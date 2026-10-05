@@ -36,7 +36,8 @@ import {
   PromptInputTextarea,
   usePromptInputController,
 } from "@/components/ai-elements/prompt-input";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
+import { OpenappaSessionStatus } from "@/components/chat/openappa-session-status";
 import { SensitiveDataConfirmDialog } from "@/components/chat/sensitive-data-confirm-dialog";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Button } from "@/components/ui/button";
@@ -58,10 +59,11 @@ import {
   chatDraftStorageKey,
   migrateLegacyNewChatDraft,
 } from "@/lib/chat/chat-utils";
-import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
+import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useToolbarCollapse } from "@/lib/hooks/use-toolbar-collapse";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useOrganization } from "@/lib/organization.query";
 import { scanText } from "@/lib/sensitive-data";
@@ -275,8 +277,8 @@ const PromptInputContent = ({
   agentModelDisplayName,
   subscriptionProvider,
   sandboxAvailable,
-  lockedChat = false,
-  onLockedChatChange,
+  encryptedChat = false,
+  onEncryptedChatChange,
   prefillText,
   onPrefillApplied,
   externalMcpSkillAttachment,
@@ -327,28 +329,29 @@ const PromptInputContent = ({
     string | null
   >(null);
 
-  // /debug needs the conversation below; fetched early so the locked-chat gate
+  // /debug needs the conversation below; fetched early so the encrypted-chat gate
   // can read it too.
   const { data: conversation } = useConversation(conversationId);
 
-  // LockedChat is "active" for the composer both while chatting in a locked
+  // EncryptedChat is "active" for the composer both while chatting in an encrypted
   // chat and while the new-chat toggle is on. It drives the composer's own
   // dressing (the notice strip and dashed border) and hides the affordances
   // the backend still rejects — sandbox `!` commands. Uploads are NOT among
-  // them any more: a locked chat's attachments are sealed under its key.
-  const lockedChatActive =
-    conversation?.lockedChat === true || (lockedChat && !conversationId);
+  // them any more: an encrypted chat's attachments are sealed under its key.
+  const encryptedChatActive =
+    conversation?.encryptedChat === true || (encryptedChat && !conversationId);
   const sandboxCommandsBlocked = !isActionAvailableForConversation(
     conversation,
     "sandboxCommands",
   );
   const appName = useAppName();
+  const providerCatalog = useModelProviderCatalog();
 
   // Any file type can be attached regardless of model modalities or sandbox:
   // a file the model can't read is still stored and surfaced in the
   // conversation's Files panel (and staged into the sandbox when one is
   // available), so uploads are gated only by the org-level toggle (and the
-  // locked-chat block) and the OS picker is unrestricted.
+  // encrypted-chat block) and the OS picker is unrestricted.
   const showFileUploadButton = allowFileUploads;
 
   // Chat placeholders from organization settings
@@ -499,7 +502,7 @@ const PromptInputContent = ({
   // Subtle affordance for the `!` convention: shown while the typed text
   // starts with `!` on a sandbox-equipped agent, i.e. whenever submitting
   // could run it as a sandbox command instead of sending it to the model.
-  // Hidden for locked chats, where the backend rejects sandbox commands.
+  // Hidden for encrypted chats, where the backend rejects sandbox commands.
   const isSandboxCommandHintVisible =
     sandboxAvailable &&
     !sandboxCommandsBlocked &&
@@ -667,7 +670,7 @@ const PromptInputContent = ({
       // a `!`-prefixed message runs directly in the conversation's sandbox —
       // disjoint from the `/`-commands above and the skill commands below,
       // since those require a `/` prefix. The text is sent exactly as typed;
-      // only a metadata marker rides along. Locked chats never mark the
+      // only a metadata marker rides along. Encrypted chats never mark the
       // message (the backend rejects sandbox commands there), so a leading
       // `!` goes to the model as ordinary text.
       const isSandboxCommand =
@@ -1024,10 +1027,10 @@ const PromptInputContent = ({
           </PromptInputCommand>
         </div>
       )}
-      {/* LockedChat "drawer": a slim strip tucked against the composer's top
+      {/* EncryptedChat "drawer": a slim strip tucked against the composer's top
           edge, carrying the explanation that used to live in the toggle's
           tooltip. Paired with the dashed composer border below so an
-          locked chat is unmistakable while composing. */}
+          encrypted chat is unmistakable while composing. */}
       {runtimeMode && (
         <div className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-primary/50 bg-primary/5 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2">
           <TerminalSquare className="size-3.5 text-primary" />
@@ -1037,17 +1040,30 @@ const PromptInputContent = ({
           </span>
         </div>
       )}
-      {lockedChatActive && !runtimeMode && (
+      {encryptedChatActive && !runtimeMode && (
         <div
-          data-testid={E2eTestId.LockedChatNotice}
+          data-testid={E2eTestId.EncryptedChatNotice}
           className="mx-3 -mb-px flex items-center gap-2 rounded-t-lg border border-b-0 border-dashed border-muted-foreground/60 bg-muted/50 px-3 py-1.5 text-xs text-muted-foreground animate-in fade-in slide-in-from-bottom-2"
         >
-          <LockedChatIcon className="size-3.5" />
+          <EncryptedChatIcon className="size-3.5" />
           <span>
-            Locked chat — encrypted with a key that stays in this browser.{" "}
-            {appName} cannot read it, and it isn't available on other devices.
+            Use this mode for highly sensitive work. This chat is private from
+            the team running {appName}: your messages are encrypted with a key
+            stored in this browser, so you can't open the chat anywhere else. A
+            backup key is held in escrow in case it's ever needed. Keep in mind
+            that{" "}
+            {currentProvider
+              ? `${providerCatalog.label(currentProvider)}, your LLM provider,`
+              : "your LLM provider"}{" "}
+            still sees the conversation.
           </span>
         </div>
+      )}
+      {conversationId && !runtimeMode && (
+        <OpenappaSessionStatus
+          key={conversationId}
+          conversationId={conversationId}
+        />
       )}
       <PromptInput
         globalDrop
@@ -1057,9 +1073,10 @@ const PromptInputContent = ({
         maxFileSize={storageByteLimit}
         onError={handleFileError}
         className={cn(
+          "[&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-input",
           runtimeMode &&
             "[&_[data-slot=input-group]]:border-primary/50 [&_[data-slot=input-group]]:bg-primary/[0.025] [&_[data-slot=input-group]]:!ring-0 [&:has([data-slot=input-group-control]:focus-visible)_[data-slot=input-group]]:!border-primary",
-          lockedChatActive &&
+          encryptedChatActive &&
             // The dashed border replaces the composer's ring outright (both
             // at once read as two competing outlines). !important because the
             // ring and focus border are has-[]-variant classes on the
@@ -1115,8 +1132,8 @@ const PromptInputContent = ({
             onApiKeyChange={onApiKeyChange}
             onProviderChange={onProviderChange}
             allowFileUploads={allowFileUploads}
-            lockedChat={lockedChat}
-            onLockedChatChange={onLockedChatChange}
+            encryptedChat={encryptedChat}
+            onEncryptedChatChange={onEncryptedChatChange}
             sandboxAvailable={sandboxAvailable}
             isModelsLoading={isModelsLoading}
             tokensUsed={tokensUsed}
@@ -1250,8 +1267,8 @@ const ArchestraPromptInput = ({
   agentRequiresPerUserConnect,
   agentModelDisplayName,
   subscriptionProvider,
-  lockedChat,
-  onLockedChatChange,
+  encryptedChat,
+  onEncryptedChatChange,
   prefillText,
   onPrefillApplied,
   externalMcpSkillAttachment,
@@ -1367,8 +1384,8 @@ const ArchestraPromptInput = ({
           agentRequiresPerUserConnect={agentRequiresPerUserConnect}
           agentModelDisplayName={agentModelDisplayName}
           sandboxAvailable={sandboxAvailable}
-          lockedChat={lockedChat}
-          onLockedChatChange={onLockedChatChange}
+          encryptedChat={encryptedChat}
+          onEncryptedChatChange={onEncryptedChatChange}
           placeholderPreview={placeholderPreview}
           runtimeMode={runtimeMode}
           runtimeAgentName={runtimeAgentName}

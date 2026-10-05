@@ -10,6 +10,7 @@ import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -18,6 +19,7 @@ import { ConnectionFlow } from "./connection-flow";
 import { getConnectableProviders } from "./connection-flow.utils";
 
 export default function ConnectionPage() {
+  const appName = useAppName();
   const searchParams = useSearchParams();
   const { data: canReadConnectionSettings } = useHasPermissions({
     organizationSettings: ["read"],
@@ -26,11 +28,8 @@ export default function ConnectionPage() {
   const requestedClient = CONNECT_CLIENTS.find(
     (client) => client.id === searchParams.get("clientId"),
   );
-  usePageTitle(
-    isApproval
-      ? `Connect ${requestedClient?.label ?? "your client"}`
-      : "Connect",
-  );
+  const approvalDocumentTitle = `Connect ${requestedClient?.label ?? "your app"}`;
+  usePageTitle(isApproval ? approvalDocumentTitle : "Connect");
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const organizationQuery = useOrganization(true, { fresh: true });
   useEffect(() => {
@@ -49,7 +48,7 @@ export default function ConnectionPage() {
       );
   }, [organizationQuery.refetch]);
   // Wait for an authoritative read before mounting the flow. On later reads,
-  // retain its inputs and selections but hide the actions until revalidated;
+  // retain its inputs and selections but pause actions until revalidated;
   // treating a pending read as disabled would generate a partial setup.
   const organization =
     organizationQuery.isFetchedAfterMount && !organizationQuery.isError
@@ -74,31 +73,34 @@ export default function ConnectionPage() {
           <>
             Connect{" "}
             <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-              {requestedClient?.label ?? "your client"}
+              {requestedClient?.label ?? "your app"}
             </span>
+            {` to ${appName}`}
           </>
         ) : (
-          "Connect your client"
+          `Connect your tools to ${appName}`
         )
       }
-      documentTitle={
-        isApproval
-          ? `Connect ${requestedClient?.label ?? "your client"}`
-          : "Connection"
-      }
+      documentTitle={isApproval ? approvalDocumentTitle : "Connection"}
       maxWidth="wizard"
       actionButton={
-        canReadConnectionSettings && (
-          <Button variant="outline" asChild>
-            <Link href="/settings/connection">
+        canReadConnectionSettings &&
+        !isApproval && (
+          <Button
+            variant="outline"
+            size="icon"
+            className="md:w-auto md:px-3"
+            asChild
+          >
+            <Link href="/settings/connection" aria-label="Connection settings">
               <Settings aria-hidden="true" />
-              <span>Connection settings</span>
+              <span className="hidden md:inline">Connection settings</span>
             </Link>
           </Button>
         )
       }
     >
-      {organizationQuery.isFetching ||
+      {(organizationQuery.isFetching && !organization) ||
       !organizationQuery.isFetchedAfterMount ? (
         <LoadingState label="Checking connection settings" />
       ) : organizationQuery.isError ? (
@@ -108,8 +110,9 @@ export default function ConnectionPage() {
         />
       ) : null}
       {organization && (
-        <div hidden={organizationQuery.isFetching}>
+        <div aria-busy={organizationQuery.isFetching}>
           <ConnectionFlow
+            isRevalidating={organizationQuery.isFetching}
             defaultMcpGatewayId={defaultMcpGateway?.id}
             llmProxyId={llmProxyEnabled ? llmProxy?.id : undefined}
             adminDefaultMcpGatewayId={adminDefaultMcpGatewayId}

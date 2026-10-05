@@ -5,8 +5,12 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
-import { afterEach, beforeEach, describe, expect, test } from "vitest";
 import config, { parseTrustProxy } from "@/config";
+import {
+  CONNECTION_SETUP_CONTEXT_PARAM,
+  issueConnectionSetupContext,
+} from "@/services/connection-setup-context";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import oauthServerRoutes from "./oauth-server";
 
 describe("OAuth Server - Well-Known Endpoints", () => {
@@ -92,6 +96,52 @@ describe("OAuth Server - Well-Known Endpoints", () => {
       expect(response.json().resource).toBe(
         "http://localhost:9000/api/mcp/app/11111111-1111-1111-1111-111111111111",
       );
+    });
+
+    test("strips a setup query from resource and resolves an external IdP by profile slug", async ({
+      makeAgent,
+      makeIdentityProvider,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const issuer = "https://idp.example.com/realms/test";
+      const identityProvider = await makeIdentityProvider(org.id, { issuer });
+      const agent = await makeAgent({
+        organizationId: org.id,
+        agentType: "mcp_gateway",
+        identityProviderId: identityProvider.id,
+      });
+      const setupContext = issueConnectionSetupContext({
+        userId: crypto.randomUUID(),
+        organizationId: org.id,
+        gatewayId: agent.id,
+        setupId: crypto.randomUUID(),
+        secret: "test-setup-signing-key",
+      });
+      const metadataUrl = new URL(
+        `http://localhost:9000/.well-known/oauth-protected-resource/v1/mcp/${agent.slug}`,
+      );
+      metadataUrl.searchParams.set(
+        CONNECTION_SETUP_CONTEXT_PARAM,
+        setupContext,
+      );
+
+      const response = await app.inject({
+        method: "GET",
+        url: `${metadataUrl.pathname}${metadataUrl.search}`,
+        headers: { host: "localhost:9000" },
+      });
+
+      expect(response.statusCode).toBe(200);
+      const body = response.json();
+      expect(body.resource).toBe(`http://localhost:9000/v1/mcp/${agent.slug}`);
+      expect(body.resource).not.toContain("cs1_");
+      expect(body.resource).not.toContain("?");
+      expect(JSON.stringify(body)).not.toContain("cs1_");
+      expect(body.authorization_servers).toEqual([
+        config.frontendBaseUrl,
+        issuer,
+      ]);
     });
   });
 

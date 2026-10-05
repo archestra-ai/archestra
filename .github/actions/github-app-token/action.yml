@@ -16,6 +16,12 @@ inputs:
   permission-actions:
     description: Actions permission level for the generated token.
     required: false
+  permission-contents:
+    description: Contents permission level for the generated token.
+    required: false
+  permission-pull-requests:
+    description: Pull requests permission level for the generated token.
+    required: false
 outputs:
   token:
     description: Generated GitHub App token.
@@ -32,3 +38,5 @@ runs:
         owner: ${{ inputs.owner }}
         repositories: ${{ inputs.repositories }}
         permission-actions: ${{ inputs.permission-actions }}
+        permission-contents: ${{ inputs.permission-contents }}
+        permission-pull-requests: ${{ inputs.permission-pull-requests }}

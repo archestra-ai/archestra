@@ -3,12 +3,14 @@ title: Overview
 category: Agents
 order: 1
 description: Agent overview, invocation paths, knowledge sources, and prompt templating
-lastUpdated: 2026-09-20
+lastUpdated: 2026-10-04
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Agents are reusable AI workers with instructions, tool access, and optional knowledge retrieval. You can invoke the same agent from chat, external integrations, or automation without rebuilding the workflow each time.
+
+Create an agent from its name, instructions, and runtime to open it directly in chat. Continue setup to configure tools, messaging, and advanced settings before creating it.
 
 An agent can include:
 
@@ -30,6 +32,8 @@ Hover or focus an agent's provider logo to see its configured key name and model
 ## Creating and Editing an Agent
 
 **Add Agent** opens a catalog. Start from scratch to open the setup wizard. When dedicated runtimes are enabled, popular agents can prefill that wizard. **Configuration** includes the name, permissions, instructions, model, and optional dedicated runtime settings. Nothing is saved until you press **Create** on the last step. A confirmation page summarizes its email address and assigned messaging channels. Select **Chat** to start a conversation, or **Start run** for a dedicated runtime. The confirmation page shows the runtime badge beside the agent name.
+
+Admins choose templates under **Settings → Agents → Popular agents**. The selection controls Create Agent suggestions and the **Runtime** image choices. All templates appear by default. Removing every selection hides the Popular agents section. Built-in and custom-image choices remain available. Existing agents keep their runtime configuration; a hidden template appears as **Custom image** when editing.
 
 Each agent has its own page for editing. When dedicated runtimes are enabled, **Agent Runtime** follows **Tools, Skills & Knowledge**. It controls the runtime configuration and credentials. **Save changes** saves the current tab and keeps it open. **A2A** holds the endpoint, authentication options, and connection examples. An Agent with a dedicated runtime is marked **Runtime** in the list and on its page. Its **Chat** action reads **Start run**.
 
@@ -81,9 +85,9 @@ Exclusions are stored per agent and have no effect in **Custom** mode. Cloning a
 
 ## Load Tools When Needed
 
-By default, an agent exposes every assigned tool through MCP `tools/list`.
+Agents enable **Progressive tool loading** by default. You can turn it off in **Manual** mode to expose every assigned tool through MCP `tools/list`.
 
-For larger toolsets, turn on **Progressive tool loading**. This keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
+Progressive loading keeps the initial tool list small. MCP clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first. Those two tools are enabled implicitly and do not need normal tool assignment.
 
 - `search_tools` can still discover them
 - `run_tool` can still execute them

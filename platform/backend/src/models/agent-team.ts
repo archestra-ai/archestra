@@ -16,6 +16,9 @@ import type { AgentAccessContext, LabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
@@ -54,6 +57,8 @@ class AgentTeamModel {
   static async getUserAccessibleAgentIds(
     userId: string,
     isAgentAdmin: boolean,
+    /** The caller's already-resolved principals, when the query has them. */
+    principals?: GrantPrincipal[],
   ): Promise<string[]> {
     logger.debug(
       { userId, isAgentAdmin },
@@ -62,6 +67,7 @@ class AgentTeamModel {
     const accessibleAgentIds = await AgentModel.findAccessibleIdsForUser(
       userId,
       isAgentAdmin,
+      principals,
     );
 
     logger.debug(
@@ -101,6 +107,10 @@ class AgentTeamModel {
     }
 
     const table = schema.agentsTable;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId: agent.organizationId,
+      userId,
+    });
     const [granted] = await db
       .select({ id: table.id })
       .from(table)
@@ -111,8 +121,7 @@ class AgentTeamModel {
             and(
               inArray(table.agentType, ["agent", "profile"]),
               ResourcePermissionPolicyModel.grantCondition({
-                organizationId: table.organizationId,
-                userId,
+                ...principal,
                 resource: "agent",
                 scopeColumn: table.id,
                 action,
@@ -121,8 +130,7 @@ class AgentTeamModel {
             and(
               eq(table.agentType, "mcp_gateway"),
               ResourcePermissionPolicyModel.grantCondition({
-                organizationId: table.organizationId,
-                userId,
+                ...principal,
                 resource: "mcpGateway",
                 scopeColumn: table.id,
                 action,

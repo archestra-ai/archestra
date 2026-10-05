@@ -127,7 +127,6 @@ export const chatsNavItems: NavItem[] = [
     url: "/projects",
     icon: FolderKanban,
     customIsActive: (pathname: string) => pathname.startsWith("/projects"),
-    beta: true,
     dotKey: "nav:projects",
   },
   {
@@ -165,15 +164,17 @@ export const contentNavGroups: NavGroup[] = [
         // Named for what the reader does there, not for the engine behind it.
         title: "Guardrails",
         url: "/openappa",
+        permissionUrls: ["/openappa", "/openappa/yells"],
         icon: OpenAppaIcon,
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
+        beta: true,
+        badgeLabel: "Alpha",
       },
       {
         title: "Skills",
         url: "/skills",
         icon: Sparkles,
         customIsActive: (pathname: string) => pathname.startsWith("/skills"),
-        beta: true,
       },
       {
         // Dropped entirely when the deployment has plugins turned off — see
@@ -182,8 +183,6 @@ export const contentNavGroups: NavGroup[] = [
         url: "/plugins",
         icon: Puzzle,
         customIsActive: (pathname: string) => pathname.startsWith("/plugins"),
-        beta: true,
-        badgeLabel: "Beta",
       },
     ],
   },

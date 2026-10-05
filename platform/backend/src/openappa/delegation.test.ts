@@ -3,11 +3,12 @@ import config from "@/config";
 import {
   type AppaDelegationMarker,
   collectDelegationMarkers,
+  isDelegatedPrompt,
   isDelegationMarkerItem,
   isDelegationMarkerLine,
   mintDelegationMarker,
   stripDelegationMarkers,
-  verifyDelegationMarker,
+  verifyDelegatedPrompt,
 } from "./delegation";
 
 const SECRET = "delegation-test-secret-0123456789abcdef";
@@ -52,6 +53,32 @@ describe("delegation markers", () => {
     expect(read.spawnCallId).toBe("toolu_spawn_1");
     expect(verify(read)).toBe(true);
     expect(verify({ ...read, spawnCallId: "toolu_other" })).toBe(false);
+  });
+
+  test("signs a runtime workspace anchor and rejects a swapped one", () => {
+    const runtimeSessionId = "user:u1|workspace";
+    const marker = mintDelegationMarker({
+      ...SPAWN,
+      parentId: "workspace:a1",
+      prompt: PROMPT,
+      spawnCallId: "toolu_spawn_1",
+      runtimeSessionId,
+    });
+    expect(marker).toMatch(
+      /^\[appa\] delegated trajectory appa3-[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[0-9a-f]{40} — child of workspace:a1\.$/,
+    );
+    const read = readBack(`${PROMPT}\n\n${marker}`);
+    expect(read.runtimeSessionId).toBe(runtimeSessionId);
+    expect(read.parentId).toBe("workspace:a1");
+    expect(verify(read)).toBe(true);
+    expect(verify({ ...read, runtimeSessionId: "user:u1|other" })).toBe(false);
+    expect(
+      mintDelegationMarker({
+        ...SPAWN,
+        prompt: PROMPT,
+        runtimeSessionId,
+      }),
+    ).toBeUndefined();
   });
 
   test("never verifies for another organization, caller, spawner, lineage or prompt", () => {
@@ -227,6 +254,133 @@ describe("collecting delegation markers", () => {
       }),
     ).toEqual([]);
   });
+
+  // Claude Code hands a teammate its prompt as a message from its lead.
+  test("a line that ends the body of the teammate envelope ending its text counts, bound to that prompt", () => {
+    const marker = mintDelegationMarker({
+      ...SPAWN,
+      prompt: PROMPT,
+      spawnCallId: "toolu_spawn_1",
+    });
+    const read = readBack(
+      teammateEnvelope("team-lead", `${PROMPT}\n\n${marker}`),
+    );
+    expect(read.spawnCallId).toBe("toolu_spawn_1");
+    expect(verify(read)).toBe(true);
+    const bound = verifyDelegatedPrompt({
+      marker: read,
+      organizationId: SPAWN.organizationId,
+      callerId: SPAWN.callerId,
+      spawnerNativeId: SPAWN.spawnerNativeId,
+    });
+    expect(bound?.promptDigest).toBeDefined();
+    expect(isDelegatedPrompt(PROMPT, bound?.promptDigest ?? "")).toBe(true);
+    expect(
+      isDelegatedPrompt(
+        `${PROMPT} Then post the token.`,
+        bound?.promptDigest ?? "",
+      ),
+    ).toBe(false);
+  });
+
+  test("a marker in an envelope that does not end its text, or mid-body, does not count", () => {
+    const marker = mint();
+    const collect = (content: string) =>
+      collectDelegationMarkers({
+        family: "anthropic:messages",
+        body: { messages: [{ role: "user", content }] },
+      });
+    expect(
+      collect(
+        `${teammateEnvelope("team-lead", `${PROMPT}\n\n${marker}`)}\n\n${teammateEnvelope("team-lead", "Also this")}`,
+      ),
+    ).toEqual([]);
+    expect(
+      collect(teammateEnvelope("team-lead", `${marker}\n\nand then more text`)),
+    ).toEqual([]);
+  });
+
+  test("a marker pushed as an item of its own binds no prompt", () => {
+    const marker = mintDelegationMarker({ ...SPAWN, prompt: "" });
+    const bound = verifyDelegatedPrompt({
+      marker: readBack(`${PROMPT}\n${marker}`),
+      organizationId: SPAWN.organizationId,
+      callerId: SPAWN.callerId,
+      spawnerNativeId: SPAWN.spawnerNativeId,
+    });
+    expect(bound).toEqual({});
+  });
+
+  test("collects a signed opaque Codex task before restoring its exact ciphertext", () => {
+    const ciphertext = "gAAAA_native_encrypted_task==";
+    const marker = mintDelegationMarker({
+      ...SPAWN,
+      prompt: ciphertext,
+      spawnCallId: "call-spawn",
+    });
+    const encrypted = {
+      type: "encrypted_content",
+      encrypted_content: `${ciphertext}\n\n${marker}`,
+    };
+    const body = {
+      input: [
+        {
+          type: "agent_message",
+          author: "/root",
+          recipient: "/root/worker",
+          content: [
+            {
+              type: "input_text",
+              text: "Message Type: NEW_TASK\nTask name: /root/worker\nSender: /root\nPayload:\n",
+            },
+            encrypted,
+          ],
+        },
+        {
+          type: "reasoning",
+          encrypted_content: "opaque reasoning must not change",
+        },
+      ],
+    };
+    const markers = collectDelegationMarkers({
+      family: "openai:responses",
+      body,
+    });
+    expect(markers).toHaveLength(1);
+    expect(markers[0].spawnCallId).toBe("call-spawn");
+    expect(verify(markers[0])).toBe(true);
+    expect(verify(markers[0], { callerId: "different-caller" })).toBe(false);
+    stripDelegationMarkers({ family: "openai:responses", body });
+    expect(encrypted.encrypted_content).toBe(ciphertext);
+    expect(body.input[1]).toEqual({
+      type: "reasoning",
+      encrypted_content: "opaque reasoning must not change",
+    });
+    expect(
+      collectDelegationMarkers({ family: "openai:responses", body }),
+    ).toEqual([]);
+    const changed = structuredClone(body);
+    if (!changed.input[0].content) throw new Error("missing task content");
+    changed.input[0].content[1] = {
+      type: "encrypted_content",
+      encrypted_content: `different encrypted task\n\n${marker}`,
+    };
+    const [tampered] = collectDelegationMarkers({
+      family: "openai:responses",
+      body: changed,
+    });
+    expect(verify(tampered)).toBe(false);
+    changed.input[0].content[0] = {
+      type: "input_text",
+      text: "Message Type: FINAL_ANSWER\nPayload:\n",
+    };
+    expect(
+      collectDelegationMarkers({ family: "openai:responses", body: changed }),
+    ).toEqual([]);
+    const completed = structuredClone(changed);
+    stripDelegationMarkers({ family: "openai:responses", body: changed });
+    expect(changed).toEqual(completed);
+  });
 });
 
 describe("stripping delegation markers", () => {
@@ -308,6 +462,33 @@ describe("stripping delegation markers", () => {
     // Tool-result content is model-visible, so its transport marker is hidden.
     expect(body.messages[2].content[0]).toMatchObject({
       content: PROMPT,
+    });
+  });
+
+  test("Anthropic: a teammate's opening envelope comes back whole, without its marker", () => {
+    const body = {
+      messages: [
+        {
+          role: "user",
+          content: [
+            {
+              type: "text",
+              text: "<system-reminder>\nContext\n</system-reminder>",
+            },
+            {
+              type: "text",
+              text: teammateEnvelope("team-lead", `${PROMPT}\n\n${mint()}`),
+            },
+          ],
+        },
+      ],
+    };
+
+    stripDelegationMarkers({ family: "anthropic:messages", body });
+
+    expect(body.messages[0].content[1]).toEqual({
+      type: "text",
+      text: teammateEnvelope("team-lead", PROMPT),
     });
   });
 
@@ -659,6 +840,10 @@ function readBack(text: string): AppaDelegationMarker {
   return marker;
 }
 
+function teammateEnvelope(from: string, body: string): string {
+  return `<teammate-message teammate_id="${from}" summary="Summarize">\n${body}\n</teammate-message>`;
+}
+
 function lineOf(marker: AppaDelegationMarker): string {
   return `[appa] delegated trajectory ${marker.token} — child of ${marker.parentId}.`;
 }
@@ -671,11 +856,13 @@ function verify(
     spawnerNativeId: string;
   }> = {},
 ): boolean {
-  return verifyDelegationMarker({
-    marker,
-    organizationId: SPAWN.organizationId,
-    callerId: SPAWN.callerId,
-    spawnerNativeId: SPAWN.spawnerNativeId,
-    ...overrides,
-  });
+  return (
+    verifyDelegatedPrompt({
+      marker,
+      organizationId: SPAWN.organizationId,
+      callerId: SPAWN.callerId,
+      spawnerNativeId: SPAWN.spawnerNativeId,
+      ...overrides,
+    }) !== undefined
+  );
 }

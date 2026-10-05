@@ -168,7 +168,10 @@ function McpGatewayAuthSurface({ gateway }: { gateway: ConnectTarget }) {
 
 function IdentityProviderStatus({ target }: { target: ConnectTarget }) {
   const { data: identityProviders } = useIdentityProviders();
-  const { data: canUpdate } = useHasPermissions({ mcpGateway: ["update"] });
+  const { data: canUpdate } = useHasPermissions(
+    { mcpGateway: ["update"] },
+    target.id,
+  );
 
   const idpId = target.identityProviderId;
   const idpName = identityProviders?.find((idp) => idp.id === idpId)?.issuer;

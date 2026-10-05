@@ -128,6 +128,11 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
+  ...getJson("/api/openappa/yells", {
+    data: [],
+    pagination: { limit: 20, hasNext: false, nextCursor: null },
+  }),
   // Label lookups for every labelled entity (see LABELLED_ENTITY_PATHS).
   // First in the array so no entity-specific pattern can shadow them.
   ...LABELLED_ENTITY_PATHS.flatMap((entity) => [
@@ -135,6 +140,8 @@ export const handlers: HttpHandler[] = [
     ...getJson(`${entity}/labels/values`, []),
   ]),
   ...getJson("/api/auth/get-session", sessionSeed),
+  // Every signed-in user loads the banner; no notice is active by default.
+  ...getJson("/api/site-notification", null),
   ...getJson("/api/auth/default-credentials-status", { enabled: false }),
   ...getJson("/api/auth/organization/list", []),
   ...getJson("/api/auth/organization/get-full-organization", betterAuthOrgSeed),
@@ -352,6 +359,15 @@ export const handlers: HttpHandler[] = [
   // Chat / role list / model availability — fired by the agent dialog +
   // sidebar. Default empty so dialog open doesn't blow up the leak guard.
   ...getJson("/api/chat/conversations", []),
+  ...getJson("/api/chat/conversations/:id/openappa-status", null),
+  ...getJson("/api/agent-runs/:taskId/openappa-review", {
+    status: "none",
+    canDecide: false,
+    offerId: null,
+    text: null,
+    tool: null,
+    arguments: null,
+  }),
   ...getJson("/api/roles", {
     data: [],
     pagination: {

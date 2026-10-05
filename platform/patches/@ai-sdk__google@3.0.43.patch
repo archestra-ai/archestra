@@ -1,0 +1,190 @@
+diff --git a/dist/index.js b/dist/index.js
+index 07a4930d7e4dfe8de4ee644f7e5ecac4c64efd3b..01cb2d7d4f189cd6c647ce6d2939439d7b559ec4 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -453,6 +453,7 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+               case "tool-call": {
+                 return {
+                   functionCall: {
++                    id: part.toolCallId,
+                     name: part.toolName,
+                     args: part.input
+                   },
+@@ -478,6 +479,7 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+                 case "text":
+                   parts.push({
+                     functionResponse: {
++                      id: part.toolCallId,
+                       name: part.toolName,
+                       response: {
+                         name: part.toolName,
+@@ -507,6 +509,7 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+           } else {
+             parts.push({
+               functionResponse: {
++                id: part.toolCallId,
+                 name: part.toolName,
+                 response: {
+                   name: part.toolName,
+@@ -1070,7 +1073,7 @@ var GoogleGenerativeAILanguageModel = class {
+       } else if ("functionCall" in part) {
+         content.push({
+           type: "tool-call",
+-          toolCallId: this.config.generateId(),
++          toolCallId: part.functionCall.id ?? this.config.generateId(),
+           toolName: part.functionCall.name,
+           input: JSON.stringify(part.functionCall.args),
+           providerMetadata: part.thoughtSignature ? {
+@@ -1405,7 +1408,7 @@ function getToolCallsFromParts({
+   );
+   return functionCallParts == null || functionCallParts.length === 0 ? void 0 : functionCallParts.map((part) => ({
+     type: "tool-call",
+-    toolCallId: generateId3(),
++    toolCallId: part.functionCall.id ?? generateId3(),
+     toolName: part.functionCall.name,
+     args: JSON.stringify(part.functionCall.args),
+     providerMetadata: part.thoughtSignature ? {
+@@ -1564,6 +1567,7 @@ var getContentSchema = () => import_v45.z.object({
+       // note: order matters since text can be fully empty
+       import_v45.z.object({
+         functionCall: import_v45.z.object({
++          id: import_v45.z.string().nullish(),
+           name: import_v45.z.string(),
+           args: import_v45.z.unknown()
+         }),
+diff --git a/dist/index.mjs b/dist/index.mjs
+index 872de3b03afbc2cc14dbf2bb91dc30beedc0a239..d321aef14714c49a84116f8c024f47f80e28aa79 100644
+--- a/dist/index.mjs
++++ b/dist/index.mjs
+@@ -459,6 +459,7 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+               case "tool-call": {
+                 return {
+                   functionCall: {
++                    id: part.toolCallId,
+                     name: part.toolName,
+                     args: part.input
+                   },
+@@ -484,6 +485,7 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+                 case "text":
+                   parts.push({
+                     functionResponse: {
++                      id: part.toolCallId,
+                       name: part.toolName,
+                       response: {
+                         name: part.toolName,
+@@ -513,6 +515,7 @@ function convertToGoogleGenerativeAIMessages(prompt, options) {
+           } else {
+             parts.push({
+               functionResponse: {
++                id: part.toolCallId,
+                 name: part.toolName,
+                 response: {
+                   name: part.toolName,
+@@ -1078,7 +1081,7 @@ var GoogleGenerativeAILanguageModel = class {
+       } else if ("functionCall" in part) {
+         content.push({
+           type: "tool-call",
+-          toolCallId: this.config.generateId(),
++          toolCallId: part.functionCall.id ?? this.config.generateId(),
+           toolName: part.functionCall.name,
+           input: JSON.stringify(part.functionCall.args),
+           providerMetadata: part.thoughtSignature ? {
+@@ -1413,7 +1416,7 @@ function getToolCallsFromParts({
+   );
+   return functionCallParts == null || functionCallParts.length === 0 ? void 0 : functionCallParts.map((part) => ({
+     type: "tool-call",
+-    toolCallId: generateId3(),
++    toolCallId: part.functionCall.id ?? generateId3(),
+     toolName: part.functionCall.name,
+     args: JSON.stringify(part.functionCall.args),
+     providerMetadata: part.thoughtSignature ? {
+@@ -1572,6 +1575,7 @@ var getContentSchema = () => z5.object({
+       // note: order matters since text can be fully empty
+       z5.object({
+         functionCall: z5.object({
++          id: z5.string().nullish(),
+           name: z5.string(),
+           args: z5.unknown()
+         }),
+diff --git a/src/convert-to-google-generative-ai-messages.ts b/src/convert-to-google-generative-ai-messages.ts
+index 9665060be792b702ec7cd8f095dfbe4ea32bc28e..700e33203d8f9bb48a0653205b608ae687559278 100644
+--- a/src/convert-to-google-generative-ai-messages.ts
++++ b/src/convert-to-google-generative-ai-messages.ts
+@@ -132,6 +132,7 @@ export function convertToGoogleGenerativeAIMessages(
+                 case 'tool-call': {
+                   return {
+                     functionCall: {
++                      id: part.toolCallId,
+                       name: part.toolName,
+                       args: part.input,
+                     },
+@@ -162,6 +163,7 @@ export function convertToGoogleGenerativeAIMessages(
+                 case 'text':
+                   parts.push({
+                     functionResponse: {
++                      id: part.toolCallId,
+                       name: part.toolName,
+                       response: {
+                         name: part.toolName,
+@@ -191,6 +193,7 @@ export function convertToGoogleGenerativeAIMessages(
+           } else {
+             parts.push({
+               functionResponse: {
++                id: part.toolCallId,
+                 name: part.toolName,
+                 response: {
+                   name: part.toolName,
+diff --git a/src/google-generative-ai-language-model.ts b/src/google-generative-ai-language-model.ts
+index 83828b736d7a96a65a7d0b9d0295f4ba30517b3c..0a609bed8597a2bd318e6cc935cc936ceb1bd19e 100644
+--- a/src/google-generative-ai-language-model.ts
++++ b/src/google-generative-ai-language-model.ts
+@@ -292,7 +292,7 @@ export class GoogleGenerativeAILanguageModel implements LanguageModelV3 {
+       } else if ('functionCall' in part) {
+         content.push({
+           type: 'tool-call' as const,
+-          toolCallId: this.config.generateId(),
++          toolCallId: part.functionCall.id ?? this.config.generateId(),
+           toolName: part.functionCall.name,
+           input: JSON.stringify(part.functionCall.args),
+           providerMetadata: part.thoughtSignature
+@@ -709,7 +709,7 @@ function getToolCallsFromParts({
+     part => 'functionCall' in part,
+   ) as Array<
+     GoogleGenerativeAIContentPart & {
+-      functionCall: { name: string; args: unknown };
++      functionCall: { id?: string | null; name: string; args: unknown };
+       thoughtSignature?: string | null;
+     }
+   >;
+@@ -718,7 +718,7 @@ function getToolCallsFromParts({
+     ? undefined
+     : functionCallParts.map(part => ({
+         type: 'tool-call' as const,
+-        toolCallId: generateId(),
++        toolCallId: part.functionCall.id ?? generateId(),
+         toolName: part.functionCall.name,
+         args: JSON.stringify(part.functionCall.args),
+         providerMetadata: part.thoughtSignature
+@@ -916,6 +916,7 @@ const getContentSchema = () =>
+           // note: order matters since text can be fully empty
+           z.object({
+             functionCall: z.object({
++              id: z.string().nullish(),
+               name: z.string(),
+               args: z.unknown(),
+             }),
+diff --git a/src/google-generative-ai-prompt.ts b/src/google-generative-ai-prompt.ts
+index 56b266336193c93df55d84351e3e0e636e514987..200863f027c0080de124bcbcba2ecda10f249847 100644
+--- a/src/google-generative-ai-prompt.ts
++++ b/src/google-generative-ai-prompt.ts
+@@ -21,8 +21,8 @@ export type GoogleGenerativeAIContent = {
+ export type GoogleGenerativeAIContentPart =
+   | { text: string; thought?: boolean; thoughtSignature?: string }
+   | { inlineData: { mimeType: string; data: string } }
+-  | { functionCall: { name: string; args: unknown }; thoughtSignature?: string }
+-  | { functionResponse: { name: string; response: unknown } }
++  | { functionCall: { id?: string | null; name: string; args: unknown }; thoughtSignature?: string }
++  | { functionResponse: { id?: string; name: string; response: unknown } }
+   | { fileData: { mimeType: string; fileUri: string } };
+ 
+ export type GoogleGenerativeAIGroundingMetadata = GroundingMetadataSchema;

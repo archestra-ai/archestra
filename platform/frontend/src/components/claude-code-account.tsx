@@ -24,8 +24,10 @@ export function ClaudeCodeAccount({
   model,
   onModelChange,
   variant = "card",
+  showDisconnectedNotice = true,
 }: {
   agentId: string;
+  showDisconnectedNotice?: boolean;
   variant?: "card" | "row" | "compact";
   model?: string;
   onModelChange?: (model: string) => void;
@@ -89,6 +91,8 @@ export function ClaudeCodeAccount({
           : variant === "row"
             ? "Sign in once for all your Claude Code agents."
             : "Sign in to use this agent.";
+
+  if (agentId && !connected && !showDisconnectedNotice) return null;
 
   if (!agentId)
     return (

@@ -124,6 +124,8 @@ test.describe("MCP environment validation rule", () => {
       .filter({ hasText: "TEST_URL" });
     await expect(validationAlert).toBeHidden();
 
+    // The environment lives under the collapsed Advanced section.
+    await editor.getByRole("button", { name: /^Advanced/ }).click();
     await editor.getByTestId(E2eTestId.SelectEnvironment).click();
     await page.getByRole("option", { name: "Default" }).click();
 
@@ -252,7 +254,9 @@ test.describe("MCP environment validation rule", () => {
 
     await page.getByRole("button", { name: "Add MCP Server" }).click();
     await page.getByRole("button", { name: "Start from scratch" }).click();
-    await page.getByRole("button", { name: /^Remote/ }).click();
+    await page
+      .locator("label", { has: page.getByRole("radio", { name: /^Remote/ }) })
+      .click();
     await page.getByRole("textbox", { name: "Name *" }).fill("install-test");
     await page
       .getByRole("textbox", { name: "Server URL *" })

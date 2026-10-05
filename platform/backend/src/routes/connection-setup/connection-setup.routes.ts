@@ -2,13 +2,14 @@ import { createHash } from "node:crypto";
 import {
   DEFAULT_APP_NAME,
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+  legacyMcpClientServerNames,
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   providerDisplayNames,
   RouteId,
+  resolveMcpClientServerName,
   STARTUP_GUARD_FORMAT_VERSION,
   type SupportedProvider,
   SupportedProvidersSchema,
-  toMcpClientServerName,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -31,14 +32,23 @@ import {
   TeamModel,
   VirtualApiKeyModel,
 } from "@/models";
-import { CONNECTION_SETUP_TOKEN_TTL_MS } from "@/models/connection-setup";
+import {
+  CONNECTION_SETUP_TOKEN_PREFIX,
+  CONNECTION_SETUP_TOKEN_TTL_MS,
+} from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
+import { clientConnectionService } from "@/services/client-connection";
+import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
 import {
   type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
   ensureConnectionVirtualKey,
   readVirtualKeyValue,
 } from "@/services/connection-setup";
+import {
+  CONNECTION_SETUP_CONTEXT_PARAM,
+  issueConnectionSetupContext,
+} from "@/services/connection-setup-context";
 import { buildDesktopInstallerBundle } from "@/services/connection-setup-desktop-bundle";
 import {
   buildSetupCommand,
@@ -46,6 +56,7 @@ import {
   renderSetupScript,
   type SetupScriptContext,
 } from "@/services/connection-setup-script";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   isReservedMarketplaceName,
@@ -841,6 +852,31 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Desktop configuration requires a Claude Desktop setup.",
           );
         const { context, marketplaceRender } = await buildScriptContext(setup);
+        if (
+          context.mcp &&
+          setup.mcpGatewayId &&
+          token.startsWith(CONNECTION_SETUP_TOKEN_PREFIX) &&
+          (
+            await clientConnectionService.poll(
+              token.slice(CONNECTION_SETUP_TOKEN_PREFIX.length),
+            )
+          ).status === "approved" &&
+          config.openappa.offerSigningSecret &&
+          (await isGuardrailsV2Active())
+        ) {
+          const url = new URL(context.mcp.url);
+          url.searchParams.set(
+            CONNECTION_SETUP_CONTEXT_PARAM,
+            issueConnectionSetupContext({
+              userId: setup.userId,
+              organizationId: setup.organizationId,
+              gatewayId: setup.mcpGatewayId,
+              setupId: setup.id,
+              secret: config.openappa.offerSigningSecret,
+            }),
+          );
+          context.mcp.url = url.toString();
+        }
 
         // Skill-link creation + attach + render commit together: a rendered
         // clone URL exists iff its link row committed.
@@ -1000,9 +1036,18 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       userId: setup.userId,
     });
     if (!gateway) throw GONE();
+    const gatewayNaming = {
+      gatewayName: gateway.name,
+      appName,
+      isPersonalGateway: gateway.isPersonalGateway,
+    };
     mcp = {
-      serverName:
-        toMcpClientServerName(gateway.name) || toMcpServerSlug(appName),
+      serverName: resolveMcpClientServerName(gatewayNaming),
+      toolPrefix: archestraMcpBranding.toolPrefix,
+      // Clients connected by an earlier run still hold the gateway's own name
+      // (e.g. `my_gateway`); the script moves those entries onto the name
+      // above instead of leaving one gateway registered twice.
+      legacyServerNames: legacyMcpClientServerNames(gatewayNaming),
       url: `${setup.baseUrl}/mcp/${gateway.slug ?? gateway.id}`,
     };
   }
@@ -1041,12 +1086,32 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       passthroughVirtualKey = await readVirtualKeyValue(setup.virtualApiKeyId);
     }
 
+    // The approved installer can change settings in a running conversation.
+    // Carry server-authorized setup scope on the URL, independent of client
+    // headers, prompt history, session IDs, or declared tools.
+    const setupProxyContext =
+      setup.virtualApiKeyId && (virtualKeyValue || passthroughVirtualKey)
+        ? issueConnectionProxySetupContext({
+            organizationId: setup.organizationId,
+            virtualApiKeyId: setup.virtualApiKeyId,
+            proxyAgentId: proxyAgent.id,
+            setupId: setup.id,
+            secret: config.auth.secret,
+          })
+        : null;
+    const proxyApiBaseUrl = setup.baseUrl.replace(/\/+$/, "");
+    const proxyApiPrefix = proxyApiBaseUrl.endsWith("/v1")
+      ? proxyApiBaseUrl
+      : `${proxyApiBaseUrl}/v1`;
+    const proxyBaseUrl = setupProxyContext
+      ? `${proxyApiPrefix}/connection-setup/${setupProxyContext}`
+      : proxyApiPrefix;
     proxy = {
       authMode: setup.proxyAuth,
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
-      baseUrl: setup.baseUrl,
-      url: `${setup.baseUrl}/${setup.provider}`,
+      baseUrl: proxyBaseUrl,
+      url: `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
       virtualKeyName,
@@ -1160,6 +1225,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       clientId: setup.clientId,
       platform: setup.platform,
       appName,
+      toolPrefix: archestraMcpBranding.toolPrefix,
       mcp,
       proxy,
       runtimeHandoffInstructions:
@@ -1417,15 +1483,6 @@ function toProxyName(name: string): string {
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, "_")
     .replace(/^_+|_+$/g, "");
-  return slug || "archestra";
-}
-
-/** White-label app name → fallback MCP server slug (mirrors the frontend). */
-function toMcpServerSlug(appName: string): string {
-  const slug = appName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
   return slug || "archestra";
 }
 

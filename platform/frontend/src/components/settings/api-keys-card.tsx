@@ -3,14 +3,12 @@
 import { API_KEY_MAX_NAME_LENGTH } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import { KeyRound, Plus, Trash2 } from "lucide-react";
-import Link from "next/link";
 import { useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { AccountPageAction } from "@/app/account/_components/account-page-action";
 import { CopyButton } from "@/components/copy-button";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExpirationDateTimeField } from "@/components/expiration-date-time-field";
-import { ExternalDocsLink } from "@/components/external-docs-link";
 import {
   CollectionFilters,
   FilterBar,
@@ -41,7 +39,6 @@ import {
 } from "@/lib/api-key.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { reportBulkOutcome } from "@/lib/bulk-action";
-import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import {
@@ -101,8 +98,6 @@ function ApiKeysCardContent() {
   const form = useForm<CreateApiKeyFormValues>({
     defaultValues: DEFAULT_FORM_VALUES,
   });
-
-  const apiDocsUrl = getFrontendDocsUrl("platform-api-reference");
 
   const filteredApiKeys = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -288,38 +283,6 @@ function ApiKeysCardContent() {
       </AccountPageAction>
 
       <section className="space-y-5">
-        <div className="space-y-1">
-          <h2 className="text-sm font-medium leading-5">API Keys</h2>
-          <p className="text-sm leading-5 text-muted-foreground">
-            Keys that let scripts and integrations call the{" "}
-            {apiDocsUrl ? (
-              <ExternalDocsLink
-                href={apiDocsUrl}
-                className="text-inherit underline underline-offset-4"
-                showIcon={false}
-              >
-                platform API
-              </ExternalDocsLink>
-            ) : (
-              <span>platform API</span>
-            )}{" "}
-            as you.
-            <WithPermissions
-              permissions={{ serviceAccount: ["read"] }}
-              noPermissionHandle="hide"
-            >
-              {" "}
-              For automation not tied to your user, use{" "}
-              <Link
-                href="/settings/service-accounts"
-                className="underline underline-offset-4"
-              >
-                Service Accounts
-              </Link>
-              .
-            </WithPermissions>
-          </p>
-        </div>
         <LoadingWrapper
           isPending={(isPending || isFetching) && apiKeys.length === 0}
           loadingFallback={null}
@@ -327,6 +290,7 @@ function ApiKeysCardContent() {
           <BulkActionsScope>
             <CollectionFilters>
               <FilterBar
+                leading
                 onClearFilters={
                   search
                     ? () => updateQueryParams({ search: null, page: "1" })

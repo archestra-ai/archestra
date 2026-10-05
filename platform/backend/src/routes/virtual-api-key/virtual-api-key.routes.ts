@@ -35,6 +35,7 @@ import {
   VirtualApiKeyWithParentInfoSchema,
   VirtualApiKeyWithValueSchema,
 } from "@/types";
+import { assertValidProviderKeyMappings } from "@/utils/provider-key-mappings";
 import {
   BulkDeleteBodySchema,
   BulkOutcomeSchema,
@@ -720,7 +721,7 @@ async function validateProviderApiKeys(params: {
     return;
   }
 
-  const providers = new Set<SupportedProvider>();
+  assertValidProviderKeyMappings(mappings);
   const apiKeys = await LlmProviderApiKeyModel.findByIds(
     mappings.map((mapping) => mapping.providerApiKeyId),
   );
@@ -745,14 +746,6 @@ async function validateProviderApiKeys(params: {
   );
 
   for (const mapping of mappings) {
-    if (providers.has(mapping.provider)) {
-      throw new ApiError(
-        400,
-        `Only one provider API key can be mapped for provider "${mapping.provider}".`,
-      );
-    }
-    providers.add(mapping.provider);
-
     const apiKey = apiKeysById.get(mapping.providerApiKeyId);
     if (!apiKey || apiKey.organizationId !== organizationId) {
       throw new ApiError(404, "LLM provider API key not found");

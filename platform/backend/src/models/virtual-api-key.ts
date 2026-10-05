@@ -7,12 +7,15 @@ import {
 } from "@archestra/shared";
 import {
   and,
+  asc,
   count,
+  desc,
   eq,
   ilike,
   inArray,
   isNull,
   lt,
+  ne,
   or,
   sql,
 } from "drizzle-orm";
@@ -32,6 +35,7 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel from "./created-by";
 import { VirtualApiKeyLabelModel } from "./entity-labels";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /** Length of random part (32 bytes = 64 hex chars = 256 bits of entropy) */
 const TOKEN_RANDOM_LENGTH = 32;
@@ -292,7 +296,7 @@ class VirtualApiKeyModel {
   }
 
   /**
-   * Upsert a single provider mapping on the (virtualApiKeyId, provider) PK.
+   * Make `providerApiKeyId` the virtual key's only mapping for `provider`.
    * Replaces a stale same-provider mapping with the newly resolved key while
    * leaving other providers' mappings untouched — unlike update(), whose
    * syncProviderApiKeys deletes all mappings first.
@@ -302,20 +306,34 @@ class VirtualApiKeyModel {
     provider: SupportedProvider;
     providerApiKeyId: string;
   }): Promise<void> {
-    await db
-      .insert(schema.virtualApiKeyProviderApiKeysTable)
-      .values({
-        virtualApiKeyId: params.virtualApiKeyId,
-        provider: params.provider,
-        providerApiKeyId: params.providerApiKeyId,
-      })
-      .onConflictDoUpdate({
-        target: [
-          schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
-          schema.virtualApiKeyProviderApiKeysTable.provider,
-        ],
-        set: { providerApiKeyId: params.providerApiKeyId },
-      });
+    await withDbTransaction(async (tx) => {
+      await tx
+        .delete(schema.virtualApiKeyProviderApiKeysTable)
+        .where(
+          and(
+            eq(
+              schema.virtualApiKeyProviderApiKeysTable.virtualApiKeyId,
+              params.virtualApiKeyId,
+            ),
+            eq(
+              schema.virtualApiKeyProviderApiKeysTable.provider,
+              params.provider,
+            ),
+            ne(
+              schema.virtualApiKeyProviderApiKeysTable.providerApiKeyId,
+              params.providerApiKeyId,
+            ),
+          ),
+        );
+      await tx
+        .insert(schema.virtualApiKeyProviderApiKeysTable)
+        .values({
+          virtualApiKeyId: params.virtualApiKeyId,
+          provider: params.provider,
+          providerApiKeyId: params.providerApiKeyId,
+        })
+        .onConflictDoNothing();
+    });
   }
 
   /**
@@ -967,7 +985,7 @@ class VirtualApiKeyModel {
           virtualApiKeyId,
         ),
       )
-      .orderBy(schema.virtualApiKeyProviderApiKeysTable.provider);
+      .orderBy(...providerKeyPreferenceOrder());
 
     return rows;
   }
@@ -1012,7 +1030,7 @@ class VirtualApiKeyModel {
           virtualApiKeyIds,
         ),
       )
-      .orderBy(schema.virtualApiKeyProviderApiKeysTable.provider);
+      .orderBy(...providerKeyPreferenceOrder());
 
     for (const row of rows) {
       const existing = result.get(row.virtualApiKeyId) ?? [];
@@ -1112,24 +1130,27 @@ class VirtualApiKeyModel {
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   private static async getAccessibleIds(params: {
-    organizationId: string | null;
+    organizationId: string;
     userId: string;
     providerApiKeyId?: string;
   }): Promise<string[]> {
     const { organizationId, userId, providerApiKeyId } = params;
 
     const table = schema.virtualApiKeysTable;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId,
+      userId,
+    });
     const rows = await db
       .select({ id: table.id })
       .from(table)
       .where(
         and(
-          organizationId ? eq(table.organizationId, organizationId) : undefined,
+          eq(table.organizationId, organizationId),
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId: organizationId ?? table.organizationId,
+            ...principal,
             resource: "llmVirtualKey",
             scopeColumn: table.id,
-            userId,
             action: "read",
           }),
           providerApiKeyId
@@ -1271,6 +1292,20 @@ async function syncVirtualApiKeyTeams(params: {
       teamId,
     })),
   );
+}
+
+/**
+ * Order of a virtual key's mappings: by provider, then — among several keys of
+ * one provider — the order requests fall back to when no key is known to serve
+ * the model: the primary key first, then the oldest.
+ */
+function providerKeyPreferenceOrder() {
+  return [
+    asc(schema.virtualApiKeyProviderApiKeysTable.provider),
+    desc(schema.llmProviderApiKeysTable.isPrimary),
+    asc(schema.llmProviderApiKeysTable.createdAt),
+    asc(schema.llmProviderApiKeysTable.id),
+  ];
 }
 
 async function syncProviderApiKeys(params: {

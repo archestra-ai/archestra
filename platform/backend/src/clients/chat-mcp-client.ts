@@ -20,7 +20,7 @@ import {
   getAgentTools,
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
-import { isServiceAccountUserId } from "@/auth/utils";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
@@ -33,7 +33,7 @@ import {
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
@@ -286,13 +286,34 @@ export const __test = {
  *
  * @param agentId - The profile (agent) ID
  * @param userId - The user requesting access
+ * @param actorTeamId - Set when a team token made the call; uses that team's token
  * @returns Token value and metadata, or null if no token available
  */
 export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
+  actorTeamId?: string,
 ): Promise<McpGatewayToken | null> {
+  if (actorTeamId) {
+    const teamToken = await TeamTokenModel.findTeamToken(actorTeamId);
+    if (teamToken) {
+      const tokenValue = await TeamTokenModel.getTokenValue(teamToken.id);
+      if (tokenValue) {
+        logger.info(
+          { agentId, actorTeamId, tokenId: teamToken.id },
+          "Using the requesting team's own token for chat MCP client",
+        );
+        return {
+          tokenValue,
+          tokenId: teamToken.id,
+          teamId: actorTeamId,
+          isOrganizationToken: false,
+        };
+      }
+    }
+  }
+
   // Get user's team IDs and profile's team IDs (needed for fallback token selection)
   const userTeamIds = await TeamModel.getUserTeamIds(userId);
   const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
@@ -806,6 +827,7 @@ export async function getChatMcpTools({
   agentId,
   userId,
   organizationId,
+  actorTeamId,
   chatOpsBindingId,
   chatOpsThreadId,
   enabledToolIds,
@@ -825,13 +847,15 @@ export async function getChatMcpTools({
   taskBridge,
   repeatTracker,
   suppressContentLogging,
-  lockedChatAudit,
+  encryptedChatAudit,
   modelAcceptsImageToolResults,
 }: {
   agentName: string;
   agentId: string;
   userId: string;
   organizationId: string;
+  /** Set when a team token made the call (userId is then "system") */
+  actorTeamId?: string;
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
@@ -889,8 +913,8 @@ export async function getChatMcpTools({
    */
   repeatTracker?: ToolCallRepeatTracker;
   /**
-   * Locked chat: span content is suppressed and long calls never
-   * detach into durable tasks. Stable per scope key (the locked-chat flag is
+   * Encrypted chat: span content is suppressed and long calls never
+   * detach into durable tasks. Stable per scope key (the encrypted-chat flag is
    * immutable per conversation), so the cached tool context can safely retain
    * it.
    */
@@ -901,7 +925,7 @@ export async function getChatMcpTools({
    * has no escrow record. Stable per scope key for the same reason
    * `suppressContentLogging` is — escrow is settled at creation.
    */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
   /**
    * Whether media returned by a tool may enter the selected model's context.
    * Omitted by headless/legacy callers to preserve their current behavior.
@@ -963,6 +987,7 @@ export async function getChatMcpTools({
     agentId,
     userId,
     organizationId,
+    actorTeamId,
   );
   if (!mcpGwToken) {
     logger.warn(
@@ -1055,7 +1080,7 @@ export async function getChatMcpTools({
       mcpGwToken,
       considerContextUntrusted,
       suppressContentLogging,
-      lockedChatAudit,
+      encryptedChatAudit,
       modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,
       teams,
       userTeams,
@@ -1102,7 +1127,7 @@ export async function getChatMcpTools({
         ]);
 
         // Convert delegation tools to AI SDK Tool format.
-        // Locked chats exclude delegation entirely: a child-agent
+        // Encrypted chats exclude delegation entirely: a child-agent
         // run builds its own tool set and would log its tool calls with
         // content, outside the parent's suppression scope. Disable rather
         // than leak.

@@ -1,6 +1,6 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -38,7 +38,7 @@ vi.mock("@/components/create-llm-provider-api-key-dialog", () => ({
 }));
 
 // The component reads the selected provider from the URL and writes selections
-// back; a static search param + no-op updater is enough for these assertions.
+// back; initialize matching history for the selection assertions.
 vi.mock("next/navigation");
 // The panel brands its copy with the deployment's app name, which otherwise
 // reaches for the appearance-settings query and needs a QueryClientProvider.
@@ -46,16 +46,17 @@ vi.mock("@/lib/hooks/use-app-name");
 
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
+  window.history.replaceState(
+    null,
+    "",
+    "/connection?clientId=generic&providerId=anthropic",
+  );
   vi.mocked(useAppName).mockReturnValue("Archestra");
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams("providerId=anthropic") as unknown as ReturnType<
       typeof useSearchParams
     >,
   );
-  vi.mocked(usePathname).mockReturnValue("/connection");
-  vi.mocked(useRouter).mockReturnValue({
-    replace: vi.fn(),
-  } as unknown as ReturnType<typeof useRouter>);
 });
 
 function genericClient() {
@@ -99,10 +100,6 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
 
   it("switches from a provider endpoint to Model Router through the provider dropdown", async () => {
     const user = userEvent.setup();
-    const replace = vi.fn();
-    vi.mocked(useRouter).mockReturnValue({ replace } as unknown as ReturnType<
-      typeof useRouter
-    >);
     renderInstructions();
 
     // A selected provider keeps its per-provider URL (id-less)…
@@ -114,10 +111,9 @@ describe("ProxyClientInstructions — Any Client step 4", () => {
       key: "ArrowDown",
     });
     await user.click(screen.getByRole("option", { name: "Model Router" }));
-    expect(replace).toHaveBeenCalledWith(
-      expect.stringContaining("providerId=model-router"),
-      { scroll: false },
-    );
+    expect(
+      Object.fromEntries(new URLSearchParams(window.location.search)),
+    ).toEqual({ clientId: "generic", providerId: "model-router" });
   });
 
   it("selecting the Model Router tab shows the unified /model-router/ endpoint", async () => {

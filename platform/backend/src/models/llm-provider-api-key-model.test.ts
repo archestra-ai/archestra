@@ -538,6 +538,9 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
       { catalog: ["gpt-5.4", "gpt-5"], expected: "gpt-5.4" },
       { catalog: ["gpt-5.5", "gpt-5.4"], expected: "gpt-5.5" },
       { catalog: ["gpt-5.5-pro", "gpt-5.5"], expected: "gpt-5.5-pro" },
+      { catalog: ["gpt-6-sol", "gpt-5.6-sol"], expected: "gpt-6-sol" },
+      { catalog: ["gpt-6-astra", "gpt-6-sol"], expected: "gpt-6-astra" },
+      { catalog: ["gpt-6-luna", "gpt-5.6-sol"], expected: "gpt-5.6-sol" },
     ])("marks $expected as best for $catalog", async ({ catalog, expected }, {
       makeOrganization,
       makeSecret,
@@ -605,6 +608,18 @@ describe("LlmProviderApiKeyModelLinkModel", () => {
         provider: "gemini",
         catalog: ["gemini-2.5-pro", "gemini-3.6-flash"],
         expected: "gemini-3.6-flash",
+      },
+      {
+        // Gemini 3.8 Flash is the current best Gemini model.
+        provider: "gemini",
+        catalog: ["gemini-3.5-pro", "gemini-3.8-flash"],
+        expected: "gemini-3.8-flash",
+      },
+      {
+        // Gemini 4 Argon outranks it once it ships.
+        provider: "gemini",
+        catalog: ["gemini-3.8-flash", "gemini-4-argon"],
+        expected: "gemini-4-argon",
       },
       {
         provider: "bedrock",

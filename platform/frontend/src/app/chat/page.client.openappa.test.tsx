@@ -20,7 +20,7 @@ import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { authClient } from "@/lib/clients/auth/auth-client";
 import { ConnectivityProvider } from "@/lib/config/connectivity";
 import { makeAgent } from "@/mocks/data/agents";
-import { adminPermissionsSeed, makeSession } from "@/mocks/data/auth";
+import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
 import { configSeed } from "@/mocks/data/config";
 import { makeLlmProviderApiKey } from "@/mocks/data/llm-keys";
 import {
@@ -52,6 +52,13 @@ const agent = makeAgent({
   modelId: "test-model",
   llmApiKeyId: "test-llm-key",
 });
+const otherAgent = makeAgent({
+  id: "research-agent",
+  name: "Research Agent",
+  scope: "org",
+  modelId: "test-model",
+  llmApiKeyId: "test-llm-key",
+});
 const conversation = {
   id: "configuration-conversation",
   origin: "user",
@@ -69,6 +76,13 @@ const createBodies: unknown[] = [];
 const sent: UIMessage[] = [];
 
 const server = setupServer(
+  http.get("/api/teams", () =>
+    HttpResponse.json({ data: [], pagination: { total: 0 } }),
+  ),
+  http.get("/api/environments", () => HttpResponse.json([])),
+  http.get("/api/chat/conversations/:id/openappa-status", () =>
+    HttpResponse.json(null),
+  ),
   http.get("/health", () => HttpResponse.json({ status: "ok" })),
   http.get("/api/llm-provider-api-keys/available", () => HttpResponse.json([])),
   http.get("/api/agents/:id/tools", () => HttpResponse.json([])),
@@ -79,7 +93,11 @@ const server = setupServer(
   ),
   http.get("/ready", () => HttpResponse.json({ status: "ok" })),
   http.get("/api/user/permissions", () =>
-    HttpResponse.json(adminPermissionsSeed),
+    HttpResponse.json(
+      makeUserPermissions({
+        chat: ["read", "create", "update", "delete", "full-view"],
+      }),
+    ),
   ),
   http.get("/api/resource-permissions", () => HttpResponse.json([])),
   http.get("/api/organization", () => HttpResponse.json(organizationSeed)),
@@ -126,6 +144,8 @@ const server = setupServer(
 
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  localStorage.clear();
+  sessionStorage.clear();
   createBodies.length = 0;
   sent.length = 0;
   archestraApiClient.setConfig({ baseUrl: window.location.origin });
@@ -197,6 +217,11 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   expect(
     await screen.findByRole("button", { name: "Chat actions" }),
   ).toBeInTheDocument();
+  expect(
+    screen.getByRole("combobox", {
+      name: "OpenAPPA Configuration Agent",
+    }),
+  ).toBeEnabled();
 
   await user.type(
     await screen.findByPlaceholderText("Ask a follow-up..."),
@@ -206,6 +231,38 @@ test("a configuration agent launch uses ordinary creation and chat controls", as
   expect(sent[1]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
+});
+
+test.each([
+  "plain chat",
+  "configuration launch",
+])("a new %s lets the user switch away from the configuration agent", async (launch) => {
+  const user = userEvent.setup();
+  vi.mocked(useSearchParams).mockReturnValue(
+    new URLSearchParams(
+      launch === "configuration launch" ? { agentId: agent.id } : {},
+    ) as unknown as ReturnType<typeof useSearchParams>,
+  );
+  server.use(
+    http.get("/api/agents/all", () => HttpResponse.json([agent, otherAgent])),
+    http.get(`/api/agents/${otherAgent.id}`, () =>
+      HttpResponse.json(otherAgent),
+    ),
+  );
+  renderChat();
+
+  await user.click(
+    await screen.findByRole("combobox", {
+      name: "OpenAPPA Configuration Agent",
+    }),
+  );
+  await user.click(
+    await screen.findByRole("option", { name: /Research Agent/ }),
+  );
+  expect(
+    await screen.findByRole("combobox", { name: "Research Agent" }),
+  ).toBeEnabled();
+  expect(createBodies).toHaveLength(0);
 });
 
 test("an ordinary launch ready on mount creates and sends once under StrictMode", async () => {
@@ -237,7 +294,21 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   vi.mocked(useSearchParams).mockReturnValue(
     new URLSearchParams() as unknown as ReturnType<typeof useSearchParams>,
   );
+  const updates: unknown[] = [];
   server.use(
+    http.get("/api/agents/all", () => HttpResponse.json([agent, otherAgent])),
+    http.get(`/api/agents/${otherAgent.id}`, () =>
+      HttpResponse.json(otherAgent),
+    ),
+    http.patch("/api/chat/conversations/:id", async ({ request }) => {
+      const body = (await request.json()) as { agentId?: string };
+      if (body.agentId) updates.push(body);
+      return HttpResponse.json({
+        ...conversation,
+        ...body,
+        agent: body.agentId === otherAgent.id ? otherAgent : agent,
+      });
+    }),
     http.get("/api/chat/conversations/:id", () =>
       HttpResponse.json({
         ...conversation,
@@ -265,6 +336,17 @@ test("a saved configuration-agent conversation accepts a normal follow-up withou
   expect(sent[0]).toMatchObject({
     parts: [{ type: "text", text: "Now tighten it" }],
   });
+  await user.click(
+    screen.getByRole("combobox", { name: "OpenAPPA Configuration Agent" }),
+  );
+  await user.click(
+    await screen.findByRole("option", { name: /Research Agent/ }),
+  );
+  await waitFor(() =>
+    expect(updates).toEqual([
+      expect.objectContaining({ agentId: otherAgent.id }),
+    ]),
+  );
 });
 
 function renderChat(routeConversationId?: string) {

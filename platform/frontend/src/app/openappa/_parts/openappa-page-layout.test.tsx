@@ -4,9 +4,16 @@ import { render, screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useSearchParams } from "next/navigation";
-import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { OpenAppaPageLayout } from "./openappa-page-layout";
 
+vi.mock("@/lib/auth/auth.query");
+beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+    typeof useHasPermissions
+  >);
+});
 const server = setupServer(
   http.get("http://localhost:9000/api/agents/all", () =>
     HttpResponse.json([
@@ -72,26 +79,18 @@ test.each([
     </OpenAppaPageLayout>,
   );
 
-  expect(screen.getAllByRole("link", { name: tabName })[0]).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
   expect(
-    screen.getByText(/deterministic guardrails that stop AI from leaking/),
-  ).toBeInTheDocument();
-  const configureLink = screen.queryByRole("link", {
-    name: "Configure with chat",
-  });
-  if (pathname === "/openappa/policy") {
-    expect(
-      await screen.findByRole("link", { name: "Configure with chat" }),
-    ).toHaveAttribute(
-      "href",
-      expect.stringMatching(/^\/chat\?agentId=appa-agent&user_prompt=Walk/),
-    );
-  } else {
-    expect(configureLink).not.toBeInTheDocument();
-  }
+    (await screen.findAllByRole("link", { name: tabName }))[0],
+  ).toHaveAttribute("aria-current", "page");
+  expect(
+    screen.getByRole("heading", {
+      level: 1,
+      name: `${pathname === "/openappa" ? "Guardrails" : tabName} Alpha`,
+    }),
+  ).toBeVisible();
+  expect(
+    screen.queryByRole("link", { name: "Configure with chat" }),
+  ).not.toBeInTheDocument();
 });
 
 test("a fresh Overview hides the tabs until a policy is saved", () => {
@@ -132,5 +131,5 @@ test("the header labels the feature as Alpha on every tab", () => {
 
   expect(screen.getByText("Alpha")).toBeInTheDocument();
   // The browser tab keeps the plain name; the badge is only for the page.
-  expect(document.title).toBe("Guardrails - Archestra");
+  expect(document.title).toBe("Policy - Archestra");
 });

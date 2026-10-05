@@ -19,8 +19,6 @@ import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
 import type { User } from "@/types";
 
-vi.mock("@/observability");
-
 describe("POST /api/agents/:id/versions/:version/restore", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
@@ -704,7 +702,7 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     ]);
   });
 
-  test("403s when a member restores another user's personal agent", async ({
+  test("hides another user's personal agent from a member who restores it", async ({
     makeAgent,
     makeUser,
     makeMember,
@@ -716,16 +714,15 @@ describe("POST /api/agents/:id/versions/:version/restore", () => {
     });
     await AgentModel.update(agent.id, { description: "changed" });
 
-    // A plain member holds agent:update, so the agent-type check passes; the
-    // scope check is what must stop them touching someone else's personal
-    // agent. Without it, version history would be a way around the ownership
-    // rules the update route enforces.
+    // Only a grant on the agent allows a restore. Without that check, version
+    // history would be a way around the ownership rules the update route
+    // enforces. The member can't see the agent, so it reads as missing.
     const outsider = await makeUser();
     await makeMember(outsider.id, organizationId);
     user = outsider;
 
     const response = await restore(agent.id, 1);
-    expect(response.statusCode).toBe(403);
+    expect(response.statusCode).toBe(404);
 
     const agentRow = await AgentModel.findById(agent.id, undefined, true);
     expect(agentRow?.description).toBe("changed");

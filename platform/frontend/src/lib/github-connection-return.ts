@@ -24,7 +24,8 @@ export function consumeGitHubConnectionReturn(state: string | null) {
   }
 }
 
-const personalConnections = "/account/connections";
+const personalConnections = "/account#connections";
+const accountPath = "/account";
 const organizationCredentials = "/settings/credentials";
 const storagePrefix = "github-connection-return:";
 
@@ -33,8 +34,11 @@ function validatedDestination(destination: string | null): string {
   try {
     const url = new URL(destination, window.location.origin);
     if (url.origin !== window.location.origin) return personalConnections;
+    // A connect started from the Connections section records `/account`, the
+    // page it sits on; come back to the section, not the top of the page.
+    if (url.pathname === accountPath)
+      return `${accountPath}${url.search}${url.hash || "#connections"}`;
     if (
-      url.pathname === personalConnections ||
       url.pathname === organizationCredentials ||
       /^\/agents\/[a-zA-Z0-9-]+$/.test(url.pathname) ||
       url.pathname === "/chat" ||

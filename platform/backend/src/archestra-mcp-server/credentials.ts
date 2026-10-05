@@ -6,7 +6,18 @@ import {
   transferPersonalRuntimeCredential,
 } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import {
+  createRuntimeCredentialDefinition,
+  deleteRuntimeCredentialDefinition,
+  getRuntimeCredentialUsage,
+  listRuntimeCredentialDefinitions,
+  updateRuntimeCredentialDefinition,
+} from "@/services/agent-runtime/runtime-credentials";
 import { ResourcePermissions } from "@/services/resource-permissions";
+import {
+  InsertRuntimeCredentialDefinitionSchema,
+  UpdateRuntimeCredentialDefinitionSchema,
+} from "@/types";
 import {
   agentCredentialSetupUrl,
   catchError,
@@ -68,6 +79,131 @@ const TransferCredentialOutputSchema = z.object({
 });
 
 const registry = defineArchestraTools([
+  defineArchestraTool({
+    shortName: "list_runtime_credentials",
+    title: "List credentials",
+    description:
+      "List reusable credential definitions visible to the caller, including whether a personal or organization connection is configured. Returns metadata only, never secret values. Use this before choosing a GitHub App for OpenAPPA sync.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
+      const actor = requireActor(context);
+      const definitions = await listRuntimeCredentialDefinitions({
+        organizationId: actor.organizationId,
+        userId: actor.id,
+      });
+      return structuredSuccessResult({
+        credentials: definitions.map(credentialSummary),
+      });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "get_runtime_credential",
+    title: "Get credential",
+    description:
+      "Read one reusable credential definition and its usage. Never returns the secret value.",
+    schema: z.strictObject({ key: z.string() }),
+    async handler({ args, context }) {
+      const actor = requireActor(context);
+      const definition = (
+        await listRuntimeCredentialDefinitions({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+        })
+      ).find((item) => item.key === args.key);
+      if (!definition) return errorResult("Credential not found");
+      const usage = await getRuntimeCredentialUsage({
+        organizationId: actor.organizationId,
+        key: args.key,
+      });
+      return structuredSuccessResult({
+        ...credentialSummary(definition),
+        usage,
+      });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "create_runtime_credential",
+    title: "Create credential definition",
+    description:
+      "Create credential metadata. Never request a secret in tool arguments. After creating a GitHub App definition, direct the person to connect its private key in the native credential dialog.",
+    schema: InsertRuntimeCredentialDefinitionSchema,
+    async handler({ args, context }) {
+      const actor = requireActor(context);
+      try {
+        const created = await createRuntimeCredentialDefinition({
+          organizationId: actor.organizationId,
+          userId: actor.id,
+          definition: args,
+        });
+        return structuredSuccessResult({
+          key: created.key,
+          id: created.id,
+          name: created.name,
+        });
+      } catch (error) {
+        return catchError(error, "creating the credential");
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: "update_runtime_credential",
+    title: "Update credential definition",
+    description:
+      "Update metadata for an existing credential. This does not set a secret value.",
+    schema: z.strictObject({
+      key: z.string(),
+      changes: UpdateRuntimeCredentialDefinitionSchema,
+    }),
+    async handler({ args, context }) {
+      const actor = requireActor(context);
+      try {
+        const updated = await updateRuntimeCredentialDefinition({
+          organizationId: actor.organizationId,
+          key: args.key,
+          definition: args.changes,
+        });
+        return structuredSuccessResult({
+          key: updated.key,
+          id: updated.id,
+          name: updated.name,
+        });
+      } catch (error) {
+        return catchError(error, "updating the credential");
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: "delete_runtime_credential",
+    title: "Delete credential definition",
+    description:
+      "Delete an unused credential and its connection. Confirm the user's intent before calling this tool.",
+    schema: z.strictObject({ key: z.string() }),
+    async handler({ args, context }) {
+      const actor = requireActor(context);
+      try {
+        await deleteRuntimeCredentialDefinition({
+          organizationId: actor.organizationId,
+          key: args.key,
+        });
+        return structuredSuccessResult({ deleted: args.key });
+      } catch (error) {
+        return catchError(error, "deleting the credential");
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: "request_runtime_credential_setup",
+    title: "Open credential setup",
+    description:
+      "Ask the person to create and connect a GitHub App through the native chat dialog. Use when no suitable organization GitHub App credential exists. Secrets stay outside the conversation. In clients without this native dialog, direct the person to Settings → Credentials.",
+    schema: z.strictObject({ kind: z.literal("github_app") }),
+    async handler() {
+      return structuredSuccessResult({
+        action: "open_credential_dialog",
+        kind: "github_app",
+      });
+    },
+  }),
   defineArchestraTool({
     shortName: TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
     title: "Transfer Credential",
@@ -220,3 +356,12 @@ const registry = defineArchestraTools([
 
 export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
+
+function credentialSummary(
+  definition: Awaited<
+    ReturnType<typeof listRuntimeCredentialDefinitions>
+  >[number],
+) {
+  const { icon: _icon, ...summary } = definition;
+  return summary;
+}

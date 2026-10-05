@@ -38,8 +38,8 @@ vi.mock("@/lib/apps/use-app-access", async (importActual) => ({
   useAppAccess: vi.fn(),
 }));
 
-// The card reads the locked-chat flag to decide whether to offer "Open as
-// locked chat". Off here: these tests are about the card's ordinary actions.
+// The card reads the encrypted-chat flag to decide whether to offer "Open as
+// encrypted chat". Off here: these tests are about the card's ordinary actions.
 vi.mock("@/lib/config/config.query", () => ({
   useFeature: () => false,
 }));
@@ -124,14 +124,7 @@ beforeEach(() => {
     push: pushMock,
   } as unknown as ReturnType<typeof useRouter>);
   vi.mocked(useAppAccess).mockReturnValue({
-    isAdmin: true,
-    isTeamAdmin: true,
-    canUpdate: true,
-    canDelete: true,
-    currentUserId: "user-1",
-    userTeamIds: new Set(),
     isPending: false,
-    canModify: true,
     canEdit: true,
     canDeleteApp: true,
   } as ReturnType<typeof useAppAccess>);
@@ -212,8 +205,8 @@ describe("ExternalAppCard", () => {
     expect(openExternalMutate).toHaveBeenCalledWith({
       mcpServerId: "srv-1",
       resourceUri: "ui://pm/board.html",
-      // The ordinary open; "Open as locked chat" is the one that sends true.
-      lockedChat: false,
+      // The ordinary open; "Open as encrypted chat" is the one that sends true.
+      encryptedChat: false,
     });
     await waitFor(() => expect(pushMock).toHaveBeenCalledWith("/chat/conv-1"));
     // A seeded render needs no opening prompt.
@@ -349,14 +342,7 @@ describe("OwnedAppCard", () => {
   it("disables settings, version history, and delete when the app is outside the caller's scope", () => {
     const onOpenSettings = vi.fn();
     vi.mocked(useAppAccess).mockReturnValue({
-      isAdmin: false,
-      isTeamAdmin: false,
-      canUpdate: true,
-      canDelete: true,
-      currentUserId: "user-2",
-      userTeamIds: new Set(),
       isPending: false,
-      canModify: false,
       canEdit: false,
       canDeleteApp: false,
     } as ReturnType<typeof useAppAccess>);

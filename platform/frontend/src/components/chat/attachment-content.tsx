@@ -1,14 +1,14 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useAttachmentContentUrl } from "@/lib/chat/locked-chat-attachment";
+import { useAttachmentContentUrl } from "@/lib/chat/encrypted-chat-attachment";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
  * Renderers for a chat attachment's bytes.
  *
  * In an ordinary chat these are the plain `<img>` / `<video>` / `<a>` they
- * wrap. In a locked chat the bytes only come back to a request carrying the
+ * wrap. In an encrypted chat the bytes only come back to a request carrying the
  * conversation key, which the DOM will not attach on its own, so each of these
  * waits on {@link useAttachmentContentUrl} to fetch them and swap in a `blob:`
  * URL. That wait is the only reason they exist as components.

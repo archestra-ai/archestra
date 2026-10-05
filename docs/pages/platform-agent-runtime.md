@@ -3,7 +3,7 @@ title: Agent Runtime (Beta)
 category: Agents
 order: 7
 description: Run coding agents and delegated tasks in isolated containers
-lastUpdated: "2026-09-23"
+lastUpdated: "2026-10-05"
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -146,6 +146,16 @@ External clients can use `read_workspace_file` and `write_workspace_file` withou
 
 Only the original run owner can access these files. See the [MCP tool reference](/docs/platform-archestra-mcp-server) for request schemas and overwrite behavior.
 
+### Guardrails
+
+Guardrails v2 checks model tool calls and results within each runtime. Delegated runs inherit their parent's restrictions before work starts. Follow-up instructions preserve those restrictions. Returned answers cross the guardrail boundary before another Agent receives them.
+
+A remedy that requires human review appears on the run page. The run's user owner can approve or deny it. Native client permission settings do not approve guardrail remedies. Runs without an eligible human reviewer stay blocked.
+
+Protected file transfers check the pinned file content before returning a download command. They refuse files that require transformation or exceed the protected export limit. Direct downloads by the session owner remain available.
+
+Start a new session to apply Guardrails v2 to work begun without enforcement. Enabling the deployment switch does not retroactively protect that history. Guardrails do not replace filesystem or network sandboxing.
+
 ### Readable Transcript
 
 Maintained images export messages and tool activity alongside terminal recordings. Custom clients can provide the same history by writing `readable-transcript.json` in `ARCHESTRA_AGENT_RUNTIME_DIR` before exiting.
@@ -253,6 +263,10 @@ Private mode can use the verified sender's personal credentials. Internal and Pu
 
 Select a runtime Agent in Chat and send a task to open its live terminal. Attach files before starting so the Agent can read them in its container. Startup progress and failures appear alongside the run.
 
+**Focus terminal** starts on. Mouse actions and keyboard shortcuts go to the terminal application. Turn it off for browser text selection, copying, and context menus.
+
+Terminal applications can copy selections to your computer's clipboard while this page is active. Cmd+C or Ctrl+C also copies selected terminal text. Paste it into another application, such as Notes. Without a selection, Ctrl+C keeps its normal terminal action.
+
 You can leave the page while work continues. Reopen it from the sidebar to see current output or retained history. Runs indicate when input is needed or progress has stalled. Send follow-up instructions to continue the work.
 
 ## Organize Runs In Projects
@@ -267,11 +281,11 @@ Runtime sessions use [granular access control](/docs/platform-access-control#ses
 
 ## View Runs From An Agent
 
-The Agent's **Runs** tab opens live terminals and completed recordings. Reattach while the client remains alive, or resume its saved conversation after suspension. Detaching leaves the run active.
+The Agent's **Runs** tab opens live terminals and completed recordings. **Resume** reopens the saved session without sending an instruction. You can type directly into the terminal once it connects. Detaching leaves the run active.
 
 Run ownership follows the user who started it, not the Agent creator. Sharing grants read-only output access, never an interactive terminal. Agent administrators can read output even without an explicit share. Project access also permits reading runs when paired with permission to read all project sessions.
 
-Recordings preserve earlier terminal output, including screens replaced by redraws. Run history remains available after the container and files are removed and follows the configured retention period. See [Deployment](/docs/platform-deployment#agent-runtime) for retention and transcript limits.
+Recordings preserve earlier terminal output, including screens replaced by redraws. Original layout preserves terminal columns and scrolls horizontally. Wrap lines fits the output to your browser width. The output panel handles vertical scrolling in both views. Links to published artifacts open in a new browser tab. Run history remains available after the container and files are removed and follows the configured retention period. See [Deployment](/docs/platform-deployment#agent-runtime) for retention and transcript limits.
 
 ## Monitor Runtime Health
 

@@ -111,7 +111,7 @@ describe("GET /api/openappa/external-consults", () => {
     expect((await list("?outcome=timeout")).json().data).toHaveLength(1);
   });
 
-  test("a log:read caller sees only their own consults, in json and jsonl", async ({
+  test("a openappaDiagnostics:read caller sees only their own consults, in json and jsonl", async ({
     makeUser,
     makeMember,
   }) => {
@@ -141,13 +141,62 @@ describe("GET /api/openappa/external-consults", () => {
     ).toEqual([mine]);
   });
 
+  test("Platform Admin cannot read another caller's consults", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: "platform_admin" });
+    const mine = await seedConsult({
+      organizationId,
+      callerId: `user:${caller.id}`,
+    });
+    await seedConsult({ organizationId, callerId: "user:another-caller" });
+    expect(
+      (await list()).json().data.map((row: { id: string }) => row.id),
+    ).toEqual([mine]);
+  });
+
+  test("a custom diagnostics admin sees organization-wide consults without log permission", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: { openappaDiagnostics: ["read", "admin"] },
+    });
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: role.role });
+    const other = await seedConsult({
+      organizationId,
+      callerId: "user:another-caller",
+    });
+    expect(
+      (await list()).json().data.map((row: { id: string }) => row.id),
+    ).toEqual([other]);
+    expect((await list("?format=jsonl")).body).toContain(other);
+  });
+
+  test("legacy log access alone no longer grants consult access", async ({
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const role = await makeCustomRole(organizationId, {
+      permission: { log: ["read"] },
+    });
+    caller = await makeUser();
+    await makeMember(caller.id, organizationId, { role: role.role });
+    expect((await list()).statusCode).toBe(403);
+  });
+
   test("an audience source's consult is withheld from a caller who cannot read members", async ({
     makeUser,
     makeMember,
     makeCustomRole,
   }) => {
     const logReader = await makeCustomRole(organizationId, {
-      permission: { log: ["read"] },
+      permission: { openappaDiagnostics: ["read"] },
     });
     const bytes = {
       rawResponse: Buffer.from('{"version":1}'),
@@ -216,7 +265,7 @@ describe("GET /api/openappa/external-consults", () => {
     );
   });
 
-  test("a caller without log:read is refused", async ({
+  test("a caller without openappaDiagnostics:read is refused", async ({
     makeUser,
     makeMember,
   }) => {

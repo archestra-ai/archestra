@@ -59,9 +59,9 @@ export class ApiError extends Error {
   /**
    * Whether a retry can succeed, surfaced as the `x-should-retry` response
    * header that the Anthropic and OpenAI SDKs (and so Claude Code) honor ahead
-   * of their status-based retry rules. Set `false` on a server-side failure
-   * that repeats on every request, so clients show it at once instead of
-   * retrying a 5xx for minutes.
+   * of their status-based retry rules. Set `false` on any failure that repeats
+   * on every request, so clients show it at once instead of retrying it for
+   * minutes. Those SDKs retry 408, 409, 429, and 5xx statuses by default.
    */
   shouldRetry?: boolean;
 

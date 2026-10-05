@@ -523,23 +523,25 @@ async function dispatchTool({
   // Reuse the set computed above so the policy gate does not re-query it.
   // A dynamically resolved tool is appended so the evaluator does not
   // refuse it as "disabled" — invocation policies still evaluate it.
-  const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
-    agentId: context.agentId,
-    toolName: resolvedName,
-    toolInput,
-    organizationId: context.organizationId,
-    contextIsTrusted: context.contextIsTrusted ?? true,
-    sensitiveContextOrigin: context.sensitiveContextOrigin,
-    enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
-    enabledToolNames: availableTool
-      ? new Set([...assignedToolNames, resolvedName])
-      : assignedToolNames,
-    // The dynamically-resolved All-mode row that will execute. The assigned case
-    // is resolved centrally via the execution resolver, so only the dynamic id
-    // is passed here. The id rides along on a block for the "Edit policy" modal
-    // (All-mode tools have no agent_tools row for the modal's lookup to find).
-    resolvedToolId: availableTool?.id,
-  });
+  const policyBlock = context.connectionSetupBypass
+    ? null
+    : await evaluateSingleMcpToolInvocationPolicy({
+        agentId: context.agentId,
+        toolName: resolvedName,
+        toolInput,
+        organizationId: context.organizationId,
+        contextIsTrusted: context.contextIsTrusted ?? true,
+        sensitiveContextOrigin: context.sensitiveContextOrigin,
+        enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
+        enabledToolNames: availableTool
+          ? new Set([...assignedToolNames, resolvedName])
+          : assignedToolNames,
+        // The dynamically-resolved All-mode row that will execute. The assigned case
+        // is resolved centrally via the execution resolver, so only the dynamic id
+        // is passed here. The id rides along on a block for the "Edit policy" modal
+        // (All-mode tools have no agent_tools row for the modal's lookup to find).
+        resolvedToolId: availableTool?.id,
+      });
   if (policyBlock) {
     // Attach the structured policy_denied error (in _meta + structuredContent)
     // so clients parse the block without scraping the prose. A caller who can
@@ -605,12 +607,12 @@ async function dispatchTool({
         abortSignal: signal,
         // A detached call outlives the synchronous timeout by design.
         ...(detachable ? { upstreamTimeoutMs: TASK_TTL_MS } : {}),
-        // LockedChat: the persisted mcp_tool_calls row is encrypted under the
+        // EncryptedChat: the persisted mcp_tool_calls row is encrypted under the
         // conversation key, or redacted when there is none to encrypt under.
         ...(context.suppressContentLogging
           ? {
               suppressContentLogging: true,
-              lockedChatAudit: context.lockedChatAudit,
+              encryptedChatAudit: context.encryptedChatAudit,
             }
           : {}),
       },

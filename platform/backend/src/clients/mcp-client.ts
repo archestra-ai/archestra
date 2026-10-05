@@ -1,13 +1,14 @@
 import { createHash, randomUUID } from "node:crypto";
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
+  ENCRYPTED_CHAT_REDACTED_MARKER,
   getArchestraAppResourceUri,
   isLogContentNotStored,
   isPlaywrightCatalogItem,
   LINKED_IDP_SSO_MODE,
-  LOCKED_CHAT_REDACTED_MARKER,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
@@ -42,7 +43,7 @@ import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-re
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -445,29 +446,29 @@ interface ExecuteToolCallForOwnerOptions {
    */
   availableTool?: CatalogTool;
   /**
-   * Locked chat conversation: the persisted mcp_tool_calls row keeps the
+   * Encrypted chat conversation: the persisted mcp_tool_calls row keeps the
    * tool name but never stores plaintext arguments or result content.
    */
   suppressContentLogging?: boolean;
   /**
-   * Present only for a locked chat that has an escrow record: the
+   * Present only for an encrypted chat that has an escrow record: the
    * row's content is encrypted under the conversation key instead of being
    * thrown away. Without it a suppressed call falls back to redaction.
    */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
 }
 
 /**
  * How one call's persisted `mcp_tool_calls` row must handle content, resolved
  * once from the caller's options and threaded down every persist path.
- * `undefined` means "not a locked-chat call, store normally".
+ * `undefined` means "not an encrypted-chat call, store normally".
  *
  * Deliberately a parameter rather than a call-id-keyed registry: ids come from
  * the model, and a collision between two conversations would encrypt one's
  * content under the other's key — unreadable by either escrow record.
  */
 type ToolCallContentDisposition =
-  | { kind: "encrypt"; audit: LockedChatAuditContext }
+  | { kind: "encrypt"; audit: EncryptedChatAuditContext }
   | { kind: "redact" };
 
 class McpClient {
@@ -481,13 +482,8 @@ class McpClient {
     maxSize: ACTIVE_CONNECTION_CACHE_MAX_SIZE,
     defaultTtl: ACTIVE_CONNECTION_CACHE_TTL_MS,
     onEviction: (key: string, value: unknown) => {
-      const client = value as Client;
-      Promise.resolve(client.close()).catch((error) => {
-        logger.warn(
-          { connectionKey: key, error },
-          "Error closing evicted active MCP connection",
-        );
-      });
+      // An idle-expired entry can still carry a long-running call.
+      this.closeWhenIdle(key, value as Client);
       this.activeConnectionServerState.delete(key);
       this.toolNameCache.delete(key);
       this.pendingHttpSessionMetadata.delete(key);
@@ -497,6 +493,11 @@ class McpClient {
   });
   private activeConnectionServerState = new Map<string, CachedServerState>();
   private activeConnectionLastValidatedAt = new Map<string, number>();
+  // Requests in flight per client. A client that recovery replaces is closed
+  // only once they settle: closing it earlier fails every sibling call on it
+  // with "Connection closed", which cannot be retried safely.
+  private clientRequestsInFlight = new Map<Client, number>();
+  private clientsClosingWhenIdle = new Set<Client>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -608,7 +609,7 @@ class McpClient {
     // Decided once here and handed to every path that persists a row (success,
     // error, retry, cancellation), so a concurrent call on another
     // conversation can never influence how this one's content is stored.
-    const lockedChatContent = resolveContentDisposition(options);
+    const encryptedChatContent = resolveContentDisposition(options);
 
     // Derive auth info for logging. Until a credential resolves, the call is
     // one the platform is serving itself (it may never reach a server — an app
@@ -629,7 +630,7 @@ class McpClient {
       toolCall,
       owner,
       options?.availableTool,
-      lockedChatContent,
+      encryptedChatContent,
     );
     if ("error" in validationResult) {
       return validationResult.error;
@@ -649,7 +650,7 @@ class McpClient {
         error: "Playwright requires an authenticated caller identity",
         mcpServerName: catalogItem.name,
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
 
@@ -708,7 +709,7 @@ class McpClient {
         isError: false,
         ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
 
@@ -720,7 +721,7 @@ class McpClient {
         tokenAuth,
         catalogItem,
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
@@ -749,7 +750,7 @@ class McpClient {
               toolCall,
               toolResult: this.buildCancelledResult(toolCall, authInfo),
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
             });
             throw error;
           }
@@ -768,7 +769,7 @@ class McpClient {
             error: agentMessage,
             mcpServerName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           });
         }
       }
@@ -787,7 +788,7 @@ class McpClient {
             "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
           mcpServerName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
       // A catalog-level enterprise-managed config is authoritative: assignments
@@ -822,7 +823,7 @@ class McpClient {
           mcpServerName,
           authInfo,
           structuredError: authError,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
 
@@ -830,7 +831,7 @@ class McpClient {
         targetMcpServerId: targetMcpServerId,
         toolCall,
         owner,
-        lockedChatContent,
+        encryptedChatContent,
       });
       if ("error" in secretsResult) {
         return secretsResult.error;
@@ -925,6 +926,9 @@ class McpClient {
         currentSecrets: Record<string, unknown>,
         isRetry = false,
       ): Promise<CommonToolResult> => {
+        // The client this attempt ran on. Recovery closes only this one: the
+        // cached client may already be a fresh one a sibling call is using.
+        let attemptClient: Client | undefined;
         try {
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
@@ -939,6 +943,7 @@ class McpClient {
           if (shouldRefreshBeforeCall) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
               secretId,
+              staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
               connectionKey,
               toolCall,
@@ -947,7 +952,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -975,6 +980,11 @@ class McpClient {
             targetMcpServerId,
             serverState,
             options?.elicitationHandler,
+          );
+          attemptClient = client;
+          this.clientRequestsInFlight.set(
+            client,
+            (this.clientRequestsInFlight.get(client) ?? 0) + 1,
           );
 
           // Determine the actual upstream tool name. Prefer the stored raw name
@@ -1032,7 +1042,7 @@ class McpClient {
               isError: false,
               _meta: { resourceUri },
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
               structuredContent: {
                 contents: result.contents as unknown,
               },
@@ -1078,6 +1088,7 @@ class McpClient {
           ) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
               secretId,
+              staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
               connectionKey,
               toolCall,
@@ -1086,7 +1097,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1114,7 +1125,7 @@ class McpClient {
               mcpServerName,
               authInfo,
               structuredError: authError,
-              lockedChatContent,
+              encryptedChatContent,
             });
           }
 
@@ -1128,7 +1139,7 @@ class McpClient {
             isError: !!result.isError,
             _meta: result._meta,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
             structuredContent: result.structuredContent as
               | Record<string, unknown>
               | undefined,
@@ -1157,7 +1168,7 @@ class McpClient {
               toolCall,
               toolResult: this.buildCancelledResult(toolCall, authInfo),
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
             });
             throw error;
           }
@@ -1207,19 +1218,12 @@ class McpClient {
                   "Failed to delete stale MCP HTTP session",
                 );
               }
-              // Close the stale client so its AbortController is cleaned up
-              const staleClient = this.activeConnections.get(connectionKey);
-              if (staleClient) {
-                try {
-                  await staleClient.close();
-                } catch {
-                  logger.warn(
-                    { connectionKey },
-                    "Failed to close stale MCP client",
-                  );
-                }
+              // Retire the client this attempt ran on. When a sibling already
+              // replaced it, the cached client is fresh and in use: leave it
+              // for the retry to reuse.
+              if (attemptClient) {
+                this.retireClient(connectionKey, attemptClient);
               }
-              this.clearConnectionState(connectionKey);
               return await executeToolCall(getTransport, currentSecrets, true);
             } finally {
               resolveRecovery();
@@ -1279,6 +1283,7 @@ class McpClient {
           if (canAttemptRecovery) {
             const retryToolCallResult = await this.attemptTokenRefreshAndRetry({
               secretId,
+              staleSecrets: currentSecrets,
               catalogId: catalogItem.id,
               connectionKey,
               toolCall,
@@ -1287,7 +1292,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1356,7 +1361,7 @@ class McpClient {
                   mcpServerName,
                   authInfo,
                   structuredError: assignmentError,
-                  lockedChatContent,
+                  encryptedChatContent,
                 });
               }
               const authError = await this.buildExpiredAuthMessage({
@@ -1373,7 +1378,7 @@ class McpClient {
                 mcpServerName,
                 authInfo,
                 structuredError: authError,
-                lockedChatContent,
+                encryptedChatContent,
               });
             }
             // No server resolved → "auth required" message with install link
@@ -1389,7 +1394,7 @@ class McpClient {
               mcpServerName,
               authInfo,
               structuredError: authError,
-              lockedChatContent,
+              encryptedChatContent,
             });
           }
 
@@ -1399,8 +1404,10 @@ class McpClient {
             error: errorMessage,
             mcpServerName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           });
+        } finally {
+          if (attemptClient) this.releaseClient(attemptClient);
         }
       };
 
@@ -1521,15 +1528,7 @@ class McpClient {
           },
           "Discarding cached MCP client after MCP server credentials changed",
         );
-        try {
-          await existingClient.close();
-        } catch (error) {
-          logger.warn(
-            { connectionKey, targetMcpServerId, error },
-            "Error closing stale cached MCP client after credential change",
-          );
-        }
-        this.clearConnectionState(connectionKey);
+        this.retireClient(connectionKey, existingClient);
       }
     }
 
@@ -1689,6 +1688,41 @@ class McpClient {
     );
   }
 
+  /**
+   * Stop handing out `client` for `connectionKey` and close it once no call
+   * is using it. A no-op on the cache when a sibling already replaced it.
+   */
+  private retireClient(connectionKey: string, client: Client): void {
+    if (this.activeConnections.get(connectionKey) === client) {
+      this.clearConnectionState(connectionKey);
+    }
+    this.closeWhenIdle(connectionKey, client);
+  }
+
+  private closeWhenIdle(connectionKey: string, client: Client): void {
+    if (this.clientRequestsInFlight.has(client)) {
+      this.clientsClosingWhenIdle.add(client);
+      return;
+    }
+    Promise.resolve(client.close()).catch((error) => {
+      logger.warn({ connectionKey, error }, "Error closing retired MCP client");
+    });
+  }
+
+  private releaseClient(client: Client): void {
+    const remaining = (this.clientRequestsInFlight.get(client) ?? 1) - 1;
+    if (remaining > 0) {
+      this.clientRequestsInFlight.set(client, remaining);
+      return;
+    }
+    this.clientRequestsInFlight.delete(client);
+    if (this.clientsClosingWhenIdle.delete(client)) {
+      Promise.resolve(client.close()).catch((error) => {
+        logger.warn({ error }, "Error closing retired MCP client");
+      });
+    }
+  }
+
   private clearConnectionState(connectionKey: string): void {
     this.activeConnections.delete(connectionKey);
     this.activeConnectionServerState.delete(connectionKey);
@@ -1714,7 +1748,7 @@ class McpClient {
     toolCall: CommonToolCall,
     owner: ToolOwner,
     availableTool?: CatalogTool,
-    lockedChatContent?: ToolCallContentDisposition,
+    encryptedChatContent?: ToolCallContentDisposition,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1825,7 +1859,7 @@ class McpClient {
             message,
             toolName: toolCall.name,
           },
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1856,7 +1890,7 @@ class McpClient {
             message,
             toolName: toolCall.name,
           },
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1892,7 +1926,7 @@ class McpClient {
           owner,
           error: "Tool is missing catalogId",
           mcpServerName: tool.catalogName || "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1906,7 +1940,7 @@ class McpClient {
           owner,
           error: `No catalog item found for tool catalog ID ${tool.catalogId}`,
           mcpServerName: tool.catalogName || "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1920,13 +1954,13 @@ class McpClient {
     targetMcpServerId,
     toolCall,
     owner,
-    lockedChatContent,
+    encryptedChatContent,
     serverLookup,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
     owner: ToolOwner;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     serverLookup?: ListingServerLookup;
   }): Promise<
     | {
@@ -1952,7 +1986,7 @@ class McpClient {
           owner,
           error: `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
           mcpServerName: "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2020,7 +2054,7 @@ class McpClient {
     owner,
     catalogItem,
     authInfo,
-    lockedChatContent,
+    encryptedChatContent,
     serverLookup,
   }: {
     tool: McpToolAssignment;
@@ -2028,7 +2062,7 @@ class McpClient {
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     // Identity of the caller, so a refusal here is recorded and rendered like
     // any other result rather than as an anonymous error.
     authInfo?: ToolCallAuthInfo;
@@ -2083,7 +2117,7 @@ class McpClient {
           error: "The browser runtime is not available for this Environment.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2119,7 +2153,7 @@ class McpClient {
             mcpServerName: fallbackName,
             authInfo,
             structuredError: reconnectError,
-            lockedChatContent,
+            encryptedChatContent,
           }),
         };
       }
@@ -2173,7 +2207,7 @@ class McpClient {
               "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
             mcpServerName: fallbackName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           }),
         };
       }
@@ -2196,7 +2230,7 @@ class McpClient {
             "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2209,7 +2243,7 @@ class McpClient {
             "Dynamic team credential is enabled but tool has no catalogId.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2289,7 +2323,7 @@ class McpClient {
             "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2351,7 +2385,7 @@ class McpClient {
         mcpServerName: fallbackName,
         authInfo,
         structuredError: authError,
-        lockedChatContent,
+        encryptedChatContent,
       }),
     };
   }
@@ -2915,7 +2949,7 @@ class McpClient {
     mcpServerName?: string;
     authInfo?: ToolCallAuthInfo;
     structuredError?: McpToolError;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -2924,7 +2958,7 @@ class McpClient {
       mcpServerName = "unknown",
       authInfo,
       structuredError,
-      lockedChatContent,
+      encryptedChatContent,
     } = opts;
     const normalizedError: McpToolError = structuredError ?? {
       type: "generic",
@@ -2952,7 +2986,7 @@ class McpClient {
       toolCall,
       toolResult: errorResult,
       authInfo,
-      lockedChatContent,
+      encryptedChatContent,
     });
     return errorResult;
   }
@@ -2969,7 +3003,7 @@ class McpClient {
     _meta?: Record<string, unknown>;
     authInfo?: ToolCallAuthInfo;
     structuredContent?: Record<string, unknown>;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -2980,7 +3014,7 @@ class McpClient {
       _meta,
       authInfo,
       structuredContent,
-      lockedChatContent,
+      encryptedChatContent,
     } = opts;
 
     // `archestraError`, the seeded-app-render marker and the executed-as
@@ -3011,7 +3045,7 @@ class McpClient {
       toolCall,
       toolResult,
       authInfo,
-      lockedChatContent,
+      encryptedChatContent,
     });
     return toolResult;
   }
@@ -3024,6 +3058,8 @@ class McpClient {
    */
   private async attemptTokenRefreshAndRetry(params: {
     secretId: string;
+    /** The secret the failing call was built with. */
+    staleSecrets: Record<string, unknown>;
     catalogId: string;
     connectionKey: string;
     toolCall: CommonToolCall;
@@ -3035,7 +3071,7 @@ class McpClient {
     enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential | null;
     toolCatalogId: string | null;
     toolCatalogName: string | null;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -3043,6 +3079,7 @@ class McpClient {
   }): Promise<CommonToolResult | null> {
     const {
       secretId,
+      staleSecrets,
       catalogId,
       connectionKey,
       toolCall,
@@ -3055,7 +3092,7 @@ class McpClient {
       toolCatalogId,
       toolCatalogName,
       executeRetry,
-      lockedChatContent,
+      encryptedChatContent,
     } = params;
 
     logger.info(
@@ -3067,6 +3104,7 @@ class McpClient {
     // race a rotating refresh token or thrash connection teardown state.
     const refreshResult = await this.refreshOAuthTokenWithLock({
       secretId,
+      staleAccessToken: staleSecrets.access_token,
       catalogId,
       connectionKey,
       targetMcpServerId,
@@ -3168,7 +3206,7 @@ class McpClient {
           error: authError.message,
           mcpServerName,
           structuredError: authError,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
 
@@ -3177,13 +3215,15 @@ class McpClient {
         owner,
         error: retryErrorMsg,
         mcpServerName,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
   }
 
   private async refreshOAuthTokenWithLock(params: {
     secretId: string;
+    /** The access token the caller's failing or expiring call was built with. */
+    staleAccessToken: unknown;
     catalogId: string;
     connectionKey: string;
     targetMcpServerId: string;
@@ -3192,7 +3232,13 @@ class McpClient {
     updatedSecret: Record<string, unknown> | null;
     outcome: OAuthRefreshOutcome;
   }> {
-    const { secretId, catalogId, connectionKey, targetMcpServerId } = params;
+    const {
+      secretId,
+      staleAccessToken,
+      catalogId,
+      connectionKey,
+      targetMcpServerId,
+    } = params;
     const existingRefresh = this.oauthRefreshLocks.get(secretId);
     if (existingRefresh) {
       logger.info(
@@ -3207,14 +3253,31 @@ class McpClient {
       updatedSecret: Record<string, unknown> | null;
       outcome: OAuthRefreshOutcome;
     }> => {
+      // A caller that queued behind the per-connection limiter holds secrets
+      // read before it queued. When another caller already rotated the token
+      // since then, use the stored one: refreshing again would retire the
+      // fresh client that sibling calls are using and spend a rotating
+      // refresh token for nothing.
+      const storedSecret = (await secretManager().getSecret(secretId))?.secret;
+      if (
+        storedSecret &&
+        storedSecret.access_token !== staleAccessToken &&
+        !shouldProactivelyRefreshOAuthToken(storedSecret)
+      ) {
+        this.secretsCache.set(targetMcpServerId, {
+          secrets: storedSecret,
+          secretId,
+        });
+        return {
+          refreshed: true,
+          updatedSecret: storedSecret,
+          outcome: { ok: true },
+        };
+      }
+
       const existingClient = this.activeConnections.get(connectionKey);
       if (existingClient) {
-        try {
-          await existingClient.close();
-        } catch {
-          // Ignore close errors during refresh teardown.
-        }
-        this.clearConnectionState(connectionKey);
+        this.retireClient(connectionKey, existingClient);
       }
 
       const outcome = await refreshOAuthToken(secretId, catalogId);
@@ -3663,7 +3726,7 @@ class McpClient {
     toolCall: CommonToolCall;
     toolResult: CommonToolResult;
     authInfo?: ToolCallAuthInfo;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<void> {
     const { owner, mcpServerName, toolCall, toolResult, authInfo } = params;
     // Skip high-frequency browser tool logging to prevent DB bloat
@@ -3672,27 +3735,27 @@ class McpClient {
       return;
     }
 
-    // Locked chat calls keep the tool name and owner/user metadata on the
+    // Encrypted chat calls keep the tool name and owner/user metadata on the
     // audit surface either way; what differs is the content. With an audit
     // context the real arguments and result are handed to the model, which
     // encrypts them under the conversation key (never encrypt here — that
     // would nest envelopes). Without one there is no key that could ever open
     // them, so the row is redacted instead.
-    const isLockedChat = params.lockedChatContent !== undefined;
+    const isEncryptedChat = params.encryptedChatContent !== undefined;
     const audit =
-      params.lockedChatContent?.kind === "encrypt"
-        ? params.lockedChatContent.audit
+      params.encryptedChatContent?.kind === "encrypt"
+        ? params.encryptedChatContent.audit
         : null;
-    const suppressContent = isLockedChat && audit === null;
+    const suppressContent = isEncryptedChat && audit === null;
     const storedToolCall: CommonToolCall = suppressContent
       ? {
           id: toolCall.id,
           name: toolCall.name,
-          arguments: LOCKED_CHAT_REDACTED_MARKER,
+          arguments: ENCRYPTED_CHAT_REDACTED_MARKER,
         }
       : toolCall;
     const storedToolResult: unknown = suppressContent
-      ? LOCKED_CHAT_REDACTED_MARKER
+      ? ENCRYPTED_CHAT_REDACTED_MARKER
       : toolResult;
 
     try {
@@ -3722,11 +3785,11 @@ class McpClient {
         toolName: toolCall.name,
       };
 
-      // The app log stays content-free for every locked-chat call, encrypted
+      // The app log stays content-free for every encrypted-chat call, encrypted
       // rows included: the row is protected at rest, the log line is not. The
       // same goes for a call the Log Content setting kept out of the row.
-      if (isLockedChat) {
-        logData.resultContent = "[redacted: locked chat]";
+      if (isEncryptedChat) {
+        logData.resultContent = "[redacted: encrypted chat]";
       } else if (isLogContentNotStored(savedToolCall.toolResult)) {
         logData.resultContent = "[not stored: log content setting]";
       } else if (toolResult.isError) {
@@ -4852,8 +4915,11 @@ class McpClient {
     );
     const toolsByCatalogId = new Map<string, McpToolAssignment>();
     for (const tool of assignedTools) {
+      // Built-ins run in this gateway; discovering them must not look for
+      // an external installation or manufacture an auth error in the audit log.
       if (
         tool.catalogId &&
+        tool.catalogId !== ARCHESTRA_MCP_CATALOG_ID &&
         !toolsByCatalogId.has(tool.catalogId) &&
         !isToolIdentityExcluded(
           { catalogId: tool.catalogId, name: tool.toolName },
@@ -5895,8 +5961,8 @@ function resolveContentDisposition(
   options?: ExecuteToolCallForOwnerOptions,
 ): ToolCallContentDisposition | undefined {
   if (!options?.suppressContentLogging) return undefined;
-  return options.lockedChatAudit
-    ? { kind: "encrypt", audit: options.lockedChatAudit }
+  return options.encryptedChatAudit
+    ? { kind: "encrypt", audit: options.encryptedChatAudit }
     : { kind: "redact" };
 }
 

@@ -14,6 +14,7 @@ import {
   it,
   vi,
 } from "vitest";
+import { ClaudeCodeAccount } from "./claude-code-account";
 import { ClaudeCodeInferenceSettings } from "./claude-code-inference-settings";
 
 vi.mock("sonner");
@@ -110,7 +111,7 @@ describe("Claude Code authentication", () => {
     );
     render(
       <QueryClientProvider client={client}>
-        <Settings />
+        <Account />
       </QueryClientProvider>,
     );
     await waitFor(() =>
@@ -170,7 +171,7 @@ describe("Claude Code authentication", () => {
     );
     render(
       <QueryClientProvider client={client}>
-        <Settings />
+        <Account />
       </QueryClientProvider>,
     );
     await screen.findByText("Sign in to use this agent.");
@@ -199,7 +200,7 @@ describe("Claude Code authentication", () => {
     );
     render(
       <QueryClientProvider client={client}>
-        <Settings />
+        <Account />
       </QueryClientProvider>,
     );
     await screen.findByText("Connection expired. Sign in again.");
@@ -228,7 +229,15 @@ describe("Claude Code authentication", () => {
         <Settings vertexEnabled />
       </QueryClientProvider>,
     );
-    await screen.findByText("Sign in to use this agent.");
+    // Signing in belongs to the setup banner; the settings stay quiet.
+    await waitFor(() =>
+      expect(
+        screen.getByRole("radio", { name: /Personal Claude subscription/ }),
+      ).toBeChecked(),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Sign in" }),
+    ).not.toBeInTheDocument();
     fireEvent.click(
       screen.getByRole("radio", { name: /API key or cloud provider/ }),
     );
@@ -245,7 +254,9 @@ describe("Claude Code authentication", () => {
     fireEvent.click(
       screen.getByRole("radio", { name: /Personal Claude subscription/ }),
     );
-    await screen.findByText("Sign in to use this agent.");
+    expect(
+      screen.queryByRole("button", { name: "Provider key" }),
+    ).not.toBeInTheDocument();
     expect(modelRequests).toBe(0);
   });
 
@@ -260,7 +271,7 @@ describe("Claude Code authentication", () => {
     );
     render(
       <QueryClientProvider client={client}>
-        <Settings />
+        <Account />
       </QueryClientProvider>,
     );
     await screen.findByText("Could not check connection");
@@ -272,6 +283,19 @@ describe("Claude Code authentication", () => {
     ).not.toBeInTheDocument();
   });
 });
+
+/** The account control the agent's setup banner shows until sign-in. */
+function Account() {
+  const [model, setModel] = useState<string>();
+  return (
+    <ClaudeCodeAccount
+      agentId="agent-1"
+      variant="compact"
+      model={model}
+      onModelChange={setModel}
+    />
+  );
+}
 
 function Settings({ vertexEnabled = false }: { vertexEnabled?: boolean }) {
   const [authentication, setAuthentication] = useState<

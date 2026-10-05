@@ -15,7 +15,6 @@ import {
   serverCanAccessPage,
   serverHasPermissions,
 } from "@/lib/auth/auth.server";
-import { handleApiError } from "@/lib/utils/api";
 import { getServerApiHeaders } from "@/lib/utils/server";
 import McpGatewaysPage from "./page.client";
 
@@ -24,9 +23,11 @@ export const dynamic = "force-dynamic";
 export default async function McpGatewaysPageServer() {
   let initialData: {
     agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+    pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
     teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
   } = {
     agents: null,
+    pinnedAgents: null,
     teams: [],
   };
   try {
@@ -44,33 +45,51 @@ export default async function McpGatewaysPageServer() {
       data: { data: [] },
       error: undefined,
     };
-    const [agentsResponse, teamsResponse] = await Promise.all([
-      archestraApiSdk.getAgents({
-        headers,
-        query: {
-          limit: DEFAULT_TABLE_LIMIT,
-          offset: 0,
-          sortBy: DEFAULT_SORT_BY,
-          sortDirection: DEFAULT_SORT_DIRECTION,
-          agentTypes: gatewayAgentTypes,
-        },
-      }),
-      canReadTeams
-        ? archestraApiSdk.getTeams({
-            headers,
-            query: { limit: 100, offset: 0 },
-          })
-        : Promise.resolve(emptyTeamsResponse),
-    ]);
-    if (agentsResponse.error) {
-      handleApiError(agentsResponse.error);
-    }
-    if (teamsResponse.error) {
-      handleApiError(teamsResponse.error);
-    }
+    const [agentsResult, pinnedAgentsResult, teamsResult] =
+      await Promise.allSettled([
+        archestraApiSdk.getAgents({
+          headers,
+          query: {
+            limit: DEFAULT_TABLE_LIMIT,
+            offset: 0,
+            sortBy: DEFAULT_SORT_BY,
+            sortDirection: DEFAULT_SORT_DIRECTION,
+            agentTypes: gatewayAgentTypes,
+            pinned: false,
+          },
+        }),
+        archestraApiSdk.getAgents({
+          headers,
+          query: {
+            limit: 100,
+            offset: 0,
+            sortBy: DEFAULT_SORT_BY,
+            sortDirection: DEFAULT_SORT_DIRECTION,
+            agentTypes: gatewayAgentTypes,
+            pinned: true,
+          },
+        }),
+        canReadTeams
+          ? archestraApiSdk.getTeams({
+              headers,
+              query: { limit: 100, offset: 0 },
+            })
+          : Promise.resolve(emptyTeamsResponse),
+      ]);
+    // A failed prefetch must leave the client query able to retry, including
+    // the deleted view where the active pinned section is not needed.
+    const agentsResponse =
+      agentsResult.status === "fulfilled" ? agentsResult.value : undefined;
+    const pinnedAgentsResponse =
+      pinnedAgentsResult.status === "fulfilled"
+        ? pinnedAgentsResult.value
+        : undefined;
+    const teamsResponse =
+      teamsResult.status === "fulfilled" ? teamsResult.value : undefined;
     initialData = {
-      agents: agentsResponse.data || null,
-      teams: teamsResponse.data?.data ?? [],
+      agents: agentsResponse?.data ?? null,
+      pinnedAgents: pinnedAgentsResponse?.data ?? null,
+      teams: teamsResponse?.data?.data ?? [],
     };
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;

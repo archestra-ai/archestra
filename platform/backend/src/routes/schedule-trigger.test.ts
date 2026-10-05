@@ -1,6 +1,9 @@
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import AuditLogModel from "@/models/audit-log";
 import ConversationModel from "@/models/conversation";
 import MessageModel from "@/models/message";
 import ScheduleTriggerRunModel from "@/models/schedule-trigger-run";
@@ -8,20 +11,15 @@ import { projectService } from "@/services/project";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth");
-
-import { hasAnyAgentTypeAdminPermission, hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
-
 describe("schedule trigger routes", () => {
   let app: FastifyInstanceWithZod;
   let adminUser: User;
   let organizationId: string;
 
   beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
-    vi.mocked(hasAnyAgentTypeAdminPermission).mockResolvedValue(false);
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: adminUser.id } }) as never,
+    );
 
     adminUser = await makeUser();
     const organization = await makeOrganization();
@@ -41,11 +39,100 @@ describe("schedule trigger routes", () => {
     const { default: scheduleTriggerRoutes } = await import(
       "./schedule-trigger"
     );
+    registerAuditLogHook(app);
     await app.register(scheduleTriggerRoutes);
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("editing a disabled schedule preserves its state and audits the actual change", async ({
+    makeAgent,
+    makeScheduleTrigger,
+  }) => {
+    const agent = await makeAgent({ organizationId, agentType: "agent" });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: adminUser.id,
+      enabled: false,
+      name: "Before",
+    });
+    const response = await app.inject({
+      method: "PUT",
+      url: `/api/schedule-triggers/${trigger.id}`,
+      payload: { name: "After" },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ name: "After", enabled: false });
+    await vi.waitFor(async () => {
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "scheduleTrigger",
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "scheduleTrigger.updated",
+            resourceId: trigger.id,
+            before: expect.objectContaining({ name: "Before", enabled: false }),
+            after: expect.objectContaining({ name: "After", enabled: false }),
+          }),
+        ]),
+      );
+    });
+    const empty = await app.inject({
+      method: "PUT",
+      url: `/api/schedule-triggers/${trigger.id}`,
+      payload: {},
+    });
+    expect(empty.statusCode).toBe(400);
+  });
+
+  test("deletion returns success and records the removed schedule", async ({
+    makeAgent,
+    makeScheduleTrigger,
+  }) => {
+    const agent = await makeAgent({ organizationId, agentType: "agent" });
+    const trigger = await makeScheduleTrigger({
+      organizationId,
+      agentId: agent.id,
+      actorUserId: adminUser.id,
+      name: "Removed schedule",
+    });
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/schedule-triggers/${trigger.id}`,
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    await vi.waitFor(async () => {
+      const { data } = await AuditLogModel.findPaginated({
+        organizationId,
+        resourceType: "scheduleTrigger",
+        limit: 10,
+        offset: 0,
+      });
+      expect(data).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            action: "scheduleTrigger.deleted",
+            resourceId: trigger.id,
+            before: expect.objectContaining({ name: "Removed schedule" }),
+            after: null,
+          }),
+        ]),
+      );
+    });
+    const second = await app.inject({
+      method: "DELETE",
+      url: `/api/schedule-triggers/${trigger.id}`,
+    });
+    expect(second.statusCode).toBe(404);
   });
 
   test("returns an existing run conversation for scheduled task admins when it belongs to another user", async ({
@@ -114,8 +201,6 @@ describe("schedule trigger routes", () => {
     makeScheduleTriggerRun,
     makeUser,
   }) => {
-    mockHasPermission.mockResolvedValue({ success: false, error: null });
-
     const owner = await makeUser();
     const member = await makeUser();
     await makeMember(owner.id, organizationId, { role: "member" });

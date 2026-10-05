@@ -413,6 +413,14 @@ export const auth = betterAuth({
               "[databaseHooks:user] Failed to delete personal MCP gateways",
             );
           }
+          try {
+            await AgentModel.deletePersonalAgentsForUser({ userId: user.id });
+          } catch (error) {
+            logger.error(
+              { err: error, userId: user.id },
+              "[databaseHooks:user] Failed to delete personal agents",
+            );
+          }
           // Personal skills must not outlive their author either: author_id
           // is `set null`, and a personal row without an author can be named
           // by no `skill://` URI, seen by no one, and edited by no one.

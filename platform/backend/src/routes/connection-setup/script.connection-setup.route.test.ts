@@ -3,6 +3,7 @@ import {
   COPILOT_CLI_CLIENT_ID,
   DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
   EXTERNAL_AGENT_ID_HEADER,
+  PERSONAL_MCP_GATEWAY_NAME,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import JSZip from "jszip";
@@ -37,7 +38,14 @@ vi.mock("@/auth");
 vi.mock("@/cache-manager");
 
 import { userHasPermission } from "@/auth";
-import config from "@/config";
+import config, { parseOpenAppaConfig } from "@/config";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { clientConnectionService } from "@/services/client-connection";
+import { verifyConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
+import {
+  CONNECTION_SETUP_CONTEXT_PARAM,
+  verifyConnectionSetupContext,
+} from "@/services/connection-setup-context";
 import { grantEverywhere } from "@/test/wildcard-grants";
 
 const mockUserHasPermission = vi.mocked(userHasPermission);
@@ -102,6 +110,128 @@ describe("GET /api/connection-setups/script/:token", () => {
       method: "GET",
       url: `/api/connection-setups/script/${rawToken}`,
       remoteAddress: nextRemoteAddress(),
+    });
+  }
+
+  for (const clientId of [
+    "claude-code",
+    "claude-desktop",
+    "codex",
+    "copilot-cli",
+    "cursor",
+    "opencode",
+  ] as const) {
+    for (const proxyAuth of ["virtual-key", "provider-key"] as const) {
+      test(`${clientId} ${proxyAuth} installer binds setup scope to its actual authentication`, async ({
+        makeAgent,
+        makeSecret,
+        makeLlmProviderApiKey,
+      }) => {
+        const proxy = await makeAgent({
+          organizationId,
+          agentType: "llm_proxy",
+          name: "Main Proxy",
+        });
+        const provider =
+          clientId === "codex" || clientId === "cursor"
+            ? "openai"
+            : clientId === "copilot-cli" && proxyAuth === "provider-key"
+              ? "github-copilot"
+              : clientId === "copilot-cli"
+                ? "openai"
+                : "anthropic";
+        await makeLlmProviderApiKey(organizationId, (await makeSecret()).id, {
+          provider,
+        });
+        const { rawToken } = await createSetup({
+          clientId,
+          baseUrl: "http://localhost:9000/v1",
+          llmProxyId: proxy.id,
+          provider,
+          proxyAuth,
+          ...(clientId === "copilot-cli" ? { model: "gpt-4.1" } : {}),
+        });
+        const setup = await ConnectionSetupModel.findByToken(rawToken);
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/connection-setups/script/${rawToken}`,
+          ...(clientId === "claude-desktop"
+            ? {
+                headers: {
+                  accept: "application/vnd.archestra.desktop-setup+json",
+                },
+              }
+            : {}),
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        const token =
+          clientId === "claude-desktop"
+            ? response.json().proxy.baseUrl.split("/connection-setup/")[1]
+            : response.body.match(
+                /\/v1\/connection-setup\/(cps1_[A-Za-z0-9_.-]+)\//,
+              )?.[1];
+        if (!setup?.virtualApiKeyId) {
+          expect(token).toBeUndefined();
+          expect(response.body).toContain(
+            `http://localhost:9000/v1/${provider}`,
+          );
+          return;
+        }
+        expect(token).toBeTruthy();
+        expect(response.body).toContain(
+          `/connection-setup/${token}/${provider}`,
+        );
+        expect(
+          verifyConnectionProxySetupContext({
+            token,
+            organizationId,
+            virtualApiKeyId: setup.virtualApiKeyId,
+            proxyAgentId: setup.llmProxyId ?? "",
+            secret: config.auth.secret,
+          }),
+        ).toBe(true);
+        expect(
+          verifyConnectionProxySetupContext({
+            token,
+            organizationId,
+            virtualApiKeyId: setup.virtualApiKeyId,
+            proxyAgentId: "another-proxy",
+            secret: config.auth.secret,
+          }),
+        ).toBe(false);
+      });
+    }
+  }
+
+  for (const platform of ["linux", "windows"] as const) {
+    test(`MCP-only Claude ${platform} setup pre-approves only exact recovery helpers`, async ({
+      makeAgent,
+    }) => {
+      const gateway = await makeAgent({
+        organizationId,
+        agentType: "mcp_gateway",
+        name: "QA Gateway",
+      });
+      const { rawToken } = await createSetup({
+        clientId: "claude-code",
+        platform,
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+      });
+      const response = await fetchScript(rawToken);
+      expect(response.statusCode, response.body).toBe(200);
+      for (const name of [
+        "get_remedy_plans",
+        "execute_remedy_plan",
+        "yell",
+        "ask_user",
+      ]) {
+        expect(response.body).toContain(`mcp__qa_gateway__archestra__${name}`);
+      }
+      expect(response.body).not.toContain("mcp__qa_gateway__*");
+      expect(response.body).not.toContain(
+        "mcp__qa_gateway__archestra__update_guardrails_policy",
+      );
     });
   }
 
@@ -327,8 +457,9 @@ describe("GET /api/connection-setups/script/:token", () => {
       "claude mcp add --scope user --transport http 'prod_gateway'",
     );
     expect(script).toContain(`/v1/mcp/${gateway.slug ?? gateway.id}`);
-    expect(script).toContain("/v1/anthropic");
-    expect(script).not.toContain("/v1/anthropic/");
+    expect(script).toMatch(
+      /\/v1\/connection-setup\/cps1_[A-Za-z0-9_.-]+\/anthropic/,
+    );
     // the real virtual key value is injected, no placeholders
     expect(script).toMatch(/arch_[0-9a-f]{64}/);
     expect(script).not.toMatch(/<your-[a-z-]+>/);
@@ -441,6 +572,58 @@ describe("GET /api/connection-setups/script/:token", () => {
     );
   });
 
+  test("registers the seeded personal gateway under the app name, and drops its old entry", async ({
+    makeAgent,
+  }) => {
+    // Every member's gateway is seeded as "My Gateway". Registering that name
+    // verbatim put `my_gateway` in the client's server list, which says
+    // nothing about which platform serves it.
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: PERSONAL_MCP_GATEWAY_NAME,
+      isPersonalGateway: true,
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+
+    const script = (await fetchScript(rawToken)).body;
+    expect(script).toContain(
+      "claude mcp add --scope user --transport http 'archestra'",
+    );
+    expect(script).toContain(
+      "claude mcp remove --scope user 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).not.toContain("mcp add --scope user --transport http 'my_");
+  });
+
+  test("keeps the name of a personal gateway its owner renamed", async ({
+    makeAgent,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+      isPersonalGateway: true,
+    });
+
+    const { rawToken } = await createSetup({
+      clientId: "claude-code",
+      baseUrl: "http://localhost:9000/v1",
+      mcpGatewayId: gateway.id,
+    });
+
+    const script = (await fetchScript(rawToken)).body;
+    expect(script).toContain(
+      "claude mcp add --scope user --transport http 'prod_gateway'",
+    );
+    expect(script).not.toContain("'archestra'");
+  });
+
   test("default platform (omitted) renders bash", async ({ makeAgent }) => {
     const gateway = await makeAgent({
       organizationId,
@@ -478,7 +661,7 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.statusCode).toBe(200);
     const script = response.body;
     expect(script).toContain("/v1/anthropic");
-    expect(script).not.toContain("/v1/anthropic/");
+    expect(script).not.toContain("/v1/connection-setup/");
     expect(script).toContain("ANTHROPIC_BASE_URL");
     // passthrough, attribution off: no injected virtual key, no auth token — but
     // the client-app agent-id header always rides along, so the header block is
@@ -575,8 +758,9 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(response.statusCode).toBe(200);
     const script = response.body;
     expect(script).toContain("CLAUDE_CODE_USE_BEDROCK");
-    expect(script).toContain("/v1/bedrock");
-    expect(script).not.toContain("/v1/bedrock/");
+    expect(script).toMatch(
+      /\/v1\/connection-setup\/cps1_[A-Za-z0-9_.-]+\/bedrock/,
+    );
     // The provisioned passthrough key rides in the attribution header alongside
     // the agent-id line, exactly like the Anthropic passthrough; the user's own
     // AWS credentials keep passing through (no bearer token is printed).
@@ -644,8 +828,9 @@ describe("GET /api/connection-setups/script/:token", () => {
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(200);
     const script = response.body;
-    expect(script).toContain("/v1/github-copilot");
-    expect(script).not.toContain("/v1/github-copilot/");
+    expect(script).toMatch(
+      /\/v1\/connection-setup\/cps1_[A-Za-z0-9_.-]+\/github-copilot/,
+    );
     // device-flow endpoints come from backend config
     expect(script).toContain("/login/device/code");
     expect(script).toContain("copilot_internal/v2/token");
@@ -802,6 +987,134 @@ describe("GET /api/connection-setups/script/:token", () => {
 
     const response = await fetchScript(rawToken);
     expect(response.statusCode).toBe(410);
+  });
+
+  test("mints a signed MCP context only for an approved installer redemption", async ({
+    makeAgent,
+  }) => {
+    const prior = config.openappa;
+    const secret = "test-offer-signing-secret-32chars";
+    const prompt =
+      "Read http://localhost:9000/connect.md?client=claude-code and connect Claude Code.";
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+      name: "Prod Gateway",
+    });
+    await OrganizationModel.patch(organizationId, {
+      connectionRuntimeHandoffEnabled: true,
+      connectionRuntimeHandoffInstructions: prompt,
+    });
+
+    async function installerTicket() {
+      const pending = await clientConnectionService.start({
+        clientId: "claude-code",
+        platform: "linux",
+      });
+      const { rawToken } = await createSetup({
+        clientId: "claude-code",
+        platform: "linux",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+      });
+      const setup = await ConnectionSetupModel.findByToken(rawToken);
+      if (!setup) throw new Error("setup ticket missing");
+      return {
+        pending,
+        setup,
+        installerToken: `archestra_con_${pending.deviceCode}`,
+        rawToken,
+      };
+    }
+
+    try {
+      config.openappa = parseOpenAppaConfig("true");
+      const inactive = await installerTicket();
+      const unapproved = await fetchScript(inactive.installerToken);
+      expect(unapproved.statusCode).toBe(404);
+      expect(unapproved.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
+      expect(unapproved.body).not.toContain("cs1_");
+
+      expect(
+        (
+          await clientConnectionService.decide({
+            id: inactive.pending.id,
+            setupId: inactive.setup.id,
+            userId: user.id,
+            organizationId,
+          })
+        ).status,
+      ).toBe("approved");
+      const withoutGuardrails = await fetchScript(inactive.installerToken);
+      expect(withoutGuardrails.statusCode, withoutGuardrails.body).toBe(200);
+      expect(withoutGuardrails.body).not.toContain(
+        CONNECTION_SETUP_CONTEXT_PARAM,
+      );
+      expect(withoutGuardrails.body).toContain(prompt);
+
+      config.openappa = {
+        ...parseOpenAppaConfig("true"),
+        offerSigningSecret: secret,
+      };
+      await GuardrailsDeploymentModel.setEnabled(true);
+
+      const { rawToken: directToken } = await createSetup({
+        clientId: "claude-code",
+        platform: "linux",
+        baseUrl: "http://localhost:9000/v1",
+        mcpGatewayId: gateway.id,
+      });
+      const direct = await fetchScript(directToken);
+      expect(direct.statusCode, direct.body).toBe(200);
+      expect(direct.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
+      expect(direct.body).toContain(prompt);
+      expect(direct.body).toBe(withoutGuardrails.body);
+
+      const active = await installerTicket();
+      const beforeApproval = await fetchScript(active.installerToken);
+      expect(beforeApproval.statusCode).toBe(404);
+      expect(beforeApproval.body).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
+
+      expect(
+        (
+          await clientConnectionService.decide({
+            id: active.pending.id,
+            setupId: active.setup.id,
+            userId: user.id,
+            organizationId,
+          })
+        ).status,
+      ).toBe("approved");
+      const approved = await fetchScript(active.installerToken);
+      expect(approved.statusCode, approved.body).toBe(200);
+      const contexts = [
+        ...approved.body.matchAll(
+          new RegExp(`${CONNECTION_SETUP_CONTEXT_PARAM}=([^'&\\s]+)`, "g"),
+        ),
+      ].map((match) => decodeURIComponent(match[1]));
+      expect(contexts.length).toBeGreaterThan(0);
+      expect(new Set(contexts).size).toBe(1);
+      expect(contexts[0]).toMatch(/^cs1_[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/);
+      expect(
+        verifyConnectionSetupContext({
+          token: contexts[0],
+          userId: user.id,
+          organizationId,
+          gatewayId: gateway.id,
+          secret,
+        }),
+      ).toBe(true);
+      const stripped = approved.body.replace(
+        new RegExp(`\\?${CONNECTION_SETUP_CONTEXT_PARAM}=[^'&\\s]+`, "g"),
+        "",
+      );
+      expect(stripped).toBe(withoutGuardrails.body);
+      expect(stripped).toContain(prompt);
+      expect(stripped).not.toContain(CONNECTION_SETUP_CONTEXT_PARAM);
+      expect(stripped).not.toContain(contexts[0]);
+    } finally {
+      config.openappa = prior;
+    }
   });
 
   test("rate limits repeated probes from one IP", async () => {

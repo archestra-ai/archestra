@@ -10,6 +10,7 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 export default class ResourcePermissionTargetModel {
   /** Discovery only. Execution must still check the specific target. */
@@ -19,6 +20,8 @@ export default class ResourcePermissionTargetModel {
     action: ResourcePermissionAction;
   }): Promise<boolean> {
     const table = schema.internalMcpCatalogTable;
+    const principal =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
     const [row] = await db
       .select({ id: table.id })
       .from(table)
@@ -31,7 +34,8 @@ export default class ResourcePermissionTargetModel {
           isNull(table.deletedAt),
           isNull(table.parentCatalogItemId),
           ResourcePermissionPolicyModel.grantCondition({
-            ...params,
+            ...principal,
+            action: params.action,
             resource: "mcpRegistry",
             scopeColumn: table.id,
           }),
@@ -57,6 +61,7 @@ export default class ResourcePermissionTargetModel {
     organizationId: string;
     resource: ScopedResource;
     id: string;
+    includeDeleted?: boolean;
   }): Promise<Target | null> {
     if (params.resource === "agent" || params.resource === "mcpGateway") {
       const table = schema.agentsTable;
@@ -127,7 +132,7 @@ export default class ResourcePermissionTargetModel {
             ? schema.conversationsTable.userId
             : schema.agentRunsTable.actorUserId,
           enabled: conversation
-            ? sql<boolean>`NOT ${schema.conversationsTable.lockedChat}`
+            ? sql<boolean>`NOT ${schema.conversationsTable.encryptedChat}`
             : sql<boolean>`true`,
         })
         .from(table)
@@ -379,7 +384,9 @@ export default class ResourcePermissionTargetModel {
             eq(catalog.organizationId, params.organizationId),
             isNull(catalog.organizationId),
           ),
-          isNull(catalog.deletedAt),
+          params.resource === "mcpRegistry" && params.includeDeleted
+            ? undefined
+            : isNull(catalog.deletedAt),
         ),
       );
     if (!target) return null;

@@ -12,8 +12,10 @@ import {
   test,
   vi,
 } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { OverviewTab } from "./overview-tab";
 
+vi.mock("@/lib/auth/auth.query");
 vi.mock("./coverage-charts", () => ({
   CoverageCharts: () => <div>Coverage charts</div>,
 }));
@@ -33,11 +35,19 @@ let revision: number;
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+  vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+    typeof useHasPermissions
+  >);
   enabled = false;
   revision = 0;
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
-      HttpResponse.json({ enabled, featureEnabled: true, active: enabled }),
+      HttpResponse.json({
+        enabled,
+        featureEnabled: true,
+        active: enabled,
+        unsupportedClientAction: "bypass",
+      }),
     ),
     http.get(`${api}/guardrails-policy`, () =>
       HttpResponse.json({
@@ -74,6 +84,7 @@ test("a fresh instance hides coverage", async () => {
     expect(screen.queryByText("Coverage charts")).not.toBeInTheDocument(),
   );
   expect(screen.queryByText("Entities table")).not.toBeInTheDocument();
+  expect(screen.queryByText("Client coverage")).not.toBeInTheDocument();
 });
 
 test.each([
@@ -85,4 +96,5 @@ test.each([
   show();
   expect(await screen.findByText("Coverage charts")).toBeInTheDocument();
   expect(screen.getByText("Entities table")).toBeInTheDocument();
+  expect(await screen.findByText("Client coverage")).toBeInTheDocument();
 });

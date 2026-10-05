@@ -7,13 +7,18 @@ import type {
   AgentRunAttachProgressMessage,
   AgentRunAttachStartedMessage,
 } from "@archestra/shared";
+import { resolveAgentCatalogId } from "@archestra/shared";
 import { useMemo } from "react";
 import {
   type ExecSessionTransport,
   ExecTerminal,
 } from "@/components/exec/exec-terminal";
 import type { ExecSessionProgress } from "@/components/exec/exec-terminal-progress";
-import { useMyAgentRun } from "@/lib/agent-runtime.query";
+import { useProfile } from "@/lib/agent.query";
+import {
+  useMyAgentRun,
+  useUploadAgentRunTerminalFiles,
+} from "@/lib/agent-runtime.query";
 import websocketService from "@/lib/websocket/websocket";
 
 /** Shared tmux terminal for Agent detail and Chat run sessions. */
@@ -38,15 +43,20 @@ export function AgentRunTerminal({
 }) {
   const runQuery = useMyAgentRun(taskId, active);
   const run = runQuery.data?.taskId === taskId ? runQuery.data : null;
+  const agentQuery = useProfile(run?.agentId, { enabled: active });
   const transport = useMemo<ExecSessionTransport>(
     () => createAgentRunTransport(taskId),
     [taskId],
   );
+  const uploadFiles = useUploadAgentRunTerminalFiles(taskId);
 
   return (
     <ExecTerminal
       sessionKey={taskId}
       transport={transport}
+      claudeMouseWorkaround={
+        resolveAgentCatalogId(agentQuery.data?.runtime) === "claude-code"
+      }
       // The metadata snapshot supplies both the original start time and the
       // current runtime phase. Opening the WebSocket first would briefly show
       // a fresh 0:00 counter on every reload before correcting itself.
@@ -57,6 +67,7 @@ export function AgentRunTerminal({
       showDisconnectedStatus={showDisconnectedStatus}
       initialProgress={run?.startupProgress ?? DEFAULT_STARTUP_PROGRESS}
       progressStartedAt={parseStartedAt(run?.startedAt)}
+      onDropFiles={uploadFiles.mutateAsync}
       onCommandChange={onCommandChange}
       onError={onError}
       onClosed={onClosed}

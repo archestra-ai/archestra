@@ -1,15 +1,8 @@
-import { vi } from "vitest";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
-import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-import { userHasPermission } from "@/auth";
 import { grantEverywhere } from "@/test/wildcard-grants";
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
+import type { User } from "@/types";
 
 describe("PATCH /api/llm-virtual-keys/:id", () => {
   let app: FastifyInstanceWithZod;
@@ -21,8 +14,6 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     organizationId = organization.id;
     user = await makeUser();
     await makeMember(user.id, organizationId, { role: "admin" });
-    mockUserHasPermission.mockReset();
-    mockUserHasPermission.mockResolvedValue(false);
 
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
@@ -49,7 +40,6 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
@@ -96,11 +86,60 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     ]);
   });
 
+  test("PATCH /api/llm-virtual-keys/:id adds and removes endpoints of a self-hosted provider", async ({
+    makeLlmProviderApiKey,
+    makeSecret,
+  }) => {
+    grantEverywhere(["llmVirtualKey"]);
+    const endpoints = [];
+    for (const name of ["GLM gateway", "DeepSeek gateway"]) {
+      endpoints.push(
+        await makeLlmProviderApiKey(
+          organizationId,
+          (await makeSecret({ secret: { apiKey: `sk-${name}` } })).id,
+          { provider: "vllm", name },
+        ),
+      );
+    }
+    const mapping = (key: { id: string }) => ({
+      provider: "vllm",
+      providerApiKeyId: key.id,
+    });
+    const createResponse = await app.inject({
+      method: "POST",
+      url: "/api/llm-virtual-keys",
+      payload: {
+        name: "endpoint-key",
+        providerApiKeys: [mapping(endpoints[0])],
+      },
+    });
+    const id = createResponse.json().id;
+    const patch = (keys: Array<{ id: string }>) =>
+      app.inject({
+        method: "PATCH",
+        url: `/api/llm-virtual-keys/${id}`,
+        payload: { name: "endpoint-key", providerApiKeys: keys.map(mapping) },
+      });
+    const mappedNames = (response: { json: () => unknown }) =>
+      (
+        response.json() as {
+          providerApiKeys: Array<{ providerApiKeyName: string }>;
+        }
+      ).providerApiKeys.map((key) => key.providerApiKeyName);
+
+    const added = await patch(endpoints);
+    expect(added.statusCode).toBe(200);
+    expect(mappedNames(added)).toEqual(["GLM gateway", "DeepSeek gateway"]);
+
+    const removed = await patch([endpoints[1]]);
+    expect(removed.statusCode).toBe(200);
+    expect(mappedNames(removed)).toEqual(["DeepSeek gateway"]);
+  });
+
   test("PATCH /api/llm-virtual-keys/:id returns 404 for an unknown key", async ({
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
@@ -129,7 +168,6 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });
@@ -173,7 +211,6 @@ describe("PATCH /api/llm-virtual-keys/:id", () => {
     makeUser,
     makeMember,
   }) => {
-    mockUserHasPermission.mockResolvedValue(true);
     grantEverywhere(["llmVirtualKey"]);
 
     const secret = await makeSecret({ secret: { apiKey: "sk-real" } });

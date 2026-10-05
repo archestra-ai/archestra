@@ -13,8 +13,8 @@ import {
   MessageModel,
   OrganizationModel,
 } from "@/models";
-import type { resolveLockedChatCreationIfRequested } from "@/routes/chat/locked-chat";
-import { LOCKED_CHAT_STATIC_TITLE } from "@/routes/chat/locked-chat";
+import type { resolveEncryptedChatCreationIfRequested } from "@/routes/chat/encrypted-chat";
+import { ENCRYPTED_CHAT_STATIC_TITLE } from "@/routes/chat/encrypted-chat";
 import { callerIsAppAdmin } from "@/services/apps/app-authorization";
 import {
   buildAppRenderResult,
@@ -32,12 +32,12 @@ const RENDER_APP_TOOL_NAME =
   `${ARCHESTRA_TOOL_PREFIX}${TOOL_RENDER_APP_SHORT_NAME}` as const;
 
 /**
- * What the route resolved from the request's locked-chat key header: the
+ * What the route resolved from the request's encrypted-chat key header: the
  * conversation id the fingerprint is bound to, the row fields to write, and
  * the key to seal seeded messages with. Null for an ordinary app chat.
  */
-type LockedChatSeed = NonNullable<
-  ReturnType<typeof resolveLockedChatCreationIfRequested>
+type EncryptedChatSeed = NonNullable<
+  ReturnType<typeof resolveEncryptedChatCreationIfRequested>
 >;
 
 /**
@@ -74,11 +74,11 @@ export async function createSeededAppConversation(params: {
    * Present when the caller asked for a LOCKED app chat: the open-in-chat POST
    * carried the browser's conversation key, so this conversation is created
    * locked and everything seeded into it is sealed under that key. See
-   * `resolveLockedChatCreationIfRequested`.
+   * `resolveEncryptedChatCreationIfRequested`.
    */
-  lockedChat?: LockedChatSeed | null;
+  encryptedChat?: EncryptedChatSeed | null;
 }): Promise<{ conversationId: string }> {
-  const { appId, userId, organizationId, agentId, lockedChat } = params;
+  const { appId, userId, organizationId, agentId, encryptedChat } = params;
 
   const app = await AppModel.findByIdForCaller({
     action: "use",
@@ -123,7 +123,7 @@ export async function createSeededAppConversation(params: {
     userId,
     organizationId,
     agentId,
-    lockedChat,
+    encryptedChat,
     title: app.name,
     part: {
       type: "dynamic-tool",
@@ -172,9 +172,9 @@ export async function createSeededExternalAppConversation(params: {
   userId: string;
   organizationId: string;
   /** See the same field on {@link createSeededAppConversation}. */
-  lockedChat?: LockedChatSeed | null;
+  encryptedChat?: EncryptedChatSeed | null;
 }): Promise<ExternalAppOpenResult> {
-  const { mcpServerId, resourceUri, userId, organizationId, lockedChat } =
+  const { mcpServerId, resourceUri, userId, organizationId, encryptedChat } =
     params;
 
   const uiResource = await McpServerModel.findInstalledUiResourceForCaller({
@@ -196,7 +196,7 @@ export async function createSeededExternalAppConversation(params: {
       userId,
       organizationId,
       title: label,
-      lockedChat,
+      encryptedChat,
     });
     return {
       conversationId,
@@ -212,7 +212,7 @@ export async function createSeededExternalAppConversation(params: {
     userId,
     organizationId,
     title: label,
-    lockedChat,
+    encryptedChat,
     part: {
       type: "dynamic-tool",
       // The tool's stored name, verbatim. `serverName`/`toolName` are a display
@@ -320,9 +320,9 @@ async function createAppChatConversation(params: {
   title: string;
   /** Pre-resolved chat agent; resolved here when the caller has none. */
   agentId?: string;
-  lockedChat?: LockedChatSeed | null;
+  encryptedChat?: EncryptedChatSeed | null;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, title, lockedChat } = params;
+  const { userId, organizationId, title, encryptedChat } = params;
 
   const agentId =
     params.agentId ??
@@ -345,15 +345,15 @@ async function createAppChatConversation(params: {
     userId,
     organizationId,
     agentId,
-    // A locked chat is titled like every other locked chat. The app's name
+    // An encrypted chat is titled like every other encrypted chat. The app's name
     // would otherwise sit in a plaintext column and say which app the chat is
     // running — the sort of thing the lock exists to keep out of the database.
     // It is the final title too, so it is not marked a placeholder.
-    ...(lockedChat
+    ...(encryptedChat
       ? {
-          id: lockedChat.conversationId,
-          ...lockedChat.fields,
-          title: LOCKED_CHAT_STATIC_TITLE,
+          id: encryptedChat.conversationId,
+          ...encryptedChat.fields,
+          title: ENCRYPTED_CHAT_STATIC_TITLE,
           titleIsPlaceholder: false,
         }
       : {
@@ -389,17 +389,24 @@ async function seedConversationWithRender(params: {
   greeting?: string;
   /** Pre-resolved chat agent; resolved downstream when the caller has none. */
   agentId?: string;
-  lockedChat?: LockedChatSeed | null;
+  encryptedChat?: EncryptedChatSeed | null;
 }): Promise<{ conversationId: string }> {
-  const { userId, organizationId, title, part, greeting, agentId, lockedChat } =
-    params;
+  const {
+    userId,
+    organizationId,
+    title,
+    part,
+    greeting,
+    agentId,
+    encryptedChat,
+  } = params;
 
   const { conversationId } = await createAppChatConversation({
     userId,
     organizationId,
     title,
     agentId,
-    lockedChat,
+    encryptedChat,
   });
 
   const content: UIMessage = {
@@ -416,7 +423,7 @@ async function seedConversationWithRender(params: {
       role: "assistant",
       content,
     },
-    lockedChat?.key ?? null,
+    encryptedChat?.key ?? null,
   );
 
   // Separate message so the render above stays a byte-for-byte model-driven render.
@@ -431,7 +438,7 @@ async function seedConversationWithRender(params: {
           parts: [{ type: "text", text: greeting }],
         } satisfies UIMessage,
       },
-      lockedChat?.key ?? null,
+      encryptedChat?.key ?? null,
     );
   }
 

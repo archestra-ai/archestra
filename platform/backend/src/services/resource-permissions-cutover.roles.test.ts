@@ -92,7 +92,7 @@ describe("scoped RBAC final cutover", () => {
       app: ["delete"],
       knowledgeSource: ["read"],
       project: ["read"],
-      log: ["read"],
+      log: ["read", "admin"],
       toolPolicy: ["read", "create", "update"],
     });
     await runMigration();

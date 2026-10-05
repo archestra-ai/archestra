@@ -38,7 +38,7 @@ import { AgentPageShell } from "./agent-page-shell";
  * `/<family>/new` — the setup wizard for a record that does not exist yet.
  * Every step fills one form that lives for the whole wizard; nothing reaches
  * the backend until the last step's Create, which writes the record and
- * everything picked for it together, then opens the agent's creation summary
+ * everything picked for it together, then opens chat with the agent selected
  * or the gateway's connection instructions.
  */
 export function AgentCreatePage({
@@ -73,6 +73,8 @@ export function AgentCreatePage({
   // into a not-found page.
   const { data: canReadFamily, isPending: isReadPermissionPending } =
     useHasPermissions({ [config.resource]: ["read"] });
+  const { data: canChat, isPending: isChatPermissionPending } =
+    useHasPermissions({ chat: ["read", "create"] });
   const [created, setCreated] = useState<{ id: string; name: string } | null>(
     null,
   );
@@ -86,13 +88,29 @@ export function AgentCreatePage({
   const showsUnreadableSuccess =
     !!created && isReadPermissionKnown && !canReadFamily;
   useEffect(() => {
-    if (!created || !isReadPermissionKnown || !canReadFamily) return;
+    if (
+      !created ||
+      !isReadPermissionKnown ||
+      !canReadFamily ||
+      (kind === "agent" && isChatPermissionPending)
+    )
+      return;
     router.push(
       kind === "agent"
-        ? `/agents/${encodeURIComponent(created.id)}/created`
+        ? canChat
+          ? `/chat?agentId=${encodeURIComponent(created.id)}`
+          : agentDetailHref(kind, created.id)
         : agentDetailHref(kind, created.id, "connect"),
     );
-  }, [created, isReadPermissionKnown, canReadFamily, router, kind]);
+  }, [
+    created,
+    isReadPermissionKnown,
+    canReadFamily,
+    canChat,
+    isChatPermissionPending,
+    router,
+    kind,
+  ]);
 
   const [isDirty, setIsDirty] = useState(false);
   useBeforeUnloadWhileDirty(isDirty);
@@ -217,7 +235,9 @@ export function AgentCreatePage({
           // time, and what was picked on a step stays on the form until the
           // create at the end.
           activeSection={step}
-          submitEnabled={!nextStep}
+          submitEnabled={
+            !nextStep || (kind === "agent" && step === "configuration")
+          }
           onDirtyChange={setIsDirty}
           onCreated={(record) => {
             // The record is saved: nothing is unsaved any more, whichever
@@ -225,7 +245,7 @@ export function AgentCreatePage({
             setIsDirty(false);
             setCreated(record);
           }}
-          footer={({ isSaving, canSubmit }) => (
+          footer={({ isSaving, canSubmit, hasRuntime }) => (
             <WizardFooter>
               <div>
                 {prevStep ? (
@@ -262,41 +282,70 @@ export function AgentCreatePage({
                   </Button>
                 )}
               </div>
-              {nextStep ? (
-                // Moving on needs what a create would need of this step (a
-                // name, a complete visibility choice), so the last step is
-                // never reached with a record that cannot be created.
-                //
-                // Keyed apart from the Create button, and with the default
-                // action stopped: the step change re-renders this slot as
-                // the submit button while the click is still dispatching,
-                // and a reused DOM button would then submit the form.
-                <Button
-                  key="next"
-                  type="button"
-                  disabled={!canSubmit}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    goToStep(nextStep.id);
-                  }}
-                  data-testid={E2eTestId.AgentSetupNextButton}
-                >
-                  <span>{nextStep.title}</span>
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              ) : (
-                <Button
-                  key="create"
-                  type="submit"
-                  disabled={!canSubmit}
-                  data-testid={E2eTestId.AgentSetupSubmitButton}
-                >
-                  {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
-                  <span>
-                    {isSaving ? "Creating..." : `Create ${config.singular}`}
-                  </span>
-                </Button>
-              )}
+              <div className="flex items-center gap-2">
+                {kind === "agent" && step === "configuration" && (
+                  <Button
+                    type="submit"
+                    disabled={!canSubmit}
+                    data-testid={E2eTestId.AgentSetupSubmitButton}
+                  >
+                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    <span>
+                      {isSaving
+                        ? "Creating..."
+                        : !canChat
+                          ? "Create Agent"
+                          : hasRuntime
+                            ? "Create and run"
+                            : "Create and chat"}
+                    </span>
+                  </Button>
+                )}
+                {nextStep ? (
+                  // Moving on needs what a create would need of this step (a
+                  // name, a complete visibility choice), so the last step is
+                  // never reached with a record that cannot be created.
+                  //
+                  // Keyed apart from the Create button, and with the default
+                  // action stopped: the step change re-renders this slot as
+                  // the submit button while the click is still dispatching,
+                  // and a reused DOM button would then submit the form.
+                  <Button
+                    key="next"
+                    variant={
+                      kind === "agent" && step === "configuration"
+                        ? "outline"
+                        : "default"
+                    }
+                    type="button"
+                    disabled={!canSubmit}
+                    onClick={(event) => {
+                      event.preventDefault();
+                      goToStep(nextStep.id);
+                    }}
+                    data-testid={E2eTestId.AgentSetupNextButton}
+                  >
+                    <span>
+                      {kind === "agent" && step === "configuration"
+                        ? "Continue setup"
+                        : nextStep.title}
+                    </span>
+                    <ArrowRight className="h-4 w-4" />
+                  </Button>
+                ) : (
+                  <Button
+                    key="create"
+                    type="submit"
+                    disabled={!canSubmit}
+                    data-testid={E2eTestId.AgentSetupSubmitButton}
+                  >
+                    {isSaving && <Loader2 className="h-4 w-4 animate-spin" />}
+                    <span>
+                      {isSaving ? "Creating..." : `Create ${config.singular}`}
+                    </span>
+                  </Button>
+                )}
+              </div>
             </WizardFooter>
           )}
         />

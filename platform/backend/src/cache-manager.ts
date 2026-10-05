@@ -1,7 +1,7 @@
 import { TimeInMs } from "@archestra/shared";
 import KeyvPostgres from "@keyv/postgres";
 import { sql } from "drizzle-orm";
-import Keyv from "keyv";
+import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
 import logger from "@/logging";
@@ -51,6 +51,8 @@ export const CacheKey = {
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** Pending OpenAPPA review indexed by a verified runtime workspace */
+  OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
@@ -61,6 +63,8 @@ export const CacheKey = {
   VirtualKeyRateLimit: "virtual-key-rate-limit",
   /** Connection-setup script token brute-force rate limiting per IP */
   ConnectionSetupScriptRateLimit: "connection-setup-script-rate-limit",
+  /** Short-lived browser intent and bound native session for /connection. */
+  ConnectionPromptSession: "connection-prompt-session",
   /** Archestra VAF Add On package proxy rate limiting per IP */
   MfilesVafAddOnPackageRateLimit: "mfiles-vaf-add-on-package-rate-limit",
   /** Resolved release pin (package URL + ref) for the Archestra VAF Add On installer */
@@ -119,14 +123,14 @@ export const CacheKey = {
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
-  /** Positive "this chat session is a locked chat" lookups for LLM proxy redaction */
+  /** Positive "this chat session is an encrypted chat" lookups for LLM proxy redaction */
   /**
    * v2: entries changed from a bare `true` to a facts object (fingerprint +
    * escrow presence). The suffix is load-bearing — the cache is Postgres-backed
    * and shared across replicas, so during a rolling deploy new code must not
-   * read an old boolean and mistake it for "not a locked chat".
+   * read an old boolean and mistake it for "not an encrypted chat".
    */
-  LockedChatSession: "locked-chat-session-v2",
+  EncryptedChatSession: "encrypted-chat-session-v2",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -163,33 +167,21 @@ class CacheManager {
   /**
    * Start the cache manager by initializing the Keyv connection.
    * Should be called once during server startup.
+   *
+   * @param store - Keyv storage for the `keyv_cache` table. Defaults to the
+   * PostgreSQL adapter; tests pass one bound to their in-process database.
    */
-  start(): void {
+  start(store?: KeyvStoreAdapter): void {
     if (this.keyv) {
       return;
     }
 
-    const store = new KeyvPostgres({
-      uri: config.database.url,
-      table: "keyv_cache",
-      max: 10,
-      /**
-       * From the PostgreSQL documentation:
-       * If specified, the table is created as an unlogged table. Data written to unlogged tables is not written to the
-       * write-ahead log (see Chapter 28), which makes them considerably faster than ordinary tables. However, they are
-       * not crash-safe: an unlogged table is automatically truncated after a crash or unclean shutdown. The contents
-       * of an unlogged table are also not replicated to standby servers. Any indexes created on an unlogged table are
-       * automatically unlogged as well.
-       *
-       * We use this to improve performance of the cache manager.
-       *
-       * https://keyv.org/docs/storage-adapters/postgres/#using-an-unlogged-table-for-performance
-       */
-      useUnloggedTable: true,
+    this.isShuttingDown = false;
+    this.keyv = new Keyv({
+      store: store ?? createPostgresStore(),
+      // Let this wrapper decide which operations may fall back to a cache miss.
+      throwOnErrors: true,
     });
-
-    // Let this wrapper decide which operations may fall back to a cache miss.
-    this.keyv = new Keyv({ store, throwOnErrors: true });
 
     this.keyv.on("error", (err) => {
       if (!this.isShuttingDown) {
@@ -465,3 +457,26 @@ class CacheManager {
 }
 
 export const cacheManager = new CacheManager();
+
+// === Internal helpers
+
+function createPostgresStore(): KeyvStoreAdapter {
+  return new KeyvPostgres({
+    uri: config.database.url,
+    table: "keyv_cache",
+    max: 10,
+    /**
+     * From the PostgreSQL documentation:
+     * If specified, the table is created as an unlogged table. Data written to unlogged tables is not written to the
+     * write-ahead log (see Chapter 28), which makes them considerably faster than ordinary tables. However, they are
+     * not crash-safe: an unlogged table is automatically truncated after a crash or unclean shutdown. The contents
+     * of an unlogged table are also not replicated to standby servers. Any indexes created on an unlogged table are
+     * automatically unlogged as well.
+     *
+     * We use this to improve performance of the cache manager.
+     *
+     * https://keyv.org/docs/storage-adapters/postgres/#using-an-unlogged-table-for-performance
+     */
+    useUnloggedTable: true,
+  });
+}

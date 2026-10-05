@@ -1,5 +1,4 @@
 import {
-  mayHoldAttestationToken,
   removeAttestationTokens,
   takeLeadingAttestation,
 } from "@/archestra-mcp-server/tool-attestation";
@@ -31,20 +30,12 @@ export function extractGatewayToolDeclarations(
 }
 
 /**
- * Removes attestation markers from a raw JSON body forwarded without proxy handling
- * (such as Anthropic count_tokens). Returns the parsed body with markers removed,
- * or null if the payload contains no markers or is invalid JSON.
+ * Removes attestation markers, in place, from a parsed body a catch-all proxy
+ * forwards without proxy handling (such as Anthropic count_tokens). Returns
+ * whether it removed any.
  */
-export function removeMarkersFromForwardedJson(raw: Buffer): object | null {
-  if (!mayHoldAttestationToken(raw)) return null;
-  let body: unknown;
-  try {
-    body = JSON.parse(raw.toString("utf8"));
-  } catch {
-    return null;
-  }
-  if (typeof body !== "object" || body === null) return null;
-  return takeMarkers(body).changed ? body : null;
+export function removeMarkersFromBody(body: object): boolean {
+  return takeMarkers(body).changed;
 }
 
 // === Internal helpers ===

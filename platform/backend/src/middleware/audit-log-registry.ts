@@ -29,6 +29,7 @@ import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
@@ -144,6 +145,12 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  "/api/openappa/yells/:id": {
+    resourceType: "openappaYell",
+    action: "openappaYell.updated",
+    fetchById: (id, organizationId) =>
+      OpenAppaYellModel.findByIdForAudit(id, organizationId),
+  },
   "/api/guardrails-policy": {
     resourceType: "guardrailsPolicy",
     action: "guardrailsPolicy.updated",
@@ -170,6 +177,15 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     onlyWhenChanged: true,
   },
   "/api/projects/:id/transfer-ownership": {
+    resourceType: "project",
+    action: "project.updated",
+    fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
+    onlyWhenChanged: true,
+  },
+  // Linking or unlinking an app changes the project's `appIds` snapshot. Both
+  // methods are a project update — without this, DELETE would walk up to
+  // project.deleted.
+  "/api/projects/:id/apps/:appId": {
     resourceType: "project",
     action: "project.updated",
     fetchById: (id, orgId) => ProjectModel.findByIdForAudit(id, orgId),
@@ -206,6 +222,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
+  },
+  // Sole audited child of the denylisted /api/connection-setups prefix.
+  // Installer tickets stay unaudited; this window grant records no secrets.
+  "/api/connection-setups/prompt-session": {
+    resourceType: "connectionPromptSession",
+    action: "connectionPromptSession.created",
+    resourceIdSource: "organizationContext",
   },
   "/api/hooks": {
     resourceType: "hook",
@@ -298,6 +321,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "agentRun",
     resourceIdParam: "taskId",
     action: "agentRun.updated",
+  },
+  "/api/agent-runs/:taskId/openappa-review": {
+    resourceType: "agentRun",
+    resourceIdParam: "taskId",
+    action: "agentRun.reviewDecided",
   },
   "/api/agent-runs/:taskId": {
     resourceType: "agentRun",
@@ -792,6 +820,13 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: () => GuardrailsDeploymentModel.findByIdForAudit(),
   },
   "/api/openappa/github-sync": {
+    resourceType: "organization",
+    action: "organization.updated",
+    resourceIdSource: "organizationContext",
+    fetchById: (id, orgId) =>
+      OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
+  },
+  "/api/openappa/github-sync/repository": {
     resourceType: "organization",
     action: "organization.updated",
     resourceIdSource: "organizationContext",

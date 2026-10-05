@@ -3,12 +3,17 @@
 import {
   Bot,
   Copy,
+  History,
   Info,
+  Loader2,
+  type LucideIcon,
   MoreHorizontal,
+  Play,
   Share2,
   Square,
   TerminalSquare,
   Trash2,
+  Unplug,
 } from "lucide-react";
 import Link from "next/link";
 import { useState } from "react";
@@ -19,7 +24,6 @@ import { AgentRunLogs } from "@/components/agent-run-logs";
 import { AgentRunState } from "@/components/agent-run-state";
 import { AgentRunTerminal } from "@/components/agent-run-terminal";
 import { ShareAgentRunDialog } from "@/components/chat/share-agent-run-dialog";
-import { ContinueAgentRunDialog } from "@/components/continue-agent-run-dialog";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { ExecTerminalStatus } from "@/components/exec/exec-terminal-progress";
 import { StandardDialog } from "@/components/standard-dialog";
@@ -28,11 +32,13 @@ import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { WorkspaceRetention } from "@/components/workspace-retention";
 import {
   useCancelAgentRun,
+  useContinueAgentRun,
   useDeleteAgentWorkspace,
   useMyAgentRun,
 } from "@/lib/agent-runtime.query";
@@ -40,9 +46,17 @@ import { useRuntimeClock } from "@/lib/agent-runtime-time";
 import { useScopedCapabilities } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
+import { AgentRunOpenappaReview } from "./openappa-review-card";
 
 export function AgentRunChatSession({ taskId }: { taskId: string }) {
-  const query = useMyAgentRun(taskId);
+  const [resumedRun, setResumedRun] = useState<{
+    sourceId: string;
+    taskId: string;
+  } | null>(null);
+  const activeTaskId =
+    resumedRun?.sourceId === taskId ? resumedRun.taskId : taskId;
+  const query = useMyAgentRun(activeTaskId);
+  const continuation = useContinueAgentRun();
   const capabilities = useScopedCapabilities();
   const canManageAccess = capabilities.data?.some(
     (grant) =>
@@ -55,7 +69,6 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
   const [deleteWorkspaceDialogOpen, setDeleteWorkspaceDialogOpen] =
     useState(false);
   const [stopDialogOpen, setStopDialogOpen] = useState(false);
-  const [continueDialogOpen, setContinueDialogOpen] = useState(false);
   const [reattachedTaskId, setReattachedTaskId] = useState<string | null>(null);
   const reattached = reattachedTaskId === taskId;
   const [showHistory, setShowHistory] = useState(false);
@@ -110,26 +123,90 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
     ? workspaceNoticeFor(run.workspace.state, canReattach)
     : null;
 
+  const actions: {
+    label: string;
+    icon: LucideIcon;
+    onSelect: () => void;
+    disabled?: boolean;
+    primary?: boolean;
+  }[] = [];
+  if (isOwner && (live || (reattached && canReattach))) {
+    actions.push({
+      label: showHistory ? "Live terminal" : "Session history",
+      icon: History,
+      onSelect: () => setShowHistory(!showHistory),
+    });
+  }
+  if (canContinue && !showLiveTerminal) {
+    actions.push({
+      label: continuation.isPending ? "Resuming…" : "Resume",
+      icon: continuation.isPending ? Loader2 : Play,
+      disabled: continuation.isPending,
+      primary: true,
+      onSelect: () => {
+        if (canReattach) {
+          setReattachedTaskId(taskId);
+          setShowHistory(false);
+          return;
+        }
+        continuation.mutate(
+          { taskId: activeTaskId },
+          {
+            onSuccess: (result) => {
+              if (!result) return;
+              // Follow the accepted turn, not the session's stale completed snapshot.
+              setResumedRun({ sourceId: taskId, taskId: result.taskId });
+              setShowHistory(false);
+            },
+          },
+        );
+      },
+    });
+  }
+  if (reattached && showLiveTerminal) {
+    actions.push({
+      label: "Detach",
+      icon: Unplug,
+      onSelect: () => setReattachedTaskId(null),
+    });
+  }
+  if (isOwner && live) {
+    actions.push({
+      label: "Stop",
+      icon: Square,
+      onSelect: () => setStopDialogOpen(true),
+    });
+  }
+  if (!isOwner && canManageAccess) {
+    actions.push({
+      label: "Permissions",
+      icon: Share2,
+      onSelect: () => setShareDialogOpen(true),
+    });
+  }
+
   return (
-    <main className="flex h-full min-h-0 flex-col bg-background">
+    <main className="@container flex h-full min-h-0 flex-col bg-background">
       {/* Keep this slot mounted while metadata loads so inserting the header
           cannot remount the terminal and restart its attach progress. */}
       <header
         className={
           run
-            ? "flex shrink-0 items-center justify-between gap-4 border-b px-5 py-3"
+            ? "flex shrink-0 items-center justify-between gap-3 border-b px-4 py-3 @2xl:px-5"
             : "hidden"
         }
       >
         {run ? (
           <>
-            <div className="flex min-w-0 items-center gap-3">
-              <div className="flex size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40">
+            <div className="flex min-w-0 flex-1 items-center gap-3">
+              <div className="hidden size-9 shrink-0 items-center justify-center rounded-md border bg-muted/40 @2xl:flex">
                 <AgentIcon icon={run.agent.icon} size={20} />
               </div>
-              <div className="min-w-0">
-                <div className="flex items-center gap-2">
-                  <h1 className="truncate text-sm font-medium">{run.title}</h1>
+              <div className="min-w-0 flex-1">
+                <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+                  <h1 className="min-w-0 basis-full truncate text-sm font-medium @2xl:basis-auto">
+                    {run.title}
+                  </h1>
                   <AgentRunState
                     state={run.state}
                     attentionState={run.attentionState}
@@ -143,64 +220,31 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                     compact
                   />
                 </div>
-                <p className="truncate text-xs text-muted-foreground">
+                <p className="mt-1 truncate text-xs text-muted-foreground @2xl:mt-0">
                   {run.agent.name}
                 </p>
               </div>
             </div>
-            <div className="flex shrink-0 items-center gap-2">
-              {isOwner && (live || (reattached && canReattach)) && (
-                <Button
-                  size="sm"
-                  variant="outline"
-                  onClick={() => setShowHistory(!showHistory)}
-                >
-                  {showHistory ? "Live terminal" : "Session history"}
-                </Button>
-              )}
-              {canContinue && !showLiveTerminal && (
-                <Button
-                  size="sm"
-                  onClick={() =>
-                    canReattach
-                      ? setReattachedTaskId(taskId)
-                      : setContinueDialogOpen(true)
-                  }
-                >
-                  <span>
-                    {canReattach ? "Continue" : "Resume conversation"}
-                  </span>
-                </Button>
-              )}
-              {reattached && showLiveTerminal && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setReattachedTaskId(null)}
-                >
-                  <span>Detach</span>
-                </Button>
-              )}
-              {isOwner && live && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setStopDialogOpen(true)}
-                >
-                  <Square className="size-3.5 fill-current" />
-                  <span>Stop</span>
-                </Button>
-              )}
-              {!isOwner && canManageAccess && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={() => setShareDialogOpen(true)}
-                >
-                  Permissions
-                </Button>
-              )}
-              {isOwner && (
+            <div className="flex shrink-0 flex-wrap items-center gap-2">
+              <div className="hidden items-center gap-2 @2xl:flex">
+                {actions.map((action) => (
+                  <Button
+                    key={action.label}
+                    size="sm"
+                    variant={action.primary ? "default" : "outline"}
+                    disabled={action.disabled}
+                    onClick={action.onSelect}
+                  >
+                    <action.icon
+                      className={
+                        action.disabled ? "size-3.5 animate-spin" : "size-3.5"
+                      }
+                    />
+                    <span>{action.label}</span>
+                  </Button>
+                ))}
+              </div>
+              {(isOwner || canManageAccess) && (
                 <DropdownMenu>
                   <DropdownMenuTrigger asChild>
                     <Button
@@ -209,38 +253,65 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
                       className="size-8"
                       aria-label="More run actions"
                     >
-                      <MoreHorizontal className="size-4" />
+                      {continuation.isPending ? (
+                        <Loader2 className="size-4 animate-spin" />
+                      ) : (
+                        <MoreHorizontal className="size-4" />
+                      )}
                     </Button>
                   </DropdownMenuTrigger>
                   <DropdownMenuContent align="end">
-                    <DropdownMenuItem onSelect={() => setShareDialogOpen(true)}>
-                      <Share2 className="size-4" />
-                      <span>Share</span>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem asChild>
-                      <Link href={`/agents/${run.agent.id}?section=runs`}>
-                        <Bot className="size-4" />
-                        <span>View Agent</span>
-                      </Link>
-                    </DropdownMenuItem>
-                    <DropdownMenuItem
-                      disabled={!availableConnectionCommand}
-                      onSelect={() => setConnectionDialogOpen(true)}
-                    >
-                      <TerminalSquare className="size-4" />
-                      <span>View connection details</span>
-                    </DropdownMenuItem>
-                    {run.workspace &&
-                      ["idle", "suspended", "deleting"].includes(
-                        run.workspace.state,
-                      ) && (
+                    {actions.map((action) => (
+                      <DropdownMenuItem
+                        key={action.label}
+                        disabled={action.disabled}
+                        onSelect={action.onSelect}
+                      >
+                        <action.icon
+                          className={
+                            action.disabled ? "size-4 animate-spin" : "size-4"
+                          }
+                        />
+                        <span>{action.label}</span>
+                      </DropdownMenuItem>
+                    ))}
+                    {actions.length > 0 && isOwner && <DropdownMenuSeparator />}
+                    {isOwner && (
+                      <>
                         <DropdownMenuItem
-                          onSelect={() => setDeleteWorkspaceDialogOpen(true)}
+                          onSelect={() => setShareDialogOpen(true)}
                         >
-                          <Trash2 className="size-4" />
-                          <span>Delete workspace</span>
+                          <Share2 className="size-4" />
+                          <span>Share</span>
                         </DropdownMenuItem>
-                      )}
+                        <DropdownMenuItem asChild>
+                          <Link href={`/agents/${run.agent.id}?section=runs`}>
+                            <Bot className="size-4" />
+                            <span>View Agent</span>
+                          </Link>
+                        </DropdownMenuItem>
+                        <DropdownMenuItem
+                          disabled={!availableConnectionCommand}
+                          onSelect={() => setConnectionDialogOpen(true)}
+                        >
+                          <TerminalSquare className="size-4" />
+                          <span>View connection details</span>
+                        </DropdownMenuItem>
+                        {run.workspace &&
+                          ["idle", "suspended", "deleting"].includes(
+                            run.workspace.state,
+                          ) && (
+                            <DropdownMenuItem
+                              onSelect={() =>
+                                setDeleteWorkspaceDialogOpen(true)
+                              }
+                            >
+                              <Trash2 className="size-4" />
+                              <span>Delete workspace</span>
+                            </DropdownMenuItem>
+                          )}
+                      </>
+                    )}
                   </DropdownMenuContent>
                 </DropdownMenu>
               )}
@@ -250,6 +321,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
       </header>
 
       <section className="flex min-h-0 flex-1 flex-col gap-3 p-4 md:p-6">
+        {run ? <AgentRunOpenappaReview taskId={activeTaskId} /> : null}
         {run && live && <AgentRunLiveness run={run} />}
         {isOwner && !live && run?.workspace && (
           <output className="flex shrink-0 flex-col gap-2 rounded-md border bg-muted/20 px-3 py-2.5 text-xs text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
@@ -271,7 +343,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         )}
         {showLiveTerminal ? (
           <AgentRunTerminal
-            taskId={run?.taskId ?? taskId}
+            taskId={run?.taskId ?? activeTaskId}
             active
             title={live ? "Live terminal" : "Output"}
             showManualCommand={false}
@@ -314,16 +386,12 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         confirmLabel="Stop run"
         pendingLabel="Stopping…"
         onConfirm={() =>
-          cancelRun.mutate(taskId, {
+          cancelRun.mutate(activeTaskId, {
             onSuccess: () => setStopDialogOpen(false),
           })
         }
       />
-      <ContinueAgentRunDialog
-        taskId={taskId}
-        open={continueDialogOpen}
-        onOpenChange={setContinueDialogOpen}
-      />
+
       <DeleteConfirmDialog
         open={deleteWorkspaceDialogOpen}
         onOpenChange={setDeleteWorkspaceDialogOpen}
@@ -338,7 +406,7 @@ export function AgentRunChatSession({ taskId }: { taskId: string }) {
         }
       />
       <ShareAgentRunDialog
-        taskId={run?.taskId ?? taskId}
+        taskId={run?.taskId ?? activeTaskId}
         open={shareDialogOpen}
         onOpenChange={setShareDialogOpen}
       />

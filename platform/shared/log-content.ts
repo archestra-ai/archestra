@@ -25,7 +25,7 @@ export type LogContentMode = z.infer<typeof LogContentModeSchema>;
 
 /**
  * The `__redacted` value written in place of content the Log Content setting
- * kept out of storage. It shares the `__redacted` key with the locked-chat
+ * kept out of storage. It shares the `__redacted` key with the encrypted-chat
  * fallback because both mean the same thing to a reader — this content was
  * never stored and cannot be recovered — so every read path that already
  * recognizes that shape keeps working.

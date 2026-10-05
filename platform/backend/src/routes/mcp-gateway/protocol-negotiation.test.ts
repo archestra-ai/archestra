@@ -404,7 +404,10 @@ describe("MCP Gateway - protocol revision negotiation", () => {
     makeAgentTool,
   }) => {
     const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
+    const agent = await makeAgent({
+      toolExposureMode: "full",
+      organizationId: org.id,
+    });
     const token = await TeamTokenModel.create({
       organizationId: org.id,
       name: "Org Token",

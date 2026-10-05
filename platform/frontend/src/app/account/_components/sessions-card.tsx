@@ -164,12 +164,6 @@ export function SessionsCard() {
 
   return (
     <section className="w-full space-y-4">
-      <div className="space-y-1">
-        <h2 className="text-sm font-medium leading-5">Sessions</h2>
-        <p className="text-sm leading-5 text-muted-foreground">
-          Manage where your account is signed in.
-        </p>
-      </div>
       {isLoadingError && error instanceof StaleSessionError ? (
         <Empty className="py-6">
           <EmptyHeader>

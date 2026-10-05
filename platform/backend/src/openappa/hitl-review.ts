@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
+import logger from "@/logging";
 import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
@@ -28,6 +29,13 @@ export async function stageHitlReview(params: {
   session: OpenAppaSession;
   review: PendingHitlReview;
 }): Promise<void> {
+  // Remember issuance before making the stage visible, so concurrent denial can
+  // veto an approval while its atomic claimant is committing the ruling.
+  await cacheManager.set(
+    stagePresenceKey(params.session, params.review.offerId),
+    params.review,
+    HITL_REVIEW_TTL_MS,
+  );
   await cacheManager.set(
     reviewKey(params.session, params.review.offerId),
     params.review,
@@ -42,7 +50,33 @@ export async function getHitlReview(params: {
   const review = await cacheManager.get<PendingHitlReview>(
     reviewKey(params.session, params.offerId),
   );
-  return review?.offerId === params.offerId ? review : undefined;
+  if (review?.offerId === params.offerId) return review;
+  // Native clients still need the exact review text to bind their following
+  // remedy call. This immutable context is not a claimable pending stage.
+  if ((await peekHitlRuling(params)) !== "approve") return undefined;
+  const approved = await cacheManager.get<PendingHitlReview>(
+    stagePresenceKey(params.session, params.offerId),
+    { throwOnError: true },
+  );
+  return approved?.offerId === params.offerId ? approved : undefined;
+}
+
+/** Observe a human ruling without spending the remedy's one-time approval. */
+export async function peekHitlRuling(params: {
+  session: OpenAppaSession;
+  offerId: string;
+}): Promise<HitlRuling | undefined> {
+  for (const ruling of ["deny", "none", "approve"] as const) {
+    const entry = await cacheManager.get<{
+      offerId: string;
+      ruling: HitlRuling;
+    }>(rulingKey(params.session, params.offerId, ruling), {
+      throwOnError: true,
+    });
+    if (entry?.offerId === params.offerId && entry.ruling === ruling)
+      return ruling;
+  }
+  return undefined;
 }
 
 export async function getHitlAskUserArguments(params: {
@@ -76,16 +110,37 @@ export async function recordHitlRuling(params: {
   offerId: string;
   ruling: HitlRuling;
 }): Promise<boolean> {
-  const pending = await getHitlReview(params);
-  if (!pending) return false;
+  const pending = await cacheManager.getAndDelete<PendingHitlReview>(
+    reviewKey(params.session, params.offerId),
+    { throwOnError: true },
+  );
+  if (pending?.offerId !== params.offerId) {
+    // A genuine later denial can revoke an unspent approval; a timeout cannot.
+    const issued = await cacheManager.get<{ offerId: string }>(
+      stagePresenceKey(params.session, params.offerId),
+      { throwOnError: true },
+    );
+    if (params.ruling !== "deny" || issued?.offerId !== params.offerId)
+      return false;
+  }
   await cacheManager.set(
     rulingKey(params.session, params.offerId, params.ruling),
     { offerId: params.offerId, ruling: params.ruling },
     HITL_REVIEW_TTL_MS,
   );
   if (params.ruling !== "approve") {
-    await cacheManager.delete(reviewKey(params.session, params.offerId));
+    await cacheManager.delete(
+      rulingKey(params.session, params.offerId, "approve"),
+    );
   }
+  logger.info(
+    {
+      sessionId: params.session.session_id,
+      callerId: params.session.caller_id,
+      ruling: params.ruling,
+    },
+    "OpenAPPA human-review ruling recorded",
+  );
   return true;
 }
 
@@ -119,6 +174,11 @@ export async function consumeHitlRuling(params: {
         : undefined;
   if (!selected) return undefined;
   await cacheManager.delete(reviewKey(params.session, params.offerId));
+  if (selected)
+    await cacheManager.delete(
+      stagePresenceKey(params.session, params.offerId),
+      { throwOnError: true },
+    );
   return selected;
 }
 
@@ -128,6 +188,7 @@ export async function clearHitlReview(params: {
 }): Promise<void> {
   await Promise.all([
     cacheManager.delete(reviewKey(params.session, params.offerId)),
+    cacheManager.delete(stagePresenceKey(params.session, params.offerId)),
     ...HITL_RULINGS.map((ruling) =>
       cacheManager.delete(rulingKey(params.session, params.offerId, ruling)),
     ),
@@ -141,6 +202,17 @@ export function hitlRulingFromLabels(
   if (labels[0] === "Approve") return "approve";
   if (labels[0] === "Deny") return "deny";
   return undefined;
+}
+
+function stagePresenceKey(
+  session: OpenAppaSession,
+  offerId: string,
+): AllowedCacheKey {
+  return scopedKey(
+    CacheKey.OpenAppaHitlRuling,
+    session,
+    `${offerId}:stage-presence`,
+  );
 }
 
 function reviewKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {

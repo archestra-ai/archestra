@@ -75,15 +75,16 @@ export const SKILL_MARKETPLACE_CLIENTS: SkillMarketplaceClient[] = [
     id: "cursor",
     getInstallSteps: ({ cloneUrl, marketplaceName }) => [
       {
-        label: "Register the marketplace",
-        body: "Open Cursor's command palette and run /add-plugin, then paste the clone URL.",
-        code: `/add-plugin ${cloneUrl}`,
+        label: "Install shared skills",
+        body: "Cursor discovers skills inside this folder, including nested skill folders.",
+        code: `git clone '${cloneUrl.replaceAll("'", "'\\''")}' "$HOME/.cursor/skills/${marketplaceName}"`,
         language: "bash",
       },
       {
-        label: "Install the skills plugin",
-        body: `The included skills appear under the "${marketplaceName}" plugin entry; install it from the marketplace view.`,
-        language: "text",
+        label: "Load or update skills",
+        body: "Reload Cursor and verify the skills under Customize → Skills. Run this command later to fetch updates.",
+        code: `git -C "$HOME/.cursor/skills/${marketplaceName}" pull --ff-only`,
+        language: "bash",
       },
     ],
   },

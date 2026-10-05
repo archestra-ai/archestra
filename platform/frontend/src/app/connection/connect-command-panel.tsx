@@ -4,6 +4,7 @@ import {
   DEFAULT_MODELS,
   DocsPage,
   providerRequiresPerUserCredential,
+  resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
 import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
@@ -32,6 +33,11 @@ import { TerminalCard } from "@/components/terminal-surface";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { Input } from "@/components/ui/input";
 import {
   Select,
@@ -59,12 +65,10 @@ import {
 } from "@/lib/llm-provider-api-keys.query";
 import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils/tailwind";
+import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
 import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
-import {
-  type ConnectionBaseUrl,
-  deriveMcpServerName,
-} from "./connection-flow.utils";
+import type { ConnectionBaseUrl } from "./connection-flow.utils";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -131,12 +135,13 @@ export function isScriptClient(
  */
 const CONNECT_SKILLS_DEFER_MS = 750;
 
-function useConnectSkills(enabled: boolean): {
+export function useConnectSkills(enabled: boolean): {
   eligible: boolean;
   skills: ConnectSkill[];
+  loading: boolean;
 } {
   const { data: canReadSkills } = useHasPermissions({ skill: ["read"] });
-  const { data: skills } = useAllSkills({
+  const { data: skills, isPending } = useAllSkills({
     enabled: enabled && canReadSkills === true,
     // Step 2's content, not step 1's: let the part of the page the user acts
     // on first render before walking the catalogue.
@@ -145,6 +150,9 @@ function useConnectSkills(enabled: boolean): {
   return {
     eligible: enabled && canReadSkills === true && (skills ?? []).length > 0,
     skills: skills ?? [],
+    loading:
+      enabled &&
+      (canReadSkills === undefined || (canReadSkills && isPending === true)),
   };
 }
 
@@ -197,10 +205,14 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
-  const compact = !!connectRequest && !customizing;
+  const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
+  const setupStep = showSetupSummary ? 3 : 2;
   const requestedPlatform = searchParams.get("platform");
-  const { eligible: skillsEligible, skills: allSkills } =
-    useConnectSkills(skillsEnabled);
+  const {
+    eligible: skillsEligible,
+    skills: allSkills,
+    loading: skillsLoading,
+  } = useConnectSkills(skillsEnabled);
   // Providers are named the way this organization names them, so a renamed
   // provider reads the same here as in the model-provider settings.
   const providerCatalog = useModelProviderCatalog();
@@ -416,7 +428,8 @@ export function ConnectCommandPanel({
     client.id === "claude-code" &&
     !!gateway &&
     !virtualKeyUnbacked;
-  const showDesktopGatewayStep = client.id === "claude-desktop" && !!gateway;
+  const showDesktopGatewayStep =
+    !connectRequest && client.id === "claude-desktop" && !!gateway;
   // The script installs skills itself for everyone who can read them, so the
   // wizard never grows an extra step here. The marketplace step appears only
   // when there is no script to carry them: nothing to connect at all (below),
@@ -430,9 +443,10 @@ export function ConnectCommandPanel({
   );
   // The exact name the script registers the gateway under — referenced in the
   // OAuth step so the user can find it in the `claude /mcp` list.
-  const oauthServerName = deriveMcpServerName({
+  const oauthServerName = resolveMcpClientServerName({
     gatewayName: gateway?.name ?? "",
     appName,
+    isPersonalGateway: gateway?.isPersonalGateway,
   });
 
   // Passthrough setups also get a personal passthrough virtual key wired into the
@@ -555,6 +569,7 @@ export function ConnectCommandPanel({
     // (or the script would silently drop the proxy).
     if (
       !hasRunnableAnything ||
+      skillsLoading ||
       pluginsLoading ||
       needsPerUserConnect ||
       virtualKeyUnbacked
@@ -568,6 +583,7 @@ export function ConnectCommandPanel({
   }, [
     inputsKey,
     hasRunnableAnything,
+    skillsLoading,
     pluginsLoading,
     needsPerUserConnect,
     virtualKeyUnbacked,
@@ -721,6 +737,11 @@ export function ConnectCommandPanel({
                   Supported OpenCode providers keep their model IDs and local
                   credentials. Only their base URLs change, and a personal
                   passthrough key attributes requests to you.
+                </span>
+              ) : client.id === "cursor" ? (
+                <span>
+                  Cursor needs your OpenAI API key for this option. Its
+                  subscription cannot authenticate requests through the proxy.
                 </span>
               ) : passthroughAttributes ? (
                 <span>
@@ -910,7 +931,11 @@ export function ConnectCommandPanel({
     // marketplace URL, so a caller who can read them still has something to do.
     return (
       <>
-        <WizardStep n={2} title="Review the setup" last={!skillsStepAvailable}>
+        <WizardStep
+          n={2}
+          title={showSetupSummary ? "Review the setup" : "Nothing to connect"}
+          last={!skillsStepAvailable}
+        >
           <NothingToConnectPanel />
         </WizardStep>
         {skillsStepAvailable && (
@@ -924,214 +949,200 @@ export function ConnectCommandPanel({
 
   return (
     <>
-      <ConnectionSection
-        compact={!!connectRequest}
-        n={2}
-        title={connectRequest ? `Connect ${client.label}` : "Review the setup"}
-      >
-        <ul className="grid gap-2">
-          {gateway && (
-            <SetupSummaryRow
-              compact={compact}
-              editable={!!gatewayEditor}
-              isEditing={editing === "gateway"}
-              onToggle={() => toggleEdit("gateway")}
-              editor={gatewayEditor}
-              changeTestId="connect-change-gateway"
-              detail={<GatewayServersSummary gatewayId={gateway.id} />}
-            >
-              Connect{" "}
-              <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
-              for tools
-            </SetupSummaryRow>
-          )}
-          {hasProxy && (
-            <SetupSummaryRow
-              compact={compact}
-              done={proxyActive}
-              editable
-              isEditing={editing === "proxy"}
-              onToggle={() => toggleEdit("proxy")}
-              editor={proxyEditor}
-              changeTestId="connect-change-proxy"
-            >
-              {!provider ? (
-                noVirtualKeyMessage
-              ) : effectiveProxyAuth === "virtual-key" ? (
-                <>
-                  Route{" "}
-                  <span className="font-medium text-foreground">
-                    {providerCatalog.label(provider)}
-                  </span>{" "}
-                  through{" "}
-                  <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
-                  using{" "}
-                  <span className="font-medium text-foreground">
-                    a virtual key
+      {showSetupSummary && (
+        <ConnectionSection compact={false} n={2} title="Review the setup">
+          <ul className="grid gap-2">
+            {gateway && (
+              <SetupSummaryRow
+                editable={!!gatewayEditor}
+                isEditing={editing === "gateway"}
+                onToggle={() => toggleEdit("gateway")}
+                editor={gatewayEditor}
+                changeTestId="connect-change-gateway"
+                detail={<GatewayServersSummary gatewayId={gateway.id} />}
+              >
+                Connect{" "}
+                <ResourceLink href="/mcp/gateways">{gateway.name}</ResourceLink>{" "}
+                for tools
+              </SetupSummaryRow>
+            )}
+            {hasProxy && (
+              <SetupSummaryRow
+                done={proxyActive && client.id !== "cursor"}
+                editable
+                isEditing={editing === "proxy"}
+                onToggle={() => toggleEdit("proxy")}
+                editor={proxyEditor}
+                changeTestId="connect-change-proxy"
+              >
+                {!provider ? (
+                  noVirtualKeyMessage
+                ) : client.id === "cursor" ? (
+                  <span>
+                    Prepare {providerCatalog.label(provider)} proxy settings for
+                    Cursor; finish setup in Cursor Settings
                   </span>
-                </>
-              ) : openCodeProviderPassthrough ? (
-                <span>
-                  Route supported OpenCode providers through{" "}
-                  <span className="font-medium text-foreground">
-                    the LLM Proxy
-                  </span>{" "}
-                  using their existing local credentials
+                ) : effectiveProxyAuth === "virtual-key" ? (
+                  <>
+                    Route{" "}
+                    <span className="font-medium text-foreground">
+                      {providerCatalog.label(provider)}
+                    </span>{" "}
+                    through{" "}
+                    <ResourceLink href="/llm/proxy">the LLM Proxy</ResourceLink>{" "}
+                    using{" "}
+                    <span className="font-medium text-foreground">
+                      a virtual key
+                    </span>
+                  </>
+                ) : openCodeProviderPassthrough ? (
+                  <span>
+                    Route supported OpenCode providers through{" "}
+                    <span className="font-medium text-foreground">
+                      the LLM Proxy
+                    </span>{" "}
+                    using their existing local credentials
+                  </span>
+                ) : (
+                  <span>
+                    Passthrough to{" "}
+                    <span className="font-medium text-foreground">
+                      {providerCatalog.label(provider)}
+                    </span>{" "}
+                    through{" "}
+                    <span className="font-medium text-foreground">
+                      the LLM Proxy
+                    </span>{" "}
+                    using{" "}
+                    <span className="font-medium text-foreground">
+                      {client.id === "claude-desktop"
+                        ? "your Claude subscription"
+                        : "your provider key"}
+                    </span>
+                  </span>
+                )}
+              </SetupSummaryRow>
+            )}
+            {supportsModelChoice && proxyActive && provider && (
+              <SetupSummaryRow
+                done
+                editable
+                isEditing={editing === "model"}
+                onToggle={() => toggleEdit("model")}
+                editor={modelEditor}
+                changeTestId="connect-change-model"
+              >
+                Run <span>{client.label}</span> with{" "}
+                <span className="font-medium text-foreground">
+                  {effectiveModel}
                 </span>
-              ) : (
-                <span>
-                  Passthrough to{" "}
-                  <span className="font-medium text-foreground">
-                    {providerCatalog.label(provider)}
-                  </span>{" "}
-                  through{" "}
-                  <span className="font-medium text-foreground">
-                    the LLM Proxy
-                  </span>{" "}
-                  using{" "}
-                  <span className="font-medium text-foreground">
+              </SetupSummaryRow>
+            )}
+            {skillsEligible && (
+              <SetupSummaryRow
+                done={includeSkills}
+                editable
+                isEditing={editing === "skills"}
+                onToggle={() => toggleEdit("skills")}
+                editor={skillsEditor}
+                changeTestId="connect-change-skills"
+                detail={
+                  includeSkills ? (
+                    <SkillNamesLine skills={selectedSkills} />
+                  ) : undefined
+                }
+              >
+                {includeSkills ? (
+                  <>
+                    <span>Install </span>
+                    <ResourceLink href="/skills">
+                      <span>
+                        <span>{allSkills.length} shared skill</span>
+                        {allSkills.length === 1 ? null : <span>s</span>}
+                      </span>
+                    </ResourceLink>
+                  </>
+                ) : (
+                  <span>Shared skills not installed</span>
+                )}
+              </SetupSummaryRow>
+            )}
+            {pluginsEnabled && plugins.length > 0 && (
+              <SetupSummaryRow
+                done={selectedPlugins.length > 0 && client.id !== "cursor"}
+                editable={!!pluginsEditor}
+                isEditing={editing === "plugins"}
+                onToggle={() => toggleEdit("plugins")}
+                editor={pluginsEditor}
+                changeTestId="connect-change-plugins"
+                detail={
+                  <PluginsDetail
+                    plugins={selectedPlugins}
+                    incompatiblePlugins={incompatiblePlugins}
+                    clientId={client.id as ScriptClientId}
+                    platform={platform}
+                  />
+                }
+              >
+                {compatiblePlugins.length === 0 ? (
+                  <span>
+                    No compatible plugins for{" "}
                     {client.id === "claude-desktop"
-                      ? "your Claude subscription"
-                      : "your provider key"}
+                      ? "macOS"
+                      : platformLabels[platform]}
                   </span>
-                </span>
-              )}
-            </SetupSummaryRow>
-          )}
-          {supportsModelChoice && proxyActive && provider && (
+                ) : selectedPlugins.length === 0 ? (
+                  <span>Plugins not installed</span>
+                ) : client.id === "cursor" ? (
+                  <span>
+                    Install{" "}
+                    <ResourceLink href="/plugins">
+                      {pluginCountLabel}
+                    </ResourceLink>{" "}
+                    manually
+                  </span>
+                ) : (
+                  <span>
+                    Install{" "}
+                    <ResourceLink href="/plugins">
+                      {pluginCountLabel}
+                    </ResourceLink>
+                  </span>
+                )}
+              </SetupSummaryRow>
+            )}
+            {showEndpoint && (
+              <SetupSummaryRow
+                editable
+                isEditing={editing === "endpoint"}
+                onToggle={() => toggleEdit("endpoint")}
+                editor={endpointEditor}
+                changeTestId="connect-change-endpoint"
+              >
+                Reach the gateway and proxy at{" "}
+                <span className="font-medium text-foreground">{baseUrl}</span>
+              </SetupSummaryRow>
+            )}
             <SetupSummaryRow
-              compact={compact}
-              done
               editable
-              isEditing={editing === "model"}
-              onToggle={() => toggleEdit("model")}
-              editor={modelEditor}
-              changeTestId="connect-change-model"
+              isEditing={editing === "platform"}
+              onToggle={() => toggleEdit("platform")}
+              editor={platformEditor}
+              changeTestId="connect-change-platform"
             >
-              Run <span>{client.label}</span> with{" "}
-              <span className="font-medium text-foreground">
-                {effectiveModel}
+              Run on{" "}
+              <span className="inline-flex items-center gap-1.5 align-middle font-medium text-foreground">
+                <OsLogos platform={platform} />
+                {platformLabels[platform]}
               </span>
             </SetupSummaryRow>
-          )}
-          {skillsEligible && (
-            <SetupSummaryRow
-              compact={compact}
-              done={includeSkills}
-              editable
-              isEditing={editing === "skills"}
-              onToggle={() => toggleEdit("skills")}
-              editor={skillsEditor}
-              changeTestId="connect-change-skills"
-              detail={
-                includeSkills ? (
-                  <SkillNamesLine skills={selectedSkills} />
-                ) : undefined
-              }
-            >
-              {includeSkills ? (
-                <>
-                  <span>Install </span>
-                  <ResourceLink href="/skills">
-                    <span>
-                      <span>{allSkills.length} shared skill</span>
-                      {allSkills.length === 1 ? null : <span>s</span>}
-                    </span>
-                  </ResourceLink>
-                </>
-              ) : (
-                <span>Shared skills not installed</span>
-              )}
-            </SetupSummaryRow>
-          )}
-          {pluginsEnabled && plugins.length > 0 && (
-            <SetupSummaryRow
-              compact={compact}
-              done={selectedPlugins.length > 0 && client.id !== "cursor"}
-              editable={!!pluginsEditor}
-              isEditing={editing === "plugins"}
-              onToggle={() => toggleEdit("plugins")}
-              editor={pluginsEditor}
-              changeTestId="connect-change-plugins"
-              detail={
-                <PluginsDetail
-                  plugins={selectedPlugins}
-                  incompatiblePlugins={incompatiblePlugins}
-                  clientId={client.id as ScriptClientId}
-                  platform={platform}
-                />
-              }
-            >
-              {compatiblePlugins.length === 0 ? (
-                <span>
-                  No compatible plugins for{" "}
-                  {client.id === "claude-desktop"
-                    ? "macOS"
-                    : platformLabels[platform]}
-                </span>
-              ) : selectedPlugins.length === 0 ? (
-                <span>Plugins not installed</span>
-              ) : client.id === "cursor" ? (
-                <span>
-                  Install{" "}
-                  <ResourceLink href="/plugins">
-                    {pluginCountLabel}
-                  </ResourceLink>{" "}
-                  manually
-                </span>
-              ) : (
-                <span>
-                  Install{" "}
-                  <ResourceLink href="/plugins">
-                    {pluginCountLabel}
-                  </ResourceLink>
-                </span>
-              )}
-            </SetupSummaryRow>
-          )}
-          {showEndpoint && (
-            <SetupSummaryRow
-              compact={compact}
-              editable
-              isEditing={editing === "endpoint"}
-              onToggle={() => toggleEdit("endpoint")}
-              editor={endpointEditor}
-              changeTestId="connect-change-endpoint"
-            >
-              Reach the gateway and proxy at{" "}
-              <span className="font-medium text-foreground">{baseUrl}</span>
-            </SetupSummaryRow>
-          )}
-          <SetupSummaryRow
-            compact={compact}
-            editable
-            isEditing={editing === "platform"}
-            onToggle={() => toggleEdit("platform")}
-            editor={platformEditor}
-            changeTestId="connect-change-platform"
-          >
-            Run on{" "}
-            <span className="inline-flex items-center gap-1.5 align-middle font-medium text-foreground">
-              <OsLogos platform={platform} />
-              {platformLabels[platform]}
-            </span>
-          </SetupSummaryRow>
-        </ul>
-        {connectRequest && (
-          <Button
-            variant="ghost"
-            className="mt-3"
-            aria-expanded={customizing}
-            onClick={() => setCustomizing(!customizing)}
-          >
-            <span>{customizing ? "Done customizing" : "Customize setup"}</span>
-          </Button>
-        )}
-      </ConnectionSection>
+          </ul>
+        </ConnectionSection>
+      )}
 
       <ConnectionSection
         compact={!!connectRequest}
-        n={3}
+        n={setupStep}
         title={
           connectRequest
             ? "Approve the connection"
@@ -1141,6 +1152,33 @@ export function ConnectCommandPanel({
         }
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
+        {!showSetupSummary && (
+          <Collapsible
+            open={customizing}
+            onOpenChange={setCustomizing}
+            className="mb-4"
+          >
+            <CollapsibleTrigger asChild>
+              <Button
+                variant="link"
+                className="h-auto p-0 underline underline-offset-4"
+              >
+                <span>
+                  {customizing ? "Done customizing" : "Customize setup"}
+                </span>
+              </Button>
+            </CollapsibleTrigger>
+            <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
+              {gatewayEditor}
+              {proxyEditor}
+              {proxyActive && modelEditor}
+              {skillsEligible && skillsEditor}
+              {pluginsEnabled && pluginsEditor}
+              {showEndpoint && endpointEditor}
+              {platformEditor}
+            </CollapsibleContent>
+          </Collapsible>
+        )}
         <div className="flex flex-col gap-3">
           {client.id === "claude-desktop" && (
             <p className="text-sm text-muted-foreground">
@@ -1182,6 +1220,31 @@ export function ConnectCommandPanel({
                     .
                   </p>
                 )}
+              </AlertDescription>
+            </Alert>
+          )}
+          {connectRequest && client.id === "cursor" && proxyActive && (
+            <Alert variant="warning">
+              <TriangleAlert />
+              <AlertTitle>Cursor model setup needs a separate step</AlertTitle>
+              <AlertDescription>
+                {effectiveProxyAuth === "virtual-key" ? (
+                  <p>
+                    After approval, look in the output of the setup command
+                    Cursor runs. The “Cursor model settings (manual step)”
+                    section prints the proxy URL and virtual key.
+                  </p>
+                ) : (
+                  <p>
+                    After approval, look in the output of the setup command
+                    Cursor runs. The “Cursor model settings (manual step)”
+                    section prints the proxy URL. Use your own OpenAI API key; a
+                    Cursor subscription cannot supply one.
+                  </p>
+                )}
+                <p>
+                  Enter these values in Cursor Settings → Models → API Keys.
+                </p>
               </AlertDescription>
             </Alert>
           )}
@@ -1251,6 +1314,11 @@ export function ConnectCommandPanel({
                 setupId={result?.id}
                 clientId={client.id}
                 platform={setupPlatform}
+                gatewaySelected={!!gateway}
+                gatewayName={oauthServerName}
+                proxySelected={proxyActive}
+                proxyUsesVirtualKey={effectiveProxyAuth === "virtual-key"}
+                skillsSelected={skillsEligible && includeSkills}
               />
             ) : client.id === "claude-desktop" && result?.installerUrl ? (
               <div className="space-y-3 p-5 text-foreground">
@@ -1333,34 +1401,17 @@ export function ConnectCommandPanel({
       </ConnectionSection>
 
       {showDesktopGatewayStep && (
-        <WizardStep n={4} title="Enable your gateway in Claude Desktop" last>
-          <div className="space-y-3 text-sm text-muted-foreground">
-            <p>
-              The installer registers your gateway. Claude Desktop does not let
-              installers enable connectors automatically, so you need to enable
-              the gateway in your conversation.
-            </p>
-            <ol className="list-decimal space-y-3 pl-5">
-              <li>
-                After Desktop restarts, open{" "}
-                <strong>Settings → Connectors</strong>. Select{" "}
-                <strong>{oauthServerName}</strong> and connect it if needed.
-                Complete sign-in and approve access in your browser.
-              </li>
-              <li>
-                In your conversation, open <strong>+ → Connectors</strong> and
-                enable <strong>{oauthServerName}</strong> if it is off. A
-                connected checkmark in Settings does not confirm it is enabled
-                for that conversation.
-              </li>
-              <li>Ask Claude to list the tools available from your gateway.</li>
-            </ol>
-          </div>
+        <WizardStep
+          n={setupStep + 1}
+          title="Enable your gateway in Claude Desktop"
+          last
+        >
+          <ClaudeDesktopGatewaySteps gatewayName={oauthServerName} />
         </WizardStep>
       )}
 
       {showOAuthStep && (
-        <WizardStep n={4} title={FINISH_OAUTH_FLOW_TITLE} last>
+        <WizardStep n={setupStep + 1} title={FINISH_OAUTH_FLOW_TITLE} last>
           <div className="flex flex-col gap-3 text-sm text-muted-foreground">
             <p>
               The script only registers the gateway — the gateway grants tool
@@ -1488,7 +1539,7 @@ function ProviderKeyGate({
 }
 
 /** Bold, underlined link to the underlying resource (gateway/proxy/skills). */
-function ResourceLink({
+export function ResourceLink({
   href,
   children,
 }: {
@@ -1508,7 +1559,7 @@ function ResourceLink({
 const SKILL_NAME_PREVIEW_LIMIT = 6;
 
 /** Names the skills the command will install, truncated past the limit. */
-function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
+export function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
   const shown = skills.slice(0, SKILL_NAME_PREVIEW_LIMIT);
   const more = skills.length - shown.length;
   return (

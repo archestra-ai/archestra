@@ -41,6 +41,11 @@ vi.mock("@/lib/connection-setup.query", () => ({
     mutateAsync: createSetupMock,
     isPending: false,
   }),
+  useConnectionPromptSession: (clientId?: string) => ({
+    data: clientId ? { expiresAt: "2099-01-01" } : undefined,
+    isError: false,
+    refetch: vi.fn(),
+  }),
 }));
 
 vi.mock("./skills-marketplace-step", () => ({
@@ -243,6 +248,33 @@ beforeEach(() => {
 });
 
 describe("ConnectCommandPanel", () => {
+  it("waits for shared skills before generating an approvable setup", async () => {
+    allSkillsMock.mockReturnValue({ data: undefined, isPending: true });
+    const view = renderPanel({ client: findClient("cursor") });
+
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    expect(createSetupMock).not.toHaveBeenCalled();
+
+    allSkillsMock.mockReturnValue({
+      data: [
+        { id: "shared-skill", name: "Shared skill", scope: "org", teams: [] },
+      ],
+      isPending: false,
+    });
+    view.rerender(
+      <ConnectCommandPanel
+        {...renderPanelProps({ client: findClient("cursor") })}
+      />,
+    );
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenCalledWith(
+        expect.objectContaining({
+          skills: { skillIds: ["shared-skill"], ttlDays: null },
+        }),
+      ),
+    );
+  });
+
   it("switches between coding prompts and Desktop setup without preparing coding-client scripts", async () => {
     vi.mocked(useRouter).mockReturnValue({
       replace: vi.fn(),
@@ -269,6 +301,10 @@ describe("ConnectCommandPanel", () => {
         screen.getByRole("heading", { name: "Connect Claude Code" }),
       ).toBeVisible();
       for (const label of ["Cursor", "Codex", "OpenCode", "Copilot CLI"]) {
+        const selectedClient = CONNECT_CLIENTS.find(
+          (entry) => entry.label === label,
+        );
+        if (!selectedClient) throw new Error(`Missing client: ${label}`);
         await user.click(
           screen.getByRole("button", {
             name: new RegExp(`${label} logo ${label}`),
@@ -278,8 +314,13 @@ describe("ConnectCommandPanel", () => {
           screen.getByRole("heading", { name: `Connect ${label}` }),
         ).toBeVisible();
         expect(
+          screen.getByRole("heading", { name: "Review the setup" }),
+        ).toBeVisible();
+        const prompt = `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`;
+        expect(
           screen.getByText(
-            `Read ${window.location.origin}/connect.md and connect ${label}.`,
+            (_content, node) =>
+              node?.tagName === "CODE" && node.textContent === prompt,
           ),
         ).toBeVisible();
       }
@@ -293,6 +334,9 @@ describe("ConnectCommandPanel", () => {
       expect(
         screen.getByRole("heading", { name: "Install the connection" }),
       ).toBeVisible();
+      expect(
+        screen.queryByRole("heading", { name: "Review the setup" }),
+      ).toBeNull();
       await waitFor(() =>
         expect(createSetupMock).toHaveBeenCalledWith(
           expect.objectContaining({ clientId: "claude-desktop" }),
@@ -304,8 +348,8 @@ describe("ConnectCommandPanel", () => {
       );
       expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
       expect(
-        screen.queryByRole("heading", { name: "Review the setup" }),
-      ).toBeNull();
+        screen.getByRole("heading", { name: "Review the setup" }),
+      ).toBeVisible();
     } finally {
       view.unmount();
       queryClient.clear();
@@ -341,23 +385,22 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.queryByRole("link", { name: "the LLM Proxy" }),
     ).not.toBeInTheDocument();
-    const proxySummary = screen
-      .getByText("your Claude subscription")
-      .closest("li");
-    expect(proxySummary).toHaveTextContent(
-      "Passthrough to Anthropic through the LLM Proxy using your Claude subscription",
-    );
     expect(
-      screen.queryByText("Good for reusing a subscription"),
-    ).not.toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("connect-change-proxy"));
+      screen.queryByRole("heading", { name: "Review the setup" }),
+    ).toBeNull();
+    expect(screen.queryByText("your Claude subscription")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Customize setup" }),
+    );
     expect(
       screen.getByRole("tab", { name: "Claude subscription" }),
     ).toHaveAttribute("aria-selected", "true");
-    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Done customizing" }),
+    );
     expect(
       screen.queryByRole("tab", { name: "Claude subscription" }),
-    ).not.toBeInTheDocument();
+    ).toBeNull();
     expect(screen.getByText(COMMAND)).not.toBeVisible();
     await userEvent.click(screen.getByText("Advanced: terminal setup"));
     expect(screen.getByText(COMMAND)).toBeVisible();
@@ -371,7 +414,7 @@ describe("ConnectCommandPanel", () => {
     const user = userEvent.setup();
     renderPanel({ client: findClient("claude-desktop") });
     await screen.findByText(COMMAND);
-    await user.click(screen.getByTestId("connect-change-platform"));
+    await user.click(screen.getByRole("button", { name: "Customize setup" }));
     await user.click(screen.getByRole("tab", { name: "Windows" }));
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -381,7 +424,6 @@ describe("ConnectCommandPanel", () => {
         }),
       ),
     );
-    await user.click(screen.getByTestId("connect-change-proxy"));
     await user.click(screen.getByRole("tab", { name: "API key" }));
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -534,6 +576,10 @@ describe("ConnectCommandPanel", () => {
           screen.queryByRole("button", { name: "Retry setup" }),
         ).toBeNull(),
       );
+      expect(
+        screen.queryByRole("heading", { name: "Connect Claude Code" }),
+      ).toBeNull();
+      expect(screen.queryByText("for tools")).toBeNull();
       expect(screen.queryByText(COMMAND)).toBeNull();
       expect(screen.queryByTestId("connect-regenerate-command")).toBeNull();
       expect(screen.queryByTestId("connect-change-skills")).toBeNull();
@@ -541,7 +587,6 @@ describe("ConnectCommandPanel", () => {
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
       await user.click(screen.getByRole("button", { name: "Customize setup" }));
-      await user.click(screen.getByTestId("connect-change-skills"));
       await user.click(
         screen.getByRole("checkbox", { name: "Install shared skills" }),
       );
@@ -982,7 +1027,9 @@ describe("ConnectCommandPanel", () => {
     });
     const { rerender } = renderPanel();
 
-    await new Promise((resolve) => setTimeout(resolve, 500));
+    // The debounce runs at 0 ms here (see beforeEach), so a short wait is
+    // already past the point where a premature generation would have fired.
+    await new Promise((resolve) => setTimeout(resolve, 20));
     expect(createSetupMock).not.toHaveBeenCalled();
 
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -1163,6 +1210,43 @@ describe("ConnectCommandPanel", () => {
     expect(screen.getByText("my_gateway")).toBeInTheDocument();
   });
 
+  it("names the seeded personal gateway after the deployment, not 'my_gateway'", async () => {
+    // "My Gateway" is the name every member's gateway is seeded with, so
+    // my_gateway in the client's server list tells the user nothing about
+    // which platform serves it.
+    renderPanel({
+      mcpGateways: [
+        {
+          id: "g1",
+          name: "My Gateway",
+          agentType: "mcp_gateway",
+          isPersonalGateway: true,
+        },
+      ],
+    });
+    await screen.findByText(COMMAND);
+
+    expect(screen.getByText("archestra")).toBeInTheDocument();
+    expect(screen.queryByText("my_gateway")).not.toBeInTheDocument();
+  });
+
+  it("names the seeded personal gateway after a white-label app name", async () => {
+    vi.mocked(useAppName).mockReturnValue("Acme AI");
+    renderPanel({
+      mcpGateways: [
+        {
+          id: "g1",
+          name: "My Gateway",
+          agentType: "mcp_gateway",
+          isPersonalGateway: true,
+        },
+      ],
+    });
+    await screen.findByText(COMMAND);
+
+    expect(screen.getByText("acme_ai")).toBeInTheDocument();
+  });
+
   it("omits the OAuth step when only a proxy (no gateway) is connected", async () => {
     renderPanel({ mcpGateways: [], mcpGatewayId: null });
     await screen.findByText(COMMAND);
@@ -1316,6 +1400,24 @@ describe("ConnectCommandPanel", () => {
     await user.click(screen.getByTestId("connect-auth-add-provider-key"));
 
     expect(screen.getByTestId("add-provider-key-dialog")).toBeInTheDocument();
+  });
+
+  it("explains Cursor needs an API key for proxy passthrough", async () => {
+    renderPanel({ client: findClient("cursor") });
+    await screen.findByText(COMMAND);
+
+    expect(
+      screen.getByTestId("connect-change-proxy").closest("li"),
+    ).toHaveTextContent(
+      "Prepare OpenAI proxy settings for Cursor; finish setup in Cursor Settings",
+    );
+
+    await userEvent.setup().click(screen.getByTestId("connect-change-proxy"));
+    expect(
+      screen.getByText(
+        /Its subscription cannot authenticate requests through the proxy/,
+      ),
+    ).toBeInTheDocument();
   });
 
   it("gates step 3 and hides the OAuth step when virtual-key auth has no backing key", async () => {

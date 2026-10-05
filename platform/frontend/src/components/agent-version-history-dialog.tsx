@@ -289,6 +289,7 @@ function VersionHistory({
               RESTORE_PERMISSIONS_BY_AGENT_TYPE[agent?.agentType ?? "agent"] ??
               RESTORE_PERMISSIONS_BY_AGENT_TYPE.agent
             }
+            permissionScope={agentId ?? undefined}
             disabled={!canRestore}
             onClick={() => setConfirmingRestore(true)}
             tooltip={restoreTooltip({

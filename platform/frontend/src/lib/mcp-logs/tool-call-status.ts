@@ -1,6 +1,6 @@
 import {
   extractMcpToolError,
-  isLockedChatUnavailableContent,
+  isEncryptedChatUnavailableContent,
   isLogContentNotStored,
 } from "@archestra/shared";
 
@@ -43,7 +43,7 @@ export function canShowMcpToolCallStatus(
   method: string,
   result: unknown,
 ): boolean {
-  if (!isLockedChatUnavailableContent(result)) {
+  if (!isEncryptedChatUnavailableContent(result)) {
     return true;
   }
   return (

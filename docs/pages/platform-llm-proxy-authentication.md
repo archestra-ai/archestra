@@ -61,6 +61,8 @@ The proxy resolves the standard virtual key to the mapped provider key and base 
 
 Each standard virtual key can map one key per provider. Provider-specific proxy routes use the mapped key for that route provider. For example, an OpenAI route requires an OpenAI mapping.
 
+Self-hosted providers are the exception: OpenAI-compatible (vLLM), Ollama, Azure, and Archestra. Each key of these providers is a separate endpoint with its own models, so a virtual key can map several of them. A request goes to the mapped endpoint that serves its model — two gateways for two models, for example. When no mapped endpoint is known to serve the model, the primary key answers, then the oldest.
+
 ### Standard Virtual Keys on the Model Router
 
 Model Router routes require a standard virtual key with at least one provider key mapping. Direct provider API keys are rejected on `/v1/model-router/*`.

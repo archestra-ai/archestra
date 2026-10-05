@@ -68,9 +68,10 @@ test("confirmed publication offers a return action without opening the diff", ()
   render(<OpenAppaPolicyCompletion output={{ structuredContent: saved }} />);
   expect(screen.getByText("Saved revision 1")).toBeInTheDocument();
   expect(screen.getByText(/Enforcement confirmed on/)).toBeInTheDocument();
-  expect(
-    screen.getByRole("link", { name: "Back to OpenAPPA" }),
-  ).toHaveAttribute("href", "/openappa");
+  expect(screen.getByRole("link", { name: "View Guardrails" })).toHaveAttribute(
+    "href",
+    "/openappa",
+  );
   expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
 });
 
@@ -102,4 +103,22 @@ test.each([
 ])("preview and pending PR do not appear as a saved local policy", (output) => {
   const { container } = render(<OpenAppaPolicyCompletion output={output} />);
   expect(container).toBeEmptyDOMElement();
+});
+
+test("published PR stays reviewable outside collapsed tool details", () => {
+  render(
+    <OpenAppaPolicyCompletion
+      output={{
+        delivery: "pull_request",
+        number: 17,
+        url: "https://github.com/example/policies/pull/17",
+        before: "old",
+        after: "new",
+      }}
+    />,
+  );
+  expect(
+    screen.getByRole("link", { name: "Review pull request" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/17");
+  expect(screen.queryByText(/Saved revision/)).not.toBeInTheDocument();
 });

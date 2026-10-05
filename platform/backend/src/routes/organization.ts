@@ -459,7 +459,7 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.UpdateIntegrationSettings,
         description:
-          "Customize the built-in integration catalogs: hide model providers, messaging channels, or knowledge connectors, and override how they are labelled. Omitted catalogs are left unchanged; null clears a catalog's overrides.",
+          "Customize the built-in integration catalogs: hide model providers, messaging channels, knowledge connectors, or popular agent templates, and override model provider labels. Omitted catalogs are left unchanged; null clears a catalog's overrides.",
         tags: ["Organization"],
         body: UpdateIntegrationSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),

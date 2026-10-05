@@ -17,6 +17,29 @@ describe("normalizeMcpAppExternalUrl", () => {
     ).toBe("slack://channel?team=T123ABC456&id=C123ABC456");
   });
 
+  test("keeps Slack message and thread anchors", () => {
+    expect(
+      normalizeMcpAppExternalUrl(
+        "slack://channel?team=T123ABC456&id=C123ABC456&message=1790957997.011019&thread_ts=1790957996.547529",
+      ),
+    ).toBe(
+      "slack://channel?team=T123ABC456&id=C123ABC456&message=1790957997.011019&thread_ts=1790957996.547529",
+    );
+  });
+
+  test("drops malformed Slack anchors", () => {
+    expect(
+      normalizeMcpAppExternalUrl(
+        "slack://channel?team=T123ABC456&id=C123ABC456&message=x&thread_ts=1.2",
+      ),
+    ).toBe("slack://channel?team=T123ABC456&id=C123ABC456");
+    expect(
+      normalizeMcpAppExternalUrl(
+        "slack://channel?team=T123ABC456&id=C123ABC456&message=1.2&thread_ts=evil",
+      ),
+    ).toBe("slack://channel?team=T123ABC456&id=C123ABC456&message=1.2");
+  });
+
   test("rejects other Slack desktop actions", () => {
     expect(
       normalizeMcpAppExternalUrl("slack://open?team=T123ABC456"),

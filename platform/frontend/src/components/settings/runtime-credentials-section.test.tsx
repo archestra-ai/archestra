@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   update: vi.fn(),
   deleteDefinition: vi.fn(),
   disconnect: vi.fn(),
+  refetch: vi.fn(),
   useRuntimeCredentialUsage: vi.fn(),
   definitions: [
     {
@@ -59,10 +60,19 @@ vi.mock("@/lib/runtime-credentials.query", () => ({
     data: mocks.definitions,
     isPending: false,
     isError: false,
+    refetch: mocks.refetch,
   }),
   useRuntimeCredentialUsage: mocks.useRuntimeCredentialUsage,
   useCreateRuntimeCredential: () => ({
     mutate: mocks.create,
+    isPending: false,
+  }),
+  useSetRuntimeCredentialConnection: () => ({
+    mutate: vi.fn(),
+    isPending: false,
+  }),
+  useStartGitHubUserConnection: () => ({
+    mutate: vi.fn(),
     isPending: false,
   }),
   useUpdateRuntimeCredential: () => ({
@@ -101,6 +111,21 @@ describe("RuntimeCredentialsSection", () => {
       isPending: false,
       isError: false,
     });
+    mocks.refetch.mockResolvedValue({
+      data: [
+        {
+          id: "new-secret",
+          key: "credential-team-secret",
+          name: "Team secret",
+          description: "",
+          icon: null,
+          kind: "secret",
+          allowOrganization: true,
+          allowPersonal: false,
+          organizationConfigured: false,
+        },
+      ],
+    });
   });
 
   it("creates a reusable definition with a generated stable key and chosen availability", async () => {
@@ -137,6 +162,30 @@ describe("RuntimeCredentialsSection", () => {
       }),
       expect.any(Object),
     );
+  });
+
+  it("opens the value dialog after adding an organization secret", async () => {
+    const user = userEvent.setup();
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <RuntimeCredentialsSection />
+      </QueryClientProvider>,
+    );
+    render(mocks.setActionButton.mock.calls.at(-1)?.[0]);
+    await user.click(screen.getByRole("button", { name: "Add credential" }));
+    const dialog = screen.getByRole("dialog");
+    await user.type(within(dialog).getByLabelText("Name"), "Team secret");
+    await user.click(
+      within(dialog).getByRole("combobox", { name: "Provided by" }),
+    );
+    await user.click(screen.getByRole("option", { name: /The organization/ }));
+    await user.click(within(dialog).getByRole("button", { name: "Add" }));
+    const onSuccess = mocks.create.mock.calls[0]?.[1].onSuccess;
+    onSuccess({ id: "new-secret" });
+    expect(
+      await screen.findByRole("dialog", { name: "Connect Team secret" }),
+    ).toBeInTheDocument();
+    expect(screen.getByLabelText("Secret value")).toBeInTheDocument();
   });
 
   it("blocks deleting credentials still used by Agents", async () => {

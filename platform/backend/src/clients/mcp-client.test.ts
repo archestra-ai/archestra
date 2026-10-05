@@ -1,10 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
-  LINKED_IDP_SSO_MODE,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  LOCKED_CHAT_REDACTED_MARKER,
+  ENCRYPTED_CHAT_REDACTED_MARKER,
+  LINKED_IDP_SSO_MODE,
   // SPDX-SnippetEnd
   MCP_APPS_EXTENSION_ID,
   MCP_CATALOG_INSTALL_PATH,
@@ -2625,7 +2625,7 @@ describe("McpClient", () => {
         expect(atWake).toEqual({ active: 1, persisted: 1 });
       });
 
-      test("redacts a locked chat call's arguments when the wake fails", async () => {
+      test("redacts an encrypted chat call's arguments when the wake fails", async () => {
         const tool = await ToolModel.createToolIfNotExists({
           name: "local-streamable-http-server__test_tool",
           description: "Test tool",
@@ -2642,7 +2642,7 @@ describe("McpClient", () => {
 
         const result = await mcpClient.executeToolCallForOwner(
           {
-            id: "call_locked_chat_wake",
+            id: "call_encrypted_chat_wake",
             name: "local-streamable-http-server__test_tool",
             arguments: { query: "the-part-that-must-not-persist" },
           },
@@ -2653,7 +2653,7 @@ describe("McpClient", () => {
 
         expect(result.isError).toBe(true);
         // The wake-failure result is persisted like any other tool failure —
-        // and a locked chat's arguments must not survive it in
+        // and an encrypted chat's arguments must not survive it in
         // plaintext just because the pod was slow to come up.
         const [logged] = await db
           .select()
@@ -2661,7 +2661,7 @@ describe("McpClient", () => {
           .where(eq(schema.mcpToolCallsTable.agentId, agentId));
         expect(logged).toBeDefined();
         expect((logged.toolCall as { arguments?: unknown }).arguments).toEqual(
-          LOCKED_CHAT_REDACTED_MARKER,
+          ENCRYPTED_CHAT_REDACTED_MARKER,
         );
         expect(JSON.stringify(logged)).not.toContain(
           "the-part-that-must-not-persist",
@@ -8444,6 +8444,50 @@ describe("McpClient", () => {
     });
 
     describe("MCP aggregate methods with OAuth headers", () => {
+      test("resource and prompt discovery skips the in-process catalog without fake uninstall errors", async ({
+        seedAndAssignArchestraTools,
+      }) => {
+        await seedAndAssignArchestraTools(agentId);
+        expect(await mcpClient.listResources(agentId)).toEqual({
+          resources: [],
+        });
+        expect(await mcpClient.listResourceTemplates(agentId)).toEqual({
+          resourceTemplates: [],
+        });
+        expect(await mcpClient.listPrompts(agentId)).toEqual({ prompts: [] });
+        expect(mockConnect).not.toHaveBeenCalled();
+        expect(
+          await db
+            .select()
+            .from(schema.mcpToolCallsTable)
+            .where(eq(schema.mcpToolCallsTable.agentId, agentId)),
+        ).toHaveLength(0);
+
+        const external = await ToolModel.createToolIfNotExists({
+          name: "github-mcp-server__resource_probe",
+          description: "Resource probe",
+          parameters: {},
+          catalogId,
+        });
+        await AgentToolModel.create(agentId, external.id, {
+          mcpServerId,
+          credentialResolutionMode: "static",
+        });
+        mockListResources.mockResolvedValue({
+          resources: [{ uri: "resource://external", name: "External" }],
+        });
+        expect(await mcpClient.listResources(agentId)).toEqual({
+          resources: [{ uri: "resource://external", name: "External" }],
+        });
+        expect(mockConnect).toHaveBeenCalledTimes(1);
+        expect(
+          await db
+            .select()
+            .from(schema.mcpToolCallsTable)
+            .where(eq(schema.mcpToolCallsTable.agentId, agentId)),
+        ).toHaveLength(0);
+      });
+
       test("uses separate aggregate cached clients for external IdP users", async () => {
         const tool = await ToolModel.createToolIfNotExists({
           name: "github-mcp-server__external_idp_resources",

@@ -69,7 +69,11 @@ export type HostedToolCall = {
 export interface CreateClientOptions {
   /** Base URL override for the provider API */
   baseUrl?: string;
-  /** Agent for observability metrics (request duration, tokens) */
+  /**
+   * Agent for observability metrics (request duration, tokens). The ChatGPT
+   * subscription clients also derive their Codex session from it (see
+   * `sessionId`).
+   */
   agent?: GatewayAgent;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
@@ -106,6 +110,13 @@ export interface CreateClientOptions {
    * cache, or use this credential outside the Responses adapter.
    */
   openAiCodexPassthrough?: OpenAiCodexPassthrough;
+  /**
+   * The request's Archestra session, such as the agent run, the conversation,
+   * or the ChatOps thread. The ChatGPT subscription clients derive their Codex
+   * session from it and the agent. The backend keeps the requests of one Codex
+   * session on the same prompt cache.
+   */
+  sessionId?: string;
 }
 
 export interface OpenAiCodexPassthrough {
@@ -332,6 +343,7 @@ export interface StreamAccumulatorState {
     id: string;
     name: string;
     arguments: string;
+    namespace?: string;
     /** Written to the client in place of `id` (OpenAPPA's trajectory stamp). */
     wireId?: string;
   }>;
@@ -557,7 +569,10 @@ export interface LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders> {
   ): LLMRequestAdapter<TRequest, TMessages>;
 
   /** Create a response adapter */
-  createResponseAdapter(response: TResponse): LLMResponseAdapter<TResponse>;
+  createResponseAdapter(
+    response: TResponse,
+    request?: TRequest,
+  ): LLMResponseAdapter<TResponse>;
 
   /** Create a stream adapter. Request is optional and used by some providers (e.g., Bedrock for tool name mapping) */
   createStreamAdapter(request?: TRequest): LLMStreamAdapter<TChunk, TResponse>;

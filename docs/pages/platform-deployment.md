@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-09-27
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -126,7 +126,7 @@ Helm deployment is our recommended approach for deploying Archestra Platform to 
 Install Archestra Platform using the Helm chart from our OCI registry:
 
 ```bash
-export ARCHESTRA_VERSION="1.4.0-rc.26" # x-release-please-version
+export ARCHESTRA_VERSION="1.4.0-rc.31" # x-release-please-version
 helm upgrade archestra-platform \
   oci://europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/helm-charts/archestra-platform \
   --version "$ARCHESTRA_VERSION" \
@@ -1141,7 +1141,7 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Useful for sharing one bucket across multiple Archestra instances (e.g. `staging/` vs `production/`)
   - Example: `archestra-prod/`
 
-- **`ARCHESTRA_ANALYTICS`** - Controls PostHog analytics for product improvements.
+- **`ARCHESTRA_ANALYTICS`** - Controls deployment analytics and forwarding OpenAPPA diagnostic reports to the shared reporting service.
   - Default: `enabled` in production builds (`NODE_ENV=production`, which includes the released Docker images); disabled in development/test environments
   - Set to `disabled` to opt-out of analytics, or `enabled` to force it on regardless of environment
 
@@ -1179,13 +1179,13 @@ My Files is the persistent byte-storage layer used by Projects and the `search_f
   - Existing rows are encrypted by a background sweep after enabling (also runnable as `pnpm --filter backend db:reencrypt-content`).
   - Once content has been encrypted, startup fails — deliberately with no override — if the key is missing or wrong, because chat history and logs cannot be re-entered.
   - See [Content Encryption at Rest](/docs/platform-content-encryption) for the enable and rotation procedures.
-- **`ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY`** - Enables [locked chats](/docs/platform-content-encryption#locked-chats): conversations, and the audit records they produce, encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery. The wrapped key is stored on the conversation row; the private half stays offline with your security team, and without it the stored copy is useless.
-  - Default: not set — locked chats are unavailable. Unsetting it later turns the feature off again.
-  - Escrow is required, not optional: a locked chat encrypts its own audit trail, so without an escrowed key those records could be read by nobody.
+- **`ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY`** - Enables [encrypted chats](/docs/platform-chat#encrypted-chats): conversations, and the audit records they produce, encrypted under a browser-held per-conversation key the server never stores. The value is the RSA public key (PEM or base64-of-PEM, >= 2048 bits) each chat key is escrowed to for break-glass recovery. The wrapped key is stored on the conversation row; the private half stays offline with your security team, and without it the stored copy is useless.
+  - Default: not set — encrypted chats are unavailable. Unsetting it later turns the feature off again.
+  - Escrow is required, not optional: an encrypted chat encrypts its own audit trail, so without an escrowed key those records could be read by nobody.
   - Startup fails when the value is not a valid RSA public key of at least 2048 bits.
   - Set it in its own rollout, after the release is deployed, so no replica writes a record an older one cannot read.
-  - This variable was called `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY` before the feature was renamed. The old name still works, so you can rename it on your own schedule.
-  - See [Locked Chats](/docs/platform-content-encryption#locked-chats) for setup and the recovery procedure.
+  - This variable was previously called `ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY`, and before that `ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY`. Both old names still work, so you can rename it on your own schedule.
+  - See [Encrypted Chats](/docs/platform-chat#encrypted-chats) for setup and the recovery procedure.
 - **`ARCHESTRA_CONTENT_ENCRYPTION_SECRET_PREVIOUS`** - Additional decrypt-only content key. Set during rotation (old key here, new key above) while the background sweep re-encrypts, and during rolling enablement to make every replica envelope-capable before writes activate. Unset it once the sweep completes.
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - The previous encryption secret, read only by the startup re-encryption to decrypt rows written under the prior key. When unset it defaults to the deployment's prior secret, so existing installs re-encrypt automatically on the first restart with the new key. Unset it once re-encryption has completed.
@@ -1358,12 +1358,13 @@ These environment variables set the default base URL for each LLM provider. Per-
   - Default: `https://api.x.ai/v1`
   - Use this to point to your own proxy or other custom endpoints
 
-- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the SuperSuperGrok sign-in. Its OIDC discovery document supplies the device and token endpoints.
+- **`ARCHESTRA_XAI_SUBSCRIPTION_ISSUER`** - OAuth issuer for the SuperGrok sign-in. Its OIDC discovery document supplies the device and token endpoints.
   - Default: `https://auth.x.ai`
 - **`ARCHESTRA_XAI_SUBSCRIPTION_VERIFICATION_ORIGIN`** - Allowed browser origin for the device-flow verification page. Responses pointing elsewhere are rejected.
   - Default: `https://accounts.x.ai`
-- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION`** - Tested xAI session-protocol version reported to the proxy. Update this deliberately when adopting a newer proxy contract.
-  - Default: `1.0.0`
+- **`ARCHESTRA_XAI_SUBSCRIPTION_CLIENT_VERSION`** - Overrides the Grok CLI version reported to the SuperGrok session proxy.
+  - Default: the stable Grok CLI version pinned in your Archestra release
+  - xAI rejects versions below a minimum that it raises without notice. If SuperGrok chat fails with HTTP 426, set this to the version at `https://x.ai/cli/stable`.
 - **`ARCHESTRA_XAI_SUBSCRIPTION_BASE_URL`** - OpenAI-compatible inference and model endpoint for SuperGrok OAuth sessions.
   - Default: `https://cli-chat-proxy.grok.com/v1`
   - This is separate from the metered `ARCHESTRA_XAI_BASE_URL` API-key endpoint
@@ -2135,30 +2136,36 @@ Automatic deletion of content-bearing records after a configurable number of day
 To learn more about enterprise licensing, see the [pricing model](/docs/platform-pricing-model).
 
 
-### OpenAPPA Tool Guardrails (experimental)
+### OpenAPPA Tool Guardrails (Experimental)
 
-- OpenAPPA has no flag of its own. It turns on with the `ARCHESTRA_BETA` master switch, which enables the OpenAPPA page, policy chat tools, and read-only policy details.
+See [Guardrails](./platform-ai-tool-guardrails) for setup, client integration requirements, and policy operations.
+
+- `ARCHESTRA_BETA=true` exposes the experimental Guardrails feature, configuration tools, and read-only policy details. It does not turn on enforcement. The separate **Enforce the policy** switch defaults to off and controls the deployment.
 - `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: HMAC secret for offer routing JWS on `get_remedy_plans` and `execute_remedy_plan`. It also signs native-question receipts, session receipts, tool-call ID stamps, and subagent delegation markers. The proxy attaches a flattened JWS JSON Serialization (RFC 7515 §7.2.2) with an unencoded payload (RFC 7797): `protected`, `payload`, and `signature`. This format provides integrity (JWS), not encryption (JWE). The `protected` header specifies `alg` (`HS256`) and `kid` (`default`); unknown algorithms fail closed. Remedy arguments (`offer_id`, `plan`) and execution receipts stay outside the JWS. The proxy can prepend a two-line protected-session mark to the first reply and compaction summaries. It removes the mark before provider dispatch and logging. Most replies have no mark. Optional. Helm deployments generate and preserve an `offer-signing-secret` key across upgrades. Other deployments derive a key from the session authentication secret. Set this variable (minimum 32 characters) to configure an explicit key or rotate keys independently. Every backend replica must use the same value. Without this secret, a subagent binds to the parent session reported by its client.
-- `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports go to Archestra’s shared HTTPS receiver, private GCS storage, and internal Slack channel. No GCP credentials are required in your deployment.
+- `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports and their compressed diagnostic archives are stored locally. When `ARCHESTRA_ANALYTICS` is enabled, reports are also forwarded to the shared OpenAPPA reporting service.
 - `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
 Child lineage and return proofs are self-contained signed tokens. Proxy replicas verify them with the same signing key. They need no extra database tables. The proxy preserves signed context across compaction and client handoffs and removes transport proofs before provider dispatch. Short started and finished codes are display markers, not authentication tokens.
 
-Policies are stored in PostgreSQL and changed through the configuration agent on the OpenAPPA Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
+Policies are stored in PostgreSQL and changed through the configuration agent on the Guardrails Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
 
-`ARCHESTRA_BETA` does not enable OpenAPPA. Restart the backend after changing the feature flag.
+Tool coverage counts custom rules, battery rules, and catch-all rules using an annotator other than `noop`. A `noop` catch-all adds no restrictions and counts as not covered. Tools without a matching rule also count as not covered. Coverage describes the policy; the enforcement switch controls whether checks run.
+
+Restart the backend after changing `ARCHESTRA_BETA`. Changing the enforcement switch does not require a restart. Check both effective-policy health and enforcement before starting protected sessions.
 
 Reporting sends the agent’s message verbatim, plus filtered policy diagnostics. Reports identify Archestra and the hostname from `ARCHESTRA_FRONTEND_URL`. Agents can include their session’s policy decisions. Diagnostics exclude raw prompts, tool arguments, tool outputs, and session identifiers. Policy names remain visible. Messages must not contain secrets, personal data, or task content. Reporting does not change policies or grant tool permissions. The active policy must permit the `yell` tool, directly or through a matching wildcard. Restart the backend after changing the reporting flag.
 
-With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, OpenAPPA replaces proxy tool-call and tool-result checks. Errors fail closed. A blocked call returns as a `get_remedy_plans` notice tool call. The model inspects the ruling, selects a remedy with `execute_remedy_plan`, and retries. The proxy injects missing notice or control tool declarations. Calls that need human approval stay blocked. See the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+With `ARCHESTRA_BETA` off, legacy Tool Guardrails remain in use. The flag disables legacy trusted-data classification even while OpenAPPA enforcement is off. Legacy invocation checks can still restrict calls. They do not provide equivalent protection during an unenforced interval.
+
+With enforcement on, OpenAPPA checks supported sessions' tool calls and results. Runtime failures do not authorize blocked actions. A blocked call returns as a `get_remedy_plans` notice tool call. The agent can select an offered remedy with `execute_remedy_plan`. Calls that require approval remain blocked until the required review succeeds. See [Protection Limits](./platform-ai-tool-guardrails#protection-limits) and the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md).
 
 Notice restoration supports Anthropic Messages, OpenAI Responses, and OpenAI Chat Completions. Bedrock InvokeModel uses Anthropic restoration. Other protocols evaluate calls and results, but notices stay in history.
 
-Remedy routing is a signed plaintext claim on the notice and control call. Any backend replica verifies the HMAC and reconstructs the session. The event log is the authority for whether the offer still stands.
+Remedy routing is a signed plaintext claim on the notice and control call. Any backend replica verifies the HMAC and reconstructs the session. The event log is the authority for whether the offer still stands. The proxy removes these claims before it forwards history to a provider, even while the enforcement switch is off.
 
 The proxy attaches the provider tool call ID to the remedy call. Standard MCP clients return this ID unchanged. Submitting the same ID and arguments returns the saved result. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
 
 Sessions belong to authorized users within an organization. External client sessions are scoped to the authenticated credential. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer.
 
-Requests without a session header share a fallback session per credential and agent. Uncredentialed loopback traffic is trusted as platform internal traffic.
+The **Client coverage** tile on **Guardrails > Overview** controls unrecognized clients. **Allowed** sends their requests to the provider without OpenAPPA checks by default. **Blocked** returns HTTP 400. See [Session Headers](./platform-ai-tool-guardrails#session-headers) for custom integrations. Uncredentialed loopback traffic is trusted as platform internal traffic.

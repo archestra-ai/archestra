@@ -52,11 +52,17 @@ export async function addCustomSelfHostedCatalogItem({
   // page-level locators are unambiguous here.
   const createForm = page;
 
-  await createForm.getByRole("button", { name: "Self-hosted" }).click();
+  // The hosting radio is visually hidden inside its card; click the card.
+  await createForm
+    .locator("label", {
+      has: createForm.getByRole("radio", { name: /^Self-hosted/ }),
+    })
+    .click();
   await createForm
     .getByRole("textbox", { name: "Name *" })
     .fill(catalogItemName);
-  await createForm.getByLabel("stdio").click();
+  await createForm.getByRole("combobox", { name: "Transport Type" }).click();
+  await page.getByRole("option", { name: "stdio", exact: true }).click();
   await createForm.getByRole("textbox", { name: "Command" }).fill("sh");
   const singleLineCommand = testMcpServerCommand.replace(/\n/g, " ");
   await createForm

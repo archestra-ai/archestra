@@ -37,6 +37,7 @@ import { assertSubscriptionCredentialForProvider } from "@/services/subscription
 import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackRequest } from "@/utils/network";
+import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -156,6 +157,12 @@ export async function validateVirtualApiKey(params: {
    * limit-checked — against a different organization's proxy.
    */
   expectedOrganizationId: string | null;
+  /**
+   * The model the request names, when it names one. A virtual key may map
+   * several endpoints of a self-hosted provider; this picks the one that
+   * serves the model. Without it the key's preferred endpoint answers.
+   */
+  requestedModel?: string | null;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -174,11 +181,15 @@ export async function validateVirtualApiKey(params: {
       "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
     );
   }
-  const mappedProviderKey = (
-    await VirtualApiKeyModel.getProviderApiKeysForRouting(
-      resolved.virtualKey.id,
-    )
-  ).find((mapping) => mapping.provider === expectedProvider);
+  const mappedProviderKey = isSupportedProvider(expectedProvider)
+    ? await selectMappedProviderKey({
+        mappings: await VirtualApiKeyModel.getProviderApiKeysForRouting(
+          resolved.virtualKey.id,
+        ),
+        provider: expectedProvider,
+        modelId: params.requestedModel,
+      })
+    : undefined;
   if (!mappedProviderKey) {
     throw new ApiError(
       400,
@@ -420,6 +431,7 @@ export async function validateLlmOAuthAccessToken(params: {
     clientId: accessToken.clientId,
     expectedProvider: params.expectedProvider,
     agent: params.agent,
+    requestedModel: params.requestedModel,
   });
 }
 
@@ -932,6 +944,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   clientId: string;
   expectedProvider: string;
   agent: GatewayAgent;
+  requestedModel?: string | null;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
   if (!oauthClient) {
@@ -943,9 +956,13 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   if (oauthClient.organizationId !== params.agent.organizationId) {
     throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
   }
-  const mappedProviderKey = oauthClient.providerApiKeys.find(
-    (mapping) => mapping.provider === params.expectedProvider,
-  );
+  const mappedProviderKey = isSupportedProvider(params.expectedProvider)
+    ? await selectMappedProviderKey({
+        mappings: oauthClient.providerApiKeys,
+        provider: params.expectedProvider,
+        modelId: params.requestedModel,
+      })
+    : undefined;
   if (!mappedProviderKey) {
     throw new ApiError(
       400,

@@ -37,6 +37,7 @@ export const AuditEventNameSchema = z.enum([
   "agentRun.canceled",
   "agentRun.updated",
   "agentRun.deleted",
+  "agentRun.reviewDecided",
   // No route emits these any more; kept so earlier records still parse.
   "agentRun.shared",
   "agentRun.unshared",
@@ -74,6 +75,7 @@ export const AuditEventNameSchema = z.enum([
   "plugin.deleted",
   "plugin.syncTriggered",
   "clientConnection.updated",
+  "connectionPromptSession.created",
   "connector.created",
   "connector.updated",
   "connector.deleted",
@@ -216,6 +218,7 @@ export const AuditEventNameSchema = z.enum([
   "teamToken.rotated",
   "tool.deleted",
   "guardrailsPolicy.updated",
+  "openappaYell.updated",
   "openappaBatteryInstall.created",
   "openappaBatteryInstall.updated",
   "openappaBatteryInstall.deleted",

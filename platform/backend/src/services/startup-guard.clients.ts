@@ -13,6 +13,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import logger from "@/logging";
+import { renderPowerShellJsonWriter } from "./powershell-json";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
 /**
@@ -44,6 +45,243 @@ function psq(value: string): string {
 // Claude Code
 // ===================================================================
 
+/**
+ * Drop installer-owned Claude Code `permissions.allow` rules for the MCP server
+ * being disconnected. The installer records only rules it newly added in
+ * `~/.archestra/claude-appa-permissions.json` (`serverName` -> `string[]`);
+ * preexisting user rules never enter that ledger. Settings honor
+ * `CLAUDE_CONFIG_DIR` (else `~/.claude`). Custom profiles keep their ledger
+ * under `$CLAUDE_CONFIG_DIR/.archestra`. Invalid JSON or types stay untouched.
+ * Invoked from the
+ * MCP disconnect arm only — not proxy disconnect — via `python3 -c` so the
+ * guard engine's case-arm parser never sees an indented heredoc.
+ */
+const CLAUDE_APPA_PERMISSION_CLEANUP_PY = `import json, os, pathlib, tempfile
+
+def load_json(path):
+    try:
+        raw = path.read_text(encoding="utf-8")
+    except FileNotFoundError:
+        return "missing", None
+    except OSError:
+        return "invalid", None
+    if not raw.strip():
+        return "empty", None
+    try:
+        data = json.loads(raw)
+    except json.JSONDecodeError:
+        return "invalid", None
+    if not isinstance(data, dict):
+        return "invalid", None
+    return "ok", data
+
+def string_list(value):
+    if not isinstance(value, list):
+        return None
+    if not all(isinstance(item, str) for item in value):
+        return None
+    return value
+
+def write_json(path, data):
+    path.parent.mkdir(parents=True, exist_ok=True)
+    fd, tmp_name = tempfile.mkstemp(dir=str(path.parent), prefix="." + path.name + ".", suffix=".tmp")
+    tmp = pathlib.Path(tmp_name)
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8", newline="\\n") as handle:
+            json.dump(data, handle, indent=2, ensure_ascii=False)
+            handle.write("\\n")
+            handle.flush()
+            os.fsync(handle.fileno())
+        if path.exists():
+            os.chmod(tmp, path.stat().st_mode & 0o777)
+        os.replace(tmp, path)
+    except Exception:
+        try:
+            tmp.unlink()
+        except OSError:
+            pass
+        raise
+
+def drop_ledger_key(ledger_path, ledger, server):
+    ledger.pop(server, None)
+    if ledger:
+        write_json(ledger_path, ledger)
+        return
+    try:
+        ledger_path.unlink()
+    except FileNotFoundError:
+        pass
+
+def main():
+    server = os.environ.get("MCP_SERVER_NAME") or ""
+    if not server:
+        return
+    home = pathlib.Path(os.path.expanduser("~"))
+    state_root = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else home
+    ledger_path = state_root / ".archestra" / "claude-appa-permissions.json"
+    status, ledger = load_json(ledger_path)
+    if status != "ok" or server not in ledger:
+        return
+    owned = string_list(ledger.get(server))
+    if owned is None:
+        return
+    config_dir = os.environ.get("CLAUDE_CONFIG_DIR") or str(home / ".claude")
+    settings_path = pathlib.Path(config_dir) / "settings.json"
+    settings_status, settings = load_json(settings_path)
+    if settings_status == "invalid":
+        return
+    if settings_status == "ok":
+        if "permissions" in settings and settings["permissions"] is not None:
+            permissions = settings["permissions"]
+            if not isinstance(permissions, dict):
+                return
+            if "allow" in permissions and permissions["allow"] is not None:
+                allow = string_list(permissions["allow"])
+                if allow is None:
+                    return
+                owned_set = set(owned)
+                kept = [item for item in allow if item not in owned_set]
+                if len(kept) != len(allow):
+                    permissions["allow"] = kept
+                    write_json(settings_path, settings)
+    elif settings_status not in ("missing", "empty"):
+        return
+    drop_ledger_key(ledger_path, ledger, server)
+
+try:
+    main()
+except Exception:
+    pass
+`;
+
+/**
+ * PowerShell 5.1 twin of {@link CLAUDE_APPA_PERMISSION_CLEANUP_PY}. Uses plain
+ * JSON values to preserve arrays. Defined and called from the MCP arm only.
+ */
+const CLAUDE_APPA_PERMISSION_CLEANUP_PS = `function Remove-ArchClaudeAppaPermissions {
+  function ConvertFrom-ArchClaudeJson([string]$Raw) {
+    $parsed = $null
+    $ok = $false
+    try {
+      if ($PSVersionTable.PSVersion.Major -ge 6) {
+        $jsonParams = @{ InputObject = $Raw; AsHashtable = $true; Depth = 100; ErrorAction = 'Stop' }
+        if ((Get-Command ConvertFrom-Json).Parameters.ContainsKey('DateKind')) { $jsonParams.DateKind = 'String' }
+        $parsed = ConvertFrom-Json @jsonParams
+      } else {
+        Add-Type -AssemblyName System.Web.Extensions -ErrorAction Stop
+        $serializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+        $serializer.MaxJsonLength = 67108864
+        $serializer.RecursionLimit = 256
+        $parsed = $serializer.DeserializeObject($Raw)
+      }
+      if ($null -ne $parsed) { $ok = $true }
+    } catch {
+      $ok = $false
+      $parsed = $null
+    }
+    return @{ Ok = $ok; Value = $parsed }
+  }
+  function ConvertTo-ArchClaudeStringArray($Value) {
+    if ($null -eq $Value -or $Value -is [string] -or $Value -isnot [System.Collections.IList]) {
+      return @{ Ok = $false; Items = @() }
+    }
+    $items = New-Object System.Collections.Generic.List[string]
+    foreach ($item in @($Value)) {
+      if ($item -isnot [string]) { return @{ Ok = $false; Items = @() } }
+      [void]$items.Add($item)
+    }
+    return @{ Ok = $true; Items = $items.ToArray() }
+  }
+  function Find-ArchClaudeKey($Map, [string]$Wanted) {
+    if ($Map -isnot [System.Collections.IDictionary]) { return $null }
+    foreach ($key in @($Map.Keys)) {
+      if ([string]$key -ceq $Wanted) { return [string]$key }
+    }
+    return $null
+  }
+  ${renderPowerShellJsonWriter("ConvertTo-ArchClaudeJson")}
+  function Write-ArchClaudeJsonAtomic([string]$Path, $Value) {
+    $json = [string](ConvertTo-ArchClaudeJson $Value)
+    if (-not $json) { throw 'empty json' }
+    $dir = Split-Path -Parent $Path
+    if ($dir -and -not (Test-Path -LiteralPath $dir)) {
+      New-Item -ItemType Directory -Path $dir | Out-Null
+    }
+    $tmp = $Path + '.' + [guid]::NewGuid().ToString('n') + '.tmp'
+    try {
+      $utf8 = New-Object System.Text.UTF8Encoding $false
+      [IO.File]::WriteAllText($tmp, $json.TrimEnd() + [Environment]::NewLine, $utf8)
+      Move-Item -LiteralPath $tmp -Destination $Path -Force
+    } catch {
+      if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+      throw
+    }
+  }
+  $ErrorActionPreference = 'Stop'
+  try {
+    if (-not $env:USERPROFILE) { return }
+    if ([string]::IsNullOrEmpty($McpServerName)) { return }
+    $stateRoot = $env:USERPROFILE
+    if ($env:CLAUDE_CONFIG_DIR) { $stateRoot = $env:CLAUDE_CONFIG_DIR }
+    $ledgerPath = Join-Path (Join-Path $stateRoot '.archestra') 'claude-appa-permissions.json'
+    if (-not (Test-Path -LiteralPath $ledgerPath)) { return }
+    $ledgerRaw = Get-Content -Raw -LiteralPath $ledgerPath -Encoding UTF8
+    if (-not ($ledgerRaw -and $ledgerRaw.Trim())) { return }
+    $ledgerParsed = ConvertFrom-ArchClaudeJson $ledgerRaw
+    if (-not $ledgerParsed.Ok) { return }
+    $ledger = $ledgerParsed.Value
+    if ($ledger -isnot [System.Collections.IDictionary]) { return }
+    $matchedKey = Find-ArchClaudeKey $ledger $McpServerName
+    if ($null -eq $matchedKey) { return }
+    $ownedParsed = ConvertTo-ArchClaudeStringArray $ledger[$matchedKey]
+    if (-not $ownedParsed.Ok) { return }
+    $configDir = Join-Path $env:USERPROFILE '.claude'
+    if ($env:CLAUDE_CONFIG_DIR) { $configDir = $env:CLAUDE_CONFIG_DIR }
+    $settingsPath = Join-Path $configDir 'settings.json'
+    if (Test-Path -LiteralPath $settingsPath) {
+      $settingsRaw = Get-Content -Raw -LiteralPath $settingsPath -Encoding UTF8
+      if ($settingsRaw -and $settingsRaw.Trim()) {
+        $settingsParsed = ConvertFrom-ArchClaudeJson $settingsRaw
+        if (-not $settingsParsed.Ok) { return }
+        $settings = $settingsParsed.Value
+        if ($settings -isnot [System.Collections.IDictionary]) { return }
+        $permKey = Find-ArchClaudeKey $settings 'permissions'
+        if ($null -ne $permKey -and $null -ne $settings[$permKey]) {
+          $permissions = $settings[$permKey]
+          if ($permissions -isnot [System.Collections.IDictionary]) { return }
+          $allowKey = Find-ArchClaudeKey $permissions 'allow'
+          if ($null -ne $allowKey -and $null -ne $permissions[$allowKey]) {
+            $allowParsed = ConvertTo-ArchClaudeStringArray $permissions[$allowKey]
+            if (-not $allowParsed.Ok) { return }
+            $ownedSet = New-Object 'System.Collections.Generic.HashSet[string]'
+            foreach ($rule in @($ownedParsed.Items)) { [void]$ownedSet.Add([string]$rule) }
+            $kept = New-Object System.Collections.ArrayList
+            $removed = 0
+            foreach ($rule in @($allowParsed.Items)) {
+              if ($ownedSet.Contains([string]$rule)) { $removed = $removed + 1 }
+              else { [void]$kept.Add([string]$rule) }
+            }
+            if ($removed -gt 0) {
+              # Index into a real array so a single remaining rule stays a JSON
+              # array. A bare one-element list is unwrapped by Windows PowerShell 5.1.
+              $allowValue = New-Object object[] $kept.Count
+              for ($i = 0; $i -lt $kept.Count; $i++) { $allowValue[$i] = [string]$kept[$i] }
+              $permissions[$allowKey] = $allowValue
+              Write-ArchClaudeJsonAtomic $settingsPath $settings
+            }
+          }
+        }
+      }
+    }
+    $ledger.Remove($matchedKey) | Out-Null
+    if (@($ledger.Keys).Count -eq 0) {
+      Remove-Item -LiteralPath $ledgerPath -Force
+    } else {
+      Write-ArchClaudeJsonAtomic $ledgerPath $ledger
+    }
+  } catch { }
+}`;
+
 export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
   clientId: "claude-code",
   binary: "claude",
@@ -73,7 +311,11 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
     "help",
   ],
   mcpDisconnectCommands: `      command claude mcp remove --scope user "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
-      command claude mcp remove --scope local "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true`,
+      command claude mcp remove --scope local "$MCP_SERVER_NAME" </dev/null >/dev/null 2>&1 || true
+      if command -v python3 >/dev/null 2>&1; then
+        export MCP_SERVER_NAME
+        command python3 -c ${sh(CLAUDE_APPA_PERMISSION_CLEANUP_PY)} >/dev/null 2>&1 || true
+      fi`,
   skillsDisconnectCommands: `      printf '%s\n' "$PLUGIN_NAMES" | while IFS= read -r arch_plugin; do
         [ -n "$arch_plugin" ] || continue
         command claude plugin uninstall "$arch_plugin@$SKILLS_MARKETPLACE_NAME" </dev/null >/dev/null 2>&1 || true
@@ -106,7 +348,9 @@ export const CLAUDE_CODE_GUARD_CLIENT: StartupGuardClient = {
     mcpDisconnect: `      if ($archRealExe) {
         try { & $archRealExe.Source mcp remove --scope user $McpServerName 2>$null | Out-Null } catch { }
         try { & $archRealExe.Source mcp remove --scope local $McpServerName 2>$null | Out-Null } catch { }
-      }`,
+      }
+${CLAUDE_APPA_PERMISSION_CLEANUP_PS}
+      try { Remove-ArchClaudeAppaPermissions } catch { }`,
     skillsDisconnect: `      if ($archRealExe) {
         foreach ($archPlugin in $PluginNames) {
           try { & $archRealExe.Source plugin uninstall ($archPlugin + '@' + $SkillsMarketplaceName) 2>$null | Out-Null } catch { }
@@ -406,6 +650,14 @@ function codexWindowsProxyDisconnect(ctx: StartupGuardContext): string {
   const selectedProvider = `model_provider = "${ctx.proxy?.proxyName ?? ""}"`;
   return `function Disconnect-ArchProxy {
   $path = Join-Path ${codexHomePs()} 'config.toml'
+  $directHelper = $GuardPath + '.handoff.cjs'
+  if (Test-Path $directHelper) {
+    if (-not (Get-Command node -ErrorAction SilentlyContinue)) { throw 'Could not restore Codex direct tool settings.' }
+    & node $directHelper --remove-direct
+    if ($LASTEXITCODE -ne 0) { throw 'Could not restore Codex direct tool settings.' }
+  } elseif ((Test-Path $path) -and (Select-String -Path $path -Pattern 'archestra:codex-direct:root' -Quiet)) {
+    throw 'Codex direct tool settings remain without their restore helper.'
+  }
   if (Test-Path $path) {
     $start = ${psq(`# >>> ${marker} >>>`)}
     $end = ${psq(`# <<< ${marker} <<<`)}
@@ -477,6 +729,12 @@ function codexProxyDisconnect(ctx: StartupGuardContext): string {
   const selectedProvider = `model_provider = "${ctx.proxy?.proxyName ?? ""}"`;
   return `disconnect_proxy() {
   CONFIG=${codexConfigShellPath()}
+  DIRECT_HELPER="$HOME/${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs"
+  if [ -f "$DIRECT_HELPER" ]; then
+    command -v node >/dev/null 2>&1 && node "$DIRECT_HELPER" --remove-direct || return 1
+  elif [ -f "$CONFIG" ] && grep -q 'archestra:codex-direct:root' "$CONFIG"; then
+    return 1
+  fi
   if [ -f "$CONFIG" ]; then
     PREVIOUS_PROVIDER=''
     if [ -f "$CONFIG.archestra-backup" ]; then

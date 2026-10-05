@@ -3,13 +3,21 @@ import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 
 /**
  * Context for the Archestra MCP server
  */
 export interface ArchestraContext {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
+  /** Proxy-authenticated source of a runtime handoff, never client-selected. */
+  openappaRuntimeCall?: {
+    session: import("@/openappa/service").OpenAppaSession;
+    toolCallId: string;
+    spawn: boolean;
+  };
+  /** A verified, short-lived connection setup session; authentication and RBAC still apply. */
+  connectionSetupBypass?: boolean;
   agent: {
     id: string;
     name: string;
@@ -123,19 +131,19 @@ export interface ArchestraContext {
    */
   approvalRequiredPoliciesHandled?: boolean;
   /**
-   * Locked chat: any real tool dispatch made on behalf of this call
+   * Encrypted chat: any real tool dispatch made on behalf of this call
    * (e.g. `run_tool` reaching mcpClient) must not persist its content in the
    * clear.
    */
   suppressContentLogging?: boolean;
   /**
    * The conversation key for that dispatch, when one is available. Present, the
-   * dispatched row is encrypted under it like any other locked-chat audit row;
+   * dispatched row is encrypted under it like any other encrypted-chat audit row;
    * absent, `suppressContentLogging` alone makes it fall back to redaction.
-   * Without this a dispatched call is the one locked-chat tool call that loses
+   * Without this a dispatched call is the one encrypted-chat tool call that loses
    * its content permanently.
    */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
   /**
    * The caller feeds this tool result to a model through the chat tool
    * pipeline, which bounds, strips and persists inline images

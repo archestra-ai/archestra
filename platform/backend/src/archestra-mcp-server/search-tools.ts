@@ -2,7 +2,9 @@ import {
   ARCHESTRA_MCP_CATALOG_ID,
   isAlwaysExposedArchestraToolShortName,
   parseFullToolName,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -22,6 +24,7 @@ import {
   appLaunchToolDescription,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
@@ -322,16 +325,28 @@ export const __test = {
 
 // === Internal helpers ===
 
-function openappaSearchTools(): Array<{
-  name: string;
-  description: string | null;
-  catalogId: string | null;
-  parameters: Record<string, unknown>;
-}> {
+async function openappaSearchTools(): Promise<
+  Array<{
+    name: string;
+    description: string | null;
+    catalogId: string | null;
+    parameters: Record<string, unknown>;
+  }>
+> {
   if (!openappaEnabled()) return [];
+  const remediesActive = await isGuardrailsV2Active();
   return openappaMcpTools.flatMap((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
     if (!isOpenappaTool(shortName)) return [];
+    if (
+      (shortName === "get_remedy_plans" ||
+        shortName === "execute_remedy_plan" ||
+        shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+        shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME) &&
+      !remediesActive
+    ) {
+      return [];
+    }
     if (shortName === "yell" && !openappaYellEnabled()) return [];
     const name = shortName
       ? archestraMcpBranding.getToolName(shortName)
@@ -375,7 +390,7 @@ async function getSearchableTools(params: {
   });
   // OpenAPPA tools are reachable on every agent when the feature is on —
   // assignment and Auto-mode extras must not hide them from search_tools.
-  const injectedOpenappaTools = openappaSearchTools();
+  const injectedOpenappaTools = await openappaSearchTools();
   const injectedOpenappaNames = new Set(
     injectedOpenappaTools.map((tool) => tool.name),
   );
@@ -1277,7 +1292,7 @@ function visitSchema(
 // the always-exposed runtime tools (skills + sandbox) are already
 // top-level — returning them as results would be redundant noise. But "always-exposed" only
 // holds once a tool is assigned: an unassigned sandbox tool the user can reach
-// via sandbox:execute is NOT top-level, so surface it here so the model can
+// via agent:read is NOT top-level, so surface it here so the model can
 // discover and run it. Meta tools are never useful as results.
 function isExcludedFromSearchResults(
   toolName: string,

@@ -115,12 +115,12 @@ async function createViaWizard(
   expect(response.ok()).toBe(true);
   const { id } = (await response.json()) as { id: string };
 
-  // 5. Agents open a summary for the saved record. Gateways still
+  // 5. Agents open chat with the new agent selected. Gateways still
   // open on Connect, their default detail section.
   const destination =
     listPath === "/mcp/gateways"
       ? new RegExp(`${listPath}/${id}$`)
-      : new RegExp(`/agents/${id}/created$`);
+      : new RegExp(`/chat\\?agentId=${id}$`);
   await page.waitForURL(destination, { timeout: 30_000 });
   await page.waitForLoadState("domcontentloaded");
   // The pointer is still where the Create button was — the bottom-right
@@ -152,20 +152,8 @@ test("can create and delete an agent", {
 
   await page.waitForLoadState("domcontentloaded");
 
+  // Creating lands in chat with the new agent selected.
   const agentId = await createViaWizard(page, "/agents", AGENT_NAME);
-
-  await expect(
-    page.getByRole("heading", { name: "Agent created", exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("heading", { name: AGENT_NAME, exact: true }),
-  ).toBeVisible();
-  await expect(
-    page.getByRole("region", { name: "Messaging channels" }),
-  ).toBeVisible();
-  await page.reload();
-  await page.getByRole("link", { name: "Chat", exact: true }).click();
-  await expect(page).toHaveURL(new RegExp(`/chat\\?agentId=${agentId}$`));
 
   // Check the rendered chat selection, not just the redirect URL: a stale
   // agent list must not silently substitute a different agent after creation.
@@ -284,6 +272,114 @@ test("can create an MCP gateway and land on its connection instructions", {
     });
   } finally {
     if (gatewayId) await deleteAgent(request, gatewayId);
+  }
+});
+
+test("pins MCP gateways across table and card views, reloads, and filters", async ({
+  page,
+  request,
+  createAgent,
+  deleteAgent,
+  makeRandomString,
+  goToPage,
+}) => {
+  test.setTimeout(120_000);
+  const prefix = makeRandomString(8, "Pin gateways");
+  const names = [`${prefix} Alpha`, `${prefix} Bravo`, `${prefix} Charlie`];
+  const ids: string[] = [];
+  try {
+    for (const name of names) {
+      const response = await createAgent(request, name, "mcp_gateway");
+      ids.push((await response.json()).id);
+    }
+    const listPath = `/mcp/gateways?name=${encodeURIComponent(prefix)}&pageSize=1&sortBy=name&sortDirection=asc`;
+    await goToPage(page, listPath);
+    await selectAgentTableView(page);
+    await openAgentRowMenu(page, names[0]);
+    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+    const pinnedSection = page.locator("section").filter({
+      has: page.getByRole("heading", { name: "Pinned", exact: true }),
+    });
+    await expect(
+      pinnedSection.getByRole("link", { name: names[0], exact: true }),
+    ).toBeVisible();
+    // Pinning frees a slot on the ordinary page; the next unpinned gateway appears.
+    await expect(
+      page.getByRole("link", { name: names[1], exact: true }),
+    ).toBeVisible();
+    await openAgentRowMenu(page, names[1]);
+    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+    await expect(
+      pinnedSection.getByRole("row").filter({ has: page.getByRole("link") }),
+    ).toHaveText([new RegExp(names[1]), new RegExp(names[0])]);
+    await page.reload();
+    await expect(
+      pinnedSection.getByRole("link", { name: names[0], exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: names[2], exact: true }),
+    ).toBeVisible();
+
+    // A search applies to pins too; it must not leave unrelated favorites above the results.
+    await goToPage(page, `/mcp/gateways?name=${encodeURIComponent(names[2])}`);
+    await expect(
+      page.getByRole("link", { name: names[2], exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Pinned", exact: true }),
+    ).toHaveCount(0);
+    await goToPage(page, listPath);
+    await page.getByRole("button", { name: "View as cards" }).click();
+    await expect(
+      pinnedSection.getByRole("link", { name: names[0], exact: true }),
+    ).toBeVisible();
+    await openAgentRowMenu(page, names[0]);
+    await page.getByRole("menuitem", { name: "Unpin", exact: true }).click();
+    await expect(
+      pinnedSection.getByRole("link", { name: names[0], exact: true }),
+    ).toHaveCount(0);
+    await expect(
+      page.getByRole("link", { name: names[0], exact: true }),
+    ).toBeVisible();
+    await page.setViewportSize({ width: 390, height: 844 });
+    await expect(
+      pinnedSection.getByRole("link", { name: names[1], exact: true }),
+    ).toBeVisible();
+    await openAgentRowMenu(page, names[1]);
+    await page.getByRole("menuitem", { name: "Unpin", exact: true }).click();
+    await expect(
+      page.getByRole("heading", { name: "Pinned", exact: true }),
+    ).toHaveCount(0);
+    await page.reload();
+    await expect(
+      page.getByRole("link", { name: names[0], exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: "Pinned", exact: true }),
+    ).toHaveCount(0);
+    // Pinning the only row on the last page keeps the remaining list reachable.
+    await page.setViewportSize({ width: 1280, height: 800 });
+    await goToPage(page, `${listPath}&page=3`);
+    await selectAgentTableView(page);
+    await openAgentRowMenu(page, names[2]);
+    await page.getByRole("menuitem", { name: "Pin", exact: true }).click();
+    await expect(
+      pinnedSection.getByRole("link", { name: names[2], exact: true }),
+    ).toBeVisible();
+    await expect(
+      page.getByRole("link", { name: names[1], exact: true }),
+    ).toBeVisible();
+    await page
+      .getByRole("checkbox", { name: `Select ${names[2]}`, exact: true })
+      .check();
+    await page
+      .getByRole("checkbox", { name: `Select ${names[1]}`, exact: true })
+      .check();
+    await expect(
+      page.getByText("2 gateways selected", { exact: true }).last(),
+    ).toBeVisible();
+  } finally {
+    for (const id of ids) await deleteAgent(request, id);
   }
 });
 

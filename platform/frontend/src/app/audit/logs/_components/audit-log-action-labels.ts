@@ -16,7 +16,9 @@ type BadgeVariant = NonNullable<ComponentProps<typeof Badge>["variant"]>;
  * the `Record<AuditEventName, string>` type enforces completeness at
  * compile time.
  */
-export const ACTION_LABEL: Record<AuditEventName, string> = {
+export const ACTION_LABEL: Record<AuditEventName, string> & {
+  "agentRun.reviewDecided": string;
+} = {
   "hook.created": "Hook created",
   "hook.updated": "Hook updated",
   "hook.deleted": "Hook deleted",
@@ -35,6 +37,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agentRun.canceled": "Agent run canceled",
   "agentRun.updated": "Agent run renamed",
   "agentRun.deleted": "Agent run deleted",
+  "agentRun.reviewDecided": "OpenAPPA review decided",
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",
   // Runtime credential
@@ -74,6 +77,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "plugin.syncTriggered": "Plugin sync check triggered",
   // Connector
   "clientConnection.updated": "Client Connection Reviewed",
+  "connectionPromptSession.created": "Connection prompt session created",
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
   "connector.deleted": "Connector deleted",
@@ -215,6 +219,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   // Tool
   "tool.deleted": "Tool deleted",
   // Tool invocation policy
+  "openappaYell.updated": "Updated OpenAPPA yell status",
   "guardrailsPolicy.updated": "Updated guardrails policy",
   // Guardrails batteries
   "openappaBatteryInstall.created": "Guardrails battery installed",
@@ -363,6 +368,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "chatOpsBinding",
   "chatOpsConfig",
   "clientConnection",
+  "connectionPromptSession",
   "plugin",
   "connector",
   "defaultUserLimit",

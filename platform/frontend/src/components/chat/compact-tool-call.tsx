@@ -54,6 +54,7 @@ import {
   OpenAppaPolicyCompletion,
 } from "./openappa-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
+import { RuntimeCredentialSetupTool } from "./runtime-credential-setup-tool";
 import { getSkillPillDisplay, SkillPill } from "./skill-pill";
 import { ToolErrorLogsButton } from "./tool-error-logs-button";
 import { ToolStatusRow } from "./tool-status-row";
@@ -553,6 +554,25 @@ export function CompactToolGroup({
           <OpenAppaPolicyCompletion
             key={entry.key}
             output={entry.toolResultPart?.output ?? entry.part.output}
+          />
+        );
+      })}
+      {tools.map((entry) => {
+        if (entry.kind === "hook" || entry.errorText) return null;
+        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
+          getToolShortName,
+        });
+        if (
+          getToolShortName(name) !== "request_runtime_credential_setup" ||
+          (entry.part.state !== "output-available" && !entry.toolResultPart)
+        )
+          return null;
+        return (
+          <RuntimeCredentialSetupTool
+            key={entry.key}
+            ready
+            toolCallId={entry.part.toolCallId}
+            onSendMessage={appContext?.onSendMessage}
           />
         );
       })}

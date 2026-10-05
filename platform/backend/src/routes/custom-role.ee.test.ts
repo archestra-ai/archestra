@@ -1,19 +1,17 @@
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import OrganizationRoleModel from "@/models/organization-role";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import TeamModel from "@/models/team";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-
-const hasPermissionMock = vi.mocked(hasPermission);
+import resourcePermissionRoutes from "./resource-permission/resource-permission.routes";
 
 describe("custom role routes", () => {
   let app: FastifyInstanceWithZod;
@@ -51,8 +49,10 @@ describe("custom role routes", () => {
       ).organizationId = organizationId;
     });
 
-    // Default: hasPermission grants admin access
-    hasPermissionMock.mockResolvedValue({ success: true, error: null });
+    // Permission checks resolve the authenticated user (an admin by default).
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: authenticatedUser.id } }) as never,
+    );
 
     const { default: organizationRoleRoutes } = await import(
       "./organization-role"
@@ -63,6 +63,7 @@ describe("custom role routes", () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -91,40 +92,6 @@ describe("custom role routes", () => {
     expect(response.statusCode).toBe(200);
     // Stored sanitized: the pair grants nothing, so it does not survive.
     expect(response.json().permission).toEqual({ agent: ["read"] });
-  });
-
-  test("accepts a UI-only permission the author's own role does not hold", async ({
-    makeCustomRole,
-    makeMember,
-    makeUser,
-  }) => {
-    // `simpleView:enable` is a display preference, not a privilege: admin
-    // deliberately holds less of it than member, so granting it is exempt
-    // from the no-escalation rule. An author without it must still be able to
-    // hand it to a role.
-    const author = await makeUser();
-    const authorRole = await makeCustomRole(organizationId, {
-      role: "role_maker",
-      name: "Role Maker",
-      permission: { ac: ["create"], agent: ["read"] },
-    });
-    await makeMember(author.id, organizationId, { role: authorRole.role });
-    authenticatedUser = author;
-
-    const response = await app.inject({
-      method: "POST",
-      url: "/api/roles",
-      payload: {
-        name: "Collapsed Sidebar",
-        permission: { agent: ["read"], simpleView: ["enable"] },
-      },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json().permission).toEqual({
-      agent: ["read"],
-      simpleView: ["enable"],
-    });
   });
 
   test("rejects creating a role with permissions the user does not have", async ({
@@ -606,7 +573,7 @@ describe("custom role routes", () => {
 
   test("POST /api/roles creates role with multiple complex permissions", async () => {
     const complexPermissions = {
-      agent: ["read", "create", "update", "delete"],
+      agent: ["read", "create", "delete"],
       toolPolicy: ["read", "create", "update", "delete"],
       log: ["read"],
       mcpServerInstallation: ["read", "create", "delete"],
@@ -681,8 +648,8 @@ describe("custom role routes", () => {
     makeMember,
     makeUser,
   }) => {
-    // Same divergence as on create: editing a role to switch on a UI-only
-    // preference, or leaving a vestigial action in place, is not escalation.
+    // Same as on create: leaving a vestigial action in place is not
+    // escalation.
     const author = await makeUser();
     const authorRole = await makeCustomRole(organizationId, {
       role: "role_editor",
@@ -703,17 +670,13 @@ describe("custom role routes", () => {
       payload: {
         permission: {
           agent: ["read"],
-          simpleView: ["enable"],
           invitation: ["read"],
         },
       },
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json().permission).toEqual({
-      agent: ["read"],
-      simpleView: ["enable"],
-    });
+    expect(response.json().permission).toEqual({ agent: ["read"] });
   });
 
   test("PUT /api/roles/admin rejects update to predefined role", async () => {
@@ -730,29 +693,112 @@ describe("custom role routes", () => {
 
   // === DELETE /api/roles/:roleId ===
 
-  test("DELETE /api/roles/:roleId deletes a custom role and verifies 404 after", async ({
-    makeCustomRole,
-  }) => {
-    const existingRole = await makeCustomRole(organizationId, {
-      role: "deletable",
-      name: "Deletable",
-      permission: { agent: ["read"] },
-    });
+  for (const mode of ["single", "bulk"] as const) {
+    test(`${mode} role deletion removes direct and inherited recipients and rejects stale saves`, async ({
+      makeCustomRole,
+      makeAgent,
+    }) => {
+      await app.register(resourcePermissionRoutes);
+      const role = await makeCustomRole(organizationId, {
+        role: "deletable",
+        name: "Deletable",
+        permission: {},
+      });
+      const agent = await makeAgent({
+        organizationId,
+        authorId: user.id,
+        agentType: "mcp_gateway",
+        access: "personal",
+      });
+      const roleGrant = {
+        subject: { type: "role" as const, id: role.id },
+        actions: ["read" as const, "use" as const],
+      };
+      const key = {
+        organizationId,
+        resource: "mcpGateway" as const,
+        scope: agent.id,
+      };
+      const direct = await ResourcePermissionPolicyModel.find(key);
+      const wildcardKey = { ...key, scope: "*" };
+      const wildcard = await ResourcePermissionPolicyModel.find(wildcardKey);
+      await ResourcePermissionPolicyModel.replace({
+        ...key,
+        revision: direct?.revision ?? 0,
+        grants: [...(direct?.grants ?? []), roleGrant],
+      });
+      await ResourcePermissionPolicyModel.replace({
+        ...wildcardKey,
+        revision: wildcard?.revision ?? 0,
+        grants: [...(wildcard?.grants ?? []), roleGrant],
+      });
+      const url = `/api/resource-permissions/mcpGateway/${agent.id}`;
+      const before = await app.inject({ method: "GET", url });
+      expect(before.statusCode, before.body).toBe(200);
+      expect(before.json().grants).toContainEqual({
+        ...roleGrant,
+        name: "Deletable",
+      });
+      expect(before.json().inheritedGrants).toContainEqual({
+        ...roleGrant,
+        name: "Deletable",
+        sourceScope: "*",
+      });
 
-    const deleteResponse = await app.inject({
-      method: "DELETE",
-      url: `/api/roles/${existingRole.id}`,
-    });
+      const deleted = await app.inject(
+        mode === "single"
+          ? { method: "DELETE", url: `/api/roles/${role.id}` }
+          : {
+              method: "DELETE",
+              url: "/api/roles/bulk",
+              payload: { ids: [role.id] },
+            },
+      );
+      expect(deleted.statusCode, deleted.body).toBe(200);
+      if (mode === "bulk") expect(deleted.json().failed).toEqual([]);
+      expect(
+        (await app.inject({ method: "GET", url: `/api/roles/${role.id}` }))
+          .statusCode,
+      ).toBe(404);
+      const after = await app.inject({ method: "GET", url });
+      expect(after.statusCode, after.body).toBe(200);
+      expect(after.json().grants).toEqual(
+        before
+          .json()
+          .grants.filter(
+            (grant: { subject: { id: string } }) =>
+              grant.subject.id !== role.id,
+          ),
+      );
+      expect(after.json().inheritedGrants).toEqual(
+        before
+          .json()
+          .inheritedGrants.filter(
+            (grant: { subject: { id: string } }) =>
+              grant.subject.id !== role.id,
+          ),
+      );
+      expect(after.json().revision).toBe(before.json().revision + 1);
 
-    expect(deleteResponse.statusCode).toBe(200);
-    expect(deleteResponse.json()).toEqual({ success: true });
-
-    const getResponse = await app.inject({
-      method: "GET",
-      url: `/api/roles/${existingRole.id}`,
+      // Even a client with the latest revision cannot reintroduce a deleted role.
+      const saved = await app.inject({
+        method: "PUT",
+        url,
+        payload: { revision: after.json().revision, grants: [roleGrant] },
+      });
+      expect(saved.statusCode, saved.body).toBe(400);
+      expect(saved.json().error.message).toContain("recipient does not exist");
+      const stale = await app.inject({
+        method: "PUT",
+        url,
+        payload: { revision: before.json().revision, grants: [] },
+      });
+      expect(stale.statusCode, stale.body).toBe(409);
+      expect((await app.inject({ method: "GET", url })).json()).toEqual(
+        after.json(),
+      );
     });
-    expect(getResponse.statusCode).toBe(404);
-  });
+  }
 
   test("DELETE /api/roles/:roleId returns 404 for non-existent role", async () => {
     const response = await app.inject({

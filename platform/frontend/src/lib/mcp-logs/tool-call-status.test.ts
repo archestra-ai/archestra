@@ -76,13 +76,13 @@ describe("canShowMcpToolCallStatus", () => {
     expect(canShowMcpToolCallStatus("tools/list", { tools: [] })).toBe(true);
   });
 
-  it("shows no status for a locked chat's encrypted or redacted result", () => {
+  it("shows no status for an encrypted chat's encrypted or redacted result", () => {
     for (const method of ["tools/call", "tools/list"]) {
       expect(
-        canShowMcpToolCallStatus(method, { __lockedChatSealed: "conv-1" }),
+        canShowMcpToolCallStatus(method, { __encryptedChatSealed: "conv-1" }),
       ).toBe(false);
       expect(
-        canShowMcpToolCallStatus(method, { __redacted: "locked_chat" }),
+        canShowMcpToolCallStatus(method, { __redacted: "encrypted_chat" }),
       ).toBe(false);
     }
   });

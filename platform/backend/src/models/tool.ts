@@ -13,6 +13,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
@@ -41,7 +42,6 @@ import {
 } from "drizzle-orm";
 import { type AnyPgColumn, alias } from "drizzle-orm/pg-core";
 
-import { getArchestraMcpTools } from "@/archestra-mcp-server";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { getArchestraMcpCatalogMetadata } from "@/archestra-mcp-server/metadata";
 import config from "@/config";
@@ -87,6 +87,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -825,7 +826,7 @@ class ToolModel {
         eq(schema.toolsTable.catalogId, schema.internalMcpCatalogTable.id),
       )
       .where(whereClause)
-      .orderBy(desc(schema.toolsTable.createdAt))
+      .orderBy(desc(schema.toolsTable.createdAt), asc(schema.toolsTable.id))
       .limit(params.pagination.limit)
       .offset(params.pagination.offset);
 
@@ -1536,6 +1537,9 @@ class ToolModel {
     // App-runtime-only built-ins never become tool rows: no row means no agent
     // assignment, no search_tools hit, no gateway listing. They dispatch
     // in-process through the app MCP proxy alone.
+    // Lazy: the built-in tool registry imports the whole service layer, which
+    // would otherwise make every model importer load it too.
+    const { getArchestraMcpTools } = await import("@/archestra-mcp-server");
     const archestraTools = getArchestraMcpTools().filter((t) => {
       // Branding-aware parse: seeding runs on rebranded names, so the shared
       // strict `archestra__` parser could miss a white-labeled prefix here.
@@ -1987,15 +1991,11 @@ class ToolModel {
    */
   static async backfillOpenAppaToolsToAllAgents(): Promise<void> {
     if (!config.openappa.enabled) return;
-    const shortNames: ArchestraToolShortName[] = [
-      "get_remedy_plans",
-      "execute_remedy_plan",
-    ];
     const organizationIds = await OrganizationModel.findAllIds();
     for (const organizationId of organizationIds) {
       const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
         organizationId,
-        shortNames,
+        REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
       );
       if (toolIds.length === 0) continue;
       const agentIds =
@@ -2174,13 +2174,7 @@ class ToolModel {
     // method assigns just the tools every agent gets.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-      ...(config.openappa.enabled
-        ? ([
-            "get_remedy_plans",
-            "execute_remedy_plan",
-            "yell",
-          ] as ArchestraToolShortName[])
-        : []),
+      ...(config.openappa.enabled ? REQUIRED_OPENAPPA_TOOL_SHORT_NAMES : []),
     ];
 
     const defaultToolNames = defaultToolShortNames.map((shortName) =>
@@ -2921,8 +2915,18 @@ class ToolModel {
       accessAllTools: boolean;
     }>;
   }> {
+    const principals = visibility
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId: visibility.userId,
+          organizationId,
+        })
+      : [];
     const accessibleIds = visibility
-      ? await AgentTeamModel.getUserAccessibleAgentIds(visibility.userId, false)
+      ? await AgentTeamModel.getUserAccessibleAgentIds(
+          visibility.userId,
+          false,
+          principals,
+        )
       : undefined;
     const entityRows = await db
       .select({
@@ -2950,9 +2954,10 @@ class ToolModel {
                 ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
                   ? [
                       or(
-                        AgentModel.notOthersPersonalCondition(
-                          visibility.userId,
-                        ),
+                        AgentModel.notOthersPersonalCondition({
+                          userId: visibility.userId,
+                          principals,
+                        }),
                         notInArray(
                           schema.agentsTable.agentType,
                           visibility.excludeOtherPersonalTypes ?? [],

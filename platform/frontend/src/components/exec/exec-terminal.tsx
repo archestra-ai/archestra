@@ -1,11 +1,25 @@
 "use client";
 
-import { Copy } from "lucide-react";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { Copy, SquareTerminal } from "lucide-react";
+import {
+  type SyntheticEvent,
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+} from "react";
 import { toast } from "sonner";
+import { FileDropZone } from "@/components/files/file-drop-zone";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { copyToClipboard } from "@/lib/clipboard";
+import { cn } from "@/lib/utils/tailwind";
+import styles from "./exec-terminal.module.css";
 import { isUsableTerminalDimensions } from "./exec-terminal.utils";
 import {
   type ExecSessionProgress,
@@ -70,6 +84,8 @@ interface ExecTerminalProps {
    */
   sessionKey: string;
   transport: ExecSessionTransport;
+  /** Claude-specific mouse workaround; other terminal apps keep their protocol. */
+  claudeMouseWorkaround?: boolean;
   /** False while the terminal is hidden, so a background tab holds no session. */
   isActive: boolean;
   title?: string;
@@ -85,6 +101,11 @@ interface ExecTerminalProps {
   initialProgress?: ExecSessionProgress | null;
   /** Stable start time for the elapsed counter, such as the run's start. */
   progressStartedAt?: number;
+  /**
+   * Accept files dropped on a live terminal. Resolves with the path of each
+   * stored file; the paths are then typed at the prompt for the user to send.
+   */
+  onDropFiles?: (files: File[]) => Promise<string[]>;
   onCommandChange?: (command: string | null) => void;
   onError?: () => void;
   onClosed?: () => void;
@@ -93,6 +114,7 @@ interface ExecTerminalProps {
 export function ExecTerminal({
   sessionKey,
   transport,
+  claudeMouseWorkaround = false,
   isActive,
   title = "Interactive Shell",
   manualCommandTitle = "Manual Command",
@@ -101,6 +123,7 @@ export function ExecTerminal({
   showDisconnectedStatus = true,
   initialProgress = null,
   progressStartedAt,
+  onDropFiles,
   onCommandChange,
   onError,
   onClosed,
@@ -109,6 +132,8 @@ export function ExecTerminal({
   // retrigger the effect; `sessionKey` is the reconnect signal.
   const transportRef = useRef(transport);
   transportRef.current = transport;
+  const claudeMouseWorkaroundRef = useRef(claudeMouseWorkaround);
+  claudeMouseWorkaroundRef.current = claudeMouseWorkaround;
   const initialProgressRef = useRef(initialProgress);
   initialProgressRef.current = initialProgress;
   const hasTransportProgressRef = useRef(false);
@@ -134,6 +159,29 @@ export function ExecTerminal({
   const [closedReason, setClosedReason] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const initializedRef = useRef(false);
+  const [focusTerminal, setFocusTerminal] = useState(true);
+  const focusTerminalRef = useRef(focusTerminal);
+
+  const handleFocusTerminalChange = (focused: boolean) => {
+    // Update before React renders: a pending paste or mouse report must not
+    // slip through after switching to browser mode.
+    focusTerminalRef.current = focused;
+    setFocusTerminal(focused);
+    const terminal = terminalInstanceRef.current;
+    if (!terminal) return;
+    terminal.options.disableStdin = !focused;
+    terminal.clearSelection();
+    // A mode change relinquishes input focus in either direction. Enabling
+    // terminal controls must not capture keystrokes until the user clicks it.
+    terminal.blur();
+    if (terminal.textarea) terminal.textarea.disabled = !focused;
+  };
+
+  const handleBrowserEvent = (event: SyntheticEvent) => {
+    // Keep the browser's default action, but stop xterm's listeners from
+    // focusing its hidden textarea, copying its selection or sending input.
+    if (!focusTerminalRef.current) event.stopPropagation();
+  };
 
   const cleanup = useCallback(() => {
     if (terminalInstanceRef.current) {
@@ -175,16 +223,62 @@ export function ExecTerminal({
         fontFamily:
           "ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace",
         theme: {
-          background: "#020617", // slate-950 — matches logs container
-          foreground: "#34d399", // emerald-400 — matches logs
-          cursor: "#34d399",
+          background: "#0a0a0a",
+          foreground: "#e5e5e5",
+          cursor: "#e5e5e5",
         },
         scrollback: 5000,
         scrollSensitivity: TERMINAL_SCROLL_SENSITIVITY,
+        disableStdin: !focusTerminalRef.current,
       });
 
       terminal.loadAddon(fitAddon);
       terminal.open(terminalRef.current);
+      if (terminal.textarea) {
+        terminal.textarea.disabled = !focusTerminalRef.current;
+      }
+      const copyTerminalText = (text: string) => {
+        void copyToClipboard(text).catch(() => {
+          toast.error("Could not copy terminal text to clipboard");
+        });
+      };
+      terminal.attachCustomKeyEventHandler((event) => {
+        if (!focusTerminalRef.current) return false;
+        if (
+          event.type === "keydown" &&
+          (event.metaKey || event.ctrlKey) &&
+          !event.altKey &&
+          event.key.toLowerCase() === "c" &&
+          terminal.hasSelection()
+        ) {
+          event.preventDefault();
+          copyTerminalText(terminal.getSelection());
+          return false;
+        }
+        return true;
+      });
+      // Native TUIs (including OpenCode's copy-on-select) send OSC 52 rather
+      // than a browser copy event. Bridge writes to the host clipboard while
+      // the user is in terminal mode; never answer clipboard-read queries.
+      terminal.parser.registerOscHandler(52, (data) => {
+        if (disposed || !focusTerminalRef.current || !document.hasFocus()) {
+          return true;
+        }
+        const separator = data.indexOf(";");
+        if (separator === -1) return true;
+        const encoded = data.slice(separator + 1);
+        if (encoded === "?") return true;
+        try {
+          const bytes = Uint8Array.from(atob(encoded), (char) =>
+            char.charCodeAt(0),
+          );
+          const text = new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+          copyTerminalText(text);
+        } catch {
+          // Ignore malformed terminal reports without breaking its output.
+        }
+        return true;
+      });
 
       // FitAddon can resize xterm for reasons other than an element resize
       // (font metrics settling is the common one). Drive the remote PTY from
@@ -263,7 +357,10 @@ export function ExecTerminal({
       };
 
       terminal.onData((data) => {
-        const input = normalizeTerminalInput(data);
+        if (disposed || !focusTerminalRef.current) return;
+        const input = claudeMouseWorkaroundRef.current
+          ? normalizeTerminalInput(data)
+          : data;
         if (input) transportRef.current.sendInput(input);
       });
 
@@ -316,6 +413,25 @@ export function ExecTerminal({
   }, [initialProgress, status]);
 
   const [commandCopied, setCommandCopied] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+
+  const handleDropFiles = useCallback(
+    async (files: File[]) => {
+      if (!onDropFiles || status !== "connected") return;
+      setUploadingFiles(true);
+      try {
+        const paths = await onDropFiles(files);
+        if (paths.length === 0) return;
+        // Typed rather than bracketed-pasted: Claude Code drops all but the
+        // first of back-to-back pastes, and plain paths work in every CLI.
+        transportRef.current.sendInput(`${paths.join(" ")} `);
+        terminalInstanceRef.current?.focus();
+      } finally {
+        setUploadingFiles(false);
+      }
+    },
+    [onDropFiles, status],
+  );
 
   const handleCopyCommand = useCallback(async () => {
     if (!command) return;
@@ -329,12 +445,76 @@ export function ExecTerminal({
     }
   }, [command]);
 
+  const terminalAreaClassName = cn(
+    "flex-1 min-h-0 p-4 pb-2",
+    status === "connecting" ||
+      status === "error" ||
+      (status === "disconnected" && showDisconnectedStatus)
+      ? "hidden"
+      : "block",
+  );
+  const terminalArea = (
+    <>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: xterm owns the interactive textarea; this wrapper gates its events. */}
+      <div
+        ref={terminalRef}
+        className={`h-full ${focusTerminal ? "" : styles.browserMode}`}
+        onMouseDownCapture={handleBrowserEvent}
+        onMouseUpCapture={handleBrowserEvent}
+        onMouseMoveCapture={handleBrowserEvent}
+        onClickCapture={handleBrowserEvent}
+        onDoubleClickCapture={handleBrowserEvent}
+        onWheelCapture={handleBrowserEvent}
+        onCopyCapture={handleBrowserEvent}
+        onPasteCapture={handleBrowserEvent}
+        onKeyDownCapture={handleBrowserEvent}
+        onKeyUpCapture={handleBrowserEvent}
+        onKeyDown={(event) => {
+          if (focusTerminalRef.current) event.stopPropagation();
+        }}
+        onKeyUp={(event) => {
+          if (focusTerminalRef.current) event.stopPropagation();
+        }}
+        onContextMenuCapture={(event) => {
+          // Let xterm handle the right click in terminal mode; suppress
+          // only the browser menu that would otherwise cover tmux's.
+          // Browser mode keeps native defaults without reaching xterm.
+          handleBrowserEvent(event);
+          if (focusTerminalRef.current) event.preventDefault();
+        }}
+      />
+    </>
+  );
+
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0">
       <div className="flex flex-col gap-2 flex-1 min-h-0">
-        {title && (
-          <h3 className="text-sm font-semibold flex-shrink-0">{title}</h3>
-        )}
+        <div className="flex items-center justify-between gap-3 flex-shrink-0">
+          {title ? <h3 className="text-sm font-semibold">{title}</h3> : <div />}
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Button
+                variant="ghost"
+                size="sm"
+                aria-label="Focus terminal"
+                aria-pressed={focusTerminal}
+                onClick={() => handleFocusTerminalChange(!focusTerminal)}
+                className="shrink-0 text-xs aria-pressed:bg-accent aria-pressed:text-accent-foreground"
+              >
+                <SquareTerminal />
+                <span>Focus terminal</span>
+                <span className="text-muted-foreground">
+                  {focusTerminal ? "On" : "Off"}
+                </span>
+              </Button>
+            </TooltipTrigger>
+            <TooltipContent>
+              {focusTerminal
+                ? "Terminal controls enabled. Click inside to type. Turn off for browser selection, copy and context menu."
+                : "Browser selection, copy and context menu enabled. Turn on to use terminal controls."}
+            </TooltipContent>
+          </Tooltip>
+        </div>
         <div className="flex flex-col flex-1 min-h-0 rounded-md border bg-slate-950 overflow-hidden">
           {status === "connecting" &&
             (progress ? (
@@ -362,19 +542,17 @@ export function ExecTerminal({
               tone="warning"
             />
           ) : null}
-          <div
-            className="flex-1 min-h-0 p-4 pb-2"
-            style={{
-              display:
-                status === "connecting" ||
-                status === "error" ||
-                (status === "disconnected" && showDisconnectedStatus)
-                  ? "none"
-                  : "block",
-            }}
-          >
-            <div ref={terminalRef} className="h-full" />
-          </div>
+          {onDropFiles ? (
+            <FileDropZone
+              onDropFiles={handleDropFiles}
+              uploading={uploadingFiles}
+              className={terminalAreaClassName}
+            >
+              {terminalArea}
+            </FileDropZone>
+          ) : (
+            <div className={terminalAreaClassName}>{terminalArea}</div>
+          )}
           {status === "connected" && (
             <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">
               <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-mono">
@@ -419,7 +597,8 @@ export function ExecTerminal({
 // A TUI can ask the outer terminal for all mouse motion (DECSET 1003). tmux
 // forwards those SGR reports to the pane, but some Claude Code render states
 // stop consuming no-button hover events and insert them into the prompt as
-// visible `^[[<35;...M` text. Hover has no useful terminal action, so drop only
+// visible `^[[<35;...M` text. Only opt Claude into this workaround; other TUIs
+// use hover for hit testing and selection. Drop only
 // motion reports whose low button bits mean "no button". Clicks, button drags,
 // wheel events, and ordinary keyboard input continue to the remote PTY.
 function normalizeTerminalInput(data: string): string {

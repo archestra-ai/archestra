@@ -119,3 +119,10 @@ export const GUARDRAILS_NOOP_ANNOTATOR_PATH =
  * bridge bearer the composed policy carries, not by a platform session.
  */
 export const OPENAPPA_HELPERS_PREFIX = "/api/openappa/helpers";
+/**
+ * The APPA runtime's `builtin = "archestra"` annotator posts its rendered
+ * prompt here over loopback, and the organization's default model answers it.
+ * Authenticated by the per-process bridge bearer, not by a platform session.
+ */
+export const OPENAPPA_ARCHESTRA_ANNOTATOR_PATH =
+  "/api/openappa/annotators/archestra";

@@ -20,6 +20,7 @@ import {
   resolveEffectiveId,
   resolveInitialClientId,
 } from "./connection-flow.utils";
+import { ConnectionPreview } from "./connection-preview";
 import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
@@ -30,6 +31,8 @@ import {
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 interface ConnectionFlowProps {
+  /** Pause setup actions during a fresh settings read while keeping the picker usable. */
+  isRevalidating?: boolean;
   defaultMcpGatewayId?: string;
   /** The organization's single LLM Proxy — undefined while loading. */
   llmProxyId?: string;
@@ -50,6 +53,7 @@ interface ConnectionFlowProps {
 }
 
 export function ConnectionFlow({
+  isRevalidating = false,
   defaultMcpGatewayId,
   llmProxyId,
   adminDefaultMcpGatewayId,
@@ -217,6 +221,7 @@ export function ConnectionFlow({
               gatewayId={effectiveMcpId}
               gatewaySlug={selectedMcp.slug ?? effectiveMcpId}
               gatewayName={selectedMcp.name}
+              isPersonalGateway={selectedMcp.isPersonalGateway}
               baseUrl={baseUrl}
             />
           ) : (
@@ -251,7 +256,7 @@ export function ConnectionFlow({
     <div className="flex flex-col">
       {/* Step 1 — Client */}
       {!searchParams.get("connectRequest") && (
-        <WizardStep n={1} title="Select your client" last={!client}>
+        <WizardStep n={1} title="Choose your app" last={!client}>
           <ClientPicker
             clients={visibleClients}
             selected={clientId}
@@ -260,46 +265,60 @@ export function ConnectionFlow({
         </WizardStep>
       )}
 
-      {client && promptClient && (
-        <WizardStep n={2} title={`Connect ${client.label}`} last>
-          <ConnectWithAi client={client} />
-        </WizardStep>
-      )}
+      <div inert={isRevalidating} className="contents">
+        {client && promptClient && (
+          <>
+            <WizardStep n={2} title="Review the setup">
+              <ConnectionPreview
+                client={client}
+                gateway={canReadMcpGateway ? (selectedMcp ?? null) : null}
+                proxyAvailable={
+                  llmProxyEnabled && canReadLlmProxy === true && !!llmProxyId
+                }
+                skillsEnabled={skillsEnabled}
+              />
+            </WizardStep>
+            <WizardStep n={3} title={`Connect ${client.label}`} last>
+              <ConnectWithAi client={client} />
+            </WizardStep>
+          </>
+        )}
 
-      {/* Steps 2-3 (script clients) — review, then run the command */}
-      {client && !promptClient && isScriptClient(client.id) && (
-        <ConnectCommandPanel
-          client={client}
-          mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
-          mcpGatewayId={effectiveMcpId}
-          onMcpGatewaySelect={handleMcpSelect}
-          llmProxyId={
-            llmProxyEnabled && canReadLlmProxy ? (llmProxyId ?? null) : null
-          }
-          shownProviders={shownProviders}
-          urlProvider={urlProvider}
-          onProviderSelect={(p) => updateUrlParams({ providerId: p })}
-          baseUrl={baseUrl}
-          candidateBaseUrls={candidateBaseUrls}
-          baseUrlMetadata={connectionBaseUrls}
-          onBaseUrlChange={setUserBaseUrl}
-          skillsEnabled={skillsEnabled}
-          pluginsEnabled={pluginsEnabled}
-        />
-      )}
+        {/* Steps 2-3 (script clients) — review, then run the command */}
+        {client && !promptClient && isScriptClient(client.id) && (
+          <ConnectCommandPanel
+            client={client}
+            mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
+            mcpGatewayId={effectiveMcpId}
+            onMcpGatewaySelect={handleMcpSelect}
+            llmProxyId={
+              llmProxyEnabled && canReadLlmProxy ? (llmProxyId ?? null) : null
+            }
+            shownProviders={shownProviders}
+            urlProvider={urlProvider}
+            onProviderSelect={(p) => updateUrlParams({ providerId: p })}
+            baseUrl={baseUrl}
+            candidateBaseUrls={candidateBaseUrls}
+            baseUrlMetadata={connectionBaseUrls}
+            onBaseUrlChange={setUserBaseUrl}
+            skillsEnabled={skillsEnabled}
+            pluginsEnabled={pluginsEnabled}
+          />
+        )}
 
-      {/* Steps 2..n (n8n / Any client) — manual instructions on the rail */}
-      {manualSteps.map((s, i) => (
-        <WizardStep
-          key={s.key}
-          n={i + 2}
-          title={s.title}
-          actions={s.actions}
-          last={i === manualSteps.length - 1}
-        >
-          {s.content}
-        </WizardStep>
-      ))}
+        {/* Steps 2..n (n8n / Any client) — manual instructions on the rail */}
+        {manualSteps.map((s, i) => (
+          <WizardStep
+            key={s.key}
+            n={i + 2}
+            title={s.title}
+            actions={s.actions}
+            last={i === manualSteps.length - 1}
+          >
+            {s.content}
+          </WizardStep>
+        ))}
+      </div>
     </div>
   );
 }

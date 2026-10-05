@@ -20,6 +20,7 @@ import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { initialPolicy } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-policy.routes";
 
 const content =
@@ -48,6 +49,7 @@ describe("guardrails policy authoring", () => {
       app = createFastifyInstance();
       await app.register(authPlugin);
       registerAuditLogHook(app);
+      registerRoutePermissions(app);
       await app.register(routes);
     },
   );
@@ -201,9 +203,15 @@ describe("guardrails policy authoring", () => {
         { content, expectedRevision: 0 },
         context,
       ),
-    ).rejects.toThrow(
-      "The policy changed. Read it again before proposing changes.",
-    );
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: "Error: The policy changed. Read it again before proposing changes.",
+        },
+      ],
+    });
   });
 
   test("an unchanged unsaved starter previews without writing and publishes once with enforcement", async () => {
@@ -245,7 +253,15 @@ describe("guardrails policy authoring", () => {
         draft,
         context,
       ),
-    ).rejects.toMatchObject({ statusCode: 409 });
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The policy changed. Read it again"),
+        },
+      ],
+    });
     await expect(
       executeArchestraTool(
         "archestra__update_guardrails_policy",
@@ -343,7 +359,7 @@ describe("guardrails policy authoring", () => {
   }) => {
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
-      permission: { toolPolicy: ["read", "update"] },
+      permission: { openappaPolicy: ["read", "update"] },
     });
     await makeMember(author.id, orgId, { role: role.role });
     await GuardrailsDeploymentModel.setEnabled(false);
@@ -368,7 +384,7 @@ describe("guardrails policy authoring", () => {
   }) => {
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
-      permission: { toolPolicy: ["read", "update"] },
+      permission: { openappaPolicy: ["read", "update"] },
     });
     await makeMember(author.id, orgId, { role: role.role });
     const session = await makeSession(author.id, {

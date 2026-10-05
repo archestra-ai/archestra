@@ -42,6 +42,7 @@ import {
 import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
+import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
@@ -76,6 +77,7 @@ import {
   useBulkDeleteProfiles,
   useDeleteProfile,
   usePermanentlyDeleteProfile,
+  usePinAgent,
   useProfilesPaginated,
   useRestoreProfile,
 } from "@/lib/agent.query";
@@ -95,6 +97,7 @@ import { McpGatewayActions } from "./mcp-gateway-actions";
 
 type McpGatewaysInitialData = {
   agents: archestraApiTypes.GetAgentsResponses["200"] | null;
+  pinnedAgents: archestraApiTypes.GetAgentsResponses["200"] | null;
   teams: archestraApiTypes.GetTeamsResponses["200"]["data"];
 };
 
@@ -262,6 +265,15 @@ function McpGateways({
     "limit" | "offset"
   >;
 
+  const filterSignature = JSON.stringify(listFilters);
+  const [pinnedPage, setPinnedPage] = useState({
+    filterSignature,
+    pageIndex: 0,
+    pageSize: 100,
+  });
+  const pinnedPageIndex =
+    pinnedPage.filterSignature === filterSignature ? pinnedPage.pageIndex : 0;
+
   const {
     data: agentsResponse,
     isPending,
@@ -272,8 +284,28 @@ function McpGateways({
     limit: pageSize,
     offset,
     initialData: initialData?.agents ?? undefined,
+    initialDataPinned: false,
     ...listFilters,
+    pinned: isDeletedView ? undefined : false,
   });
+  const {
+    data: pinnedAgentsResponse,
+    isPending: isPinnedPending,
+    isFetching: isPinnedFetching,
+    isLoadingError: isPinnedLoadError,
+    refetch: refetchPinnedGateways,
+  } = useProfilesPaginated({
+    limit: pinnedPage.pageSize,
+    offset: pinnedPageIndex * pinnedPage.pageSize,
+    initialData: initialData?.pinnedAgents ?? undefined,
+    initialDataPinned: true,
+    initialDataLimit: 100,
+    enabled: !isDeletedView,
+    ...listFilters,
+    status: undefined,
+    pinned: true,
+  });
+  const pinGateway = usePinAgent();
   const { data: canReadTeams } = useHasPermissions({ team: ["read"] });
 
   const { data: userTeams } = useMyTeams({
@@ -354,13 +386,46 @@ function McpGateways({
     [setPagination],
   );
 
-  const agents = agentsResponse?.data || [];
+  const unpinnedAgents = agentsResponse?.data ?? [];
+  const pinnedAgents = isDeletedView ? [] : (pinnedAgentsResponse?.data ?? []);
+  const agents = [...pinnedAgents, ...unpinnedAgents];
   const pagination = agentsResponse?.pagination;
-  const showLoading = (isPending || isFetching) && agents.length === 0;
+  // Pinning or unpinning can remove the last row from either paginated section.
+  useEffect(() => {
+    if (pagination && pageIndex > 0 && offset >= pagination.total) {
+      setPagination({
+        pageIndex: Math.max(0, Math.ceil(pagination.total / pageSize) - 1),
+        pageSize,
+      });
+    }
+  }, [pagination, pageIndex, offset, pageSize, setPagination]);
+  useEffect(() => {
+    const total = pinnedAgentsResponse?.pagination.total;
+    if (
+      total !== undefined &&
+      pinnedPageIndex > 0 &&
+      pinnedPageIndex * pinnedPage.pageSize >= total
+    ) {
+      setPinnedPage({
+        filterSignature,
+        pageIndex: Math.max(0, Math.ceil(total / pinnedPage.pageSize) - 1),
+        pageSize: pinnedPage.pageSize,
+      });
+    }
+  }, [
+    pinnedAgentsResponse,
+    pinnedPageIndex,
+    pinnedPage.pageSize,
+    filterSignature,
+  ]);
+  const showLoading =
+    (isPending ||
+      isFetching ||
+      (!isDeletedView && (isPinnedPending || isPinnedFetching))) &&
+    agents.length === 0;
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
   // another page drop out of both the count and the request.
-  const filterSignature = JSON.stringify(listFilters);
   const [escalatedFor, setEscalatedFor] = useState<string | null>(null);
   const allMatchingSelected = escalatedFor === filterSignature;
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
@@ -416,6 +481,9 @@ function McpGateways({
         }}
         onPermanentlyDelete={setPermanentlyDeletingGateway}
         onClone={setCloningGateway}
+        onTogglePin={(target) =>
+          pinGateway.mutate({ id: target.id, pinned: !target.pinnedAt })
+        }
         onHistory={(id, historyCanModify) =>
           setHistory({ id, canModify: historyCanModify })
         }
@@ -470,6 +538,7 @@ function McpGateways({
                 : agentDetailHref("mcp_gateway", agent.id)
             }
             description={agent.description}
+            owner={{ resource: agent, currentUserId }}
             extraBadges={
               agent.agentType === "profile" ? (
                 <TooltipProvider>
@@ -589,7 +658,178 @@ function McpGateways({
     },
   ];
 
-  if (isGatewaysLoadError) {
+  const pinnedColumns: ColumnDef<GatewayData>[] = columns.map((column) => {
+    const labels: Record<string, string> = {
+      name: "Name",
+      toolsCount: "Tools",
+      subagentsCount: "Subagents",
+      lastUsedAt: "Last used",
+    };
+    const label = labels[column.id ?? ""];
+    return label ? { ...column, header: label, enableSorting: false } : column;
+  });
+
+  const renderGatewaySection = ({
+    title,
+    sectionAgents,
+    sectionPagination,
+    sortable = true,
+    onSectionPaginationChange = handlePaginationChange,
+  }: {
+    title?: string;
+    sectionAgents: GatewayData[];
+    sectionPagination?: { pageIndex: number; pageSize: number; total: number };
+    sortable?: boolean;
+    onSectionPaginationChange?: typeof handlePaginationChange;
+  }) => (
+    <section className="space-y-3">
+      {title ? (
+        <h2 className="text-sm font-medium uppercase tracking-wide text-muted-foreground">
+          {title}
+        </h2>
+      ) : null}
+      <TableCardViewContent
+        forceTable={isDeletedView}
+        cards={
+          <TableCardList
+            itemCount={sectionAgents.length}
+            isLoading={showLoading}
+            hasActiveFilters={Boolean(
+              nameFilter || scopeFilter.hasActiveScopeFilters || labelsFromUrl,
+            )}
+            emptyIcon={Waypoints}
+            filteredEmptyMessage="No MCP gateways match your filters"
+            onClearFilters={() =>
+              updateQueryParams({
+                name: null,
+                scope: null,
+                teamIds: null,
+                authorIds: null,
+                excludeAuthorIds: null,
+                labels: null,
+                status: null,
+                page: "1",
+              })
+            }
+            pagination={sectionPagination}
+            onPaginationChange={
+              sectionPagination ? onSectionPaginationChange : undefined
+            }
+          >
+            {sectionAgents.map((agent) => (
+              <TableCard
+                key={agent.id}
+                icon={
+                  <AgentIcon
+                    icon={agent.icon}
+                    size={20}
+                    fallbackType="mcp_gateway"
+                  />
+                }
+                title={
+                  <span className="flex min-w-0 items-center gap-1.5">
+                    <Link
+                      href={agentDetailHref("mcp_gateway", agent.id)}
+                      className="truncate"
+                    >
+                      {agent.name}
+                    </Link>
+                    <LabelTags labels={agent.labels} />
+                  </span>
+                }
+                description={
+                  <>
+                    <PersonalResourceOwner
+                      resource={agent}
+                      currentUserId={currentUserId}
+                    />
+                    {agent.description && (
+                      <span className="block">{agent.description}</span>
+                    )}
+                  </>
+                }
+                actions={renderGatewayActions(agent)}
+                onNavigate={
+                  isDeletedView
+                    ? undefined
+                    : () =>
+                        router.push(agentDetailHref("mcp_gateway", agent.id))
+                }
+                {...cardSelection(agent)}
+                selectionLabel={`Select ${agent.name}`}
+                footer={<AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />}
+              >
+                <div className="flex flex-wrap items-center gap-2">
+                  <AgentAccessBadges agent={agent} />
+                </div>
+              </TableCard>
+            ))}
+          </TableCardList>
+        }
+        table={
+          <DataTable
+            columns={sortable ? columns : pinnedColumns}
+            data={sectionAgents}
+            isLoading={showLoading}
+            getRowId={(row) => row.id}
+            rowSelection={effectiveRowSelection}
+            onRowSelectionChange={onRowSelectionChange}
+            rangeSelection={rangeSelection}
+            hideSelectedCount
+            sorting={sortable ? sorting : []}
+            onSortingChange={sortable ? handleSortingChange : undefined}
+            manualSorting={true}
+            manualPagination={true}
+            pagination={sectionPagination}
+            onPaginationChange={
+              sectionPagination ? onSectionPaginationChange : undefined
+            }
+            // Trashed rows have no page to open — Restore and permanent
+            // delete stay row actions.
+            onRowClick={
+              isDeletedView
+                ? undefined
+                : (row, event) =>
+                    openRowOnPlainClick(event, () =>
+                      router.push(agentDetailHref("mcp_gateway", row.id)),
+                    )
+            }
+            hasActiveFilters={Boolean(
+              nameFilter ||
+                scopeFilter.hasActiveScopeFilters ||
+                labelsFromUrl ||
+                isDeletedView,
+            )}
+            onClearFilters={() =>
+              updateQueryParams({
+                name: null,
+                scope: null,
+                teamIds: null,
+                authorIds: null,
+                excludeAuthorIds: null,
+                labels: null,
+                status: null,
+                page: "1",
+              })
+            }
+            emptyIcon={Waypoints}
+            emptyMessage={
+              isDeletedView
+                ? "No deleted MCP gateways found."
+                : "No MCP gateways found"
+            }
+            filteredEmptyMessage={
+              isDeletedView
+                ? "No deleted MCP gateways found."
+                : "No MCP gateways match your filters"
+            }
+          />
+        }
+      />
+    </section>
+  );
+
+  if (isGatewaysLoadError || (!isDeletedView && isPinnedLoadError)) {
     return (
       <PageLayout
         title="MCP Gateways"
@@ -614,7 +854,10 @@ function McpGateways({
       >
         <QueryLoadError
           title="Couldn't load your MCP gateways"
-          onRetry={() => refetchGateways()}
+          onRetry={() => {
+            void refetchGateways();
+            if (!isDeletedView) void refetchPinnedGateways();
+          }}
         />
       </PageLayout>
     );
@@ -664,7 +907,9 @@ function McpGateways({
                 actions={!isDeletedView ? <TableCardViewToggle /> : undefined}
                 search={
                   <SearchInput
-                    isLoading={isFetching}
+                    isLoading={
+                      isFetching || (!isDeletedView && isPinnedFetching)
+                    }
                     objectNamePlural="gateways"
                     searchFields={["name"]}
                     paramName="name"
@@ -688,7 +933,11 @@ function McpGateways({
                 onClear={clearSelection}
                 busy={bulkDelete.isPending || isFetchingAllMatching}
                 selectAllMatching={{
-                  total: pagination?.total ?? 0,
+                  total:
+                    (pagination?.total ?? 0) +
+                    (isDeletedView
+                      ? 0
+                      : (pinnedAgentsResponse?.pagination.total ?? 0)),
                   pageFullySelected:
                     agents.length > 0 && pageSelection.length === agents.length,
                   active: allMatchingSelected,
@@ -709,146 +958,37 @@ function McpGateways({
                 </PermissionButton>
               </BulkActions>
 
-              <TableCardViewContent
-                forceTable={isDeletedView}
-                cards={
-                  <TableCardList
-                    itemCount={agents.length}
-                    isLoading={showLoading}
-                    hasActiveFilters={Boolean(
-                      nameFilter ||
-                        scopeFilter.hasActiveScopeFilters ||
-                        labelsFromUrl,
-                    )}
-                    emptyIcon={Waypoints}
-                    filteredEmptyMessage="No MCP gateways match your filters"
-                    onClearFilters={() =>
-                      updateQueryParams({
-                        name: null,
-                        scope: null,
-                        teamIds: null,
-                        authorIds: null,
-                        excludeAuthorIds: null,
-                        labels: null,
-                        status: null,
-                        page: "1",
-                      })
-                    }
-                    pagination={{
-                      pageIndex,
-                      pageSize,
-                      total: pagination?.total ?? 0,
-                    }}
-                    onPaginationChange={handlePaginationChange}
-                  >
-                    {agents.map((agent) => (
-                      <TableCard
-                        key={agent.id}
-                        icon={
-                          <AgentIcon
-                            icon={agent.icon}
-                            size={20}
-                            fallbackType="mcp_gateway"
-                          />
-                        }
-                        title={
-                          <span className="flex min-w-0 items-center gap-1.5">
-                            <Link
-                              href={agentDetailHref("mcp_gateway", agent.id)}
-                              className="truncate"
-                            >
-                              {agent.name}
-                            </Link>
-                            <LabelTags labels={agent.labels} />
-                          </span>
-                        }
-                        description={agent.description}
-                        actions={renderGatewayActions(agent)}
-                        onNavigate={
-                          isDeletedView
-                            ? undefined
-                            : () =>
-                                router.push(
-                                  agentDetailHref("mcp_gateway", agent.id),
-                                )
-                        }
-                        {...cardSelection(agent)}
-                        selectionLabel={`Select ${agent.name}`}
-                        footer={
-                          <AgentLastUsedFooter lastUsedAt={agent.lastUsedAt} />
-                        }
-                      >
-                        <div className="flex flex-wrap items-center gap-2">
-                          <AgentAccessBadges agent={agent} />
-                        </div>
-                      </TableCard>
-                    ))}
-                  </TableCardList>
-                }
-                table={
-                  <DataTable
-                    columns={columns}
-                    data={agents}
-                    isLoading={showLoading}
-                    getRowId={(row) => row.id}
-                    rowSelection={effectiveRowSelection}
-                    onRowSelectionChange={onRowSelectionChange}
-                    rangeSelection={rangeSelection}
-                    hideSelectedCount
-                    sorting={sorting}
-                    onSortingChange={handleSortingChange}
-                    manualSorting={true}
-                    manualPagination={true}
-                    pagination={{
-                      pageIndex,
-                      pageSize,
-                      total: pagination?.total ?? 0,
-                    }}
-                    onPaginationChange={handlePaginationChange}
-                    // Trashed rows have no page to open — Restore and permanent
-                    // delete stay row actions.
-                    onRowClick={
-                      isDeletedView
-                        ? undefined
-                        : (row, event) =>
-                            openRowOnPlainClick(event, () =>
-                              router.push(
-                                agentDetailHref("mcp_gateway", row.id),
-                              ),
-                            )
-                    }
-                    hasActiveFilters={Boolean(
-                      nameFilter ||
-                        scopeFilter.hasActiveScopeFilters ||
-                        labelsFromUrl ||
-                        isDeletedView,
-                    )}
-                    onClearFilters={() =>
-                      updateQueryParams({
-                        name: null,
-                        scope: null,
-                        teamIds: null,
-                        authorIds: null,
-                        excludeAuthorIds: null,
-                        labels: null,
-                        status: null,
-                        page: "1",
-                      })
-                    }
-                    emptyIcon={Waypoints}
-                    emptyMessage={
-                      isDeletedView
-                        ? "No deleted MCP gateways found."
-                        : "No MCP gateways found"
-                    }
-                    filteredEmptyMessage={
-                      isDeletedView
-                        ? "No deleted MCP gateways found."
-                        : "No MCP gateways match your filters"
-                    }
-                  />
-                }
-              />
+              <div className="space-y-6">
+                {pinnedAgents.length > 0
+                  ? renderGatewaySection({
+                      title: "Pinned",
+                      sectionAgents: pinnedAgents,
+                      sortable: false,
+                      sectionPagination:
+                        (pinnedAgentsResponse?.pagination.total ?? 0) >
+                          pinnedPage.pageSize || pinnedPageIndex > 0
+                          ? {
+                              pageIndex: pinnedPageIndex,
+                              pageSize: pinnedPage.pageSize,
+                              total:
+                                pinnedAgentsResponse?.pagination.total ?? 0,
+                            }
+                          : undefined,
+                      onSectionPaginationChange: (next) =>
+                        setPinnedPage({ ...next, filterSignature }),
+                    })
+                  : null}
+                {unpinnedAgents.length > 0 || pinnedAgents.length === 0
+                  ? renderGatewaySection({
+                      sectionAgents: unpinnedAgents,
+                      sectionPagination: {
+                        pageIndex,
+                        pageSize,
+                        total: pagination?.total ?? 0,
+                      },
+                    })
+                  : null}
+              </div>
             </div>
 
             {bulkDeleteOpen && (

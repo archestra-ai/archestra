@@ -3,7 +3,7 @@ title: Credentials
 category: Administration
 description: Save credentials once and reuse them across agents, MCP servers, skills, and knowledge
 order: 5
-lastUpdated: 2026-09-15
+lastUpdated: 2026-10-02
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -33,6 +33,8 @@ User connections and bot installation credentials have separate ownership polici
 Every credential definition has a name, description, type, and owner policy. Its saved values are separate from that definition.
 
 **Each user** means every person connects their own private value. Agent Runtime uses the person acting on the run. MCP servers use the owner of a personal installation. Another user's value is never substituted.
+
+With Agent Runtime enabled, **Account → Connections** appears when a personal credential is available. Installed Claude Code agents also make the page available.
 
 **The organization** means an administrator connects one shared value. Scheduled skill, plugin, and Knowledge syncs use organization credentials.
 

@@ -14,8 +14,11 @@ import {
   TOOL_UPDATE_SKILL_FULL_NAME,
   TOOL_UPLOAD_FILE_FULL_NAME,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import config from "@/config";
 import { ConversationEnabledToolModel, ToolModel } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import * as guardrailsDeployment from "@/services/guardrails-deployment";
 import { describe, expect, test } from "@/test";
 import type { ArchestraContext } from ".";
 import { executeArchestraTool } from ".";
@@ -164,6 +167,7 @@ describe("search_tools", () => {
   }) => {
     const previous = config.openappa.enabled;
     config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(true);
     try {
       const org = await makeOrganization();
       const user = await makeUser();
@@ -193,7 +197,100 @@ describe("search_tools", () => {
       expect(names.some((name) => name.endsWith("execute_remedy_plan"))).toBe(
         true,
       );
+      // The rendered signatures show only what the model writes, never the
+      // members the proxy stamps or their JWS prose.
+      const remedyTools = (
+        result.structuredContent as SearchToolsStructuredContent
+      ).tools.filter((tool) => /remedy_plan/.test(tool.toolName));
+      const execute = remedyTools.find((tool) =>
+        tool.toolName.endsWith("execute_remedy_plan"),
+      );
+      expect(execute?.params).toContain("offer_id!:string");
+      for (const tool of remedyTools) {
+        expect(tool.params).not.toMatch(
+          /execution|protected|payload|signature|offers|JWS|RFC 7515/,
+        );
+      }
     } finally {
+      config.openappa.enabled = previous;
+    }
+  });
+
+  test("search hides remedy tools while the deployment switch is off and still finds policy tools", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const previous = config.openappa.enabled;
+    config.openappa.enabled = true;
+    await GuardrailsDeploymentModel.setEnabled(false);
+    try {
+      const org = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const agent = await makeAgent({ organizationId: org.id });
+      const context: ArchestraContext = {
+        agent: { id: agent.id, name: agent.name },
+        agentId: agent.id,
+        organizationId: org.id,
+        userId: user.id,
+      };
+      const remedies = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "get_remedy_plans execute_remedy_plan", limit: 10 },
+        context,
+      );
+      const remedyNames = (
+        remedies.structuredContent as SearchToolsStructuredContent
+      ).tools.map((tool) => tool.toolName);
+      expect(
+        remedyNames.some((name) => name.endsWith("get_remedy_plans")),
+      ).toBe(false);
+      expect(
+        remedyNames.some((name) => name.endsWith("execute_remedy_plan")),
+      ).toBe(false);
+      const policy = await executeArchestraTool(
+        TOOL_SEARCH_TOOLS_FULL_NAME,
+        { query: "get_guardrails_policy", limit: 10 },
+        context,
+      );
+      const policyNames = (
+        policy.structuredContent as SearchToolsStructuredContent
+      ).tools.map((tool) => tool.toolName);
+      expect(
+        policyNames.some((name) => name.endsWith("get_guardrails_policy")),
+      ).toBe(true);
+    } finally {
+      config.openappa.enabled = previous;
+    }
+  });
+
+  test("a thrown switch read fails search instead of hiding remedy tools", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const previous = config.openappa.enabled;
+    config.openappa.enabled = true;
+    const read = vi
+      .spyOn(guardrailsDeployment, "isGuardrailsV2Active")
+      .mockRejectedValue(new Error("deployment row unavailable"));
+    try {
+      const org = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      await expect(
+        executeArchestraTool(
+          TOOL_SEARCH_TOOLS_FULL_NAME,
+          { query: "get_guardrails_policy", limit: 5 },
+          {
+            agent: { id: agent.id, name: agent.name },
+            agentId: agent.id,
+            organizationId: org.id,
+          },
+        ),
+      ).rejects.toThrow("deployment row unavailable");
+    } finally {
+      read.mockRestore();
       config.openappa.enabled = previous;
     }
   });
@@ -722,7 +819,7 @@ describe("search_tools", () => {
   // the model can discover and run them dynamically); assigned always-exposed
   // tools stay out (they are already top-level). Sandbox built-ins additionally
   // require their feature flag, and every result is RBAC-filtered — so they
-  // only surface for callers who can actually run them (sandbox:execute).
+  // only surface for callers who can actually run them (agent:read).
   // Seeded but not assigned here to exercise that path.
   describe("sandbox built-in discovery", () => {
     async function searchSandboxTools(
@@ -739,7 +836,7 @@ describe("search_tools", () => {
       ).tools.map((tool) => tool.toolName);
     }
 
-    test("surfaces an unassigned sandbox tool to a user with sandbox:execute", async ({
+    test("surfaces an unassigned sandbox tool to a user with agent:read", async ({
       makeAgent,
       makeMember,
       makeOrganization,
@@ -779,7 +876,7 @@ describe("search_tools", () => {
       }
     });
 
-    test("hides sandbox tools from a user without sandbox:execute", async ({
+    test("hides sandbox tools from a user without agent:read", async ({
       makeAgent,
       makeCustomRole,
       makeMember,
@@ -793,7 +890,7 @@ describe("search_tools", () => {
         const org = await makeOrganization();
         const user = await makeUser();
         const role = await makeCustomRole(org.id, {
-          permission: { agent: ["read"] },
+          permission: { chat: ["read", "create"] },
         });
         await makeMember(user.id, org.id, { role: role.role });
         const agent = await makeAgent({

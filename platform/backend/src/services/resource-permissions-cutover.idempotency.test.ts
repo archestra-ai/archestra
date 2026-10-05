@@ -314,8 +314,6 @@ describe("cutover idempotency", () => {
         "mcpOauthClient",
         "llmOauthClient",
         "scheduledTask",
-        "log",
-        "auditLog",
       ]),
     );
 

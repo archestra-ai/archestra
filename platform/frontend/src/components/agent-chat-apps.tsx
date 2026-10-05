@@ -39,7 +39,7 @@ import { PermissionButton } from "@/components/ui/permission-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
   useApplyChatOpsBindingPlan,
@@ -136,9 +136,6 @@ export function AgentChatAppsEditor({
     (params?: { agentId: string }) => Promise<boolean>
   >(() => Promise.resolve(true));
   const { data: session } = useSession();
-  const { data: canCreateDm = false } = useHasPermissions({
-    agentTrigger: ["create"],
-  });
   const {
     data,
     isPending,
@@ -267,16 +264,13 @@ export function AgentChatAppsEditor({
   );
   const assignmentOptions = buildAssignmentOptions({
     subject,
-    // Same field, two hosts: the record's page calls its first tab General,
-    // the create wizard calls its first step Configuration.
     visibilityLocation: emailAgent
-      ? "the General tab"
-      : "the Configuration step",
+      ? "the Permissions tab"
+      : "Permissions in the Configuration step",
     agentNames,
     bindings,
     configuredDmProviders,
     currentUserId: session?.user?.id,
-    canCreateDm,
   });
   // "new" while the record has no id, so the wizard's own selection still has
   // a stable key to be compared against.
@@ -703,7 +697,7 @@ export function AgentChatAppsEditor({
                   )}
                   <PermissionButton
                     type="button"
-                    permissions={{ agentTrigger: ["update"] }}
+                    permissions={{ organizationSettings: ["update"] }}
                     onClick={() => void requestSave()}
                     disabled={
                       readOnly || !isDirty || isSaving || !agentNamesReady
@@ -1206,9 +1200,9 @@ function AgentEmailSection({
 }) {
   if (!providerEnabled) {
     return (
-      <div className="rounded-md border border-dashed px-4 py-6">
+      <div className="flex flex-col items-center gap-1 rounded-md border border-dashed px-4 py-6 text-center">
         <p className="text-sm font-medium">Incoming email isn&apos;t set up</p>
-        <p className="mt-1 max-w-prose text-xs text-muted-foreground">
+        <p className="max-w-prose text-xs text-muted-foreground">
           Set it up once for the organization and every agent gets its own
           address.
         </p>
@@ -1216,7 +1210,7 @@ function AgentEmailSection({
           type="button"
           variant="outline"
           size="sm"
-          className="mt-4"
+          className="mt-2"
           asChild
         >
           <Link href="/settings/messaging-channels/email">
@@ -1375,7 +1369,6 @@ function buildAssignmentOptions({
   bindings,
   configuredDmProviders,
   currentUserId,
-  canCreateDm,
   visibilityLocation,
 }: {
   subject: ChannelSubject;
@@ -1383,8 +1376,7 @@ function buildAssignmentOptions({
   bindings: Binding[];
   configuredDmProviders: ChatProvider[];
   currentUserId: string | undefined;
-  canCreateDm: boolean;
-  /** Where this agent's Visibility field is, named as its host names it. */
+  /** Where this agent's permissions are edited, named as its host names it. */
   visibilityLocation: string;
 }): AssignmentOption[] {
   const virtualDmOptions = configuredDmProviders.map((provider) => ({
@@ -1395,9 +1387,8 @@ function buildAssignmentOptions({
     workspaceName: null,
     assignedAgentId: null,
     assignedAgentName: null,
-    disabledReason: !canCreateDm
-      ? "You do not have permission to create a direct message assignment."
-      : subject.scope === "personal" && subject.authorId !== currentUserId
+    disabledReason:
+      subject.scope === "personal" && subject.authorId !== currentUserId
         ? "Only this personal agent's owner can assign a direct message."
         : null,
     virtualDm: true,
@@ -1419,10 +1410,7 @@ function buildAssignmentOptions({
           ? (agentNames.get(binding.agentId) ?? "another agent")
           : null,
       disabledReason: personalAssignmentRefused
-        ? // Says what to do about it, not just that it is so: the refusal is
-          // the agent's visibility, which is one field away and the reader's
-          // to change.
-          `A personal agent answers only in its owner's direct messages. Change Visibility from Personal on ${visibilityLocation} to use shared channels.`
+        ? `A personal agent answers only in its owner's direct messages. To use shared channels, open ${visibilityLocation} and add "Everyone in this organization" with "Can use" access.`
         : null,
       virtualDm: false,
       isDm: binding.isDm,

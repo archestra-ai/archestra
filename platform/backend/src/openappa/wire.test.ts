@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import db, { schema } from "@/database";
+import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
 import { extractAppaSessionIdentity } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
 import { extractGatewayToolDeclarations } from "@/routes/proxy/utils/gateway-tool-declarations";
 import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { openappaActor } from "./actor";
 import {
   collectAndStripChildReturns,
@@ -20,8 +21,18 @@ import {
   readNotice,
   readRemedyExecution,
 } from "./notice";
-import { prepareAppaRequest } from "./request";
+import {
+  type OfferJws,
+  signOfferClaims,
+  unsignedOfferClaims,
+} from "./offer-claims";
+import {
+  prepareAppaRequest,
+  sanitizeForwardedRequest,
+  sanitizeProviderBoundRequest,
+} from "./request";
 import { appendSessionReceipt } from "./session-token";
+import { stampToolCallId } from "./trajectory-stamp";
 import {
   appaSessionIdentity,
   appaTurnBoundaries,
@@ -3160,6 +3171,812 @@ describe("APPA request preflight", () => {
   });
 });
 
+describe("provider-bound sanitizer", () => {
+  // The deployment's offer signing key; an offer signed under any other key
+  // is not one this deployment wrote.
+  const SECRET = "wire-provider-bound-secret-0123456789";
+  const RULING = "[appa] Blocked: this call cannot run yet.";
+  const ASK_USER = "mcp__archestra__ask_user";
+  type NoticeArgs = ReturnType<typeof buildNoticeArguments>;
+
+  beforeEach(() => {
+    config.openappa.offerSigningSecret = SECRET;
+  });
+
+  test("restores a governed history without a session as the session path does", () => {
+    // OpenAPPA switched off, or this client bypassed: the history still holds
+    // the proxy's notices, receipts and stamped offers from governed turns.
+    const offer = signedOffer(SECRET);
+    const history = () => ({
+      tools: [{ name: NOTICE }, { name: CONTROL }, { name: ASK_USER }],
+      messages: [
+        { role: "user", content: "clean the build" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_denied",
+              name: NOTICE,
+              input: buildNoticeArguments({
+                id: "toolu_denied",
+                tool: "Bash",
+                arguments: { command: "rm -rf build" },
+                result: RULING,
+                offers: [offer],
+              }),
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_denied",
+              content: "shown to the user",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_ask",
+              name: ASK_USER,
+              input: {
+                question: "Submit the cleanup for approval?",
+                options: [{ label: "Submit" }],
+                remedy_offer_ids: ["offer_1"],
+                remedy_offers: [offer],
+              },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_ask",
+              content: "Submit",
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_remedy",
+              name: CONTROL,
+              input: stampedRemedyArguments({
+                callId: "toolu_remedy",
+                toolName: CONTROL,
+                original: '{"offer_id":"offer_1"}',
+                offer,
+              }),
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_remedy",
+              content: "Authorized",
+            },
+          ],
+        },
+      ],
+    });
+    const session = history();
+    const sessionless = history();
+
+    prepareAppaRequest({
+      body: session,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+    for (const body of [session, sessionless]) {
+      sanitizeProviderBoundRequest({
+        body,
+        interactionType: "anthropic:messages",
+        identity,
+      });
+    }
+
+    expect(JSON.stringify(sessionless.messages)).toBe(
+      JSON.stringify(session.messages),
+    );
+    expect(sessionless.messages[1].content[0]).toEqual({
+      type: "tool_use",
+      id: "toolu_denied",
+      name: "Bash",
+      input: { command: "rm -rf build" },
+    });
+    expect(sessionless.messages[2].content[0]).toEqual({
+      type: "tool_result",
+      tool_use_id: "toolu_denied",
+      content: RULING,
+      is_error: true,
+    });
+    for (const body of [session, sessionless]) {
+      const sent = withJsonTextDecoded(body);
+      for (const member of [
+        '"offers"',
+        '"execution"',
+        '"signature"',
+        '"remedy_offers"',
+      ]) {
+        expect(sent).not.toContain(member);
+      }
+    }
+  });
+
+  test("shows the provider the same earlier turns on every request, thinking untouched", () => {
+    // Claude 5.5 and Fable 5.1 bind a thinking block to every byte before it:
+    // a request that shows an earlier turn differently fails or loses them.
+    const offer = signedOffer(SECRET);
+    const firstThinking = {
+      type: "thinking",
+      thinking: "The build folder can go.",
+      signature: "sig-thinking-1",
+    };
+    const redacted = { type: "redacted_thinking", data: "opaque-redacted-1" };
+    const turns = [
+      {
+        role: "user",
+        content: [
+          {
+            type: "text",
+            text: "clean the build",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          firstThinking,
+          {
+            type: "tool_use",
+            id: "toolu_denied",
+            name: NOTICE,
+            input: buildNoticeArguments({
+              id: "toolu_denied",
+              tool: "Bash",
+              arguments: { command: "rm -rf build" },
+              result: RULING,
+              offers: [offer],
+            }),
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_denied",
+            content: "shown to the user",
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          redacted,
+          {
+            type: "tool_use",
+            id: "toolu_remedy",
+            name: CONTROL,
+            input: stampedRemedyArguments({
+              callId: "toolu_remedy",
+              toolName: CONTROL,
+              original: '{"offer_id":"offer_1"}',
+              offer,
+            }),
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_remedy",
+            content: "Authorized",
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [
+          {
+            type: "thinking",
+            thinking: "Retry the cleanup.",
+            signature: "sig-thinking-2",
+          },
+          {
+            type: "tool_use",
+            id: "toolu_retry",
+            name: "Bash",
+            input: { command: "rm -rf build" },
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_retry",
+            content: "removed",
+          },
+        ],
+      },
+    ];
+    const forwarded = (turnCount: number, withSession: boolean) => {
+      const body = {
+        tools: [{ name: NOTICE }, { name: CONTROL }, { name: "Bash" }],
+        messages: structuredClone(turns.slice(0, turnCount)),
+      };
+      if (withSession)
+        prepareAppaRequest({
+          body,
+          interactionType: "anthropic:messages",
+          identity,
+        });
+      sanitizeProviderBoundRequest({
+        body,
+        interactionType: "anthropic:messages",
+        identity,
+      });
+      return body;
+    };
+
+    for (const withSession of [true, false]) {
+      // The three requests of one conversation: after the ruling, after the
+      // remedy, after the retry.
+      const [ruled, remedied, retried] = [3, 5, 7].map((count) =>
+        forwarded(count, withSession),
+      );
+      expect(remedied.messages.slice(0, 3)).toEqual(ruled.messages);
+      expect(retried.messages.slice(0, 5)).toEqual(remedied.messages);
+      expect(remedied.tools).toEqual(ruled.tools);
+      expect(retried.tools).toEqual(remedied.tools);
+      // Thinking blocks and cache markers pass through as the client sent them.
+      expect(retried.messages[0]).toEqual(turns[0]);
+      expect(retried.messages[1].content[0]).toEqual(firstThinking);
+      expect(retried.messages[3].content[0]).toEqual(redacted);
+      expect(retried.messages.slice(5)).toEqual(turns.slice(5));
+      // A request the sanitizer already cleaned does not change again.
+      const again = structuredClone(retried);
+      expect(
+        sanitizeProviderBoundRequest({
+          body: again,
+          interactionType: "anthropic:messages",
+          identity,
+        }),
+      ).toBe(0);
+      expect(again).toEqual(retried);
+    }
+    expect(forwarded(7, false).messages).toEqual(forwarded(7, true).messages);
+  });
+
+  test.each([
+    {
+      label:
+        "an Anthropic notice of a custom call, which Anthropic cannot carry",
+      interactionType: "anthropic:messages",
+      identity,
+      args: buildNoticeArguments({
+        id: "toolu_patch",
+        tool: "apply_patch",
+        arguments: { input: "*** Begin Patch\n" },
+        result: RULING,
+        custom: true,
+        offers: [signedOffer(SECRET)],
+      }),
+      build: (args: NoticeArgs) => {
+        const call: Record<string, unknown> = {
+          type: "tool_use",
+          id: "toolu_patch",
+          name: NOTICE,
+          input: args,
+        };
+        return {
+          body: { messages: [{ role: "assistant", content: [call] }] },
+          holder: call,
+          key: "input",
+        };
+      },
+    },
+    {
+      label: "a Chat Completions notice for a name no provider accepts",
+      interactionType: "openai:chatCompletions",
+      identity,
+      args: buildNoticeArguments({
+        id: "call_invented",
+        tool: "my_gateway archestra__run_tool",
+        arguments: '{"tool_name":"archestra__whoami"}',
+        result: "[appa] This tool is not declared.",
+        offers: [signedOffer(SECRET)],
+      }),
+      build: (args: NoticeArgs) => {
+        const fn: Record<string, unknown> = {
+          name: NOTICE,
+          arguments: JSON.stringify(args),
+        };
+        return {
+          body: {
+            messages: [
+              {
+                role: "assistant",
+                tool_calls: [
+                  { id: "call_invented", type: "function", function: fn },
+                ],
+              },
+              { role: "tool", tool_call_id: "call_invented", content: "shown" },
+            ],
+          },
+          holder: fn,
+          key: "arguments",
+        };
+      },
+    },
+    {
+      label: "a Bedrock Converse notice proven by a record naming its own call",
+      interactionType: "bedrock:converse",
+      identity: undefined,
+      args: buildNoticeArguments({
+        id: "tooluse_1",
+        tool: "read_file",
+        arguments: { path: "/etc/hosts" },
+        result: RULING,
+        offers: [signedOffer(SECRET)],
+      }),
+      build: (args: NoticeArgs) => {
+        const toolUse: Record<string, unknown> = {
+          toolUseId: "tooluse_1",
+          name: NOTICE,
+          input: args,
+        };
+        return {
+          body: { messages: [{ role: "assistant", content: [{ toolUse }] }] },
+          holder: toolUse,
+          key: "input",
+        };
+      },
+    },
+    {
+      label: "a Gemini notice without a call id, named by Chat's identity",
+      interactionType: "gemini:generateContent",
+      identity: chatIdentity,
+      args: buildNoticeArguments({
+        id: "call_g",
+        tool: "read",
+        arguments: { path: "README.md" },
+        result: RULING,
+        offers: [signedOffer(SECRET)],
+      }),
+      build: (args: NoticeArgs) => {
+        const functionCall: Record<string, unknown> = {
+          name: ADVERTISED_NOTICE,
+          args,
+        };
+        return {
+          body: { contents: [{ role: "model", parts: [{ functionCall }] }] },
+          holder: functionCall,
+          key: "args",
+        };
+      },
+    },
+  ])("leaves only the call and its ruling on a notice no wire restores: $label", ({
+    interactionType,
+    identity: toolIdentity,
+    args,
+    build,
+  }) => {
+    const { body, holder, key } = build(args);
+    const recordedAs = typeof holder[key];
+
+    sanitizeProviderBoundRequest({
+      body,
+      interactionType,
+      identity: toolIdentity,
+    });
+
+    const recorded = holder[key];
+    // Arguments the client recorded as JSON text stay JSON text.
+    expect(typeof recorded).toBe(recordedAs);
+    expect(
+      typeof recorded === "string" ? JSON.parse(recorded) : recorded,
+    ).toEqual({
+      tool: args.tool,
+      arguments: args.arguments,
+      ruling: args.ruling,
+    });
+    const sent = withJsonTextDecoded(body);
+    expect(sent).not.toContain('"offers"');
+    expect(sent).not.toContain('"notice"');
+  });
+
+  test("puts a remedy call back to the model's bytes, or drops a receipt its call no longer matches", () => {
+    const original = '{ "offer_id": "offer_1" }';
+    const stamped = stampedRemedyArguments({
+      callId: "call_remedy",
+      toolName: CONTROL,
+      original,
+      offer: signedOffer(SECRET),
+    });
+    const remedyCall = (args: Record<string, unknown>) => ({
+      type: "function_call",
+      call_id: "call_remedy",
+      name: CONTROL,
+      arguments: JSON.stringify(args),
+    });
+    const intact = remedyCall(stamped);
+    // Changed after the proxy stamped it: the receipt vouches for bytes the
+    // call no longer holds, so it cannot put them back.
+    const edited = remedyCall({ ...stamped, offer_id: "edited" });
+
+    for (const call of [intact, edited]) {
+      sanitizeProviderBoundRequest({
+        body: {
+          tools: [{ type: "function", name: CONTROL }],
+          input: [
+            call,
+            {
+              type: "function_call_output",
+              call_id: "call_remedy",
+              output: "Authorized",
+            },
+          ],
+        },
+        interactionType: "openai:responses",
+        identity,
+      });
+    }
+
+    expect(intact.arguments).toBe(original);
+    expect(JSON.parse(edited.arguments)).toEqual({ offer_id: "edited" });
+  });
+
+  test("never rewrites a lookalike unless it carries an offer this deployment signed", async () => {
+    const offer = signedOffer(SECRET);
+    const foreignOffer = signedOffer("another-deployment-secret-0123456789");
+    const original = '{ "offer_id": "offer_1" }';
+    const call = (params: {
+      id: string;
+      name: string;
+      namespace?: string;
+      args: Record<string, unknown>;
+    }) => ({
+      type: "function_call",
+      call_id: params.id,
+      name: params.name,
+      ...(params.namespace ? { namespace: params.namespace } : {}),
+      arguments: JSON.stringify(params.args),
+    });
+    const body = {
+      tools: [
+        {
+          type: "namespace",
+          name: "mcp__evil",
+          tools: [
+            { type: "function", name: ADVERTISED_CONTROL },
+            { type: "function", name: ADVERTISED_ASK_USER },
+          ],
+        },
+        {
+          type: "namespace",
+          name: "mcp__gw",
+          tools: [
+            ADVERTISED_NOTICE,
+            ADVERTISED_CONTROL,
+            ADVERTISED_ASK_USER,
+          ].map((advertisedName) =>
+            attestedTool({
+              type: "function",
+              name: advertisedName,
+              advertisedName,
+            }),
+          ),
+        },
+        { type: "function", name: "someone_elses__get_remedy_plans" },
+      ],
+      input: [
+        // A signing tool's own JWS-shaped arguments.
+        call({
+          id: "call_sign",
+          name: ADVERTISED_CONTROL,
+          namespace: "mcp__evil",
+          args: {
+            document: "contract.pdf",
+            protected: "eyJhbGciOiJFUzI1NiJ9",
+            payload: "contract-digest",
+            signature: "c2lnbmVkLWJ5LWl0LW93bi1rZXk",
+          },
+        }),
+        call({
+          id: "call_ask",
+          name: ADVERTISED_ASK_USER,
+          namespace: "mcp__evil",
+          args: { question: "Proceed?", remedy_offers: [foreignOffer] },
+        }),
+        call({
+          id: "call_someone",
+          name: "someone_elses__get_remedy_plans",
+          args: buildNoticeArguments({
+            id: "toolu_other",
+            tool: "Bash",
+            arguments: { command: "ls" },
+            result: RULING,
+            offers: [foreignOffer],
+          }),
+        }),
+        // An offer this deployment signed, copied onto the lookalike.
+        call({
+          id: "call_copied",
+          name: ADVERTISED_CONTROL,
+          namespace: "mcp__evil",
+          args: { offer_id: "offer_1", reason: "retry", ...offer },
+        }),
+        // Stamped without a matched offer, so no signature vouches for it;
+        // the attested namespace makes it ours, and its receipt restores it.
+        call({
+          id: "call_ours",
+          name: ADVERTISED_CONTROL,
+          namespace: "mcp__gw",
+          args: {
+            ...JSON.parse(original),
+            execution: {
+              v: 1,
+              kind: "appa_remedy",
+              call_id: "call_ours",
+              tool_name: ADVERTISED_CONTROL,
+              namespace: "mcp__gw",
+              original_arguments: original,
+            },
+          },
+        }),
+      ],
+    };
+    const lookalikes = structuredClone(body.input.slice(0, 3));
+    const tools = await attestedIdentity(body);
+    expect(tools.mode).toBe("attested");
+
+    sanitizeProviderBoundRequest({
+      body,
+      interactionType: "openai:responses",
+      identity: tools,
+    });
+
+    expect(body.input.slice(0, 3)).toEqual(lookalikes);
+    expect(JSON.parse(body.input[3].arguments)).toEqual({
+      offer_id: "offer_1",
+      reason: "retry",
+    });
+    expect(body.input[4].arguments).toBe(original);
+  });
+
+  test("strips proxy-only parameters only from this platform's remedy and ask_user declarations", async () => {
+    const schema = (members: readonly string[]) => ({
+      type: "object",
+      properties: Object.fromEntries(
+        members.map((member) => [member, { type: "string" }]),
+      ),
+      required: [...members],
+    });
+    const members = {
+      [ADVERTISED_NOTICE]: ["tool", "arguments", "ruling", "notice", "offers"],
+      [ADVERTISED_CONTROL]: [
+        "offer_id",
+        "execution",
+        "protected",
+        "payload",
+        "signature",
+      ],
+      [ADVERTISED_ASK_USER]: ["question", "remedy_offers"],
+    };
+    // The gateway's declarations, fetched before it stopped publishing the
+    // proxy's members, beside a server spelling the same advertised names.
+    const request = () => ({
+      tools: Object.entries(members).flatMap(([advertisedName, declared]) => [
+        {
+          ...attestedTool({
+            name: `mcp__gw__${advertisedName}`,
+            advertisedName,
+          }),
+          input_schema: schema(declared),
+        },
+        {
+          name: `mcp__evil__${advertisedName}`,
+          input_schema: schema(declared),
+        },
+      ]),
+    });
+    const body = request();
+    const tools = await attestedIdentity(body);
+    expect(tools.mode).toBe("attested");
+
+    sanitizeProviderBoundRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity: tools,
+    });
+
+    // The notice keeps its record, which the gateway still advertises.
+    expect(body.tools.map((tool) => [tool.name, tool.input_schema])).toEqual([
+      [
+        `mcp__gw__${ADVERTISED_NOTICE}`,
+        schema(["tool", "arguments", "ruling", "notice"]),
+      ],
+      [`mcp__evil__${ADVERTISED_NOTICE}`, schema(members[ADVERTISED_NOTICE])],
+      [`mcp__gw__${ADVERTISED_CONTROL}`, schema(["offer_id"])],
+      [`mcp__evil__${ADVERTISED_CONTROL}`, schema(members[ADVERTISED_CONTROL])],
+      [`mcp__gw__${ADVERTISED_ASK_USER}`, schema(["question"])],
+      [
+        `mcp__evil__${ADVERTISED_ASK_USER}`,
+        schema(members[ADVERTISED_ASK_USER]),
+      ],
+    ]);
+
+    // Without an identity, as on a catch-all route, no declaration is ours.
+    const unresolved = request();
+    const declared = structuredClone(unresolved.tools);
+    sanitizeProviderBoundRequest({
+      body: unresolved,
+      interactionType: "anthropic:messages",
+    });
+    expect(unresolved.tools).toEqual(declared);
+  });
+
+  test("puts the call id back where a client copied a stamp into text, never into thinking", () => {
+    // Claude Code names a background agent's spawn call, by the id it holds,
+    // in the notification it writes when the agent finishes.
+    const stamp = stampToolCallId({
+      callId: "toolu_spawn",
+      sessionId: "session-1",
+      organizationId: ORG,
+      callerId: "user:alice",
+      secret: SECRET,
+    });
+    const notification = (id: string) =>
+      `<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>${id}</tool-use-id>\n<status>completed</status>\n</task-notification>`;
+    const thinking = {
+      type: "thinking",
+      thinking: `Agent ${stamp} has not finished.`,
+      signature: "sig-thinking",
+    };
+    const output = { type: "text", text: `Agent ${stamp} is still running.` };
+    const notified = { type: "text", text: notification(stamp) };
+    const body = {
+      messages: [
+        { role: "user", content: `Check on ${stamp}` },
+        {
+          role: "assistant",
+          content: [
+            thinking,
+            {
+              type: "tool_use",
+              id: "toolu_output",
+              name: "TaskOutput",
+              input: { task_id: "a1" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_output",
+              content: [output],
+            },
+            notified,
+          ],
+        },
+      ],
+    };
+
+    sanitizeProviderBoundRequest({
+      body,
+      interactionType: "anthropic:messages",
+      identity,
+    });
+
+    expect(body.messages[0].content).toBe("Check on toolu_spawn");
+    expect(output.text).toBe("Agent toolu_spawn is still running.");
+    expect(notified.text).toBe(notification("toolu_spawn"));
+    // Signed thinking goes back byte for byte, or the provider rejects it.
+    expect(thinking).toEqual({
+      type: "thinking",
+      thinking: `Agent ${stamp} has not finished.`,
+      signature: "sig-thinking",
+    });
+  });
+
+  test("cleans a forwarded body by its shape", () => {
+    // Token counting reaches the provider through a catch-all route: no LLM
+    // proxy pipeline, no gateway identity, and the wire read from the body.
+    const stamp = stampToolCallId({
+      callId: "call_1",
+      sessionId: "session-1",
+      organizationId: ORG,
+      callerId: "user:alice",
+      secret: SECRET,
+    });
+    const inputTokens = {
+      model: "gpt-5.5",
+      input: [
+        {
+          type: "function_call",
+          call_id: stamp,
+          name: NOTICE,
+          arguments: JSON.stringify(
+            notice("shell", { command: "ls" }, "call_1"),
+          ),
+        },
+        { type: "function_call_output", call_id: stamp, output: "shown" },
+      ],
+    };
+    const functionCall: Record<string, unknown> = {
+      name: NOTICE,
+      args: buildNoticeArguments({
+        id: "call_g",
+        tool: "read",
+        arguments: { path: "README.md" },
+        result: RULING,
+        offers: [signedOffer(SECRET)],
+      }),
+    };
+    const countTokens = {
+      generateContentRequest: {
+        model: "models/gemini-2.5-pro",
+        contents: [
+          { role: "user", parts: [{ text: "read the readme" }] },
+          { role: "model", parts: [{ functionCall }] },
+        ],
+      },
+    };
+    // Names a remedy tool in prose, but carries no tool traffic.
+    const toolFree = {
+      model: "claude-opus-5-5",
+      messages: [
+        { role: "user", content: "What does get_remedy_plans return?" },
+      ],
+    };
+    const asSent = structuredClone(toolFree);
+
+    expect(sanitizeForwardedRequest(inputTokens)).toBe(true);
+    expect(sanitizeForwardedRequest(countTokens)).toBe(true);
+    expect(sanitizeForwardedRequest(toolFree)).toBe(false);
+
+    expect(inputTokens.input).toEqual([
+      {
+        type: "function_call",
+        call_id: "call_1",
+        name: "shell",
+        arguments: JSON.stringify({ command: "ls" }),
+      },
+      { type: "function_call_output", call_id: "call_1", output: RULING },
+    ]);
+    // With no id on the call, its record proves nothing; the signatures do.
+    expect(functionCall.args).toEqual({
+      tool: "read",
+      arguments: { path: "README.md" },
+      ruling: RULING,
+      notice: { v: 1, call_id: "call_g" },
+    });
+    expect(toolFree).toEqual(asSent);
+  });
+});
+
 function notice(
   tool: string,
   args: Record<string, unknown>,
@@ -3271,6 +4088,58 @@ describe("client session identity", () => {
       sessionId: "chat-conversation",
       parentId: "parent-root",
       provenance: "appa-header",
+    });
+  });
+
+  test("a Codex guardian auto-review is not bound as an unprepared child", () => {
+    // The review names the requester session as parent_thread_id and its own
+    // thread as thread_id, with no top-level tools and a json_schema verdict.
+    // That is not a spawn. Opening it as a child is refused because no fork
+    // was prepared, and that refusal is reported as an unavailable runtime.
+    const codex = new AppaCodexAdapter();
+    const context = {
+      headers: {
+        "user-agent": "codex_cli_rs/0.99.0",
+        "x-openai-subagent": "guardian",
+      },
+      requestBody: {
+        model: "codex-auto-review",
+        text: { format: { type: "json_schema", name: "codex_output_schema" } },
+        client_metadata: {
+          session_id: "requester-session",
+          thread_id: "review-thread",
+          "x-codex-parent-thread-id": "requester-session",
+          "x-openai-subagent": "guardian",
+          "x-codex-turn-metadata": JSON.stringify({
+            session_id: "requester-session",
+            thread_id: "review-thread",
+            parent_thread_id: "requester-session",
+            request_kind: "turn",
+            turn_trigger: "guardian_review",
+            thread_source: "guardian_review",
+            subagent_kind: "guardian",
+            model: "codex-auto-review",
+          }),
+        },
+        input: [
+          {
+            type: "additional_tools",
+            tools: [{ type: "namespace", name: "functions", tools: [] }],
+          },
+        ],
+      },
+    };
+    expect(codex.bindChildTrajectory(context)).toBeUndefined();
+    expect(
+      extractAppaSessionIdentity({
+        family: "openai:responses",
+        body: context.requestBody,
+        headers: context.headers,
+      }),
+    ).toMatchObject({
+      sessionId: "review-thread",
+      parentId: undefined,
+      provenance: "codex-turn-metadata",
     });
   });
 
@@ -3429,5 +4298,57 @@ async function attestedIdentity(body: unknown, organizationId = ORG) {
     organizationId,
     declarations: extractGatewayToolDeclarations(body),
     internalChat: false,
+  });
+}
+
+/** An offer as the proxy signs it into a notice, under `secret`. */
+function signedOffer(secret: string): OfferJws {
+  return signOfferClaims(
+    unsignedOfferClaims({
+      organizationId: ORG,
+      sessionId: "session-1",
+      offerId: "offer_1",
+      tool: "Bash",
+    }),
+    secret,
+  );
+}
+
+/**
+ * A control call's arguments as the plugin stamps them: the model's own, the
+ * receipt binding them to the call, and the matched offer's JWS members.
+ */
+function stampedRemedyArguments(params: {
+  callId: string;
+  toolName: string;
+  original: string;
+  offer: OfferJws;
+}): Record<string, unknown> {
+  return {
+    ...JSON.parse(params.original),
+    execution: {
+      v: 1,
+      kind: "appa_remedy",
+      call_id: params.callId,
+      tool_name: params.toolName,
+      original_arguments: params.original,
+    },
+    ...params.offer,
+  };
+}
+
+/**
+ * A request body as text with every JSON-text value decoded in place, so a
+ * member inside a call's JSON-text arguments shows up like any other.
+ */
+function withJsonTextDecoded(body: unknown): string {
+  return JSON.stringify(body, (_key, value) => {
+    if (typeof value !== "string") return value;
+    try {
+      const parsed: unknown = JSON.parse(value);
+      return typeof parsed === "object" && parsed !== null ? parsed : value;
+    } catch {
+      return value;
+    }
   });
 }

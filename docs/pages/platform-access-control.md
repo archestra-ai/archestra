@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-09-27
+lastUpdated: 2026-10-04
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -18,7 +18,13 @@ Permissions in Archestra are defined using a `resource:action` format, where:
 - **Resource**: The type of object or feature being accessed (e.g., `agent`, `mcpGateway`, `llmProxy`)
 - **Action**: The operation being performed (`create`, `read`, `update`, `delete`, `admin`)
 
-For example, `agent:create` allows creating agents, `mcpGateway:update` allows updating MCP gateways, and `llmProxy:read` allows viewing the LLM Proxy.
+For example, `agent:create` allows creating agents, `mcpServerInstallation:create` allows installing MCP servers, and `llmProxy:read` allows viewing the LLM Proxy.
+
+Agents, MCP gateways, the MCP registry, skills, apps, models, keys, OAuth clients and service accounts also have per-item grants. For these, a role decides who can open the section and create new items; who can see, edit, delete or share them is granted under Permissions, either on a single item or, for all items of a kind, from the list page's ⋯ menu (see [Scoped Resources](#scoped-resources)).
+
+## Log Visibility
+
+The `log:read` permission shows your own LLM and MCP logs. Add `log:admin` to see every organization log. Audit events use `auditLog:read` and `auditLog:admin`. Guardrail consult logs use `openappaDiagnostics:read` and `openappaDiagnostics:admin`. Admin has organization-wide visibility by default. Log pages use these role actions instead of resource sharing policies.
 
 ## Predefined Roles
 
@@ -34,56 +40,44 @@ The admin role has **all permissions** on every resource.
 
 Runs the platform — everything an admin can do, except reading other users' logs, reading the audit log, and impersonating users
 
-Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
+Platform Admin holds **all permissions except** `log:admin`, `auditLog:admin`, `openappaDiagnostics:admin`, and `member:impersonate` — so holders run the platform (users, roles, settings, resources) while other members' LLM/MCP logs, the org-wide audit trail, and impersonation stay out of reach. They keep `log:read` and `auditLog:read`, which show **their own** records only. Combined with the [no-privilege-escalation rule](#no-privilege-escalation), a Platform Admin cannot grant themselves or anyone else a role carrying the withheld permissions.
 
 ### Editor
 
-Full access to core resources and settings, but cannot manage users, roles, or identity providers
+Full access to core resources, but cannot change organization settings or manage users, roles, or identity providers
 
 | Resource | Actions |
 |----------|--------|
-| Agents | `read`, `create`, `update`, `delete` |
-| Skills | `read`, `create`, `update`, `delete` |
+| Agents | `read`, `create`, `delete` |
+| Skills | `read`, `create`, `delete` |
 | Plugins | `read`, `create`, `update`, `delete` |
-| Apps | `read`, `create`, `update`, `delete` |
-| Code Sandbox | `execute` |
-| Agent Triggers | `read`, `create`, `update`, `delete` |
+| Apps | `read`, `create` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read`, `update` |
-| LLM Provider API Keys | `read`, `create`, `update`, `delete` |
-| LLM Virtual Keys | `read`, `create`, `update`, `delete` |
-| LLM OAuth Clients | `read`, `create`, `update`, `delete` |
+| LLM Provider API Keys | `read`, `create` |
+| LLM Virtual Keys | `read`, `create` |
+| LLM OAuth Clients | `read`, `create` |
 | LLM Models | `read`, `update` |
 | LLM Limits | `read`, `create`, `update`, `delete` |
 | LLM Cost Analytics | `read` |
-| MCP Gateways | `read`, `create`, `update`, `delete` |
-| MCP OAuth Clients | `read`, `create`, `update`, `delete` |
+| MCP Gateways | `read`, `create`, `delete` |
+| MCP OAuth Clients | `read`, `create` |
 | Tools & Policies | `read`, `create`, `update`, `delete` |
-| MCP Registry | `read`, `create`, `update`, `delete` |
+| MCP Registry | `read`, `create` |
 | MCP Server Installations | `read`, `create`, `update`, `delete` |
 | Environments | `read`, `create`, `update`, `delete` |
 | Credentials | `read`, `create`, `update`, `delete` |
+| OpenAPPA Policy | `read`, `update` |
+| OpenAPPA Diagnostics | `read`, `update` |
 | Knowledge Sources | `read`, `create`, `update`, `delete`, `query` |
-| Chats | `read`, `create`, `update`, `delete` |
+| Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
-| Files | `manage` |
 | LLM & MCP Logs | `read` |
 | API Keys | `read`, `create`, `delete` |
-| LLM Settings | `read`, `update` |
-| MCP Settings | `read`, `update` |
-| Skills Settings | `read`, `update` |
-| Knowledge Settings | `read`, `update` |
 | Users | `read` |
-| Invitations | `read` |
 | Roles | `read` |
 | Teams | `read` |
 | Identity Providers | `read` |
-| Secrets | `read` |
-| Organization Settings | `read`, `update` |
-| Site Notifications | `read` |
-| Chat Agent Picker | `enable` |
-| Chat Provider Settings | `enable` |
-| Chat Expand Tool Calls | `enable` |
 
 ### Member
 
@@ -91,34 +85,28 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 
 | Resource | Actions |
 |----------|--------|
-| Agents | `read`, `create`, `update`, `delete` |
-| Skills | `read`, `create`, `update`, `delete` |
-| Apps | `read`, `create`, `update`, `delete` |
-| Code Sandbox | `execute` |
+| Agents | `read`, `create`, `delete` |
+| Skills | `read`, `create`, `delete` |
+| Apps | `read`, `create` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
 | LLM Proxy | `read` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read`, `create` |
 | LLM OAuth Clients | `read` |
 | LLM Models | `read` |
-| MCP Gateways | `read`, `create`, `update`, `delete` |
+| MCP Gateways | `read`, `create`, `delete` |
 | MCP OAuth Clients | `read` |
 | Tools & Policies | `read` |
-| MCP Registry | `read`, `update` |
+| MCP Registry | `read` |
 | MCP Server Installations | `read`, `create`, `delete` |
 | Environments | `read` |
 | Credentials | `read` |
+| OpenAPPA Policy | `read` |
 | Knowledge Sources | `read`, `query` |
-| Chats | `read`, `create`, `update`, `delete` |
+| Chats | `read`, `create`, `update`, `delete`, `full-view` |
 | Projects | `read`, `create`, `update`, `delete` |
-| Files | `manage` |
 | API Keys | `read`, `create`, `delete` |
 | Teams | `read` |
-| Site Notifications | `read` |
-| Simple View | `enable` |
-| Chat Agent Picker | `enable` |
-| Chat Provider Settings | `enable` |
-| Chat Expand Tool Calls | `enable` |
 
 
 ## Custom Roles
@@ -137,7 +125,7 @@ Users and service accounts can have multiple organization roles. Their permissio
 
 Teams can also hold organization roles. Members inherit these grants from their own teams and every ancestor in the [team hierarchy](#team-hierarchies). Removing a role or membership removes its grants, unless another assignment provides the same permissions.
 
-The account permissions page shows each permission's sources when you hover over or focus its badge. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
+The account permissions page shows each permission's sources when you hover over or focus its granted action. Organization roles assigned to teams are separate from [team membership roles](#team-roles).
 
 #### No privilege escalation
 
@@ -162,31 +150,23 @@ The following table lists all available permissions that can be assigned to cust
 | `ac:create` | Create new custom roles |
 | `ac:update` | Modify custom role permissions |
 | `ac:delete` | Delete custom roles |
-| `agent:read` | View and list agents |
+| `accessPolicies:read` | View access policies for all resource types |
+| `accessPolicies:update` | Edit access policies and grant access across all resource types |
+| `agent:read` | Open Agents, and use the code sandboxes and files of agents you can use |
 | `agent:create` | Create new agents |
-| `agent:update` | Modify agent configuration and settings |
-| `agent:delete` | Delete agents |
-| `agentSettings:read` | View agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
-| `agentSettings:update` | Modify agent settings (default model, default agent, default tool guardrails, file uploads, Apps Hackathon recorder) |
-| `agentTrigger:read` | View agent trigger configurations (Slack, MS Teams, email) |
-| `agentTrigger:create` | Set up new agent triggers |
-| `agentTrigger:update` | Modify agent trigger configurations |
-| `agentTrigger:delete` | Remove agent triggers |
+| `agent:delete` | Open the trash of deleted agents |
 | `apiKey:read` | View API keys |
 | `apiKey:create` | Create API keys |
 | `apiKey:delete` | Delete API keys |
-| `app:read` | View MCP Apps allowed by your resource grants |
+| `app:read` | Open Apps |
 | `app:create` | Create new MCP Apps |
-| `app:update` | Modify MCP Apps and their tools allowed by your resource grants |
-| `app:delete` | Delete MCP Apps |
 | `auditLog:read` | View audit log records of your own administrative actions |
+| `auditLog:admin` | View every audit event in your organization (also requires Read) |
 | `chat:read` | View and access chat conversations |
 | `chat:create` | Start new chat conversations |
 | `chat:update` | Edit chat messages and conversation settings |
 | `chat:delete` | Delete chat conversations |
-| `chatAgentPicker:enable` | Show agent picker in chat |
-| `chatExpandToolCalls:enable` | Allow expanding tool call details in chat |
-| `chatProviderSettings:enable` | Show model and API key selectors in chat |
+| `chat:full-view` | Show the full chat: the agent picker, model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view |
 | `credential:read` | View saved credentials |
 | `credential:create` | Create saved credentials |
 | `credential:update` | Modify saved credentials |
@@ -195,15 +175,10 @@ The following table lists all available permissions that can be assigned to cust
 | `environment:create` | Create deployment environments |
 | `environment:update` | Modify deployment environments, including the org default environment |
 | `environment:delete` | Delete deployment environments |
-| `file:manage` | List, read, write, and delete files in chats and projects |
 | `identityProvider:read` | View identity provider configurations (SSO) |
 | `identityProvider:create` | Set up new identity providers |
 | `identityProvider:update` | Modify identity provider settings |
 | `identityProvider:delete` | Remove identity providers |
-| `invitation:create` | Send invitations to new users |
-| `invitation:cancel` | Cancel pending invitations |
-| `knowledgeSettings:read` | View knowledge settings (embedding and reranking models) |
-| `knowledgeSettings:update` | Modify knowledge settings (embedding and reranking models) |
 | `knowledgeSource:read` | View Knowledge Bases and Connectors |
 | `knowledgeSource:create` | Create Knowledge Bases and Connectors |
 | `knowledgeSource:update` | Modify Knowledge Bases and Connectors |
@@ -215,51 +190,40 @@ The following table lists all available permissions that can be assigned to cust
 | `llmLimit:update` | Modify existing usage limits |
 | `llmLimit:delete` | Remove usage limits |
 | `llmModel:read` | View synced LLM models and capabilities |
-| `llmModel:update` | Modify LLM model pricing, modality and generation-parameter settings |
-| `llmOauthClient:read` | View LLM OAuth client registrations |
+| `llmModel:update` | Sync the model catalog and see every model, including ones not shared with you |
+| `llmOauthClient:read` | Open LLM OAuth client registrations |
 | `llmOauthClient:create` | Create LLM OAuth client registrations |
-| `llmOauthClient:update` | Modify LLM OAuth client registrations |
-| `llmOauthClient:delete` | Delete LLM OAuth client registrations |
-| `llmProviderApiKey:read` | View LLM provider API keys |
+| `llmProviderApiKey:read` | Open LLM provider API keys |
 | `llmProviderApiKey:create` | Add new LLM provider API keys |
-| `llmProviderApiKey:update` | Modify LLM provider API key configuration and visibility |
-| `llmProviderApiKey:delete` | Remove LLM provider API keys |
 | `llmProxy:read` | View the LLM Proxy and its connection details |
 | `llmProxy:update` | Modify LLM Proxy configuration |
-| `llmSettings:read` | View LLM settings |
-| `llmSettings:update` | Modify LLM settings |
-| `llmVirtualKey:read` | View LLM virtual keys |
+| `llmVirtualKey:read` | Open LLM virtual keys |
 | `llmVirtualKey:create` | Create LLM virtual keys |
-| `llmVirtualKey:update` | Modify LLM virtual keys and their visibility |
-| `llmVirtualKey:delete` | Delete LLM virtual keys |
 | `log:read` | View your own LLM proxy and MCP tool call logs in the active organization |
-| `mcpGateway:read` | View and list MCP gateways |
+| `log:admin` | View every LLM and MCP log in your organization (also requires Read) |
+| `mcpGateway:read` | Open MCP Gateways |
 | `mcpGateway:create` | Create new MCP gateways |
-| `mcpGateway:update` | Modify MCP gateway configuration |
-| `mcpGateway:delete` | Delete MCP gateways |
-| `mcpOauthClient:read` | View MCP OAuth client registrations |
+| `mcpGateway:delete` | Open the trash of deleted MCP gateways |
+| `mcpOauthClient:read` | Open MCP OAuth client registrations |
 | `mcpOauthClient:create` | Create MCP OAuth client registrations |
-| `mcpOauthClient:update` | Modify MCP OAuth client registrations |
-| `mcpOauthClient:delete` | Delete MCP OAuth client registrations |
-| `mcpRegistry:read` | Browse the MCP server registry |
+| `mcpRegistry:read` | Open the MCP registry and use its built-in servers |
 | `mcpRegistry:create` | Add servers to the MCP registry |
-| `mcpRegistry:update` | Modify MCP registry entries |
-| `mcpRegistry:delete` | Remove servers from the MCP registry |
-| `mcpRegistry:manage-deleted` | View and restore soft-deleted MCP registry entries |
 | `mcpServerInstallation:read` | View installed MCP servers and their status |
 | `mcpServerInstallation:create` | Install MCP servers from the registry |
 | `mcpServerInstallation:update` | Modify installed MCP server configuration |
-| `mcpServerInstallation:delete` | Uninstall MCP servers |
-| `mcpServerInstallation:manage-deleted` | View and restore soft-deleted (uninstalled) MCP servers |
-| `mcpSettings:read` | View MCP settings (online catalog availability) |
-| `mcpSettings:update` | Modify MCP settings |
+| `mcpServerInstallation:delete` | Uninstall, view deleted, and restore MCP servers within your access |
 | `member:read` | View organization members and their roles |
-| `member:create` | Add new members to the organization |
+| `member:create` | Add new members to the organization and manage invitations |
 | `member:update` | Change member roles and settings |
 | `member:delete` | Remove members from the organization |
 | `member:impersonate` | Temporarily sign in as another member to see the app with their access (role debugging) |
-| `organizationSettings:read` | View organization settings (appearance, authentication, etc) |
-| `organizationSettings:update` | Customize organization appearance, authentication, etc |
+| `openappaDiagnostics:read` | Read all organization yells and your own consult logs |
+| `openappaDiagnostics:update` | Resolve and reopen organization yells |
+| `openappaDiagnostics:admin` | Read consult logs across the organization |
+| `openappaPolicy:read` | View OpenAPPA policy, batteries, and coverage |
+| `openappaPolicy:update` | Validate and edit OpenAPPA policy and manage batteries |
+| `organizationSettings:read` | View every organization settings page, including messaging channels |
+| `organizationSettings:update` | Change organization settings, messaging channels, and site notifications |
 | `plugin:read` | View plugins and their file metadata |
 | `plugin:create` | Create plugins |
 | `plugin:update` | Modify plugin metadata and files |
@@ -268,28 +232,15 @@ The following table lists all available permissions that can be assigned to cust
 | `project:create` | Create projects |
 | `project:update` | Edit project descriptions, instructions, and sharing |
 | `project:delete` | Delete projects |
-| `sandbox:execute` | Run commands and upload/download files in code execution sandboxes |
 | `scheduledTask:read` | View scheduled tasks and their run history |
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |
 | `scheduledTask:update` | Modify scheduled task configuration |
 | `scheduledTask:delete` | Delete scheduled tasks |
-| `secret:read` | View secrets manager configuration |
-| `secret:update` | Modify secrets manager settings and test connectivity |
-| `serviceAccount:read` | View service accounts |
+| `serviceAccount:read` | Open Service Accounts |
 | `serviceAccount:create` | Create service accounts |
-| `serviceAccount:update` | Modify service accounts |
-| `serviceAccount:delete` | Delete service accounts |
-| `simpleView:enable` | Collapse the app sidebar by default |
-| `siteNotification:read` | View site-wide notifications |
-| `siteNotification:create` | Create new site notifications |
-| `siteNotification:update` | Modify site notifications |
-| `siteNotification:delete` | Delete site notifications |
-| `skill:read` | View agent skills allowed by your resource grants |
+| `skill:read` | Open Skills |
 | `skill:create` | Create new agent skills |
-| `skill:update` | Modify agent skill content allowed by your resource grants |
-| `skill:delete` | Delete agent skills |
-| `skillsSettings:read` | View Skills settings (online catalog availability) |
-| `skillsSettings:update` | Modify Skills settings |
+| `skill:delete` | Permanently delete skills from the trash |
 | `team:read` | View teams and their members |
 | `team:create` | Create new teams |
 | `team:update` | Modify team settings |
@@ -359,12 +310,13 @@ Each permission is evaluated as one complete action-and-scope pair. The scope id
 | `update` | Edit its configuration |
 | `delete` | Delete the resource |
 | `manage-permissions` | Change its direct grants, within the caller's own authority |
+| `configure-deployment-spec` | MCP registry only: view and change how a self-hosted server is deployed (deployment spec, service account, secret sources) |
 
 Viewing a resource does not by itself grant execution. Uncatalogued model IDs require a model `use` grant on `*`. For example, a model read grant does not bypass its invocation restrictions; use a model use grant to permit invocation. Disabled apps remain private to their author, even when another recipient has a grant. Editing configuration does not grant permission to share the resource. Creation continues to require the resource's organization-level `create` permission because the object does not exist yet.
 
 For example, a service account can have `read` on all MCP registry entries and `update` on one entry. Those grants allow it to view every entry and edit only that one. The evaluator does not combine the wildcard from the first grant with the update action from the second.
 
-The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. Each recipient can have a different permission level. OAuth clients have no **Can use** level, because nothing is used through a client registration.
+The editor offers **Can view**, **Can use**, **Can edit**, and **Full access** presets. Full access includes deletion and permission management. MCP registry entries add **Full access + deployment**, which also allows `configure-deployment-spec`. Admin and Platform Admin hold it on every entry by default; a creator's own Full access does not include it. Each recipient can have a different permission level. OAuth clients have no **Can use** level, because nothing is used through a client registration.
 
 Public marketplace link management remains organization-wide. Creating, listing, rotating, or revoking skill marketplace links requires skill `read`, `use`, and `manage-permissions` on `*`. Editing a skill alone does not authorize public distribution. A link contains the skills selected when it is created; it does not automatically include future skills.
 
@@ -380,7 +332,7 @@ Creation with `initialGrants` also records the creator's full access explicitly.
 
 ### Delegation And Concurrent Edits
 
-To change a policy, you need `manage-permissions` on that scope. You can grant only actions that you also hold on that same scope. Authority over one object does not authorize a wildcard grant. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
+Global policies require `accessPolicies:read` to view or `accessPolicies:update` to edit. Update also allows viewing the policy. These role permissions apply across resource types. Admin and Platform Admin receive both by default. Ordinary resource CRUD permissions do not authorize global policy administration. Individual object policies still require `manage-permissions` on that object. You can grant only actions you hold on that object. Assigning a role or changing team inheritance also checks its scoped grants, including ancestor teams. Team membership administrators can add and remove their team’s members. This changes recipients of existing team grants; it does not let administrators edit those grants or resources. Other callers adding members must also hold the authority they delegate. Role assignment cannot bypass the grant-delegation check.
 
 Saving includes the policy revision. If someone else changes the policy first, the API returns `409` and the editor preserves your draft. Reload the latest policy before saving again. Changes to grants are recorded in the audit log. Unsaved permission edits are kept separate from ordinary configuration saves; use **Save permissions** to apply them.
 
@@ -477,10 +429,9 @@ Chat access is controlled separately from optional chat UI controls:
 
 - `chat:read` allows access to chat itself
 - `agent:read` is also required because chat is agent-backed and a user must be able to access at least one agent/profile context to start or use chat
-- `chatAgentPicker:enable` controls whether the agent picker is visible
-- `chatProviderSettings:enable` controls whether model and API key selectors are visible
+- `chat:full-view` shows the full chat: the agent picker, the model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view
 
-The selector visibility permissions are UI toggles. They should be treated independently from core chat access and should not be assumed to grant access to provider credentials or model catalogs on their own.
+`chat:full-view` is a UI toggle. It is independent of core chat access and does not grant access to provider credentials or model catalogs on its own.
 
 ### MCP Registry And Installation Records
 

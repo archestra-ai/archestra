@@ -3,7 +3,7 @@ title: MCP Gateway
 category: MCP
 order: 1
 description: Unified access point for all MCP servers
-lastUpdated: 2026-09-21
+lastUpdated: 2026-09-29
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,6 +27,10 @@ Every gateway has its own page, and that page is where you change it. The three 
 Tool assignments can point to a specific installed MCP server connection or use **Resolve at call time**. Resolve-at-call-time is useful when the same gateway should use the caller's own GitHub, Jira, or other upstream credential instead of a shared connection.
 
 After the gateway is configured, use its **Connect** tab to copy connection details for supported clients.
+
+## Personal Pins
+
+Pinned gateways appear first, with the most recently pinned gateway at the top. Pins belong to you and do not affect other members' lists. Search and visibility filters still apply to pinned gateways.
 
 ## Ownership Transfers
 
@@ -169,9 +173,9 @@ See [Access Control](/docs/platform-access-control) for the permission model.
 
 ## Load Tools When Needed
 
-By default, a gateway exposes every assigned tool through MCP `tools/list`.
+Gateways enable **Progressive tool loading** by default. You can turn it off in **Manual** mode to expose every assigned tool through MCP `tools/list`.
 
-For larger toolsets, turn on **Progressive tool loading** on the gateway's **Tools & Knowledge** step. This keeps the initial tool list small. Clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first.
+Progressive loading keeps the initial tool list small. Clients see the built-in [`search_tools`](/docs/platform-archestra-mcp-server#search_tools) and [`run_tool`](/docs/platform-archestra-mcp-server#run_tool) tools first.
 
 Those two tools are enabled implicitly and do not appear in the built-in tool picker. The rest of the gateway's assigned tools stay available on demand:
 
@@ -206,9 +210,9 @@ The built-in [`ask_user`](/docs/platform-archestra-mcp-server#ask_user) tool ask
 
 Headless sessions cannot show forms. Models receive guidance to list options in their text replies instead.
 
-Codex declines forms when its approval policy is `never`. Set the policy to `on-request` to answer forms.
+Codex declines forms without displaying them when its approval policy is `never`, including the Full Access preset. Archestra treats an automatic client refusal as an unavailable form, not a choice you made. Connection setup does not change Codex's approval policy.
 
-Codex shows the MCP form for `ask_user`. Some Codex releases also advertise a `request_user_input` tool they cannot run in Default mode. Enable that tool with `codex features enable default_mode_request_user_input` if you want Codex's own question UI.
+Codex shows the MCP form for `ask_user` when its approval policy permits elicitation. Some releases also advertise a `request_user_input` tool they cannot run in Default mode. Enable that tool with `codex features enable default_mode_request_user_input` if you want Codex's own question UI.
 
 The model decides whether to use a form. Some client models ask permission questions in plain text.
 

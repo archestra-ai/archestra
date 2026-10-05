@@ -16,10 +16,8 @@ const isChannelHidden = vi.fn().mockReturnValue(false);
 const refetchAgentNames = vi.fn();
 const refetchBindings = vi.fn();
 const refetchProviders = vi.fn();
-const updateBinding = vi.fn();
 const hasUpdatePermission = vi.fn(() => true);
 const hasAgentUpdatePermission = vi.fn(() => true);
-const hasCreatePermission = vi.fn(() => true);
 
 vi.mock("@/lib/agent.query", () => ({
   useProfiles: vi.fn(),
@@ -31,9 +29,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
     data:
       "agent" in permissions
         ? hasAgentUpdatePermission()
-        : permissions.agentTrigger?.includes("create")
-          ? hasCreatePermission()
-          : hasUpdatePermission(),
+        : hasUpdatePermission(),
   }),
 }));
 
@@ -42,10 +38,6 @@ vi.mock("@/lib/chatops/chatops.query", () => ({
   useChatOpsStatus: vi.fn(),
   useApplyChatOpsBindingPlan: () => ({
     mutate: applyBindingPlan,
-    isPending: false,
-  }),
-  useUpdateChatOpsBinding: () => ({
-    mutate: updateBinding,
     isPending: false,
   }),
 }));
@@ -256,7 +248,6 @@ describe("AgentChatAppsEditor", () => {
     vi.clearAllMocks();
     hasUpdatePermission.mockReturnValue(true);
     hasAgentUpdatePermission.mockReturnValue(true);
-    hasCreatePermission.mockReturnValue(true);
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -488,31 +479,6 @@ describe("AgentChatAppsEditor", () => {
     ).toBeDisabled();
   });
 
-  it("folds a direct message it cannot create into the unavailable group", async () => {
-    const user = userEvent.setup();
-    hasCreatePermission.mockReturnValue(false);
-
-    render(<AgentChatApps agent={agent} />);
-
-    await openPicker(user, "Slack");
-    // Not offered as something to click...
-    expect(
-      screen.queryByRole("button", { name: /^Direct message/ }),
-    ).toBeNull();
-    // ...but still reachable, under one line that says how many and why.
-    const group = await screen.findByRole("button", {
-      name: /1 not available to this agent/,
-    });
-    expect(group).toHaveTextContent(
-      "You do not have permission to create a direct message assignment.",
-    );
-    expect(group).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(group);
-    expect(group).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Direct message")).toBeVisible();
-  });
-
   it("edits channel behavior and instructions from one details dialog", async () => {
     const user = userEvent.setup();
     const { rerender } = render(<AgentChatApps agent={agent} />);
@@ -549,7 +515,7 @@ describe("AgentChatAppsEditor", () => {
       }),
     );
 
-    expect(updateBinding).not.toHaveBeenCalled();
+    expect(applyBindingPlan).not.toHaveBeenCalled();
     expect(screen.getByText("Changes pending")).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Save channel changes" }),
@@ -1123,10 +1089,9 @@ describe("AgentChatAppsEditor", () => {
     );
 
     await openPicker(user, "Slack");
-    // The refusal names the field that lifts it, and where that field is on
-    // this surface — the record's page calls its first tab General.
+    // The refusal names the access to grant and where to grant it.
     const reason =
-      "A personal agent answers only in its owner's direct messages. Change Visibility from Personal on the General tab to use shared channels.";
+      'A personal agent answers only in its owner\'s direct messages. To use shared channels, open the Permissions tab and add "Everyone in this organization" with "Can use" access.';
     // One sentence for the whole group, not one per row.
     expect(screen.getAllByText(reason)).toHaveLength(1);
     const group = screen.getByRole("button", {

@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type AgentScope,
-  type archestraApiTypes,
-  isBuiltInCatalogId,
-} from "@archestra/shared";
+import { type archestraApiTypes, isBuiltInCatalogId } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -24,7 +20,6 @@ import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connec
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
 import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
@@ -374,6 +369,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
           <PromptInputButton
             role="combobox"
             aria-expanded={open}
+            aria-label={displayAgentName}
             data-agent-selector
             onKeyDown={navigation.onTriggerKeyDown}
             className="max-w-[300px] min-w-0"
@@ -486,10 +482,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                                 runtime={agent.runtime}
                               />
                             )}
-                            <AgentBadge
-                              type={agent.scope}
-                              className="text-[10px] px-1.5 py-0 shrink-0"
-                            />
                             {/* Greying alone reads as "styled differently"; the
                               word is what says the row cannot be picked. */}
                             {isBlocked && (
@@ -966,10 +958,6 @@ function AgentSettingsView({
                 >
                   {agent.name}
                 </button>
-                <AgentBadge
-                  type={(agent.scope as AgentScope) ?? "personal"}
-                  className="text-[10px] px-1.5 py-0"
-                />
               </div>
             )}
             {!isEditingName && truncatedDescription && (
@@ -1932,10 +1920,6 @@ function AddDelegationView({
                   </p>
                 )}
                 <div className="flex items-center gap-2 w-full mt-auto">
-                  <AgentBadge
-                    type={agent.scope}
-                    className="text-[10px] px-1.5 py-0"
-                  />
                   <div className="flex-1" />
                   <AgentToolAvatars agentId={agent.id} enabled />
                 </div>

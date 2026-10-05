@@ -64,6 +64,7 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
+import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import {
   isProviderApiKeyId,
   ProviderKeyFilterSelect,
@@ -224,7 +225,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const { data: canCreateAgent } = useHasPermissions({ agent: ["create"] });
   const { data: canManageExternalAgents } = useHasPermissions({
     agent: ["read"],
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
 
   // Get pagination/filter params from URL
@@ -577,13 +578,15 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     (canManageExternalAgents
       ? (catalogResponse?.totals.externalAgents ?? 0)
       : 0);
-  const bulkVisibilityPermissions = { agentSettings: ["update" as const] };
+  const bulkVisibilityPermissions = {
+    organizationSettings: ["update" as const],
+  };
   const showBulkVisibility =
     selectedExternalAgents.length > 0 && selectedRegularAgents.length === 0;
   const bulkDeletePermissions = {
     ...(selectedRegularAgents.length > 0 ? { agent: ["delete" as const] } : {}),
     ...(selectedExternalAgents.length > 0
-      ? { agentSettings: ["update" as const] }
+      ? { organizationSettings: ["update" as const] }
       : {}),
   };
   const bulkBusy =
@@ -774,7 +777,17 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             <LabelTags labels={agent.labels} />
           </span>
         }
-        description={agent.description}
+        description={
+          <>
+            <PersonalResourceOwner
+              resource={agent}
+              currentUserId={currentUserId}
+            />
+            {agent.description && (
+              <span className="block">{agent.description}</span>
+            )}
+          </>
+        }
         actions={renderAgentActions(agent)}
         onNavigate={
           isDeletedView
@@ -863,6 +876,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
             }
             builtIn={agent.builtIn ?? undefined}
             description={agent.description}
+            owner={{ resource: agent, currentUserId }}
             labels={agent.labels}
             extraBadges={
               <>
@@ -1045,7 +1059,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
           <DataTable
             columns={sortable ? columns : pinnedColumns}
             tableClassName="table-fixed"
-            fixedWidthColumnIds={["team", "provider", "environment"]}
+            fixedWidthColumnIds={[
+              "tools",
+              "subagents",
+              "team",
+              "provider",
+              "environment",
+            ]}
             flexibleColumnIds={["name"]}
             data={sectionRows}
             isLoading={showLoading}

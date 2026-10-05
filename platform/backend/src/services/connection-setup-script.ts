@@ -16,6 +16,7 @@ import {
   type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { ARCHESTRA_TOOL_PREFIX } from "@archestra/shared/archestra-mcp-server";
 import type {
   ConnectionSetupClientId,
   ConnectionSetupPlatform,
@@ -58,6 +59,14 @@ import {
 export interface SetupScriptMcpSection {
   /** Logical server name registered in the client (slug). */
   serverName: string;
+  /** Prefix advertised by this deployment's built-in MCP tools. */
+  toolPrefix: string;
+  /**
+   * Names an earlier connect run registered this same gateway under. A re-run
+   * moves such an entry onto `serverName`, so one gateway never shows up twice
+   * in the client's server list. Empty when nothing needs migrating.
+   */
+  legacyServerNames?: string[];
   /** Gateway URL, e.g. https://host/v1/mcp/<gateway-slug>. */
   url: string;
 }
@@ -126,6 +135,11 @@ export interface SetupScriptContext {
   platform: ConnectionSetupPlatform;
   /** White-label product name for user-facing messaging. */
   appName: string;
+  /**
+   * Trusted built-in tool prefix from deployment branding. Independent of
+   * `mcp.serverName`; the canonical prefix is omitted from printed options.
+   */
+  toolPrefix?: string;
   mcp: SetupScriptMcpSection | null;
   proxy: SetupScriptProxySection | null;
   skills: SetupScriptSkillsSection | null;
@@ -149,6 +163,21 @@ export function buildSetupCommand(params: {
   }
   // single quotes: nothing in the URL may expand in the user's shell.
   return `curl -fsSL ${sh(url)} | bash`;
+}
+
+export function codexConnectionVerificationOptions(params: {
+  server?: string;
+  provider?: string;
+  toolPrefix?: string;
+}): { server?: string; provider?: string; toolPrefix?: string } {
+  const options: { server?: string; provider?: string; toolPrefix?: string } =
+    {};
+  if (params.server) options.server = params.server;
+  if (params.provider) options.provider = params.provider;
+  if (params.toolPrefix && params.toolPrefix !== ARCHESTRA_TOOL_PREFIX) {
+    options.toolPrefix = params.toolPrefix;
+  }
+  return options;
 }
 
 /** Strips the /v1 suffix the connection base URLs carry. */
@@ -188,16 +217,45 @@ export function claudeCodeOAuthNextStep(serverName: string): string {
   return `Start a new \`claude\` session, run \`/mcp\` there, select "${serverName}", and sign in via your browser — the gateway grants tool access per user, so its tools unlock after this one-time approval.`;
 }
 
+export const CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING =
+  "Skipped Claude Code helper allow rules. The gateway name or tool prefix cannot be used in an exact permission rule. MCP setup continues without pre-approving those calls.";
+
+/** True when both names can be embedded as exact Claude allow rules. */
+export function claudeCodeAppaPermissionsAreLiteral(
+  mcp: SetupScriptMcpSection,
+): boolean {
+  return (
+    /^[a-zA-Z0-9_.-]+$/.test(mcp.serverName) &&
+    /^[a-zA-Z0-9_]+__$/.test(mcp.toolPrefix)
+  );
+}
+
+export function claudeCodeAppaPermissionRules(
+  mcp: SetupScriptMcpSection,
+): string[] {
+  if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
+    throw new Error(
+      "Claude MCP permission rules require literal server and tool names",
+    );
+  }
+  return ["get_remedy_plans", "execute_remedy_plan", "yell", "ask_user"].map(
+    (name) => `mcp__${mcp.serverName}__${mcp.toolPrefix}${name}`,
+  );
+}
+
 /**
  * OpenCode's post-install OAuth step, shared by the bash and PowerShell
  * renderers. Unlike Claude Code's in-session `/mcp`, `opencode mcp auth` is its
  * own process that reads the updated config, so the connection agent can run it
- * before restarting. The running OpenCode session still never reloads its
- * config, so the renderers close with a restart step.
+ * before asking the user to restart. The running OpenCode session still never
+ * reloads its config, so the renderers close with a user-controlled handoff.
  */
 export function opencodeOAuthNextStep(serverName: string): string {
   return `Run \`opencode mcp list\` first. If "${serverName}" is connected (OAuth), skip sign-in. Otherwise check \`opencode mcp auth list\`: if "${serverName}" is authenticated but not connected, report the connection error rather than forcing re-authentication. If authentication is missing or expired, run \`opencode mcp auth ${serverName}\` with CI=true set for the process so its browser URL stays visible in captured output. Keep it running while the user completes sign-in — this browser approval is the gateway's native OAuth flow, not a repeat of connection setup. If no browser opens, relay the URL printed by the command. OpenCode does not start this sign-in on its own.`;
 }
+
+export const opencodeRestartNextStep =
+  "Do not stop or restart OpenCode from inside this running conversation. Finish your reply, then tell the user to save work, close all OpenCode windows normally, and launch `opencode` in a new terminal. The startup guard checks these remotes on that launch.";
 
 export function renderSetupScript(rawCtx: SetupScriptContext): string {
   if (rawCtx.clientId === "claude-desktop") {
@@ -460,7 +518,12 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
     case "codex":
       if (ctx.mcp) {
         steps.push(
-          `Run \`codex\` — it opens your browser to finish the OAuth handshake for "${ctx.mcp.serverName}".`,
+          `If registration printed "Successfully logged in.", OAuth for "${ctx.mcp.serverName}" is already cached; do not repeat login. Otherwise check \`codex mcp list\` and run \`codex mcp login ${ctx.mcp.serverName}\` only when Auth is "Not logged in". Keep any pending login running until its browser callback finishes.`,
+        );
+      }
+      if (ctx.mcp || ctx.proxy) {
+        steps.push(
+          `Verification command: node "$HOME/${CODEX_GUARD_CLIENT.scriptRelpath}.handoff.cjs" --verify "$(command -v codex)" ${sh(Buffer.from(JSON.stringify(codexConnectionVerificationOptions({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName, toolPrefix: ctx.toolPrefix }))).toString("base64"))}`,
         );
       }
       if (ctx.proxy) {
@@ -521,15 +584,13 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
         }
       }
       if (ctx.mcp || ctx.proxy || ctx.skills) {
-        steps.push(
-          "Close every running OpenCode process. Then open a new terminal (or source your shell profile) and start `opencode`. The startup guard checks these remotes before every launch.",
-        );
+        steps.push(opencodeRestartNextStep);
       }
       break;
     case "cursor":
       if (ctx.mcp) {
         steps.push(
-          `Open Cursor settings → MCP and toggle on "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
+          `Open Cursor Customize → MCPs and authenticate "${ctx.mcp.serverName}"; Cursor handles the OAuth flow.`,
         );
       }
       if (ctx.proxy) {
@@ -539,7 +600,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.skills) {
         steps.push(
-          "Run /add-plugin in Cursor's command palette and paste the clone URL printed above.",
+          "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
         );
         if (ctx.skills.pluginNames?.length) {
           steps.push(
@@ -598,9 +659,37 @@ function indent(block: string, prefix: string): string {
     .join("\n");
 }
 
+/**
+ * Server names this gateway may already sit under in the client's config,
+ * minus the one it is about to be registered as.
+ */
+export function legacyServerNames(mcp: SetupScriptMcpSection): string[] {
+  return (mcp.legacyServerNames ?? []).filter(
+    (name) => name && name !== mcp.serverName,
+  );
+}
+
 // ===================================================================
 // Internal helpers — Claude Code
 // ===================================================================
+
+function claudeAppaPermissionsBash(mcp: SetupScriptMcpSection): string {
+  if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
+    return `warn ${sh(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}`;
+  }
+  return `if ! command -v python3 >/dev/null 2>&1; then
+  err 'python3 is required to configure Claude Code APPA tool permissions. Install it and re-run connection setup.'
+  exit 1
+fi
+say 'Configuring exact APPA helper permissions for Claude Code'
+ARCHESTRA_MCP_NAME=${sh(mcp.serverName)} \\
+ARCHESTRA_MCP_LEGACY_NAMES=${sh(JSON.stringify(legacyServerNames(mcp)))} \\
+ARCHESTRA_APPA_PERMISSION_RULES=${sh(JSON.stringify(claudeCodeAppaPermissionRules(mcp)))} \\
+python3 - <<'ARCHESTRA_APPA_PERMISSIONS_PY'
+${CLAUDE_APPA_PERMISSIONS_MERGE_PY}
+ARCHESTRA_APPA_PERMISSIONS_PY
+ok 'APPA helper calls are pre-approved for Claude Code, including auto mode. Gateway authorization and required human review still apply.'`;
+}
 
 function claudeCodeSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
@@ -613,10 +702,17 @@ function claudeCodeSections(ctx: SetupScriptContext): string[] {
     // local and user scopes first: a stale local entry from an older connect run
     // would otherwise shadow the user entry and fail `add` under `set -euo
     // pipefail`, leaving the gateway removed and not re-added.
+    const stale = legacyServerNames(ctx.mcp)
+      .flatMap((name) => [
+        `cli claude mcp remove --scope local ${sh(name)} >/dev/null 2>&1 || true`,
+        `cli claude mcp remove --scope user ${sh(name)} >/dev/null 2>&1 || true`,
+      ])
+      .join("\n");
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
 cli claude mcp remove --scope local ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
-cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli claude mcp remove --scope user ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli claude mcp add --scope user --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}`);
+    sections.push(claudeAppaPermissionsBash(ctx.mcp));
   }
 
   if (ctx.proxy) {
@@ -913,6 +1009,47 @@ if append_headers:
 path.write_text(json.dumps(settings, indent=2) + "\\n")
 print(f"Updated {path}")`;
 
+const CLAUDE_APPA_PERMISSIONS_MERGE_PY = `import json, os, pathlib, shutil
+home = pathlib.Path.home()
+path = pathlib.Path(os.environ.get("CLAUDE_CONFIG_DIR") or home / ".claude") / "settings.json"
+state_root = pathlib.Path(os.environ["CLAUDE_CONFIG_DIR"]) if os.environ.get("CLAUDE_CONFIG_DIR") else home
+state_path = state_root / ".archestra" / "claude-appa-permissions.json"
+settings_raw = path.read_text() if path.exists() else ""
+settings = json.loads(settings_raw) if settings_raw.strip() else {}
+state = json.loads(state_path.read_text()) if state_path.exists() else {}
+if not isinstance(settings, dict) or not isinstance(state, dict):
+    raise ValueError("Claude settings and APPA permission state must be JSON objects")
+permissions = settings.setdefault("permissions", {})
+if not isinstance(permissions, dict):
+    raise ValueError(f"Claude permissions must be a JSON object in {path}")
+allowed = permissions.get("allow", [])
+if not isinstance(allowed, list) or not all(isinstance(rule, str) for rule in allowed):
+    raise ValueError(f"Claude permissions.allow must be an array of strings in {path}")
+for owned in state.values():
+    if not isinstance(owned, list) or not all(isinstance(rule, str) for rule in owned):
+        raise ValueError("Invalid APPA permission ownership state")
+server = os.environ["ARCHESTRA_MCP_NAME"]
+desired = json.loads(os.environ["ARCHESTRA_APPA_PERMISSION_RULES"])
+names = [server] + json.loads(os.environ["ARCHESTRA_MCP_LEGACY_NAMES"])
+previously_owned = {rule for name in names for rule in state.pop(name, [])}
+allowed = [rule for rule in allowed if rule not in previously_owned or rule in desired]
+owned = [rule for rule in desired if rule in previously_owned or rule not in allowed]
+for rule in desired:
+    if rule not in allowed:
+        allowed.append(rule)
+permissions["allow"] = allowed
+if owned:
+    state[server] = owned
+path.parent.mkdir(parents=True, exist_ok=True)
+state_path.parent.mkdir(parents=True, exist_ok=True)
+backup = path.with_name(path.name + ".archestra-backup")
+if path.exists() and not backup.exists():
+    shutil.copy2(path, backup)
+# Record ownership first so a failed settings write remains recoverable.
+state_path.write_text(json.dumps(state, indent=2) + "\\n")
+path.write_text(json.dumps(settings, indent=2) + "\\n")
+print(f"Updated {path}")`;
+
 const OPENCODE_OWNED_MERGE_NODE = `const fs = require("fs");
 const os = require("os");
 const path = require("path");
@@ -924,6 +1061,9 @@ if (fs.existsSync(configPath) && !fs.existsSync(backupPath)) fs.copyFileSync(con
 cfg.$schema ??= "https://opencode.ai/config.json";
 if (process.env.ARCHESTRA_OC_MCP_NAME) {
   cfg.mcp ??= {};
+  // Move, not add: an entry left by an earlier connect run points at this same
+  // gateway, so it is dropped rather than left beside the new one.
+  for (const legacy of JSON.parse(process.env.ARCHESTRA_OC_MCP_LEGACY_NAMES || "[]")) delete cfg.mcp[legacy];
   cfg.mcp[process.env.ARCHESTRA_OC_MCP_NAME] = { type: "remote", url: process.env.ARCHESTRA_OC_MCP_URL };
 }
 const managedHeaders = JSON.parse(process.env.ARCHESTRA_OC_HEADERS || "{}");
@@ -1160,8 +1300,11 @@ fi`);
   }
 
   if (ctx.mcp) {
+    const stale = legacyServerNames(ctx.mcp)
+      .map((name) => `cli codex mcp remove ${sh(name)} >/dev/null 2>&1 || true`)
+      .join("\n");
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli codex mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli codex mcp add ${sh(ctx.mcp.serverName)} --url ${sh(ctx.mcp.url)}`);
   }
 
@@ -1240,8 +1383,13 @@ function copilotSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [];
 
   if (ctx.mcp) {
+    const stale = legacyServerNames(ctx.mcp)
+      .map(
+        (name) => `cli copilot mcp remove ${sh(name)} >/dev/null 2>&1 || true`,
+      )
+      .join("\n");
     sections.push(`say ${sh(`Registering MCP gateway "${ctx.mcp.serverName}" (OAuth)`)}
-cli copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true
+cli copilot mcp remove ${sh(ctx.mcp.serverName)} >/dev/null 2>&1 || true${stale ? `\n${stale}` : ""}
 cli copilot mcp add --transport http ${sh(ctx.mcp.serverName)} ${sh(ctx.mcp.url)}
 cli copilot mcp get ${sh(ctx.mcp.serverName)}`);
   }
@@ -1448,6 +1596,10 @@ if path.exists():
     if raw:
         config = json.loads(raw)
 servers = config.setdefault("mcpServers", {})
+# Move, not add: an entry left by an earlier connect run points at this same
+# gateway, so it is dropped rather than left beside the new one.
+for legacy in json.loads(os.environ.get("ARCHESTRA_MCP_LEGACY_NAMES", "[]")):
+    servers.pop(legacy, None)
 servers[os.environ["ARCHESTRA_MCP_SERVER_NAME"]] = {
     "url": os.environ["ARCHESTRA_MCP_SERVER_URL"],
 }
@@ -1469,6 +1621,7 @@ ${mergeJsonFileSnippet({
   env: {
     ARCHESTRA_MCP_SERVER_NAME: ctx.mcp.serverName,
     ARCHESTRA_MCP_SERVER_URL: ctx.mcp.url,
+    ARCHESTRA_MCP_LEGACY_NAMES: JSON.stringify(legacyServerNames(ctx.mcp)),
   },
   python: CURSOR_MCP_MERGE_PY,
   fallbackMessage:
@@ -1490,19 +1643,46 @@ In Cursor: Settings -> Models -> API Keys -> OpenAI API Key
   1. Turn on "Override OpenAI Base URL" and paste: ${ctx.proxy.url}
   2. ${
     ctx.proxy.virtualKey
-      ? `Paste this key into the API Key field and click Verify:
+      ? `Paste this key into the API Key field and turn on "Use OpenAI API Key":
      ${ctx.proxy.virtualKey}`
-      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and click Verify.`
+      : `Paste your own ${ctx.proxy.providerLabel} API key into the API Key field and turn on "Use OpenAI API Key". A Cursor subscription cannot be used as a provider credential.`
   }
 ARCHESTRA_CURSOR`);
   }
 
   if (ctx.skills) {
-    sections.push(`say ${sh(`${describeMarketplaceContents(ctx.skills).label} (manual step)`)}
+    sections.push(`say ${sh(`Installing ${describeMarketplaceContents(ctx.skills).label} for Cursor`)}
+CURSOR_SKILLS_DIR="$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
+cursor_skills_installed=0
+if command -v git >/dev/null 2>&1; then
+  if [ -d "$CURSOR_SKILLS_DIR/.git" ]; then
+    if git -C "$CURSOR_SKILLS_DIR" remote set-url origin ${sh(ctx.skills.cloneUrl)} && git -C "$CURSOR_SKILLS_DIR" pull --ff-only -q; then
+      cursor_skills_installed=1
+    fi
+  elif [ ! -e "$CURSOR_SKILLS_DIR" ]; then
+    mkdir -p "$(dirname "$CURSOR_SKILLS_DIR")"
+    if git clone -q ${sh(ctx.skills.cloneUrl)} "$CURSOR_SKILLS_DIR"; then
+      cursor_skills_installed=1
+    fi
+  else
+    warn ${sh("Cursor skills folder already exists and is not a Git repository.")}
+  fi
+else
+  warn ${sh("git is not installed. Install git to fetch shared skills for Cursor.")}
+fi
+if [ "$cursor_skills_installed" -eq 1 ]; then
+  ok ${sh(`Cursor skills installed in ~/.cursor/skills/${ctx.skills.marketplaceName}.`)}
+else
+  warn ${sh("Cursor skills installation failed. Retry after checking git access to the marketplace.")}
 cat <<'ARCHESTRA_CURSOR_SKILLS'
 
-In Cursor's command palette run /add-plugin and paste:
-  ${ctx.skills.cloneUrl}
+Clone the marketplace into ~/.cursor/skills/${ctx.skills.marketplaceName}:
+  git clone ${sh(ctx.skills.cloneUrl)} "$HOME/.cursor/skills/${ctx.skills.marketplaceName}"
+ARCHESTRA_CURSOR_SKILLS
+fi
+cat <<'ARCHESTRA_CURSOR_SKILLS'
+
+Reload Cursor and open Customize > Skills to confirm the shared skills are available.
 ARCHESTRA_CURSOR_SKILLS`);
   }
 
@@ -1565,7 +1745,11 @@ if path.exists() and not backup.exists():
     shutil.copy2(path, backup)
 cfg.setdefault("$schema", "https://opencode.ai/config.json")
 if os.environ.get("ARCHESTRA_OC_MCP_NAME"):
-    cfg.setdefault("mcp", {})[os.environ["ARCHESTRA_OC_MCP_NAME"]] = {"type": "remote", "url": os.environ["ARCHESTRA_OC_MCP_URL"]}
+    servers = cfg.setdefault("mcp", {})
+    # Move, not add: an entry left by an earlier connect run points at this
+    # same gateway, so it is dropped rather than left beside the new one.
+    for legacy in json.loads(os.environ.get("ARCHESTRA_OC_MCP_LEGACY_NAMES", "[]")): servers.pop(legacy, None)
+    servers[os.environ["ARCHESTRA_OC_MCP_NAME"]] = {"type": "remote", "url": os.environ["ARCHESTRA_OC_MCP_URL"]}
 managed_headers = json.loads(os.environ.get("ARCHESTRA_OC_HEADERS", "{}"))
 routes = json.loads(os.environ.get("ARCHESTRA_OC_PROVIDER_ROUTES", "{}"))
 runtime_routing = os.environ.get("ARCHESTRA_OC_RUNTIME_ROUTING") == "1"
@@ -1704,6 +1888,7 @@ ${opencodeOwnedMerge(
   {
     ARCHESTRA_OC_MCP_NAME: ctx.mcp.serverName,
     ARCHESTRA_OC_MCP_URL: ctx.mcp.url,
+    ARCHESTRA_OC_MCP_LEGACY_NAMES: JSON.stringify(legacyServerNames(ctx.mcp)),
     ARCHESTRA_OC_PROVIDER_ID: "",
   },
   JSON.stringify(

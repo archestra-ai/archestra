@@ -1,24 +1,39 @@
 import type { Permissions } from "@archestra/shared";
+import { memberPermissions } from "@archestra/shared/access-control";
 import { vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { betterAuth } from "@/auth";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import { MemberModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import TeamTokenModel from "@/models/team-token";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { User } from "@/types";
 import tokenRoutes from "./token";
-
-vi.mock("@/auth");
 
 describe("shared token route authorization", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let teamId: string;
-  let granted: Permissions;
+  let user: User;
+
+  /** Moves the caller onto a role holding the member baseline plus `granted`. */
+  async function grant(
+    makeCustomRole: (
+      organizationId: string,
+      overrides: { permission: Permissions },
+    ) => Promise<{ role: string }>,
+    granted: Permissions,
+  ) {
+    const role = await makeCustomRole(organizationId, {
+      permission: { ...memberPermissions, ...granted },
+    });
+    await MemberModel.updateRole(user.id, organizationId, role.role);
+  }
 
   beforeEach(
     async ({
@@ -30,20 +45,15 @@ describe("shared token route authorization", () => {
     }) => {
       const org = await makeOrganization();
       organizationId = org.id;
-      const user = await makeUser();
+      user = await makeUser();
+      // A plain member holds neither ac:update nor team:update.
       await makeMember(user.id, org.id);
       const team = await makeTeam(org.id, user.id);
       teamId = team.id;
       await makeTeamMember(team.id, user.id, { role: "admin" });
-      granted = {};
-      vi.mocked(hasPermission).mockImplementation(async (required) => ({
-        success: Object.entries(required).every(([resource, actions]) =>
-          actions.every((action) =>
-            granted[resource as keyof Permissions]?.includes(action),
-          ),
-        ),
-        error: null,
-      }));
+      vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+        async () => ({ user: { id: user.id } }) as never,
+      );
       app = createFastifyInstance();
       app.addHook("onRequest", async (request) => {
         request.organizationId = org.id;
@@ -54,6 +64,7 @@ describe("shared token route authorization", () => {
     },
   );
   afterEach(async () => {
+    vi.restoreAllMocks();
     await app.close();
   });
 
@@ -77,8 +88,12 @@ describe("shared token route authorization", () => {
     expect(denied.body).not.toContain(value);
   });
 
-  test("organization team management does not authorize reading or rotating team credentials", async () => {
-    granted = { team: ["read", "create", "update", "delete"] };
+  test("organization team management does not authorize reading or rotating team credentials", async ({
+    makeCustomRole,
+  }) => {
+    await grant(makeCustomRole, {
+      team: ["read", "create", "update", "delete"],
+    });
     const { token, value } = await TeamTokenModel.createTeamToken(
       teamId,
       "Team automation",
@@ -93,8 +108,10 @@ describe("shared token route authorization", () => {
     expect(await TeamTokenModel.getTokenValue(token.id)).toBe(value);
   });
 
-  test("explicit access-control authority can read and rotate a shared credential with a non-secret audit record", async () => {
-    granted = { ac: ["update"] };
+  test("explicit access-control authority can read and rotate a shared credential with a non-secret audit record", async ({
+    makeCustomRole,
+  }) => {
+    await grant(makeCustomRole, { ac: ["update"] });
     const { token, value } = await TeamTokenModel.createTeamToken(
       teamId,
       "Team automation",
@@ -126,14 +143,16 @@ describe("shared token route authorization", () => {
     expect(JSON.stringify(audit.data)).not.toContain(rotated.json().value);
   });
 
-  test("organization credentials require the same explicit authority", async () => {
+  test("organization credentials require the same explicit authority", async ({
+    makeCustomRole,
+  }) => {
     const { token } = await TeamTokenModel.createOrganizationToken();
     const denied = await app.inject({
       method: "GET",
       url: `/api/tokens/${token.id}/value`,
     });
     expect(denied.statusCode).toBe(403);
-    granted = { ac: ["update"] };
+    await grant(makeCustomRole, { ac: ["update"] });
     const allowed = await app.inject({
       method: "GET",
       url: `/api/tokens/${token.id}/value`,

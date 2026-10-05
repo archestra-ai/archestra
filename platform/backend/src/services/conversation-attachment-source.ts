@@ -29,12 +29,12 @@ export async function loadConversationAttachmentSource(params: {
     };
   }
 
-  const lockedChatInfo =
-    await ConversationModel.getLockedChatKeyInfo(conversationId);
-  if (lockedChatInfo?.lockedChat) {
+  const encryptedChatInfo =
+    await ConversationModel.getEncryptedChatKeyInfo(conversationId);
+  if (encryptedChatInfo?.encryptedChat) {
     return {
       error:
-        "Files attached to a locked chat cannot be read here because they are encrypted with a key only the user's browser holds.",
+        "Files attached to an encrypted chat cannot be read here because they are encrypted with a key only the user's browser holds.",
     };
   }
 

@@ -495,7 +495,7 @@ describe("OrganizationCostsPage", () => {
     }
   });
 
-  it("renders statistics tables inside capped scroll containers", () => {
+  it("renders a statistics table per entity, but none for the LLM proxy", () => {
     mockUseTeamStatistics.mockReturnValue({
       data: [
         {
@@ -551,22 +551,11 @@ describe("OrganizationCostsPage", () => {
       ],
     });
 
-    const { container } = render(<OrganizationCostsPage />);
-
-    const tablePanels = Array.from(
-      container.querySelectorAll(".max-h-\\[280px\\]"),
-    );
+    render(<OrganizationCostsPage />);
 
     // Teams, Agents, Models, People, Apps, Skills. The LLM Proxy has no
     // table: it is one entity, so the card reports totals instead.
-    expect(tablePanels).toHaveLength(6);
-    for (const tablePanel of tablePanels) {
-      expect(tablePanel.className).toContain("max-h-[280px]");
-      expect(tablePanel.className).toContain("overflow-auto");
-      const table = tablePanel.querySelector("table.min-w-\\[70rem\\]");
-      expect(table).not.toBeNull();
-      expect(table?.className).toContain("table-auto");
-    }
+    expect(screen.getAllByRole("table")).toHaveLength(6);
   });
   it("splits an app's build and runtime cost and discloses a shared build session", async () => {
     mockUseAppStatistics.mockReturnValue({

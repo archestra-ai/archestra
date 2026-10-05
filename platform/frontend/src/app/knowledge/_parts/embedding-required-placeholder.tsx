@@ -9,7 +9,7 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 export function EmbeddingRequiredPlaceholder() {
   const router = useRouter();
   const { data: canAccessSettings } = useHasPermissions({
-    knowledgeSettings: ["read"],
+    organizationSettings: ["read"],
   });
 
   return (

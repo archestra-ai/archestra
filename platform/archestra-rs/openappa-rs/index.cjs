@@ -2,10 +2,16 @@
 const { loadNativeBinding, wrapAsync } = require("@archestra/napi-loader");
 const binding = loadNativeBinding({ dir: __dirname, crateName: "openappa_rs", packageName: "@archestra/openappa-rs" });
 module.exports.initializeOpenappa = wrapAsync(binding, "initializeOpenappa");
+module.exports.getOpenappaStatus = wrapAsync(binding, "getOpenappaStatus");
 module.exports.dispatchHook = wrapAsync(binding, "dispatchHook");
 module.exports.executeRemedyByOffer = wrapAsync(binding, "executeRemedyByOffer");
 module.exports.loadOfferReview = wrapAsync(binding, "loadOfferReview");
 module.exports.loadChildReturns = wrapAsync(binding, "loadChildReturns");
+module.exports.loadChildAddresses = wrapAsync(binding, "loadChildAddresses");
+module.exports.sendPeerMessage = wrapAsync(binding, "sendPeerMessage");
+module.exports.admitPeerMessage = wrapAsync(binding, "admitPeerMessage");
+module.exports.listPeerMessages = wrapAsync(binding, "listPeerMessages");
+module.exports.readPeerMessage = wrapAsync(binding, "readPeerMessage");
 module.exports.validateOpenappaPolicy = wrapAsync(binding, "validateOpenappaPolicy");
 module.exports.composeOpenappaPolicy = wrapAsync(binding, "composeOpenappaPolicy");
 module.exports.parseOpenappaDeclarations = wrapAsync(binding, "parseOpenappaDeclarations");

@@ -103,7 +103,8 @@ for (const viewport of [
         url: "/api/user/permissions",
         body: {
           ...permissions,
-          organization: ["read", "update"],
+          organizationSettings: ["read", "update"],
+          openappaPolicy: ["read", "update"],
           credential: ["read"],
         },
       });
@@ -164,9 +165,6 @@ for (const viewport of [
       const policySource = page.getByText("Revision 1", { exact: true });
       await expect(policySource).toBeInViewport();
       await expect(
-        page.getByRole("switch", { name: "Enforcement" }),
-      ).toBeVisible();
-      await expect(
         page.getByRole("button", { name: "Save & apply" }),
       ).toHaveCount(0);
       const effective = page.getByText(
@@ -184,7 +182,16 @@ for (const viewport of [
         fullPage: true,
       });
       await page.goto("/openappa");
-      await page.getByRole("button", { name: "Connect GitHub" }).click();
+      await expect(
+        page.getByRole("switch", { name: "Enforce the policy" }),
+      ).toBeVisible();
+      await page
+        .getByRole("button", { name: "Create repository", exact: true })
+        .click();
+      await page
+        .getByRole("dialog", { name: "Create OpenAPPA repository" })
+        .getByRole("button", { name: "Connect existing repository" })
+        .click();
       const dialog = page.getByRole("dialog", {
         name: "Connect OpenAPPA to GitHub",
       });
@@ -220,13 +227,12 @@ for (const viewport of [
       await expect(dialog).toBeHidden();
       await page.goto("/openappa/policy");
       await expect(
+        page.getByRole("heading", { name: "Policy Alpha" }),
+      ).toBeVisible();
+      await expect(policySource).toBeVisible();
+      await expect(
         page.getByRole("link", { name: "Configure with chat" }),
-      ).toHaveAttribute(
-        "href",
-        expect.stringMatching(
-          /^\/chat\?agentId=openappa-configuration-agent&user_prompt=Walk/,
-        ),
-      );
+      ).toHaveCount(0);
     });
   });
 }

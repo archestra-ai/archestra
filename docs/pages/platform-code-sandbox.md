@@ -80,7 +80,7 @@ The quickstart Docker image and the Helm chart enable the sandbox by default. To
 
 A manual deployment turns it on with `ARCHESTRA_CODE_RUNTIME_ENABLED=true`. The sandbox needs Kubernetes — that's where Archestra runs the Dagger engines — unless you point it at an engine you run yourself. See [Deployment](./platform-deployment#code-sandbox) for the setup.
 
-Running a command needs the `sandbox:execute` permission. See [Access Control](./platform-access-control).
+Running a command needs the `agent:read` permission — anyone who can use the agent can run commands in its sandbox. See [Access Control](./platform-access-control).
 
 ## Use Case: Cleaning a Spreadsheet
 

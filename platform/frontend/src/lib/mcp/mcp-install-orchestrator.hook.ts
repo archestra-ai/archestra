@@ -361,7 +361,6 @@ export function useMcpInstallOrchestrator(options?: { enabled?: boolean }) {
         installResult.scope === "team"
           ? (installResult.teamId ?? undefined)
           : undefined,
-      serviceAccount: installResult.serviceAccount,
     });
 
     closeDialog("local-install");

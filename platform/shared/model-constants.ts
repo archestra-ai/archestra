@@ -833,8 +833,9 @@ export const OPENROUTER_LATEST_ALIAS_PREFIX = "~";
 export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
   anthropic: ["opus-4-8", "opus-4-7", "opus", "sonnet"],
   openai: [
-    // Sol is the 5.6 flagship tier; Terra the balanced one. Luna (nano tier)
-    // is deliberately absent so it is never marked best over a 5.5 model.
+    // Luna is deliberately absent so a smaller tier is never marked best.
+    "gpt-6-astra",
+    "gpt-6-sol",
     "gpt-5.6-sol",
     "gpt-5.6-terra",
     "gpt-5.5-pro",
@@ -846,6 +847,10 @@ export const MODEL_MARKER_PATTERNS: Record<SupportedProvider, string[]> = {
     "gpt-4o",
   ],
   gemini: [
+    // Gemini 4 Argon, the next flagship tier. It has no public API id yet, so
+    // match the tier name rather than a guessed full id.
+    "argon",
+    "gemini-3.8-flash",
     "gemini-3.5-pro",
     "gemini-3.6-flash",
     "gemini-3.1-pro-preview",

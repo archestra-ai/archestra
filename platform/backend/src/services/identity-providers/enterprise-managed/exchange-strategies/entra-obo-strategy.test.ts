@@ -9,6 +9,41 @@ import type { ExternalIdentityProviderConfig } from "@/services/identity-provide
 import { entraOboStrategy } from "./entra-obo-strategy";
 
 describe("entraOboStrategy", () => {
+  test.each([
+    {},
+    { scopes: [] },
+    { scopes: [""] },
+    { scopes: [" \t "] },
+    { resourceIdentifier: " \t ", audience: " " },
+  ])("rejects a missing target before issuer discovery: %j", async (target) => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockRejectedValue(new Error("Synthetic issuer unavailable"));
+
+    await expect(
+      entraOboStrategy.exchangeCredential({
+        identityProvider: makeIdentityProvider({
+          issuer: "https://identity.example.com",
+          oidcConfig: {
+            clientId: "synthetic-client",
+            clientSecret: "synthetic-secret",
+            enterpriseManagedCredentials: {
+              exchangeStrategy: "entra_obo",
+              subjectTokenType: OAUTH_TOKEN_TYPE.AccessToken,
+            },
+          },
+        }),
+        assertion: "synthetic-session-token",
+        enterpriseManagedConfig: {
+          requestedCredentialType: "bearer_token",
+          tokenInjectionMode: "authorization_bearer",
+          ...target,
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
   test("builds an Entra OBO request and returns a bearer token", async () => {
     const identityProvider = makeIdentityProvider({
       issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
@@ -44,7 +79,7 @@ describe("entraOboStrategy", () => {
       assertion: "user-access-token",
       enterpriseManagedConfig: {
         requestedCredentialType: "bearer_token",
-        scopes: ["https://graph.microsoft.com/.default"],
+        scopes: [" ", " https://graph.microsoft.com/.default ", ""],
         tokenInjectionMode: "authorization_bearer",
       },
     });
@@ -119,7 +154,12 @@ describe("entraOboStrategy", () => {
     fetchMock.mockRestore();
   });
 
-  test("derives a .default scope from the configured resource identifier", async () => {
+  test.each([
+    { resourceIdentifier: "api://downstream-app-id" },
+    { audience: "api://downstream-app-id" },
+    { resourceIdentifier: " ", audience: " api://downstream-app-id/ " },
+    { scopes: [" \t "], resourceIdentifier: "api://downstream-app-id" },
+  ])("derives a .default scope from the configured target: %j", async (target) => {
     const identityProvider = makeIdentityProvider({
       issuer: "https://login.microsoftonline.com/test-tenant/v2.0",
       oidcConfig: {
@@ -154,7 +194,7 @@ describe("entraOboStrategy", () => {
       assertion: "user-access-token",
       enterpriseManagedConfig: {
         requestedCredentialType: "bearer_token",
-        resourceIdentifier: "api://downstream-app-id",
+        ...target,
         tokenInjectionMode: "authorization_bearer",
       },
     });

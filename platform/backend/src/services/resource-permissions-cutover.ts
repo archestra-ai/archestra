@@ -472,8 +472,12 @@ FROM merged WHERE p.organization_id = merged.organization_id AND p.resource = me
 WITH resources(resource) AS (
   VALUES ('agent'), ('mcpGateway'), ('mcpRegistry'), ('skill'), ('app'), ('llmModel')
 ), role_actions AS (
+  -- The registry adds deployment-spec configuration above Full access, the
+  -- same widest preset initializeOrganization seeds.
   SELECT o.id AS organization_id, r.resource, builtin.id AS subject_id,
-    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
+    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']
+      || CASE WHEN r.resource = 'mcpRegistry'
+        THEN ARRAY['configure-deployment-spec'] ELSE ARRAY[]::text[] END) AS action
   FROM organization o CROSS JOIN resources r
   CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
   WHERE NOT EXISTS (
@@ -652,15 +656,13 @@ WITH holders AS (
   FROM organization o
   CROSS JOIN (VALUES
     ('project'), ('plugin'), ('llmVirtualKey'), ('llmProviderApiKey'),
-    ('knowledgeSource'), ('scheduledTask'), ('log'), ('auditLog'),
+    ('knowledgeSource'), ('scheduledTask'),
     ('mcpOauthClient'), ('llmOauthClient')
   ) AS source(role_action)
   JOIN LATERAL (
     -- The built-in roles keep their permissions in code, not in this table,
-    -- so they are named rather than queried. Only \`admin\` held the two log
-    -- actions; \`platform_admin\` held the rest alongside it.
-    SELECT unnest(CASE WHEN source.role_action IN ('log', 'auditLog')
-      THEN ARRAY['admin'] ELSE ARRAY['admin', 'platform_admin'] END) AS id
+    -- so they are named rather than queried.
+    SELECT unnest(ARRAY['admin', 'platform_admin']) AS id
     UNION
     SELECT roles.id FROM organization_role roles
     WHERE roles.organization_id = o.id
@@ -668,14 +670,9 @@ WITH holders AS (
   ) grantee ON true
 ), targeted AS (
   SELECT h.organization_id, mapped.resource, h.role_id,
-    -- Log viewers keep read-only access. The built-in admin also needs to
-    -- delegate that access now that the old role action has been retired.
+    -- Preserve the ordinary action gates alongside the widened scope.
     ARRAY(
-      SELECT action FROM unnest(CASE
-        WHEN mapped.resource IN ('log', 'auditLog') AND h.role_id = 'admin'
-          THEN ARRAY['read', 'manage-permissions']
-        WHEN mapped.resource IN ('log', 'auditLog') THEN ARRAY['read']
-        ELSE ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'] END) action
+      SELECT action FROM unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) action
       WHERE h.role_id IN ('admin', 'platform_admin') OR EXISTS (
         -- The old admin flag widened scope, while the ordinary role actions
         -- still gated CRUD. Preserve both halves for custom roles.
@@ -927,7 +924,7 @@ WITH converted AS (
       WHEN resource IN (
         'agent', 'mcpGateway', 'mcpRegistry', 'skill', 'app',
         'project', 'plugin', 'llmVirtualKey', 'llmProviderApiKey',
-        'knowledgeSource', 'scheduledTask', 'log', 'auditLog',
+        'knowledgeSource', 'scheduledTask',
         'mcpServerInstallation', 'mcpOauthClient', 'llmOauthClient'
       ) THEN
         COALESCE((SELECT jsonb_agg(action ORDER BY ordinal)
@@ -950,7 +947,7 @@ FROM converted WHERE r.id = converted.id AND r.permission::jsonb IS DISTINCT FRO
 const SESSION_SHARING_CONVERSION = sql.raw(`
 WITH targets AS (
   SELECT c.organization_id, 'conversation' AS resource, c.id::text AS scope,
-    c.user_id AS owner_id, c.locked_chat AS locked, s.id AS share_id, s.visibility::text
+    c.user_id AS owner_id, c.encrypted_chat AS locked, s.id AS share_id, s.visibility::text
   FROM conversations c LEFT JOIN conversation_shares s
     ON s.conversation_id = c.id AND s.organization_id = c.organization_id
   UNION ALL

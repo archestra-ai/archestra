@@ -9,8 +9,11 @@ import { vi } from "vitest";
 import config from "@/config";
 import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import * as runtimeReview from "@/openappa/runtime-hitl-review";
 import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
+import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import type { Agent } from "@/types";
 import {
   type ArchestraContext,
@@ -18,7 +21,8 @@ import {
   getArchestraMcpTools,
 } from ".";
 
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("chat tool execution", () => {
   let testAgent: Agent;
@@ -79,6 +83,21 @@ describe("chat tool execution", () => {
     const properties = tool?.inputSchema.properties;
     expect(properties).toHaveProperty("remedy_offer_ids");
     expect(properties).not.toHaveProperty("remedy_offers");
+  });
+
+  test("a malformed ask_user call is shown the advertised arguments, not the proxy's", async () => {
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      { options: [{ label: "Approve" }] },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(true);
+    const text = result.content
+      .map((part) => (part.type === "text" ? part.text : ""))
+      .join("\n");
+    expect(text).toContain('"remedy_offer_ids"');
+    expect(text).not.toContain('"remedy_offers"');
   });
 
   const acceptingElicitation = {
@@ -161,6 +180,33 @@ describe("chat tool execution", () => {
     const text = (result.content[0] as any).text;
     expect(text).toContain("This client did not answer the choice form");
     expect(text).toContain("Do not ask this as a plain-text chat question");
+  });
+
+  test("ask_user does not attribute an automatic client decline to the user", async () => {
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: {
+            action: "decline" as const,
+            _meta: { approvals_reviewer: "auto_review" },
+          },
+        }),
+      },
+    };
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Which option?",
+        options: [{ label: "One" }, { label: "Two" }],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("This client did not answer the choice form");
+    expect(text).not.toContain("The user declined");
   });
 
   test("ask_user returns the selected option after elicitation", async () => {
@@ -328,7 +374,11 @@ describe("chat tool execution", () => {
     expect(text).toContain("The user picked: Accept for this session.");
     expect(text).toContain("Live remedy offers: offer-abc123");
     expect(text).toContain("archestra__execute_remedy_plan");
-    expect(text).toContain("Do not ask the user again");
+    // Credits the user's answer instead of hurrying past the user.
+    expect(text).toContain(
+      "The user already answered, so do not ask about the same plan again",
+    );
+    expect(text).not.toMatch(/continue now|immediately/i);
   });
 
   test("a staged HITL review replaces model-authored copy and records approval", async () => {
@@ -391,6 +441,95 @@ describe("chat tool execution", () => {
       selected: ["Approve"],
     });
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+  });
+
+  for (const [outcome, message] of [
+    ["no-reviewer", "no eligible human reviewer"],
+    ["review-unavailable", "fresh exact-offer review"],
+  ] as const) {
+    test(`runtime review ${outcome} is an error, not an approval or native form`, async () => {
+      const offerId = `runtime-${outcome}`;
+      const session = chatOpenAppaSession(
+        mockContext.organizationId as string,
+        mockContext.userId as string,
+        sessionId,
+      );
+      await stageHitlReview({
+        session,
+        review: { offerId, text: "Exact action", tool: "mcp/example/write" },
+      });
+      const nativeForm = vi.fn();
+      const wait = vi
+        .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+        .mockResolvedValue(outcome);
+      try {
+        const result = await executeArchestraTool(
+          TOOL_ASK_USER_FULL_NAME,
+          {
+            question: "Approve?",
+            options: [{ label: "Approve" }, { label: "Deny" }],
+            remedy_offer_ids: [offerId],
+            remedy_offers: [sessionOffer(offerId)],
+          },
+          { ...mockContext, elicitation: { elicit: nativeForm } },
+        );
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(message);
+        expect(result.structuredContent).toBeUndefined();
+        expect(nativeForm).not.toHaveBeenCalled();
+        expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+      } finally {
+        wait.mockRestore();
+      }
+    });
+  }
+
+  test("a runtime review waits on the platform instead of an auto-declining native form", async () => {
+    const offerId = "runtime-review";
+    const session = chatOpenAppaSession(
+      mockContext.organizationId as string,
+      mockContext.userId as string,
+      sessionId,
+    );
+    await stageHitlReview({
+      session,
+      review: {
+        offerId,
+        text: "Exact runtime action",
+        tool: "mcp/example/write",
+        arguments: '{"value":1}',
+      },
+    });
+    const nativeForm = vi.fn(async () => ({
+      status: "answered" as const,
+      result: { action: "decline" as const },
+    }));
+    const wait = vi
+      .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+      .mockResolvedValue("approve");
+    try {
+      const answer = await executeArchestraTool(
+        TOOL_ASK_USER_FULL_NAME,
+        {
+          question: "Approve?",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          remedy_offer_ids: [offerId],
+          remedy_offers: [sessionOffer(offerId)],
+        },
+        { ...mockContext, elicitation: { elicit: nativeForm } },
+      );
+      expect(answer.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Approve"],
+      });
+      expect(nativeForm).not.toHaveBeenCalled();
+      expect(wait).toHaveBeenCalledWith(
+        expect.objectContaining({ offerId, userId: mockContext.userId }),
+      );
+      expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+    } finally {
+      wait.mockRestore();
+    }
   });
 
   test.each([
@@ -617,6 +756,46 @@ describe("chat tool execution", () => {
     expect(text).toContain("do not retry it");
   });
 
+  test("automatic client decline cannot be recorded as a human HITL denial", async () => {
+    const offerId = "offer-auto-decline";
+    const session = chatOpenAppaSession(
+      mockContext.organizationId as string,
+      mockContext.userId as string,
+      sessionId,
+    );
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Review this exact call." },
+    });
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => ({
+          status: "answered" as const,
+          result: {
+            action: "decline" as const,
+            _meta: { approvals_reviewer: "auto_review" },
+          },
+        }),
+      },
+    };
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Approve this?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        remedy_offers: [sessionOffer(offerId)],
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "cannot show the HITL review",
+    );
+    expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+  });
+
   test("parallel decisions keep accepted and declined offers separate", async () => {
     mockContext = {
       ...mockContext,
@@ -706,6 +885,60 @@ describe("chat tool execution", () => {
     const text = (result.content[0] as any).text as string;
     expect(text).toContain("The user picked: Accept for this session.");
     expect(text).not.toContain("Live remedy offers");
+  });
+
+  test("ask_user keeps a workload offer only for that workspace principal", async () => {
+    const workspaceId = "44444444-4444-4444-8444-444444444444";
+    const principal = workloadPrincipal(workspaceId);
+    const session = `${principal}|workspace-a`;
+    mockContext = {
+      agent: mockContext.agent,
+      organizationId: mockContext.organizationId,
+      openappaSession: {
+        organization_id: mockContext.organizationId as string,
+        caller_id: principal,
+        session_id: session,
+      },
+      elicitation: acceptingElicitation,
+    };
+
+    const accepted = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offers: [
+          sessionOffer("offer-owned", {
+            callerId: principal,
+            sessionId: session,
+          }),
+        ],
+      },
+      mockContext,
+    );
+    expect((accepted.content[0] as any).text).toContain("offer-owned");
+
+    const dropped = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offers: [
+          sessionOffer("offer-sibling", {
+            callerId: workloadPrincipal("55555555-5555-4555-8555-555555555555"),
+            sessionId: session,
+          }),
+        ],
+      },
+      mockContext,
+    );
+    expect((dropped.content[0] as any).text).not.toContain("offer-sibling");
   });
 
   test("ask_user keeps only this session's offers when replayed ones ride along", async () => {
@@ -800,7 +1033,7 @@ describe("chat tool execution", () => {
       "If this question offered the remedy, the user did not accept it: do not retry the blocked call and do not ask again.",
     );
     expect((result.content[0] as any).text).toContain(
-      "Do not ask it again, offer the same options in prose, or end with a follow-up question or invitation.",
+      "Do not ask again, offer the same options in prose, or end with a follow-up question or invitation.",
     );
     expect((result.content[0] as any).text).not.toContain(
       "Live remedy offers:",
@@ -872,7 +1105,7 @@ describe("chat tool execution", () => {
       selected: [],
     });
     expect((result.content[0] as any).text).toContain(
-      "Do not ask it again, offer the same options in prose, or end with a follow-up question or invitation.",
+      "Do not ask again, offer the same options in prose, or end with a follow-up question or invitation.",
     );
     expect((result.content[0] as any).text).not.toContain(
       "Live remedy offers:",

@@ -21,6 +21,8 @@
  *   5. The model retries the original call; it is released and returns the
  *      real result.
  *
+ * It also checks that Chat displays the persisted trust and audience after the turn.
+ *
  * The second test repeats the flow with the model calling the restricted tool
  * through `archestra__run_tool`, the only path a `search_and_run_only` agent
  * has: the policy names the dispatch's target, so the denial notice and the
@@ -36,6 +38,7 @@
  */
 import { randomUUID } from "node:crypto";
 import { WIREMOCK_BASE_URL } from "../../consts";
+import { goToPage } from "../../fixtures";
 import { ensureWireMockAnthropicChatProvider } from "../../utils";
 import { expect, test } from "../api-fixtures";
 import {
@@ -116,6 +119,7 @@ delta = { audience = ["lab@archestra.local"] }
 `;
 
 test("denies a tool call, rules on it, and releases it after the model executes the remedy", async ({
+  page,
   request,
   makeApiRequest,
   createAgent,
@@ -313,9 +317,34 @@ test("denies a tool call, rules on it, and releases it after the model executes 
     const released = textOf(outputFor(toolOutputs, retry.toolCallId));
     expect(released).not.toContain("[appa] Blocked");
     expect(released).not.toContain("Tool output withheld");
-    expect(released).not.toContain("The tool was not executed");
+    expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
+
+    const statusResponse = await makeApiRequest({
+      request,
+      method: "get",
+      urlSuffix: `/api/chat/conversations/${conversationId}/openappa-status`,
+    });
+    const status = (await statusResponse.json()) as {
+      trust: string;
+      audience: string;
+    } | null;
+    if (!status)
+      throw new Error("OpenAPPA status is missing after the chat turn");
+    expect(status.trust).toBe("trusted");
+    expect(status.audience).not.toBe("");
+
+    await goToPage(page, `/chat/${conversationId}`);
+    const badge = page.getByRole("status", {
+      name: `Trust: ${status.trust}; audience: ${status.audience}`,
+    });
+    await expect(badge).toBeVisible();
+    await expect(badge).toContainText(status.trust);
+    await expect(badge).toContainText(status.audience);
+    await expect(
+      page.getByRole("button", { name: "OpenAPPA status" }),
+    ).toHaveCount(0);
   } finally {
     for (const mappingId of wireMockMappingIds) {
       await request
@@ -548,7 +577,7 @@ test("rules a run_tool dispatch by its target: notice names it, remedy clears it
     const released = textOf(outputFor(toolOutputs, retry.toolCallId));
     expect(released).not.toContain("[appa] Blocked");
     expect(released).not.toContain("Tool output withheld");
-    expect(released).not.toContain("The tool was not executed");
+    expect(released).not.toContain("The tool did not run. If the ruling");
 
     expect(assistantText(events)).toContain(finalAnswer);
   } finally {

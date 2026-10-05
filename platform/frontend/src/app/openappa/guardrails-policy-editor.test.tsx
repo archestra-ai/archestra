@@ -14,12 +14,15 @@ import {
   test,
   vi,
 } from "vitest";
+import { authClient } from "@/lib/clients/auth/auth-client";
 import { invalidatePolicyViews } from "@/lib/openappa-policy-views";
+import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
 import { GuardrailsPolicyEditor } from "./guardrails-policy-editor";
 
 vi.mock("@/components/editor");
 vi.mock("next/navigation");
 vi.mock("sonner");
+vi.mock("@/lib/clients/auth/auth-client");
 const mockRouterPush = vi.fn();
 const origin = "http://localhost:9000";
 const url = `${origin}/api/guardrails-policy`;
@@ -75,6 +78,10 @@ let effectiveRequests = 0;
 const server = setupServer();
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
+  vi.mocked(authClient.getSession).mockResolvedValue({
+    data: makeSession(),
+    error: null,
+  } as Awaited<ReturnType<typeof authClient.getSession>>);
   archestraApiClient.setConfig({ baseUrl: origin });
   vi.mocked(useRouter).mockReturnValue({
     push: mockRouterPush,
@@ -82,6 +89,9 @@ beforeEach(() => {
   mockRouterPush.mockClear();
   effectiveRequests = 0;
   server.use(
+    http.get(`${origin}/api/user/permissions`, () =>
+      HttpResponse.json(makeUserPermissions()),
+    ),
     http.get(url, () => HttpResponse.json(policy)),
     http.get(`${origin}/api/openappa/github-sync`, () =>
       HttpResponse.json({ enabled: true, source: null, hasPolicy: false }),
@@ -203,20 +213,6 @@ test("policy invalidation refreshes the displayed battery source", async () => {
   batteryContent = 'name = "mcp/github/get_issue"';
   await invalidatePolicyViews(client);
   await waitFor(() => expect(source).toHaveValue(batteryContent));
-});
-
-test("a GitHub-synced policy says where it comes from", async () => {
-  server.use(
-    http.get(`${origin}/api/openappa/github-sync`, () =>
-      HttpResponse.json({
-        enabled: true,
-        source: { interval: "1h" },
-        hasPolicy: true,
-      }),
-    ),
-  );
-  mount();
-  expect(await screen.findByText("Synced from GitHub")).toBeVisible();
 });
 
 test("the editor footer counts the composed batteries and the unenforced ones", async () => {

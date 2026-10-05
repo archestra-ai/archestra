@@ -1,7 +1,10 @@
 "use client";
 
-import { Plus } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import {
+  AddListItemButton,
+  EmptyListState,
+} from "@/components/empty-list-state";
 import {
   type CredentialBindingOption,
   EnvironmentVariableDialog,
@@ -11,7 +14,6 @@ import {
   EnvironmentVariablesTable,
   type EnvironmentVariableTableRow,
 } from "@/components/environment-variables-read-only-table";
-import { Button } from "@/components/ui/button";
 
 interface DeploymentEnvironmentVariablesEditorProps {
   hideHeading?: boolean;
@@ -61,49 +63,53 @@ export function DeploymentEnvironmentVariablesEditor({
     ...entry,
   }));
 
+  const addButton = (
+    <AddListItemButton
+      label="Add variable"
+      onClick={() => setDialog({ mode: "add" })}
+    />
+  );
+
   return (
-    <div className="space-y-1">
-      <div className="flex items-start justify-between gap-4">
+    <div className="space-y-3">
+      {(!hideHeading || description) && (
         <div className="space-y-1">
           {!hideHeading && (
             <h3 className="font-semibold text-base">Environment variables</h3>
           )}
-          <p className="text-xs text-muted-foreground">{description}</p>
+          {description && (
+            <p className="text-xs text-muted-foreground">{description}</p>
+          )}
         </div>
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setDialog({ mode: "add" })}
-        >
-          <Plus className="h-4 w-4" />
-          Add variable
-        </Button>
-      </div>
+      )}
 
       {value.length === 0 ? (
-        <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-          No environment variables configured.
-        </div>
-      ) : (
-        <EnvironmentVariablesTable
-          rows={rows}
-          credentialLabels={Object.fromEntries(
-            (credentialBindingOptions ?? []).map((option) => [
-              option.id,
-              option.label,
-            ]),
-          )}
-          credentialSources={Object.fromEntries(
-            (credentialBindingOptions ?? []).map((option) => [
-              option.id,
-              { icon: option.icon, label: option.sourceLabel },
-            ]),
-          )}
-          promptedValueLabel={promptedValueLabel}
-          onEdit={(index) => setDialog({ mode: "edit", index })}
-          onDelete={(index) => onChange(value.filter((_, i) => i !== index))}
+        <EmptyListState
+          message="No environment variables yet."
+          action={addButton}
         />
+      ) : (
+        <>
+          <EnvironmentVariablesTable
+            rows={rows}
+            credentialLabels={Object.fromEntries(
+              (credentialBindingOptions ?? []).map((option) => [
+                option.id,
+                option.label,
+              ]),
+            )}
+            credentialSources={Object.fromEntries(
+              (credentialBindingOptions ?? []).map((option) => [
+                option.id,
+                { icon: option.icon, label: option.sourceLabel },
+              ]),
+            )}
+            promptedValueLabel={promptedValueLabel}
+            onEdit={(index) => setDialog({ mode: "edit", index })}
+            onDelete={(index) => onChange(value.filter((_, i) => i !== index))}
+          />
+          {addButton}
+        </>
       )}
 
       <EnvironmentVariableDialog

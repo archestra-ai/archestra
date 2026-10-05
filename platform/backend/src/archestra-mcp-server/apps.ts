@@ -77,6 +77,7 @@ import { restoreAppVersion } from "@/services/apps/app-version-restore";
 import { resolveNewAppLifecycleDefaults } from "@/services/apps/new-app-defaults";
 import { loadConversationAttachmentSource } from "@/services/conversation-attachment-source";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
+import { projectService } from "@/services/project";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
 import { fileStore } from "@/skills-sandbox/file-store";
@@ -127,7 +128,16 @@ const toolsField = z
     "Upstream MCP tool names to assign to the new app (e.g. from search_tools), callable from its HTML via archestra.tools.call with the viewing user's credentials. Omitted leaves the app with no assigned tools.",
   );
 
-const ScaffoldAppToolSchema = ScaffoldAppSchema.extend({ tools: toolsField });
+const ScaffoldAppToolSchema = ScaffoldAppSchema.extend({
+  tools: toolsField,
+  project_id: z
+    .string()
+    .uuid()
+    .optional()
+    .describe(
+      "Link the new app into this project (from list_projects) so it is listed with the project's files. You need access to the project. Omitted creates a standalone app.",
+    ),
+});
 
 /**
  * An app is addressed by id, but a user naming one in chat gives its *name*
@@ -603,6 +613,21 @@ const registry = defineArchestraTools([
       if (!toolsResolution.ok) return errorResult(toolsResolution.error);
       const resolvedTools = toolsResolution.tools;
 
+      // Checked before anything is created, so an unreachable project leaves
+      // no orphan app behind. 404 covers both "missing" and "no access".
+      if (args.project_id) {
+        try {
+          await projectService.get({
+            id: args.project_id,
+            organizationId,
+            userId,
+          });
+        } catch (error) {
+          if (error instanceof ApiError) return errorResult(error.message);
+          throw error;
+        }
+      }
+
       // Like the REST path: create the app, then its backing; on backing failure
       // delete the app so it is never left unbacked. scaffold_app defers team
       // selection to the REST/UI path, so no teams here; the environment is the
@@ -695,6 +720,27 @@ const registry = defineArchestraTools([
         return errorResult("App created but could not be loaded.");
       }
 
+      // The app exists from here on, so a failed link is a partial success:
+      // say so instead of failing, or the model assumes nothing was created.
+      let projectNote = "";
+      if (args.project_id) {
+        try {
+          await projectService.linkApp({
+            id: args.project_id,
+            appId: app.id,
+            organizationId,
+            userId,
+          });
+          projectNote = ` Linked to project ${args.project_id}.`;
+        } catch (error) {
+          logger.warn(
+            { err: error, appId: app.id, projectId: args.project_id },
+            "scaffold_app: project link failed after creation",
+          );
+          projectNote = ` The app was created but could not be linked to project ${args.project_id}; retry with link_app_to_project.`;
+        }
+      }
+
       if (resolvedTools !== undefined && resolvedTools.length > 0) {
         try {
           await replaceAppToolAssignments(app.id, resolvedTools);
@@ -749,7 +795,7 @@ const registry = defineArchestraTools([
           ...toolsParts.structured,
           ...(warnings.length > 0 ? { warnings } : {}),
         },
-        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${nextEditBaseVersionHint(app.latestVersion)}${lifecycleNote} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
+        `Created app "${escapeAppNameForModelText(app.name)}" (${app.id}) at version ${app.latestVersion}.${projectNote}${nextEditBaseVersionHint(app.latestVersion)}${lifecycleNote} Will render inline when opened in chat; standalone page: ${appRunLink(app.name, app)}${toolsParts.note}${warningsNote}${seededHtmlNote}\n\n${ARCHESTRA_APP_SDK_SUMMARY}`,
       );
     },
   }),
@@ -1194,19 +1240,19 @@ const registry = defineArchestraTools([
       if (mode.kind === "replacementSource") {
         // Authorization is not inherited: this tool's own gate is app:update
         // (rbac.ts TOOL_PERMISSIONS), which says nothing about reading files.
-        // Reading one is file:manage, so check it here rather than let an
+        // Reading one is agent:read, so check it here rather than let an
         // app-authoring permission double as a file-read permission. The single
         // permission per tool in the central map cannot express a mode-dependent
         // second one, and per-file authorization lives in the handlers by design.
         const canReadFiles = await userHasPermission(
           auth.userId,
           auth.organizationId,
-          "file",
-          "manage",
+          "agent",
+          "read",
         );
         if (!canReadFiles) {
           return errorResult(
-            "You do not have permission to perform this action (requires file:manage to read replacementHtmlSource). Pass the document as replacementHtml instead.",
+            "You do not have permission to perform this action (requires agent:read to read replacementHtmlSource). Pass the document as replacementHtml instead.",
           );
         }
         const resolved = await resolveHtmlSource({

@@ -48,7 +48,7 @@ const oauthServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const baseUrl = getPublicRequestOrigin(request);
 
       // Extract the resource path (everything after /.well-known/oauth-protected-resource)
-      const resourcePath = request.url.replace(
+      const resourcePath = new URL(request.url, baseUrl).pathname.replace(
         "/.well-known/oauth-protected-resource",
         "",
       );

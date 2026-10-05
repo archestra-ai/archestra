@@ -81,41 +81,6 @@ export function useAllChatOpsBindings() {
   });
 }
 
-export function useUpdateChatOpsBinding() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (params: {
-      id: string;
-      agentId?: string | null;
-      answerAllMessages?: boolean;
-      channelInstructions?: string | null;
-    }) => {
-      const { data, error } = await archestraApiSdk.updateChatOpsBinding({
-        path: { id: params.id },
-        body: {
-          ...(params.agentId !== undefined && { agentId: params.agentId }),
-          ...(params.answerAllMessages !== undefined && {
-            answerAllMessages: params.answerAllMessages,
-          }),
-          ...(params.channelInstructions !== undefined && {
-            channelInstructions: params.channelInstructions,
-          }),
-        },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      if (!data) return;
-      toast.success("Channels updated");
-      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
-    },
-  });
-}
-
 export function useApplyChatOpsBindingPlan() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -138,65 +103,6 @@ export function useApplyChatOpsBindingPlan() {
   });
 }
 
-export function useBulkUpdateChatOpsBindings() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (params: {
-      ids: string[];
-      agentId: string | null;
-      expectedAgentAssignments?: Array<{
-        id: string;
-        agentId: string | null;
-      }>;
-    }) => {
-      const { data, error } = await archestraApiSdk.bulkUpdateChatOpsBindings({
-        body: {
-          ids: params.ids,
-          agentId: params.agentId,
-          expectedAgentAssignments: params.expectedAgentAssignments,
-        },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      if (!data) return;
-      toast.success(
-        `${data.length} channel${data.length === 1 ? "" : "s"} updated`,
-      );
-      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
-    },
-  });
-}
-
-export function useCreateChatOpsDmBinding() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (params: {
-      provider: "ms-teams" | "slack" | "telegram";
-      agentId: string | null;
-      requireNoExistingBinding?: true;
-    }) => {
-      const { data, error } = await archestraApiSdk.createChatOpsDmBinding({
-        body: params,
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return data;
-    },
-    onSuccess: (data) => {
-      if (!data) return;
-      toast.success("Direct message channel updated");
-      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
-    },
-  });
-}
-
 export function useDeleteChatOpsBinding() {
   const queryClient = useQueryClient();
   return useMutation({
@@ -213,26 +119,6 @@ export function useDeleteChatOpsBinding() {
     onSuccess: (data) => {
       if (!data) return;
       toast.success("Binding deleted");
-      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
-    },
-  });
-}
-
-export function useRefreshChatOpsChannelDiscovery() {
-  const queryClient = useQueryClient();
-  return useMutation({
-    mutationFn: async (provider: string) => {
-      const { error } = await archestraApiSdk.refreshChatOpsChannelDiscovery({
-        body: { provider: provider as "ms-teams" | "slack" },
-      });
-      if (error) {
-        handleApiError(error);
-        return null;
-      }
-      return true;
-    },
-    onSuccess: (data) => {
-      if (!data) return;
       queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
     },
   });

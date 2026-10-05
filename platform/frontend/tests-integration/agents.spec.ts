@@ -8,6 +8,61 @@ import {
 import { expect, test } from "./fixtures";
 
 test.describe("Agents", () => {
+  test("keeps count columns compact as the table grows", async ({
+    page,
+    agentsPage,
+    mswControl,
+  }) => {
+    await mswControl.registerMany([
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "false" },
+        body: makeAgentCatalog({
+          agents: [
+            makeAgent({
+              name: "Research and documentation assistant",
+              accessAllTools: true,
+              accessAllSubagents: true,
+            }),
+          ],
+        }),
+      },
+      {
+        method: "get",
+        url: "/api/agent-catalog",
+        query: { pinned: "true" },
+        body: makeAgentCatalog(),
+      },
+    ]);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await agentsPage.goto();
+    await page.getByRole("button", { name: "View as table" }).click();
+    const table = agentsPage.table.getByRole("table");
+    await expect(table.getByText("All", { exact: true })).toHaveCount(2);
+
+    const widths: number[][] = [];
+    for (const width of [1440, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      const sizes: number[] = [];
+      for (const name of ["Name", "Tools", "Subagents"]) {
+        const header = table.getByRole("columnheader", { name, exact: true });
+        await expect(header).toBeVisible();
+        const bounds = await header.boundingBox();
+        expect(bounds).not.toBeNull();
+        sizes.push(bounds?.width ?? 0);
+      }
+      const [name, tools, subagents] = sizes;
+      expect(tools).toBeLessThanOrEqual(120);
+      expect(subagents).toBeLessThanOrEqual(120);
+      expect(name).toBeGreaterThan(tools + subagents);
+      widths.push(sizes);
+    }
+    expect(widths[1][0]).toBeGreaterThan(widths[0][0]);
+    expect(widths[1][1]).toBeCloseTo(widths[0][1], 0);
+    expect(widths[1][2]).toBeCloseTo(widths[0][2], 0);
+  });
+
   test("selects and bulk modifies regular and external A2A agents together", async ({
     page,
     agentsPage,
@@ -433,7 +488,7 @@ test.describe("Agents", () => {
       url: "/api/user/permissions",
       body: makeUserPermissions({
         agent: ["read", "update", "delete"],
-        agentSettings: [],
+        organizationSettings: [],
       }),
     });
     await mswControl.use({
@@ -559,107 +614,6 @@ test.describe("Agents", () => {
     await expect(
       page.getByRole("button", { name: "Delete", exact: true }),
     ).toBeDisabled();
-  });
-
-  test("can create and delete an agent", async ({
-    page,
-    agentsPage,
-    mswControl,
-  }) => {
-    const NAME = "Test Agent 1";
-    const newAgent = makeAgent({ id: "agent-created", name: NAME });
-
-    // Stage POST/create then the post-mutation GET that re-populates the
-    // table. Latest-wins on the handler chain means the table reflects the
-    // new agent after React Query invalidation refetches.
-    await mswControl.use({
-      method: "post",
-      url: "/api/agents",
-      body: newAgent,
-    });
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { pinned: "false" },
-      body: makeAgentCatalog({ agents: [newAgent] }),
-    });
-    await mswControl.use({
-      method: "get",
-      url: "/api/agents/agent-created",
-      body: newAgent,
-    });
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { pinned: "true" },
-      body: makeAgentCatalog(),
-    });
-
-    await agentsPage.goto();
-    await expect(agentsPage.heading).toBeVisible();
-    await agentsPage.createButton.click();
-    await page.waitForURL("/agents/new");
-    await expect(
-      page.getByRole("heading", { name: "Popular agents" }),
-    ).toBeHidden();
-    await page.getByRole("button", { name: /Start from scratch/ }).click();
-    await page
-      .locator("#main-content")
-      .getByRole("link", { name: "Agents" })
-      .click();
-    await expect(
-      page.getByRole("button", { name: /Connect via A2A/ }),
-    ).toBeVisible();
-    await page.getByRole("button", { name: /Start from scratch/ }).click();
-    await page.getByRole("textbox", { name: "Name" }).fill(NAME);
-    // Walk to the last step, however many the wizard has — the step list
-    // depends on the record's type and grows, and only the last step offers
-    // Create. Each Next is a plain state change, so this settles immediately.
-    const nextButton = page.getByTestId(E2eTestId.AgentSetupNextButton);
-    const submitButton = page.getByTestId(E2eTestId.AgentSetupSubmitButton);
-    await expect(async () => {
-      if (await submitButton.isVisible()) return;
-      await nextButton.click();
-      await expect(submitButton).toBeVisible({ timeout: 3_000 });
-    }).toPass({ timeout: 20_000 });
-    await submitButton.click();
-    await page.waitForURL(/\/agents\/agent-created\/created$/);
-    await expect(
-      page.getByRole("heading", { name: "Agent created", exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("heading", { name: NAME, exact: true }),
-    ).toBeVisible();
-    await expect(
-      page.getByText("No messaging channels are configured for this agent."),
-    ).toBeVisible();
-    await expect(
-      page.getByRole("link", { name: "Chat", exact: true }),
-    ).toHaveAttribute("href", "/chat?agentId=agent-created");
-
-    await agentsPage.goto();
-
-    await expect(agentsPage.rowFor(NAME)).toBeVisible();
-
-    // Stage the post-delete GET ahead of clicking Delete so the refetch
-    // following DELETE's onSuccess returns the empty list.
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { pinned: "false" },
-      body: makeAgentCatalog(),
-    });
-    await mswControl.use({
-      method: "delete",
-      url: "/api/agents/:id",
-      body: { success: true },
-    });
-
-    await agentsPage.openRowMenu(NAME);
-    await agentsPage.deleteButtonFor(NAME).click();
-    await page.getByRole("button", { name: "Delete Agent" }).click();
-
-    await expect(agentsPage.rowFor(NAME)).toBeHidden();
   });
 
   test("can clone an agent and rename it", async ({

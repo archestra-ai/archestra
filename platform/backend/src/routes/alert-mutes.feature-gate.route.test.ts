@@ -1,19 +1,10 @@
 import { vi } from "vitest";
+import { betterAuth } from "@/auth";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
-
-vi.mock("@/auth");
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    mcpServer: { alertingEnabled: false },
-  }),
-);
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = vi.mocked(hasPermission);
 
 describe("MCP alerting beta gate", () => {
   let app: FastifyInstanceWithZod;
@@ -21,10 +12,13 @@ describe("MCP alerting beta gate", () => {
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    config.mcpServer.alertingEnabled = false;
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
-    await makeMember(user.id, organizationId);
+    await makeMember(user.id, organizationId, { role: "admin" });
     app = createFastifyInstance();
     app.addHook("onRequest", async (request) => {
       Object.assign(request, { user, organizationId });
@@ -38,7 +32,10 @@ describe("MCP alerting beta gate", () => {
     await app.register(catalogRoutes);
   });
 
-  afterEach(async () => app.close());
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    await app.close();
+  });
 
   test("hides dismissal APIs and dismissal data while disabled", async ({
     makeInternalMcpCatalog,

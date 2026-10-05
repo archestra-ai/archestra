@@ -25,16 +25,17 @@ import {
   deleteTargetFor,
 } from "@/lib/chat/conversation-files";
 import {
-  LOCKED_CHAT_KEY_HEADER,
-  lockedChatRequestHeaders,
-  storeLockedChatKey,
-} from "@/lib/chat/locked-chat";
-import { handleApiError, toApiError } from "@/lib/utils/api";
+  ENCRYPTED_CHAT_KEY_HEADER,
+  encryptedChatRequestHeaders,
+  storeEncryptedChatKey,
+} from "@/lib/chat/encrypted-chat";
+import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 import websocketService from "@/lib/websocket/websocket";
 
 const {
   getChatConversations,
   getChatConversation,
+  getChatOpenappaStatus,
   getChatConversationFiles,
   getChatAgentMcpTools,
   createChatConversation,
@@ -137,13 +138,13 @@ export function useConversation(conversationId?: string) {
     queryFn: () => {
       if (!conversationId) return null;
       // 400/404 are handled gracefully by the UI, so suppress their toast.
-      // For a locked chat the stored key rides along; without it
+      // For an encrypted chat the stored key rides along; without it
       // the server answers 200 with `contentLocked: true` and no messages.
       return callApi(
         () =>
           getChatConversation({
             path: { id: conversationId },
-            headers: lockedChatRequestHeaders(conversationId),
+            headers: encryptedChatRequestHeaders(conversationId),
           }),
         null,
         {
@@ -167,18 +168,38 @@ export function useConversation(conversationId?: string) {
   });
 }
 
+export const openappaStatusQueryKey = (conversationId: string | undefined) =>
+  ["openappa-status", conversationId] as const;
+
+export function useOpenappaStatus(conversationId?: string) {
+  return useQuery({
+    queryKey: openappaStatusQueryKey(conversationId),
+    queryFn: async () => {
+      if (!conversationId) return null;
+      const { data, error } = await getChatOpenappaStatus({
+        path: { id: conversationId },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? null;
+    },
+    enabled: !!conversationId,
+    staleTime: 0,
+    retry: false,
+  });
+}
+
 export function useConversationFiles(conversationId?: string) {
   return useQuery({
     queryKey: ["conversation-files", conversationId],
     queryFn: () => {
       if (!conversationId) return null;
-      // The key opens the attachment filenames for a locked chat; without it
+      // The key opens the attachment filenames for an encrypted chat; without it
       // the server still lists the files, under a placeholder name.
       return callApi(
         () =>
           getChatConversationFiles({
             path: { id: conversationId },
-            headers: lockedChatRequestHeaders(conversationId),
+            headers: encryptedChatRequestHeaders(conversationId),
           }),
         null,
         { silent: true },
@@ -389,18 +410,18 @@ export function useCreateConversation() {
       chatApiKeyId,
       title,
       projectId,
-      lockedChat,
-      lockedChatKey,
+      encryptedChat,
+      encryptedChatKey,
       thinkingEffort,
     }: WithThinkingEffortSetting<
       NonNullable<archestraApiTypes.CreateChatConversationData["body"]>
     > & {
       /**
        * Browser-generated conversation DEK (base64url of 32 random bytes).
-       * Required when `locked-chat` is set: the server fingerprints and
+       * Required when `encrypted-chat` is set: the server fingerprints and
        * escrow-wraps it but never stores it.
        */
-      lockedChatKey?: string;
+      encryptedChatKey?: string;
     }) =>
       callApi(
         () =>
@@ -411,13 +432,13 @@ export function useCreateConversation() {
               chatApiKeyId: chatApiKeyId ?? undefined,
               title,
               projectId: projectId ?? undefined,
-              lockedChat: lockedChat || undefined,
+              encryptedChat: encryptedChat || undefined,
               // The generated body type drops `nullable: true` from enum
               // schemas, so null (auto) has to be re-asserted here.
               thinkingEffort: thinkingEffort as ThinkingEffort | undefined,
             },
-            headers: lockedChatKey
-              ? { [LOCKED_CHAT_KEY_HEADER]: lockedChatKey }
+            headers: encryptedChatKey
+              ? { [ENCRYPTED_CHAT_KEY_HEADER]: encryptedChatKey }
               : undefined,
           }),
         null,
@@ -427,8 +448,8 @@ export function useCreateConversation() {
       // Persist the DEK under the fresh conversation id FIRST — before any
       // cache writes trigger navigation or the first stream request, both of
       // which must find the key in localStorage.
-      if (variables.lockedChat && variables.lockedChatKey) {
-        storeLockedChatKey(newConversation.id, variables.lockedChatKey);
+      if (variables.encryptedChat && variables.encryptedChatKey) {
+        storeEncryptedChatKey(newConversation.id, variables.encryptedChatKey);
       }
       queryClient.invalidateQueries({ queryKey: ["conversations"] });
       // Immediately populate the individual conversation cache to avoid loading state
@@ -758,10 +779,12 @@ export function useDeleteConversation() {
         localStorage.removeItem(keys.rightPanelOpen);
         localStorage.removeItem(keys.rightPanelTab);
         localStorage.removeItem(keys.draft);
-        // A locked chat's encryption key dies with the conversation. Both
-        // spellings, so a key written before the rename is not left behind.
-        localStorage.removeItem(keys.lockedChatKey);
-        localStorage.removeItem(keys.legacyLockedChatKey);
+        // An encrypted chat's encryption key dies with the conversation. Every
+        // spelling, so a key written before a rename is not left behind.
+        localStorage.removeItem(keys.encryptedChatKey);
+        for (const legacyKey of keys.legacyEncryptedChatKeys) {
+          localStorage.removeItem(legacyKey);
+        }
         // Also drop any docked-review context (localStorage + in-memory map) so
         // a deleted review chat leaves nothing behind.
         clearReviewContext(deletedId);

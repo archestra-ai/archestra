@@ -64,6 +64,7 @@ import {
 import { McpElicitationCard } from "@/components/chat/mcp-elicitation-card";
 import { isChoiceElicitationRequest } from "@/components/chat/mcp-elicitation-fields";
 import { McpTaskProvider } from "@/components/chat/mcp-task-context";
+import { RuntimeCredentialSetupTool } from "@/components/chat/runtime-credential-setup-tool";
 import { ExecutedAsBadge } from "@/components/executed-as-badge";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import {
@@ -88,8 +89,8 @@ import {
   getMessageFeedback,
   PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "@/lib/chat/chat-utils";
+import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
-import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
@@ -273,7 +274,7 @@ export function ChatMessages({
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const { data: canExpandToolCalls } = useHasPermissions({
-    chatExpandToolCalls: ["enable"],
+    chat: ["full-view"],
   });
   const { data: canReadToolPolicy } = useHasPermissions({
     toolPolicy: ["read"],
@@ -327,7 +328,7 @@ export function ChatMessages({
   }, [agentTools, catalogItems]);
 
   const updateChatMessageMutation = useUpdateChatMessage(conversationId);
-  // Resolved once for the whole transcript: a locked chat's attachments cannot
+  // Resolved once for the whole transcript: an encrypted chat's attachments cannot
   // be copied into a knowledge base, so their chips do not offer it.
   const { data: messagesConversation } = useConversation(conversationId);
   const canSaveToKnowledge = isActionAvailableForConversation(
@@ -2012,7 +2013,12 @@ const MessageTool = memo(
         (toolResultPart && Boolean(toolResultPart.output)) ||
         (!toolResultPart && Boolean(part.output)),
     );
-    const shouldDefaultOpen = isApprovalRequested || policyChange;
+    const credentialSetup =
+      getToolShortName(toolName) === "request_runtime_credential_setup" &&
+      !errorText &&
+      (part.state === "output-available" || Boolean(toolResultPart));
+    const shouldDefaultOpen =
+      isApprovalRequested || policyChange || credentialSetup;
 
     // Hooks must be called before any early returns
     const { data: session } = useSession();
@@ -2203,6 +2209,13 @@ const MessageTool = memo(
             <ToolErrorDetails errorText={errorText} />
           ) : null}
           {authToolBody}
+          {credentialSetup && (
+            <RuntimeCredentialSetupTool
+              ready
+              toolCallId={part.toolCallId}
+              onSendMessage={onSendMessage}
+            />
+          )}
 
           {/* Standard MCP Apps flow: tool definition has _meta.ui.resourceUri → AppBridge + AppFrame */}
           {!isApprovalRequested &&

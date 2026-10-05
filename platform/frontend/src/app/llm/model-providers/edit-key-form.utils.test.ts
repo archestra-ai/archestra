@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from "vitest";
 import type { LlmProviderApiKeyFormValues } from "@/components/llm-provider-api-key-form";
 import {

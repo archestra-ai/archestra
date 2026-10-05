@@ -4,6 +4,7 @@ import {
   DEFAULT_LLM_PROXY_NAME,
   getCreationDefaultArchestraToolShortNames,
   type PaginationQuery,
+  PERSONAL_MCP_GATEWAY_NAME,
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
@@ -38,7 +39,6 @@ import {
 } from "drizzle-orm";
 import { unionAll } from "drizzle-orm/pg-core";
 import { LRUCacheManager } from "@/cache-manager";
-import { clearChatMcpClient } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -49,7 +49,6 @@ import {
 } from "@/database/utils/pagination";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
-import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import {
   type Agent,
   type AgentActivationSkillMode,
@@ -89,6 +88,9 @@ import CreatedByModel from "./created-by";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 import ToolModel from "./tool";
 
 type AgentListFilters = {
@@ -400,11 +402,14 @@ class AgentModel {
    * overseer who can read every agent still does not list others' private
    * ones.
    */
-  static notOthersPersonalCondition(userId: string): SQL {
+  static notOthersPersonalCondition(params: {
+    userId: string;
+    principals: GrantPrincipal[];
+  }): SQL {
     return or(
       not(agentAudienceIs("personal")),
-      eq(schema.agentsTable.authorId, userId),
-      explicitAgentReadCondition(userId),
+      eq(schema.agentsTable.authorId, params.userId),
+      explicitAgentReadCondition(params.principals),
     ) as SQL;
   }
 
@@ -632,6 +637,11 @@ class AgentModel {
   ): Promise<void> {
     if (agents.length === 0 || !userId) return;
 
+    // Lazy: the availability check reaches into the service layer, which
+    // would otherwise load with every model.
+    const { isSkillSandboxAvailableForAgent } = await import(
+      "@/skills/skill-sandbox-availability"
+    );
     await Promise.all(
       agents.map(async (agent) => {
         agent.sandboxAvailable = await isSkillSandboxAvailableForAgent({
@@ -993,10 +1003,16 @@ class AgentModel {
     // Tools are attached afterwards as slim refs via one batched query:
     // joining them here multiplied every agent row (system prompt included)
     // by that agent's tool count.
+    const principals = userId
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId,
+          organizationId: options?.authorization?.organizationId,
+        })
+      : [];
     // Build where conditions
     const whereConditions: SQL[] = [
       getAgentStatusCondition(options?.status ?? "active"),
-      ...(userId ? [agentListFence(userId)] : []),
+      ...(userId ? [agentListFence(principals)] : []),
     ];
     if (options?.authorization) {
       if (!userId) return [];
@@ -1008,7 +1024,7 @@ class AgentModel {
         whereConditions.push(
           or(
             inArray(schema.agentsTable.agentType, baseReadTypes),
-            explicitAgentReadCondition(userId),
+            explicitAgentReadCondition(principals),
           ) as SQL,
         );
       }
@@ -1052,7 +1068,9 @@ class AgentModel {
 
     // Keep oversight-only personal agents hidden, while honoring explicit shares.
     if (options?.excludeOtherPersonalAgents && userId) {
-      whereConditions.push(AgentModel.notOthersPersonalCondition(userId));
+      whereConditions.push(
+        AgentModel.notOthersPersonalCondition({ userId, principals }),
+      );
     }
 
     // Apply access control filtering for non-agent admins
@@ -1060,6 +1078,7 @@ class AgentModel {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
+        principals,
       );
 
       if (accessibleAgentIds.length === 0) {
@@ -1288,6 +1307,19 @@ class AgentModel {
       );
   }
 
+  static async findRuntimeTargets(organizationId: string) {
+    return db
+      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          isNotNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
+
   /**
    * Find all agents for an organization filtered by accessible agent IDs
    * Returns only agents the user has access to via team membership
@@ -1428,6 +1460,8 @@ class AgentModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const principal =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
     return db
       .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
       .from(schema.agentsTable)
@@ -1438,10 +1472,9 @@ class AgentModel {
           eq(schema.agentsTable.builtIn, false),
           notDeleted(schema.agentsTable),
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId: schema.agentsTable.organizationId,
+            ...principal,
             resource: "agent",
             scopeColumn: schema.agentsTable.id,
-            userId: params.userId,
             action: "use",
           }),
           params.includePersonal ? undefined : not(agentAudienceIs("personal")),
@@ -2025,9 +2058,16 @@ class AgentModel {
     isAgentAdmin?: boolean;
   }): Promise<SQL | undefined> {
     const { filters, userId, isAgentAdmin } = params;
+    const principals = userId
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId,
+          organizationId:
+            filters?.authorization?.organizationId ?? filters?.organizationId,
+        })
+      : [];
     const whereConditions: SQL[] = [
       getAgentStatusCondition(filters?.status ?? "active"),
-      ...(userId ? [agentListFence(userId)] : []),
+      ...(userId ? [agentListFence(principals)] : []),
     ];
 
     if (filters?.organizationId) {
@@ -2045,7 +2085,7 @@ class AgentModel {
         whereConditions.push(
           or(
             inArray(schema.agentsTable.agentType, baseReadTypes),
-            explicitAgentReadCondition(userId),
+            explicitAgentReadCondition(principals),
           ) as SQL,
         );
     }
@@ -2122,12 +2162,9 @@ class AgentModel {
       if (condition) whereConditions.push(condition);
     }
     if (filters?.excludeOtherPersonalAgents && userId) {
-      const condition = or(
-        not(agentAudienceIs("personal")),
-        eq(schema.agentsTable.authorId, userId),
-        explicitAgentReadCondition(userId),
+      whereConditions.push(
+        AgentModel.notOthersPersonalCondition({ userId, principals }),
       );
-      if (condition) whereConditions.push(condition);
     }
     if (filters?.labels) {
       for (const [key, values] of Object.entries(filters.labels)) {
@@ -2188,6 +2225,7 @@ class AgentModel {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
+        principals,
       );
       whereConditions.push(
         accessibleAgentIds.length > 0
@@ -2475,16 +2513,21 @@ class AgentModel {
   }
 
   /**
-   * Names of every live agent that can serve as an MCP gateway in this
-   * organization. External clients register gateways under a server name
-   * derived from these (see `toMcpClientServerName`), so the LLM proxy uses
-   * them to recognize client-decorated gateway tool names.
+   * Every live agent that can serve as an MCP gateway in this organization, by
+   * name. External clients register gateways under a server name derived from
+   * these (see `resolveMcpClientServerName`), so the LLM proxy uses them to
+   * recognize client-decorated gateway tool names. `isPersonalGateway` comes
+   * along because a seeded personal gateway registers under the app name
+   * rather than its own.
    */
   static async findGatewayNamesByOrganizationId(
     organizationId: string,
-  ): Promise<string[]> {
-    const agents = await db
-      .select({ name: schema.agentsTable.name })
+  ): Promise<{ name: string; isPersonalGateway: boolean }[]> {
+    return db
+      .select({
+        name: schema.agentsTable.name,
+        isPersonalGateway: schema.agentsTable.isPersonalGateway,
+      })
       .from(schema.agentsTable)
       .where(
         and(
@@ -2495,8 +2538,6 @@ class AgentModel {
           ]),
         ),
       );
-
-    return agents.map((agent) => agent.name);
   }
 
   static async findIdsByOrganizationId(
@@ -2597,7 +2638,11 @@ class AgentModel {
   static async findAccessibleIdsForUser(
     userId: string,
     isAgentAdmin = false,
+    principals?: GrantPrincipal[],
   ): Promise<string[]> {
+    const readers =
+      principals ??
+      (await ResourcePermissionSubjectModel.resolvePrincipals({ userId }));
     const rows = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
@@ -2605,7 +2650,7 @@ class AgentModel {
         and(
           notDeleted(schema.agentsTable),
           or(
-            explicitAgentReadCondition(userId),
+            explicitAgentReadCondition(readers),
             isAgentAdmin ? sql`true` : undefined,
             organizationLlmProxyCondition(userId),
           ),
@@ -2689,6 +2734,10 @@ class AgentModel {
         .orderBy(asc(schema.agentsTable.name));
     }
 
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId,
+      userId,
+    });
     return db
       .select({
         id: schema.agentsTable.id,
@@ -2704,8 +2753,7 @@ class AgentModel {
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId: schema.agentsTable.organizationId,
-            userId,
+            ...principal,
             resource: "agent",
             scopeColumn: schema.agentsTable.id,
             action: "use",
@@ -3466,6 +3514,11 @@ class AgentModel {
 
         // Invalidate tool cache for all parent agents so they pick up the new tool name
         const parentAgentIds = await ToolModel.getParentAgentIds(id);
+        // Lazy (here and below): the chat MCP client imports the service
+        // layer, which would otherwise load with every model.
+        const { clearChatMcpClient } = await import(
+          "@/clients/chat-mcp-client"
+        );
         for (const parentAgentId of parentAgentIds) {
           clearChatMcpClient(parentAgentId);
         }
@@ -3481,6 +3534,9 @@ class AgentModel {
         updatedAgent.toolExposureMode !== existingAgent.toolExposureMode ||
         updatedAgent.accessAllTools !== existingAgent.accessAllTools
       ) {
+        const { clearChatMcpClient } = await import(
+          "@/clients/chat-mcp-client"
+        );
         clearChatMcpClient(id);
       }
     } else {
@@ -4136,6 +4192,36 @@ class AgentModel {
     );
   }
 
+  /** Soft-delete an author's private chat agents when their membership ends. */
+  static async deletePersonalAgentsForUser(params: {
+    userId: string;
+    organizationId?: string;
+    tx?: Transaction;
+  }): Promise<number> {
+    const table = schema.agentsTable;
+    return await softDelete(
+      params.tx ?? db,
+      table,
+      and(
+        eq(table.authorId, params.userId),
+        eq(table.agentType, "agent"),
+        params.organizationId
+          ? eq(table.organizationId, params.organizationId)
+          : undefined,
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        ResourcePermissionPolicyModel.reachesOnlyOwner({
+          organizationId: table.organizationId,
+          resource: "agent",
+          scopeColumn: table.id,
+          ownerColumn: table.authorId,
+        }),
+        // SPDX-SnippetEnd
+      ),
+    );
+  }
+
   /**
    * Resolve a UUID or slug to an agent ID.
    * Checks both the id and slug columns in a single query.
@@ -4679,7 +4765,6 @@ class AgentModel {
   }
 }
 
-const PERSONAL_MCP_GATEWAY_NAME = "My Gateway";
 const PERSONAL_MCP_GATEWAY_DESCRIPTION =
   "All MCP servers you install are automatically connected to this gateway.";
 
@@ -4768,7 +4853,7 @@ const CHAT_AGENT_ROW_COLUMNS = {
   end`,
 };
 
-function explicitAgentReadCondition(userId: string) {
+function explicitAgentReadCondition(principals: GrantPrincipal[]) {
   const table = schema.agentsTable;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -4776,9 +4861,9 @@ function explicitAgentReadCondition(userId: string) {
   return or(
     and(
       inArray(table.agentType, ["agent", "profile"]),
-      ResourcePermissionPolicyModel.grantCondition({
-        organizationId: table.organizationId,
-        userId,
+      ResourcePermissionPolicyModel.grantConditionForAny({
+        principals,
+        organizationColumn: table.organizationId,
         resource: "agent",
         scopeColumn: table.id,
         action: "read",
@@ -4786,9 +4871,9 @@ function explicitAgentReadCondition(userId: string) {
     ),
     and(
       eq(table.agentType, "mcp_gateway"),
-      ResourcePermissionPolicyModel.grantCondition({
-        organizationId: table.organizationId,
-        userId,
+      ResourcePermissionPolicyModel.grantConditionForAny({
+        principals,
+        organizationColumn: table.organizationId,
         resource: "mcpGateway",
         scopeColumn: table.id,
         action: "read",
@@ -4803,13 +4888,13 @@ function explicitAgentReadCondition(userId: string) {
  * grants, and LLM proxies unfenced here because they have no grant namespace
  * of their own — the caller's own conditions decide those.
  */
-function agentListFence(userId: string): SQL {
+function agentListFence(principals: GrantPrincipal[]): SQL {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   return or(
     eq(schema.agentsTable.agentType, "llm_proxy"),
-    explicitAgentReadCondition(userId),
+    explicitAgentReadCondition(principals),
   ) as SQL;
   // SPDX-SnippetEnd
 }

@@ -2,22 +2,19 @@ import { APPS_HACKATHON_OPENS_AT_MS } from "@archestra/shared";
 import { afterEach, beforeEach, describe, expect, vi } from "vitest";
 import config from "@/config";
 import { test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { useRouteTestApp } from "@/test/route-test-app";
 import appGalleryRoutes from "./app-gallery.routes";
 
-// cacheManager (used by the rate limiter) needs a live PostgreSQL connection
-// that PGlite tests don't have; back it with the canonical Map-backed fake from
-// src/__mocks__/cache-manager.ts (reset before every test).
-vi.mock("@/cache-manager");
+// The real cache, stored in this file's test database.
+setupTestCacheManager();
 
 describe("POST /api/app-gallery/device/start", () => {
   const ctx = useRouteTestApp(appGalleryRoutes);
 
   beforeEach(() => {
-    // This file uses vi.mock, so it runs in the isolated project where config
-    // is NOT auto-restored between tests; every case must set the baseline it
-    // needs. The date gate reads the wall clock and has no bypass, so pin the
-    // clock inside the hackathon window.
+    // The date gate reads the wall clock and has no bypass, so pin the clock
+    // inside the hackathon window.
     config.hackathonRecorder.enabled = true;
     vi.useFakeTimers({ shouldAdvanceTime: true });
     vi.setSystemTime(APPS_HACKATHON_OPENS_AT_MS);

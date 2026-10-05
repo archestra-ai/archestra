@@ -59,16 +59,16 @@ describe("hasPermissions", () => {
 
   it("grants only the actions a role holds, with no implied actions", () => {
     const userPermissions: Permissions = {
-      mcpServerInstallation: ["read", "create", "update", "delete"],
+      mcpServerInstallation: ["read", "create", "delete"],
     };
     expect(
       hasPermissions(userPermissions, {
-        mcpServerInstallation: ["read", "create", "update", "delete"],
+        mcpServerInstallation: ["read", "create", "delete"],
       }),
     ).toBe(true);
     expect(
       hasPermissions(userPermissions, {
-        mcpServerInstallation: ["manage-deleted"],
+        mcpServerInstallation: ["update"],
       }),
     ).toBe(false);
   });
@@ -177,6 +177,23 @@ describe("scoped page discovery", () => {
       }),
     ).toBe(false);
   });
+  it("ignores retired log capabilities when deciding page access", () => {
+    expect(
+      hasPagePermissions({
+        userPermissions: {},
+        required: { log: ["read"] },
+        capabilities: [
+          {
+            organizationId: "org",
+            resource: "log",
+            scope: "*",
+            action: "read",
+          },
+        ],
+      }),
+    ).toBe(false);
+  });
+
   it("still requires every other page permission", () => {
     const required: Permissions = { mcpRegistry: ["read"], team: ["read"] };
     expect(

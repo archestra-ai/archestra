@@ -40,7 +40,7 @@ function renderCallback(
   );
 }
 it.each([
-  "/account/connections",
+  "/account#connections",
   "/settings/credentials",
   "/chat?conversation=conversation-1",
 ])("completes once in strict mode and returns to %s without leaving authorization in the URL", async (destination) => {
@@ -69,7 +69,7 @@ it.each([
   expect(window.location.search).toBe("");
 });
 it.each([
-  "/account/connections",
+  "/account#connections",
   "/settings/credentials",
   "/agents/agent-1?section=advanced&setup=credentials#runtime-credentials",
 ])("returns to %s to recover from expired authorization", async (destination) => {

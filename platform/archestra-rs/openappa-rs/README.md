@@ -23,11 +23,11 @@ flowchart LR
 
 ## Build and run
 
-Cargo fetches the OpenAPPA v0.26.0 runtime at commit
-`cbb0fdfd5fe957655ed1c071580208a36e1a3610`, pinned in this package's
-manifest and the workspace lockfile. A sibling checkout is not required. Update the revision
-and lockfile together when adopting a newer runtime. The lockfile also selects
-`rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
+Cargo fetches the OpenAPPA runtime pinned to commit `05c04872` from its main
+branch. This includes the checked status read from OpenAPPA PR #509 and the
+wildcard fallback fix from PR #515. A sibling checkout is not required. Update
+the manifest revision and lockfile when adopting a newer runtime commit.
+The lockfile also selects `rmcp` 3.4.0, matching the runtime's MCP API. Rebuild the native addon and
 restart the backend after updating; production uses the normal Archestra image build.
 
 From `archestra/platform`:
@@ -50,7 +50,7 @@ native addon before starting the development backend. Changes to its Rust
 sources, build configuration, or the workspace Cargo manifest/lockfile rebuild
 the addon and restart the backend after a successful build. Failed builds leave
 the previous backend running and appear as errors in Tilt. With the flag off,
-Tilt skips this build. The build uses the same pinned OpenAPPA dependency as
+Tilt skips this build. The build uses the same lockfile-resolved OpenAPPA dependency as
 Docker; it does not use a sibling OpenAPPA checkout.
 
 The feature flag defaults to false and does not inherit `ARCHESTRA_BETA`.
@@ -106,6 +106,8 @@ including Chat, Slack and A2A, use the existing local-request trust boundary.
 Caller identity provides audit attribution. For external clients, it scopes the session and binds remedy offers to the authenticated credential. External callers authenticate through existing proxy mechanisms.
 
 The native actor ID hashes the session ID, and a new root ID hashes the organization and session IDs. A session keeps the root its row records. Authorized users share guardrail state within one organization. An organization change is refused.
+
+Chat reads the current trust and audience through an authenticated status endpoint. The native binding resolves the root recorded for the conversation and reads its persisted trajectory without dispatching a hook. The endpoint returns no status for an encrypted chat, even when the browser has its key; it does not read OpenAPPA for that chat.
 
 The proxy scopes external session IDs to the authenticated credential. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and ignores caller-supplied session headers. A changed parent is refused.
 
@@ -211,7 +213,7 @@ The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice 
 
 The runtime withholds results for unreleased call IDs. Unrecognized or expired remedy calls return a terminal message telling the model that nothing was applied.
 
-Locked chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Known provider-hosted tools are accepted, but their calls execute inside the provider and cannot be gated by the proxy. Unknown typed declarations and client-executed types that the adapter cannot gate are refused instead of being assumed hosted. The exception below governs the result of OpenAI Responses hosted web search; Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted results are not governed as client tool calls. Deferred `tool_search` declarations, including versioned Anthropic tool-search types and `defer_loading` tools, are refused with HTTP 400 because their client-callable tools are not declared on the wire. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates client calls and results, but notices stay in history as notice calls.
+Encrypted chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Known provider-hosted tools are accepted, but their calls execute inside the provider and cannot be gated by the proxy. Unknown typed declarations and client-executed types that the adapter cannot gate are refused instead of being assumed hosted. The exception below governs the result of OpenAI Responses hosted web search; Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted results are not governed as client tool calls. Deferred `tool_search` declarations, including versioned Anthropic tool-search types and `defer_loading` tools, are refused with HTTP 400 because their client-callable tools are not declared on the wire. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates client calls and results, but notices stay in history as notice calls.
 
 The provider runs a hosted `web_search` inside the inference call, so the proxy cannot stop the call; it rules on what the call brought in. It withholds the response from the first `web_search_call` item on — the search record, the text the model wrote with the results in view, and any calls after it — and submits that as the result of a `web_search` tool call. An admitted result passes through unchanged. A held one reaches the client as a notice in place of the withheld part, so the model never sees it in a later request unless a remedy releases it. List `web_search` under `confined_results` to have the runtime stage the result: accepting the offer returns it. Any other denial drops it, and the model searches again once the remedy allows the call. The query itself has already reached the provider, which holds the session's context anyway. A search-backed turn loses token streaming after the search starts, since the verdict needs the whole turn.
 
@@ -250,7 +252,7 @@ session identity from headers and from the client's own request, and MCP remedy
 availability. Chat tests verify that ordinary tools
 execute and return their original output without APPA callbacks in either mode.
 
-The pinned OpenAPPA revision includes the companion PostgreSQL and embedded-remedy
+The resolved OpenAPPA revision includes the companion PostgreSQL and embedded-remedy
 changes.
 Previous demo/browser results do not qualify this proxy-only refactor; validation
 for this change is reported separately in the PR.

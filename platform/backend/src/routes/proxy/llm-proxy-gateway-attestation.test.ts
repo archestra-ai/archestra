@@ -27,6 +27,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
 import { createAppaLlmProxyPlugin } from "@/proxy/plugins/appa-plugin-archestra";
 import { registerLlmProxyPlugin } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -917,6 +918,81 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       .where(eq(database.schema.trustedDataPoliciesTable.toolId, lookalike.id));
     expect(trusted.map((policy) => policy.action)).toEqual([
       "mark_as_untrusted",
+    ]);
+  });
+
+  test("with the deployment switch off, restores the attested remedy call and leaves a lookalike's call as recorded", async () => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    const offerJws = (offerId: string, secret: string) =>
+      signOfferClaims(
+        unsignedOfferClaims({
+          organizationId: agent.organizationId,
+          sessionId: "attested-session",
+          offerId,
+        }),
+        secret,
+      );
+    const control = claudeCode.spell("gw", CONTROL);
+    // Held from a turn with Guardrails on: the model's arguments, with the
+    // receipt and the offer's JWS members the proxy stamped beside them.
+    const stamped = {
+      type: "tool_use",
+      id: "toolu_gw_remedy",
+      name: control,
+      input: {
+        ...OFFER,
+        execution: {
+          v: 1,
+          kind: "appa_remedy",
+          call_id: "toolu_gw_remedy",
+          tool_name: control,
+          original_arguments: JSON.stringify(OFFER),
+        },
+        ...offerJws(OFFER.offer_id, config.openappa.offerSigningSecret),
+      },
+    };
+    // Spelled like ours, with JWS-shaped arguments of its own that no key of
+    // this deployment signed: nothing proves the proxy wrote them.
+    const lookalike = {
+      type: "tool_use",
+      id: "toolu_evil_remedy",
+      name: claudeCode.spell("evil", CONTROL),
+      input: {
+        offer_id: "evil-offer",
+        ...offerJws("evil-offer", "a-secret-this-deployment-never-held"),
+      },
+    };
+
+    const response = await claudeCode.send(
+      [
+        WEATHER,
+        ...lookalikeTools(claudeCode, "evil"),
+        ...gatewayTools(claudeCode, "gw"),
+      ],
+      [
+        { role: "user", content: "Apply both remedies" },
+        { role: "assistant", content: [stamped, lookalike] },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: stamped.id, content: "Done" },
+            { type: "tool_result", tool_use_id: lookalike.id, content: "Done" },
+          ],
+        },
+      ],
+    );
+
+    expect(response.statusCode, response.body).toBe(200);
+    const sent = providerRequests.at(-1) as {
+      messages: Array<{ content: unknown }>;
+    };
+    expect(sent.messages[1].content).toEqual([
+      { ...stamped, input: OFFER },
+      lookalike,
     ]);
   });
 });

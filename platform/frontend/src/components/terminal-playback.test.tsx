@@ -1,223 +1,233 @@
-import { act, render, waitFor } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
+import { Terminal } from "@xterm/xterm";
+import { afterEach, expect, test, vi } from "vitest";
 import { TerminalPlayback } from "./terminal-playback";
+import { TerminalRecording } from "./terminal-recording";
 
-const { terminal, fit, dimensions, proposeDimensions } = vi.hoisted(() => {
-  const dimensions = { current: { cols: 120, rows: 40 } };
-  return {
-    terminal: {
-      dispose: vi.fn(),
-      loadAddon: vi.fn(),
-      open: vi.fn(),
-      reset: vi.fn(),
-      resize: vi.fn(),
-      write: vi.fn(),
-      options: [] as unknown[],
-      registerCsiHandler: vi.fn(),
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+});
+
+test("retains scrollback through alternate-screen output with safe native artifact links", async () => {
+  const output = Array.from({ length: 100 }, (_, i) => `Line ${i}`).join(
+    "\r\n",
+  );
+  render(
+    <TerminalPlayback
+      content={`\x1b]777;archestra-terminal-size=80x5\x07${output}\x1b[?1049h\x1b[2J\x1b[HAlternate output\r\nArtifact: https://example.com/report\r\n\x1b[?1049lDone`}
+    />,
+  );
+  await waitFor(() => expect(screen.getByText("Done")).toBeVisible());
+  expect(screen.getByText("Line 0")).toBeVisible();
+  expect(screen.getByText("Alternate output")).toBeVisible();
+  const link = screen.getByRole("link", { name: "https://example.com/report" });
+  expect(link).toHaveAttribute("href", "https://example.com/report");
+  expect(link).toHaveAttribute("target", "_blank");
+  expect(link).toHaveAttribute("rel", "noopener noreferrer");
+  expect(link.style.textDecorationLine).toContain("underline");
+  expect(screen.getByTestId("terminal-playback")).not.toContainHTML(
+    'class="xterm',
+  );
+});
+
+test("changes wrapping after emulation and keeps geometry, text, colors and links", async () => {
+  render(
+    <TerminalRecording
+      content={
+        "\x1b]777;archestra-terminal-size=20x4\x07\x1b[31mA long line that runs across the original grid\x1b[0m\r\n\x1b]8;;https://example.com/report\x1b\\View artifact\x1b]8;;\x1b\\"
+      }
+    />,
+  );
+  const link = await screen.findByRole("link", { name: "View artifact" });
+  const playback = screen.getByTestId("terminal-playback");
+  const text = playback.textContent;
+  const physicalLines = playback.querySelectorAll("[data-terminal-row]").length;
+  expect(playback).toHaveAttribute("data-recorded-cols", "20");
+  expect(playback).toHaveAttribute("data-recorded-rows", "4");
+  const red =
+    playback.querySelector<HTMLElement>("[style*=color]")?.style.color;
+  expect(red).toBe("rgb(204, 0, 0)");
+  const resize = vi.spyOn(Terminal.prototype, "resize");
+  const wrap = screen.getByRole("button", { name: "Wrap lines" });
+  expect(wrap).toHaveAttribute("aria-pressed", "false");
+  fireEvent.click(wrap);
+  expect(wrap).toHaveAttribute("aria-pressed", "true");
+  expect(playback.querySelectorAll("[data-terminal-row]").length).toBeLessThan(
+    physicalLines,
+  );
+  expect(playback.textContent).toBe(text);
+  expect(playback).toHaveAttribute("data-recorded-cols", "20");
+  expect(link).toHaveAttribute("href", "https://example.com/report");
+  expect(
+    playback.querySelector<HTMLElement>("[style*=color]")?.style.color,
+  ).toBe(red);
+  fireEvent(window, new Event("resize"));
+  expect(resize).not.toHaveBeenCalled();
+  fireEvent.click(wrap);
+  expect(playback.querySelectorAll("[data-terminal-row]").length).toBe(
+    physicalLines,
+  );
+});
+
+test("seeking reconstructs redraws without stale output or links", async () => {
+  const { rerender } = render(
+    <TerminalPlayback
+      content={
+        "\x1b]777;archestra-terminal-size=40x5\x07Old screen\r\nhttps://example.com/old"
+      }
+    />,
+  );
+  await screen.findByRole("link");
+  rerender(
+    <TerminalPlayback
+      content={
+        "\x1b]777;archestra-terminal-size=80x6\x07\x1b[2J\x1b[HNew screen\r\n\x1b[32mReady"
+      }
+    />,
+  );
+  await screen.findByText("Ready");
+  expect(screen.queryByText("Old screen")).not.toBeInTheDocument();
+  expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  expect(screen.getByTestId("terminal-playback")).toHaveAttribute(
+    "data-recorded-cols",
+    "80",
+  );
+});
+
+test("keeps DOM work bounded when a large soft-wrapped artifact is reflowed", async () => {
+  vi.stubGlobal(
+    "IntersectionObserver",
+    class {
+      observe() {}
+      unobserve() {}
+      disconnect() {}
     },
-    fit: vi.fn(),
-    dimensions,
-    proposeDimensions: vi.fn(() => dimensions.current),
-  };
+  );
+  render(
+    <TerminalRecording
+      content={`\x1b]777;archestra-terminal-size=80x5\x07${"x".repeat(80 * 5100)}`}
+    />,
+  );
+  await waitFor(() =>
+    expect(
+      document.querySelectorAll("[data-recording-block]").length,
+    ).toBeGreaterThan(100),
+  );
+  expect(document.querySelectorAll("[data-terminal-row]").length).toBeLessThan(
+    500,
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Wrap lines" }));
+  expect(
+    document.querySelectorAll("[data-recording-block]").length,
+  ).toBeGreaterThan(100);
+  expect(document.querySelectorAll("[data-terminal-row]").length).toBeLessThan(
+    500,
+  );
 });
 
-let resizeObserverCallback: ResizeObserverCallback | undefined;
-
-vi.mock("@xterm/xterm", () => ({
-  Terminal: class Terminal {
-    constructor(options: unknown) {
-      terminal.options.push(options);
-    }
-    dispose = terminal.dispose;
-    loadAddon = terminal.loadAddon;
-    open = terminal.open;
-    reset = terminal.reset;
-    resize = terminal.resize;
-    write = terminal.write;
-    parser = { registerCsiHandler: terminal.registerCsiHandler };
-  },
-}));
-
-vi.mock("@xterm/addon-fit", () => ({
-  FitAddon: class FitAddon {
-    fit = fit;
-    proposeDimensions = proposeDimensions;
-  },
-}));
-
-vi.mock("@xterm/xterm/css/xterm.css", () => ({}));
-
-describe("TerminalPlayback", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-    fit.mockImplementation(() => {});
-    dimensions.current = { cols: 120, rows: 40 };
-    resizeObserverCallback = undefined;
-    terminal.options.length = 0;
-    vi.stubGlobal("requestAnimationFrame", (callback: FrameRequestCallback) => {
-      callback(0);
-      return 0;
+test("a new seek cancels a large snapshot without exposing its stale content", async () => {
+  const originalWrite = Terminal.prototype.write;
+  const parsed = new Promise<void>((resolve) => {
+    vi.spyOn(Terminal.prototype, "write").mockImplementation(function (
+      this: Terminal,
+      data,
+      callback,
+    ) {
+      originalWrite.call(this, data, () => {
+        callback?.();
+        resolve();
+      });
     });
-    vi.stubGlobal(
-      "ResizeObserver",
-      class {
-        constructor(callback: ResizeObserverCallback) {
-          resizeObserverCallback = callback;
-        }
-        observe() {}
-        disconnect() {}
-      },
-    );
   });
-
-  it("waits to replay captured bytes until the panel has a usable grid", async () => {
-    dimensions.current = { cols: 1, rows: 1 };
-    render(<TerminalPlayback content="captured frame" />);
-
-    await waitFor(() => expect(resizeObserverCallback).toBeDefined());
-    expect(terminal.write).not.toHaveBeenCalled();
-
-    dimensions.current = { cols: 120, rows: 40 };
-    act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
-
-    expect(terminal.write).toHaveBeenCalledWith(
-      `captured frame${readOnlyTerminalState}`,
-    );
-  });
-
-  it("replays raw terminal controls and appends streamed bytes", async () => {
-    const firstFrame = "\u001b[2J\u001b[2GClaude Code";
-    const { rerender } = render(<TerminalPlayback content={firstFrame} />);
-
-    await waitFor(() =>
-      expect(terminal.write).toHaveBeenCalledWith(
-        `${firstFrame}${readOnlyTerminalState}`,
-      ),
-    );
-
-    await act(() =>
-      rerender(<TerminalPlayback content={`${firstFrame}\r\nReady`} />),
-    );
-    expect(terminal.write).toHaveBeenLastCalledWith(
-      `\r\nReady${readOnlyTerminalState}`,
-    );
-    expect(terminal.reset).not.toHaveBeenCalled();
-  });
-
-  it("resets the emulated screen when the transcript is replaced", async () => {
-    const { rerender } = render(<TerminalPlayback content="first task" />);
-    await waitFor(() =>
-      expect(terminal.write).toHaveBeenCalledWith(
-        `first task${readOnlyTerminalState}`,
-      ),
-    );
-
-    await act(() => rerender(<TerminalPlayback content="replacement" />));
-    expect(terminal.reset).toHaveBeenCalledOnce();
-    expect(terminal.write).toHaveBeenLastCalledWith(
-      `replacement${readOnlyTerminalState}`,
-    );
-  });
-
-  it("replays the retained frame when its grid dimensions change", async () => {
-    render(<TerminalPlayback content="captured frame" />);
-    await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());
-
-    dimensions.current = { cols: 90, rows: 30 };
-    act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
-
-    expect(terminal.reset).toHaveBeenCalledOnce();
-    expect(terminal.write).toHaveBeenLastCalledWith(
-      `captured frame${readOnlyTerminalState}`,
-    );
-  });
-
-  it("preserves a completed TUI's recorded grid instead of reflowing it", async () => {
-    fit.mockImplementation(() => {
-      terminal.resize(dimensions.current.cols, dimensions.current.rows);
-    });
-    render(
-      <TerminalPlayback
-        content={
-          "\u001b]777;archestra-terminal-size=160x40\u0007\u001b[2JHermes"
-        }
-      />,
-    );
-
-    await waitFor(() =>
-      expect(terminal.write).toHaveBeenCalledWith(
-        `\u001b[2JHermes${readOnlyTerminalState}`,
-      ),
-    );
-    expect(terminal.resize).toHaveBeenCalledWith(160, 40);
-    expect(terminal.write).not.toHaveBeenCalledWith(
-      expect.stringContaining("archestra-terminal-size"),
-    );
-
-    dimensions.current = { cols: 90, rows: 30 };
-    act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
-
-    expect(terminal.reset).not.toHaveBeenCalled();
-    expect(terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it("scales a recorded grid as one canvas on a narrower viewport", async () => {
-    const { getByTestId } = render(
-      <TerminalPlayback
-        content={
-          "\u001b]777;archestra-terminal-size=160x40\u0007\u001b[2JClaude Code"
-        }
-      />,
-    );
-    await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());
-
-    const viewport = getByTestId("terminal-playback-viewport");
-    const playback = getByTestId("terminal-playback");
-    Object.defineProperties(viewport, {
-      clientWidth: { configurable: true, value: 720 },
-    });
-    Object.defineProperties(playback, {
-      offsetHeight: { configurable: true, value: 600 },
-      offsetWidth: { configurable: true, value: 1280 },
-    });
-
-    act(() => resizeObserverCallback?.([], {} as unknown as ResizeObserver));
-
-    expect(playback.style.transform).toBe("scale(0.5375)");
-    expect(playback.parentElement).toHaveStyle({
-      height: "322.5px",
-      width: "688px",
-    });
-    expect(terminal.resize).toHaveBeenCalledTimes(1);
-  });
-
-  it("keeps retained playback locally scrollable", async () => {
-    render(<TerminalPlayback content="captured frame" />);
-    await waitFor(() => expect(terminal.write).toHaveBeenCalledOnce());
-
-    expect(terminal.options.at(-1)).toMatchObject({
-      convertEol: true,
-      disableStdin: true,
-      lineHeight: 1.2,
-      scrollback: 1_000_000,
-      scrollSensitivity: 3,
-    });
-    expect(terminal.write).toHaveBeenCalledWith(
-      expect.stringContaining("\u001b[?1003l"),
-    );
-
-    const setModeHandler = terminal.registerCsiHandler.mock.calls.find(
-      ([identifier]) => identifier.final === "h",
-    )?.[1];
-    const resetModeHandler = terminal.registerCsiHandler.mock.calls.find(
-      ([identifier]) => identifier.final === "l",
-    )?.[1];
-
-    expect(setModeHandler?.([1049])).toBe(true);
-    expect(resetModeHandler?.([47])).toBe(true);
-    expect(setModeHandler?.([25])).toBe(false);
-  });
+  const { rerender } = render(
+    <TerminalPlayback
+      content={`\x1b]777;archestra-terminal-size=80x5\x07${"Old output\r\n".repeat(6000)}`}
+    />,
+  );
+  await act(() => parsed);
+  rerender(<TerminalPlayback content="Latest screen" />);
+  await screen.findByText("Latest screen");
+  expect(screen.queryByText("Old output")).not.toBeInTheDocument();
 });
 
-const readOnlyTerminalState =
-  "\u001b[?25l\u001b[?1000l\u001b[?1002l\u001b[?1003l\u001b[?1006l\u001b[?1015l";
+test("appends streamed bytes and completes an artifact URL without resetting history", async () => {
+  const prefix =
+    "\x1b]777;archestra-terminal-size=80x5\x07First\nReport: https://exam";
+  const { rerender } = render(<TerminalPlayback content={prefix} />);
+  await screen.findByText("First");
+  const reset = vi.spyOn(Terminal.prototype, "reset");
+  rerender(
+    <TerminalPlayback content={`${prefix}ple.com/report.html\nReady`} />,
+  );
+  await screen.findByText("Ready");
+  expect(screen.getByText("First")).toBeVisible();
+  expect(
+    screen.getByRole("link", { name: "https://example.com/report.html" }),
+  ).toHaveAttribute("href", "https://example.com/report.html");
+  expect(reset).not.toHaveBeenCalled();
+});
+
+test("replays retained text when its recorded geometry changes", async () => {
+  const { rerender } = render(<TerminalPlayback content="Captured frame" />);
+  await screen.findByText("Captured frame");
+  expect(screen.getByTestId("terminal-playback")).toHaveAttribute(
+    "data-recorded-cols",
+    "120",
+  );
+  rerender(
+    <TerminalPlayback
+      content={"\x1b]777;archestra-terminal-size=90x30\x07Captured frame"}
+    />,
+  );
+  await waitFor(() =>
+    expect(screen.getByTestId("terminal-playback")).toHaveAttribute(
+      "data-recorded-cols",
+      "90",
+    ),
+  );
+  expect(screen.getByTestId("terminal-playback")).toHaveAttribute(
+    "data-recorded-rows",
+    "30",
+  );
+  expect(screen.getByText("Captured frame")).toBeVisible();
+});
+
+test("drains parsed bytes before a rapid seek and publishes only the latest position", async () => {
+  const originalWrite = Terminal.prototype.write;
+  let release: (() => void) | undefined;
+  const parsed = new Promise<void>((resolve) => {
+    vi.spyOn(Terminal.prototype, "write").mockImplementation(function (
+      this: Terminal,
+      data,
+      callback,
+    ) {
+      originalWrite.call(this, data, () => {
+        if (!release) {
+          release = callback;
+          resolve();
+        } else callback?.();
+      });
+    });
+  });
+  const reset = vi.spyOn(Terminal.prototype, "reset");
+  const { rerender } = render(<TerminalPlayback content="Later screen" />);
+  await act(() => parsed);
+  rerender(<TerminalPlayback content="Middle screen" />);
+  rerender(<TerminalPlayback content="Latest screen" />);
+  expect(reset).not.toHaveBeenCalled();
+  await act(() => release?.());
+  await screen.findByText("Latest screen");
+  expect(Terminal.prototype.write).not.toHaveBeenCalledWith(
+    "Middle screen",
+    expect.any(Function),
+  );
+  expect(screen.queryByText("Later screen")).not.toBeInTheDocument();
+  expect(screen.queryByText("Middle screen")).not.toBeInTheDocument();
+});

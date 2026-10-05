@@ -1,37 +1,22 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
-import { userHasPermission } from "@/auth";
 import {
   acceptHeldAppaGithubPull,
   configureAppaGithubSync,
+  createAppaGithubRepository,
   getAppaGithubSync,
   updateAppaGithubSync,
 } from "@/services/openappa-github-sync";
-import { ApiError, constructResponseSchema } from "@/types";
+import { constructResponseSchema } from "@/types";
 import {
   AcceptedHeldPullSchema,
   AppaGithubSourceSchema,
   AppaGithubSyncActionSchema,
   AppaGithubSyncStatusSchema,
+  CreateAppaGithubRepositorySchema,
 } from "@/types/openappa-github-sync";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
-  // This changes organization policy, so require organization management as well as the endpoint permission.
-  app.addHook("preHandler", async (request) => {
-    if (
-      request.method !== "GET" &&
-      !(await userHasPermission(
-        request.user.id,
-        request.organizationId,
-        "organization",
-        "update",
-      ))
-    )
-      throw new ApiError(
-        403,
-        "Organization update permission is required to manage APPA sync",
-      );
-  });
   app.get(
     "/api/openappa/github-sync",
     {
@@ -60,6 +45,25 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           organizationId: request.organizationId,
           userId: request.user.id,
           source: request.body,
+        }),
+      ),
+  );
+  app.post(
+    "/api/openappa/github-sync/repository",
+    {
+      schema: {
+        operationId: RouteId.CreateAppaGithubRepository,
+        tags: ["OpenAPPA"],
+        body: CreateAppaGithubRepositorySchema,
+        response: constructResponseSchema(AppaGithubSyncStatusSchema),
+      },
+    },
+    async (request, reply) =>
+      reply.send(
+        await createAppaGithubRepository({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          ...request.body,
         }),
       ),
   );

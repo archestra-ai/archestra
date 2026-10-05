@@ -175,7 +175,7 @@ class AgentSkillModel {
         and(
           eq(schema.agentSkillsTable.agentId, params.agentId),
           skillUriKeyPredicate(params),
-          skillReadablePredicate({
+          await skillReadablePredicate({
             organizationId: params.organizationId,
             readableBy: params.readableBy,
           }),

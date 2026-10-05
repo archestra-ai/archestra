@@ -8,6 +8,128 @@ import { buildSandboxSupervisorScript } from "./sandbox-supervisor";
 describe.skipIf(!process.env.ARCHESTRA_TEST_SANDBOX_IMAGE)(
   "sandbox supervisor",
   () => {
+    it("clears retained terminal ownership when recording fails after completion", () => {
+      const result = runInContainer(`
+cat > /var/run/archestra/turns/1.request <<'TURN'
+touch /tmp/started
+while [ ! -f /tmp/complete ]; do sleep 0.1; done
+tmux set-option -t agent @archestra_retained_task 1
+printf '0\\n' > /var/run/archestra/turns/1.result
+touch /tmp/completed
+sleep 60
+TURN
+wait_for /tmp/started
+kill -STOP "$supervisor"
+touch /tmp/complete
+wait_for /tmp/completed
+client="$(tmux list-clients -F '#{client_name}')"
+tmux detach-client -t "$client"
+sleep 0.2
+kill -CONT "$supervisor"
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 75
+test "$(tmux show-option -v -t agent @archestra_retained_task)" = ''
+kill -0 "$supervisor"
+echo VERIFIED
+`);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
+    it.each([
+      "disconnect",
+      "parser error",
+    ])("fails a recording %s without losing output or ending the workspace", (failure) => {
+      const result = runInContainer(`
+printf 'echo retained-output; touch /tmp/started; sleep 60\\n' > /var/run/archestra/turns/1.request
+wait_for /tmp/started
+${failure === "disconnect" ? 'client="$(tmux list-clients -F \'#{client_name}\')"\ntmux detach-client -t "$client"' : "printf 'not-a-tmux-command\\n' > /var/run/archestra/turns/1.recording-input"}
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 75
+grep -q retained-output /var/run/archestra/turns/1.log
+python3 - <<'PY'
+import json
+assert json.load(open('/var/run/archestra/turns/1.failure'))['code'] == 'runtime.recording_failed'
+PY
+kill -0 "$supervisor"
+test ! -e /var/run/archestra/turns/1.recording-input
+printf 'echo follow-up\\n' > /var/run/archestra/turns/2.request
+wait_for /var/run/archestra/turns/2.exit
+test "$(cat /var/run/archestra/turns/2.exit)" = 0
+grep -q follow-up /var/run/archestra/turns/2.log
+echo VERIFIED
+`);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
+    it("bounds recording startup without launching unrecorded work", () => {
+      const result = runInContainer(`
+cp /var/run/archestra/record-terminal /tmp/original-recorder
+printf 'while IFS= read -r event; do :; done\\n' > /var/run/archestra/record-terminal
+printf 'touch /tmp/unrecorded-work\\n' > /var/run/archestra/turns/1.request
+sleep 12
+test -f /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 75
+test ! -f /tmp/unrecorded-work
+test ! -e /var/run/archestra/turns/1.recording-input
+test -z "$(tmux list-clients -F '#{client_name}')"
+kill -0 "$supervisor"
+cp /tmp/original-recorder /var/run/archestra/record-terminal
+printf 'echo follow-up\\n' > /var/run/archestra/turns/2.request
+wait_for /var/run/archestra/turns/2.exit
+test "$(cat /var/run/archestra/turns/2.exit)" = 0
+echo VERIFIED
+`);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
+    it("records initial and resized grids in order even when a turn is canceled", () => {
+      const result = runInContainer(`
+tmux set-option -t agent status off
+tmux resize-window -t agent -x 80 -y 23
+cat > /tmp/redraw.py <<'PYTHON'
+import os, signal, time
+from pathlib import Path
+def redraw(*args):
+    width, height = os.get_terminal_size()
+    print('\\x1b[2J\\x1b[Hframe:%dx%d' % (width, height), flush=True)
+    Path('/tmp/frame-%dx%d' % (width, height)).touch()
+signal.signal(signal.SIGWINCH, redraw)
+redraw()
+while True: time.sleep(.1)
+PYTHON
+printf 'python3 /tmp/redraw.py\\n' > /var/run/archestra/turns/1.request
+wait_for /tmp/frame-80x23
+tmux resize-window -t agent -x 200 -y 57
+wait_for /tmp/frame-200x57
+touch /var/run/archestra/turns/1.cancel
+wait_for /var/run/archestra/turns/1.exit
+test "$(cat /var/run/archestra/turns/1.exit)" = 130
+python3 - <<'PYTHON'
+from pathlib import Path
+recording = Path('/var/run/archestra/turns/1.log').read_bytes()
+initial = b'\\x1b]777;archestra-terminal-size=80x23\\x07'
+resized = b'\\x1b]777;archestra-terminal-size=200x57\\x07'
+assert recording.startswith(initial), repr(recording)
+assert recording.index(initial) < recording.index(b'frame:80x23') < recording.index(resized) < recording.index(b'frame:200x57'), repr(recording)
+assert not Path('/var/run/archestra/development-activity').exists(), 'recorder counted as human activity'
+PYTHON
+printf 'echo next-turn\\n' > /var/run/archestra/turns/2.request
+wait_for /var/run/archestra/turns/2.exit
+python3 - <<'PYTHON'
+from pathlib import Path
+recording = Path('/var/run/archestra/turns/2.log').read_bytes()
+assert recording.startswith(b'\\x1b]777;archestra-terminal-size=200x57\\x07'), repr(recording)
+assert b'next-turn' in recording and b'frame:' not in recording, repr(recording)
+PYTHON
+echo VERIFIED
+`);
+      expect(result.status, result.stderr).toBe(0);
+      expect(result.stdout).toContain("VERIFIED");
+    }, 30_000);
+
     it("keeps the same CLI and tmux contents interactive after completing a turn", () => {
       const result = runInContainer(`
 mkdir -p /var/run/archestra/turns
@@ -222,6 +344,7 @@ wait_for_absent() {
   done
 }
 set -x
+while ! tmux has-session -t agent 2>/dev/null; do sleep 0.1; done
 ${assertions}
 `,
     },

@@ -4,7 +4,7 @@ import { fireEvent, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { useState } from "react";
+import { type ReactNode, useState } from "react";
 import {
   afterAll,
   afterEach,
@@ -15,8 +15,10 @@ import {
   it,
   vi,
 } from "vitest";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
+import { makeOrganization } from "@/mocks/data/organization";
 import { getAgentCatalogTemplates } from "./agent-pages/agent-catalog";
 import {
   type AgentRuntimeConfig,
@@ -29,6 +31,7 @@ import {
 
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
+vi.mock("@/lib/auth/auth.query");
 Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
 Element.prototype.setPointerCapture = vi.fn();
 Element.prototype.releasePointerCapture = vi.fn();
@@ -39,6 +42,9 @@ global.ResizeObserver = class ResizeObserver {
   disconnect() {}
 } as typeof ResizeObserver;
 const server = setupServer(
+  http.get("http://localhost:9000/api/organization", () =>
+    HttpResponse.json(makeOrganization()),
+  ),
   http.get("http://localhost:9000/api/credentials", () =>
     HttpResponse.json([]),
   ),
@@ -52,6 +58,9 @@ const catalogImages = getAgentCatalogImages({
 });
 
 beforeEach(() => {
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "test-user" } },
+  } as ReturnType<typeof useSession>);
   archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
   vi.mocked(useAppName).mockReturnValue("Test Platform");
   vi.mocked(useAppIconLogo).mockReturnValue("/logo-icon.svg");
@@ -67,7 +76,7 @@ beforeEach(() => {
 describe("AgentRuntimePicker", () => {
   it("replaces the complete runtime when switching harnesses and removes it for the native platform agent", async () => {
     const user = userEvent.setup();
-    renderPicker("claude-code", {
+    await renderPicker("claude-code", {
       ...runtimeFor("claude-code"),
       environment: [{ key: "OLD_SETTING", value: "old" }],
       credentials: [
@@ -93,7 +102,7 @@ describe("AgentRuntimePicker", () => {
 
   it("locks Claude Code to Anthropic and limits Codex to the two OpenAI protocols", async () => {
     const user = userEvent.setup();
-    renderPicker("claude-code");
+    await renderPicker("claude-code");
     await user.click(screen.getByRole("button", { name: /^Inference API/ }));
     expect(screen.getByLabelText("Inference API")).toBeDisabled();
     expect(screen.getByLabelText("Inference API")).toHaveTextContent(
@@ -113,7 +122,7 @@ describe("AgentRuntimePicker", () => {
 
   it("corrects incompatible protocols when a custom command changes harnesses, retaining compatible choices", async () => {
     const user = userEvent.setup();
-    renderPicker("custom");
+    await renderPicker("custom");
     fireEvent.change(screen.getByLabelText("Command"), {
       target: { value: "archestra-claude-code" },
     });
@@ -154,7 +163,7 @@ describe("AgentRuntimePicker", () => {
 
   it("opens Custom image setup and preserves edits through disclosure changes", async () => {
     const user = userEvent.setup();
-    renderPicker("chat");
+    await renderPicker("chat");
     await user.click(screen.getByRole("radio", { name: "Custom image" }));
     expect(screen.getByText("Model settings content")).toBeVisible();
     // Custom image starts empty: it must not quietly fall back to the
@@ -178,8 +187,11 @@ describe("AgentRuntimePicker", () => {
       screen.getByRole("option", { name: "Anthropic Messages" }),
     );
     await user.click(screen.getByRole("button", { name: /^Run controls/ }));
+    await user.click(
+      screen.getByRole("button", { name: /Resources and access/ }),
+    );
     expect(screen.getByLabelText("Privileged mode")).toBeVisible();
-    fireEvent.change(screen.getByLabelText("Metered LLM budget (USD)"), {
+    fireEvent.change(screen.getByLabelText("Metered LLM budget"), {
       target: { value: "25" },
     });
     expect(
@@ -201,7 +213,10 @@ describe("AgentRuntimePicker", () => {
       modelSummary: "Provider connection",
       modelAttention: "Select a provider and Claude model",
     };
-    const { rerender } = render(<AgentRuntimePicker {...props} />);
+    const { rerender } = render(<AgentRuntimePicker {...props} />, {
+      wrapper: QueryWrapper,
+    });
+    await screen.findByRole("radio", { name: "Claude Code" });
     await user.hover(screen.getByRole("img", { name: props.modelAttention }));
     expect(await screen.findByRole("tooltip")).toHaveTextContent(
       props.modelAttention,
@@ -253,19 +268,23 @@ function runtimeFor(
   );
 }
 
-function renderPicker(
+async function renderPicker(
   initialId: AgentRuntimeSelection,
   initialRuntime?: AgentRuntimeConfig,
 ) {
-  return render(
-    <QueryClientProvider
-      client={
-        new QueryClient({ defaultOptions: { queries: { retry: false } } })
-      }
-    >
-      <Harness initialId={initialId} initialRuntime={initialRuntime} />
-    </QueryClientProvider>,
+  const view = render(
+    <Harness initialId={initialId} initialRuntime={initialRuntime} />,
+    { wrapper: QueryWrapper },
   );
+  await screen.findByRole("radio", { name: "Claude Code" });
+  return view;
+}
+
+function QueryWrapper({ children }: { children: ReactNode }) {
+  const [client] = useState(
+    () => new QueryClient({ defaultOptions: { queries: { retry: false } } }),
+  );
+  return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 
 function savedRuntime() {

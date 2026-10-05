@@ -11,7 +11,6 @@ import {
   GitPullRequestArrow,
   KeyRound,
   Loader2,
-  LockKeyhole,
   Pencil,
   Plus,
   RefreshCw,
@@ -107,6 +106,7 @@ import {
   BATTERY_STATUS_GROUPS,
   type BatteryStatusGroup,
 } from "./battery-status";
+import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
 import { batteryStatusBadge } from "./policy-decorations";
 
 type BatteryStatus = PolicyBattery["status"];
@@ -152,8 +152,7 @@ export function BatteriesUploadAction() {
   const pathname = usePathname();
   const declarations = usePolicyDeclarations();
   const { data: canBind } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
     credential: ["update"],
   });
   const [uploading, setUploading] = useState(false);
@@ -182,14 +181,12 @@ export function BatteriesPanel() {
   // The batteries that fit a server, as the overview counts them.
   const summary = useCoverageSummary();
   const { data: canManage } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, and an uploaded
   // package may carry such code, so both take the credential permission too.
   const { data: canBind } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
     credential: ["update"],
   });
   // Filters and page live in the URL, so a reload or a shared link keeps them.
@@ -378,15 +375,7 @@ export function BatteriesPanel() {
           <InlineNoticeText>{lastError}</InlineNoticeText>
         </InlineNotice>
       )}
-      {managedInGithub && (
-        <InlineNotice variant="neutral">
-          <LockKeyhole />
-          <span className="font-medium">Managed in GitHub</span>
-          <InlineNoticeText>
-            The repository owns this policy. Change its batteries there.
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
+      {managedInGithub && <GithubManagedPolicyNotice />}
       {heldPull !== null && (
         <HeldPullNotice
           heldPull={heldPull}
@@ -771,6 +760,12 @@ function BatteryDialog({
               })}
             </ul>
           )}
+          {writable && servers.length === 1 && (
+            <p className="text-xs text-muted-foreground">
+              Detaching the last server also removes the battery from the
+              policy.
+            </p>
+          )}
           {writable && summary && (
             <AttachServerPicker
               batteryName={summary.name}
@@ -927,7 +922,13 @@ function AttachServerPicker({
   const id = `battery-server-${batteryName}`;
   return (
     <div className="space-y-2">
-      <Label htmlFor={id}>Attach to a server</Label>
+      <div className="space-y-0.5">
+        <Label htmlFor={id}>Attach to a server</Label>
+        <p className="text-xs text-muted-foreground">
+          Points the battery's rules at this server's tools. The server itself
+          doesn't change.
+        </p>
+      </div>
       <div className="flex items-center gap-2">
         <SearchableSelect
           id={id}
@@ -1098,7 +1099,7 @@ function CredentialRow({
         value={value}
         disabled={disabled}
         onValueChange={(next) => {
-          // The table is one per organization: letting go of a variable the
+          // The table is one per openappaSettings: letting go of a variable the
           // other entries read would take the key from them too, so the
           // unset is refused and the row says why.
           if (next === UNBOUND && others.length > 0) return setKept(true);

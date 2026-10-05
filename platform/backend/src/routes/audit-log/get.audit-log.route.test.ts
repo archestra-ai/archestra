@@ -11,23 +11,19 @@
  * - Legacy actorUserId param is not accepted by the route; it is silently ignored
  *   (Fastify strips unknown query params) — the regression guard verifies results are
  *   NOT narrowed when only actorUserId is passed.
- * - 403 when hasPermission denies the request.
+ * - 403 when the caller's role lacks the route's permission.
  */
 
+import { RouteId } from "@archestra/shared";
+import { requiredEndpointPermissionsMap } from "@archestra/shared/access-control";
 import { vi } from "vitest";
-import { hasPermission } from "@/auth";
+import { betterAuth, hasPermission } from "@/auth";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { MemberModel } from "@/models";
 import AuditLogModel from "@/models/audit-log";
-import { ResourcePermissions } from "@/services/resource-permissions";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type AuditLog, type User } from "@/types";
-
-vi.mock("@/auth");
-
-const hasPermissionMock = vi.mocked(hasPermission);
-
-vi.mock("@/observability");
 
 type SeedAuditLogInput = Parameters<typeof AuditLogModel.create>[0] & {
   createdAt?: Date;
@@ -66,16 +62,15 @@ describe("GET /api/audit-logs", () => {
   let organizationId: string;
   let user: User;
 
-  beforeEach(async ({ makeOrganization, makeUser }) => {
-    vi.clearAllMocks();
-    hasPermissionMock.mockResolvedValue({ success: true, error: null });
-    // Suite default: org-wide view (`read` on the audit log at `*`, which the
-    // retired auditLog:admin became). Own-only tests flip this.
-    vi.spyOn(ResourcePermissions, "allows").mockResolvedValue(true);
+  beforeEach(async ({ makeMember, makeOrganization, makeUser }) => {
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     const organization = await makeOrganization();
     organizationId = organization.id;
     user = await makeUser();
+    await makeMember(user.id, organizationId, { role: "admin" });
 
     app = createFastifyInstance();
 
@@ -86,12 +81,14 @@ describe("GET /api/audit-logs", () => {
         organizationId;
     });
 
-    // Simulate the permission gate that fastifyAuthPlugin normally provides.
-    // The mock's configured resolution decides the outcome; the permissions
-    // argument is unused, but the real signature requires an object.
+    // The route's permission gate that fastifyAuthPlugin normally applies,
+    // checked against the caller's real role.
     app.addHook("preHandler", async (request) => {
-      const result = await hasPermissionMock({}, request.headers);
-      if (!result?.success) {
+      const result = await hasPermission(
+        requiredEndpointPermissionsMap[RouteId.GetAuditLogs] ?? {},
+        request.headers,
+      );
+      if (!result.success) {
         throw new ApiError(403, "Forbidden");
       }
     });
@@ -145,11 +142,8 @@ describe("GET /api/audit-logs", () => {
     expect(returned?.action).toBe("futureFeature.created");
   });
 
-  test("returns 403 when hasPermission denies the request (member role equivalent)", async () => {
-    hasPermissionMock.mockResolvedValue({
-      success: false,
-      error: new Error("Forbidden"),
-    });
+  test("returns 403 for the member role", async () => {
+    await MemberModel.updateRole(user.id, organizationId, "member");
 
     const response = await app.inject({
       method: "GET",
@@ -159,11 +153,8 @@ describe("GET /api/audit-logs", () => {
     expect(response.statusCode).toBe(403);
   });
 
-  test("returns 403 when hasPermission denies the request (editor role equivalent)", async () => {
-    hasPermissionMock.mockResolvedValue({
-      success: false,
-      error: new Error("Forbidden"),
-    });
+  test("returns 403 for the editor role", async () => {
+    await MemberModel.updateRole(user.id, organizationId, "editor");
 
     const response = await app.inject({
       method: "GET",
@@ -580,7 +571,7 @@ describe("GET /api/audit-logs", () => {
       await seedRow(organizationId, { actorId: other.id, actorEmail: "o@x" });
       await seedRow(organizationId, { actorId: null });
 
-      vi.spyOn(ResourcePermissions, "allows").mockResolvedValue(false);
+      await MemberModel.updateRole(user.id, organizationId, "platform_admin");
 
       const list = await app.inject({
         method: "GET",

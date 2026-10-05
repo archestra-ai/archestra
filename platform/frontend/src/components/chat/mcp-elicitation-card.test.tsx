@@ -1,6 +1,6 @@
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import type { AskUserGroupMember } from "./ask-user-outcome";
 import { McpElicitationCard } from "./mcp-elicitation-card";
 import {
@@ -17,6 +17,10 @@ global.ResizeObserver = class ResizeObserver {
 const CONVERSATION_ID = "00000000-0000-4000-8000-000000000100";
 
 describe("McpElicitationCard", () => {
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
   it("shows a single question with Dismiss and Submit, no tabs or navigation", async () => {
     const user = userEvent.setup();
     const onRespond = vi.fn().mockResolvedValue(true);
@@ -429,7 +433,8 @@ describe("McpElicitationCard", () => {
   });
 
   it("does not auto-advance from a multi-choice tab; Next moves on", async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     render(
       <McpElicitationCard
@@ -447,7 +452,7 @@ describe("McpElicitationCard", () => {
 
     await user.click(screen.getByRole("checkbox", { name: "Run tests" }));
     // Longer than the auto-advance delay.
-    await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+    await act(() => vi.advanceTimersByTimeAsync(400));
     expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
       "aria-selected",
       "true",
@@ -480,7 +485,8 @@ describe("McpElicitationCard", () => {
   });
 
   it("confirms a keyboard pick with Enter instead of advancing on arrow keys", async () => {
-    const user = userEvent.setup();
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
 
     render(
       <McpElicitationCard
@@ -497,10 +503,10 @@ describe("McpElicitationCard", () => {
     await user.keyboard("[Space]");
     // Radix selects on its deferred focus move while the arrow is still held.
     await user.keyboard("{ArrowDown>}");
-    await act(() => new Promise((resolve) => setTimeout(resolve, 20)));
+    await act(() => vi.advanceTimersByTimeAsync(20));
     await user.keyboard("{/ArrowDown}");
     expect(within(panel).getByRole("radio", { name: "B" })).toBeChecked();
-    await act(() => new Promise((resolve) => setTimeout(resolve, 400)));
+    await act(() => vi.advanceTimersByTimeAsync(400));
     expect(screen.getByText("First?")).toBeInTheDocument();
 
     await user.keyboard("[Enter]");
@@ -678,6 +684,8 @@ describe("McpElicitationCard", () => {
     expect(screen.getByRole("list", { name: "Answers" })).toHaveTextContent(
       "Pick a colorBluePick a fruitApple",
     );
+    expect(screen.queryByRole("button", { name: "Blue" })).toBeNull();
+    expect(screen.queryByRole("button", { name: "Apple" })).toBeNull();
   });
 
   it("orders tabs by members even when requests arrive in reverse order", async () => {

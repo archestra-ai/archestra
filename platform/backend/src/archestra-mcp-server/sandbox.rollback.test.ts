@@ -135,7 +135,7 @@ describe("sandbox tools (runtime enabled)", () => {
       const user = await makeUser();
       await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
       userId = user.id;
-      // Sandbox tools are gated by per-agent assignment (plus sandbox:execute),
+      // Sandbox tools are gated by per-agent assignment (plus agent:read),
       // so assign the full Archestra set (seeded with the runtime enabled).
       await seedAndAssignArchestraTools(agent.id);
       context = {
@@ -2323,6 +2323,170 @@ describe("project file scope (save_file, scoped search/my_file)", () => {
       expect(result.isError).toBe(true);
       expect(textOf(result)).toContain("drop project_id");
       expect(textOf(result)).not.toContain("other project rules");
+    });
+  });
+
+  describe("explicit project_id (headless project writes)", () => {
+    const findProjectFile = (projectId: string, filename: string) =>
+      FileModel.findByProjectAndName({ organizationId, projectId, filename });
+
+    test("save, edit and delete a project file with no conversation", async () => {
+      const project = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "headless-write",
+        description: null,
+      });
+
+      const saved = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        { filename: "spec.md", content: "# Spec\nv1", project_id: project.id },
+        context,
+      );
+      expect(saved.isError).toBe(false);
+      expect(textOf(saved)).toContain("headless-write/spec.md");
+      expect(await findProjectFile(project.id, "spec.md")).not.toBeNull();
+
+      const edited = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        {
+          filename: "spec.md",
+          old_string: "v1",
+          new_string: "v2",
+          project_id: project.id,
+        },
+        context,
+      );
+      expect(edited.isError).toBe(false);
+      const read = await executeArchestraTool(
+        TOOL_READ_FILE_FULL_NAME,
+        { filename: "spec.md", project_id: project.id },
+        context,
+      );
+      expect(textOf(read)).toContain("v2");
+
+      const deleted = await executeArchestraTool(
+        TOOL_DELETE_FILE_FULL_NAME,
+        { filename: "spec.md", project_id: project.id },
+        context,
+      );
+      expect(deleted.isError).toBe(false);
+      expect(await findProjectFile(project.id, "spec.md")).toBeNull();
+    });
+
+    test("refuses a project the caller cannot access", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const theirs = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "owner-only",
+        description: null,
+      });
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: "member" });
+
+      const result = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        { filename: "planted.md", content: "x", project_id: theirs.id },
+        { ...context, userId: member.id },
+      );
+
+      expect(result.isError).toBe(true);
+      expect(await findProjectFile(theirs.id, "planted.md")).toBeNull();
+    });
+
+    test("refuses to write from a project chat into another project", async () => {
+      const { ctx } = await makeProjectChatCtx("write-confined");
+      const other = await ProjectModel.create({
+        organizationId,
+        userId,
+        name: "write-target",
+        description: null,
+      });
+
+      const result = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        { filename: "planted.md", content: "x", project_id: other.id },
+        ctx,
+      );
+
+      expect(result.isError).toBe(true);
+      expect(textOf(result)).toContain("drop project_id");
+      expect(await findProjectFile(other.id, "planted.md")).toBeNull();
+    });
+
+    test("a shared member writes project files but not its instructions", async ({
+      makeUser,
+      makeMember,
+    }) => {
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: "member" });
+      const project = await ProjectModel.create(
+        { organizationId, userId, name: "shared-write", description: null },
+        {
+          initialPermissionGrants: [
+            { subject: { type: "user", id: member.id }, actions: ["read"] },
+          ],
+        },
+      );
+      await fileStore.writeProjectInstructions({
+        organizationId,
+        userId,
+        projectId: project.id,
+        content: "owner rules",
+      });
+      const memberContext = { ...context, userId: member.id };
+
+      const saved = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        { filename: "notes.md", content: "hi", project_id: project.id },
+        memberContext,
+      );
+      expect(saved.isError).toBe(false);
+
+      const overwrite = await executeArchestraTool(
+        TOOL_SAVE_FILE_FULL_NAME,
+        {
+          filename: PROJECT_INSTRUCTIONS_FILENAME,
+          content: "hijacked",
+          overwrite: true,
+          project_id: project.id,
+        },
+        memberContext,
+      );
+      expect(overwrite.isError).toBe(true);
+      const edit = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        {
+          filename: PROJECT_INSTRUCTIONS_FILENAME,
+          old_string: "owner rules",
+          new_string: "hijacked",
+          project_id: project.id,
+        },
+        memberContext,
+      );
+      expect(edit.isError).toBe(true);
+      expect(
+        await fileStore.readProjectInstructions({
+          organizationId,
+          projectId: project.id,
+        }),
+      ).toBe("owner rules");
+
+      // The owner still edits them through the same tool.
+      const ownerEdit = await executeArchestraTool(
+        TOOL_EDIT_FILE_FULL_NAME,
+        {
+          filename: PROJECT_INSTRUCTIONS_FILENAME,
+          old_string: "owner rules",
+          new_string: "new rules",
+          project_id: project.id,
+        },
+        context,
+      );
+      expect(ownerEdit.isError).toBe(false);
     });
   });
 });

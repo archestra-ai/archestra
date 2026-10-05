@@ -25,6 +25,7 @@ import {
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { executeOutboundA2aDelegation } from "@/services/a2a-outbound-client";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { SPAWN_TARGET_MISMATCH } from "@/services/agent-runtime/runtime-crossing";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { Agent } from "@/types";
 import {
@@ -37,6 +38,10 @@ import type { ArchestraContext } from "./types";
 
 export const delegationToolArgsSchema = z.object({
   message: z.string().trim().min(1, "message is required."),
+  runtime_proof: z
+    .string()
+    .optional()
+    .describe("Source-session proof supplied by the proxy."),
 });
 
 // The canonical delegation input schema, reused for Auto-mode synthesized
@@ -199,22 +204,27 @@ export async function handleDelegation(
     ...(realUserId ? { userId: realUserId } : {}),
   });
   if (outboundTarget) {
+    if (context.openappaRuntimeCall?.spawn) {
+      return errorResult(SPAWN_TARGET_MISMATCH);
+    }
     if (environmentId) {
       return errorResult(
         "Outbound A2A delegation is not available for environment-bound agents yet.",
       );
     }
-    const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
-      agentId,
-      toolName,
-      toolInput: { message },
-      organizationId,
-      contextIsTrusted: context.contextIsTrusted ?? true,
-      sensitiveContextOrigin: context.sensitiveContextOrigin,
-      enabledToolNames: new Set([toolName]),
-      resolvedToolId: outboundTarget.tool.id,
-      enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
-    });
+    const policyBlock = context.connectionSetupBypass
+      ? null
+      : await evaluateSingleMcpToolInvocationPolicy({
+          agentId,
+          toolName,
+          toolInput: { message },
+          organizationId,
+          contextIsTrusted: context.contextIsTrusted ?? true,
+          sensitiveContextOrigin: context.sensitiveContextOrigin,
+          enabledToolNames: new Set([toolName]),
+          resolvedToolId: outboundTarget.tool.id,
+          enforceApprovalRequired: !context.approvalRequiredPoliciesHandled,
+        });
     if (policyBlock) {
       return structuredToolErrorResult({
         error: policyBlockToToolError(policyBlock),
@@ -272,6 +282,12 @@ export async function handleDelegation(
   // direct conversation with the same Agent never enters this path and stays
   // in the foreground loop.
   const targetAgent = await AgentModel.findById(target.id);
+  if (
+    context.openappaRuntimeCall?.spawn &&
+    !(targetAgent && resolveAgentRuntime(targetAgent))
+  ) {
+    return errorResult(SPAWN_TARGET_MISMATCH);
+  }
   if (targetAgent && resolveAgentRuntime(targetAgent)) {
     logger.info(
       {
@@ -633,12 +649,27 @@ function buildDelegationToolDescriptor(params: {
     name,
     title: targetAgent.name,
     description,
-    inputSchema,
+    inputSchema: advertiseRuntimeProof(inputSchema),
     annotations: {},
     _meta: {
       targetAgentId: targetAgent.id,
       ...(externalA2a ? { targetType: "external_a2a" } : {}),
       ...(toolId ? { toolId } : {}),
+    },
+  };
+}
+
+function advertiseRuntimeProof(
+  schema: Tool["inputSchema"],
+): Tool["inputSchema"] {
+  return {
+    ...schema,
+    properties: {
+      ...schema.properties,
+      runtime_proof: {
+        type: "string",
+        description: "Source-session proof supplied by the proxy.",
+      },
     },
   };
 }

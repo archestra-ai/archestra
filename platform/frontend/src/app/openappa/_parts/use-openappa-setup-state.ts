@@ -1,3 +1,4 @@
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
 
@@ -7,14 +8,19 @@ import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
  * organization starts in, and undefined until both answers are in.
  */
 export function useOpenAppaSetupState() {
+  const { data: canReadSettings } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   const deployment = useGuardrailsDeployment();
   const policy = useGuardrailsPolicy();
   const enabled = deployment.data?.enabled;
   // Revision 0 is the unsaved starter policy the API answers with.
   const hasPolicy = Boolean(policy.data?.revision);
   const isFresh =
-    deployment.isPending || policy.isPending
+    policy.isPending || (canReadSettings && deployment.isPending)
       ? undefined
-      : enabled === false && policy.isSuccess && !hasPolicy;
+      : (canReadSettings ? enabled === false : true) &&
+        policy.isSuccess &&
+        !hasPolicy;
   return { enabled, hasPolicy, isFresh };
 }

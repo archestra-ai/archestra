@@ -68,12 +68,18 @@ type ArchestraToolDefinition<
   schema: TSchema;
   publicSchema?: ZodType;
   outputSchema?: ZodType;
+  annotations?: Tool["annotations"];
   handler: ArchestraToolHandler<TSchema>;
   invoke: ArchestraToolHandler;
 };
 
 export type ArchestraRuntimeToolEntry = {
   schema: ZodType;
+  /**
+   * The schema tools/list advertises when it differs from `schema`. Validation
+   * errors describe this one, so they never show members only the proxy writes.
+   */
+  publicSchema?: ZodType | undefined;
   outputSchema?: ZodType | undefined;
   invoke: (params: {
     args: unknown;
@@ -268,6 +274,7 @@ function createToolDefinition(params: {
   description: string;
   schema: ZodType;
   outputSchema?: ZodType;
+  annotations?: Tool["annotations"];
 }): Tool {
   return {
     name: params.name,
@@ -283,7 +290,7 @@ function createToolDefinition(params: {
           }) as Tool["outputSchema"],
         }
       : {}),
-    annotations: {},
+    annotations: params.annotations ?? {},
     _meta: {},
   };
 }
@@ -299,6 +306,7 @@ export function defineArchestraTool<
   schema: TSchema;
   publicSchema?: ZodType;
   outputSchema?: TOutputSchema;
+  annotations?: Tool["annotations"];
   handler: ArchestraToolHandler<TSchema>;
 }): ArchestraToolDefinition<ShortName, TSchema> & {
   outputSchema?: TOutputSchema;
@@ -340,6 +348,7 @@ export function defineArchestraTools<
     }
     toolEntries[fullName] = {
       schema: definition.schema,
+      publicSchema: definition.publicSchema,
       outputSchema: definition.outputSchema,
       invoke:
         (definition as Partial<ArchestraToolDefinition>).invoke ??
@@ -354,6 +363,7 @@ export function defineArchestraTools<
       description: definition.description,
       schema: definition.publicSchema ?? definition.schema,
       outputSchema: definition.outputSchema,
+      annotations: definition.annotations,
     }),
   );
 

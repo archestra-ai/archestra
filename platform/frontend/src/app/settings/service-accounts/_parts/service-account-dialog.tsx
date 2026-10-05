@@ -130,9 +130,10 @@ export function ServiceAccountDialog({
   const [activeTab, setActiveTab] = useState<DetailTab>("general");
   const { data: canReadServiceAccounts, isPending: isCheckingPermissions } =
     useHasPermissions({ serviceAccount: ["read"] });
-  const { data: canUpdateServiceAccounts } = useHasPermissions({
-    serviceAccount: ["update"],
-  });
+  const { data: canUpdateServiceAccounts } = useHasPermissions(
+    { serviceAccount: ["update"] },
+    serviceAccountId,
+  );
   const {
     data: serviceAccount,
     isPending,
@@ -469,6 +470,7 @@ export function ServiceAccountDialog({
             </Button>
             <PermissionButton
               permissions={{ serviceAccount: ["update"] }}
+              permissionScope={serviceAccountId}
               type="button"
               onClick={openTokenDialog}
             >

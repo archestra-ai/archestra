@@ -28,6 +28,8 @@ import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {
   buildSetupCommand,
+  CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
+  claudeCodeAppaPermissionRules,
   proxyBaseUrlToOrigin,
   renderSetupScript,
   type SetupScriptContext,
@@ -43,6 +45,7 @@ const CODEX_AGENT_ID_TOML_LINE = `"${EXTERNAL_AGENT_ID_HEADER}" = "${CODEX_CLIEN
 
 const MCP = {
   serverName: "prod_gateway",
+  toolPrefix: "archestra__",
   url: "https://archestra.example.com/v1/mcp/prod-gateway",
 };
 
@@ -141,6 +144,16 @@ function fullContext(
   };
 }
 
+/**
+ * The same gateway as {@link MCP}, as a client that connected before the
+ * app-name change still holds it: registered under the gateway's own name.
+ */
+const MCP_WITH_LEGACY_NAME = {
+  ...MCP,
+  serverName: "archestra",
+  legacyServerNames: ["my_gateway"],
+};
+
 /** Every rendered variant must be parseable bash. */
 async function expectValidBash(script: string): Promise<void> {
   const dir = await mkdtemp(path.join(tmpdir(), "archestra-script-"));
@@ -193,6 +206,242 @@ async function runClaudeSettingsMerge(params: {
     await rm(home, { recursive: true, force: true });
   }
 }
+
+async function runClaudeAppaPermissionsMerge(params: {
+  existing: object;
+  contexts?: NonNullable<SetupScriptContext["mcp"]>[];
+  ownership?: Record<string, string[]>;
+  customConfigDir?: boolean;
+  expectFailure?: boolean;
+  lockSettings?: boolean;
+}) {
+  const home = await mkdtemp(
+    path.join(tmpdir(), "archestra-appa-permissions-"),
+  );
+  const configDir = path.join(
+    home,
+    params.customConfigDir ? "profile" : ".claude",
+  );
+  const settingsPath = path.join(configDir, "settings.json");
+  const statePath = path.join(
+    params.customConfigDir ? configDir : home,
+    ".archestra",
+    "claude-appa-permissions.json",
+  );
+  try {
+    await mkdir(configDir, { recursive: true });
+    await mkdir(path.dirname(statePath), { recursive: true });
+    const original = JSON.stringify(params.existing);
+    await writeFile(settingsPath, original);
+    if (params.lockSettings) await chmod(settingsPath, 0o444);
+    await writeFile(statePath, JSON.stringify(params.ownership ?? {}));
+    let failed = false;
+    let failureMessage = "";
+    for (const mcp of params.contexts ?? [MCP]) {
+      const script = renderSetupScript({
+        ...fullContext("claude-code", "linux"),
+        mcp,
+        proxy: null,
+        skills: null,
+      });
+      const start = script.indexOf("ARCHESTRA_MCP_NAME=");
+      const endMarker = "\nARCHESTRA_APPA_PERMISSIONS_PY";
+      const end = script.indexOf(endMarker, start);
+      if (start < 0 || end < 0)
+        throw new Error("Missing APPA permissions merge block");
+      const blockPath = path.join(home, "merge.sh");
+      await writeFile(
+        blockPath,
+        `set -euo pipefail\n${script.slice(start, end + endMarker.length)}\n`,
+      );
+      try {
+        await execFileAsync("bash", [blockPath], {
+          cwd: home,
+          env: {
+            ...process.env,
+            HOME: home,
+            CLAUDE_CONFIG_DIR: params.customConfigDir ? configDir : "",
+          },
+        });
+      } catch (error) {
+        if (!params.expectFailure) throw error;
+        failed = true;
+        failureMessage = error instanceof Error ? error.message : String(error);
+      }
+    }
+    return {
+      settings: JSON.parse(await readFile(settingsPath, "utf8")),
+      ownership: JSON.parse(await readFile(statePath, "utf8")),
+      original,
+      backup: failed
+        ? null
+        : await readFile(`${settingsPath}.archestra-backup`, "utf8"),
+      failed,
+      failureMessage,
+      settingsPath,
+    };
+  } finally {
+    await rm(home, { recursive: true, force: true });
+  }
+}
+
+describe("Claude Code APPA permission installation", () => {
+  const rules = [
+    "get_remedy_plans",
+    "execute_remedy_plan",
+    "yell",
+    "ask_user",
+  ].map((name) => `mcp__prod_gateway__archestra__${name}`);
+
+  test("MCP-only setup adds exact helper rules, preserves restrictions, and is idempotent", async () => {
+    const existing = {
+      permissions: {
+        allow: ["Read", rules[3]],
+        ask: [rules[1]],
+        deny: ["Bash"],
+      },
+      env: { ANTHROPIC_API_KEY: "provider-key" },
+      theme: "dark",
+    };
+    const result = await runClaudeAppaPermissionsMerge({
+      existing,
+      contexts: [MCP, MCP],
+    });
+    expect(result.settings).toEqual({
+      ...existing,
+      permissions: {
+        ...existing.permissions,
+        allow: ["Read", rules[3], ...rules.slice(0, 3)],
+      },
+    });
+    expect(result.ownership).toEqual({ prod_gateway: rules.slice(0, 3) });
+    expect(result.backup).toBe(result.original);
+    expect(
+      result.settings.permissions.allow.every(
+        (rule: string) => !rule.includes("*"),
+      ),
+    ).toBe(true);
+  });
+
+  test("migrates owned legacy rules and branded prefixes without removing user or other-gateway rules", async () => {
+    const old = "mcp__my_gateway__archestra__get_remedy_plans";
+    const userRule = "mcp__my_gateway__archestra__ask_user";
+    const other = "mcp__other__archestra__yell";
+    const branded = {
+      ...MCP,
+      serverName: "company_gateway",
+      toolPrefix: "company__",
+      legacyServerNames: ["my_gateway"],
+    };
+    const result = await runClaudeAppaPermissionsMerge({
+      existing: {
+        permissions: { allow: [old, userRule, other], deny: ["Bash"] },
+      },
+      ownership: { my_gateway: [old], other: [other] },
+      contexts: [branded],
+    });
+    const desired = [
+      "get_remedy_plans",
+      "execute_remedy_plan",
+      "yell",
+      "ask_user",
+    ].map((name) => `mcp__company_gateway__company__${name}`);
+    expect(result.settings.permissions.allow).toEqual([
+      userRule,
+      other,
+      ...desired,
+    ]);
+    expect(result.ownership).toEqual({
+      other: [other],
+      company_gateway: desired,
+    });
+  });
+
+  test("writes the selected Claude configuration directory", async () => {
+    const result = await runClaudeAppaPermissionsMerge({
+      existing: {},
+      customConfigDir: true,
+    });
+    expect(result.settings.permissions.allow).toEqual(rules);
+  });
+
+  test.each([
+    "Read",
+    { allow: "Read" },
+  ])("preserves invalid permissions %j and reports the settings path", async (permissions) => {
+    const existing = { permissions, env: { KEEP: "value" } };
+    const result = await runClaudeAppaPermissionsMerge({
+      existing,
+      expectFailure: true,
+    });
+    expect(result.failed).toBe(true);
+    expect(result.settings).toEqual(existing);
+    expect(result.ownership).toEqual({});
+    expect(result.failureMessage).toContain(result.settingsPath);
+  });
+
+  test("skips helper rules for an unsafe gateway name and still registers MCP", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: { ...MCP, serverName: "team_(eu)" },
+    });
+    expect(script).toContain("claude mcp add");
+    expect(script).toContain("team_(eu)");
+    expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
+    expect(script).not.toContain("APPA helper calls are pre-approved");
+    expect(script).not.toContain("python3 is required");
+    expect(script).not.toContain("mcp__team_(eu)__");
+    expect(() =>
+      claudeCodeAppaPermissionRules({ ...MCP, serverName: "team_(eu)" }),
+    ).toThrow("literal server and tool names");
+  });
+
+  test("skips helper rules for an unsafe tool prefix without broadening allow syntax", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: { ...MCP, toolPrefix: "archestra__*" },
+    });
+    expect(script).toContain("claude mcp add");
+    expect(script).toContain(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING);
+    expect(script).not.toContain("APPA helper calls are pre-approved");
+    expect(script).not.toContain("mcp__prod_gateway__");
+    expect(script).not.toContain("*get_remedy_plans");
+    expect(() =>
+      claudeCodeAppaPermissionRules({ ...MCP, toolPrefix: "archestra__*" }),
+    ).toThrow("literal server and tool names");
+  });
+
+  test("a failed settings write after the ledger is recovered on retry", async () => {
+    const rules = [
+      "get_remedy_plans",
+      "execute_remedy_plan",
+      "yell",
+      "ask_user",
+    ].map((name) => `mcp__prod_gateway__archestra__${name}`);
+    const original = JSON.stringify({
+      permissions: { allow: ["Read"], deny: ["Bash"] },
+      env: { KEEP: "value" },
+    });
+    const failed = await runClaudeAppaPermissionsMerge({
+      existing: JSON.parse(original),
+      lockSettings: true,
+      expectFailure: true,
+    });
+    expect(failed.failed).toBe(true);
+    expect(JSON.stringify(failed.settings)).toBe(original);
+    expect(failed.ownership).toEqual({ prod_gateway: rules });
+
+    const recovered = await runClaudeAppaPermissionsMerge({
+      existing: failed.settings,
+      ownership: failed.ownership,
+    });
+    expect(recovered.failed).toBe(false);
+    expect(recovered.settings.permissions.allow).toEqual(["Read", ...rules]);
+    expect(recovered.settings.permissions.deny).toEqual(["Bash"]);
+    expect(recovered.settings.env).toEqual({ KEEP: "value" });
+    expect(recovered.ownership).toEqual({ prod_gateway: rules });
+  });
+});
 
 /**
  * Runs the rendered Claude Code skills-only script against a fake Claude CLI
@@ -433,6 +682,35 @@ const ALL_CLIENTS = [
 ] as const;
 
 describe("renderSetupScript", () => {
+  const signedGatewayUrl = `${MCP.url}?archestra_setup_ctx=cs1_example.signature`;
+
+  test.each(
+    ALL_CLIENTS,
+  )("%s: retains the approved setup context in both shell installers", (clientId) => {
+    for (const platform of ["linux", "windows"] as const) {
+      const script = renderSetupScript({
+        ...fullContext(clientId, platform),
+        mcp: { ...MCP, url: signedGatewayUrl },
+      });
+      expect(script).toContain(signedGatewayUrl);
+    }
+  });
+
+  test.each([
+    "linux",
+    "windows",
+  ] as const)("Claude Desktop (%s): carries the approved setup context in its encoded installer", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("claude-desktop", platform),
+      mcp: { ...MCP, url: signedGatewayUrl },
+      proxy: PROXY,
+    });
+    const encoded = script.match(/base64\.b64decode\('([^']+)'\)/)?.[1];
+    expect(encoded).toBeDefined();
+    const context = JSON.parse(Buffer.from(encoded ?? "", "base64").toString());
+    expect(context.mcp.url).toBe(signedGatewayUrl);
+  });
+
   test.each([
     { clientId: "claude-code" as const, binary: "claude", mode: "-p" },
     { clientId: "codex" as const, binary: "codex", mode: "exec" },
@@ -468,6 +746,10 @@ describe("renderSetupScript", () => {
 const fs = require("node:fs");
 const args = process.argv.slice(2);
 fs.appendFileSync(process.env.ARCHESTRA_TEST_COMMAND_LOG, JSON.stringify({ executable: process.argv[1], args }) + "\\n");
+if (args[0] === "debug") {
+  process.stdout.write(JSON.stringify({models:[{slug:'one',tool_mode:'code_mode_only',supports_search_tool:true},{slug:'two',tool_mode:null}]}));
+  process.exit(0);
+}
 process.exit(args[0] === "mcp" ? 0 : 23);
 `,
         );
@@ -494,6 +776,7 @@ printf '%s' '{"mcp":"ok","llm":"ok"}'
       );
       const env = {
         HOME: home,
+        CODEX_HOME: path.join(home, "custom codex"),
         SHELL: "/bin/bash",
         PATH: `${bin}:${process.env.PATH}`,
         ARCHESTRA_TEST_COMMAND_LOG: callsPath,
@@ -526,7 +809,8 @@ cat "$1" | bash
           setupCalls.every(
             (call) =>
               call.executable === path.join(bin, binary) &&
-              call.args[0] === "mcp",
+              (call.args[0] === "mcp" ||
+                (clientId === "codex" && call.args[0] === "debug")),
           ),
         ).toBe(true);
         expect(setupCalls.some((call) => call.args.includes("add"))).toBe(true);
@@ -567,6 +851,16 @@ ${binary} "$@"
             { health: true },
             { executable: path.join(directory, binary), args },
           ]);
+          if (clientId === "codex") {
+            await expect(
+              readFile(
+                path.join(
+                  env.CODEX_HOME,
+                  "archestra-direct-model-catalog.json",
+                ),
+              ),
+            ).rejects.toMatchObject({ code: "ENOENT" });
+          }
         }
       }
     } finally {
@@ -1118,7 +1412,7 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
   test.each([
     "macos",
     "windows",
-  ] as const)("opencode (%s): next steps check authentication before restarting", (platform) => {
+  ] as const)("opencode (%s): next steps leave restart to the user", (platform) => {
     const script = renderSetupScript(fullContext("opencode", platform));
     expect(script).toContain("Run `opencode mcp list` first");
     expect(script).toContain("connected (OAuth), skip sign-in");
@@ -1132,9 +1426,15 @@ cli sh -c '[ -t 1 ] && echo TTY-VIA-CLI || echo PIPE-VIA-CLI; cat'`;
     );
     expect(script).toContain("If no browser opens, relay the URL");
     const signInAt = script.indexOf(`opencode mcp auth ${MCP.serverName}`);
-    const restartAt = script.indexOf("Close every running OpenCode process");
+    const restartAt = script.indexOf(
+      "Do not stop or restart OpenCode from inside this running conversation",
+    );
     expect(signInAt).toBeGreaterThan(-1);
     expect(restartAt).toBeGreaterThan(signInAt);
+    expect(script).toContain(
+      "tell the user to save work, close all OpenCode windows normally",
+    );
+    expect(script).not.toContain("Close every running OpenCode process");
   });
 
   test("opencode: rerunning setup preserves a connected gateway and LLM proxy without requiring OAuth again", async () => {
@@ -1808,7 +2108,15 @@ ${script.slice(start, end)}
       const codexHome = path.join(home, ".codex");
       await mkdir(bin);
       await mkdir(codexHome);
-      await writeFile(path.join(bin, "codex"), "#!/bin/sh\nexit 0\n");
+      await writeFile(
+        path.join(bin, "codex"),
+        `#!/usr/bin/env node
+if (process.argv[2] === 'debug') {
+  require('node:fs').writeFileSync(require('node:path').join(process.env.CODEX_HOME,'models_cache.json'),JSON.stringify({fetched_at:new Date().toISOString()}));
+  console.log(JSON.stringify({models:[{slug:'gpt-5.5',tool_mode:null,supports_search_tool:true}]}));
+}
+`,
+      );
       await chmod(path.join(bin, "codex"), 0o755);
       const configPath = path.join(codexHome, "config.toml");
       const original =
@@ -1839,6 +2147,11 @@ ${script.slice(start, end)}
       expect(parsed.model).toBe("gpt-5.5");
       expect(parsed.approval_policy).toBe("on-request");
       expect(parsed.tools).toEqual({ web_search: true });
+      expect(parsed.features).toEqual({ code_mode_host: false });
+      expect(parsed.web_search).toBe("disabled");
+      expect(parsed.model_catalog_json).toBe(
+        path.join(codexHome, "archestra-direct-model-catalog.json"),
+      );
       expect(parsed.model_providers).toMatchObject({
         default_proxy: {
           requires_openai_auth: true,
@@ -1852,7 +2165,11 @@ ${script.slice(start, end)}
         original,
       );
       await execFileAsync("bash", [scriptPath], { env });
-      expect(await readFile(configPath, "utf8")).toBe(installed);
+      const reinstalled = await readFile(configPath, "utf8");
+      expect(parseToml(reinstalled)).toEqual(parsed);
+      expect(
+        reinstalled.split("# >>> archestra:codex-direct:root >>>"),
+      ).toHaveLength(2);
     } finally {
       await rm(home, { recursive: true, force: true });
     }
@@ -1972,12 +2289,148 @@ ${script.slice(start, end)}
     expect(script).not.toMatch(/<<[ \t]*ARCHESTRA/);
   });
 
-  test("cursor: merges mcp.json without auth headers (OAuth) and prints manual proxy steps", () => {
-    const script = renderSetupScript(fullContext("cursor"));
-    expect(script).toContain("ARCHESTRA_MCP_SERVER_NAME");
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("cursor (%s): prints the working plugin and model setup steps", (platform) => {
+    const script = renderSetupScript(fullContext("cursor", platform));
+    expect(script).toContain(
+      platform === "windows"
+        ? "$arch_server_name"
+        : "ARCHESTRA_MCP_SERVER_NAME",
+    );
     expect(script).not.toContain("Authorization");
     expect(script).toContain("Override OpenAI Base URL");
-    expect(script).toContain("/add-plugin");
+    expect(script).toContain("Cursor Customize → MCPs");
+    expect(script).toContain('turn on "Use OpenAI API Key"');
+    expect(script).not.toContain("click Verify");
+    expect(script).toContain(".cursor/skills/");
+    expect(script).toContain("git clone");
+    expect(script).toContain("Customize > Skills");
+    expect(script).not.toContain("command palette");
+  });
+
+  test.each([
+    "macos",
+    "windows",
+  ] as const)("cursor (%s): requires an API key for passthrough", (platform) => {
+    const script = renderSetupScript({
+      ...fullContext("cursor", platform),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    expect(script).toContain("Paste your own OpenAI API key");
+    expect(script).toContain("A Cursor subscription cannot be used");
+  });
+
+  test("cursor: setup preserves MCP servers and installs discoverable skills from a Git repository", async () => {
+    const home = await mkdtemp(path.join(tmpdir(), "cursor-connect-"));
+    try {
+      await mkdir(path.join(home, ".cursor"));
+      const source = path.join(home, "source");
+      await mkdir(path.join(source, "plugins", "skills", "skills", "example"), {
+        recursive: true,
+      });
+      await writeFile(
+        path.join(source, "plugins", "skills", "skills", "example", "SKILL.md"),
+        "---\nname: example\ndescription: Example skill\n---\n",
+      );
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "init",
+        "-q",
+        "--initial-branch=main",
+      ]);
+      await execFileAsync("git", ["-C", source, "add", "."]);
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.test",
+        "commit",
+        "-qm",
+        "Initial skills",
+      ]);
+      await writeFile(
+        path.join(home, ".cursor/mcp.json"),
+        JSON.stringify({
+          mcpServers: { existing: { url: "https://example.test/mcp" } },
+        }),
+      );
+      const scriptPath = path.join(home, "connect.sh");
+      const context = fullContext("cursor");
+      if (!context.skills) throw new Error("Missing skills");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...context,
+          skills: { ...context.skills, cloneUrl: source },
+        }),
+      );
+      const { stdout } = await execFileAsync("bash", [scriptPath], {
+        env: {
+          ...process.env,
+          HOME: home,
+          NO_COLOR: "1",
+        },
+      });
+      const mcp = JSON.parse(
+        await readFile(path.join(home, ".cursor/mcp.json"), "utf8"),
+      );
+      expect(mcp.mcpServers).toMatchObject({
+        existing: { url: "https://example.test/mcp" },
+        [MCP.serverName]: { url: MCP.url },
+      });
+      expect(stdout).toContain("Reload Cursor and open Customize > Skills");
+      expect(stdout).toContain('turn on "Use OpenAI API Key"');
+      expect(stdout).not.toContain(source);
+      expect(
+        await readFile(
+          path.join(
+            home,
+            ".cursor/skills",
+            SKILLS.marketplaceName,
+            "plugins/skills/skills/example/SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("name: example");
+
+      await writeFile(
+        path.join(source, "plugins", "skills", "skills", "example", "SKILL.md"),
+        "---\nname: example\ndescription: Updated skill\n---\n",
+      );
+      await execFileAsync("git", ["-C", source, "add", "."]);
+      await execFileAsync("git", [
+        "-C",
+        source,
+        "-c",
+        "user.name=Test",
+        "-c",
+        "user.email=test@example.test",
+        "commit",
+        "-qm",
+        "Update skill",
+      ]);
+      await execFileAsync("bash", [scriptPath], {
+        env: { ...process.env, HOME: home, NO_COLOR: "1" },
+      });
+      expect(
+        await readFile(
+          path.join(
+            home,
+            ".cursor/skills",
+            SKILLS.marketplaceName,
+            "plugins/skills/skills/example/SKILL.md",
+          ),
+          "utf8",
+        ),
+      ).toContain("Updated skill");
+    } finally {
+      await rm(home, { recursive: true, force: true });
+    }
   });
 });
 
@@ -2291,7 +2744,7 @@ describe("renderSetupScript (windows)", () => {
     expect(script).toContain(".cursor\\mcp.json");
     expect(script).toContain("mcpServers");
     expect(script).toContain("Override OpenAI Base URL");
-    expect(script).toContain("/add-plugin");
+    expect(script).toContain("Customize > Skills");
   });
 
   test("github-copilot passthrough without device-flow config throws", () => {
@@ -2507,5 +2960,120 @@ describe("buildSetupCommand / proxyBaseUrlToOrigin", () => {
     ).toBe(
       "irm 'https://host.example.com/api/connection-setups/script/archestra_con_abc' | iex",
     );
+  });
+});
+
+describe("migrating a gateway registered under an older name", () => {
+  // Every member's gateway is seeded as "My Gateway", so clients connected
+  // before this change hold it as `my_gateway`. A re-run must move that entry
+  // rather than leave the user with the same gateway listed twice.
+  test("claude-code drops the old entry from both scopes", async () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli claude mcp remove --scope local 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      "cli claude mcp remove --scope user 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      `cli claude mcp add --scope user --transport http 'archestra' '${MCP.url}'`,
+    );
+    // The removals must precede the add, or the add is undone immediately.
+    expect(script.indexOf("mcp remove --scope user 'my_gateway'")).toBeLessThan(
+      script.indexOf("mcp add --scope user"),
+    );
+    await expectValidBash(script);
+  });
+
+  test("codex drops the old entry", async () => {
+    const script = renderSetupScript({
+      ...fullContext("codex"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli codex mcp remove 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    expect(script).toContain(
+      `cli codex mcp add 'archestra' --url '${MCP.url}'`,
+    );
+    await expectValidBash(script);
+  });
+
+  test("copilot drops the old entry", async () => {
+    const script = renderSetupScript({
+      ...fullContext("copilot-cli"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "cli copilot mcp remove 'my_gateway' >/dev/null 2>&1 || true",
+    );
+    await expectValidBash(script);
+  });
+
+  test("cursor moves the mcp.json entry onto the new name", async () => {
+    const script = renderSetupScript({
+      ...fullContext("cursor"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain("ARCHESTRA_MCP_LEGACY_NAMES='[\"my_gateway\"]'");
+    expect(script).toContain("ARCHESTRA_MCP_SERVER_NAME='archestra'");
+    await expectValidBash(script);
+  });
+
+  test("opencode moves the config entry onto the new name", async () => {
+    const script = renderSetupScript({
+      ...fullContext("opencode"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "ARCHESTRA_OC_MCP_LEGACY_NAMES='[\"my_gateway\"]'",
+    );
+    expect(script).toContain("ARCHESTRA_OC_MCP_NAME='archestra'");
+    await expectValidBash(script);
+  });
+
+  test("windows claude-code drops the old entry from both scopes", () => {
+    const script = renderSetupScript({
+      ...fullContext("claude-code", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(script).toContain(
+      "try { claude mcp remove --scope local 'my_gateway' 2>$null | Out-Null } catch { }",
+    );
+    expect(script).toContain(
+      "try { claude mcp remove --scope user 'my_gateway' 2>$null | Out-Null } catch { }",
+    );
+    expect(script).toContain(
+      `claude mcp add --scope user --transport http 'archestra' '${MCP.url}'`,
+    );
+  });
+
+  test("windows cursor and opencode drop the old config entry", () => {
+    const cursor = renderSetupScript({
+      ...fullContext("cursor", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+    const opencode = renderSetupScript({
+      ...fullContext("opencode", "windows"),
+      mcp: MCP_WITH_LEGACY_NAME,
+    });
+
+    expect(cursor).toContain("foreach ($arch_legacy in @('my_gateway'))");
+    expect(opencode).toContain("foreach ($archLegacy in @('my_gateway'))");
+  });
+
+  test("emits no migration when the gateway keeps its own name", () => {
+    const script = renderSetupScript(fullContext("claude-code"));
+
+    expect(script).not.toContain("my_gateway");
   });
 });

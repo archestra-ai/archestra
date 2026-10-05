@@ -68,7 +68,7 @@ beforeEach(() => {
   configured = [];
   writes = [];
   failKey = null;
-  permissions = { agent: ["read"], agentSettings: [] };
+  permissions = { agent: ["read"], organizationSettings: [] };
   queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -439,7 +439,7 @@ describe("credential setup deep links", () => {
   });
 
   it("lets an administrator configure a missing organization connection", async () => {
-    permissions = { agent: ["read"], agentSettings: ["update"] };
+    permissions = { agent: ["read"], organizationSettings: ["update"] };
     const shared = { ...declarations[0], scope: "shared" as const };
     server.use(
       http.get(`${origin}/api/agents/agent-1/runtime/preflight`, () =>

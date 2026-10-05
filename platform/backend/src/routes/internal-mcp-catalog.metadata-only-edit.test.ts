@@ -1,5 +1,5 @@
 import { eq } from "drizzle-orm";
-import { type Mock, type MockInstance, vi } from "vitest";
+import { type MockInstance, vi } from "vitest";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -21,11 +21,7 @@ async function assertCascadeDidNotFire(spy: MockInstance): Promise<void> {
   expect(spy).not.toHaveBeenCalled();
 }
 
-vi.mock("@/auth");
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
+import { betterAuth } from "@/auth";
 
 /**
  * The cascade-reinstall gate skips metadata-only edits (currently just
@@ -38,7 +34,9 @@ describe("PUT /api/internal_mcp_catalog/:id — metadata-only edit cascade", () 
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
     vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({ success: true, error: null });
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
 
     user = await makeUser();
     const organization = await makeOrganization();

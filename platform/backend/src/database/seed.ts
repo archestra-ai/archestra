@@ -387,11 +387,19 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "get_agent",
     "get_mcp_gateway",
     "get_guardrails_policy",
+    "get_openappa_yell",
     "list_guardrails_battery_fits",
     "validate_guardrails_policy",
     "preview_guardrails_policy_change",
     "update_guardrails_policy",
     "get_guardrails_policy_change_status",
+    "list_runtime_credentials",
+    "get_runtime_credential",
+    "create_runtime_credential",
+    "update_runtime_credential",
+    "delete_runtime_credential",
+    "request_runtime_credential_setup",
+    "create_guardrails_repository",
     "list_mcp_server_deployments",
     "inspect_guardrails_server",
     "load_skill",
@@ -1386,7 +1394,8 @@ function shouldSyncBuiltInAgentSystemPrompt(params: {
   if (params.builtInAgentId === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG) {
     return (
       params.systemPrompt === null ||
-      params.systemPrompt === LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT
+      params.systemPrompt === LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT ||
+      params.systemPrompt === PREVIOUS_OPENAPPA_CONFIG_SYSTEM_PROMPT
     );
   }
   if (params.systemPrompt === null) {
@@ -1401,6 +1410,9 @@ function shouldSyncBuiltInAgentSystemPrompt(params: {
 
 const LEGACY_OPENAPPA_CONFIG_SYSTEM_PROMPT =
   "Configure the organization's OpenAPPA policy. Load the appa-guide skill, inspect the current policy, preview requested changes and explain the diff before publishing. Answer questions without changing the policy. Use only OpenAPPA policy and discovery tools.";
+
+const PREVIOUS_OPENAPPA_CONFIG_SYSTEM_PROMPT =
+  "Configure this deployment's OpenAPPA policy. Load the appa-guide skill before policy work and follow its current workflow. Use your assigned policy and discovery tools to inspect the current effective policy and relevant agents, MCP gateways, and MCP server tools. When the user identifies a target, look it up by its ID before explaining or changing its rules; ask for clarification when the target is missing or unavailable, and keep changes scoped to it unless the user says otherwise. Preview proposed changes and explain their effects before publishing, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it.";
 
 const LEGACY_POLICY_CONFIG_SYSTEM_PROMPT = `Analyze this MCP tool and determine security policies:
 

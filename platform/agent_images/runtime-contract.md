@@ -16,7 +16,7 @@ This reference is for custom image authors. For maintained image targets and bui
 | Completion | Exit `0` only after the turn is complete. Any non-zero exit marks the run failed. The workspace supervisor does not replay an interrupted turn after Pod replacement. |
 | Storage | `/home/node` and `/var/run/archestra` are persisted on a workspace PVC. Privileged runtimes also persist `/var/lib/docker` there. Other container paths are ephemeral. Export final deliverables before the workspace's retention deadline. |
 
-The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
+The initial task is supplied in `ARCHESTRA_AGENT_RUNTIME_TASK`. When `ARCHESTRA_AGENT_RUNTIME_CONTINUE=1` and the mode is `interactive`, an absent or empty task means reopen the saved conversation without submitting a prompt. The Agent system prompt is supplied in `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT`. A custom client decides how to combine them. It should read `ARCHESTRA_AGENT_RUNTIME_MODE`: `interactive` means expose its input loop and remain available for follow-ups, while `one_shot` means finish the supplied task and exit. Images that support only unattended work can ignore interactive mode, but they will not provide a useful Chat terminal.
 
 ## Failure Reasons
 
@@ -61,6 +61,12 @@ Pass `ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT` to the model. It includes a bounded
 Use the gateway's advertised tool names: `list_skills` discovers the Agent's effective catalog; `load_skill` loads instructions or a bundled file by `name` and optional `path`. Names carry the deployment's tool prefix. When the gateway uses tool search, discover these tools there first. The Agent's skill policy, environment, and caller permissions apply to every request.
 
 Bundled text files are returned as text. A `<skill_file encoding="base64">` contains bytes to decode before saving. Preserve resource paths relative to the skill root and provide the runtimes and dependencies its scripts require. Files are not automatically installed in native client skill directories. `/skills` mounts mentioned by sandbox-enabled tools belong to the separate Code Sandbox, not this container.
+
+## MCP Startup
+
+In the default TUI mode, the maintained images wait for their native client's gateway catalog before submitting a delegated task. A failed connection, catalog request, or discovery timeout fails the run instead of starting it with only local tools. Claude Code checks its own TUI's registered gateway tools before submitting the prompt. Custom clients must also complete gateway discovery before assembling their first model request; checking tool assignments or making a separate preflight connection does not establish that the client's tool catalog is ready.
+
+The real-client tests in `agent_images/tests/mcp-startup.py` run during image builds. They hold discovery behind a barrier, execute all three OpenAPPA recovery tools, resume a saved conversation, and check discovery errors and timeouts. The MCP and model endpoints are synthetic; the pinned clients, wrappers, tmux sessions, and tool execution paths are real.
 
 ## Readable Transcript
 
@@ -148,6 +154,7 @@ Archestra supplies the applicable variables below when launching a run. You do n
 | `ARCHESTRA_AGENT_RUNTIME_STEER_FIFO` | Turn-boundary steering channel. |
 | `ARCHESTRA_AGENT_RUNTIME_IDLE_TIMEOUT_SECONDS` | How long a completed turn may wait for follow-up work before the run exits. |
 | `ARCHESTRA_AGENT_RUNTIME_OPENAPPA` | `1` when Guardrails v2 (OpenAPPA) governed the deployment at launch. A client must then declare every tool inline: OpenAPPA refuses a session that hides tools behind a provider-side tool search or a code-mode program. The Codex image turns off tool search, code mode, and hosted web search. |
+| `ARCHESTRA_AGENT_RUNTIME_BINDING` | Platform-signed, turn-scoped workspace credential. Send it only to the injected proxy and gateway. Do not print, store in artifacts, or forward it to providers or tool servers. |
 
 Send these headers on every LLM proxy and MCP gateway request. The maintained catalog images configure them automatically.
 
@@ -156,9 +163,19 @@ Send these headers on every LLM proxy and MCP gateway request. The maintained ca
 | `X-Archestra-Run-Id` | `ARCHESTRA_AGENT_RUNTIME_TASK_ID` | Groups one turn's model interactions and tool calls in logs and traces. |
 | `X-Archestra-Session-Id` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Groups the whole conversation, follow-ups included, in one log session. |
 | `X-Appa-Session-ID` | `ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID` | Names the OpenAPPA session that holds the conversation's trust restrictions and pending calls. |
-| `X-Appa-Parent-ID` | The parent's `X-Appa-Session-ID` | Optional. Marks a subagent session as a child of that session. |
+| `X-Archestra-Runtime-Binding` | `ARCHESTRA_AGENT_RUNTIME_BINDING` | Authenticates the workspace and current run independently of the virtual key. Required with Guardrails v2. |
 
 The workspace ID stays the same for follow-ups, so a resumed conversation keeps its log session and its OpenAPPA restrictions. Send the same value in both session headers. A client that sends no session ID shares one fallback OpenAPPA session with every other run of the same user on the Agent.
+
+With Guardrails v2, the platform rejects a runtime credential that names a different workspace or turn. The launcher binds delegated runs to their authenticated parent before staging inputs or starting the client. The proxy and gateway restore that stored relationship; a client header cannot select another parent. Team and organization runs keep a workspace principal when the platform rotates their virtual keys.
+
+Claude Code, Codex, and OpenCode children retain separate trajectories when the client supplies native child identity. Signed lineage binds nested children to the same workspace. A custom client without child identity cannot create isolated child-return boundaries by sharing the workspace header.
+
+Human-review remedies use `ask_user` with the exact signed offer IDs. Runtime reviews appear on the run page. Only the run's user owner can approve or deny them. Native permission settings and plain-text answers do not approve an OpenAPPA offer. A run without an eligible human reviewer stays blocked.
+
+Pending reviews and rulings expire after ten minutes. They use the platform's shared PostgreSQL-backed cache, whose state can be lost on restart. Expiry or missing state never approves an action; the runtime must request a fresh review for a live exact offer before proceeding.
+
+Protected runtime tools accept only proxy-signed source proofs. Returned text is an admitted value for that run, not a raw transcript. Protected file downloads admit the pinned content before issuing a ticket. They refuse transformed content and files over 4 MiB. Direct owner downloads remain an authenticated human surface. A parent cannot publish another runtime's file through `post_run_file` without a supported external-egress crossing.
 
 Session and parent IDs must be 1 to 512 bytes with no control characters. The proxy rejects a malformed value with HTTP 400; the gateway answers with JSON-RPC error `-32600`.
 

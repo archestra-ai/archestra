@@ -9,7 +9,6 @@ import {
   CalendarClock,
   ChevronDown,
   Folder,
-  FolderPlus,
   Loader2,
   MoreHorizontal,
   Pencil,
@@ -24,10 +23,9 @@ import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode, useEffect, useRef, useState } from "react";
 import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
-import { CreateProjectFromChatDialog } from "@/app/_parts/create-project-from-chat-dialog";
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -92,14 +90,17 @@ import {
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
 import { conversationHref } from "@/lib/chat/conversation-href";
+import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
-import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
-import { canCreateProjectFromChat } from "@/lib/projects/can-create-project-from-chat";
-import { usePinProject, useProjects } from "@/lib/projects/projects.query";
+import {
+  useCreateProject,
+  usePinProject,
+  useProjects,
+} from "@/lib/projects/projects.query";
 import { cn } from "@/lib/utils/tailwind";
 
 const DEFAULT_SIDEBAR_CHAT_SLOTS = 3;
@@ -160,6 +161,7 @@ export function ChatSidebarSection({
   const cancelRunMutation = useCancelAgentRun();
   const deleteRunMutation = useDeleteAgentRun();
   const updateConversationMutation = useUpdateConversation();
+  const createProjectMutation = useCreateProject();
   const deleteConversationMutation = useDeleteConversation();
   const generateTitleMutation = useGenerateConversationTitle();
   const pinConversationMutation = usePinConversation();
@@ -186,10 +188,6 @@ export function ChatSidebarSection({
   const { data: canReadProjects } = useHasPermissions({
     project: ["read"],
   });
-  const [createProjectConv, setCreateProjectConv] = useState<{
-    id: string;
-    title: string;
-  } | null>(null);
 
   // Conversations whose title should play the typing animation (shared via chat
   // context); getSession drives the live "generating" spinner.
@@ -476,17 +474,11 @@ export function ChatSidebarSection({
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
-    const showCreateProject =
-      isActionAvailableForConversation(conv, "createProject") &&
-      canCreateProjectFromChat({
-        hasCreatePermission: canCreateProject === true,
-        conversation: conv,
-      });
     const showProjectActions =
       canUpdateConversation === true &&
       canReadProjects === true &&
       isActionAvailableForConversation(conv, "changeProject");
-    // AI title generation is rejected for locked chats (the server would
+    // AI title generation is rejected for encrypted chats (the server would
     // have to read encrypted messages), so hide both regenerate affordances.
     const canRegenerateTitle = isActionAvailableForConversation(
       conv,
@@ -558,13 +550,13 @@ export function ChatSidebarSection({
               className="cursor-pointer flex-1 justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 flex-1">
-                {conv.lockedChat && (
+                {conv.encryptedChat && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <LockedChatIcon className="h-3.5 w-3.5" />
+                        <EncryptedChatIcon className="h-3.5 w-3.5" />
                       </TooltipTrigger>
-                      <TooltipContent side="top">Locked chat</TooltipContent>
+                      <TooltipContent side="top">Encrypted chat</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
@@ -647,9 +639,7 @@ export function ChatSidebarSection({
               controls must not be nested, and the trigger must be a real
               button rather than a bare svg. */}
           {editingId !== conv.id &&
-            (canUpdateConversation ||
-              canDeleteConversation ||
-              showCreateProject) && (
+            (canUpdateConversation || canDeleteConversation) && (
               <DropdownMenu
                 open={isMenuOpen}
                 onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
@@ -717,28 +707,31 @@ export function ChatSidebarSection({
                         <ConversationProjectActions
                           projectId={conv.projectId}
                           projects={projectsData ?? []}
-                          isPending={updateConversationMutation.isPending}
+                          isPending={
+                            updateConversationMutation.isPending ||
+                            createProjectMutation.isPending
+                          }
+                          onCreateProject={
+                            canCreateProject === true
+                              ? async (name) => {
+                                  const project =
+                                    await createProjectMutation.mutateAsync({
+                                      name,
+                                    });
+                                  if (project)
+                                    await handleChangeProject(
+                                      conv.id,
+                                      project.id,
+                                    );
+                                }
+                              : undefined
+                          }
                           onProjectChange={(projectId) =>
                             handleChangeProject(conv.id, projectId)
                           }
                         />
                       )}
                     </>
-                  )}
-                  {showCreateProject && (
-                    <DropdownMenuItem
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        setOpenMenuId(null);
-                        setCreateProjectConv({
-                          id: conv.id,
-                          title: displayTitle,
-                        });
-                      }}
-                    >
-                      <FolderPlus className="h-4 w-4 mr-2" />
-                      Create project
-                    </DropdownMenuItem>
                   )}
                   {canDeleteConversation && (
                     <DropdownMenuItem
@@ -876,7 +869,23 @@ export function ChatSidebarSection({
                   <ConversationProjectActions
                     projectId={run.projectId}
                     projects={projectsData ?? []}
-                    isPending={updateRunMutation.isPending}
+                    isPending={
+                      updateRunMutation.isPending ||
+                      createProjectMutation.isPending
+                    }
+                    onCreateProject={
+                      canCreateProject === true
+                        ? async (name) => {
+                            const project =
+                              await createProjectMutation.mutateAsync({ name });
+                            if (project)
+                              await handleChangeRunProject(
+                                run.taskId,
+                                project.id,
+                              );
+                          }
+                        : undefined
+                    }
                     onProjectChange={(projectId) =>
                       handleChangeRunProject(run.taskId, projectId)
                     }
@@ -1190,13 +1199,6 @@ export function ChatSidebarSection({
           await deleteRunMutation.mutateAsync(deleteRunId);
           setDeleteRunId(null);
         }}
-      />
-
-      <CreateProjectFromChatDialog
-        conversationId={createProjectConv?.id ?? null}
-        defaultName={createProjectConv?.title ?? ""}
-        open={createProjectConv !== null}
-        onOpenChange={(open) => !open && setCreateProjectConv(null)}
       />
     </>
   );

@@ -8,7 +8,7 @@ use appa_eventlog::LogStore;
 use appa_package::PackageName;
 use appa_runtime::{
     api::Runtime,
-    config::{Config, HostDefaults, HostedBattery, IncludeResolution},
+    config::{ArchestraEndpoint, Config, HostDefaults, HostedBattery, IncludeResolution},
 };
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
@@ -18,10 +18,23 @@ pub(crate) const CONSULT_TIMEOUT: Duration = Duration::from_millis(5000);
 
 fn defaults() -> HostDefaults {
     HostDefaults {
-        consult_timeout: CONSULT_TIMEOUT,
-        max_body_bytes: 65536,
+        archestra: archestra_endpoint(),
+        ..HostDefaults::new(CONSULT_TIMEOUT, 65536)
     }
 }
+
+/// Where a `builtin = "archestra"` annotator posts its rendered prompt: the backend's own
+/// route, behind the same per-process bearer the helper bridge checks. The host publishes
+/// both before it crosses into the addon; a process that has not leaves the builtin
+/// unconfigured, and a policy naming it fails to open.
+fn archestra_endpoint() -> Option<ArchestraEndpoint> {
+    let url = std::env::var(ARCHESTRA_ANNOTATOR_URL_ENV).ok()?;
+    let token = std::env::var(BRIDGE_TOKEN_ENV).ok()?;
+    Some(ArchestraEndpoint::new(url, token))
+}
+
+const ARCHESTRA_ANNOTATOR_URL_ENV: &str = "APPA_ARCHESTRA_ANNOTATOR_URL";
+const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_BRIDGE_TOKEN";
 
 /// Compile a hosted document, resolving every `token_env` it names through `lookup`.
 pub(crate) fn compile(
@@ -324,7 +337,8 @@ mod tests {
                 arguments: serde_json::value::RawValue::from_string("{}".into()).unwrap(),
                 cwd: None,
             },
-            spawn: false,
+            spawn: None,
+            prompt: None,
             ruling: None,
         }
     }
@@ -344,6 +358,8 @@ mod tests {
                 HookEvent::SessionStart {
                     root: actor.root.clone(),
                     principal: None,
+                    address: None,
+                    title: None,
                 }
             )
             .await,
@@ -392,7 +408,8 @@ mod tests {
                 .unwrap(),
                 cwd: None,
             },
-            spawn: false,
+            spawn: None,
+            prompt: None,
             ruling: None,
         };
         assert!(matches!(
@@ -444,7 +461,8 @@ requires = { audience = { within = ["internal"] } }
                             .unwrap(),
                         cwd: None,
                     },
-                    spawn: false,
+                    spawn: None,
+                    prompt: None,
                     ruling: None,
                 }
             )
@@ -560,6 +578,43 @@ delta = {}
             hooks::handle(&runtime, call(&fresh, "github_prod__get_file_contents")).await,
             HookDecision::Refuse { .. }
         ));
+    }
+
+    /// A stored policy that already names one helper under two kinds restores
+    /// without rewriting those bytes. The open trajectory keeps that document.
+    #[tokio::test]
+    async fn a_stored_cross_kind_helper_policy_restores_without_rewriting_it() {
+        let stored = "\
+[policy]
+version = 2
+[[policy.tool]]
+name = \"mcp/github/get_file_contents\"
+delta = {}
+[externals.context.github]
+url = \"http://127.0.0.1:9000/api/openappa/helpers/install-1/github\"
+token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
+[externals.audience.github]
+url = \"http://127.0.0.1:9000/api/openappa/helpers/install-1/github\"
+token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
+";
+        // SAFETY: the stored document names the bridge token; the host resolves
+        // it at compile time and does not rewrite the policy bytes.
+        unsafe { std::env::set_var("APPA_ARCHESTRA_BRIDGE_TOKEN", "bridge-token") };
+        compile(stored).expect("stored bytes compile without being rewritten");
+        let runtime = memory_runtime(stored);
+        let opened = started(&runtime, "restored-cross-kind").await;
+        assert!(matches!(
+            hooks::handle(&runtime, call(&opened, "github__get_file_contents")).await,
+            HookDecision::AllowCall { .. }
+        ));
+        runtime.reload(compile(stored).unwrap()).unwrap();
+        assert!(
+            matches!(
+                hooks::handle(&runtime, call(&opened, "github__get_file_contents")).await,
+                HookDecision::AllowCall { .. }
+            ),
+            "restoring the same bytes does not rewrite the open root"
+        );
     }
 
     /// The `[[policy.tool]]` rules of a composed document, in the order it states them.
@@ -821,6 +876,7 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
         // SAFETY: as above.
         unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
         let jev = crate::batteries::bundled()
+            .expect("bundled batteries validate")
             .iter()
             .find(|battery| battery.name == "jev")
             .expect("the jev battery is bundled");

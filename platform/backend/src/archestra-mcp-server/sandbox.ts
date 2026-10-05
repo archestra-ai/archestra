@@ -26,6 +26,7 @@ import {
   SkillSandboxModel,
 } from "@/models";
 import { loadConversationAttachmentSource } from "@/services/conversation-attachment-source";
+import { projectService } from "@/services/project";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
 import { UnsafePathError } from "@/skills-sandbox/file-path";
 import { FileBytesMissingError } from "@/skills-sandbox/file-storage";
@@ -77,8 +78,8 @@ import type { ArchestraContext } from "./types";
  *
  * RBAC (see `rbac.ts`, enforced in the dispatch path before the handler runs):
  * `run_command`, `upload_file`, and `download_file` are gated by
- * `sandbox:execute`; the file tools (`search_files`, `read_file`, `save_file`,
- * `edit_file`, `delete_file`) by `file:manage`. Skills become runnable here by
+ * `agent:read`; the file tools (`search_files`, `read_file`, `save_file`,
+ * `edit_file`, `delete_file`) by `agent:read` too. Skills become runnable here by
  * loading them (`load_skill`), which mounts them into the default sandbox; that
  * path is `skill:read`-gated.
  *
@@ -372,7 +373,7 @@ const UploadFileOutputSchema = z.object({
 });
 
 /**
- * Opt a read tool out of the chat-derived scope and onto a named project. The
+ * Opt a file tool out of the chat-derived scope and onto a named project. The
  * point is headless use: a client with no conversation (an external MCP client
  * on a gateway) has nothing to derive scope from, so it names the project it
  * found via `list_projects` / `get_project`.
@@ -381,9 +382,9 @@ const PROJECT_ID_FILE_ARG = z
   .string()
   .optional()
   .describe(
-    "Read this project's files instead of the current chat's — how you reach " +
+    "Use this project's files instead of the current chat's — how you reach " +
       "project files when working outside a chat (get_project returns the id). " +
-      "Only projects you own or that are shared with you can be read. Cannot " +
+      "Only projects you own or that are shared with you can be used. Cannot " +
       "be used from a chat that already belongs to a different project, nor " +
       'combined with scope: "app".',
   );
@@ -657,6 +658,7 @@ const SaveFileSchema = z
         "Replace an existing file of the same name in place, keeping its id. " +
           "Default false errors if the name is already taken.",
       ),
+    project_id: PROJECT_ID_FILE_ARG,
   })
   .refine((v) => (v.content != null) !== (v.contentBase64 != null), {
     message: "provide exactly one of `content` or `contentBase64`",
@@ -674,7 +676,7 @@ const SaveFileOutputSchema = z.object({
   projectName: z
     .string()
     .nullable()
-    .describe("Owning project when saved in a project chat; null otherwise."),
+    .describe("Owning project when saved into a project; null otherwise."),
   mimeType: z.string(),
   sizeBytes: z.number(),
   overwritten: z
@@ -715,6 +717,7 @@ const EditFileSchema = z
         "Replace every occurrence of old_string. Default false replaces a single " +
           "occurrence and errors if old_string is not unique.",
       ),
+    project_id: PROJECT_ID_FILE_ARG,
   })
   .refine((v) => (v.id != null) !== (v.filename != null), {
     message: "provide exactly one of `id` or `filename`",
@@ -754,6 +757,7 @@ const DeleteFileSchema = z
       .describe(
         "Filename to delete instead of `id`; rejected as ambiguous if more than one file shares the name.",
       ),
+    project_id: PROJECT_ID_FILE_ARG,
   })
   .refine((v) => (v.id != null) !== (v.filename != null), {
     message: "provide exactly one of `id` or `filename`",
@@ -1015,7 +1019,7 @@ const registry = defineArchestraTools([
 
       let fileScope: MyFileScope | null;
       try {
-        fileScope = await resolveReadFileScope({
+        fileScope = await resolveFileScope({
           projectId: args.project_id,
           conversationId: context.conversationId,
           appId,
@@ -1092,7 +1096,7 @@ const registry = defineArchestraTools([
       const ref = args.id ?? args.filename ?? "";
       let fileScope: MyFileScope | null;
       try {
-        fileScope = await resolveReadFileScope({
+        fileScope = await resolveFileScope({
           projectId: args.project_id,
           conversationId: context.conversationId,
           appId: context.appId,
@@ -1346,7 +1350,8 @@ const registry = defineArchestraTools([
       "attached it — do not read it back and paste its bytes here; export it with download_file by " +
       "its path instead, so the bytes never enter your context. Pass `overwrite: true` to replace " +
       "an existing same-named file in place (e.g. a full rewrite); otherwise a duplicate name is " +
-      "rejected.",
+      "rejected. Pass project_id to save into a project's files — how you write to a project " +
+      "when working outside a chat.",
     schema: SaveFileSchema,
     outputSchema: SaveFileOutputSchema,
     async handler({ args, context }) {
@@ -1383,18 +1388,36 @@ const registry = defineArchestraTools([
         );
       }
 
-      let scope: ProjectFileScope | null;
+      let fileScope: MyFileScope | null;
       try {
-        scope = await resolveProjectFileScope({
+        fileScope = await resolveFileScope({
+          projectId: args.project_id,
           conversationId: context.conversationId,
-          userId: guard.userCtx.userId,
-          organizationId: guard.userCtx.organizationId,
+          appId: context.appId,
+          userCtx: guard.userCtx,
         });
       } catch (error) {
         if (error instanceof SkillSandboxError) {
           return errorResult(error.message);
         }
         throw error;
+      }
+      const scope: ProjectFileScope | null =
+        fileScope?.kind === "project"
+          ? {
+              projectId: fileScope.projectId,
+              projectName: fileScope.projectName,
+            }
+          : null;
+      if (
+        scope &&
+        filename.toLowerCase() === PROJECT_INSTRUCTIONS_FILENAME &&
+        !(await canWriteProjectInstructions({
+          projectId: scope.projectId,
+          userCtx: guard.userCtx,
+        }))
+      ) {
+        return errorResult(INSTRUCTIONS_WRITE_REFUSED);
       }
 
       const mimeType = resolveArtifactMime({
@@ -1407,11 +1430,6 @@ const registry = defineArchestraTools([
       // exists. Without overwrite, a duplicate name surfaces as an error below.
       // A headless no-project write resolves the orphan it created on a prior run
       // (no conversation/project scope), so re-runs stay idempotent.
-      const fileScope = resolveChatFileScope(
-        scope,
-        context.conversationId,
-        context.appId,
-      );
       if (args.overwrite) {
         const existing = fileScope
           ? await fileStore.resolveMyFileRef({
@@ -1487,32 +1505,28 @@ const registry = defineArchestraTools([
       "set `replace_all` to change every occurrence. Identify the file by `id` " +
       "(from search_files / save_file) or by `filename`. Text files only — to " +
       "replace a binary file, use save_file with overwrite for inline content, or " +
-      "download_file with overwrite for a file in the sandbox.",
+      "download_file with overwrite for a file in the sandbox. Pass project_id to " +
+      "edit a project's file when working outside a chat.",
     schema: EditFileSchema,
     outputSchema: EditFileOutputSchema,
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
-      let scope: ProjectFileScope | null;
+      const ref = args.id ?? args.filename ?? "";
+      let fileScope: MyFileScope | null;
       try {
-        scope = await resolveProjectFileScope({
+        fileScope = await resolveFileScope({
+          projectId: args.project_id,
           conversationId: context.conversationId,
-          userId: guard.userCtx.userId,
-          organizationId: guard.userCtx.organizationId,
+          appId: context.appId,
+          userCtx: guard.userCtx,
         });
       } catch (error) {
         if (error instanceof SkillSandboxError)
           return errorResult(error.message);
         throw error;
       }
-
-      const ref = args.id ?? args.filename ?? "";
-      const fileScope = resolveChatFileScope(
-        scope,
-        context.conversationId,
-        context.appId,
-      );
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
@@ -1525,6 +1539,16 @@ const registry = defineArchestraTools([
       });
       if ("error" in resolved) {
         return errorResult(describeMyFileError(resolved.error, ref));
+      }
+      if (
+        resolved.projectId &&
+        resolved.filename === PROJECT_INSTRUCTIONS_FILENAME &&
+        !(await canWriteProjectInstructions({
+          projectId: resolved.projectId,
+          userCtx: guard.userCtx,
+        }))
+      ) {
+        return errorResult(INSTRUCTIONS_WRITE_REFUSED);
       }
 
       // Read the current bytes through the facade (it re-authorizes the row we
@@ -1592,7 +1616,7 @@ const registry = defineArchestraTools([
           fileId: updated.id,
           sizeBytes: updated.sizeBytes,
           replacements,
-          projectScoped: !!scope,
+          projectScoped: fileScope.kind === "project",
         },
         "[Sandbox] file edited in PFS",
       );
@@ -1614,32 +1638,28 @@ const registry = defineArchestraTools([
     title: "Delete File",
     description:
       "Permanently delete a persistent file, identified by `id` " +
-      "(from search_files / save_file) or by `filename`.",
+      "(from search_files / save_file) or by `filename`. Pass project_id to " +
+      "delete a project's file when working outside a chat.",
     schema: DeleteFileSchema,
     outputSchema: DeleteFileOutputSchema,
     async handler({ args, context }) {
       const guard = ensureUsable(context);
       if ("error" in guard) return errorResult(guard.error);
 
-      let scope: ProjectFileScope | null;
+      const ref = args.id ?? args.filename ?? "";
+      let fileScope: MyFileScope | null;
       try {
-        scope = await resolveProjectFileScope({
+        fileScope = await resolveFileScope({
+          projectId: args.project_id,
           conversationId: context.conversationId,
-          userId: guard.userCtx.userId,
-          organizationId: guard.userCtx.organizationId,
+          appId: context.appId,
+          userCtx: guard.userCtx,
         });
       } catch (error) {
         if (error instanceof SkillSandboxError)
           return errorResult(error.message);
         throw error;
       }
-
-      const ref = args.id ?? args.filename ?? "";
-      const fileScope = resolveChatFileScope(
-        scope,
-        context.conversationId,
-        context.appId,
-      );
       if (!fileScope) {
         return errorResult(describeMyFileError("not_found", ref));
       }
@@ -1675,7 +1695,7 @@ const registry = defineArchestraTools([
       }
 
       logger.info(
-        { fileId: resolved.id, projectScoped: !!scope },
+        { fileId: resolved.id, projectScoped: fileScope.kind === "project" },
         "[Sandbox] file deleted from PFS",
       );
 
@@ -1959,7 +1979,7 @@ async function resolveEnvironmentTarget(
 }
 
 /**
- * Enforces the deployment flag + an authenticated user. `sandbox:execute` is
+ * Enforces the deployment flag + an authenticated user. `agent:read` is
  * enforced earlier in the dispatch path (see `rbac.ts`), so handlers don't
  * re-check it here.
  */
@@ -2399,9 +2419,9 @@ function resolveChatFileScope(
 type MyFileScope = NonNullable<ReturnType<typeof resolveChatFileScope>>;
 
 /**
- * Scope for the two READ tools, which additionally accept an explicit
- * `project_id`. Without one this is exactly the chat scope; with one the named
- * project is used after re-verifying the caller's access to it.
+ * Scope for the file tools that accept an explicit `project_id` (the reads
+ * plus save/edit/delete). Without one this is exactly the chat scope; with one
+ * the named project is used after re-verifying the caller's access to it.
  *
  * The explicit id is REFUSED, never silently ignored, when it cannot apply — a
  * caller told it read a project must not have been served something else:
@@ -2410,10 +2430,12 @@ type MyFileScope = NonNullable<ReturnType<typeof resolveChatFileScope>>;
  *    so content inside a project chat cannot steer the model into a second
  *    project the user happens to have access to.
  *
- * Only reads take this argument. Writes stay chat-derived, so nothing can be
- * created in or deleted from a project the caller is not actually working in.
+ * Writes take it too, under the same access rule as a project upload in the UI
+ * (owner or share). That is what lets a headless client save into a project;
+ * the project-chat confinement above still keeps a chat from writing into a
+ * second project.
  */
-async function resolveReadFileScope(params: {
+async function resolveFileScope(params: {
   projectId: string | undefined;
   conversationId: string | undefined;
   appId: string | undefined;
@@ -2451,6 +2473,24 @@ async function resolveReadFileScope(params: {
     projectId: scope.projectId,
     projectName: scope.projectName,
   };
+}
+
+const INSTRUCTIONS_WRITE_REFUSED = `"${PROJECT_INSTRUCTIONS_FILENAME}" steers every chat in the project; only the project's owner or a project admin can change it.`;
+
+/**
+ * `instructions.md` steers every chat in its project, so writing it is project
+ * management (owner or project admin) — the UI editor's gate. Plain project
+ * access, enough for every other project file, does not reach it.
+ */
+async function canWriteProjectInstructions(params: {
+  projectId: string;
+  userCtx: UserContext;
+}): Promise<boolean> {
+  return projectService.canManage({
+    id: params.projectId,
+    organizationId: params.userCtx.organizationId,
+    userId: params.userCtx.userId,
+  });
 }
 
 function describeMyFileError(

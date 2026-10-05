@@ -28,6 +28,10 @@ export default defineConfig({
         __dirname,
         "../shared/consts.ts",
       ),
+      "@archestra/shared/connection-setup": path.resolve(
+        __dirname,
+        "../shared/connection-setup.ts",
+      ),
       "@archestra/shared": path.resolve(__dirname, "../shared/index.ts"),
     },
   },

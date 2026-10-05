@@ -598,6 +598,7 @@ const McpServerRowActions = memo(function McpServerRowActions({
         permissions: showAdminCatalogReinstall
           ? { mcpRegistry: ["update"] }
           : { mcpServerInstallation: ["create"] },
+        permissionScope: showAdminCatalogReinstall ? item.id : undefined,
         disabled: reinstallCatalogMutation.isPending || showApprovalPanel,
         disabledTooltip: showApprovalPanel
           ? "The Docker image needs admin approval first"

@@ -5,8 +5,13 @@ import {
   type FastifyRequest,
   type HookHandlerDoneFunction,
 } from "fastify";
+import { mayHoldAttestationToken } from "@/archestra-mcp-server/tool-attestation";
 import logger from "@/logging";
-import { removeMarkersFromForwardedJson } from "../utils/gateway-tool-declarations";
+import {
+  mayHoldOpenAppaPayload,
+  sanitizeForwardedRequest,
+} from "@/openappa/request";
+import { removeMarkersFromBody } from "../utils/gateway-tool-declarations";
 
 const UUID_REGEX =
   /^\/([0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12})(\/.*)?$/i;
@@ -16,7 +21,8 @@ const UUID_REGEX =
  * 1. Rejects POST requests matching the custom-handled endpoint suffix with a 400
  * 2. Strips agent UUIDs from the URL path so the proxy forwards to the correct upstream
  * 3. Logs the rewrite or pass-through for debugging
- * 4. Takes the gateway's tool attestation markers out of a forwarded JSON body
+ * 4. Takes the gateway's tool attestation markers and OpenAPPA's provider-bound
+ *    payloads out of a forwarded JSON body
  *
  * `rejectUnhandledPaths` (GitHub Copilot): every supported endpoint has its own
  * explicit route, so anything reaching this catch-all proxy is unsupported.
@@ -128,24 +134,26 @@ export function createProxyPreHandler(params: {
       );
     }
 
-    removeForwardedAttestationMarkers(request).then(() => next(), next);
+    cleanForwardedBody(request).then(() => next(), next);
   };
 }
 
 /**
- * Takes the gateway's tool attestation markers out of a JSON body before a
- * catch-all proxy forwards it upstream, so they never reach a provider. The
- * dedicated routes strip them in handleLLMProxy, but clients also send their
- * tool list to endpoints only the catch-all serves: Anthropic's
+ * Cleans a JSON body before a catch-all proxy forwards it upstream: the
+ * gateway's tool attestation markers and OpenAPPA's provider-bound payloads
+ * (notice records and signed offers, control receipts, ask_user offers,
+ * trajectory stamps) never reach a provider. The
+ * dedicated routes do both in handleLLMProxy, but clients also send their tool
+ * list and history to endpoints only the catch-all serves: Anthropic's
  * `/v1/messages/count_tokens`, OpenAI's `/responses/input_tokens`, Gemini's
  * `:countTokens`.
  *
  * The catch-all hands its preHandler the raw body stream, so a JSON body is
  * read here, within the route's body limit, and put back: byte for byte when
- * it holds no marker, re-serialized when it did. Compressed and non-JSON
- * bodies are forwarded as they are.
+ * nothing in it changed, re-serialized when something did. Compressed and
+ * non-JSON bodies are forwarded as they are.
  */
-export async function removeForwardedAttestationMarkers(
+export async function cleanForwardedBody(
   request: FastifyRequest,
 ): Promise<void> {
   const body = request.body;
@@ -160,11 +168,27 @@ export async function removeForwardedAttestationMarkers(
   // @fastify/reply-from pipes a stream upstream as it is, and serializes an
   // object for an application/json request with a fresh content-length.
   request.body =
-    removeMarkersFromForwardedJson(raw) ??
-    Readable.from([raw], { objectMode: false });
+    cleanedJson(raw) ?? Readable.from([raw], { objectMode: false });
 }
 
 // === Internal helpers ===
+
+/** The parsed body once something in it was removed; null to forward the bytes as they came. */
+function cleanedJson(raw: Buffer): object | null {
+  const markers = mayHoldAttestationToken(raw);
+  const payloads = mayHoldOpenAppaPayload(raw);
+  if (!markers && !payloads) return null;
+  let body: unknown;
+  try {
+    body = JSON.parse(raw.toString("utf8"));
+  } catch {
+    return null;
+  }
+  if (typeof body !== "object" || body === null) return null;
+  const removedMarkers = markers && removeMarkersFromBody(body);
+  const removedPayloads = payloads && sanitizeForwardedRequest(body);
+  return removedMarkers || removedPayloads ? body : null;
+}
 
 function isUncompressedJson(headers: FastifyRequest["headers"]): boolean {
   const mediaType = headers["content-type"]?.split(";")[0].trim().toLowerCase();

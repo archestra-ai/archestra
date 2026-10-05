@@ -7,9 +7,12 @@ import type { AgentFormProps } from "@/components/agent-form";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import { useOrganization } from "@/lib/organization.query";
+import { makeOrganization } from "@/mocks/data/organization";
 import { AgentCreatePage } from "./agent-create-page";
 
 vi.mock("next/navigation");
+vi.mock("@/lib/organization.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/hooks/use-app-name");
@@ -18,6 +21,7 @@ vi.mock("@/lib/hooks/use-app-name");
 // props are what the page is expected to hand it, plus a way to fire
 // `onCreated` and report dirtiness.
 const formProps = vi.fn<(props: AgentFormProps) => void>();
+const formState = { hasRuntime: false };
 vi.mock("@/components/agent-form", () => ({
   AgentForm: (props: AgentFormProps) => {
     formProps(props);
@@ -39,6 +43,7 @@ vi.mock("@/components/agent-form", () => ({
           isDirty: false,
           canSubmit: true,
           readOnly: false,
+          hasRuntime: formState.hasRuntime,
         })}
       </div>
     );
@@ -79,6 +84,9 @@ function renderAgentCreatePage({
 describe("AgentCreatePage", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    vi.mocked(useOrganization).mockReturnValue({
+      data: makeOrganization(),
+    } as ReturnType<typeof useOrganization>);
     mockPermissions({ canRead: true });
     vi.mocked(useFeature).mockReturnValue(false);
     vi.mocked(useAppName).mockReturnValue("Archestra");
@@ -360,14 +368,51 @@ describe("AgentCreatePage", () => {
     );
   });
 
-  it("opens the newly created agent’s summary", async () => {
+  it("names the create action after what opening the agent starts", async () => {
+    const user = userEvent.setup();
+    const { rerender } = renderAgentCreatePage();
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
+    expect(
+      screen.getByTestId(E2eTestId.AgentSetupSubmitButton),
+    ).toHaveTextContent("Create and chat");
+
+    formState.hasRuntime = true;
+    rerender(
+      <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
+    );
+    expect(
+      screen.getByTestId(E2eTestId.AgentSetupSubmitButton),
+    ).toHaveTextContent("Create and run");
+    formState.hasRuntime = false;
+  });
+
+  it("opens chat with the newly created agent selected", async () => {
     const user = userEvent.setup();
     renderAgentCreatePage();
     await user.click(
       screen.getByRole("button", { name: /start from scratch/i }),
     );
     await user.click(screen.getByRole("button", { name: "fire created" }));
-    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
+    expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
+  });
+
+  it("opens the agent details when the creator can read agents but cannot chat", async () => {
+    const user = userEvent.setup();
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({ data: !("chat" in permissions), isPending: false }) as ReturnType<
+          typeof useHasPermissions
+        >,
+    );
+    renderAgentCreatePage();
+    await user.click(
+      screen.getByRole("button", { name: /start from scratch/i }),
+    );
+    expect(screen.getByRole("button", { name: "Create Agent" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "fire created" }));
+    expect(push).toHaveBeenCalledWith("/agents/new-1");
   });
 
   it("keeps a newly created MCP gateway on its connection instructions", async () => {
@@ -377,7 +422,7 @@ describe("AgentCreatePage", () => {
     expect(push).toHaveBeenCalledWith("/mcp/gateways/new-1");
   });
 
-  it("opens the summary for a newly created Claude Code agent", async () => {
+  it("opens chat with a newly created Claude Code agent", async () => {
     const user = userEvent.setup();
     vi.mocked(useFeature).mockImplementation((feature) =>
       feature === "agentRuntime" ? true : undefined,
@@ -387,7 +432,7 @@ describe("AgentCreatePage", () => {
     await user.click(screen.getByRole("button", { name: /claude code/i }));
     await user.click(screen.getByRole("button", { name: "fire created" }));
 
-    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
+    expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
   });
 
   it("stays put with a success state when the creator may not read what it made", async () => {
@@ -433,7 +478,7 @@ describe("AgentCreatePage", () => {
     rerender(
       <AgentCreatePage kind="agent" canAddExternalAgent canCreateAgent />,
     );
-    expect(push).toHaveBeenCalledWith("/agents/new-1/created");
+    expect(push).toHaveBeenCalledWith("/chat?agentId=new-1");
   });
 
   it("shows the success state when the pending permission settles to a no", async () => {

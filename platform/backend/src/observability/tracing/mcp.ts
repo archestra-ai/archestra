@@ -63,7 +63,7 @@ export async function startActiveMcpSpan<T>(params: {
   toolArgs?: unknown;
   /**
    * Suppress tool argument/result content capture for this span even when
-   * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (locked chat sessions). Metadata
+   * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (encrypted chat sessions). Metadata
    * attributes (tool name, agent, session) are unaffected. The agent's
    * organization Log Content setting suppresses it too, checked here so no
    * caller can forget it.

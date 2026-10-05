@@ -1,7 +1,7 @@
 "use client";
 
 import { parseVaultReference } from "@archestra/shared";
-import { Key, Loader2, Plus, Trash2 } from "lucide-react";
+import { Key, Loader2, Trash2 } from "lucide-react";
 import { lazy, Suspense, useEffect, useState } from "react";
 import type {
   FieldArrayWithId,
@@ -13,6 +13,10 @@ import type {
   UseFormSetValue,
   UseFormWatch,
 } from "react-hook-form";
+import {
+  AddListItemButton,
+  EmptyListState,
+} from "@/components/empty-list-state";
 import {
   EnvFromDialog,
   type EnvFromDraft,
@@ -29,7 +33,7 @@ import {
 } from "@/components/secret-file-dialog";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { FormDescription, FormLabel } from "@/components/ui/form";
+import { FormDescription } from "@/components/ui/form";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
 
 const ExternalSecretSelector = lazy(
@@ -172,76 +176,80 @@ export function EnvironmentVariablesFormField<
       : "";
 
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between">
-        {showLabel && (
+    <div className="space-y-6">
+      <div className="space-y-3">
+        {showLabel ? (
           <h3 className="font-semibold text-base">
             Environment Variables
             {labelSuffix}
           </h3>
+        ) : (
+          <ListHeading
+            title="Variables"
+            description="Set on this server directly, or prompted at installation."
+          />
         )}
-        <Button
-          type="button"
-          variant="outline"
-          size="sm"
-          onClick={() => setEnvVarDialog({ mode: "add" })}
-        >
-          <Plus className="h-4 w-4" />
-          Add Variable
-        </Button>
-      </div>
-      {/* Filter out mounted secrets - they go in the Secret Files section */}
-      {(() => {
-        const envVarIndexes = fields
-          .map((_, index) => index)
-          .filter((index) => {
-            const mounted = form.watch(
-              `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
-            );
-            return !mounted;
-          });
-        const envVarCount = envVarIndexes.length;
+        {/* Filter out mounted secrets - they go in the Secret Files section */}
+        {(() => {
+          const envVarIndexes = fields
+            .map((_, index) => index)
+            .filter((index) => {
+              const mounted = form.watch(
+                `${fieldNamePrefix}.${index}.mounted` as FieldPath<TFieldValues>,
+              );
+              return !mounted;
+            });
+          const envVarCount = envVarIndexes.length;
 
-        if (envVarCount === 0) {
-          return (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No environment variables configured.
-            </div>
+          const addVariableButton = (
+            <AddListItemButton
+              label="Add Variable"
+              onClick={() => setEnvVarDialog({ mode: "add" })}
+            />
           );
-        }
+          if (envVarCount === 0) {
+            return (
+              <EmptyListState
+                message="No environment variables yet."
+                action={addVariableButton}
+              />
+            );
+          }
 
-        return (
-          <>
-            {showDescription && (
-              <FormDescription className="mb-4 text-xs">
-                Configure environment variables for the MCP server. Use "Secret"
-                type for sensitive values.
-              </FormDescription>
-            )}
-            {/* TODO(e2e): existing tests in platform/e2e-tests drive the inline
+          return (
+            <>
+              {showDescription && (
+                <FormDescription className="text-xs">
+                  Configure environment variables for the MCP server. Use
+                  "Secret" type for sensitive values.
+                </FormDescription>
+              )}
+              {/* TODO(e2e): existing tests in platform/e2e-tests drive the inline
                 inputs (placeholder "API_KEY", inline Type Select, inline scope
                 checkbox). After this refactor those interactions live in
                 EnvironmentVariableDialog — tests must click "Add Variable"
                 first, then operate inside the modal. */}
-            <EnvironmentVariablesReadOnlyTable
-              credentialLabels={Object.fromEntries(
-                credentialBindingOptions.map((option) => [
-                  option.id,
-                  option.label,
-                ]),
-              )}
-              form={form}
-              fields={fields}
-              rowIndexes={envVarIndexes}
-              fieldNamePrefix={fieldNamePrefix}
-              useExternalSecretsManager={useExternalSecretsManager}
-              secretKeysWithStoredValue={secretKeysWithStoredValue}
-              onEdit={(index) => setEnvVarDialog({ mode: "edit", index })}
-              onDelete={(index) => remove(index)}
-            />
-          </>
-        );
-      })()}
+              <EnvironmentVariablesReadOnlyTable
+                credentialLabels={Object.fromEntries(
+                  credentialBindingOptions.map((option) => [
+                    option.id,
+                    option.label,
+                  ]),
+                )}
+                form={form}
+                fields={fields}
+                rowIndexes={envVarIndexes}
+                fieldNamePrefix={fieldNamePrefix}
+                useExternalSecretsManager={useExternalSecretsManager}
+                secretKeysWithStoredValue={secretKeysWithStoredValue}
+                onEdit={(index) => setEnvVarDialog({ mode: "edit", index })}
+                onDelete={(index) => remove(index)}
+              />
+              {addVariableButton}
+            </>
+          );
+        })()}
+      </div>
 
       <EnvironmentVariableDialog
         credentialBindingOptions={credentialBindingOptions}
@@ -276,32 +284,24 @@ export function EnvironmentVariablesFormField<
 
       {/* Environment From k8s Secrets / ConfigMaps Section */}
       {envFrom && (
-        <div className="space-y-1 mt-6">
-          <div className="flex items-center justify-between">
-            <h3 className="font-semibold text-base">
-              Environment From k8s Secrets / ConfigMaps
-            </h3>
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              onClick={() => setEnvFromDialog({ mode: "add" })}
-            >
-              <Plus className="h-4 w-4" />
-              Add Source
-            </Button>
-          </div>
+        <div className="space-y-3">
+          <ListHeading
+            title="From Kubernetes Secrets and ConfigMaps"
+            description="Inject every key of an existing Secret or ConfigMap as environment variables."
+          />
 
           {envFrom.fields.length === 0 ? (
-            <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-              No sources configured.
-            </div>
+            <EmptyListState
+              message="No sources yet."
+              action={
+                <AddListItemButton
+                  label="Add Source"
+                  onClick={() => setEnvFromDialog({ mode: "add" })}
+                />
+              }
+            />
           ) : (
             <>
-              <FormDescription className="mb-4 text-xs">
-                Inject all keys from existing k8s Secrets or ConfigMaps as
-                environment variables.
-              </FormDescription>
               <div>
                 <div className="grid grid-cols-[160px_1fr_1fr_auto] gap-3 border-b py-2.5 px-4 text-xs font-medium text-foreground">
                   <div>Type</div>
@@ -364,6 +364,10 @@ export function EnvironmentVariablesFormField<
                   );
                 })}
               </div>
+              <AddListItemButton
+                label="Add Source"
+                onClick={() => setEnvFromDialog({ mode: "add" })}
+              />
             </>
           )}
 
@@ -389,20 +393,18 @@ export function EnvironmentVariablesFormField<
       )}
 
       {/* Secret Files Section */}
-      <div className="space-y-1 mt-6">
-        <div className="flex items-center justify-between">
-          <FormLabel>Secret Files</FormLabel>
-          <Button
-            type="button"
-            variant="outline"
-            size="sm"
-            onClick={() => setSecretFileDialog({ mode: "add" })}
-          >
-            <Plus className="h-4 w-4" />
-            Add Secret File
-          </Button>
-        </div>
+      <div className="space-y-3">
+        <ListHeading
+          title="Secret files"
+          description="Secrets mounted as files at /secrets/<key>."
+        />
         {(() => {
+          const addSecretFileButton = (
+            <AddListItemButton
+              label="Add Secret File"
+              onClick={() => setSecretFileDialog({ mode: "add" })}
+            />
+          );
           const secretFileIndices = fields
             .map((_, index) => index)
             .filter((index) => {
@@ -414,17 +416,15 @@ export function EnvironmentVariablesFormField<
 
           if (secretFileIndices.length === 0) {
             return (
-              <div className="rounded-lg border border-dashed p-4 text-sm text-muted-foreground">
-                No secret files configured.
-              </div>
+              <EmptyListState
+                message="No secret files yet."
+                action={addSecretFileButton}
+              />
             );
           }
 
           return (
             <>
-              <FormDescription className="mb-4 text-xs">
-                Secrets mounted as files at /secrets/&lt;key&gt;.
-              </FormDescription>
               <EnvironmentVariablesReadOnlyTable
                 credentialLabels={Object.fromEntries(
                   credentialBindingOptions.map((option) => [
@@ -444,6 +444,7 @@ export function EnvironmentVariablesFormField<
                 onEdit={(index) => setSecretFileDialog({ mode: "edit", index })}
                 onDelete={(index) => remove(index)}
               />
+              {addSecretFileButton}
             </>
           );
         })()}
@@ -814,5 +815,20 @@ function ExternalSecretDialog({
         />
       </Suspense>
     </StandardDialog>
+  );
+}
+
+function ListHeading({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="space-y-0.5">
+      <h4 className="text-sm font-medium">{title}</h4>
+      <p className="text-xs text-muted-foreground">{description}</p>
+    </div>
   );
 }

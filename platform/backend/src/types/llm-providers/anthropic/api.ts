@@ -42,23 +42,44 @@ const OutputConfigSchema = z.object({
     .optional(),
 });
 
-// Mirrors @anthropic-ai/sdk BetaThinkingConfigParam. `display` controls
-// whether thinking text appears in the response ("summarized") or only the
-// signature comes back ("omitted", the newest models' default); without it in
-// the schema, Fastify's Zod validation would silently strip the field before
-// the body is forwarded upstream.
+// Mirrors @anthropic-ai/sdk BetaThinkingConfigParam (SDK 0.131). `display`
+// sets how thinking comes back: "summarized" returns the thinking text,
+// "omitted" returns only the signature (the newest models' default), and
+// "updates" is a newer beta mode that Claude Code sends on interactive
+// requests. Fastify replaces the request body with the Zod parse result, so a
+// thinking field that this schema drops never reaches the upstream provider.
+// Thus each variant keeps keys it does not list, and a thinking type that it
+// does not list goes upstream unchanged. Anthropic validates the config there,
+// so a new thinking option does not cause a 400 from the proxy.
 const ThinkingDisplaySchema = z
-  .enum(["summarized", "omitted"])
+  .enum(["summarized", "omitted", "updates"])
+  .nullable()
+  .optional();
+// Sets what Anthropic does when a thinking block sent back in `messages` fails
+// its conversation check.
+const ThinkingBlockBindingSchema = z
+  .record(z.string(), z.unknown())
   .nullable()
   .optional();
 const ThinkingConfigSchema = z.union([
-  z.object({
-    type: z.literal("enabled"),
-    budget_tokens: z.number(),
-    display: ThinkingDisplaySchema,
-  }),
-  z.object({ type: z.literal("disabled") }),
-  z.object({ type: z.literal("adaptive"), display: ThinkingDisplaySchema }),
+  z
+    .object({
+      type: z.literal("enabled"),
+      budget_tokens: z.number(),
+      display: ThinkingDisplaySchema,
+      block_binding: ThinkingBlockBindingSchema,
+    })
+    .passthrough(),
+  z.object({ type: z.literal("disabled") }).passthrough(),
+  z.object({ type: z.literal("between_tools") }).passthrough(),
+  z
+    .object({
+      type: z.literal("adaptive"),
+      display: ThinkingDisplaySchema,
+      block_binding: ThinkingBlockBindingSchema,
+    })
+    .passthrough(),
+  z.object({ type: z.string() }).passthrough(),
 ]);
 
 export const MessagesRequestSchema = z.object({

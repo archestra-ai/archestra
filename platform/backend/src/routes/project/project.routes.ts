@@ -19,6 +19,7 @@ import {
   constructResponseSchema,
   GetAgentRunResponseSchema,
   LabelWithDetailsSchema,
+  ProjectAppListItemSchema,
   ProjectConversationItemSchema,
   ProjectDetailSchema,
   ProjectLifecycleSchema,
@@ -701,6 +702,70 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async ({ params: { id }, organizationId, user }) => {
       await projectService.unpin({ id, organizationId, userId: user.id });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.get(
+    "/api/projects/:id/apps",
+    {
+      schema: {
+        operationId: RouteId.GetProjectApps,
+        description:
+          "Apps linked into the project. Each member sees only the linked " +
+          "apps they can read themselves.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid() }),
+        response: constructResponseSchema(z.array(ProjectAppListItemSchema)),
+      },
+    },
+    async ({ params: { id }, organizationId, user }) =>
+      projectService.listApps({ id, organizationId, userId: user.id }),
+  );
+
+  fastify.put(
+    "/api/projects/:id/apps/:appId",
+    {
+      schema: {
+        operationId: RouteId.LinkProjectApp,
+        description:
+          "Link an app into the project. Any project member who can read the " +
+          "app may link it; the app keeps its own permissions. Idempotent.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid(), appId: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id, appId }, organizationId, user }) => {
+      await projectService.linkApp({
+        id,
+        appId,
+        organizationId,
+        userId: user.id,
+      });
+      return { ok: true as const };
+    },
+  );
+
+  fastify.delete(
+    "/api/projects/:id/apps/:appId",
+    {
+      schema: {
+        operationId: RouteId.UnlinkProjectApp,
+        description:
+          "Unlink an app from the project. The app itself is not changed.",
+        tags: ["Projects"],
+        params: z.object({ id: z.string().uuid(), appId: z.string().uuid() }),
+        response: constructResponseSchema(z.object({ ok: z.literal(true) })),
+      },
+    },
+    async ({ params: { id, appId }, organizationId, user }) => {
+      await projectService.unlinkApp({
+        id,
+        appId,
+        organizationId,
+        userId: user.id,
+      });
       return { ok: true as const };
     },
   );

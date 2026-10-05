@@ -2,7 +2,9 @@ import {
   PROJECT_INSTRUCTIONS_FILENAME,
   TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME,
   TOOL_GET_PROJECT_SHORT_NAME,
+  TOOL_LINK_APP_TO_PROJECT_SHORT_NAME,
   TOOL_LIST_PROJECTS_SHORT_NAME,
+  TOOL_UNLINK_APP_FROM_PROJECT_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
@@ -16,6 +18,25 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
+
+const USER_CONTEXT_REQUIRED =
+  "This tool requires an authenticated user context. Call it with a user token.";
+
+const ProjectAppArgsSchema = z
+  .object({
+    project_id: z
+      .string()
+      .uuid()
+      .describe("Id of the project (from list_projects)."),
+    app_id: z.string().uuid().describe("Id of the app (from list_apps)."),
+  })
+  .strict();
+
+const ProjectAppLinkOutputSchema = z.object({
+  project_id: z.string().describe("The project's id."),
+  app_id: z.string().describe("The app's id."),
+  linked: z.boolean().describe("Whether the app is now linked."),
+});
 
 const CreateProjectFromConversationOutputSchema = z.object({
   success: z.literal(true).describe("Whether the project was created."),
@@ -92,6 +113,18 @@ const GetProjectOutputSchema = ProjectSummarySchema.extend({
     .describe(
       "Files the project owns. Read one with read_file, passing the same " +
         "project_id and this `ref`.",
+    ),
+  apps: z
+    .array(
+      z.object({
+        id: z.string().describe("The app's id."),
+        name: z.string().describe("The app's name."),
+        description: z.string().nullable().describe("The app's description."),
+      }),
+    )
+    .describe(
+      "Apps linked into the project that you can open. Read or edit one with " +
+        "the app tools, passing this id.",
     ),
 });
 
@@ -238,7 +271,8 @@ const registry = defineArchestraTools([
     description:
       "Read one project's context in a single call: its metadata, its " +
       `instructions (the \`${PROJECT_INSTRUCTIONS_FILENAME}\` that steers every ` +
-      "chat in the project), and the list of files it owns. Use list_projects " +
+      "chat in the project), the files it owns, and the apps linked into it " +
+      "that you can open. Use list_projects " +
       "to find the id. To read a file's contents, call read_file with the same " +
       "project_id and the `ref` from the files list. Works outside a chat, so " +
       "an external MCP client can pull a project's context into its own session.",
@@ -268,13 +302,14 @@ const registry = defineArchestraTools([
           organizationId,
           userId,
         });
-        const [{ content }, files] = await Promise.all([
+        const [{ content }, files, apps] = await Promise.all([
           projectService.getInstructions({
             id: project.id,
             organizationId,
             userId,
           }),
           projectService.listFiles({ id: project.id, organizationId, userId }),
+          projectService.listApps({ id: project.id, organizationId, userId }),
         ]);
 
         const truncated = content.length > MAX_INLINED_INSTRUCTIONS_CHARS;
@@ -293,6 +328,11 @@ const registry = defineArchestraTools([
             mime_type: f.mimeType,
             size_bytes: f.sizeBytes,
           })),
+          apps: apps.map((a) => ({
+            id: a.id,
+            name: a.name,
+            description: a.description,
+          })),
         };
         const instructionsLine = content
           ? truncated
@@ -308,9 +348,13 @@ const registry = defineArchestraTools([
                     `${f.filename} (${f.mimeType}, ${f.sizeBytes} bytes) ref=${f.downloadRef}`,
                 )
                 .join("\n")}`;
+        const appsLine =
+          apps.length === 0
+            ? "Apps: (none)"
+            : `Apps:\n${apps.map((a) => `${a.name} (id=${a.id})`).join("\n")}`;
         return structuredSuccessResult(
           result,
-          `Project "${project.name}" (id=${project.id})\n\n${instructionsLine}\n\n${filesLine}`,
+          `Project "${project.name}" (id=${project.id})\n\n${instructionsLine}\n\n${filesLine}\n\n${appsLine}`,
         );
       } catch (error) {
         // "Project not found" (the 404 that also covers "no access") is the
@@ -319,6 +363,66 @@ const registry = defineArchestraTools([
           return errorResult(error.message);
         }
         return catchError(error, "reading the project");
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_LINK_APP_TO_PROJECT_SHORT_NAME,
+    title: "Link App To Project",
+    description:
+      "Link an existing app into a project so it is listed with the project's " +
+      "files and chats. The app keeps its own permissions: project members " +
+      "see it only if they can open the app. You need access to the project " +
+      "and the app. Linking twice is a no-op. Works outside a chat.",
+    schema: ProjectAppArgsSchema,
+    outputSchema: ProjectAppLinkOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult(USER_CONTEXT_REQUIRED);
+      }
+      try {
+        await projectService.linkApp({
+          id: args.project_id,
+          appId: args.app_id,
+          organizationId: context.organizationId,
+          userId: context.userId,
+        });
+        return structuredSuccessResult(
+          { project_id: args.project_id, app_id: args.app_id, linked: true },
+          `Linked app ${args.app_id} to project ${args.project_id}.`,
+        );
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        return catchError(error, "linking the app");
+      }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_UNLINK_APP_FROM_PROJECT_SHORT_NAME,
+    title: "Unlink App From Project",
+    description:
+      "Remove an app's link from a project. The app itself is not changed or " +
+      "deleted. Works outside a chat.",
+    schema: ProjectAppArgsSchema,
+    outputSchema: ProjectAppLinkOutputSchema,
+    async handler({ args, context }) {
+      if (!context.userId || !context.organizationId) {
+        return errorResult(USER_CONTEXT_REQUIRED);
+      }
+      try {
+        await projectService.unlinkApp({
+          id: args.project_id,
+          appId: args.app_id,
+          organizationId: context.organizationId,
+          userId: context.userId,
+        });
+        return structuredSuccessResult(
+          { project_id: args.project_id, app_id: args.app_id, linked: false },
+          `Unlinked app ${args.app_id} from project ${args.project_id}.`,
+        );
+      } catch (error) {
+        if (error instanceof ApiError) return errorResult(error.message);
+        return catchError(error, "unlinking the app");
       }
     },
   }),

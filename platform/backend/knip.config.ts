@@ -12,6 +12,9 @@ const config: KnipConfig = {
     "src/standalone-scripts/**/*.ts!",
     // Container/Helm entrypoint; referenced outside the TypeScript module graph.
     "scripts/migrate-with-lock.mjs!",
+    // GitHub Actions runs these CLIs to propose stable client version updates.
+    "scripts/update-codex-models-client-version.mjs!",
+    "scripts/update-grok-client-version.mjs!",
     // Test infrastructure used by *.test.ts files (dev-only entries)
     "src/test/**/*.ts",
     // Loaded by `vitest run --config` for the opt-in session storage benchmark.

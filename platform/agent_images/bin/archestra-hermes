@@ -10,6 +10,13 @@ fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
+# Restoring an interactive session does not submit another model turn.
+if [[ "${runtime_mode}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
+if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_BINDING:?OpenAPPA runtime binding is required}"
+fi
 export HERMES_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/hermes"
 mkdir -p "${runtime_dir}" "${HERMES_HOME}"
 attention_plugin_dir="${HERMES_HOME}/plugins/archestra-attention"
@@ -271,12 +278,14 @@ chmod 0700 "${completion_hook}"
 # index can block agent construction past the native TUI's initialization limit.
 # The first turn must carry the gateway tools, including the OpenAPPA remedy
 # pair. Hermes waits at most 1.5s for MCP discovery by default; the wait ends
-# as soon as discovery does, so this bound only caps an unreachable gateway.
+# as soon as discovery does. The image patch rejects agent construction if
+# discovery is still running or the required gateway failed to connect.
 jq -n \
   --arg base_url "${OPENAI_BASE_URL:?}" \
   --arg model "${ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL:?}" \
   --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
   --arg session "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" \
+  --arg binding "${ARCHESTRA_AGENT_RUNTIME_BINDING:-}" \
   --arg mcp_url "${ARCHESTRA_MCP_GATEWAY_URL:?}" \
   --arg gateway_token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg system_prompt "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}" \
@@ -295,21 +304,21 @@ jq -n \
     model:{
       max_tokens:16384,
       context_length:1047576,
-      default_headers:{
+      default_headers:({
         "X-Archestra-Run-Id":$task_id,
         "X-Archestra-Session-Id":$session,
         "X-Appa-Session-ID":$session
-      }
+      } + (if $binding == "" then {} else {"X-Archestra-Runtime-Binding":$binding} end))
     },
     mcp_discovery_timeout:30,
     mcp_servers:{archestra:{
       url:$mcp_url,
-      headers:{
+      headers:({
         Authorization:("Bearer " + $gateway_token),
         "X-Archestra-Run-Id":$task_id,
         "X-Archestra-Session-Id":$session,
         "X-Appa-Session-ID":$session
-      }
+      } + (if $binding == "" then {} else {"X-Archestra-Runtime-Binding":$binding} end))
     }}
   } + {
     hooks_auto_accept:true,
@@ -325,7 +334,7 @@ chmod 0600 "${HERMES_HOME}/config.yaml"
 mkdir -p "${HOME}/.hermes"
 ln -sf "${HERMES_HOME}/config.yaml" "${HOME}/.hermes/config.yaml"
 task_file="${runtime_dir}/task.md"
-printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" > "${task_file}"
 
 completion_watcher="${runtime_dir}/hermes-completion-watch.py"
 cat > "${completion_watcher}" <<'PYTHON'
@@ -412,10 +421,11 @@ fi
 
 case "${runtime_mode}" in
   interactive)
-    exec hermes chat \
-      "${common_args[@]}" \
-      --tui \
-      --query "$(cat "${task_file}")"
+    prompt_args=()
+    if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" ]]; then
+      prompt_args+=(--query "$(cat "${task_file}")")
+    fi
+    exec hermes chat "${common_args[@]}" --tui "${prompt_args[@]}"
     ;;
   one_shot)
     if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then

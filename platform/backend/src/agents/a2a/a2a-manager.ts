@@ -181,6 +181,11 @@ export interface A2ASystemParams {
    * repeating the frame on every persisted turn.
    */
   ephemeralExecutionPrefix?: string;
+  /**
+   * Verified OpenAPPA source for a runtime spawn or steer. Server-built only.
+   * Protocol requests cannot set this.
+   */
+  runtimeCrossing?: import("@/services/agent-runtime/runtime-crossing").RuntimeCrossing;
 }
 
 /**
@@ -408,8 +413,18 @@ export class A2AManager {
         }
       });
 
+      const runtime = resolveAgentRuntime(agent);
+      const resumeInteractiveSession = Boolean(
+        runtime &&
+          fullTaskMode &&
+          params.taskRun?.createTask &&
+          systemParams?.runtimeMode === "interactive" &&
+          systemParams.resumeFromTaskId,
+      );
       const needToExecute =
-        messageParts.length > 0 || taskWasSwitchedToWorkingState;
+        messageParts.length > 0 ||
+        taskWasSwitchedToWorkingState ||
+        resumeInteractiveSession;
       if (!needToExecute) {
         if (taskApprovalDecisionsWasApplied) {
           if (!task) {
@@ -425,7 +440,6 @@ export class A2AManager {
 
       // A detached run returns its task handle before execution. Reject an
       // incompatible model before compaction, context creation, or turn writes.
-      const runtime = resolveAgentRuntime(agent);
       // Protocol terminal tasks remain immutable. A new task addressed to
       // their context reuses the same owned workspace, just like MCP/UI
       // continuation, rather than silently creating another development box.
@@ -647,6 +661,7 @@ export class A2AManager {
                 llmApiKeyId: agent.llmApiKeyId,
                 runMode: systemParams?.runtimeMode ?? "one_shot",
                 titleUserId: actor.kind === "user" ? actor.id : undefined,
+                runtimeCrossing: systemParams?.runtimeCrossing,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,
               });
@@ -661,6 +676,7 @@ export class A2AManager {
               messages: requestMessages,
               organizationId: actor.organizationId,
               userId: actor.kind === "user" ? actor.id : "system",
+              actorTeamId: actor.kind === "team" ? actor.id : undefined,
               sessionId,
               source: systemParams?.source,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId

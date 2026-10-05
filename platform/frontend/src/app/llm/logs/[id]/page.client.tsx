@@ -3,14 +3,14 @@
 import {
   type archestraApiTypes,
   DynamicInteraction,
-  isLockedChatUnavailableContent,
+  isEncryptedChatUnavailableContent,
 } from "@archestra/shared";
 import { Database, Layers } from "lucide-react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { BilledCost } from "@/components/billed-cost";
 import { type DetailFact, DetailFacts } from "@/components/detail-facts";
+import { EncryptedChatContentUnavailable } from "@/components/encrypted-chat-content-unavailable";
 import { JsonCodeBlock } from "@/components/json-code-block";
-import { LockedChatContentUnavailable } from "@/components/locked-chat-content-unavailable";
 import MessageThread from "@/components/message-thread";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
@@ -363,8 +363,10 @@ function LogDetail({
                 </span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                {isLockedChatUnavailableContent(dynamicInteraction.request) ? (
-                  <LockedChatContentUnavailable
+                {isEncryptedChatUnavailableContent(
+                  dynamicInteraction.request,
+                ) ? (
+                  <EncryptedChatContentUnavailable
                     value={dynamicInteraction.request}
                   />
                 ) : (
@@ -384,10 +386,10 @@ function LogDetail({
                   </span>
                 </AccordionTrigger>
                 <AccordionContent className="px-6 pb-4">
-                  {isLockedChatUnavailableContent(
+                  {isEncryptedChatUnavailableContent(
                     dynamicInteraction.processedRequest,
                   ) ? (
-                    <LockedChatContentUnavailable
+                    <EncryptedChatContentUnavailable
                       value={dynamicInteraction.processedRequest}
                     />
                   ) : (
@@ -411,8 +413,10 @@ function LogDetail({
                 <span className="text-base font-semibold">Raw Response</span>
               </AccordionTrigger>
               <AccordionContent className="px-6 pb-4">
-                {isLockedChatUnavailableContent(dynamicInteraction.response) ? (
-                  <LockedChatContentUnavailable
+                {isEncryptedChatUnavailableContent(
+                  dynamicInteraction.response,
+                ) ? (
+                  <EncryptedChatContentUnavailable
                     value={dynamicInteraction.response}
                   />
                 ) : (

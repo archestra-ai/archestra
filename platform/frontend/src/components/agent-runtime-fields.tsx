@@ -4,19 +4,29 @@ import {
   getAgentRuntimeAllowedProtocols,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
+import { ChevronDown } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useId, useRef, useState } from "react";
 import { ContainerDeploymentFields } from "@/components/container-deployment-fields";
 import { DeploymentEnvironmentVariablesEditor } from "@/components/deployment-environment-variables-editor";
 import type { EnvVarDraft } from "@/components/environment-variable-dialog";
 import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
+import {
+  InputGroup,
+  InputGroupAddon,
+  InputGroupInput,
+  InputGroupText,
+} from "@/components/ui/input-group";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -29,6 +39,7 @@ import { Switch } from "@/components/ui/switch";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
+import { cn } from "@/lib/utils/tailwind";
 
 export type AgentRuntimeConfig = {
   image: string;
@@ -93,73 +104,92 @@ export function AgentRuntimeFields({
   const config = value ?? defaultAgentRuntime();
 
   return (
-    <div className="space-y-4" data-testid="agent-runtime">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-1">
-          <Label htmlFor={enabledId}>Dedicated Agent runtime</Label>
-          <FieldDescription>
-            Give this Agent an isolated environment for interactive, delegated,
-            and long-running work. Selecting it in Chat starts a run instead of
-            a foreground conversation.
-          </FieldDescription>
-          {runtimeEnabled === false && value === null && (
-            <FieldDescription>
-              Your deployment administrator must enable Agent Runtime before you
-              can configure a dedicated runtime.
-            </FieldDescription>
-          )}
-        </div>
-        <Switch
-          id={enabledId}
-          checked={value !== null}
-          disabled={runtimeEnabled !== true && value === null}
-          onCheckedChange={(checked) =>
-            onChange(checked ? defaultAgentRuntime() : null)
-          }
-        />
-      </div>
-
-      {value && (
-        <div className="space-y-6 rounded-md border p-4">
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <h3 className="font-semibold text-base">Runtime image</h3>
-              <p className="text-xs text-muted-foreground">
-                The container uses this Agent&apos;s Environment, including its
-                network egress policy and image pull configuration.
-              </p>
+    <div data-testid="agent-runtime">
+      <SettingsSectionGroup>
+        <SettingsSection
+          title="Dedicated runtime"
+          description="Run this agent in its own container."
+        >
+          <div className="flex items-start gap-3">
+            <Switch
+              id={enabledId}
+              aria-label="Dedicated Agent runtime"
+              className="mt-0.5 shrink-0"
+              checked={value !== null}
+              disabled={runtimeEnabled !== true && value === null}
+              onCheckedChange={(checked) =>
+                onChange(checked ? defaultAgentRuntime() : null)
+              }
+            />
+            <div className="min-w-0 space-y-1">
+              <Label htmlFor={enabledId}>
+                {value ? "Enabled" : "Disabled"}
+              </Label>
+              <FieldDescription>
+                {runtimeEnabled === false && value === null
+                  ? "Your deployment administrator must enable Agent Runtime before you can configure a dedicated runtime."
+                  : "Selecting this agent in Chat starts a run in the container instead of a foreground conversation."}
+              </FieldDescription>
             </div>
-            <AgentRuntimeImageFields value={config} onChange={onChange} />
           </div>
-
-          <AgentRuntimeEnvironmentFields value={config} onChange={onChange} />
-
-          <div className="space-y-4">
-            <div className="space-y-1">
-              <h3 className="font-semibold text-base">Run controls</h3>
-              <p className="text-xs text-muted-foreground">
-                Bound each isolated run. Blank fields use the installation
-                defaults.
-              </p>
-            </div>
-            <div className="grid gap-4 sm:grid-cols-2">
-              <AgentRuntimeProtocolField value={config} onChange={onChange} />
-              <AgentRuntimeSteeringField value={config} onChange={onChange} />
-            </div>
-            <Accordion type="single" collapsible>
-              <AccordionItem
-                value="advanced"
-                className="rounded-md border px-4 last:border-b"
-              >
-                <AccordionTrigger>Advanced</AccordionTrigger>
-                <AccordionContent className="space-y-4">
-                  <AgentRuntimeRunControls value={config} onChange={onChange} />
-                </AccordionContent>
-              </AccordionItem>
-            </Accordion>
-          </div>
-        </div>
-      )}
+        </SettingsSection>
+        {value && (
+          <>
+            <SettingsSection
+              title="Container"
+              description="The image and client each run starts. It inherits this agent's network egress policy and image pull settings."
+            >
+              <AgentRuntimeImageFields value={config} onChange={onChange} />
+              <div className="grid gap-4 sm:grid-cols-2">
+                <AgentRuntimeProtocolField
+                  value={config}
+                  onChange={onChange}
+                  constrainToHarness
+                  compact
+                />
+                <AgentRuntimeSteeringField
+                  value={config}
+                  onChange={onChange}
+                  compact
+                />
+              </div>
+            </SettingsSection>
+            <SettingsSection
+              title="Environment"
+              description={
+                <>
+                  Configuration and secrets passed to the container. Manage
+                  reusable credentials on the{" "}
+                  <Link
+                    href="/settings/credentials"
+                    className="underline underline-offset-4"
+                  >
+                    Credentials
+                  </Link>{" "}
+                  page.
+                </>
+              }
+            >
+              <AgentRuntimeEnvironmentFields
+                value={config}
+                onChange={onChange}
+                hideLabel
+                hideDescription
+              />
+            </SettingsSection>
+            <SettingsSection
+              title="Limits"
+              description="Run lifetime, spend, and resources. Blank fields use installation defaults."
+            >
+              <AgentRuntimeRunLimits value={config} onChange={onChange} />
+              <AgentRuntimeContainerOptions
+                value={config}
+                onChange={onChange}
+              />
+            </SettingsSection>
+          </>
+        )}
+      </SettingsSectionGroup>
     </div>
   );
 }
@@ -218,7 +248,8 @@ export function AgentRuntimeEnvironmentFields({
   value,
   onChange,
   hideLabel = false,
-}: RuntimeSectionProps & { hideLabel?: boolean }) {
+  hideDescription = false,
+}: RuntimeSectionProps & { hideLabel?: boolean; hideDescription?: boolean }) {
   const config = value;
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
@@ -231,18 +262,20 @@ export function AgentRuntimeEnvironmentFields({
         value={toEnvironmentDrafts(config)}
         onChange={(drafts) => update(fromEnvironmentDrafts(config, drafts))}
         description={
-          <>
-            Add plain configuration or declare static secrets for this Agent.
-            Secret values are provided after saving. Manage reusable
-            organization or per-user credentials on the{" "}
-            <Link
-              href="/settings/credentials"
-              className="font-medium text-foreground underline underline-offset-4"
-            >
-              Credentials
-            </Link>{" "}
-            page, then select them as a secret source.
-          </>
+          hideDescription ? null : (
+            <>
+              Add plain configuration or declare static secrets for this Agent.
+              Secret values are provided after saving. Manage reusable
+              organization or per-user credentials on the{" "}
+              <Link
+                href="/settings/credentials"
+                className="font-medium text-foreground underline underline-offset-4"
+              >
+                Credentials
+              </Link>{" "}
+              page, then select them as a secret source.
+            </>
+          )
         }
         targetLabel="dedicated runtime"
         installationLabel="Per user"
@@ -282,26 +315,36 @@ export function AgentRuntimeEnvironmentFields({
         )}
       />
 
-      <div className="flex items-start justify-between gap-6 border-t pt-4">
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="agent-runtime-allow-client-credentials">
-            Accept credentials from a connected client
-          </Label>
-          <FieldDescription>
-            Lets a client store a credential on this Agent with{" "}
-            <code>{TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}</code>, for your runs
-            only. The model sees the value, and the client keeps it in its chat
-            history. Turn it off to require the Credentials page.
-          </FieldDescription>
-        </div>
-        <Switch
-          id="agent-runtime-allow-client-credentials"
-          className="mt-0.5 shrink-0"
-          checked={config.allowAgentSuppliedCredentialValues !== false}
-          onCheckedChange={(allowed) =>
-            update({ allowAgentSuppliedCredentialValues: allowed })
-          }
-        />
+      <RuntimeClientCredentialsField value={config} onChange={onChange} />
+    </div>
+  );
+}
+
+function RuntimeClientCredentialsField({
+  value,
+  onChange,
+}: RuntimeSectionProps) {
+  const update = (patch: Partial<AgentRuntimeConfig>) =>
+    onChange({ ...value, ...patch });
+  return (
+    <div className="flex items-start gap-3">
+      <Switch
+        id="agent-runtime-allow-client-credentials"
+        className="mt-0.5 shrink-0"
+        checked={value.allowAgentSuppliedCredentialValues !== false}
+        onCheckedChange={(allowed) =>
+          update({ allowAgentSuppliedCredentialValues: allowed })
+        }
+      />
+      <div className="min-w-0 space-y-1">
+        <Label htmlFor="agent-runtime-allow-client-credentials">
+          Accept credentials from a connected client
+        </Label>
+        <FieldDescription>
+          A client can store a credential for its own runs with{" "}
+          <code>{TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}</code>. The model sees the
+          value and the client keeps it in its chat history.
+        </FieldDescription>
       </div>
     </div>
   );
@@ -312,9 +355,12 @@ export function AgentRuntimeProtocolField({
   onChange,
   constrainToHarness = false,
   hideLabel = false,
+  compact = false,
 }: RuntimeSectionProps & {
   constrainToHarness?: boolean;
   hideLabel?: boolean;
+  /** Label above, one short line below: for a field sharing a row. */
+  compact?: boolean;
 }) {
   const config = value;
   const update = (patch: Partial<AgentRuntimeConfig>) =>
@@ -331,11 +377,13 @@ export function AgentRuntimeProtocolField({
       >
         Inference API
       </Label>
-      <FieldDescription>
-        Choose the API protocol the container&apos;s Agent client expects. Every
-        option stays behind the {appName} LLM proxy.
-      </FieldDescription>
-      {constrainToHarness && allowedProtocols.length === 1 && (
+      {!compact && (
+        <FieldDescription>
+          Choose the API protocol the container&apos;s Agent client expects.
+          Every option stays behind the {appName} LLM proxy.
+        </FieldDescription>
+      )}
+      {!compact && constrainToHarness && allowedProtocols.length === 1 && (
         <FieldDescription>
           Claude Code only speaks the Anthropic Messages API, so this cannot be
           changed.
@@ -359,6 +407,13 @@ export function AgentRuntimeProtocolField({
           ))}
         </SelectContent>
       </Select>
+      {compact && (
+        <FieldDescription>
+          {allowedProtocols.length === 1 && constrainToHarness
+            ? "Fixed by the client in this image."
+            : `What the client speaks to the ${appName} LLM proxy.`}
+        </FieldDescription>
+      )}
     </div>
   );
 }
@@ -367,7 +422,8 @@ export function AgentRuntimeSteeringField({
   value,
   onChange,
   hideLabel = false,
-}: RuntimeSectionProps & { hideLabel?: boolean }) {
+  compact = false,
+}: RuntimeSectionProps & { hideLabel?: boolean; compact?: boolean }) {
   const config = value;
   const update = (patch: Partial<AgentRuntimeConfig>) =>
     onChange({ ...config, ...patch });
@@ -379,10 +435,12 @@ export function AgentRuntimeSteeringField({
       >
         Steering
       </Label>
-      <FieldDescription>
-        Turn boundary delivers follow-up instructions between Agent turns.
-        Terminal input types directly into an interactive CLI.
-      </FieldDescription>
+      {!compact && (
+        <FieldDescription>
+          Turn boundary delivers follow-up instructions between Agent turns.
+          Terminal input types directly into an interactive CLI.
+        </FieldDescription>
+      )}
       <Select
         value={config.steerMode}
         onValueChange={(steerMode: "pipe" | "tmux_keys") =>
@@ -397,119 +455,179 @@ export function AgentRuntimeSteeringField({
           <SelectItem value="tmux_keys">Terminal input</SelectItem>
         </SelectContent>
       </Select>
+      {compact && (
+        <FieldDescription>
+          {config.steerMode === "tmux_keys"
+            ? "Follow-ups are typed into the client's terminal."
+            : "Follow-ups are delivered between turns."}
+        </FieldDescription>
+      )}
     </div>
   );
 }
 
+/** Limits plus container options, for surfaces with no section of their own. */
 export function AgentRuntimeRunControls({
   value,
   onChange,
 }: RuntimeSectionProps) {
-  const config = value;
-  const update = (patch: Partial<AgentRuntimeConfig>) =>
-    onChange({ ...config, ...patch });
-  const runtimeDefaults = useFeature("agentRuntimeBackend");
   return (
     <div className="space-y-4">
-      <div className="grid gap-4 sm:grid-cols-2">
-        <NumberField
-          id="runtime-idle-timeout"
-          label="Idle timeout (minutes)"
-          value={config.idleTimeoutMinutes}
-          defaultValue={runtimeDefaults?.defaultIdleTimeoutMinutes}
-          min={1}
-          max={1440}
-          onChange={(idleTimeoutMinutes) => update({ idleTimeoutMinutes })}
-          description="Stops the run after it finishes a task and receives no follow-up instructions for this long."
-        />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <NumberField
-          id="agent-runtime-max-duration"
-          label="Maximum duration (hours)"
-          value={config.ttlHours}
-          defaultValue={runtimeDefaults?.defaultTtlHours}
-          min={1}
-          max={720}
-          onChange={(ttlHours) => update({ ttlHours })}
-          description="Hard lifetime cap for a run, including active and idle time."
-        />
-        <NumberField
-          id="agent-runtime-cost-budget"
-          label="Metered LLM budget (USD)"
-          value={config.maxCostUsd}
-          defaultValue="No limit"
-          min={1}
-          max={100000}
-          onChange={(maxCostUsd) => update({ maxCostUsd })}
-          description="Blocks further metered model calls after this run reaches the spend ceiling."
-        />
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2">
-        <ResourceField
-          id="agent-runtime-cpu-request"
-          label="CPU request"
-          placeholder={installationDefaultPlaceholder(
-            runtimeDefaults?.resources.cpuRequest,
-          )}
-          value={config.resources?.cpuRequest}
-          onChange={(cpuRequest) =>
-            updateResource(config, update, { cpuRequest })
-          }
-        />
-        <ResourceField
-          id="agent-runtime-memory-request"
-          label="Memory request"
-          placeholder={installationDefaultPlaceholder(
-            runtimeDefaults?.resources.memoryRequest,
-          )}
-          value={config.resources?.memoryRequest}
-          onChange={(memoryRequest) =>
-            updateResource(config, update, { memoryRequest })
-          }
-        />
-        <ResourceField
-          id="agent-runtime-cpu-limit"
-          label="CPU limit"
-          placeholder={installationDefaultPlaceholder("No limit")}
-          value={config.resources?.cpuLimit}
-          onChange={(cpuLimit) => updateResource(config, update, { cpuLimit })}
-        />
-        <ResourceField
-          id="agent-runtime-memory-limit"
-          label="Memory limit"
-          placeholder={installationDefaultPlaceholder(
-            runtimeDefaults?.resources.memoryLimit,
-          )}
-          value={config.resources?.memoryLimit}
-          onChange={(memoryLimit) =>
-            updateResource(config, update, { memoryLimit })
-          }
-        />
-      </div>
-
-      <RuntimePortsField
-        value={config.ports ?? []}
-        onChange={(ports) => update({ ports })}
-      />
-
-      <div className="flex items-start justify-between gap-6 border-t pt-4">
-        <div className="min-w-0 space-y-1">
-          <Label htmlFor="agent-runtime-privileged">Privileged mode</Label>
-          <FieldDescription>
-            Gives the container elevated access to its host. Enable it only for
-            workloads that require host-level capabilities. Only Agent
-            administrators can turn it on.
-          </FieldDescription>
-        </div>
-        <Switch
-          id="agent-runtime-privileged"
-          className="mt-0.5 shrink-0"
-          checked={config.privileged}
-          onCheckedChange={(privileged) => update({ privileged })}
-        />
-      </div>
+      <AgentRuntimeRunLimits value={value} onChange={onChange} />
+      <AgentRuntimeContainerOptions value={value} onChange={onChange} />
     </div>
+  );
+}
+
+function AgentRuntimeRunLimits({ value, onChange }: RuntimeSectionProps) {
+  const update = (patch: Partial<AgentRuntimeConfig>) =>
+    onChange({ ...value, ...patch });
+  const runtimeDefaults = useFeature("agentRuntimeBackend");
+  return (
+    <div className="grid gap-x-4 gap-y-5 sm:grid-cols-3">
+      <NumberField
+        id="runtime-idle-timeout"
+        label="Idle timeout"
+        unit="min"
+        value={value.idleTimeoutMinutes}
+        defaultValue={runtimeDefaults?.defaultIdleTimeoutMinutes}
+        min={1}
+        max={1440}
+        onChange={(idleTimeoutMinutes) => update({ idleTimeoutMinutes })}
+        description="Stops the run after it finishes a task and gets no follow-up for this long."
+      />
+      <NumberField
+        id="agent-runtime-max-duration"
+        label="Maximum duration"
+        unit="hours"
+        value={value.ttlHours}
+        defaultValue={runtimeDefaults?.defaultTtlHours}
+        min={1}
+        max={720}
+        onChange={(ttlHours) => update({ ttlHours })}
+        description="Hard lifetime cap, including idle time."
+      />
+      <NumberField
+        id="agent-runtime-cost-budget"
+        label="Metered LLM budget"
+        unit="USD"
+        value={value.maxCostUsd}
+        defaultValue="No limit"
+        min={1}
+        max={100000}
+        onChange={(maxCostUsd) => update({ maxCostUsd })}
+        description="Blocks further metered model calls once a run spends this much."
+      />
+    </div>
+  );
+}
+
+/**
+ * Resources, ports, and host access: rarely changed, so they sit closed
+ * behind a one-line summary of what is set.
+ */
+function AgentRuntimeContainerOptions({
+  value,
+  onChange,
+}: RuntimeSectionProps) {
+  const update = (patch: Partial<AgentRuntimeConfig>) =>
+    onChange({ ...value, ...patch });
+  const runtimeDefaults = useFeature("agentRuntimeBackend");
+  const [open, setOpen] = useState(false);
+  return (
+    <Collapsible
+      open={open}
+      onOpenChange={setOpen}
+      className="rounded-md border"
+    >
+      <CollapsibleTrigger asChild>
+        <button
+          type="button"
+          className="flex w-full items-center gap-3 rounded-md px-4 py-3 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
+        >
+          <span className="min-w-0 flex-1">
+            <span className="block text-sm font-medium">
+              Resources and access
+            </span>
+            <span className="block truncate text-xs text-muted-foreground">
+              {containerOptionsSummary(value)}
+            </span>
+          </span>
+          <ChevronDown
+            aria-hidden="true"
+            className={cn(
+              "size-4 shrink-0 text-muted-foreground transition-transform",
+              open && "rotate-180",
+            )}
+          />
+        </button>
+      </CollapsibleTrigger>
+      <CollapsibleContent className="space-y-5 border-t px-4 py-4">
+        <div className="grid gap-4 sm:grid-cols-2">
+          <ResourceField
+            id="agent-runtime-cpu-request"
+            label="CPU request"
+            placeholder={installationDefaultPlaceholder(
+              runtimeDefaults?.resources.cpuRequest,
+            )}
+            value={value.resources?.cpuRequest}
+            onChange={(cpuRequest) =>
+              updateResource(value, update, { cpuRequest })
+            }
+          />
+          <ResourceField
+            id="agent-runtime-cpu-limit"
+            label="CPU limit"
+            placeholder={installationDefaultPlaceholder("No limit")}
+            value={value.resources?.cpuLimit}
+            onChange={(cpuLimit) => updateResource(value, update, { cpuLimit })}
+          />
+          <ResourceField
+            id="agent-runtime-memory-request"
+            label="Memory request"
+            placeholder={installationDefaultPlaceholder(
+              runtimeDefaults?.resources.memoryRequest,
+            )}
+            value={value.resources?.memoryRequest}
+            onChange={(memoryRequest) =>
+              updateResource(value, update, { memoryRequest })
+            }
+          />
+          <ResourceField
+            id="agent-runtime-memory-limit"
+            label="Memory limit"
+            placeholder={installationDefaultPlaceholder(
+              runtimeDefaults?.resources.memoryLimit,
+            )}
+            value={value.resources?.memoryLimit}
+            onChange={(memoryLimit) =>
+              updateResource(value, update, { memoryLimit })
+            }
+          />
+        </div>
+
+        <RuntimePortsField
+          value={value.ports ?? []}
+          onChange={(ports) => update({ ports })}
+        />
+
+        <div className="flex items-start gap-3">
+          <Switch
+            id="agent-runtime-privileged"
+            className="mt-0.5 shrink-0"
+            checked={value.privileged}
+            onCheckedChange={(privileged) => update({ privileged })}
+          />
+          <div className="min-w-0 space-y-1">
+            <Label htmlFor="agent-runtime-privileged">Privileged mode</Label>
+            <FieldDescription>
+              Gives the container elevated access to its host. Only Agent
+              administrators can turn it on.
+            </FieldDescription>
+          </div>
+        </div>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }
 
@@ -537,10 +655,6 @@ function RuntimePortsField({
   return (
     <div className="space-y-2">
       <Label htmlFor="agent-runtime-ports">Ports to forward</Label>
-      <FieldDescription>
-        Optional container ports, separated by commas (up to 20). These appear
-        in the run&apos;s connection details.
-      </FieldDescription>
       <Input
         id="agent-runtime-ports"
         inputMode="numeric"
@@ -568,11 +682,11 @@ function RuntimePortsField({
           }
         }}
       />
-      {!valid && (
-        <FieldDescription>
-          Use up to 20 port numbers from 1 to 65535.
-        </FieldDescription>
-      )}
+      <FieldDescription>
+        {valid
+          ? "Comma-separated, up to 20. Shown in the run's connection details."
+          : "Use up to 20 port numbers from 1 to 65535."}
+      </FieldDescription>
     </div>
   );
 }
@@ -665,6 +779,7 @@ function uppercase(value: string): string {
 function NumberField({
   id,
   label,
+  unit,
   value,
   min,
   max,
@@ -674,6 +789,7 @@ function NumberField({
 }: {
   id: string;
   label: string;
+  unit: string;
   value: number | null;
   min: number;
   max: number;
@@ -682,23 +798,28 @@ function NumberField({
   defaultValue: string | number | undefined;
 }) {
   return (
-    <div className="flex h-full flex-col gap-2">
+    <div className="flex flex-col gap-2">
       <Label htmlFor={id}>{label}</Label>
-      <FieldDescription className="flex-1">{description}</FieldDescription>
-      <Input
-        id={id}
-        type="number"
-        min={min}
-        max={max}
-        value={value ?? ""}
-        onChange={(event) => {
-          const next = event.currentTarget.valueAsNumber;
-          onChange(
-            Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : null,
-          );
-        }}
-        placeholder={installationDefaultPlaceholder(defaultValue)}
-      />
+      <InputGroup>
+        <InputGroupInput
+          id={id}
+          type="number"
+          min={min}
+          max={max}
+          value={value ?? ""}
+          onChange={(event) => {
+            const next = event.currentTarget.valueAsNumber;
+            onChange(
+              Number.isFinite(next) ? Math.min(max, Math.max(min, next)) : null,
+            );
+          }}
+          placeholder={installationDefaultPlaceholder(defaultValue)}
+        />
+        <InputGroupAddon align="inline-end">
+          <InputGroupText>{unit}</InputGroupText>
+        </InputGroupAddon>
+      </InputGroup>
+      <FieldDescription>{description}</FieldDescription>
     </div>
   );
 }
@@ -724,10 +845,25 @@ function ResourceField({
         value={value ?? ""}
         onChange={(event) => onChange(event.target.value || undefined)}
         placeholder={placeholder}
-        className="font-mono"
       />
     </div>
   );
+}
+
+function containerOptionsSummary(config: AgentRuntimeConfig): string {
+  const resources = config.resources ?? {};
+  const parts = [
+    resources.cpuRequest && `CPU ${resources.cpuRequest}`,
+    resources.cpuLimit && `CPU limit ${resources.cpuLimit}`,
+    resources.memoryRequest && `Memory ${resources.memoryRequest}`,
+    resources.memoryLimit && `Memory limit ${resources.memoryLimit}`,
+    config.ports?.length &&
+      `${config.ports.length === 1 ? "Port" : "Ports"} ${config.ports.join(", ")}`,
+    config.privileged && "Privileged",
+  ].filter(Boolean);
+  return parts.length
+    ? parts.join(" · ")
+    : "Installation default CPU and memory, no forwarded ports";
 }
 
 function updateResource(
@@ -754,7 +890,5 @@ const ENVIRONMENT_KEY_LABELS: Record<string, string> = {
 function installationDefaultPlaceholder(
   value: string | number | undefined,
 ): string {
-  return value === undefined
-    ? "Loading default…"
-    : `${value} (Installation Default)`;
+  return value === undefined ? "Loading default…" : `${value} (default)`;
 }

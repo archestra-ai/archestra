@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   appaGithubSyncQueryKey,
   invalidatePolicyViews,
@@ -8,7 +9,11 @@ import {
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export function useAppaGithubSync() {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   return useQuery({
+    enabled: canRead === true,
     queryKey: appaGithubSyncQueryKey,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getAppaGithubSync();
@@ -40,6 +45,25 @@ export function useConfigureAppaGithubSync() {
     onSettled: () => invalidatePolicyViews(client),
   });
 }
+export function useCreateAppaGithubRepository() {
+  const client = useQueryClient();
+  return useMutation({
+    mutationFn: async (
+      body: archestraApiTypes.CreateAppaGithubRepositoryData["body"],
+    ) => {
+      const { data, error } = await archestraApiSdk.createAppaGithubRepository({
+        body,
+      });
+      if (error) {
+        throw toApiError(error);
+      }
+      return data;
+    },
+    onSuccess: () =>
+      toast.success("Repository created with your current policy."),
+    onSettled: () => invalidatePolicyViews(client),
+  });
+}
 export function useUpdateAppaGithubSync() {
   const client = useQueryClient();
   return useMutation({
@@ -56,10 +80,11 @@ export function useUpdateAppaGithubSync() {
       return data;
     },
     onSettled: () => invalidatePolicyViews(client),
-    onSuccess: (_data, body) => {
+    onSuccess: (data, body) => {
+      if (body.action === "sync" && data?.source?.lastSyncError) return;
       toast.success(
         body.action === "sync"
-          ? "Sync queued"
+          ? "Sync complete"
           : body.action === "disconnect"
             ? "Sync stopped. The last accepted policy is kept."
             : "Sync schedule updated",

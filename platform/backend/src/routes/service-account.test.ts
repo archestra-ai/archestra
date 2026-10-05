@@ -608,16 +608,9 @@ describe("service account API authentication", () => {
     const organizationDataRole = await makeCustomRole(organization.id, {
       permission: {
         llmCost: ["read"],
-        log: ["read"],
+        log: ["read", "admin"],
         member: ["read"],
       },
-    });
-    // Every member's logs are `read` on the log at `*`, which log:admin became.
-    await grantRoleEverywhere({
-      organizationId: organization.id,
-      resource: "log",
-      roleId: organizationDataRole.id,
-      actions: ["read"],
     });
     const organizationDataAccount = await ServiceAccountModel.create({
       organizationId: organization.id,
@@ -656,7 +649,7 @@ describe("service account API authentication", () => {
         }),
         app.inject({
           method: "GET",
-          url: "/api/statistics/users?timeframe=24h",
+          url: "/api/statistics/users?timeframe=24h&includeModelTimeSeries=true&includeTimeSeries=true",
           headers: authorization(ownDataToken.token),
         }),
         app.inject({
@@ -666,7 +659,7 @@ describe("service account API authentication", () => {
         }),
         app.inject({
           method: "GET",
-          url: "/api/statistics/users?timeframe=24h",
+          url: "/api/statistics/users?timeframe=24h&includeModelTimeSeries=true&includeTimeSeries=true",
           headers: authorization(organizationDataToken.token),
         }),
       ]);
@@ -683,7 +676,28 @@ describe("service account API authentication", () => {
     expect(allLogs.json().data).toHaveLength(1);
     expect(allUsers.statusCode).toBe(200);
     expect(allUsers.json().data).toEqual([
-      expect.objectContaining({ userId: user.id }),
+      expect.objectContaining({
+        userId: user.id,
+        timeSeries: [
+          expect.objectContaining({
+            requests: 1,
+            inputTokens: 80,
+            outputTokens: 20,
+          }),
+        ],
+        models: [
+          expect.objectContaining({
+            model: "gpt-4o",
+            timeSeries: [
+              expect.objectContaining({
+                requests: 1,
+                inputTokens: 80,
+                outputTokens: 20,
+              }),
+            ],
+          }),
+        ],
+      }),
     ]);
   });
 });

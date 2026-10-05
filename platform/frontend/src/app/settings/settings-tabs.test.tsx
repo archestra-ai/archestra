@@ -92,8 +92,6 @@ describe("useSettingsTabs", () => {
       ac: ["read"],
       organizationSettings: ["read"],
       serviceAccount: ["read"],
-      llmSettings: ["read"],
-      agentSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -116,7 +114,7 @@ describe("useSettingsTabs", () => {
 
   it("hides legacy Security settings when OpenAPPA is enabled", async () => {
     mockOpenAppaEnabled = true;
-    mockPermissions = { agentSettings: ["read"] };
+    mockPermissions = { organizationSettings: ["read"] };
     const { result } = renderHook(() => useSettingsTabs(), {
       wrapper: createWrapper(),
     });
@@ -126,9 +124,9 @@ describe("useSettingsTabs", () => {
     );
   });
 
-  it("shows LLM tab when user has llmSettings:read permission", async () => {
+  it("opens every organization settings tab with organizationSettings:read alone", async () => {
     mockPermissions = {
-      llmSettings: ["read"],
+      organizationSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -137,21 +135,15 @@ describe("useSettingsTabs", () => {
 
     await waitFor(() => {
       const labels = getTabLabels(result.current);
-      expect(labels).toContain("LLM");
-    });
-  });
-
-  it("shows Messaging Channels when the user can read agent triggers", async () => {
-    mockPermissions = {
-      agentTrigger: ["read"],
-    };
-
-    const { result } = renderHook(() => useSettingsTabs(), {
-      wrapper: createWrapper(),
-    });
-
-    await waitFor(() => {
-      expect(getTabLabels(result.current)).toEqual(["Messaging Channels"]);
+      for (const label of [
+        "Agents",
+        "LLM",
+        "Messaging Channels",
+        "Appearance",
+        "Auth",
+      ]) {
+        expect(labels).toContain(label);
+      }
     });
   });
 
@@ -214,7 +206,7 @@ describe("useSettingsTabs", () => {
     });
   });
 
-  it("hides LLM tab when user lacks llmSettings:read permission", async () => {
+  it("hides LLM tab when user lacks organizationSettings:read permission", async () => {
     mockPermissions = {};
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -266,7 +258,7 @@ describe("useSettingsTabs", () => {
   it("shows Secrets tab only when using Vault storage and user has permission", async () => {
     mockSecretsType = "Vault";
     mockPermissions = {
-      secret: ["read"],
+      organizationSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -282,7 +274,7 @@ describe("useSettingsTabs", () => {
   it("hides Secrets tab when using DB storage", async () => {
     mockSecretsType = "DB";
     mockPermissions = {
-      secret: ["read"],
+      organizationSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -372,11 +364,8 @@ describe("useSettingsTabs", () => {
       ac: ["read"],
       credential: ["read"],
       identityProvider: ["read"],
-      secret: ["read"],
       organizationSettings: ["read"],
       serviceAccount: ["read"],
-      llmSettings: ["read"],
-      agentSettings: ["read"],
     };
 
     const { result } = renderHook(() => useSettingsTabs(), {
@@ -390,11 +379,15 @@ describe("useSettingsTabs", () => {
         "Auth",
         "Service Accounts",
         "Agents",
+        "Messaging Channels",
         "LLM",
+        "MCP",
         "Connect Page",
         "Apps",
+        "Skills",
         "Security",
         "Logs",
+        "Knowledge",
         "Users",
         "Teams",
         "Roles",

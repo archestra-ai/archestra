@@ -6,6 +6,7 @@ import type {
   ModelProviderOverrides,
   OrganizationCustomFont,
   OrganizationTheme,
+  PopularAgentOverrides,
   SupportedProvider,
 } from "@archestra/shared";
 import { DEFAULT_OAUTH_ACCESS_TOKEN_LIFETIME_SECONDS } from "@archestra/shared";
@@ -425,6 +426,11 @@ const organizationsTable = pgTable("organization", {
   knowledgeConnectorOverrides: jsonb(
     "knowledge_connector_overrides",
   ).$type<KnowledgeConnectorOverrides>(),
+
+  /** Controls template visibility on Create Agent; existing runtimes are unaffected. */
+  popularAgentOverrides: jsonb(
+    "popular_agent_overrides",
+  ).$type<PopularAgentOverrides>(),
 
   /**
    * Legacy preset columns (feature removed) — retained inert (non-destructive,

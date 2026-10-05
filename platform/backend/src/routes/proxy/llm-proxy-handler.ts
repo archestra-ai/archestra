@@ -1,4 +1,3 @@
-import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 /**
  * Generic LLM Proxy Handler
  *
@@ -29,6 +28,7 @@ import {
   stripClaudeContextVariantSuffix,
   UNTRUSTED_CONTEXT_HEADER,
 } from "@archestra/shared";
+import { ARCHESTRA_CODEX_CONNECTION_ORIGINATOR } from "@archestra/shared/interactions/client";
 import {
   type Context,
   context as otelContext,
@@ -42,9 +42,9 @@ import { isVertexAiEnabled } from "@/clients/gemini-client";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
-  LOCKED_CHAT_KEY_HEADER,
-  parseLockedChatDekHeader,
-} from "@/content-encryption/locked-chat";
+  ENCRYPTED_CHAT_KEY_HEADER,
+  parseEncryptedChatDekHeader,
+} from "@/content-encryption/encrypted-chat";
 import {
   type DualLlmProgressEvent,
   dualLlmProgressBus,
@@ -103,7 +103,10 @@ import {
   stripDelegationMarkers,
 } from "@/openappa/delegation";
 import { forkedSession } from "@/openappa/lineage";
-import { prepareAppaRequest } from "@/openappa/request";
+import {
+  prepareAppaRequest,
+  sanitizeProviderBoundRequest,
+} from "@/openappa/request";
 import {
   APPA_PARENT_HEADER,
   isAppaChatSource,
@@ -114,13 +117,20 @@ import {
   sessionFromHeaders,
 } from "@/openappa/service";
 import { formatSessionReceipt } from "@/openappa/session-token";
-import { stampedSessions } from "@/openappa/trajectory-stamp";
+import {
+  restoreTrajectoryStampText,
+  stampedSessions,
+} from "@/openappa/trajectory-stamp";
+import { startedUnenforced } from "@/openappa/unenforced";
 import {
   type AppaSessionIdentity,
   appaWireFamily,
   appendChildTrajectoryReceiptToResponse,
   appendSessionReceiptToResponse,
+  declaredToolEntries,
+  providerWire,
   restoreTrajectoryStamps,
+  restoreTrajectoryStampsInText,
   sessionReceiptEvidence,
   stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
@@ -131,6 +141,7 @@ import {
 } from "@/proxy/plugins/appa-plugin-archestra/adapters/trajectory";
 import {
   APPA_CLIENT_ADAPTERS,
+  appaTrajectory,
   extractAppaSessionIdentity,
   nativeSpawnParentId,
 } from "@/proxy/plugins/appa-plugin-archestra/session-identity";
@@ -147,7 +158,23 @@ import {
   type LlmProxyToolCallRefusal,
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
+import {
+  RUNTIME_BINDING_HEADER,
+  resolveRuntimeIdentityByVirtualKeys,
+  resolveRuntimeSessionForWorkspace,
+  runtimeBindingAuthorizes,
+  runtimeSessionConflicts,
+} from "@/services/agent-runtime/runtime-identity";
+import {
+  connectionProxySetupContext,
+  verifyConnectionProxySetupContext,
+} from "@/services/connection-proxy-setup-context";
+import {
+  nativeSetupClientFromProvenance,
+  resolveConnectionSetupScope,
+} from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
+import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -200,12 +227,12 @@ import {
 } from "./llm-proxy-helpers";
 import { StreamKeepAlive } from "./stream-keepalive";
 import * as utils from "./utils";
-import type { SessionSource } from "./utils/headers/session-id";
 import {
-  type LockedChatAuditDisposition,
-  redactLockedChatInteraction,
-  resolveLockedChatAuditContext,
-} from "./utils/locked-chat-session";
+  type EncryptedChatAuditDisposition,
+  redactEncryptedChatInteraction,
+  resolveEncryptedChatAuditContext,
+} from "./utils/encrypted-chat-session";
+import type { SessionSource } from "./utils/headers/session-id";
 
 const {
   observability: {
@@ -219,7 +246,9 @@ const {
  * for maintainability and readability.
  */
 export interface LLMProxyContext<TRequest> {
+  connectionVerification?: boolean;
   openappaSession?: OpenAppaSession;
+  connectionSetupBypass: boolean;
   sessionReceipt?: SessionReceiptOutput;
   childTrajectoryReceipt?: ChildTrajectoryReceiptOutput;
   childCompactionContext?: string;
@@ -241,9 +270,9 @@ export interface LLMProxyContext<TRequest> {
   dualLlmAnalyses: DualLlmAnalysis[];
   unsafeContextBoundary?: UnsafeContextBoundary;
   /**
-   * Locked chat session: span content capture is suppressed and persisted
+   * Encrypted chat session: span content capture is suppressed and persisted
    * content is either encrypted or redacted (usage/cost metadata untouched).
-   * True whenever `locked-chat.kind !== "none"`.
+   * True whenever `encrypted-chat.kind !== "none"`.
    */
   suppressContent: boolean;
   /**
@@ -251,7 +280,7 @@ export interface LLMProxyContext<TRequest> {
    * carries the validated conversation key; `redact` is the fail-closed
    * fallback. Resolved once per request so every write site agrees.
    */
-  lockedChat: LockedChatAuditDisposition;
+  encryptedChat: EncryptedChatAuditDisposition;
   /**
    * Caller environment an advisor consultation bills to, resolved from the
    * loopback-gated delegation header and re-validated against the executing
@@ -469,6 +498,31 @@ function markSessionReceiptIssued(receipt: {
  * sites only so a large tool result cannot trigger a false re-issue and so
  * the body is never serialized just to search it.
  */
+/**
+ * Claude Code's next-prompt suggestion: after an answer, it asks the model
+ * what the user might type next, with the session's tools and history, and
+ * shows the reply as a hint in the input box. Its last user message carries
+ * this fixed instruction.
+ */
+function isClientPromptSuggestion(body: unknown): boolean {
+  const messages = asRecord(body)?.messages;
+  if (!Array.isArray(messages)) return false;
+  const content = asRecord(messages.at(-1))?.content;
+  const texts =
+    typeof content === "string"
+      ? [content]
+      : Array.isArray(content)
+        ? content.map((part) => asRecord(part)?.text)
+        : [];
+  return texts.some(
+    (text) =>
+      typeof text === "string" &&
+      text.trimStart().startsWith(PROMPT_SUGGESTION_INSTRUCTION),
+  );
+}
+
+const PROMPT_SUGGESTION_INSTRUCTION = "[SUGGESTION MODE:";
+
 function isClientCompactionRequest(params: {
   body: unknown;
   headers: Record<string, string | string[] | undefined>;
@@ -611,6 +665,10 @@ export async function handleLLMProxy<
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
+  const connectionVerification =
+    appaWireFamily(provider.interactionType) === "openai:responses" &&
+    readSingleHeader(request.headers, "originator")?.trim().toLowerCase() ===
+      ARCHESTRA_CODEX_CONNECTION_ORIGINATOR;
   const pluginRegistry = getLlmProxyPluginRegistry();
   const hasProxyPlugins = pluginRegistry.hasPlugins();
   let pluginContext: LlmProxyRequestContext | undefined;
@@ -652,22 +710,27 @@ export async function handleLLMProxy<
       body,
     });
     stripDelegationMarkers({ family: requestWireFamily, body });
+    const nativeClient = APPA_CLIENT_ADAPTERS.find((adapter) =>
+      adapter.matches({
+        headers: headers as Record<string, string | string[] | undefined>,
+        requestBody: body,
+      }),
+    )?.id;
     childReturns = collectAndStripChildReturns(body, {
-      openCodeBackgroundReturns:
-        APPA_CLIENT_ADAPTERS.find((adapter) =>
-          adapter.matches({
-            headers: headers as Record<string, string | string[] | undefined>,
-            requestBody: body,
-          }),
-        )?.id === "opencode",
+      openCodeBackgroundReturns: nativeClient === "opencode",
+      codexMailboxReturns: nativeClient === "codex",
     });
   }
   // Restores original provider call IDs before request processing, logging,
-  // or policy evaluation.
+  // or policy evaluation: the trajectory stamps first, then any stamp a
+  // client copied into text. Neither needs an OpenAPPA session, so no id the
+  // proxy gave a client reaches a provider with Guardrails off either.
   const trajectoryStamps = restoreTrajectoryStamps({
     interactionType: provider.interactionType,
     body,
   });
+  const wire = providerWire(provider.interactionType);
+  if (wire) restoreTrajectoryStampsInText({ wire, body });
 
   // Extract header-based context
   const headersForExtraction = headers as Record<
@@ -1020,6 +1083,7 @@ export async function handleLLMProxy<
         tokenValue: rawApiKey,
         expectedProvider: providerName,
         expectedOrganizationId: resolvedAgent.organizationId,
+        requestedModel: requestAdapter.getModel(),
       });
       await virtualKeyRateLimiter.recordSuccess({ credential: rawApiKey });
       apiKey = virtualResult.apiKey;
@@ -1186,13 +1250,13 @@ export async function handleLLMProxy<
         : "provider_key";
   }
 
-  // Locked chat sessions: interaction rows keep all usage/cost/session
+  // Encrypted chat sessions: interaction rows keep all usage/cost/session
   // metadata, but their content-bearing fields are encrypted under the
   // conversation's browser-held key (or redacted if that cannot be done
   // safely), and span content capture is suppressed either way. Resolved once
   // up front (server-derived, fail closed) so the catch below and both stream
   // handlers agree on it.
-  const lockedChat = await resolveLockedChatAuditContext({
+  const encryptedChat = await resolveEncryptedChatAuditContext({
     source,
     // The raw socket peer, NOT request.ip: trustProxy can rewrite request.ip
     // from forwarded headers, and this seam must only ever match the
@@ -1200,24 +1264,42 @@ export async function handleLLMProxy<
     requestIp: request.socket.remoteAddress,
     sessionId,
     userId,
-    dek: readLockedChatDek(request),
+    dek: readEncryptedChatDek(request),
   });
-  // Content never reaches spans or logs for a locked-chat session, whether it
-  // ends up encrypted or redacted — nor for an organization whose Log Content
-  // setting is Metadata only (its rows are withheld in InteractionModel.create).
-  // Resolved here, outside the lifecycle try below, because it never throws:
-  // an unreadable setting suppresses content rather than failing the request.
-  const isLockedChatSession = lockedChat.kind !== "none";
+  // Content never reaches spans or logs for an encrypted-chat session or an
+  // organization whose Log Content setting is Metadata only. An unreadable
+  // setting suppresses content rather than failing the request.
+  const isEncryptedChatSession = encryptedChat.kind !== "none";
   const suppressContent =
-    isLockedChatSession ||
+    isEncryptedChatSession ||
     (await resolveLogContentMode({
       organizationId: resolvedAgent.organizationId,
     })) === "metadata_only";
-  const appaActive = await isGuardrailsV2Active();
-  if (appaActive && isLockedChatSession) {
+  const {
+    active: appaActive,
+    featureEnabled: appaFeatureEnabled,
+    unsupportedClientAction,
+  } = await getGuardrailsDeployment();
+  // Enforcement is off, but OpenAPPA records what it must know when enforcement
+  // turns on: the sessions that start now, and the calls governed sessions make.
+  // The records hold ids only, so they cover encrypted chats too.
+  const appaObserving = appaFeatureEnabled && !appaActive;
+  // An encrypted chat that started while enforcement was off stays out of
+  // OpenAPPA, so the encrypted storage OpenAPPA lacks does not matter to it.
+  if (
+    appaActive &&
+    isEncryptedChatSession &&
+    !(
+      sessionId &&
+      (await startedUnenforced({
+        organization_id: resolvedAgent.organizationId,
+        session_id: sessionId,
+      }))
+    )
+  ) {
     throw new ApiError(
       409,
-      "OpenAPPA does not yet support encrypted policy storage for locked chats",
+      "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
     );
   }
 
@@ -1545,11 +1627,35 @@ export async function handleLLMProxy<
       | Awaited<ReturnType<LlmProxyPluginRegistry["onToolResults"]>>
       | undefined;
     let openappaSession: OpenAppaSession | undefined;
+    // The session a request has while enforcement is off, for the records
+    // OpenAPPA reads once it turns on. Nothing governs it.
+    let observedSession: OpenAppaSession | undefined;
     let sessionReceipt: SessionReceiptOutput | undefined;
     let childTrajectoryReceipt: ChildTrajectoryReceiptOutput | undefined;
     let childCompactionContext: string | undefined;
     let appaIdentity: AppaSessionIdentity = {};
     let hasNativeClientSession = false;
+    const approvedProxySetupContext = connectionProxySetupContext(request.raw);
+    const approvedProxySetup =
+      !!approvedProxySetupContext &&
+      [virtualKeyId, passthroughVirtualKeyId].some(
+        (keyId) =>
+          !!keyId &&
+          verifyConnectionProxySetupContext({
+            token: approvedProxySetupContext,
+            organizationId: resolvedAgent.organizationId,
+            virtualApiKeyId: keyId,
+            proxyAgentId: resolvedAgent.id,
+            secret: config.auth.secret,
+          }),
+      );
+    let connectionSetupBypass = appaActive && approvedProxySetup;
+    if (connectionSetupBypass) {
+      logger.info(
+        { profileId: resolvedAgent.id, proof: "approved-installer" },
+        "Connection setup APPA bypass active",
+      );
+    }
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
@@ -1599,18 +1705,139 @@ export async function handleLLMProxy<
       // APPA child-return lifecycle. Keep their events out of that trajectory;
       // the existing guardrails still evaluate the child independently.
       // Only the trusted internal executor's agent chain selects this path.
+      const delegatedRun =
+        isInternalRequest &&
+        isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
+      const runtimeLookup =
+        (appaActive || appaObserving) &&
+        (virtualKeyId || passthroughVirtualKeyId)
+          ? await resolveRuntimeIdentityByVirtualKeys({
+              virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
+              organizationId: resolvedAgent.organizationId,
+            })
+          : { status: "unbound" as const };
       if (
         appaActive &&
-        (!isInternalRequest ||
-          !isAppaDelegatedRun(resolvedAgent.id, externalAgentId))
+        !connectionSetupBypass &&
+        runtimeLookup.status === "conflict"
       ) {
-        const callerId = appaUserId
-          ? `user:${appaUserId}`
+        throw new ApiError(
+          400,
+          "OpenAPPA runtime credentials do not name one workspace",
+        );
+      }
+      const runtimeIdentity =
+        runtimeLookup.status === "bound" ? runtimeLookup.identity : null;
+      if (
+        runtimeIdentity?.actorKind === "user" &&
+        appaUserId &&
+        appaUserId !== runtimeIdentity.actorId
+      ) {
+        throw new ApiError(
+          401,
+          "OpenAPPA runtime credential does not match the authenticated user",
+        );
+      }
+      const presentedRuntimeSession = appaClaims.sessionId;
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        runtimeIdentity &&
+        runtimeSessionConflicts({
+          workloadName: runtimeIdentity.workloadName,
+          presentedSession: presentedRuntimeSession,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA session does not match the authenticated runtime workspace",
+        );
+      }
+      const runtimeBindingMatches =
+        runtimeIdentity !== null &&
+        runtimeBindingAuthorizes({
+          token: firstHeaderValue(
+            headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
+          ),
+          secret: config.openappa.offerSigningSecret,
+          identity: runtimeIdentity,
+        });
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        runtimeIdentity &&
+        !runtimeBindingMatches
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA runtime binding does not match this run",
+        );
+      }
+      const runtimeSession =
+        runtimeIdentity && runtimeBindingMatches
+          ? (
+              await resolveRuntimeSessionForWorkspace({
+                organizationId: runtimeIdentity.organizationId,
+                workspaceId: runtimeIdentity.workspaceId,
+              })
+            )?.session
+          : undefined;
+      const runtimeSessionId = runtimeSession?.session_id;
+      const boundRuntimeIdentity =
+        runtimeIdentity &&
+        runtimeBindingMatches &&
+        !runtimeSessionConflicts({
+          workloadName: runtimeIdentity.workloadName,
+          presentedSession: presentedRuntimeSession,
+        })
+          ? runtimeIdentity
+          : null;
+      if (
+        (appaActive || appaObserving) &&
+        boundRuntimeIdentity &&
+        presentedRuntimeSession === undefined
+      ) {
+        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
+          boundRuntimeIdentity.workloadName;
+      }
+      const callerId = appaUserId
+        ? `user:${appaUserId}`
+        : boundRuntimeIdentity
+          ? boundRuntimeIdentity.principal
           : authenticatedApp
             ? `app:${authenticatedApp.id}`
             : virtualKeyId
               ? `virtual-key:${virtualKeyId}`
               : undefined;
+      // A platform request over loopback that brings no credential of its own.
+      // Only such a request may name an unscoped session in the header.
+      const platformLoopback =
+        isInternalRequest &&
+        !authenticatedUserId &&
+        !authenticatedApp &&
+        !virtualKeyId;
+      const unsupportedClient =
+        appaActive &&
+        !connectionSetupBypass &&
+        !isInternalChat &&
+        !delegatedRun &&
+        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
+        headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] === undefined &&
+        !APPA_CLIENT_ADAPTERS.some((adapter) =>
+          adapter.matches({ headers: headersForExtraction, requestBody: body }),
+        );
+      if (unsupportedClient && unsupportedClientAction === "block") {
+        throw new ApiError(
+          400,
+          "Guardrails do not recognize this client, so the proxy blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",
+        );
+      }
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        !delegatedRun &&
+        !unsupportedClient
+      ) {
         appaCallerId = callerId;
         // Extract client-native session metadata into APPA session identity.
         // Client adapters resolve resume, fork, and compaction semantics
@@ -1626,11 +1853,8 @@ export async function handleLLMProxy<
             })
           : {};
         hasNativeClientSession =
-          appaIdentity.provenance === "claude-code-header" ||
-          appaIdentity.provenance === "claude-code-metadata" ||
-          appaIdentity.provenance === "codex-turn-metadata" ||
-          appaIdentity.provenance === "opencode-session-header" ||
-          appaIdentity.provenance === "opencode-hosted-header";
+          nativeSetupClientFromProvenance(appaIdentity.provenance) !==
+          undefined;
         if (
           hasNativeClientSession &&
           appaIdentity.sessionId !== undefined &&
@@ -1641,19 +1865,48 @@ export async function handleLLMProxy<
             "OpenAPPA requires a valid client-native session ID",
           );
         }
+        if (
+          !isInternalChat &&
+          authenticatedUserId &&
+          appaIdentity.sessionId &&
+          hasNativeClientSession
+        ) {
+          const setupScope = await resolveConnectionSetupScope({
+            principal: {
+              userId: authenticatedUserId,
+              organizationId: resolvedAgent.organizationId,
+              targetOrganizationId: resolvedAgent.organizationId,
+              guardrailsActive: appaActive,
+            },
+            evidence: {
+              kind: "native-session",
+              identity: appaIdentity,
+              requestBody: body,
+            },
+          });
+          connectionSetupBypass = setupScope !== null;
+          if (setupScope?.kind === "native-session") {
+            logger.info(
+              { clientId: setupScope.clientId },
+              "Connection setup APPA bypass active",
+            );
+          }
+        }
         // Receipts were stripped from history above, before any forwarding or
         // logging. APPA now resolves the collected codes into lineage evidence
         // owned by this caller.
-        const receiptSessions = callerId
-          ? await sessionReceiptEvidence({
-              organizationId: resolvedAgent.organizationId,
-              callerId,
-              codes: strippedReceiptCodes,
-            })
-          : [];
+        const receiptSessions =
+          !connectionSetupBypass && callerId
+            ? await sessionReceiptEvidence({
+                organizationId: resolvedAgent.organizationId,
+                callerId,
+                codes: strippedReceiptCodes,
+              })
+            : [];
         // History carrying verified stamps or session receipts identifies
         // parent context. A new session opens as a fork of its deepest ancestor.
         const traceable =
+          !connectionSetupBypass &&
           appaCallerId &&
           appaIdentity.sessionId &&
           appaFamily &&
@@ -1685,58 +1938,54 @@ export async function handleLLMProxy<
                 scope: (session) => scopedSessionId(callerId, session),
               })
             : undefined;
-        if (
-          appaIdentity.sessionId &&
-          isWellFormedAppaId(appaIdentity.sessionId) &&
-          !incomingAppaSessionHeader
-        ) {
-          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
-            appaIdentity.sessionId;
+        fillAppaSessionHeaders(headersForExtraction, appaIdentity);
+        // Reading connect.md can taint the rest of setup, so the verified
+        // session bypasses APPA trust and invocation decisions together.
+        openappaSession = connectionSetupBypass
+          ? undefined
+          : sessionFromHeaders({
+              headers: headersForExtraction,
+              organizationId: resolvedAgent.organizationId,
+              callerId,
+              // Chat sessions use conversation IDs with verified ownership.
+              ...(isInternalChat
+                ? {}
+                : {
+                    // Scope external sessions to the authenticated principal.
+                    scope:
+                      platformLoopback &&
+                      incomingAppaSessionHeader !== undefined
+                        ? undefined
+                        : callerId,
+                    // Bind fallback root if no session was provided.
+                    fallbackSessionId: callerId
+                      ? `${callerId}@${resolvedAgent.id}`
+                      : undefined,
+                  }),
+            });
+        if (runtimeSession) {
+          if (openappaSession?.session_id !== runtimeSession.session_id) {
+            throw new ApiError(
+              400,
+              "The runtime request does not match its bound workspace",
+            );
+          }
+          // The launcher stored the authenticated parent before giving the pod data.
+          openappaSession = runtimeSession;
         }
-        if (
-          appaIdentity.parentId &&
-          isWellFormedAppaId(appaIdentity.parentId) &&
-          !headersForExtraction[APPA_PARENT_HEADER.toLowerCase()]
-        ) {
-          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] =
-            appaIdentity.parentId;
-        }
-        openappaSession = sessionFromHeaders({
-          headers: headersForExtraction,
-          organizationId: resolvedAgent.organizationId,
-          callerId,
-          // Chat sessions use conversation IDs with verified ownership.
-          ...(isInternalChat
-            ? {}
-            : {
-                // Scope external sessions to the authenticated principal.
-                scope:
-                  isInternalRequest &&
-                  !authenticatedUserId &&
-                  !authenticatedApp &&
-                  !virtualKeyId &&
-                  incomingAppaSessionHeader !== undefined
-                    ? undefined
-                    : callerId,
-                // Bind fallback root if no session was provided.
-                fallbackSessionId: callerId
-                  ? `${callerId}@${resolvedAgent.id}`
-                  : undefined,
-              }),
-        });
-        if (!openappaSession)
+        if (!openappaSession && !connectionSetupBypass)
           throw new ApiError(
             400,
             "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
           );
-        if (forkOf && callerId)
+        if (forkOf && callerId && openappaSession)
           openappaSession = {
             ...openappaSession,
             fork_of: scopedSessionId(callerId, forkOf),
           };
         if (
           callerId &&
-          openappaSession.session_id === `${callerId}@${resolvedAgent.id}`
+          openappaSession?.session_id === `${callerId}@${resolvedAgent.id}`
         ) {
           // Every conversation of this credential on this agent now shares one
           // root: a turn ending in one releases the offers of the others.
@@ -1745,6 +1994,23 @@ export async function handleLLMProxy<
             "OpenAPPA bound a fallback root because the client reported no session",
           );
         }
+      } else if (
+        appaObserving &&
+        !delegatedRun &&
+        (isInternalRequest ||
+          authenticatedUserId ||
+          authenticatedApp ||
+          virtualKeyId)
+      ) {
+        observedSession = observedAppaSession({
+          headers: headersForExtraction,
+          body,
+          interactionType: provider.interactionType,
+          organizationId: resolvedAgent.organizationId,
+          callerId,
+          isInternalChat,
+          platformLoopback,
+        });
       }
       pluginContext = {
         requestId: request.id,
@@ -1759,6 +2025,51 @@ export async function handleLLMProxy<
         requestBody: requestAdapter.getOriginalRequest(),
         resources: new Map(),
       };
+      // The facts that bind a child trajectory. Read without preparing the
+      // request for enforcement, which changes the body and refuses tool
+      // shapes that OpenAPPA cannot govern. Built only for an OpenAPPA session.
+      const lineageRequest = (): AppaTrustedContext["request"] => ({
+        tools: undefined,
+        session: appaIdentity,
+        customTools: new Set(),
+        declaredTools: [],
+        ...(delegationMarkers
+          ? { delegation: { markers: delegationMarkers } }
+          : {}),
+        ...(childReturns ? { childReturns } : {}),
+        ...(childTrajectoryReceipts && childTrajectoryReceipts.length > 0
+          ? { childTrajectoryReceipts }
+          : {}),
+      });
+      if (
+        openappaSession &&
+        (await startedUnenforced(
+          appaTrajectory({
+            adapters: APPA_CLIENT_ADAPTERS,
+            headers: pluginContext.headers,
+            requestBody: pluginContext.requestBody,
+            trustedContext: {
+              session: openappaSession,
+              profileId: resolvedAgent.id,
+              toolIdentity,
+              request: lineageRequest(),
+              claims: appaClaims,
+              ...(runtimeSessionId
+                ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+                : {}),
+              ...(isInternalChat ? { chatSource: source } : {}),
+            },
+          }).session,
+        ))
+      ) {
+        // The session started while enforcement was off. OpenAPPA never
+        // governs it: the request goes on as if enforcement were off.
+        logger.info(
+          { sessionId: openappaSession.session_id },
+          "OpenAPPA ignores a session that started while Guardrails enforcement was off",
+        );
+        openappaSession = undefined;
+      }
       if (openappaSession) {
         // A Chat session is a conversation, and the request must name the
         // user whose conversation it is: without one there is nothing to
@@ -1811,7 +2122,25 @@ export async function handleLLMProxy<
           toolIdentity,
           request: appaRequest,
           claims: appaClaims,
+          ...(runtimeSessionId
+            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+            : {}),
           compaction: clientCompaction && !isInternalChat,
+          enforcement: "active",
+          ...(isInternalChat ? { chatSource: source } : {}),
+        } satisfies AppaTrustedContext);
+      } else if (observedSession) {
+        pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
+          session: observedSession,
+          profileId: resolvedAgent.id,
+          toolIdentity,
+          request: lineageRequest(),
+          claims: appaClaims,
+          ...(runtimeSessionId
+            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+            : {}),
+          compaction: clientCompaction && !isInternalChat,
+          enforcement: "inactive",
           ...(isInternalChat ? { chatSource: source } : {}),
         } satisfies AppaTrustedContext);
       }
@@ -1840,6 +2169,13 @@ export async function handleLLMProxy<
         hasNativeClientSession &&
         !isInternalChat &&
         !hasStructuredOutputConstraint(body) &&
+        // The agent loop declares its tools. A client's side calls (Claude
+        // Code's auto-mode classifier, its quota check, its next-prompt
+        // suggestion) are never shown as the session's reply, so the mark
+        // would be lost there and would alter what the client parses.
+        (clientCompaction ||
+          (declaredToolEntries(body).length > 0 &&
+            !isClientPromptSuggestion(body))) &&
         appaCallerId &&
         appaFamily &&
         config.openappa.offerSigningSecret.length > 0
@@ -1867,18 +2203,53 @@ export async function handleLLMProxy<
         };
       }
     }
-    const trustedDataOutcome =
-      legacyTrustOutcome ??
-      pluginToolResultsOutcome?.contextTrust ??
-      (await evaluateLegacyTrust());
+    // Nothing OpenAPPA wrote for the client and the gateway goes on to the
+    // provider, whether or not this request has a session (deployment switch
+    // off, a connection-setup or unsupported-client bypass, a delegated run)
+    // and whatever restoration above could not put back. Runs after
+    // prepareAppaRequest collected the notices' signed offers and the plugin
+    // read this request's results. A request without a session evaluates
+    // trusted data on the result, as a session does on its restored history.
+    // It changes no call id, so the tool-result updates below still land.
+    const providerBoundRewrites = sanitizeProviderBoundRequest({
+      body,
+      interactionType: provider.interactionType,
+      identity: toolIdentity,
+    });
+    if (providerBoundRewrites > 0) {
+      logger.debug(
+        {
+          resolvedAgentId,
+          rewrites: providerBoundRewrites,
+          openappaSession: openappaSession !== undefined,
+        },
+        `[${providerName}Proxy] Removed OpenAPPA transport members from the provider-bound request`,
+      );
+    }
+    const trustedDataOutcome = connectionSetupBypass
+      ? {
+          toolResultUpdates: {},
+          contextIsTrusted: true,
+          dualLlmAnalyses: [],
+          unsafeContextBoundary: undefined,
+        }
+      : (legacyTrustOutcome ??
+        pluginToolResultsOutcome?.contextTrust ??
+        (await evaluateLegacyTrust()));
     const { contextIsTrusted, dualLlmAnalyses, unsafeContextBoundary } =
       trustedDataOutcome;
-    const toolResultUpdates = {
-      ...("toolResultUpdates" in trustedDataOutcome
-        ? trustedDataOutcome.toolResultUpdates
-        : {}),
-      ...pluginToolResultsOutcome?.toolResultUpdates,
-    };
+    const toolResultUpdates = Object.fromEntries(
+      Object.entries({
+        ...("toolResultUpdates" in trustedDataOutcome
+          ? trustedDataOutcome.toolResultUpdates
+          : {}),
+        ...pluginToolResultsOutcome?.toolResultUpdates,
+      }).map(
+        // Approved outputs are rendered from results as the client sent them:
+        // a trajectory stamp one echoed still never reaches the provider.
+        ([id, content]) => [id, restoreTrajectoryStampText(content)],
+      ),
+    );
 
     // Apply tool result updates
     requestAdapter.applyToolResultUpdates(toolResultUpdates);
@@ -1994,6 +2365,7 @@ export async function handleLLMProxy<
       defaultHeaders:
         Object.keys(mergedHeaders).length > 0 ? mergedHeaders : undefined,
       llmProviderApiKeyId: perKeyChatApiKeyId,
+      sessionId: sessionId ?? undefined,
       onResponseHeaders: (responseHeaders) => {
         if (providerName === "anthropic") {
           billingMode = utils.refineAnthropicBillingModeFromHeaders({
@@ -2043,7 +2415,13 @@ export async function handleLLMProxy<
         `[${providerName}Proxy] Replaced unpaired surrogates in the outbound request body; the provider would have rejected it as malformed JSON`,
       );
     }
-    const finalRequest = repairedRequest as TRequest;
+    // A connection probe is not an agent task. This is request-local and does
+    // not alter the client's model, sandbox, approval policy or configuration.
+    const finalRequest = (
+      connectionVerification
+        ? { ...asRecord(repairedRequest), tool_choice: "none" }
+        : repairedRequest
+    ) as TRequest;
 
     // Which called tool names count as available to evaluatePolicies, in the
     // canonical form tool-call names are compared in. Read from the request
@@ -2079,7 +2457,9 @@ export async function handleLLMProxy<
     }
 
     const ctx: LLMProxyContext<TRequest> = {
+      connectionVerification,
       openappaSession,
+      connectionSetupBypass,
       ...(sessionReceipt ? { sessionReceipt } : {}),
       ...(childTrajectoryReceipt ? { childTrajectoryReceipt } : {}),
       ...(childCompactionContext ? { childCompactionContext } : {}),
@@ -2096,7 +2476,7 @@ export async function handleLLMProxy<
       dualLlmAnalyses,
       unsafeContextBoundary,
       suppressContent,
-      lockedChat,
+      encryptedChat,
       delegationBillingEnvironmentId,
       appId: attributedAppId,
       externalAgentId,
@@ -2194,7 +2574,7 @@ export async function handleLLMProxy<
       };
       await persistProxyInteraction(
         record,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -2211,6 +2591,61 @@ export async function handleLLMProxy<
       requestAdapter.isStreaming(),
       provider.extractInternalCode.bind(provider),
       provider.formatStreamErrorFrame,
+    );
+  }
+}
+
+/** Checks before provider processing and again at the client-write boundary. */
+function assertVerificationResponse(value: unknown): void {
+  const record = asRecord(value);
+  if (!record)
+    throw new ApiError(
+      409,
+      "Invalid response during Codex connection verification.",
+    );
+  const type = record.type;
+  // This probe permits only text and reasoning. Unknown events fail closed so
+  // new provider tool types cannot reach the native dispatcher by default.
+  if (
+    typeof type === "string" &&
+    ![
+      "error",
+      "response.created",
+      "response.in_progress",
+      "response.queued",
+      "response.completed",
+      "response.failed",
+      "response.incomplete",
+      "response.output_item.added",
+      "response.output_item.done",
+    ].includes(type) &&
+    !/^response\.(output_text|content_part|reasoning|reasoning_text|reasoning_summary_text|reasoning_summary_part|refusal|compaction)\./.test(
+      type,
+    )
+  ) {
+    throw new ApiError(
+      409,
+      "Codex connection verification does not permit model tool calls.",
+    );
+  }
+  const items = [
+    ...(record.item !== undefined ? [record.item] : []),
+    ...(Array.isArray(record.output) ? record.output : []),
+    ...(Array.isArray(asRecord(record.response)?.output)
+      ? (asRecord(record.response)?.output as unknown[])
+      : []),
+  ];
+  if (
+    items.some(
+      (item) =>
+        !["message", "reasoning", "compaction"].includes(
+          String(asRecord(item)?.type),
+        ),
+    )
+  ) {
+    throw new ApiError(
+      409,
+      "Codex connection verification does not permit model tool calls.",
     );
   }
 }
@@ -2245,7 +2680,7 @@ async function handleStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    lockedChat,
+    encryptedChat,
     delegationBillingEnvironmentId,
     appId,
     externalAgentId,
@@ -2319,6 +2754,29 @@ async function handleStreaming<
   );
   keepAlive.start();
   const writeToClient = (data: string | Uint8Array) => {
+    if (ctx.connectionVerification) {
+      // Includes policy-generated frames as well as provider frames. Do not
+      // let an executable call reach the native client's dispatcher.
+      for (const line of (typeof data === "string"
+        ? data
+        : Buffer.from(data).toString("utf8")
+      ).split("\n")) {
+        if (!line.startsWith("data:")) continue;
+        const value = line.slice(5).trim();
+        if (value && value !== "[DONE]") {
+          let frame: unknown;
+          try {
+            frame = JSON.parse(value);
+          } catch {
+            throw new ApiError(
+              409,
+              "Malformed response during Codex connection verification.",
+            );
+          }
+          assertVerificationResponse(frame);
+        }
+      }
+    }
     ensureStreamHeaders();
     reply.raw.write(data);
     keepAlive.touch();
@@ -2404,7 +2862,7 @@ async function handleStreaming<
       };
       await persistProxyInteraction(
         record,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
     } catch (interactionError) {
@@ -2477,6 +2935,7 @@ async function handleStreaming<
         // Process chunks
 
         for await (const chunk of stream) {
+          if (ctx.connectionVerification) assertVerificationResponse(chunk);
           // Track first chunk time
           if (!firstChunkTime) {
             firstChunkTime = Date.now();
@@ -2602,7 +3061,7 @@ async function handleStreaming<
           ]);
         }
 
-        // Capture streamed completion content (suppressed for locked chats)
+        // Capture streamed completion content (suppressed for encrypted chats)
         if (captureContent && !suppressContent && state.text) {
           llmSpan.addEvent(EVENT_GENAI_CONTENT_COMPLETION, {
             [ATTR_GENAI_COMPLETION]: state.text.slice(0, contentMaxLength),
@@ -2677,25 +3136,27 @@ async function handleStreaming<
         rewrittenToolCalls ?? toolCalls,
         streamAdapter.formatToolCallsSSE !== undefined,
         async (calls) =>
-          await utils.toolInvocation.evaluatePolicies(
-            toolCallsForPolicyEvaluation({
-              toolCalls: [...calls],
-              toolIdentity,
-              discoveredToolDefault: discoveredToolInvocationDefault,
-            }),
-            agent.id,
-            {
-              teamIds: teamIds ?? [],
-              externalAgentId,
-              sensitiveContextOrigin:
-                utils.trustedData.sensitiveContextOriginFromBoundary(
-                  unsafeContextBoundary,
-                ),
-            },
-            contextIsTrusted,
-            enabledToolNames,
-            { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-          ),
+          ctx.connectionSetupBypass
+            ? null
+            : await utils.toolInvocation.evaluatePolicies(
+                toolCallsForPolicyEvaluation({
+                  toolCalls: [...calls],
+                  toolIdentity,
+                  discoveredToolDefault: discoveredToolInvocationDefault,
+                }),
+                agent.id,
+                {
+                  teamIds: teamIds ?? [],
+                  externalAgentId,
+                  sensitiveContextOrigin:
+                    utils.trustedData.sensitiveContextOriginFromBoundary(
+                      unsafeContextBoundary,
+                    ),
+                },
+                contextIsTrusted,
+                enabledToolNames,
+                { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+              ),
       );
       if (policyOutcome.wasRewritten)
         rewrittenToolCalls = policyOutcome.toolCalls;
@@ -3018,7 +3479,7 @@ async function handleStreaming<
         });
         await persistProxyInteraction(
           record,
-          lockedChat,
+          encryptedChat,
           delegationBillingEnvironmentId,
         );
       } catch (interactionError) {
@@ -3070,7 +3531,7 @@ async function handleNonStreaming<
     dualLlmAnalyses,
     unsafeContextBoundary,
     suppressContent,
-    lockedChat,
+    encryptedChat,
     delegationBillingEnvironmentId,
     appId,
     externalAgentId,
@@ -3098,6 +3559,10 @@ async function handleNonStreaming<
   } = ctx;
 
   const providerName = provider.provider;
+  const sendResponse = (response: unknown) => {
+    if (ctx.connectionVerification) assertVerificationResponse(response);
+    return reply.send(response);
+  };
   let billingMode = initialBillingMode;
   const requestStartTime = Date.now();
 
@@ -3140,6 +3605,7 @@ async function handleNonStreaming<
           await pluginRegistry.onBeforeModel({ ...pluginContext, request });
         }
         result = await provider.execute(client, request);
+        if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
       } catch (error) {
         if (provider.recordRequestDurationInHandler) {
@@ -3164,7 +3630,7 @@ async function handleNonStreaming<
           source,
         );
       }
-      const adapter = provider.createResponseAdapter(result);
+      const adapter = provider.createResponseAdapter(result, request);
 
       // Set response attributes on span per OTEL GenAI semconv. Correct zero-input
       // usage here so the span cost and the downstream cost/persistence (which
@@ -3238,7 +3704,7 @@ async function handleNonStreaming<
         adapter.getFinishReasons(),
       );
 
-      // Capture completion content (suppressed for locked chats)
+      // Capture completion content (suppressed for encrypted chats)
       if (captureContent && !suppressContent) {
         const text = adapter.getText?.();
         if (text) {
@@ -3305,25 +3771,27 @@ async function handleNonStreaming<
       rewrittenToolCalls ?? emittedToolCalls,
       responseAdapter.withRewrittenToolCalls !== undefined,
       async (calls) =>
-        await utils.toolInvocation.evaluatePolicies(
-          toolCallsForPolicyEvaluation({
-            toolCalls: [...calls],
-            toolIdentity,
-            discoveredToolDefault: discoveredToolInvocationDefault,
-          }),
-          agent.id,
-          {
-            teamIds: teamIds ?? [],
-            externalAgentId,
-            sensitiveContextOrigin:
-              utils.trustedData.sensitiveContextOriginFromBoundary(
-                unsafeContextBoundary,
-              ),
-          },
-          contextIsTrusted,
-          enabledToolNames,
-          { surface: "llm-proxy", sessionId: sessionId ?? undefined },
-        ),
+        ctx.connectionSetupBypass
+          ? null
+          : await utils.toolInvocation.evaluatePolicies(
+              toolCallsForPolicyEvaluation({
+                toolCalls: [...calls],
+                toolIdentity,
+                discoveredToolDefault: discoveredToolInvocationDefault,
+              }),
+              agent.id,
+              {
+                teamIds: teamIds ?? [],
+                externalAgentId,
+                sensitiveContextOrigin:
+                  utils.trustedData.sensitiveContextOriginFromBoundary(
+                    unsafeContextBoundary,
+                  ),
+              },
+              contextIsTrusted,
+              enabledToolNames,
+              { surface: "llm-proxy", sessionId: sessionId ?? undefined },
+            ),
     );
     if (policyOutcome.wasRewritten)
       rewrittenToolCalls = policyOutcome.toolCalls;
@@ -3450,7 +3918,7 @@ async function handleNonStreaming<
       });
       await persistProxyInteraction(
         refusalRecord,
-        lockedChat,
+        encryptedChat,
         delegationBillingEnvironmentId,
       );
 
@@ -3466,7 +3934,7 @@ async function handleNonStreaming<
           response: refusalResponse,
         });
       }
-      return reply.send(refusalResponse);
+      return sendResponse(refusalResponse);
     }
   }
 
@@ -3596,7 +4064,7 @@ async function handleNonStreaming<
     });
     await persistProxyInteraction(
       record,
-      lockedChat,
+      encryptedChat,
       delegationBillingEnvironmentId,
     );
   } catch (interactionError) {
@@ -3625,11 +4093,11 @@ async function handleNonStreaming<
         response.output.every((item) => asRecord(item)?.type === "compaction"))
     ) {
       // Opaque clients keep the compaction item itself, not synthetic messages.
-      return reply.send(clientResponse);
+      return sendResponse(clientResponse);
     }
   }
   if (!sessionReceipt && !childTrajectoryReceipt) {
-    return reply.send(clientResponse);
+    return sendResponse(clientResponse);
   }
   const outboundResponse = structuredClone(clientResponse);
   if (childTrajectoryReceipt) {
@@ -3647,7 +4115,7 @@ async function handleNonStreaming<
     });
     if (appended) markSessionReceiptIssued(sessionReceipt);
   }
-  return reply.send(outboundResponse);
+  return sendResponse(outboundResponse);
 }
 
 // Verifies that preamble frames carry no content before release without buffering.
@@ -3702,6 +4170,103 @@ function preambleSseCarriesContent(data: string | Uint8Array): boolean {
     return true;
   }
   return !sawDataLine;
+}
+
+/**
+ * Fills the APPA session and parent headers from the client's own session
+ * identity when the request did not send them. The enforced path and the
+ * observer both use it, so they read the same session from a request.
+ */
+function fillAppaSessionHeaders(
+  headers: Record<string, string | string[] | undefined>,
+  identity: AppaSessionIdentity,
+): void {
+  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
+  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
+  if (
+    identity.sessionId &&
+    isWellFormedAppaId(identity.sessionId) &&
+    !headers[sessionHeader]
+  )
+    headers[sessionHeader] = identity.sessionId;
+  if (
+    identity.parentId &&
+    isWellFormedAppaId(identity.parentId) &&
+    !headers[parentHeader]
+  )
+    headers[parentHeader] = identity.parentId;
+}
+
+/**
+ * The session a request has while enforcement is off: the one the enforced
+ * path binds, without a fork source. Undefined for a client that OpenAPPA
+ * cannot govern, or a request that names no valid session of its own. A
+ * fallback root is shared by all conversations of a credential, so it is
+ * never one session. Never throws, because enforcement is off.
+ */
+function observedAppaSession(params: {
+  headers: Record<string, string | string[] | undefined>;
+  body: unknown;
+  interactionType: Parameters<typeof appaWireFamily>[0];
+  organizationId: string;
+  callerId: string | undefined;
+  isInternalChat: boolean;
+  /** A platform request over loopback with no credential of its own. */
+  platformLoopback: boolean;
+}): OpenAppaSession | undefined {
+  const sessionHeader = APPA_SESSION_HEADER.toLowerCase();
+  const parentHeader = APPA_PARENT_HEADER.toLowerCase();
+  const incoming = params.headers[sessionHeader];
+  const governable =
+    params.isInternalChat ||
+    incoming !== undefined ||
+    params.headers[parentHeader] !== undefined ||
+    APPA_CLIENT_ADAPTERS.some((adapter) =>
+      adapter.matches({ headers: params.headers, requestBody: params.body }),
+    );
+  if (!governable) return undefined;
+  try {
+    const family = appaWireFamily(params.interactionType);
+    const identity = family
+      ? extractAppaSessionIdentity({
+          family,
+          body: params.body,
+          headers: params.headers,
+        })
+      : {};
+    const headers = { ...params.headers };
+    fillAppaSessionHeaders(headers, identity);
+    return sessionFromHeaders({
+      headers,
+      organizationId: params.organizationId,
+      callerId: params.callerId,
+      ...(params.isInternalChat
+        ? {}
+        : {
+            scope:
+              params.platformLoopback && incoming !== undefined
+                ? undefined
+                : params.callerId,
+          }),
+    });
+  } catch (error) {
+    // Enforcement is off, so the request goes on either way. A request
+    // without a usable session id is expected; anything else is not.
+    const details = {
+      error: error instanceof Error ? error.message : String(error),
+    };
+    if (error instanceof ApiError)
+      logger.debug(
+        details,
+        "OpenAPPA does not record a request without a usable session id while Guardrails enforcement is off",
+      );
+    else
+      logger.warn(
+        details,
+        "OpenAPPA could not read the session of a request while Guardrails enforcement is off",
+      );
+    return undefined;
+  }
 }
 
 async function evaluateProxyPluginToolCalls(
@@ -3984,7 +4549,7 @@ function extractDurationStatusCode(error: unknown): string {
 
 /**
  * The single funnel every proxy interaction write goes through, so all five
- * sites treat locked-chat identically.
+ * sites treat encrypted-chat identically.
  *
  * - `encrypt`: store the full record, keyed to the conversation's browser-held
  *   DEK (recoverable offline via that conversation's escrow record).
@@ -3994,12 +4559,14 @@ function extractDurationStatusCode(error: unknown): string {
  */
 async function persistProxyInteraction(
   record: InsertInteraction,
-  lockedChat: LockedChatAuditDisposition,
+  encryptedChat: EncryptedChatAuditDisposition,
   environmentIdOverride?: string,
 ): Promise<void> {
   await InteractionModel.create(
-    lockedChat.kind === "redact" ? redactLockedChatInteraction(record) : record,
-    lockedChat.kind === "encrypt" ? lockedChat.audit : null,
+    encryptedChat.kind === "redact"
+      ? redactEncryptedChatInteraction(record)
+      : record,
+    encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
     environmentIdOverride ? { environmentIdOverride } : undefined,
   );
 }
@@ -4133,16 +4700,16 @@ async function resolveAttributedAppId(
 }
 
 /**
- * Read the locked chat key off the request. A malformed header is
+ * Read the encrypted chat key off the request. A malformed header is
  * treated as absent (the resolver then fails closed to redaction) rather than
  * failing the LLM call — the proxy's job is to serve the request; losing the
  * key costs audit fidelity, not the user's turn.
  */
-function readLockedChatDek(request: FastifyRequest): Buffer | null {
-  const raw = request.headers[LOCKED_CHAT_KEY_HEADER];
+function readEncryptedChatDek(request: FastifyRequest): Buffer | null {
+  const raw = request.headers[ENCRYPTED_CHAT_KEY_HEADER];
   const value = Array.isArray(raw) ? raw[0] : raw;
   try {
-    return parseLockedChatDekHeader(value);
+    return parseEncryptedChatDekHeader(value);
   } catch {
     return null;
   }

@@ -11,7 +11,7 @@ import { ApiError } from "@/types";
 import type { ConversationContentKey } from "@/types/conversation";
 import type { ConversationFilesResponse } from "@/types/conversation-file";
 
-/** Shown for a locked chat's attachment when the reader has no key. */
+/** Shown for an encrypted chat's attachment when the reader has no key. */
 const LOCKED_ATTACHMENT_PLACEHOLDER_NAME = "Locked file";
 
 type ProjectFile = {
@@ -34,10 +34,10 @@ class ConversationFilesService {
     /** Who is asking; their project access gates the project files. */
     requestingUserId: string;
     /**
-     * The locked chat's browser-held key, when the request carried one. It
+     * The encrypted chat's browser-held key, when the request carried one. It
      * opens the attachment filenames; without it they stay sealed and the panel
      * lists each file under a neutral placeholder, which is what a reader who
-     * reaches a locked chat through project membership sees.
+     * reaches an encrypted chat through project membership sees.
      */
     conversationKey?: ConversationContentKey | null;
   }): Promise<ConversationFilesResponse> {
@@ -101,7 +101,7 @@ class ConversationFilesService {
           // A still-sealed name would render as a wall of base64; say the file
           // is there and unreadable instead.
           name:
-            a.lockedChat && !params.conversationKey
+            a.encryptedChat && !params.conversationKey
               ? LOCKED_ATTACHMENT_PLACEHOLDER_NAME
               : a.originalName,
           mimeType: a.mimeType,

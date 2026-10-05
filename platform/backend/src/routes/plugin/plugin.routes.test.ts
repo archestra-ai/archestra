@@ -1,6 +1,6 @@
 import { PLUGIN_MARKETPLACE_IMPORT_LIMIT } from "@archestra/shared";
 import { vi } from "vitest";
-import { userHasPermission } from "@/auth";
+import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
@@ -14,18 +14,8 @@ import { grantEverywhere } from "@/test/wildcard-grants";
 import type { CreatePlugin, User } from "@/types";
 import pluginRoutes from "./plugin.routes";
 
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    plugins: { enabled: true },
-  }),
-);
-vi.mock("@/auth");
-
-const mockUserHasPermission = vi.mocked(userHasPermission);
-
 beforeEach(() => {
-  mockUserHasPermission.mockReset();
-  mockUserHasPermission.mockResolvedValue(true);
+  config.plugins.enabled = true;
   grantEverywhere(["plugin"]);
 });
 
@@ -228,7 +218,11 @@ describe("plugin routes", () => {
     ).toBe(true);
   });
 
-  test("replaces an expired GitHub token without changing approved plugin bytes", async () => {
+  test("replaces an expired GitHub token without changing approved plugin bytes", async ({
+    makeMember,
+  }) => {
+    // Using a stored GitHub credential needs credential:read.
+    await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
     const expiredPat = await createGithubPat({
       organizationId: ctx.organizationId,
       data: { name: "Expired token", token: "ghp_expired" },

@@ -10,6 +10,10 @@ fi
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 runtime_mode="${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}"
+# Restoring an interactive session does not submit another model turn.
+if [[ "${runtime_mode}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
 export CODEX_HOME="${ARCHESTRA_AGENT_RUNTIME_NATIVE_STATE_DIR:-${runtime_dir}}/codex"
 mkdir -p "${runtime_dir}" "${CODEX_HOME}"
 attention_hook="${runtime_dir}/codex-attention-hook.sh"
@@ -207,6 +211,7 @@ fi
 openappa_config=""
 openappa_features=""
 if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_BINDING:?OpenAPPA runtime binding is required}"
   model_catalog="${CODEX_HOME}/openappa-model-catalog.json"
   if ! codex debug models --bundled 2>/dev/null \
     | jq '.models |= map(.tool_mode = "direct" | .supports_search_tool = false)' \
@@ -223,6 +228,10 @@ if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
 model_catalog_json = $(jq -Rn --arg value "${model_catalog}" '$value')"
   openappa_features="[features]
 code_mode_host = false"
+fi
+binding_toml=""
+if [[ -n "${ARCHESTRA_AGENT_RUNTIME_BINDING:-}" ]]; then
+  binding_toml=$'"X-Archestra-Runtime-Binding" = '"$(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_BINDING}" '$value')"
 fi
 developer_instructions="$({
   printf '%s\n\n' "${ARCHESTRA_AGENT_RUNTIME_SYSTEM_PROMPT:-}"
@@ -247,8 +256,13 @@ wire_api = "responses"
 "X-Archestra-Run-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
 "X-Archestra-Session-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" '$value')
 "X-Appa-Session-ID" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" '$value')
+${binding_toml}
 
+# The gateway is part of the runtime contract, not an optional integration.
+# Required MCP startup awaits initialization AND tools/list before any turn;
+# a timeout or discovery error aborts instead of sending a tool-less request.
 [mcp_servers.archestra]
+required = true
 url = $(jq -Rn --arg value "${ARCHESTRA_MCP_GATEWAY_URL:?}" '$value')
 bearer_token_env_var = "ARCHESTRA_MCP_GATEWAY_TOKEN"
 
@@ -256,6 +270,7 @@ bearer_token_env_var = "ARCHESTRA_MCP_GATEWAY_TOKEN"
 "X-Archestra-Run-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" '$value')
 "X-Archestra-Session-Id" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" '$value')
 "X-Appa-Session-ID" = $(jq -Rn --arg value "${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}" '$value')
+${binding_toml}
 
 [projects.$(jq -Rn --arg value "${PWD}" '$value')]
 trust_level = "trusted"
@@ -265,7 +280,7 @@ EOF
 chmod 0600 "${CODEX_HOME}/config.toml"
 
 task_file="${runtime_dir}/task.md"
-printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:?}" > "${task_file}"
+printf '%s\n' "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" > "${task_file}"
 
 common_args=(
   --dangerously-bypass-approvals-and-sandbox
@@ -289,7 +304,11 @@ case "${runtime_mode}" in
     # No subcommand means Codex's native full-screen TUI. The positional prompt
     # starts the first turn; subsequent terminal input stays in the same Codex
     # conversation until the person exits or stops the execution.
-    exec "${failure_watch[@]}" codex "${common_args[@]}" -- "$(cat "${task_file}")"
+    prompt_args=()
+    if [[ -n "${ARCHESTRA_AGENT_RUNTIME_TASK:-}" ]]; then
+      prompt_args+=(-- "$(cat "${task_file}")")
+    fi
+    exec "${failure_watch[@]}" codex "${common_args[@]}" "${prompt_args[@]}"
     ;;
   one_shot)
     if [[ "${ARCHESTRA_AGENT_RUNTIME_PLAIN:-0}" == "1" ]]; then

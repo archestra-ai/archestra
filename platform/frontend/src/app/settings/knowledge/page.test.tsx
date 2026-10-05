@@ -1452,7 +1452,7 @@ describe("KnowledgeSettingsPage", () => {
       expect(screen.queryByText(/ago/)).not.toBeInTheDocument();
     });
 
-    it("keeps the factors read-only without knowledgeSettings:update", () => {
+    it("keeps the factors read-only without organizationSettings:update", () => {
       mockOrganization = { ...baseOrg, kbBm25K1: null, kbBm25B: null };
       mockFeatures();
       vi.mocked(useHasPermissions).mockReturnValue({
@@ -1462,7 +1462,7 @@ describe("KnowledgeSettingsPage", () => {
       renderAdvancedPage();
 
       // The status line still reports where ranking stands — that only needs
-      // knowledgeSettings:read — but neither factor can be edited.
+      // organizationSettings:read — but neither factor can be edited.
       expect(screen.getByLabelText("Term Saturation")).toBeDisabled();
       expect(screen.getByLabelText("Length Normalization")).toBeDisabled();
     });

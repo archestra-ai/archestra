@@ -24,6 +24,7 @@ import {
 } from "@/services/agent-runtime/runtime-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./openappa-batteries.routes";
 
 const PACKAGE_FILES = [
@@ -66,6 +67,7 @@ describe("guardrails batteries", () => {
       Object.assign(request, { user, organizationId });
     });
     registerAuditLogHook(app);
+    registerRoutePermissions(app);
     await app.register(routes);
   });
   afterEach(async () => {
@@ -923,8 +925,8 @@ describe("guardrails batteries", () => {
     const manager = await makeUser();
     const role = await makeCustomRole(organizationId, {
       permission: {
-        organization: ["update"],
-        toolPolicy: ["read", "update"],
+        organizationSettings: ["update"],
+        openappaPolicy: ["read", "update"],
       },
     });
     await makeMember(manager.id, organizationId, { role: role.role });
@@ -942,6 +944,7 @@ describe("guardrails batteries", () => {
     managerApp.addHook("onRequest", async (request) => {
       Object.assign(request, { user: manager, organizationId });
     });
+    registerRoutePermissions(managerApp);
     await managerApp.register(routes);
     try {
       const unbound = await managerApp.inject({
@@ -1332,7 +1335,7 @@ describe("guardrails batteries", () => {
     expect(failure.retryAfterSeconds).toBeUndefined();
   });
 
-  test("a member without organization management cannot install", async ({
+  test("a member without policy update cannot install", async ({
     makeUser,
     makeMember,
   }) => {
@@ -1342,6 +1345,7 @@ describe("guardrails batteries", () => {
     memberApp.addHook("onRequest", async (request) => {
       Object.assign(request, { user: member, organizationId });
     });
+    registerRoutePermissions(memberApp);
     await memberApp.register(routes);
     try {
       expect(

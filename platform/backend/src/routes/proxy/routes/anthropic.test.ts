@@ -29,6 +29,14 @@ import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import logger from "@/logging";
 import { ModelModel, VirtualApiKeyModel } from "@/models";
+import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
+import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import {
+  formatSessionReceipt,
+  mintReceiptCode,
+} from "@/openappa/session-token";
+import { stampToolCallId } from "@/openappa/trajectory-stamp";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { anthropicAdapterFactory } from "../adapters";
@@ -553,7 +561,8 @@ describe("Anthropic Claude Code requests", () => {
   // survive validation unchanged.
   function captureUpstreamParams() {
     const stub = createAnthropicTestClient();
-    const captured: { params?: { messages?: unknown[] } } = {};
+    const captured: { params?: { messages?: unknown[]; thinking?: unknown } } =
+      {};
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
       () =>
         ({
@@ -579,7 +588,7 @@ describe("Anthropic Claude Code requests", () => {
   function injectMessages(
     app: FastifyInstance,
     agentId: string,
-    messages: unknown[],
+    body: { messages: unknown[]; thinking?: unknown },
   ) {
     return app.inject({
       method: "POST",
@@ -595,7 +604,7 @@ describe("Anthropic Claude Code requests", () => {
       payload: {
         model: "claude-opus-4-20250514",
         max_tokens: 1024,
-        messages,
+        ...body,
       },
     });
   }
@@ -616,20 +625,22 @@ describe("Anthropic Claude Code requests", () => {
         content: "SessionStart:startup hook success: OK",
       };
 
-      const response = await injectMessages(app, agent.id, [
-        {
-          role: "user",
-          content: [
-            { type: "text", text: "hi" },
-            {
-              type: "text",
-              text: "<system-reminder>context</system-reminder>",
-              cache_control: { type: "ephemeral" },
-            },
-          ],
-        },
-        systemMessage,
-      ]);
+      const response = await injectMessages(app, agent.id, {
+        messages: [
+          {
+            role: "user",
+            content: [
+              { type: "text", text: "hi" },
+              {
+                type: "text",
+                text: "<system-reminder>context</system-reminder>",
+                cache_control: { type: "ephemeral" },
+              },
+            ],
+          },
+          systemMessage,
+        ],
+      });
 
       expect(response.statusCode).toBe(200);
       expect(captured.params?.messages?.[1]).toEqual(systemMessage);
@@ -674,13 +685,37 @@ describe("Anthropic Claude Code requests", () => {
         ],
       };
 
-      const response = await injectMessages(app, agent.id, [
-        { role: "user", content: "hi" },
-        assistantMessage,
-      ]);
+      const response = await injectMessages(app, agent.id, {
+        messages: [{ role: "user", content: "hi" }, assistantMessage],
+      });
 
       expect(response.statusCode).toBe(200);
       expect(captured.params?.messages?.[1]).toEqual(assistantMessage);
+    } finally {
+      await app.close();
+    }
+  });
+
+  // Claude Code sends `display: "updates"` on interactive requests. When the
+  // proxy answers 400, Claude Code sends the request again without `display`
+  // and stops sending it for the rest of the conversation.
+  test("accepts and forwards Claude Code's thinking display mode", async ({
+    makeAgent,
+  }) => {
+    const captured = captureUpstreamParams();
+    const app = await buildApp();
+
+    try {
+      const agent = await makeAgent({ name: "Thinking Display Agent" });
+      const thinking = { type: "adaptive", display: "updates" };
+
+      const response = await injectMessages(app, agent.id, {
+        messages: [{ role: "user", content: "hi" }],
+        thinking,
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(captured.params?.thinking).toEqual(thinking);
     } finally {
       await app.close();
     }
@@ -1070,11 +1105,272 @@ describe("Anthropic count_tokens passthrough", () => {
     });
   });
 
-  test("forwards a body without markers byte for byte", async () => {
-    // Re-serializing would reformat this and round the integer.
+  test("takes OpenAPPA's signed offers, receipts and stamps out of a counted history", async () => {
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa.offerSigningSecret = secret;
+    const stamp = (callId: string) =>
+      stampToolCallId({
+        callId,
+        sessionId: "count-tokens-session",
+        organizationId: "org-count-tokens",
+        callerId: "user:count-tokens",
+        secret,
+      });
+    const offer = signOfferClaims(
+      unsignedOfferClaims({
+        organizationId: "org-count-tokens",
+        callerId: "user:count-tokens",
+        sessionId: "user:count-tokens|count-tokens-session",
+        offerId: "offer-weather",
+      }),
+      secret,
+    );
+    const ruling = "[appa] get_weather is blocked until a plan is approved.";
+    const control = "mcp__gw__archestra__execute_remedy_plan";
+    const remedyArguments = { offer_id: "offer-weather", plan: "approve" };
+    const execution = {
+      v: 1,
+      kind: "appa_remedy",
+      call_id: "toolu_remedy",
+      tool_name: control,
+      original_arguments: JSON.stringify(remedyArguments),
+    } satisfies RemedyExecution;
+    // Declaring tools rules out restoring a control call from its receipt
+    // alone. The catch-all has no gateway identity either, so the control call
+    // goes back only because its JWS verifies under the signing secret.
+    const tools = [
+      {
+        name: "get_weather",
+        input_schema: {
+          type: "object",
+          properties: { location: { type: "string" } },
+        },
+      },
+      {
+        name: control,
+        input_schema: {
+          type: "object",
+          properties: {
+            offer_id: { type: "string" },
+            plan: { type: "string" },
+          },
+          required: ["offer_id"],
+        },
+      },
+    ];
+
+    const response = await countTokens(
+      JSON.stringify({
+        model: "claude-opus-4-20250514",
+        messages: [
+          { role: "user", content: "What's the weather in SF?" },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: stamp("toolu_weather"),
+                name: "mcp__gw__archestra__get_remedy_plans",
+                input: buildNoticeArguments({
+                  id: "toolu_weather",
+                  tool: "get_weather",
+                  arguments: { location: "SF" },
+                  result: ruling,
+                  offers: [offer],
+                }),
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: stamp("toolu_weather"),
+                content: "rendered for the user",
+              },
+            ],
+          },
+          {
+            role: "assistant",
+            content: [
+              {
+                type: "tool_use",
+                id: stamp("toolu_remedy"),
+                name: control,
+                input: { ...remedyArguments, execution, ...offer },
+              },
+            ],
+          },
+          {
+            role: "user",
+            content: [
+              {
+                type: "tool_result",
+                tool_use_id: stamp("toolu_remedy"),
+                content: "Plan authorized.",
+              },
+            ],
+          },
+        ],
+        tools,
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ input_tokens: 42 });
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toMatch(
+      /appat1|"signature"|"offers"|"execution"/,
+    );
+    expect(JSON.parse(forwardedBodies[0])).toEqual({
+      model: "claude-opus-4-20250514",
+      messages: [
+        { role: "user", content: "What's the weather in SF?" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_weather",
+              name: "get_weather",
+              input: { location: "SF" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_weather",
+              content: ruling,
+              is_error: true,
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_remedy",
+              name: control,
+              input: remedyArguments,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_remedy",
+              content: "Plan authorized.",
+            },
+          ],
+        },
+      ],
+      tools,
+    });
+  });
+
+  test("takes the proxy's receipts out of a counted history", async () => {
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa.offerSigningSecret = secret;
+    const session = {
+      organization_id: "org-count-tokens",
+      caller_id: "user:count-tokens",
+      session_id: "count-tokens-session",
+    };
+    const sessionReceipt = formatSessionReceipt(
+      mintReceiptCode({
+        secret,
+        organizationId: session.organization_id,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+      }),
+    );
+    const childReceipt = mintChildTrajectoryReceipt({
+      organizationId: session.organization_id,
+      callerId: session.caller_id,
+      parentId: session.session_id,
+      childId: "count-tokens-child",
+      spawnerNativeId: "count-tokens-native",
+    });
+    expect(childReceipt).toBeDefined();
+    const question = {
+      questions: [
+        {
+          question: "Clean the build?",
+          header: "Approval",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          multiSelect: false,
+        },
+      ],
+    };
+    const history = (ids: { question: string }, texts: string[]) => [
+      { role: "user", content: "Clean the build." },
+      {
+        role: "assistant",
+        content: [
+          { type: "text", text: texts[0] },
+          {
+            type: "tool_use",
+            id: ids.question,
+            name: "AskUserQuestion",
+            input: question,
+          },
+        ],
+      },
+      {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: ids.question,
+            content: "Approve",
+          },
+        ],
+      },
+      { role: "assistant", content: [{ type: "text", text: texts[1] }] },
+      { role: "user", content: "Thanks." },
+    ];
+
+    const response = await countTokens(
+      JSON.stringify({
+        model: "claude-opus-4-20250514",
+        messages: history({ question: "toolu_question" }, [
+          `${sessionReceipt}\n\nI'll ask first.`,
+          `${childReceipt}\n\nA subagent is cleaning it.`,
+        ]),
+      }),
+    );
+
+    expect(response.statusCode).toBe(200);
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toMatch(
+      /appact2-|protected session|started subagent/,
+    );
+    expect(JSON.parse(forwardedBodies[0])).toEqual({
+      model: "claude-opus-4-20250514",
+      messages: history({ question: "toolu_question" }, [
+        "I'll ask first.",
+        "A subagent is cleaning it.",
+      ]),
+    });
+  });
+
+  test("forwards a body without markers or OpenAPPA payloads byte for byte", async () => {
+    // Each of these words passes the byte check that decides whether to parse
+    // the body, but none is a marker, a receipt, a stamp or a remedy call, so
+    // nothing changes. Re-serializing would reformat this and round the
+    // integer.
     const payload =
       '{ "model": "claude-opus-4-20250514", "seed": 12345678901234567890,\n' +
-      '  "messages": [{ "role": "user", "content": "gwa1 is not a marker" }] }';
+      '  "messages": [{ "role": "user", "content":\n' +
+      '    "gwa1 is not a marker, appat1 is not a stamp, get_remedy_plans is a word, ' +
+      'protected session is a phrase, appact2- is not a receipt" }] }';
 
     const response = await countTokens(payload);
 

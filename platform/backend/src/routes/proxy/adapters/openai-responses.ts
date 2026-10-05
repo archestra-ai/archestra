@@ -106,14 +106,21 @@ export const openAiResponsesAdapterFactory: LLMProvider<
 
   createResponseAdapter(
     response: OpenAiResponsesResponse,
+    request?: OpenAiResponsesRequest,
   ): LLMResponseAdapter<OpenAiResponsesResponse> {
-    return new OpenAiResponsesResponseAdapter(response);
+    const namespaces = uniqueDeclaredNamespaces(request);
+    return new OpenAiResponsesResponseAdapter({
+      ...response,
+      output: response.output?.map((item) =>
+        stampDeclaredNamespace(item, namespaces),
+      ),
+    });
   },
 
-  createStreamAdapter():
-    | LLMStreamAdapter<OpenAiResponsesStreamChunk, OpenAiResponsesResponse>
-    | never {
-    return new OpenAiResponsesStreamAdapter();
+  createStreamAdapter(
+    request?: OpenAiResponsesRequest,
+  ): LLMStreamAdapter<OpenAiResponsesStreamChunk, OpenAiResponsesResponse> {
+    return new OpenAiResponsesStreamAdapter(uniqueDeclaredNamespaces(request));
   },
 
   extractApiKey(headers: OpenAiResponsesHeaders): string | undefined {
@@ -722,6 +729,7 @@ class OpenAiResponsesStreamAdapter
     outputIndex: number;
     contentIndex: number;
   } | null = null;
+  private firstTextDelta: OpenAiResponsesStreamAdapter["lastTextDelta"] = null;
   private textByPart = new Map<string, string>();
   /**
    * Calls the model made as custom tool calls, by call id. The completed
@@ -738,6 +746,18 @@ class OpenAiResponsesStreamAdapter
     { id: string; name: string; arguments: string; namespace?: string }
   >();
   private withholdsHosted = false;
+  /**
+   * Namespaces declared on this request, by tool name, when that name belongs
+   * to exactly one namespace. Codex Responses Lite puts these in an
+   * `additional_tools` input item and does not echo them onto the call.
+   * A missing namespace is dispatched as `functions`, so `collaboration.spawn_agent`
+   * never runs unless the item we hand back names `collaboration`.
+   */
+  private readonly declaredNamespaces: ReadonlyMap<string, string>;
+
+  constructor(declaredNamespaces?: ReadonlyMap<string, string>) {
+    this.declaredNamespaces = declaredNamespaces ?? new Map();
+  }
   /**
    * Set from the first hosted call on. What the model wrote after it rests on
    * what that call brought in, so none of it is the client's until ruled on.
@@ -761,6 +781,7 @@ class OpenAiResponsesStreamAdapter
   }
 
   processChunk(chunk: OpenAiResponsesStreamChunk): ChunkProcessingResult {
+    chunk = this.withDeclaredNamespaces(chunk);
     if (this.state.timing.firstChunkTime === null) {
       this.state.timing.firstChunkTime = Date.now();
     }
@@ -816,6 +837,7 @@ class OpenAiResponsesStreamAdapter
         outputIndex: chunk.output_index,
         contentIndex: chunk.content_index,
       };
+      this.firstTextDelta ??= this.lastTextDelta;
       let prefixSse = "";
       let outbound = chunk;
       if (!this.textPrefixIssued && this.getTextSuffix) {
@@ -834,7 +856,10 @@ class OpenAiResponsesStreamAdapter
       };
     }
 
-    if (this.getTextSuffix && this.isLastTextTerminalEvent(chunk)) {
+    if (
+      this.getTextSuffix &&
+      this.isTextTerminalEvent(chunk, this.lastTextDelta)
+    ) {
       this.pendingTextTerminalEvents.push(chunk);
       return {
         sseData: null,
@@ -1249,6 +1274,7 @@ class OpenAiResponsesStreamAdapter
                 type: "custom_tool_call" as const,
                 name: toolCall.name,
                 input: customToolInput(toolCall.arguments) ?? "",
+                ...this.namespaceFields(toolCall),
                 status: "completed" as const,
               } as OpenAiResponsesResponse["output"][number])
             : {
@@ -1257,6 +1283,7 @@ class OpenAiResponsesStreamAdapter
                 type: "function_call" as const,
                 name: toolCall.name,
                 arguments: toolCall.arguments,
+                ...this.namespaceFields(toolCall),
                 status: "completed" as const,
               },
         ),
@@ -1276,9 +1303,12 @@ class OpenAiResponsesStreamAdapter
         (Array.isArray(upstreamOutput) && upstreamOutput.length > 0) ||
         outputItems.length === 0
       ) {
-        return this.completedResponse;
+        return this.stampResponseOutput(this.completedResponse);
       }
-      return { ...this.completedResponse, output: outputItems };
+      return this.stampResponseOutput({
+        ...this.completedResponse,
+        output: outputItems,
+      });
     }
 
     return {
@@ -1327,37 +1357,41 @@ class OpenAiResponsesStreamAdapter
     return `${params.itemId}\u0000${params.outputIndex}\u0000${params.contentIndex}`;
   }
 
-  private isLastTextTerminalEvent(chunk: OpenAiResponsesStreamChunk): boolean {
-    const lastTextDelta = this.lastTextDelta;
-    if (!lastTextDelta) return false;
+  private isTextTerminalEvent(
+    chunk: OpenAiResponsesStreamChunk,
+    textDelta: OpenAiResponsesStreamAdapter["lastTextDelta"],
+  ): boolean {
+    if (!textDelta) return false;
     if (chunk.type === "response.output_text.done") {
       return (
-        chunk.item_id === lastTextDelta.itemId &&
-        chunk.output_index === lastTextDelta.outputIndex &&
-        chunk.content_index === lastTextDelta.contentIndex
+        chunk.item_id === textDelta.itemId &&
+        chunk.output_index === textDelta.outputIndex &&
+        chunk.content_index === textDelta.contentIndex
       );
     }
     if (chunk.type === "response.content_part.done") {
       return (
-        chunk.item_id === lastTextDelta.itemId &&
-        chunk.output_index === lastTextDelta.outputIndex &&
-        chunk.content_index === lastTextDelta.contentIndex &&
+        chunk.item_id === textDelta.itemId &&
+        chunk.output_index === textDelta.outputIndex &&
+        chunk.content_index === textDelta.contentIndex &&
         chunk.part.type === "output_text"
       );
     }
     return (
       chunk.type === "response.output_item.done" &&
-      chunk.output_index === lastTextDelta.outputIndex &&
+      chunk.output_index === textDelta.outputIndex &&
       chunk.item.type === "message" &&
-      chunk.item.id === lastTextDelta.itemId &&
-      chunk.item.content[lastTextDelta.contentIndex]?.type === "output_text"
+      chunk.item.id === textDelta.itemId &&
+      chunk.item.content[textDelta.contentIndex]?.type === "output_text"
     );
   }
 
   private drainPendingTextTerminalEvents(): string {
+    // Completed snapshots must carry the receipt only where its delta was sent.
     const events = this.pendingTextTerminalEvents.map((event) =>
       toSse(
-        this.issuedPrefix
+        this.issuedPrefix &&
+          this.isTextTerminalEvent(event, this.firstTextDelta)
           ? prependPrefixToTerminalEvent(event, this.issuedPrefix)
           : event,
       ),
@@ -1410,27 +1444,52 @@ class OpenAiResponsesStreamAdapter
     if (chunk.type === "response.output_item.added") {
       const item = chunk.item;
       if (isResponseCustomToolCall(item)) {
-        this.toolCallsByItemId.set(item.id ?? item.call_id, {
+        this.rememberCall(item.id ?? item.call_id, {
           id: item.call_id,
           name: item.name,
           arguments: JSON.stringify({ input: item.input ?? "" }),
           ...namespaceOf(item),
         });
         this.customCallIds.add(item.call_id);
-        this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
         return;
       }
       if (!isResponseFunctionCall(item)) {
         return;
       }
 
-      this.toolCallsByItemId.set(item.id ?? item.call_id, {
+      this.rememberCall(item.id ?? item.call_id, {
         id: item.call_id,
         name: item.name,
         arguments: item.arguments,
         ...namespaceOf(item),
       });
-      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+      return;
+    }
+
+    if (chunk.type === "response.output_item.done") {
+      const item = chunk.item;
+      if (isResponseCustomToolCall(item)) {
+        this.rememberCall(item.id ?? item.call_id, {
+          id: item.call_id,
+          name: item.name,
+          arguments: item.input ? JSON.stringify({ input: item.input }) : "",
+          ...namespaceOf(item),
+        });
+        this.customCallIds.add(item.call_id);
+        return;
+      }
+      if (!isResponseFunctionCall(item)) return;
+      const key = item.id ?? item.call_id;
+      const existing = this.toolCallsByItemId.get(key);
+      this.rememberCall(key, {
+        id: item.call_id,
+        name: item.name || existing?.name || "",
+        arguments: item.arguments || existing?.arguments || "",
+        ...namespaceOf(item),
+        ...(existing?.namespace && !namespaceOf(item).namespace
+          ? { namespace: existing.namespace }
+          : {}),
+      });
       return;
     }
 
@@ -1485,9 +1544,242 @@ class OpenAiResponsesStreamAdapter
       toolCall.arguments = chunk.arguments;
     }
 
-    this.toolCallsByItemId.set(chunk.item_id, toolCall);
+    this.rememberCall(chunk.item_id, toolCall);
+  }
+
+  /**
+   * Codex routes a namespaced tool by the namespace on the function-call item.
+   * `response.function_call_arguments.done` has no namespace field. A Lite
+   * request declares the namespace in `additional_tools` and the model often
+   * omits it; without it the client treats the call as `functions.<name>`.
+   */
+  private withDeclaredNamespaces(
+    chunk: OpenAiResponsesStreamChunk,
+  ): OpenAiResponsesStreamChunk {
+    if (
+      chunk.type === "response.output_item.added" ||
+      chunk.type === "response.output_item.done"
+    ) {
+      const item = this.stampCallItem(chunk.item);
+      return item === chunk.item
+        ? chunk
+        : ({ ...chunk, item } as OpenAiResponsesStreamChunk);
+    }
+    if (
+      chunk.type === "response.completed" &&
+      Array.isArray(chunk.response?.output)
+    ) {
+      return {
+        ...chunk,
+        response: this.stampResponseOutput(
+          chunk.response as unknown as OpenAiResponsesResponse,
+        ),
+      } as OpenAiResponsesStreamChunk;
+    }
+    return chunk;
+  }
+
+  private stampResponseOutput(
+    response: OpenAiResponsesResponse,
+  ): OpenAiResponsesResponse {
+    if (!Array.isArray(response.output)) return response;
+    let changed = false;
+    const output = response.output.map((item) => {
+      const stamped = this.stampCallItem(item);
+      if (stamped !== item) changed = true;
+      return stamped;
+    });
+    return changed ? { ...response, output } : response;
+  }
+
+  private stampCallItem<T>(item: T): T {
+    return stampDeclaredNamespace(item, this.declaredNamespaces);
+  }
+
+  private namespaceFields(toolCall: { name: string; namespace?: string }): {
+    namespace?: string;
+  } {
+    const namespace = toolCall.namespace || this.namespaceFor(toolCall.name);
+    return namespace ? { namespace } : {};
+  }
+
+  private namespaceFor(name: string | undefined): string | undefined {
+    if (!name) return undefined;
+    return this.declaredNamespaces.get(name);
+  }
+
+  private rememberCall(
+    key: string,
+    call: { id: string; name: string; arguments: string; namespace?: string },
+  ): void {
+    const existing = this.toolCallsByItemId.get(key);
+    const namespace =
+      call.namespace ||
+      existing?.namespace ||
+      this.namespaceFor(call.name || existing?.name);
+    const next = {
+      id: call.id || existing?.id || key,
+      name: call.name || existing?.name || "",
+      arguments: call.arguments || existing?.arguments || "",
+      ...(namespace ? { namespace } : {}),
+    };
+    this.toolCallsByItemId.set(key, next);
+    this.backfillHeldItem(key, next.name, namespace);
     this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
   }
+
+  private backfillHeldItem(
+    key: string,
+    name: string,
+    namespace: string | undefined,
+  ): void {
+    if (!namespace) return;
+    let events: unknown[] | undefined;
+    for (const [index, event] of this.state.rawToolCallEvents.entries()) {
+      if (
+        !isRecord(event) ||
+        !isRecord(event.item) ||
+        (event.type !== "response.output_item.added" &&
+          event.type !== "response.output_item.done")
+      ) {
+        continue;
+      }
+      const item = event.item as {
+        id?: string;
+        call_id?: string;
+        name?: string;
+        namespace?: string;
+      };
+      if (item.id !== key && item.call_id !== key) continue;
+      if (item.namespace && (item.name || !name)) continue;
+      events ??= [...this.state.rawToolCallEvents];
+      events[index] = {
+        ...event,
+        item: {
+          ...item,
+          ...(!item.namespace ? { namespace } : {}),
+          ...(!item.name && name ? { name } : {}),
+        },
+      };
+    }
+    if (events) this.state.rawToolCallEvents = events;
+  }
+}
+
+function stampDeclaredNamespace<T>(
+  item: T,
+  namespaces: ReadonlyMap<string, string>,
+): T {
+  if (!item || typeof item !== "object") return item;
+  const record = item as { type?: string; name?: string; namespace?: unknown };
+  if (record.type !== "function_call" && record.type !== "custom_tool_call")
+    return item;
+  if (typeof record.namespace === "string" && record.namespace !== "") {
+    return record.name?.startsWith(`${record.namespace}.`) &&
+      namespaces.get(record.name) === record.namespace
+      ? { ...item, name: record.name.slice(record.namespace.length + 1) }
+      : item;
+  }
+  const namespace = record.name ? namespaces.get(record.name) : undefined;
+  return namespace
+    ? {
+        ...item,
+        namespace,
+        ...(record.name?.startsWith(`${namespace}.`)
+          ? { name: record.name.slice(namespace.length + 1) }
+          : {}),
+      }
+    : item;
+}
+
+/**
+ * Tool name to namespace, only when the request declares that name in exactly
+ * one namespace. A collision is left unset so a call is not routed to the
+ * wrong handler.
+ */
+function uniqueDeclaredNamespaces(
+  request: OpenAiResponsesRequest | undefined,
+): ReadonlyMap<string, string> {
+  const namespaces = new Map<string, string>();
+  const ambiguous = new Set<string>();
+  if (!request) return namespaces;
+  for (const tools of toolDeclarationLists(request)) {
+    for (const tool of tools) {
+      if (
+        isRecord(tool) &&
+        (tool.type === "function" || tool.type === "custom")
+      ) {
+        const name = declaredMemberName(tool);
+        if (name) {
+          ambiguous.add(name);
+          namespaces.delete(name);
+        }
+        continue;
+      }
+      if (
+        !isRecord(tool) ||
+        tool.type !== "namespace" ||
+        !Array.isArray(tool.tools)
+      ) {
+        continue;
+      }
+      const namespace = tool.name;
+      if (typeof namespace !== "string" || namespace === "") continue;
+      for (const member of tool.tools) {
+        const name = declaredMemberName(member);
+        if (!name) continue;
+        const qualified = `${namespace}.${name}`;
+        if (!ambiguous.has(qualified)) namespaces.set(qualified, namespace);
+        if (ambiguous.has(name)) continue;
+        const existing = namespaces.get(name);
+        if (existing && existing !== namespace) {
+          ambiguous.add(name);
+          namespaces.delete(name);
+          continue;
+        }
+        namespaces.set(name, namespace);
+      }
+    }
+  }
+  return namespaces;
+}
+
+function toolDeclarationLists(request: OpenAiResponsesRequest): unknown[][] {
+  const record = request as unknown as Record<string, unknown>;
+  const lists: unknown[][] = [];
+  for (const key of ["tools", "additional_tools"] as const) {
+    if (Array.isArray(record[key])) lists.push(record[key] as unknown[]);
+  }
+  if (!Array.isArray(request.input)) return lists;
+  for (const input of request.input) {
+    const item: unknown = input;
+    if (
+      !isRecord(item) ||
+      (item.type !== "additional_tools" &&
+        item.type !== "tool_search_output") ||
+      !Array.isArray(item.tools)
+    ) {
+      continue;
+    }
+    lists.push(item.tools);
+  }
+  return lists;
+}
+
+function declaredMemberName(tool: unknown): string | undefined {
+  if (!isRecord(tool)) return undefined;
+  if (typeof tool.name === "string" && tool.name !== "") return tool.name;
+  for (const nested of [tool.function, tool.custom]) {
+    if (
+      !isRecord(nested) ||
+      typeof nested.name !== "string" ||
+      nested.name === ""
+    ) {
+      continue;
+    }
+    return nested.name;
+  }
+  return undefined;
 }
 
 function withoutOmittedToolCalls<TItem extends { type?: string }>(

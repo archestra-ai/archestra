@@ -6,11 +6,21 @@ if [[ "${ARCHESTRA_LLM_PROXY_PROTOCOL:-}" != "anthropic" ]]; then
   exit 78
 fi
 
+if [[ "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" != "interactive" || "${ARCHESTRA_AGENT_RUNTIME_CONTINUE:-0}" != "1" ]]; then
+  : "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+fi
+
 # Claude Code treats ANTHROPIC_API_KEY as a user-supplied custom key and asks
 # for first-run confirmation. The same short-lived platform credential is also
 # provided in ANTHROPIC_AUTH_TOKEN, which is its non-interactive gateway path.
 # Prefer that alias so a fresh pod opens directly into the native TUI.
 unset ANTHROPIC_API_KEY
+
+# Guardrails require directly declared tools, including the recovery tools.
+if [[ "${ARCHESTRA_AGENT_RUNTIME_OPENAPPA:-0}" == "1" ]]; then
+  export ENABLE_TOOL_SEARCH=false
+  : "${ARCHESTRA_AGENT_RUNTIME_BINDING:?OpenAPPA runtime binding is required}"
+fi
 
 if [[ "${ARCHESTRA_AGENT_RUNTIME_CLAUDE_AUTH:-}" == "subscription" ]]; then
   # The personal setup-token is injected from the configured secrets backend.
@@ -31,7 +41,8 @@ fi
 session="${ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID:-${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}}"
 export ANTHROPIC_CUSTOM_HEADERS="${ANTHROPIC_CUSTOM_HEADERS:+${ANTHROPIC_CUSTOM_HEADERS}
 }X-Archestra-Session-Id: ${session}
-X-Appa-Session-ID: ${session}"
+X-Appa-Session-ID: ${session}${ARCHESTRA_AGENT_RUNTIME_BINDING:+
+X-Archestra-Runtime-Binding: ${ARCHESTRA_AGENT_RUNTIME_BINDING}}"
 
 runtime_dir="${ARCHESTRA_AGENT_RUNTIME_DIR:-/var/run/archestra}"
 mcp_config="${runtime_dir}/claude-mcp.json"
@@ -40,15 +51,18 @@ jq -n \
   --arg token "${ARCHESTRA_MCP_GATEWAY_TOKEN:?}" \
   --arg task_id "${ARCHESTRA_AGENT_RUNTIME_TASK_ID:?}" \
   --arg session "${session}" \
+  --arg binding "${ARCHESTRA_AGENT_RUNTIME_BINDING:-}" \
   '{mcpServers:{archestra:{
     type:"http",
+    alwaysLoad:true,
+    discoveryCache:false,
     url:$url,
-    headers:{
+    headers:({
       Authorization:("Bearer " + $token),
       "X-Archestra-Run-Id":$task_id,
       "X-Archestra-Session-Id":$session,
       "X-Appa-Session-ID":$session
-    }
+    } + (if $binding == "" then {} else {"X-Archestra-Runtime-Binding":$binding} end))
   }}}' \
   > "${mcp_config}"
 chmod 0600 "${mcp_config}"
@@ -265,12 +279,14 @@ jq -n --arg attention_cmd "${attention_hook}" --arg transcript_cmd "${transcript
 }}' > "${settings_file}"
 args+=(--settings "${settings_file}")
 
+script_dir="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+tui_start=(python3 "${script_dir}/archestra-claude-tui-start")
+
 case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
   interactive)
-    # A Chat execution owns a real pty. Start Claude Code's native TUI with the
-    # first prompt already submitted, then leave the process alive for the
-    # person's follow-up turns.
-    exec claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+    # The same native TUI discovers tools before receiving a task. An empty
+    # prompt restores the session for input without submitting a model turn.
+    exec "${tui_start[@]}" claude "${args[@]}"
     ;;
   one_shot)
     # Delegation has nobody attached to exit a TUI, which is why this mode
@@ -299,7 +315,7 @@ case "${ARCHESTRA_AGENT_RUNTIME_MODE:-one_shot}" in
     exec "${script_dir}/archestra-tui-run" \
       "${done_marker}" \
       "${answer_file}" \
-      claude "${args[@]}" "${ARCHESTRA_AGENT_RUNTIME_TASK:?}"
+      "${tui_start[@]}" claude "${args[@]}"
     ;;
   *)
     echo "archestra: unknown Agent Runtime mode" >&2

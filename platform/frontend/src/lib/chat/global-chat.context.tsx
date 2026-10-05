@@ -65,7 +65,7 @@ import {
   isPlaceholderTitle,
   resolveCanonicalMessageId,
 } from "@/lib/chat/chat-utils";
-import { lockedChatRequestHeaders } from "@/lib/chat/locked-chat";
+import { encryptedChatRequestHeaders } from "@/lib/chat/encrypted-chat";
 import { readThinkingEffort } from "@/lib/chat/thinking-effort-cache";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -678,12 +678,12 @@ function ChatSessionHook({
     transport: new DefaultChatTransport({
       api: "/api/chat",
       credentials: "include",
-      // Resolved per request (function form) so a locked chat's
+      // Resolved per request (function form) so an encrypted chat's
       // browser-held key — stored just before the session mounts — always
       // rides on the stream POST.
       headers: () => ({
         [EXTERNAL_AGENT_ID_HEADER]: getChatExternalAgentId(appName),
-        ...lockedChatRequestHeaders(conversationId),
+        ...encryptedChatRequestHeaders(conversationId),
       }),
       // Carry the reasoning depth the composer is showing. The server also
       // stores it per conversation, but that write is a separate request the
@@ -706,11 +706,11 @@ function ChatSessionHook({
         },
       }),
       prepareReconnectToStreamRequest: ({ id, headers, credentials }) => {
-        // Merge the locked-chat key explicitly: the reconnect GET touches the
+        // Merge the encrypted-chat key explicitly: the reconnect GET touches the
         // conversation's content too and must carry the same header.
         const merged = new Headers(headers);
         for (const [name, value] of Object.entries(
-          lockedChatRequestHeaders(id) ?? {},
+          encryptedChatRequestHeaders(id) ?? {},
         )) {
           merged.set(name, value);
         }
@@ -799,6 +799,9 @@ function ChatSessionHook({
 
       const conversationInvalidate = queryClient.invalidateQueries({
         queryKey: ["conversation", conversationId],
+      });
+      queryClient.invalidateQueries({
+        queryKey: ["openappa-status", conversationId],
       });
 
       const conversationsSidebarInvalidate = queryClient.invalidateQueries({

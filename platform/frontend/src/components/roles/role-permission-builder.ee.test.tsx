@@ -3,138 +3,167 @@ import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { describe, expect, it, vi } from "vitest";
-
-global.ResizeObserver = class ResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-} as typeof ResizeObserver;
-
-vi.mock("@/components/ui/tooltip", () => ({
-  Tooltip: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-  TooltipContent: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-}));
-
 import { RolePermissionBuilder } from "./role-permission-builder.ee";
 
 describe("RolePermissionBuilder", () => {
-  it("shows indeterminate state for preloaded partial permissions", async () => {
-    const user = userEvent.setup();
-    const onChange = vi.fn();
-    const permission: Permissions = {
-      knowledgeSource: ["query"],
+  it("keeps partial selections and reflects changes to the role being edited", async () => {
+    const props = {
+      onChange: vi.fn(),
+      userPermissions: {
+        knowledgeSource: ["read", "create", "update", "delete", "query"],
+      } as Permissions,
     };
-    const userPermissions: Permissions = {
-      knowledgeSource: ["read", "create", "update", "delete", "query"],
-      knowledgeSettings: ["read", "update"],
-    };
-
     const { rerender } = render(
       <RolePermissionBuilder
-        permission={permission}
-        onChange={onChange}
-        userPermissions={userPermissions}
+        {...props}
+        permission={{ knowledgeSource: ["query"] }}
       />,
-    );
-
-    await user.click(screen.getByRole("button", { name: "Knowledge" }));
-
-    expect(
-      screen.getByRole("checkbox", { name: "Knowledge permissions" }),
-    ).toHaveAttribute("data-state", "indeterminate");
-    expect(
-      screen.getByRole("checkbox", { name: "Knowledge Sources permissions" }),
-    ).toHaveAttribute("data-state", "indeterminate");
-    expect(screen.getByLabelText("Query")).toHaveAttribute(
-      "data-state",
-      "checked",
-    );
-
-    rerender(
-      <RolePermissionBuilder
-        permission={{ knowledgeSettings: ["read"] }}
-        onChange={onChange}
-        userPermissions={userPermissions}
-      />,
-    );
-
-    expect(screen.getByLabelText("Query")).toHaveAttribute(
-      "data-state",
-      "unchecked",
     );
     expect(
       screen.getByRole("checkbox", {
-        name: "Knowledge Settings permissions",
+        name: "Knowledge Sources permissions",
       }),
     ).toHaveAttribute("data-state", "indeterminate");
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Knowledge Sources Query",
+      }),
+    ).toBeChecked();
+    rerender(
+      <RolePermissionBuilder
+        {...props}
+        permission={{ knowledgeSource: ["read"] }}
+      />,
+    );
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Knowledge Sources Query",
+      }),
+    ).not.toBeChecked();
+    expect(
+      screen.getByRole("checkbox", {
+        name: "Knowledge Sources Read",
+      }),
+    ).toBeChecked();
   });
 
-  it("shows ungrantable permissions as disabled with an explanation", async () => {
+  it("disables ungrantable actions and explains why", async () => {
     const user = userEvent.setup();
-
     render(
       <RolePermissionBuilder
         permission={{}}
         onChange={vi.fn()}
-        userPermissions={{
-          knowledgeSource: ["read"],
+        userPermissions={{ knowledgeSource: ["read"] }}
+      />,
+    );
+    await user.click(screen.getByRole("button", { name: "Other" }));
+    const checkbox = screen.getByRole("checkbox", {
+      name: "Knowledge Sources Create",
+    });
+    expect(checkbox).toBeDisabled();
+    const label = checkbox.closest("label");
+    if (!label) throw new Error("Permission control has no label");
+    await user.hover(label);
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "You can only grant permissions that you currently have yourself.",
+    );
+  });
+
+  it("preserves selections when switching categories", async () => {
+    const user = userEvent.setup();
+    render(
+      <Editor
+        initial={{ knowledgeSource: ["query"] }}
+        grantable={{
+          knowledgeSource: ["read", "query"],
+          agent: ["read"],
         }}
       />,
     );
-
-    await user.click(screen.getByRole("button", { name: "Knowledge" }));
-
-    const createCheckbox = document.getElementById("knowledgeSource-create");
-    expect(createCheckbox).toBeDisabled();
-
+    await user.click(
+      screen.getByRole("checkbox", { name: "Knowledge Sources Read" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    await user.click(screen.getByRole("checkbox", { name: "Agents Read" }));
+    await user.click(screen.getByRole("button", { name: "Other" }));
     expect(
-      screen.getAllByText(
-        "You can only grant permissions that you currently have yourself.",
-      ).length,
-    ).toBeGreaterThan(0);
+      screen.getByRole("checkbox", { name: "Knowledge Sources Read" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Knowledge Sources Query" }),
+    ).toBeChecked();
+    await user.click(screen.getByRole("button", { name: "Agents" }));
+    expect(screen.getByRole("checkbox", { name: "Agents Read" })).toBeChecked();
+  });
+
+  it("bulk selection adds only grantable actions and retains existing stronger grants", async () => {
+    const user = userEvent.setup();
+    render(
+      <Editor
+        initial={{ agent: ["delete"] }}
+        grantable={{ agent: ["read"], skill: ["read"] }}
+      />,
+    );
+    await user.click(
+      screen.getByRole("checkbox", { name: "Agents permissions" }),
+    );
+    expect(screen.getByRole("checkbox", { name: "Agents Read" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Agents Delete" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Agents Create" }),
+    ).toBeDisabled();
+    expect(
+      screen.getByRole("checkbox", { name: "Skills Read" }),
+    ).not.toBeChecked();
+    await user.click(
+      screen.getByRole("checkbox", { name: "Skills permissions" }),
+    );
+    expect(screen.getByRole("checkbox", { name: "Skills Read" })).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Agents Delete" }),
+    ).toBeChecked();
+    expect(
+      screen.getByRole("checkbox", { name: "Skills Create" }),
+    ).not.toBeChecked();
+  });
+
+  it("shows granted permissions as a readable view without editing controls", () => {
+    render(
+      <RolePermissionBuilder
+        permission={{ agent: ["read", "create"] }}
+        userPermissions={{}}
+        onChange={vi.fn()}
+        readOnly
+      />,
+    );
+    expect(
+      screen.getByRole("button", { name: "Agents Read granted" }),
+    ).toBeVisible();
+    expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Clear" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("group", { name: "Skills actions" }),
+    ).not.toBeInTheDocument();
   });
 });
 
-it("filters resources without losing selections and supports reviewing selected permissions", async () => {
-  function Editor() {
-    const [permission, setPermission] = useState<Permissions>({
-      knowledgeSource: ["query"],
-    });
-    return (
-      <RolePermissionBuilder
-        permission={permission}
-        onChange={setPermission}
-        userPermissions={{
-          knowledgeSource: ["read", "query"],
-          knowledgeSettings: ["read"],
-        }}
-      />
-    );
-  }
-  const user = userEvent.setup();
-  render(<Editor />);
-  await user.type(
-    screen.getByRole("textbox", { name: "Search permissions" }),
-    "knowledge sources",
+function Editor({
+  initial,
+  grantable,
+}: {
+  initial: Permissions;
+  grantable: Permissions;
+}) {
+  const [permission, setPermission] = useState(initial);
+  return (
+    <RolePermissionBuilder
+      permission={permission}
+      onChange={setPermission}
+      userPermissions={grantable}
+    />
   );
-  expect(screen.getByLabelText("Query")).toBeChecked();
-  expect(
-    screen.queryByRole("checkbox", { name: "Knowledge Settings permissions" }),
-  ).not.toBeInTheDocument();
-  await user.click(screen.getByLabelText("Read"));
-  await user.clear(screen.getByRole("textbox", { name: "Search permissions" }));
-  await user.click(screen.getByRole("button", { name: /^Selected \(/ }));
-  expect(screen.getByLabelText("Read")).toBeChecked();
-  expect(screen.getByLabelText("Query")).toBeChecked();
-  await user.click(screen.getByRole("button", { name: "Clear" }));
-  expect(
-    screen.getByText("No selected permissions match your search."),
-  ).toBeVisible();
-});
+}

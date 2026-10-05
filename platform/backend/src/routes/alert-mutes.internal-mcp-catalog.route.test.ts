@@ -2,7 +2,9 @@ import {
   createMcpServerAlertFingerprint,
   mcpRuntimeAlertSource,
 } from "@archestra/shared";
-import { type Mock, vi } from "vitest";
+import { vi } from "vitest";
+import { betterAuth } from "@/auth";
+import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -11,28 +13,17 @@ import { InternalMcpCatalogModel, McpServerModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
-vi.mock("@/auth");
-vi.mock("@/config", async () =>
-  (await import("@/test/mocks/config")).configModuleMock({
-    mcpServer: { alertingEnabled: true },
-  }),
-);
-
-import { hasPermission } from "@/auth";
-
-const mockHasPermission = hasPermission as Mock;
-
 describe("MCP catalog alert dismissal routes", () => {
   let app: FastifyInstanceWithZod;
   let user: User;
   let organizationId: string;
 
   beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
-    vi.clearAllMocks();
-    mockHasPermission.mockResolvedValue({
-      success: false,
-      error: new Error("Forbidden"),
-    });
+    config.mcpServer.alertingEnabled = true;
+    // A plain member: permission checks read the member role.
+    vi.spyOn(betterAuth.api, "getSession").mockImplementation(
+      async () => ({ user: { id: user.id } }) as never,
+    );
     user = await makeUser();
     organizationId = (await makeOrganization()).id;
     await makeMember(user.id, organizationId);

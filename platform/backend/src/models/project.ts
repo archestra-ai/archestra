@@ -22,6 +22,7 @@ import {
 import type { ConversationOrigin, InsertProject, Project } from "@/types";
 import { ProjectLabelModel } from "./entity-labels";
 import ProjectAccessModel from "./project-access";
+import ProjectAppModel from "./project-app";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 /**
@@ -578,7 +579,8 @@ class ProjectModel {
   }
 
   /**
-   * Audit snapshot: the project row plus who it is shared with, org-scoped.
+   * Audit snapshot: the project row plus who it is shared with and which apps
+   * are linked into it, org-scoped.
    *
    * Deliberately NOT filtered by `deleted_at` — delete and restore are the two
    * lifecycle events that most need an audit trail, and both would diff against
@@ -602,9 +604,10 @@ class ProjectModel {
       .limit(1);
     if (!row) return null;
 
-    const [audience, labels] = await Promise.all([
+    const [audience, labels, appIds] = await Promise.all([
       ProjectAccessModel.findAudience(row),
       ProjectLabelModel.getLabelsFor(id),
+      ProjectAppModel.listAppIds(id),
     ]);
     return {
       ...row,
@@ -612,6 +615,7 @@ class ProjectModel {
       shareTeamIds: audience.teams.map((team) => team.id).sort(),
       shareUserIds: audience.users.map((user) => user.id).sort(),
       labels: labels.map(({ key, value }) => `${key}:${value}`).sort(),
+      appIds,
     };
   }
 

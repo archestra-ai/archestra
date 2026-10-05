@@ -1456,8 +1456,8 @@ describe("AgentModel.update evicts cached chat MCP clients", () => {
     makeUser,
   }) => {
     const user = await makeUser();
-    // makeAgent defaults to full mode + accessAllTools=false.
-    const agent = await makeAgent();
+    // Exercise an actual change from an explicit Manual-mode opt-out.
+    const agent = await makeAgent({ toolExposureMode: "full" });
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     const mockClient = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
@@ -2779,5 +2779,40 @@ describe("selectMCPGatewayToken synthetic principals", () => {
     );
 
     expect(result).toBeNull();
+  });
+
+  test("team actor uses its own team token over the org token", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ organizationId: org.id });
+
+    await TeamTokenModel.create({
+      organizationId: org.id,
+      isOrganizationToken: true,
+      name: "Org Token",
+    });
+    const { token: teamToken } = await TeamTokenModel.createTeamToken(
+      team.id,
+      team.name,
+    );
+
+    const result = await chatClient.selectMCPGatewayToken(
+      agent.id,
+      "system",
+      org.id,
+      team.id,
+    );
+
+    expect(result).toMatchObject({
+      tokenId: teamToken.id,
+      teamId: team.id,
+      isOrganizationToken: false,
+    });
   });
 });

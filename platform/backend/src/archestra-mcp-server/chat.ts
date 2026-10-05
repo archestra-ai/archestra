@@ -6,13 +6,19 @@ import {
 import { z } from "zod";
 import config from "@/config";
 import logger from "@/logging";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import {
   getHitlAskUserArguments,
   hitlRulingFromLabels,
   recordHitlRuling,
 } from "@/openappa/hitl-review";
 import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
+import { awaitRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
+import {
+  authenticatedRuntimeSpender,
+  parseWorkloadPrincipal,
+} from "@/services/agent-runtime/runtime-identity";
 import { archestraMcpBranding } from "./branding";
 import {
   catchError,
@@ -60,7 +66,7 @@ const AskUserOptionSchema = z
 const AskUserOutputSchema = z.object({
   action: z
     .enum(["accept", "decline", "cancel"])
-    .describe("Whether the user submitted, declined, or canceled."),
+    .describe("Whether the choice form was submitted, declined, or canceled."),
   selected: z
     .array(z.string())
     .describe("The labels the user selected. Empty when declined or canceled."),
@@ -160,12 +166,12 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. Use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, you must call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Never ask a multiple-choice question in plain text, including yes or no. Do not use this for open questions. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
+    description: `Ask the user to pick from a short list of options. For Agent Runtime guardrail reviews, use this tool with the offer IDs: the authorized reviewer answers on the run page. Do not substitute a native question or a plain-text answer for that review. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Do not use this for open questions. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
     schema: AskUserExecutionSchema,
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
     async handler({ args, context, toolName }) {
-      const verifiedOffers = verifiedRemedyOffers(
+      const verifiedOffers = await verifiedRemedyOffers(
         args.remedy_offers,
         args.remedy_offer_ids,
         context,
@@ -178,6 +184,40 @@ const registry = defineArchestraTools([
             offerIds: liveOffers,
           })
         : undefined;
+      if (session && liveOffers.length === 1) {
+        const ruling = await awaitRuntimeHitlReview({
+          session,
+          offerId: liveOffers[0],
+          userId: context.userId,
+          signal: context.abortSignal,
+        });
+        if (ruling !== "not-runtime") {
+          if (ruling === "no-reviewer") {
+            return errorResult(
+              "This runtime has no eligible human reviewer. Keep the call blocked; a native form or a plain-text answer cannot approve it.",
+            );
+          }
+          if (ruling === "review-unavailable") {
+            return errorResult(
+              "The staged runtime review expired or became unavailable, including after loss of shared cache state. Keep the call blocked. A fresh exact-offer review is required before proceeding; missing state is not approval.",
+            );
+          }
+          if (ruling === "unavailable" || ruling === "none") {
+            return errorResult(
+              "The runtime review was not approved. Keep the call blocked. A timeout or disconnection is not approval.",
+            );
+          }
+          return structuredSuccessResult(
+            {
+              action: "accept" as const,
+              selected: [ruling === "approve" ? "Approve" : "Deny"],
+            },
+            ruling === "approve"
+              ? "The authenticated run reviewer approved this offer. Retry execute_remedy_plan for the same offer before retrying the blocked call."
+              : "The authenticated run reviewer denied this offer. The original call remains blocked.",
+          );
+        }
+      }
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
       const effectiveArgs = hitlArgs ?? args;
@@ -203,7 +243,12 @@ const registry = defineArchestraTools([
         header: effectiveArgs.header,
       });
 
-      if (outcome.status === "no_viewer") {
+      if (
+        outcome.status === "no_viewer" ||
+        (outcome.status === "answered" &&
+          outcome.result.action === "decline" &&
+          outcome.result._meta?.approvals_reviewer === "auto_review")
+      ) {
         return errorResult(
           hitlArgs ? HITL_NO_VIEWER_MESSAGE : NO_CHOICE_FORM_MESSAGE,
         );
@@ -233,9 +278,9 @@ const registry = defineArchestraTools([
             outcome.status === "unanswered"
               ? "The user did not answer the question in time."
               : action === "decline"
-                ? "The user declined to pick."
+                ? "The MCP client declined the choice form. It may not have reached the user."
                 : "The user dismissed the question.",
-            "This is the user's final decision on this question for this turn. Do not ask it again, offer the same options in prose, or end with a follow-up question or invitation. Wait for a new user message before revisiting this question.",
+            "No selection was returned. Do not ask again, offer the same options in prose, or end with a follow-up question or invitation. Wait for a new user message before revisiting this question.",
             // Several questions asked in one turn all carry the turn's offers,
             // so a dismissed one only refuses the remedy if it offered it.
             liveOffers.length > 0
@@ -275,9 +320,9 @@ const registry = defineArchestraTools([
           hitlRuling === "deny"
             ? "The user denied the remedy. Keep the blocked call blocked. Do not ask again and do not call execute_remedy_plan."
             : liveOffers.length > 0
-              ? `Live remedy offers: ${liveOffers.join(", ")}. If the pick accepts a remedy, continue now exactly as the ruling says — call ${archestraMcpBranding.getToolName(
+              ? `Live remedy offers: ${liveOffers.join(", ")}. If the user's pick accepts a remedy, apply it with ${archestraMcpBranding.getToolName(
                   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
-                )} with the offer_id and the plan from the ruling, then retry the blocked call. Do not ask the user again.`
+                )} using the offer_id and plan from the ruling, then retry the blocked call after the plan is authorized. The user already answered, so do not ask about the same plan again.`
               : "",
         ]
           .filter((part) => part.length > 0)
@@ -321,16 +366,19 @@ function optionKey(index: number) {
  * Uses the offer's signed child scope to locate the staged review. Gateway
  * calls may have only the parent's session header, or no session header at all.
  */
-function verifiedRemedyOffers(
+async function verifiedRemedyOffers(
   envelopes: unknown,
   declaredIds: unknown,
   context: ArchestraContext,
-): { session: OpenAppaSession; ids: string[] } | undefined {
-  if (!Array.isArray(envelopes) || !context.organizationId || !context.userId) {
+): Promise<{ session: OpenAppaSession; ids: string[] } | undefined> {
+  const spender = authenticatedRuntimeSpender({
+    userId: context.userId,
+    callerId: context.openappaSession?.caller_id,
+  });
+  if (!Array.isArray(envelopes) || !context.organizationId || !spender) {
     return undefined;
   }
   const gatewaySession = callOpenAppaSession(context);
-  const spender = `user:${context.userId}`;
   const gatewayId = gatewaySession?.session_id;
   const normalizedGatewayId =
     gatewayId && !gatewayId.startsWith(`${spender}|`)
@@ -350,7 +398,21 @@ function verifiedRemedyOffers(
         claims.session_id !== normalizedGatewayId &&
         claims.parent_id !== normalizedGatewayId
       ) {
-        continue;
+        const recorded = await OpenAppaSessionModel.familySession({
+          organizationId: context.organizationId,
+          sessionId: claims.session_id,
+          callerId: spender,
+        });
+        if (
+          recorded?.parentId !== claims.parent_id ||
+          !(await OpenAppaSessionModel.hasAncestor({
+            organizationId: context.organizationId,
+            callerId: spender,
+            sessionId: claims.session_id,
+            ancestorSessionId: normalizedGatewayId ?? gatewayId,
+          }))
+        )
+          continue;
       }
     } else if (!claims.parent_id || claims.caller_id !== spender) {
       // Without a gateway session header, only this user's child offers can
@@ -411,6 +473,9 @@ function offerOwnerIsSpender(owner: string | null, spender: string): boolean {
   }
   if (owner.startsWith("user:")) {
     return owner.length > "user:".length && owner === spender;
+  }
+  if (parseWorkloadPrincipal(owner)) {
+    return owner === spender;
   }
   return !owner.startsWith("app:") && !owner.startsWith("virtual-key:");
 }

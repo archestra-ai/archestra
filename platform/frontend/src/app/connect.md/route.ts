@@ -1,9 +1,27 @@
 import { requestOrigin } from "@/lib/request-origin";
 
+const opencodeRestartInstruction =
+  "Do not stop or restart OpenCode from inside this conversation. Finish your reply and ask the user to save work, close OpenCode normally, then launch `opencode` in a new terminal.";
+
+const approvalLinkFallback = [
+  "As soon as the installer creates an approval request, show its full browser approval URL as a clickable markdown link in your reply, plus the matching code.",
+  "Always show this manual fallback while approval is pending, even if a browser opens automatically or tool output already printed the URL. Never suppress it because of deduplication.",
+  'Use the complete URL from the installer line starting with "Open ". Its path is /connection and it has a connectRequest query parameter. Query parameter order does not matter.',
+  "Do not link the installer download, a wrapped or truncated /api/client-connections path, or any other URL.",
+  "A tool card is not a clickable link.",
+  "If the user asks for the link again while approval is pending, show the same request URL and code again, without starting another installer.",
+  "Do not start a second installer or a second approval request while the first process is alive. Keep the first request and its code.",
+  "If that process has already exited with an error, report the error. Do not offer an earlier approval URL as ready.",
+  "After approval completes, omit the URL and code.",
+].join(" ");
+
 export function GET(request: Request) {
   const origin = requestOrigin(request);
+  const client = new URL(request.url).searchParams.get("client");
+  const focused = client ? focusedInstructions(origin, client) : null;
   return new Response(
-    `# Connect This Client
+    focused ??
+      `# Connect This Client
 
 Connect the coding client running this conversation to ${origin}.
 No preinstalled skill or platform credentials are needed to start.
@@ -42,7 +60,7 @@ under Settings > Plugins. Send a message to make sure that inference works.
 1. Run exactly one command below in the terminal. Replace CLIENT_ID with the
    current client ID.
    macOS/Linux:
-   p="$(mktemp)"; trap 'rm -f "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client CLIENT_ID
+   p="$(mktemp)"; trap 'unlink "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client CLIENT_ID
    Windows PowerShell:
    $p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client CLIENT_ID } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
 2. The public bootstrap validates the deployment URL, starts a browser approval,
@@ -53,11 +71,11 @@ under Settings > Plugins. Send a message to make sure that inference works.
    It reports approval, download size, and setup progress. If it fails, report
    the exact error and stop instead of replacing the flow with manual API calls.
    OpenCode: run the installer here with a timeout of 600000 ms. Keep that exact
-   process running. Relay its approval URL and code if no browser opens. Do
-   not start a second installer while the first request is pending.
+   process running. Do not start a second installer while the first request is pending.
+   Codex: ${CODEX_APPROVAL_WAIT}
    For Desktop, the separate terminal owns this process; finish the agent task after handoff.
    The browser code must match the code printed in the terminal.
-   If no browser opens, show the printed approval URL to the user.
+   ${approvalLinkFallback}
 4. The installer applies the approved configuration automatically.
    If the organization has runtime handoff instructions enabled, the setup also
    installs a system-prompt file injected into every future session launch —
@@ -66,9 +84,18 @@ under Settings > Plugins. Send a message to make sure that inference works.
    Claude Code only registers the gateway in a NEW session, so never send the
    user to /mcp here. OpenCode's separate CLI can read the updated config now.
    Claude Code: in the new session, open /mcp, select the configured server, and authenticate.
-   Cursor: use its MCP settings to connect/authenticate the configured server.
-   Codex: use codex mcp login SERVER_NAME. Open a new terminal and run codex.
-   The setup script selects the proxy as the default provider.
+   Cursor: open Customize > MCPs to connect/authenticate the configured server.
+   If the setup installed shared skills, reload Cursor and verify them under
+   Customize > Skills. Cursor reads nested skills from ~/.cursor/skills/.
+   If the proxy was selected, find "Cursor model settings (manual step)" in the
+   installer output. It prints the proxy URL and either a virtual key or an
+   instruction to use the user's own OpenAI API key. Tell the user where to find
+   these values in the terminal; do not quote a secret key in chat. In Cursor
+   Settings > Models > API Keys, enter them and enable Use OpenAI API Key and
+   Override OpenAI Base URL.
+   A Cursor subscription cannot authenticate the proxy. Send a test prompt in
+   Cursor and confirm the request appears in this deployment before reporting success.
+   Codex: ${CODEX_FINISH_INSTRUCTIONS.replaceAll("\n", "\n   ")}
    OpenCode: run opencode mcp list first. If SERVER_NAME is connected (OAuth),
    skip authentication; do not re-authenticate a working connection. Otherwise
    run opencode mcp auth list. If SERVER_NAME is authenticated but not connected,
@@ -86,20 +113,25 @@ under Settings > Plugins. Send a message to make sure that inference works.
    error; do not pipe a confirmation answer or start another auth. Then run
    opencode mcp list and confirm the gateway is connected.
    Let the user complete any browser consent or client execution approval.
-   Then close with one short, imperative user instruction and nothing else, e.g.:
+   Cursor: installation alone is not a complete connection. If native OAuth,
+   the skills check, or proxy inference remain unverified, say so explicitly.
+   List the remaining steps from the setup output, including any manual User
+   Rules and model settings. Ask the user to enter the printed virtual key or
+   their own OpenAI API key in Cursor Settings; never ask for the key in chat.
+   Do not claim the proxy is configured
+   merely because the installer printed its settings.
+   For other clients, close with one short, imperative user instruction, e.g.:
    "Open a new terminal, then run claude /mcp and select <server> to sign in."
-   OpenCode: "Close every OpenCode process, then start opencode again."
+   OpenCode: ${opencodeRestartInstruction}
 6. Verify the configured gateway can list tools before reporting a working connection —
    in the new session, after authentication. OpenCode can check its connection
-   now with opencode mcp list, but must restart to load new tools.
+   now with opencode mcp list. The user-started session loads newly configured tools.
    Configuration applied alone does not prove MCP authentication succeeded.
    For clients requiring a new session, verification is that session's job.
-   Codex: make sure that config.toml selects the proxy provider at the top level.
-   Then send a short prompt in a new Codex session. Gateway OAuth alone does
-   not show that inference uses the proxy. If OpenAPPA is enabled, the first text
-   reply in a new protected session also shows a protected-session mark.
-   If the provider is not selected or the prompt fails, report that the connection
-   is incomplete. Do not report that setup succeeded.
+   Codex: perform the fresh-process verification above from this conversation's
+   terminal; do not defer it to a future user session. Gateway OAuth alone does
+   not prove proxy inference or tool execution. A protected-session mark alone
+   is not a complete verification either.
 7. For other clients, delete the temporary bootstrap file when finished.
    For Desktop, leave this public temporary file in place and end the task after handoff.
 
@@ -118,3 +150,111 @@ Review its output for backup paths and restart instructions.
     },
   );
 }
+
+function focusedInstructions(origin: string, client: string): string | null {
+  if (client === "claude-desktop") {
+    return `# Connect Claude Desktop
+
+In Claude Desktop's Cowork or Code tab, use client ID claude-desktop, not claude-code.
+Direct the user to ${origin}/connection?clientId=claude-desktop to review and download the installer.
+They open it in normal Claude Desktop; its native Install confirmation starts setup in a separate OS terminal.
+The installer reuses a valid local subscription token, or opens Claude sign-in if needed.
+It checks inference before changing configuration and restarting Desktop.
+
+Cowork's code-execution terminal runs in a VM or cloud sandbox, not the host computer.
+Do not install into that environment. A localhost deployment must be accessed from the user's host computer or browser.
+Do not retry a denied action through another tool. After handoff, end the task without polling or cleanup.
+After installation, the user authorizes the gateway under Settings > Connectors and installs shared skills under Settings > Plugins.
+Do not ask the user to paste passwords, session cookies, or tokens into this conversation.
+`;
+  }
+
+  const details = focusedClientDetails(client);
+  if (!details) return null;
+
+  return `# Connect ${details.label}
+
+Connect the client running this conversation to ${origin}.
+Use client ID ${client}. No preinstalled skill or platform credentials are needed.
+The terminal needs Node.js 18 or newer and access to this deployment.
+If a localhost page cannot be fetched through a web tool, use the local terminal.
+
+## Setup
+
+Run exactly one command in the client's terminal.
+macOS/Linux:
+p="$(mktemp)"; trap 'unlink "$p"' EXIT; curl --fail --silent --show-error ${origin}/api/client-connections/installer --output "$p" && node "$p" --url ${origin} --client ${client}
+Windows PowerShell:
+$p=[IO.Path]::GetTempFileName(); try { Invoke-WebRequest -UseBasicParsing -Uri ${origin}/api/client-connections/installer -OutFile $p; node $p --url ${origin} --client ${client} } finally { Remove-Item $p -Force -ErrorAction SilentlyContinue }
+
+Keep the command running while the user signs in and reviews the setup in their browser.
+The browser code must match the code printed in the terminal. ${approvalLinkFallback}
+${client === "codex" ? `${CODEX_APPROVAL_WAIT}\n` : ""}The public bootstrap downloads and applies only the approved setup. If it fails, report the exact error; do not replace this flow with manual API calls.
+Do not print the polling secret, installer source, or approved setup payload.
+If runtime handoff instructions are enabled, tell the user that future sessions inject a system-prompt file.
+
+## Finish and verify
+
+${details.finish}
+
+Do not claim the connection works until its gateway and any selected model proxy have been verified.
+Never ask the user to paste passwords, session cookies, or provider keys into this conversation.
+The approval request expires after ten minutes. Denial or expiry requires a new run.
+`;
+}
+
+function focusedClientDetails(client: string): {
+  label: string;
+  finish: string;
+} | null {
+  switch (client) {
+    case "claude-code":
+      return {
+        label: "Claude Code",
+        finish:
+          "Open a new Claude Code session so the gateway registers. In that new session, open /mcp, select the configured server, and authenticate. Verify that it lists tools. Follow the setup output for model proxy settings; send a short test prompt before reporting inference as working.",
+      };
+    case "cursor":
+      return {
+        label: "Cursor",
+        finish:
+          "Reload Cursor. Open Customize > MCPs, authenticate the configured gateway, and verify it lists tools. Confirm installed shared skills under Customize > Skills. Cursor discovers nested skills in ~/.cursor/skills/. If runtime handoff User Rules were printed, ask the user to paste them under Customize > Rules > User Rules without replacing existing rules. If the model proxy was selected, find 'Cursor model settings (manual step)' in the installer output. Tell the user where to find the printed proxy URL and, for virtual-key setup, the printed virtual key; otherwise they need their own OpenAI API key. Do not quote a secret key in chat. Ask the user to enter these values under Settings > Models > API Keys, then enable Use OpenAI API Key and Override OpenAI Base URL. A Cursor subscription cannot authenticate the proxy. Send a test prompt and confirm the request appears in this deployment. Installation alone does not complete these native steps; state exactly which checks remain unverified.",
+      };
+    case "codex":
+      return {
+        label: "Codex",
+        finish: CODEX_FINISH_INSTRUCTIONS,
+      };
+    case "copilot-cli":
+      return {
+        label: "Copilot CLI",
+        finish:
+          "Follow the setup output to restart Copilot CLI and complete native gateway OAuth. Verify that the gateway lists tools. If a model proxy was selected, send a short prompt and verify that inference reaches this deployment.",
+      };
+    case "opencode":
+      return {
+        label: "OpenCode",
+        finish: `Run opencode mcp list. If SERVER_NAME is connected, skip authentication. Otherwise run opencode mcp auth list; if authentication is missing or expired, run CI=true opencode mcp auth SERVER_NAME and keep the process running while the user completes native OAuth consent. Do not start a second auth process while one is pending. Run opencode mcp list again. ${opencodeRestartInstruction} Ask the user to verify gateway tools and any selected model proxy in that new session. State that the connection remains unverified until those checks pass.`,
+      };
+    default:
+      return null;
+  }
+}
+
+const CODEX_APPROVAL_WAIT = [
+  'Use sandbox_permissions="require_escalated" for network-blocked setup commands.',
+  "Codex's exec_command yields a still-running terminal and returns a session id before browser approval finishes.",
+  'keep reading that same session with write_stdin, or the client\'s equivalent read of that same process, until the installer prints "Browser approval confirmed." or a terminal error.',
+  "Do not end the turn and ask the user to say when approval is finished.",
+  "A temporarily unavailable status is not expiry. Retry that same session; do not start again.",
+  "Gateway OAuth is a later native sign-in after this installer applies the setup. It is not a new connection approval. Do not automate that sign-in, and do not change the configured approval mode or sandbox.",
+].join(" ");
+
+const CODEX_FINISH_INSTRUCTIONS = [
+  "If the installer printed 'Successfully logged in.', gateway OAuth is already cached. Do not run codex mcp login again. Otherwise run codex mcp list --json and inspect auth_status for the configured server. If auth_status is oauth, skip login.",
+  "Only if auth_status is not_logged_in, run codex mcp login SERVER_NAME once. Wait for its browser callback. For unknown or unsupported auth status, use verification to check cached authorization instead of repeating login. Do not start another login while one is pending.",
+  "If a gateway or proxy was selected, run the exact Verification command printed by the installer yourself. Do not ask the user to run verification commands. On Windows use the printed native PowerShell verifier, not the Node --verify command. The helper starts a fresh native Codex app-server and calls a read-only gateway tool directly. It checks proxy inference with the configured model, approval mode and sandbox unchanged.",
+  "Do not substitute codex exec or a model-driven shell probe. Do not force --sandbox read-only, edit config, or change the configured model, sandbox or approval settings. If the OS blocks process launch or access to Codex state files, request ordinary native per-command approval. Request approval only for this exact verification command, then retry once.",
+  "If approval is unavailable, report the blocker instead of weakening the sandbox. Do not request elevated execution for API authentication or gateway authorization errors. The verifier must never auto-approve app-server permission requests.",
+  "Empty MCP resource lists and tools/list are not gateway execution checks. Report success only when the helper returns verified for each selected gateway/proxy. A failed or interrupted verifier is incomplete, even when installation or OAuth succeeded. If skills were selected, verify the marketplace/plugins are registered. Report the connection status briefly without listing tool names or quoting the test response.",
+].join("\n\n");

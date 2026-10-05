@@ -87,6 +87,22 @@ class AgentRunModel {
     return run ?? null;
   }
 
+  /**
+   * The run a live virtual key was minted for. Two rows for one key is not a
+   * binding: the caller must fail closed rather than pick a workspace.
+   */
+  static async findByVirtualApiKeyId(
+    virtualApiKeyId: string,
+  ): Promise<AgentRunRecord | "ambiguous" | null> {
+    const rows = await db
+      .select()
+      .from(schema.agentRunsTable)
+      .where(eq(schema.agentRunsTable.virtualApiKeyId, virtualApiKeyId))
+      .limit(2);
+    if (rows.length === 1) return rows[0];
+    return rows.length === 0 ? null : "ambiguous";
+  }
+
   /** Resolve an owned session URL (or any of its task aliases) to its current turn. */
   static async findCurrentSessionForActor(params: {
     taskId: string;

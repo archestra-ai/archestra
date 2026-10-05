@@ -7,6 +7,7 @@ import { isK8sNotFoundError } from "@/k8s/shared";
 import logger from "@/logging";
 import {
   A2ATaskModel,
+  AgentModel,
   AgentRunInputModel,
   AgentRunModel,
   AgentWorkspaceModel,
@@ -30,6 +31,17 @@ import { trackBackgroundWork } from "@/utils/background-work";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
+import { constructStableRunName } from "./runtime-contract";
+import {
+  admitRuntimeSteer,
+  bindRuntimeChild,
+  promptWithContract,
+  type RuntimeCrossing,
+} from "./runtime-crossing";
+import {
+  runtimeOpenAppaSession,
+  stampRuntimeBinding,
+} from "./runtime-identity";
 import { generateAgentRunTitle } from "./title";
 import { agentRunTranscriptStore } from "./transcript-store";
 
@@ -59,6 +71,7 @@ async function startAgentRunSession(params: {
   llmApiKeyId: string | null;
   titleUserId?: string;
   resumeFromTaskId?: string;
+  runtimeCrossing?: RuntimeCrossing;
 }): Promise<AgentRunRecord> {
   const backend = resolveAgentRuntimeBackendDriver(params.runtime.backend);
 
@@ -103,6 +116,21 @@ async function startAgentRunSession(params: {
       "The prior workspace is unavailable for this actor, Agent, or environment",
     );
 
+  let task = params.task;
+  if (params.runtimeCrossing && !params.resumeFromTaskId) {
+    const agent = await AgentModel.findById(params.agentId);
+    if (!agent) throw new ApiError(404, "Agent not found");
+    const contract = await bindRuntimeChild({
+      crossing: params.runtimeCrossing,
+      organizationId: params.organizationId,
+      workspaceId: params.taskId,
+      workloadName: constructStableRunName(agent.name, params.taskId),
+      actorKind: params.actor.kind,
+      actorId: params.actor.id,
+    });
+    task = promptWithContract(task, contract);
+  }
+
   const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
     runtime: params.runtime,
     taskId: params.taskId,
@@ -113,9 +141,21 @@ async function startAgentRunSession(params: {
     runtimeScope,
     effectiveNetworkPolicy,
     appName: organization?.appName ?? DEFAULT_APP_NAME,
-    task: params.task,
+    task,
     runMode: params.runMode,
     inputFiles,
+    ...(workspace
+      ? {
+          workspaceId: workspace.id,
+          runtimeSession: runtimeOpenAppaSession({
+            organizationId: params.organizationId,
+            workspaceId: workspace.id,
+            workloadName: workspace.workloadName,
+            actorKind: workspace.actorKind,
+            actorId: workspace.actorId,
+          }),
+        }
+      : {}),
   });
 
   if (workspace) {
@@ -131,7 +171,11 @@ async function startAgentRunSession(params: {
 
   // The row lands before the workload: it is what teardown reads to find the
   // objects, so a crash between the two must leave a record, not an orphan.
-  const placeholderTitle = toPlaceholderTitle(params.task ?? "Run");
+  const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
+  const placeholderTitle =
+    resumeWithoutPrompt && priorRun
+      ? priorRun.title
+      : toPlaceholderTitle(params.task ?? "Run");
   const session = await AgentRunModel.create({
     id: runId,
     organizationId: params.organizationId,
@@ -150,29 +194,31 @@ async function startAgentRunSession(params: {
     completionTarget: params.completionTarget,
   });
 
-  trackBackgroundWork(
-    generateAgentRunTitle({
-      taskId: params.taskId,
-      prompt: params.task ?? "Run",
-      organizationId: params.organizationId,
-      userId: params.titleUserId,
-      modelId: params.modelId,
-      llmApiKeyId: params.llmApiKeyId,
-    })
-      .then((title) =>
-        AgentRunModel.updateTitleIfCurrent({
-          taskId: params.taskId,
-          expectedTitle: placeholderTitle,
-          title,
+  if (!resumeWithoutPrompt) {
+    trackBackgroundWork(
+      generateAgentRunTitle({
+        taskId: params.taskId,
+        prompt: params.task ?? "Run",
+        organizationId: params.organizationId,
+        userId: params.titleUserId,
+        modelId: params.modelId,
+        llmApiKeyId: params.llmApiKeyId,
+      })
+        .then((title) =>
+          AgentRunModel.updateTitleIfCurrent({
+            taskId: params.taskId,
+            expectedTitle: placeholderTitle,
+            title,
+          }),
+        )
+        .catch((error) => {
+          logger.warn(
+            { error, taskId: params.taskId },
+            "Could not generate an Agent run title",
+          );
         }),
-      )
-      .catch((error) => {
-        logger.warn(
-          { error, taskId: params.taskId },
-          "Could not generate an Agent run title",
-        );
-      }),
-  );
+    );
+  }
 
   let claimedWorkspace = false;
   let createdWorkspace:
@@ -197,6 +243,19 @@ async function startAgentRunSession(params: {
       const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
       if (previous?.virtualApiKeyId)
         await cleanupAgentRun(previous, { requireTranscript: true });
+      if (params.runtimeCrossing) {
+        await admitRuntimeSteer({
+          crossing: params.runtimeCrossing,
+          organizationId: params.organizationId,
+          workspaceId: workspace.id,
+        });
+      }
+      await stampRuntimeBinding({
+        spec,
+        organizationId: params.organizationId,
+        workspaceId: workspace.id,
+        taskId: params.taskId,
+      });
       await backend.continueRun({ session, spec });
     } else {
       createdWorkspace = await AgentWorkspaceModel.create({
@@ -217,6 +276,12 @@ async function startAgentRunSession(params: {
               config.agentRuntime.defaultTtlHours * 3600) *
               1000,
         ),
+      });
+      await stampRuntimeBinding({
+        spec,
+        organizationId: params.organizationId,
+        workspaceId: createdWorkspace.id,
+        taskId: params.taskId,
       });
       await backend.launch(spec);
       await backend.stageInputs({ session, inputs: inputFiles });
@@ -309,6 +374,7 @@ export async function runTaskInAgentRuntime(params: {
   llmApiKeyId: string | null;
   titleUserId?: string;
   resumeFromTaskId?: string;
+  runtimeCrossing?: RuntimeCrossing;
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {

@@ -66,7 +66,7 @@ export async function buildSkillCatalogPrompt(
     : "";
 
   // only advertise the sandbox path when it would actually work: the feature is
-  // enabled, the caller has sandbox:execute, and the sandbox tools are assigned
+  // enabled, the caller has agent:read, and the sandbox tools are assigned
   // to this agent (so they appear in its tools/list).
   const loadSkill = archestraMcpBranding.getToolName(
     TOOL_LOAD_SKILL_SHORT_NAME,

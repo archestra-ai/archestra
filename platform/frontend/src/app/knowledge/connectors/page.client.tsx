@@ -119,7 +119,7 @@ function ConnectorsList() {
     (type) =>
       (type !== "mfiles" || mfilesEnabled) && !connectorCatalog.isHidden(type),
   );
-  // The trash view; the backend serves deleted connectors to manage-deleted
+  // The trash view; the backend serves deleted connectors to delete
   // holders only, and the status filter itself is gated the same way.
   const isDeletedView = searchParams.get("status") === "deleted";
   // Label filtering is server-side, so the value rides the list query.
@@ -349,7 +349,7 @@ function ConnectorsList() {
   ];
 
   // The trash view: soft-deleted connectors, org-wide (the backend serves them
-  // to manage-deleted holders only). Rows do not navigate — the detail page
+  // to delete holders only). Rows do not navigate — the detail page
   // would 404 on a deleted id — and the actions collapse to Restore + Delete
   // permanently, matching the agents, skills, and projects trash views. A
   // restored connector comes back disabled (its credential was destroyed at

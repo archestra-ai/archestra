@@ -21,6 +21,14 @@ vi.mock("@/lib/mcp/archestra-mcp-server", () => ({
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/skills/skill.query");
+vi.mock("@/lib/runtime-credentials.query", () => ({
+  useRuntimeCredentials: () => ({ data: [] }),
+}));
+vi.mock("@/components/settings/runtime-credential-definition-dialog", () => ({
+  RuntimeCredentialDefinitionDialog: () => (
+    <div role="dialog">Add credential</div>
+  ),
+}));
 
 vi.mock("@/components/mcp-catalog-icon", () => ({
   McpCatalogIcon: ({
@@ -56,6 +64,7 @@ function loadSkillEntry(input: Record<string, unknown>) {
 describe("CompactToolGroup", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    sessionStorage.clear();
     // Default: no tool is treated as `load_skill`, so CompactCircle stays on
     // the default code path. Tests that exercise the SkillPill branch can
     // override per-call.
@@ -102,11 +111,47 @@ describe("CompactToolGroup", () => {
       </QueryClientProvider>,
     );
     expect(
-      screen.getByRole("link", { name: "Back to OpenAPPA" }),
+      screen.getByRole("link", { name: "View Guardrails" }),
     ).toHaveAttribute("href", "/openappa");
     expect(
       screen.getByRole("button", { name: "update guardrails policy" }),
     ).toHaveAttribute("aria-expanded", "false");
+  });
+
+  it("opens the native credential dialog for a completed compact chat tool call", () => {
+    mockGetToolShortName.mockImplementation((name: string) =>
+      name === "archestra__request_runtime_credential_setup"
+        ? "request_runtime_credential_setup"
+        : null,
+    );
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <CompactToolGroup
+          tools={[
+            {
+              kind: "tool",
+              key: "setup",
+              toolName: "archestra__request_runtime_credential_setup",
+              part: {
+                type: "tool-archestra__request_runtime_credential_setup",
+                state: "output-available",
+                toolCallId: "setup-call",
+                input: { kind: "github_app" },
+                output: {
+                  action: "open_credential_dialog",
+                  kind: "github_app",
+                },
+              } as never,
+              toolResultPart: null,
+              errorText: undefined,
+            },
+          ]}
+        />
+      </QueryClientProvider>,
+    );
+    expect(screen.getByRole("dialog", { name: "" })).toHaveTextContent(
+      "Add credential",
+    );
   });
 
   it("shows a denial notice's arguments as the object they hold", async () => {

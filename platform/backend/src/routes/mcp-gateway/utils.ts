@@ -19,9 +19,11 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
   TOOL_LIST_SKILLS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RENDER_APP_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -100,6 +102,7 @@ import {
   appLaunchToolTitle,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { resolveConnectionSetupScope } from "@/services/connection-setup-scope";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
@@ -275,10 +278,12 @@ const rawArchestraTokenCache =
     defaultTtl: TOKEN_AUTH_CACHE_TTL_MS,
   });
 
-/** Both APPA tools are served by this endpoint whenever APPA is enabled. */
+/** Runtime tools are advertised only while Guardrails v2 is active. */
 const APPA_IMPLICIT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
 ]);
 const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
   "get_guardrails_policy",
@@ -297,7 +302,7 @@ const APPA_POLICY_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
 
 /**
  * The tools the gateway advertises to every OpenAPPA session without an
- * assignment: the control and notice tools always, and `yell` while agent
+ * assignment: the control, notice and inbox tools, and `yell` while agent
  * reporting is on.
  */
 function isImplicitOpenAppaTool(shortName: string | null | undefined): boolean {
@@ -312,6 +317,8 @@ function isImplicitOpenAppaTool(shortName: string | null | undefined): boolean {
  */
 export async function createAgentServer(params: {
   openappaSession?: import("@/openappa/service").OpenAppaSession;
+  /** Short-lived proof minted only by an approved /connection installer. */
+  connectionSetupContext?: string;
   /** External JSON-RPC execution identity, scoped by native remedy receipts. */
   currentToolCallId?: string;
   agentId: string;
@@ -362,6 +369,24 @@ export async function createAgentServer(params: {
   // tools/teams/knowledge/connector hydration `findById` performs.
   const agent = await AgentModel.findGatewayAgentById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
+  const setupScope = params.connectionSetupContext
+    ? await resolveConnectionSetupScope({
+        principal: {
+          userId: tokenAuth?.userId,
+          organizationId: tokenAuth?.organizationId,
+          targetOrganizationId: agent.organizationId,
+          guardrailsActive:
+            !!tokenAuth?.userId && (await isGuardrailsV2Active()),
+        },
+        evidence: {
+          kind: "approved-installer",
+          token: params.connectionSetupContext,
+          gatewayId: agent.id,
+          signingSecret: config.openappa.offerSigningSecret,
+        },
+      })
+    : null;
+  const connectionSetupBypass = setupScope !== null;
 
   // Fetch the agent's teams and the calling user's teams (with labels) for
   // trace span team attributes.
@@ -468,15 +493,15 @@ export async function createAgentServer(params: {
       config.agentRuntime.enabled || hasTaskStarter
         ? getImplicitTaskControlTools()
         : [];
-    // Both notice and remedy tools are required when OpenAPPA is active.
-    const implicitOpenAppaTools =
-      openappaEnabled() || (await isGuardrailsV2Active())
-        ? getArchestraMcpTools().filter((tool) =>
-            isImplicitOpenAppaTool(
-              archestraMcpBranding.getToolShortName(tool.name),
-            ),
-          )
-        : [];
+    // A thrown switch read must fail the list, not look like the switch is off.
+    const remediesActive = await isGuardrailsV2Active();
+    const implicitOpenAppaTools = getArchestraMcpTools().filter((tool) => {
+      const shortName = archestraMcpBranding.getToolShortName(tool.name);
+      if (APPA_IMPLICIT_TOOL_SHORT_NAMES.has(shortName ?? "")) {
+        return remediesActive;
+      }
+      return shortName === "yell" && openappaYellEnabled();
+    });
     const implicitPolicyTools =
       openappaEnabled() && agent.agentType === "agent"
         ? getArchestraMcpTools().filter((tool) =>
@@ -931,27 +956,29 @@ export async function createAgentServer(params: {
             ? dynamicTool
             : undefined;
 
-        const policyBlock = await evaluateSingleMcpToolInvocationPolicy({
-          agentId: agent.id,
-          toolName: name,
-          toolInput: args ?? {},
-          organizationId: tokenAuth?.organizationId,
-          contextIsTrusted,
-          // The only way this path starts untrusted is the agent's own
-          // "treat context as sensitive" setting, so name that origin in
-          // any sensitive-context block.
-          sensitiveContextOrigin: contextIsTrusted
-            ? undefined
-            : { kind: "agent_configured" },
-          ...(availableTool &&
-            assignedToolNames && {
-              enabledToolNames: new Set([...assignedToolNames, name]),
-            }),
-          // The dynamically-resolved All-mode row that will execute: evaluate the
-          // policy against it and ride its id along on a block so the "Edit
-          // policy" modal can resolve a tool with no agent_tools assignment.
-          resolvedToolId: availableTool?.id,
-        });
+        const policyBlock = connectionSetupBypass
+          ? null
+          : await evaluateSingleMcpToolInvocationPolicy({
+              agentId: agent.id,
+              toolName: name,
+              toolInput: args ?? {},
+              organizationId: tokenAuth?.organizationId,
+              contextIsTrusted,
+              // The only way this path starts untrusted is the agent's own
+              // "treat context as sensitive" setting, so name that origin in
+              // any sensitive-context block.
+              sensitiveContextOrigin: contextIsTrusted
+                ? undefined
+                : { kind: "agent_configured" },
+              ...(availableTool &&
+                assignedToolNames && {
+                  enabledToolNames: new Set([...assignedToolNames, name]),
+                }),
+              // The dynamically-resolved All-mode row that will execute: evaluate the
+              // policy against it and ride its id along on a block so the "Edit
+              // policy" modal can resolve a tool with no agent_tools assignment.
+              resolvedToolId: availableTool?.id,
+            });
         if (policyBlock) {
           // Carry the machine-readable policy_denied error alongside the prose
           // (in _meta + structuredContent) so MCP clients render the block
@@ -1036,6 +1063,7 @@ export async function createAgentServer(params: {
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 openappaSession: params.openappaSession,
+                connectionSetupBypass,
                 currentToolCallId: params.currentToolCallId,
                 agent: { id: agent.id, name: agent.name },
                 agentId: agent.id,
@@ -1479,6 +1507,8 @@ export function extractPassthroughHeaders(
   }
   const extracted: Record<string, string> = {};
   for (const headerName of allowlist) {
+    // A runtime binding authenticates only to this platform, never to an MCP server.
+    if (headerName.toLowerCase() === "x-archestra-runtime-binding") continue;
     const value = requestHeaders[headerName.toLowerCase()];
     if (typeof value === "string") {
       extracted[headerName] = value;
@@ -2448,15 +2478,24 @@ function toMcpListTool(tool: {
     _meta?: Record<string, unknown>;
   } | null;
   builtIn?: boolean;
+  annotations?: Record<string, unknown>;
 }): McpListToolCandidate {
+  const builtIn =
+    tool.builtIn === true || tool.catalogId === ARCHESTRA_MCP_CATALOG_ID;
+  const annotations = builtIn
+    ? (tool.annotations ??
+      getArchestraMcpTools().find((candidate) => candidate.name === tool.name)
+        ?.annotations)
+    : undefined;
   return {
     name: tool.name,
     description: tool.description ?? null,
     parameters: normalizeToolInputSchema(tool.parameters ?? tool.inputSchema),
     catalogId: tool.catalogId,
-    meta: tool.meta ?? undefined,
-    builtIn:
-      tool.builtIn === true || tool.catalogId === ARCHESTRA_MCP_CATALOG_ID,
+    meta: annotations
+      ? { ...tool.meta, annotations }
+      : (tool.meta ?? undefined),
+    builtIn,
   };
 }
 

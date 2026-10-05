@@ -267,3 +267,39 @@ it.each([
   expect(openResource).not.toHaveBeenCalled();
   expect(deleteResource).not.toHaveBeenCalled();
 });
+
+it.each([
+  ["catalog", false],
+  ["catalog", true],
+  ["skill", true],
+] as const)("gates %s transfer on the object's own grant (granted: %s)", (kind, granted) => {
+  vi.mocked(useHasPermissions).mockImplementation(
+    (_permissions, scope) =>
+      ({ data: granted && scope === agent.id }) as ReturnType<
+        typeof useHasPermissions
+      >,
+  );
+  function KindHarness() {
+    const ownership = useResourceOwnershipTransfer({ kind, resource: agent });
+    return (
+      <DropdownMenu>
+        <DropdownMenuTrigger asChild>
+          <Button>More actions</Button>
+        </DropdownMenuTrigger>
+        <DropdownMenuContent>{ownership.menuItem}</DropdownMenuContent>
+      </DropdownMenu>
+    );
+  }
+  render(
+    <QueryClientProvider client={new QueryClient()}>
+      <KindHarness />
+    </QueryClientProvider>,
+  );
+  fireEvent.pointerDown(screen.getByRole("button", { name: "More actions" }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  const item = screen.getByRole("menuitem", { name: /Transfer ownership/ });
+  if (granted) expect(item).not.toHaveAttribute("aria-disabled", "true");
+  else expect(item).toHaveAttribute("aria-disabled", "true");
+});

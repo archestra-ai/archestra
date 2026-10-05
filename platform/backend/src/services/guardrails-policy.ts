@@ -1,4 +1,5 @@
 import { createHash } from "node:crypto";
+import { TOOL_RUN_COMMAND_SHORT_NAME } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
@@ -218,7 +219,8 @@ function hash(content: string) {
 /**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
- * carry in this deployment, and reads the organization's members as `internal`.
+ * carry in this deployment, reads the organization's members as `internal`, and
+ * has the organization's default model label each sandbox command.
  */
 export function initialPolicy(): string {
   return `include = ["${bundledEntry(ARCHESTRA_BATTERY)}"]
@@ -237,6 +239,20 @@ context_control = true
 
 [[policy.annotator]]
 name = "noop"
+
+# Labels each sandbox command (run_command) with the organization's
+# default model, through the LLM proxy.
+[[policy.annotator]]
+name = "archestra.run-command"
+builtin = "archestra"
+hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets."
+ranks = ["suspicious", "trusted"]
+marks = []
+effects = []
+
+[[policy.tool]]
+name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
+annotator = "archestra.run-command"
 
 # Tools without a specific rule have no additional restrictions.
 [[policy.tool]]

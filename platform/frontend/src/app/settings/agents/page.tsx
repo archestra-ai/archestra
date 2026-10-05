@@ -5,11 +5,16 @@ import {
   getDocsUrl,
   MESSAGING_CHANNEL_LABELS,
   type MessagingChannelId,
+  PopularAgentIdSchema,
 } from "@archestra/shared";
 import { Pencil, Plus, Trash2 } from "lucide-react";
 import Link from "next/link";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { siKubernetes } from "simple-icons";
+import {
+  AGENT_CATALOG_TEMPLATE_NAMES,
+  CatalogAgentIcon,
+} from "@/components/agent-pages/agent-catalog";
 import { AgentSelector } from "@/components/agent-selector";
 import { ButtonWithTooltip } from "@/components/button-with-tooltip";
 import { ChannelIcon } from "@/components/channel-icon";
@@ -250,7 +255,7 @@ export default function AgentSettingsPage() {
         }
         control={
           <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) =>
@@ -334,7 +339,7 @@ export default function AgentSettingsPage() {
         description="Preselected for new chats, for every member who has not set a personal default agent of their own."
         control={
           <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -362,7 +367,7 @@ export default function AgentSettingsPage() {
         description={`Allow users to upload files in the ${appName} chat UI.`}
         control={
           <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -413,7 +418,7 @@ export default function AgentSettingsPage() {
           }
           control={
             <WithPermissions
-              permissions={{ agentSettings: ["update"] }}
+              permissions={{ organizationSettings: ["update"] }}
               noPermissionHandle="tooltip"
             >
               {({ hasPermission }) => (
@@ -441,9 +446,24 @@ export default function AgentSettingsPage() {
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={selectedApiKeyId !== "" && defaultModel === ""}
         isSaving={isSaving}
-        permissions={{ agentSettings: ["update"] }}
+        permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
         onCancel={handleCancel}
+      />
+      <IntegrationAvailabilitySection
+        id="popular-agents"
+        catalogKey="popularAgentOverrides"
+        catalog={PopularAgentIdSchema.options}
+        title="Popular agents"
+        description="Choose which templates appear on Create Agent and in the Runtime image choices. Removing a template preserves existing agents and custom runtime configuration."
+        options={PopularAgentIdSchema.options.map((id) => ({
+          value: id,
+          label: AGENT_CATALOG_TEMPLATE_NAMES[id],
+          icon: <CatalogAgentIcon id={id} size={18} />,
+        }))}
+        placeholder="Select popular agents…"
+        emptyMessage="No agents found."
+        savedMessage="Popular agents updated"
       />
       <IntegrationAvailabilitySection
         id="available-messaging-channels"

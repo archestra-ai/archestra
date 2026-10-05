@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { RUN_ID_HEADER } from "@archestra/shared";
+import { RouteId, RUN_ID_HEADER } from "@archestra/shared";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -14,7 +14,13 @@ import {
   isWellFormedAppaId,
   sessionFromHeaders,
 } from "@/openappa/service";
+import {
+  RUNTIME_BINDING_HEADER,
+  resolveGatewayRuntimeSession,
+  resolveRuntimeSessionForWorkspace,
+} from "@/services/agent-runtime/runtime-identity";
 import { skillsSurfaceEnabled } from "@/services/agent-skill-resolution";
+import { CONNECTION_SETUP_CONTEXT_PARAM } from "@/services/connection-setup-context";
 import {
   AgentRunAttentionStateSchema,
   type AgentRunRecord,
@@ -97,7 +103,8 @@ function setWWWAuthenticateHeader(
   reply: FastifyReply,
 ) {
   const origin = getPublicRequestOrigin(request);
-  const resourceMetadataUrl = `${origin}/.well-known/oauth-protected-resource${request.url}`;
+  const pathname = new URL(request.url, origin).pathname;
+  const resourceMetadataUrl = `${origin}/.well-known/oauth-protected-resource${pathname}`;
   reply.header(
     "WWW-Authenticate",
     `Bearer resource_metadata="${resourceMetadataUrl}"`,
@@ -362,17 +369,59 @@ async function handleMcpPostRequest(
         400,
         "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
       );
-    openappaSession =
-      namedSession !== undefined &&
-      tokenAuthContext?.organizationId &&
-      tokenAuthContext.userId
-        ? sessionFromHeaders({
-            headers: request.headers,
+    const runtimeSession =
+      tokenAuthContext?.organizationId && !tokenAuthContext.userId
+        ? await resolveGatewayRuntimeSession({
             organizationId: tokenAuthContext.organizationId,
-            callerId: `user:${tokenAuthContext.userId}`,
-            scope: `user:${tokenAuthContext.userId}`,
+            agentId: profileId,
+            token: tokenAuthContext,
+            bindingToken: readHeader(request, RUNTIME_BINDING_HEADER),
+            secret: config.openappa.offerSigningSecret,
+            sessionName:
+              typeof namedSession === "string" ? namedSession : undefined,
+            runTaskId: runId,
           })
-        : undefined;
+        : { kind: "none" as const };
+    if (runtimeSession.kind === "reject") {
+      throw new ApiError(400, runtimeSession.message);
+    }
+    openappaSession =
+      runtimeSession.kind === "session"
+        ? sessionFromHeaders({
+            headers: {
+              [APPA_SESSION_HEADER.toLowerCase()]:
+                runtimeSession.identity.workloadName,
+            },
+            organizationId: runtimeSession.identity.organizationId,
+            callerId: runtimeSession.identity.principal,
+            scope: runtimeSession.identity.principal,
+          })
+        : namedSession !== undefined &&
+            tokenAuthContext?.organizationId &&
+            tokenAuthContext.userId
+          ? sessionFromHeaders({
+              headers: request.headers,
+              organizationId: tokenAuthContext.organizationId,
+              callerId: `user:${tokenAuthContext.userId}`,
+              scope: `user:${tokenAuthContext.userId}`,
+            })
+          : undefined;
+    if (runtimeSession.kind === "session") {
+      const workspace = await resolveRuntimeSessionForWorkspace({
+        organizationId: runtimeSession.identity.organizationId,
+        workspaceId: runtimeSession.identity.workspaceId,
+      });
+      if (
+        !workspace ||
+        workspace.session.session_id !== openappaSession?.session_id
+      ) {
+        throw new ApiError(
+          400,
+          "The runtime gateway request has no bound workspace",
+        );
+      }
+      openappaSession = workspace.session;
+    }
   } catch (error) {
     if (!(error instanceof ApiError)) throw error;
     reply.status(error.statusCode);
@@ -387,6 +436,10 @@ async function handleMcpPostRequest(
     // Create fresh server and transport for each request (stateless mode)
     const { server } = await createAgentServer({
       openappaSession,
+      connectionSetupContext:
+        new URL(request.url, "http://localhost").searchParams.get(
+          CONNECTION_SETUP_CONTEXT_PARAM,
+        ) ?? undefined,
       currentToolCallId,
       agentId: profileId,
       tokenAuth: tokenAuthContext,
@@ -657,6 +710,58 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         id: null,
       };
+    },
+  );
+
+  // Codex (rmcp) DELETEs the Mcp-Session-Id it was given once exec finishes.
+  // That id is signed capability metadata, not a legacy SSE session record.
+  // Looking it up in the legacy transport 404s. Acknowledge termination only
+  // when the signature binds this gateway and this principal.
+  fastify.delete(
+    `${endpoint}/:profileId`,
+    {
+      schema: {
+        operationId: RouteId.McpGatewayDelete,
+        hide: true,
+        params: z.object({
+          profileId: UuidOrSlugSchema,
+        }),
+      },
+    },
+    async (request, reply) => {
+      const { profileId, token } =
+        (await extractProfileIdAndTokenFromRequest(request)) ?? {};
+
+      if (!profileId || !token) {
+        setWWWAuthenticateHeader(request, reply);
+        throw new ApiError(401, "Missing or invalid Authorization header");
+      }
+
+      const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
+        profileId,
+        token,
+      );
+      if (!tokenAuth) {
+        setWWWAuthenticateHeader(request, reply);
+        throw new ApiError(401, describeGatewayAuthFailure(reason));
+      }
+
+      const sessionId = readHeader(request, MCP_SESSION_ID_HEADER);
+      if (!sessionId) {
+        throw new ApiError(400, "Missing Mcp-Session-Id header");
+      }
+
+      const capabilities = readCapabilitySession({
+        sessionId,
+        profileId,
+        principal: deriveStatePrincipal(tokenAuth),
+      });
+      if (capabilities === undefined) {
+        throw new ApiError(404, "Unknown session");
+      }
+
+      reply.status(204);
+      return reply.send();
     },
   );
 

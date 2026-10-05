@@ -1,6 +1,6 @@
 "use client";
 
-import { AlertTriangle, ChevronRight, Info } from "lucide-react";
+import { AlertTriangle, ChevronRight } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { OUTCOME_LABEL } from "@/app/consults/logs/_components/consult-outcome-badge";
@@ -148,22 +148,11 @@ function Section({
 }) {
   return (
     <section aria-labelledby={id} className="space-y-3">
-      <div className="flex items-center gap-1.5">
+      <div className="space-y-0.5">
         <h2 id={id} className="text-base font-semibold">
           {title}
         </h2>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <button
-              type="button"
-              aria-label={`About ${title.toLowerCase()}`}
-              className="text-muted-foreground"
-            >
-              <Info className="size-4" />
-            </button>
-          </TooltipTrigger>
-          <TooltipContent className="max-w-xs">{hint}</TooltipContent>
-        </Tooltip>
+        <p className="text-sm text-muted-foreground">{hint}</p>
       </div>
       {children}
     </section>

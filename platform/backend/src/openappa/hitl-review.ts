@@ -29,6 +29,13 @@ export async function stageHitlReview(params: {
   session: OpenAppaSession;
   review: PendingHitlReview;
 }): Promise<void> {
+  // Remember issuance before making the stage visible, so concurrent denial can
+  // veto an approval while its atomic claimant is committing the ruling.
+  await cacheManager.set(
+    stagePresenceKey(params.session, params.review.offerId),
+    { offerId: params.review.offerId },
+    HITL_REVIEW_TTL_MS,
+  );
   await cacheManager.set(
     reviewKey(params.session, params.review.offerId),
     params.review,
@@ -95,15 +102,28 @@ export async function recordHitlRuling(params: {
   offerId: string;
   ruling: HitlRuling;
 }): Promise<boolean> {
-  const pending = await getHitlReview(params);
-  if (!pending) return false;
+  const pending = await cacheManager.getAndDelete<PendingHitlReview>(
+    reviewKey(params.session, params.offerId),
+    { throwOnError: true },
+  );
+  if (pending?.offerId !== params.offerId) {
+    // A genuine later denial can revoke an unspent approval; a timeout cannot.
+    const issued = await cacheManager.get<{ offerId: string }>(
+      stagePresenceKey(params.session, params.offerId),
+      { throwOnError: true },
+    );
+    if (params.ruling !== "deny" || issued?.offerId !== params.offerId)
+      return false;
+  }
   await cacheManager.set(
     rulingKey(params.session, params.offerId, params.ruling),
     { offerId: params.offerId, ruling: params.ruling },
     HITL_REVIEW_TTL_MS,
   );
   if (params.ruling !== "approve") {
-    await cacheManager.delete(reviewKey(params.session, params.offerId));
+    await cacheManager.delete(
+      rulingKey(params.session, params.offerId, "approve"),
+    );
   }
   logger.info(
     {
@@ -146,6 +166,11 @@ export async function consumeHitlRuling(params: {
         : undefined;
   if (!selected) return undefined;
   await cacheManager.delete(reviewKey(params.session, params.offerId));
+  if (selected)
+    await cacheManager.delete(
+      stagePresenceKey(params.session, params.offerId),
+      { throwOnError: true },
+    );
   return selected;
 }
 
@@ -155,6 +180,7 @@ export async function clearHitlReview(params: {
 }): Promise<void> {
   await Promise.all([
     cacheManager.delete(reviewKey(params.session, params.offerId)),
+    cacheManager.delete(stagePresenceKey(params.session, params.offerId)),
     ...HITL_RULINGS.map((ruling) =>
       cacheManager.delete(rulingKey(params.session, params.offerId, ruling)),
     ),
@@ -168,6 +194,17 @@ export function hitlRulingFromLabels(
   if (labels[0] === "Approve") return "approve";
   if (labels[0] === "Deny") return "deny";
   return undefined;
+}
+
+function stagePresenceKey(
+  session: OpenAppaSession,
+  offerId: string,
+): AllowedCacheKey {
+  return scopedKey(
+    CacheKey.OpenAppaHitlRuling,
+    session,
+    `${offerId}:stage-presence`,
+  );
 }
 
 function reviewKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {

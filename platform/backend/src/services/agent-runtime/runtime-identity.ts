@@ -462,11 +462,9 @@ export async function stampRuntimeBinding(params: {
   }
   const deadlineMs =
     Math.max(1, params.spec.activeDeadlineSeconds ?? 60) * 1000;
-  const expiresAt = Math.min(
-    workspace.expiresAt.getTime(),
-    Date.now() + deadlineMs,
-  );
-  if (expiresAt <= Date.now()) {
+  const now = Date.now();
+  const expiresAt = Math.min(workspace.expiresAt.getTime(), now + deadlineMs);
+  if (expiresAt <= now) {
     throw new ApiError(409, "Runtime binding deadline has passed");
   }
   const token = issueRuntimeBinding({

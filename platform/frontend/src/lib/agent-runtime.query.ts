@@ -129,6 +129,7 @@ export type AgentRunOpenappaReview =
   archestraApiTypes.GetAgentRunOpenappaReviewResponses["200"];
 
 export function useAgentRunOpenappaReview(taskId: string, enabled = true) {
+  const queryClient = useQueryClient();
   return useQuery({
     queryKey: ["agent-runs", taskId, "openappa-review"],
     queryFn: async () => {
@@ -148,8 +149,18 @@ export function useAgentRunOpenappaReview(taskId: string, enabled = true) {
       );
     },
     enabled: enabled && !!taskId,
-    // A running session can acquire its first review after this panel opens.
-    refetchInterval: 3_000,
+    refetchInterval: (query) => {
+      const run = queryClient.getQueryData<
+        archestraApiTypes.GetMyAgentRunResponses["200"]
+      >(["agent-runs", taskId]);
+      // Live/retained runs can acquire their first offer after the panel opens.
+      return !run ||
+        !run.endedAt ||
+        hasRetainedSessionActivity(run) ||
+        query.state.data?.status === "pending"
+        ? 3_000
+        : false;
+    },
   });
 }
 
@@ -166,7 +177,7 @@ export function useDecideAgentRunOpenappaReview(taskId: string) {
       if (error) throw reportApiError(error);
       return data;
     },
-    onSuccess: async () => {
+    onSettled: async () => {
       await queryClient.invalidateQueries({
         queryKey: ["agent-runs", taskId, "openappa-review"],
       });

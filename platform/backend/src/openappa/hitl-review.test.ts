@@ -113,3 +113,62 @@ test("a denial wins when concurrent reviews record different rulings", async () 
     "deny",
   );
 });
+
+test("native reviewers atomically claim one approval and a timeout cannot overwrite it", async () => {
+  const active = session("one-native-claim");
+  await stageHitlReview({
+    session: active,
+    review: { offerId: "native-claim", text: "Review this exact call." },
+  });
+  const recorded = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      recordHitlRuling({
+        session: active,
+        offerId: "native-claim",
+        ruling: "approve",
+      }),
+    ),
+  );
+  expect(recorded.filter(Boolean)).toHaveLength(1);
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: "native-claim",
+      ruling: "none",
+    }),
+  ).toBe(false);
+  expect(
+    await consumeHitlRuling({ session: active, offerId: "native-claim" }),
+  ).toBe("approve");
+  expect(
+    await consumeHitlRuling({ session: active, offerId: "native-claim" }),
+  ).toBeUndefined();
+});
+
+test("a later genuine denial revokes an approval that has not been spent", async () => {
+  const active = session("later-denial");
+  await stageHitlReview({
+    session: active,
+    review: { offerId: "revoked", text: "Review this exact call." },
+  });
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: "revoked",
+      ruling: "approve",
+    }),
+  ).toBe(true);
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: "revoked",
+      ruling: "deny",
+    }),
+  ).toBe(true);
+  expect(await consumeHitlRuling({ session: active, offerId: "revoked" })).toBe(
+    "deny",
+  );
+  expect(
+    await consumeHitlRuling({ session: active, offerId: "revoked" }),
+  ).toBeUndefined();
+});

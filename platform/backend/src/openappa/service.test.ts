@@ -1495,6 +1495,40 @@ describe("APPA feature boundary", () => {
     ]);
   });
 
+  test("withholds oversized UTF-8 child bytes before native dispatch", async () => {
+    await expect(
+      returnRuntimeValue({
+        session: {
+          ...session,
+          session_id: "child",
+          parent_id: session.session_id,
+        },
+        operationId: "oversized-raw",
+        value: "é".repeat(4 * 1024 * 1024 + 1),
+      }),
+    ).resolves.toMatchObject({ kind: "held" });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  for (const decision of ["child_return", "deliver_value"] as const) {
+    test(`rejects oversized native ${decision} data instead of forwarding it`, async () => {
+      native.dispatchHook.mockResolvedValue(
+        JSON.stringify({ decision, value: "é".repeat(4 * 1024 * 1024 + 1) }),
+      );
+      await expect(
+        returnRuntimeValue({
+          session: {
+            ...session,
+            session_id: "child",
+            parent_id: session.session_id,
+          },
+          operationId: `oversized-${decision}`,
+          value: "small source",
+        }),
+      ).rejects.toThrow();
+    });
+  }
+
   test("withholds a runtime value with an open call instead of ending the child", async () => {
     native.dispatchHook.mockResolvedValue(
       JSON.stringify({

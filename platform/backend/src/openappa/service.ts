@@ -76,6 +76,13 @@ const NativeOfferSchema = z
   .passthrough();
 
 /** Validation schema for decisions returned by the native runtime. */
+const NativeValueSchema = z
+  .string()
+  .refine(
+    (value) => Buffer.byteLength(value, "utf8") <= 8 * 1024 * 1024,
+    "Native value exceeds 8 MiB",
+  );
+
 const NativeDecisionSchema = z
   .discriminatedUnion("decision", [
     z.object({ decision: z.literal("ack"), ...ResultDecisionFields }),
@@ -109,12 +116,12 @@ const NativeDecisionSchema = z
     }),
     z.object({
       decision: z.literal("deliver_value"),
-      value: z.string(),
+      value: NativeValueSchema,
       ...ResultDecisionFields,
     }),
     z.object({
       decision: z.literal("child_return"),
-      value: z.string(),
+      value: NativeValueSchema,
       ...ResultDecisionFields,
     }),
     z.object({
@@ -1664,6 +1671,14 @@ async function crossChildValue(params: {
 }): Promise<ChildEndOutcome> {
   if (!params.session.parent_id) {
     throw new ApiError(409, "OpenAPPA cannot end a non-child trajectory");
+  }
+  if (Buffer.byteLength(params.output, "utf8") > 8 * 1024 * 1024) {
+    return {
+      decision: "replace",
+      crossed: false,
+      content:
+        "The child value exceeds the supported size. No original bytes were returned.",
+    };
   }
   const policy = sharedPolicy(params.session.organization_id);
   const correlation = {

@@ -33,7 +33,7 @@ import type { Agent, ResolvedAgentRuntime } from "@/types";
 import { ApiError } from "@/types";
 import { drainBackgroundWork } from "@/utils/background-work";
 import { runTaskInAgentRuntime } from "./pod-run";
-import { crossRuntimeOutput } from "./runtime-crossing";
+import { crossRuntimeFile, crossRuntimeOutput } from "./runtime-crossing";
 import { runtimeOpenAppaSession } from "./runtime-identity";
 import { workspaceTransferTickets } from "./workspace-transfers";
 
@@ -148,7 +148,7 @@ describe("runtime crossing", () => {
         ...started.params,
         runtimeCrossing: crossing(true, started.organizationId),
       }),
-    ).rejects.toThrow("spawn refused");
+    ).rejects.toThrow("protected runtime could not be bound");
     expect(backend.launch).not.toHaveBeenCalled();
     expect(backend.stageInputs).not.toHaveBeenCalled();
   });
@@ -836,6 +836,26 @@ test("a signed released get_run proof executes once and replay cannot read the r
   } finally {
     config.openappa.offerSigningSecret = prior;
   }
+});
+
+test("a held file returns a generic refusal without private native diagnostics", async () => {
+  vi.spyOn(openappa, "returnRuntimeValue").mockResolvedValue({
+    kind: "held",
+    reason: "private-diagnostic-qa-sentinel",
+  });
+  const result = crossRuntimeFile({
+    child: {
+      organization_id: "qa-org",
+      session_id: "qa-child",
+      parent_id: "qa-parent",
+    },
+    operationId: "qa-held",
+    value: "private file bytes",
+  });
+  await expect(result).rejects.toThrow("protected file could not be admitted");
+  await result.catch((error: Error) =>
+    expect(error.message).not.toContain("private-diagnostic-qa-sentinel"),
+  );
 });
 
 async function runnable(params: {

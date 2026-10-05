@@ -117,7 +117,9 @@ export async function bindRuntimeChild(params: {
   } catch (error) {
     if (error instanceof RuntimeCrossingRefusal) throw error;
     if (error instanceof ApiError) {
-      throw new RuntimeCrossingRefusal(error.message);
+      throw new RuntimeCrossingRefusal(
+        "The protected runtime could not be bound. No input was delivered; inspect the guardrail decision before requesting a new launch.",
+      );
     }
     throw error;
   }
@@ -258,7 +260,9 @@ export async function crossRuntimeFile(params: {
     value: params.value,
   });
   if (result.kind !== "admitted") {
-    throw new RuntimeCrossingRefusal(result.reason);
+    throw new RuntimeCrossingRefusal(
+      "The protected file could not be admitted. No original bytes were returned.",
+    );
   }
   return result.value;
 }

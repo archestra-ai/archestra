@@ -90,7 +90,7 @@ The router accepts OpenAI Responses and Chat Completions requests, resolves prov
 
 ## Custom Headers
 
-Archestra supports the following custom headers on LLM Proxy requests. Attribution headers are optional. [OpenAPPA](./platform-ai-tool-guardrails) also requires a supported session identity. Native clients supply it automatically. Custom integrations use the [session headers](./platform-ai-tool-guardrails#custom-session-headers).
+Archestra supports the following custom headers on LLM Proxy requests. Attribution headers are optional. [OpenAPPA](./platform-ai-tool-guardrails) also requires a supported session identity. Native clients supply it automatically. Custom integrations use the [session headers](./platform-ai-tool-guardrails#session-headers).
 
 With OpenAPPA enabled, Claude Code, Codex, and OpenCode receive signed tool-call IDs from the proxy. The proxy detects session identity from Claude Code session headers, Codex thread metadata, and OpenCode session headers. The proxy restores original provider IDs before forwarding later requests. Archestra Chat and Mistral models keep original provider IDs.
 

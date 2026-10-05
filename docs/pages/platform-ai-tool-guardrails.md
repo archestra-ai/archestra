@@ -49,7 +49,7 @@ The flag does not activate OpenAPPA checks. Turn on enforcement separately. Lega
 
 On a fresh install, click **Create my policy** to draft a policy from your tools. The starter covers selected Archestra tools and leaves the rest open. Review those gaps before approval. An administrator can enable enforcement with the first local save. Other policy editors must ask an administrator to enable it. Check **Enforce the policy** after saving. The chat then guides you through GitHub sync.
 
-From then on, administrators can turn enforcement off and on with the **Enforce the policy** switch on **Overview**. The policy stays as it is. Ask about the policy explains what it does.
+From then on, administrators can turn enforcement off and on with the **Enforce the policy** switch on **Overview**. The policy stays as it is. **Ask about the policy** explains what it does.
 
 Enforcement applies to [recognized clients](#clients):
 
@@ -67,6 +67,8 @@ Claude Code teammates can send messages without finishing their tasks. Sending b
 - The receiver lists pending messages with `list_peer_messages` and chooses which to read with `read_peer_message`. Reading applies that message's restrictions to the receiver.
 - The inbox tools require a connection to the [Archestra MCP Gateway](./platform-claude-code-example). Pending messages remain discoverable after conversation compaction. Expired messages cannot be read.
 - A teammate that started while enforcement was off stays unchecked. Start a new teammate, under a new name, to continue its work under the policy.
+
+A structured message appears directly only when that same send adds no restrictions. Otherwise, read its held body through the inbox. Messages without a recorded release stay withheld. OpenAPPA refuses a second teammate under a name the session already used.
 
 ## Yells
 

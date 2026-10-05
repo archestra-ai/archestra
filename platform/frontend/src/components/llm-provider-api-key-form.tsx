@@ -248,8 +248,8 @@ const PROVIDER_CONFIG: Record<
     icon: "/model-logos/jev.svg",
     placeholder: "...",
     enabled: true,
-    consoleUrl: "https://typesafe.ai",
-    consoleName: "TypeSafe",
+    consoleUrl: "https://console.typesafe.ai/",
+    consoleName: "TypeSafe Console",
     description:
       "Decisions only. Jev classifies content and serves no chat models. To reach Jev through another service, set the base URL to its full decisions endpoint, such as https://openrouter.ai/api/alpha/decisions.",
     supportsEmbeddings: false,

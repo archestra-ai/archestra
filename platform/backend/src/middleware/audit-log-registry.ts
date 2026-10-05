@@ -1079,6 +1079,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     fetchById: (id, orgId) =>
       ChatOpsChannelBindingModel.findByIdForAudit(id, orgId),
   },
+  // The binding is the caller's own Telegram DM link, only known inside the
+  // handler — the unlink handler supplies the resource id and `before`.
+  "/api/chatops/telegram/link": {
+    resourceType: "chatOpsBinding",
+  },
   "/api/chatops/config/ms-teams": {
     resourceType: "chatOpsConfig",
     resourceIdSource: "organizationContext",

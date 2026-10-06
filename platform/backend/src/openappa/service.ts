@@ -688,6 +688,7 @@ function unexecutedControlResult(content: unknown): ProcessedToolResult {
   return {
     content: `[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n${truncated(text, MAX_UNEXECUTED_RESULT_CHARS)}\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
     outputSource: "runtime",
+    code: UNRELEASED_CALL_CODE,
   };
 }
 
@@ -1204,7 +1205,9 @@ export async function approveSpawnReturn(params: {
   });
   if (decision.decision === "block") {
     const msg = decisionMessage(decision);
-    if (msg.includes("no open dispatch")) {
+    // UnknownDispatch has this exact engine reason. Other fields and quoted
+    // reason fragments must not convert a denied return into idempotent success.
+    if (decision.reason === "no open dispatch") {
       logger.info(
         { toolCallId: params.toolCallId, childId: params.childId },
         "OpenAPPA spawn dispatch already closed; child return matches the retained crossing",

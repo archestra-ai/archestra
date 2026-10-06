@@ -38,7 +38,10 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
-import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import {
+  mintChildTrajectoryReceipt,
+  stripChildTrajectoryReceipts,
+} from "@/openappa/child-trajectory-receipt";
 import { mintDelegationMarker } from "@/openappa/delegation";
 import {
   consumeHitlRuling,
@@ -10916,14 +10919,22 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }
     });
 
-    test("preserves a grandchild through compaction without completing its return", async () => {
+    test.each([
+      "g1",
+      undefined,
+    ])("preserves a grandchild through compaction and rejects forged bindings (birth native id=%s)", async (birthNativeId) => {
       config.openappa.offerSigningSecret = secret;
       const session = "5b0d2c63-9f0f-4d7e-8f3e-0d3c5b8a1a11";
+      const childId = `${session}:a1:${birthNativeId ?? "spawn-g"}`;
       options = {
         includeToolUse: false,
         nonStreamingToolUse: { name: "get_weather", input: { location: "SF" } },
       };
-      const send = (agentId: string, messages: unknown[]) => {
+      const send = (
+        agentId: string | undefined,
+        messages: unknown[],
+        extraHeaders: Record<string, string> = {},
+      ) => {
         const body = payload(false, messages);
         return app.inject({
           method: "POST",
@@ -10933,7 +10944,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": session,
-            "x-claude-code-agent-id": agentId,
+            ...(agentId ? { "x-claude-code-agent-id": agentId } : {}),
+            ...extraHeaders,
           },
           payload: body,
         });
@@ -10944,15 +10956,16 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         parentId: `${session}:a1`,
         spawnerNativeId: session,
         prompt: spawnPrompt,
+        spawnCallId: "spawn-g",
       });
       events.length = 0;
-      const first = await send("g1", [
+      const first = await send(birthNativeId, [
         { role: "user", content: `${spawnPrompt}\n\n${marker}` },
       ]);
       expect(first.statusCode, first.body).toBe(200);
       expect(events).toContainEqual(
         expect.objectContaining({
-          session_id: `user:${userId}|${session}:a1:g1`,
+          session_id: `user:${userId}|${childId}`,
         }),
       );
       const text = first.json().content[0].text;
@@ -10965,7 +10978,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         responseText: "Condensed child context",
       };
       events.length = 0;
-      const maintenance = await send("g1", [
+      const maintenance = await send(birthNativeId, [
         { role: "assistant", content: `${footer}\n\nPrior child context` },
         {
           role: "user",
@@ -10997,10 +11010,139 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(compacted.statusCode, compacted.body).toBe(200);
       expect(events).toContainEqual(
         expect.objectContaining({
-          session_id: `user:${userId}|${session}:a1:g1`,
+          session_id: `user:${userId}|${childId}`,
         }),
       );
       expect(JSON.stringify(providerRequests)).not.toContain("appact2-");
+      expect(providerRequests).toHaveLength(1);
+      expect(events.filter((event) => event.event === "prompt")).toContainEqual(
+        expect.objectContaining({ child_native_id: "g1" }),
+      );
+
+      const stripped = stripChildTrajectoryReceipts(summary);
+      const [receipt] = stripped.receipts;
+      expect(receipt.childId).toBe(childId);
+      expect(receipt.childNativeId).toBe(birthNativeId);
+      const remint = (
+        changes: Partial<Parameters<typeof mintChildTrajectoryReceipt>[0]>,
+      ) => {
+        const forged = mintChildTrajectoryReceipt({
+          ...receipt,
+          callerId: receipt.callerId,
+          ...changes,
+        });
+        if (!forged) throw new Error("expected a test carrier");
+        return `${forged}\n\n${stripped.text}`;
+      };
+      // Explicit parent/session claims cannot be satisfied by an unbound
+      // native fallback when the compacted proof is foreign or corrupted.
+      const claims = {
+        "x-appa-parent-id": `${session}:a1`,
+        "x-appa-session-id": childId,
+      };
+      const forgedHistories = [
+        remint({ organizationId: "wrong-organization" }),
+        remint({ callerId: "user:wrong-caller" }),
+        remint({ spawnerNativeId: "wrong-spawner" }),
+        summary.replace(
+          /(\.[0-9a-f]{63})([0-9a-f])\./,
+          (_match: string, prefix: string, last: string) =>
+            `${prefix}${last === "0" ? "1" : "0"}.`,
+        ),
+        remint({ childNativeId: "different-native-child" }),
+      ];
+      for (const forgedHistory of forgedHistories) {
+        unregisterAppaPlugin();
+        unregisterAppaPlugin = registerLlmProxyPlugin(
+          createAppaLlmProxyPlugin(),
+        );
+        events.length = 0;
+        providerRequests.length = 0;
+        const refused = await send(
+          "g1",
+          [
+            { role: "user", content: forgedHistory },
+            { role: "user", content: "Continue the child task" },
+          ],
+          claims,
+        );
+        expect(refused.statusCode, refused.body).toBe(400);
+        expect(providerRequests).toHaveLength(0);
+        expect(events).toEqual([]);
+        expect(refused.body).not.toContain("appact2-");
+      }
+
+      for (const conflict of [
+        { "x-appa-parent-id": `${session}:other-parent` },
+        { "x-appa-session-id": `${session}:a1:other-child` },
+      ]) {
+        events.length = 0;
+        providerRequests.length = 0;
+        const refused = await send("g1", [{ role: "user", content: summary }], {
+          ...claims,
+          ...conflict,
+        });
+        expect(refused.statusCode, refused.body).toBe(400);
+        expect(providerRequests).toHaveLength(0);
+        expect(events).toEqual([]);
+      }
+
+      // A sealed native mismatch must not downgrade even without APPA claims.
+      events.length = 0;
+      providerRequests.length = 0;
+      const nativeMismatch = await send("g1", [
+        { role: "user", content: remint({ childNativeId: "other-child" }) },
+      ]);
+      expect(nativeMismatch.statusCode, nativeMismatch.body).toBe(400);
+      expect(nativeMismatch.body).toContain(
+        "does not match the native child id",
+      );
+      expect(providerRequests).toHaveLength(0);
+      expect(events).toEqual([]);
+
+      if (birthNativeId === undefined) {
+        // The same legitimate early receipt cannot identify a child using
+        // only the shared parent's session metadata after compaction.
+        const body = {
+          ...payload(false, [{ role: "user", content: summary }]),
+          metadata: { user_id: JSON.stringify({ session_id: session }) },
+        };
+        events.length = 0;
+        providerRequests.length = 0;
+        const ambiguous = await app.inject({
+          method: "POST",
+          url: url(),
+          remoteAddress: "127.0.0.1",
+          headers: {
+            ...externalClientHeaders(),
+            "user-agent": "claude-cli/2.1.0 (external, cli)",
+            "x-claude-code-session-id": session,
+          },
+          payload: body,
+        });
+        expect(ambiguous.statusCode, ambiguous.body).toBe(409);
+        expect(ambiguous.body).toContain("Resume the correct native child");
+        expect(providerRequests).toHaveLength(0);
+        expect(events).toEqual([]);
+        expect(ambiguous.body).not.toContain("appact2-");
+      }
+      await drainBackgroundWork();
+      const recorded = await InteractionModel.findAllPaginated(
+        { limit: 100, offset: 0 },
+        undefined,
+        undefined,
+        undefined,
+        { organizationId: agent.organizationId, profileId: agent.id },
+      );
+      expect(recorded.data.length).toBeGreaterThan(0);
+      expect(
+        JSON.stringify(
+          recorded.data.map(({ request, processedRequest }) => ({
+            request,
+            processedRequest,
+          })),
+        ),
+      ).not.toContain("appact2-");
     });
   });
 

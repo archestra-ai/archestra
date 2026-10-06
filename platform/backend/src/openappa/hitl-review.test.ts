@@ -1,10 +1,12 @@
 import { expect, test, vi } from "vitest";
+import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   consumeHitlRuling,
   getHitlAskUserArguments,
   getHitlReview,
   getHitlReviewResult,
+  peekHitlRuling,
   recordHitlReviewResult,
   recordHitlRuling,
   reviewSessionFromTrajectory,
@@ -436,3 +438,164 @@ test("approved native review context remains readable without reopening its clai
     await getHitlReview({ session: active, offerId: review.offerId }),
   ).toBeUndefined();
 });
+
+test("a denial validated before consumption cannot write an orphan ruling afterward", async () => {
+  const lookup = { session: session("denial-before-consume"), offerId: "race" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "race", text: "Review" },
+  });
+  expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+  const read = barrier();
+  const resume = barrier();
+  const consuming = barrier();
+  let calls = 0;
+  interceptLockedCache(
+    (cache) => {
+      const get = cache.get;
+      cache.get = async <T>(key: AllowedCacheKey) => {
+        const value = await get<T>(key);
+        read.release();
+        await resume.wait;
+        return value;
+      };
+    },
+    () => {
+      if (++calls === 2) consuming.release();
+    },
+  );
+  const denial = recordHitlRuling({ ...lookup, ruling: "deny" });
+  await read.wait;
+  const consumption = consumeHitlRuling(lookup);
+  await consuming.wait;
+  resume.release();
+  expect(await denial).toBe(true);
+  expect(await consumption).toBe("deny");
+  expect(await peekHitlRuling(lookup)).toBeUndefined();
+  expect(await consumeHitlRuling(lookup)).toBeUndefined();
+});
+
+test("a denial starting during consumption cleanup cannot leave an orphan ruling", async () => {
+  const lookup = { session: session("denial-during-cleanup"), offerId: "race" };
+  await stageHitlReview({
+    ...lookup,
+    review: { offerId: "race", text: "Review" },
+  });
+  expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+  const taken = barrier();
+  const resume = barrier();
+  const denying = barrier();
+  let calls = 0;
+  interceptLockedCache(
+    (cache) => {
+      const take = cache.getAndDeleteMany;
+      cache.getAndDeleteMany = async <T>(keys: AllowedCacheKey[]) => {
+        const entries = await take<T>(keys);
+        taken.release();
+        await resume.wait;
+        return entries;
+      };
+    },
+    () => {
+      if (++calls === 2) denying.release();
+    },
+  );
+  const consumption = consumeHitlRuling(lookup);
+  await taken.wait;
+  const denial = recordHitlRuling({ ...lookup, ruling: "deny" });
+  await denying.wait;
+  resume.release();
+  expect(await consumption).toBe("approve");
+  expect(await denial).toBe(false);
+  expect(await peekHitlRuling(lookup)).toBeUndefined();
+  expect(await consumeHitlRuling(lookup)).toBeUndefined();
+});
+
+test("rulings cannot claim another organization, caller, parent, or expired stage", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const active = { ...session("scoped-stage"), parent_id: "parent" };
+    const lookup = { session: active, offerId: "race" };
+    await stageHitlReview({
+      ...lookup,
+      review: { offerId: "race", text: "Review" },
+    });
+    for (const other of [
+      { ...active, organization_id: "other" },
+      { ...active, caller_id: "user:other" },
+      { ...active, parent_id: "other" },
+      { ...active, session_id: "other" },
+    ]) {
+      expect(
+        await recordHitlRuling({
+          session: other,
+          offerId: "race",
+          ruling: "deny",
+        }),
+      ).toBe(false);
+      expect(
+        await consumeHitlRuling({ session: other, offerId: "race" }),
+      ).toBeUndefined();
+    }
+    vi.setSystemTime(Date.now() + 11 * 60 * 1000);
+    for (const ruling of ["approve", "deny", "none"] as const)
+      expect(await recordHitlRuling({ ...lookup, ruling })).toBe(false);
+    expect(await peekHitlRuling(lookup)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+test("a recorded ruling keeps its own ten-minute TTL without reviving the expired stage", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const lookup = {
+      session: session("ruling-ttl"),
+      offerId: "race",
+      callId: "control",
+    };
+    await stageHitlReview({
+      ...lookup,
+      review: { offerId: "race", text: "Review" },
+    });
+    vi.setSystemTime(Date.now() + 9 * 60 * 1000);
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(true);
+    vi.setSystemTime(Date.now() + 2 * 60 * 1000);
+    expect(await getHitlReview(lookup)).toBeUndefined();
+    expect(await recordHitlRuling({ ...lookup, ruling: "deny" })).toBe(false);
+    expect(await consumeHitlRuling(lookup)).toBe("approve");
+    expect(await consumeHitlRuling(lookup)).toBeUndefined();
+    expect(await getHitlReviewResult(lookup)).toBe("review_required");
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
+type LockedCache = Parameters<Parameters<typeof cacheManager.withLock>[1]>[0];
+
+function interceptLockedCache(
+  intercept: (cache: LockedCache) => void,
+  entered: () => void,
+) {
+  const lock = cacheManager.withLock.bind(cacheManager);
+  vi.spyOn(cacheManager, "withLock").mockImplementation(
+    <T>(
+      scope: AllowedCacheKey,
+      callback: (cache: LockedCache) => Promise<T>,
+    ) => {
+      entered();
+      return lock(scope, async (cache) => {
+        intercept(cache);
+        return callback(cache);
+      });
+    },
+  );
+}
+
+function barrier() {
+  let release = () => {};
+  const wait = new Promise<void>((resolve) => {
+    release = resolve;
+  });
+  return { wait, release };
+}

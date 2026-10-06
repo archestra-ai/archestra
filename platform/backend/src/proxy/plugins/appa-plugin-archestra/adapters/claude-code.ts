@@ -25,9 +25,21 @@ import {
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,
+  nativeId,
   stringField,
   stripRecordFields,
 } from "./trajectory";
+
+/** Reads native identity signals without composing or binding a trajectory. */
+export function claudeCodeNativeChildIds(context: AppaMatchContext): {
+  parentNativeId: string | undefined;
+  childNativeId: string | undefined;
+} {
+  return {
+    parentNativeId: parentSessionId(context),
+    childNativeId: childAgentId(context),
+  };
+}
 
 /** A skill runs in the spawner's trajectory. An agent opens a new child trajectory. */
 const CHILD_SPAWN_TOOLS = new Set(["Agent", "Task"]);
@@ -380,16 +392,24 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {
-  const parent = stringField(claudeUserMetadata(context)?.parent_session_id);
-  if (parent) return parent;
+  const metadata = claudeUserMetadata(context);
+  const description = "Claude Code parent session id";
+  // A present invalid parent is a broken claim, not permission to fall back.
+  if (metadata && "parent_session_id" in metadata) {
+    return nativeId(metadata.parent_session_id, description);
+  }
   const header = readHeader(context.headers, "x-claude-code-session-id");
-  if (header) return header;
-  const own = stringField(claudeUserMetadata(context)?.session_id);
-  if (own) return own;
-  const userId = stringField(
-    asRecord(asRecord(context.requestBody)?.metadata)?.user_id,
+  if (header !== undefined) return nativeId(header, description);
+  if (metadata && "session_id" in metadata) {
+    return nativeId(metadata.session_id, description);
+  }
+  const userId = asRecord(asRecord(context.requestBody)?.metadata)?.user_id;
+  return nativeId(
+    typeof userId === "string"
+      ? (parseClaudeMetadataSessionId(userId) ?? userId)
+      : userId,
+    description,
   );
-  return userId ? (parseClaudeMetadataSessionId(userId) ?? userId) : undefined;
 }
 
 function childAgentId(context: AppaMatchContext): string | undefined {

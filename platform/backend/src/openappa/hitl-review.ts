@@ -72,17 +72,20 @@ export async function stageHitlReview(params: {
   review: PendingHitlReview;
   callId?: string;
 }): Promise<void> {
-  // Remember issuance before making the stage visible, so concurrent denial can
-  // veto an approval while its atomic claimant is committing the ruling.
-  await cacheManager.set(
+  await cacheManager.withLock(
     stagePresenceKey(params.session, params.review.offerId),
-    params.review,
-    HITL_REVIEW_TTL_MS,
-  );
-  await cacheManager.set(
-    reviewKey(params.session, params.review.offerId),
-    params.review,
-    HITL_REVIEW_TTL_MS,
+    async (cache) => {
+      await cache.set(
+        stagePresenceKey(params.session, params.review.offerId),
+        params.review,
+        HITL_REVIEW_TTL_MS,
+      );
+      await cache.set(
+        reviewKey(params.session, params.review.offerId),
+        params.review,
+        HITL_REVIEW_TTL_MS,
+      );
+    },
   );
   if (params.callId) {
     await recordHitlReviewResult({
@@ -202,29 +205,34 @@ export async function recordHitlRuling(params: {
   offerId: string;
   ruling: HitlRuling;
 }): Promise<boolean> {
-  const pending = await cacheManager.getAndDelete<PendingHitlReview>(
-    reviewKey(params.session, params.offerId),
-    { throwOnError: true },
+  const recorded = await cacheManager.withLock(
+    stagePresenceKey(params.session, params.offerId),
+    async (cache) => {
+      // Validation and commit share the consumer's lock across replicas.
+      const issued = await cache.get<{ offerId: string }>(
+        stagePresenceKey(params.session, params.offerId),
+      );
+      if (issued?.offerId !== params.offerId) return false;
+      const pending = await cache.getAndDelete<PendingHitlReview>(
+        reviewKey(params.session, params.offerId),
+      );
+      // A genuine later denial can revoke an unspent approval; a timeout cannot.
+      if (pending?.offerId !== params.offerId && params.ruling !== "deny")
+        return false;
+      await cache.set(
+        rulingKey(params.session, params.offerId, params.ruling),
+        { offerId: params.offerId, ruling: params.ruling },
+        HITL_REVIEW_TTL_MS,
+      );
+      if (params.ruling !== "approve") {
+        await cache.delete(
+          rulingKey(params.session, params.offerId, "approve"),
+        );
+      }
+      return true;
+    },
   );
-  if (pending?.offerId !== params.offerId) {
-    // A genuine later denial can revoke an unspent approval; a timeout cannot.
-    const issued = await cacheManager.get<{ offerId: string }>(
-      stagePresenceKey(params.session, params.offerId),
-      { throwOnError: true },
-    );
-    if (params.ruling !== "deny" || issued?.offerId !== params.offerId)
-      return false;
-  }
-  await cacheManager.set(
-    rulingKey(params.session, params.offerId, params.ruling),
-    { offerId: params.offerId, ruling: params.ruling },
-    HITL_REVIEW_TTL_MS,
-  );
-  if (params.ruling !== "approve") {
-    await cacheManager.delete(
-      rulingKey(params.session, params.offerId, "approve"),
-    );
-  }
+  if (!recorded) return false;
   logger.info(
     {
       sessionId: params.session.session_id,
@@ -240,49 +248,57 @@ export async function consumeHitlRuling(params: {
   session: OpenAppaSession;
   offerId: string;
 }): Promise<HitlRuling | undefined> {
-  const keys = HITL_RULINGS.map((ruling) =>
-    rulingKey(params.session, params.offerId, ruling),
+  return cacheManager.withLock(
+    stagePresenceKey(params.session, params.offerId),
+    async (cache) => {
+      const keys = HITL_RULINGS.map((ruling) =>
+        rulingKey(params.session, params.offerId, ruling),
+      );
+      const entries = new Map(
+        (
+          await cache.getAndDeleteMany<{
+            offerId?: unknown;
+            ruling?: unknown;
+          }>(keys)
+        ).map((entry) => [entry.key, entry.value]),
+      );
+      const recorded = HITL_RULINGS.filter((ruling) => {
+        const entry = entries.get(
+          rulingKey(params.session, params.offerId, ruling),
+        );
+        return entry?.offerId === params.offerId && entry.ruling === ruling;
+      });
+      const selected = recorded.includes("deny")
+        ? "deny"
+        : recorded.includes("none")
+          ? "none"
+          : recorded.includes("approve")
+            ? "approve"
+            : undefined;
+      if (!selected) return undefined;
+      await cache.delete(reviewKey(params.session, params.offerId));
+      await cache.delete(stagePresenceKey(params.session, params.offerId));
+      return selected;
+    },
   );
-  const entries = new Map(
-    (
-      await cacheManager.getAndDeleteMany<{
-        offerId?: unknown;
-        ruling?: unknown;
-      }>(keys)
-    ).map((entry) => [entry.key, entry.value]),
-  );
-  const recorded = HITL_RULINGS.filter((ruling) => {
-    const entry = entries.get(
-      rulingKey(params.session, params.offerId, ruling),
-    );
-    return entry?.offerId === params.offerId && entry.ruling === ruling;
-  });
-  const selected = recorded.includes("deny")
-    ? "deny"
-    : recorded.includes("none")
-      ? "none"
-      : recorded.includes("approve")
-        ? "approve"
-        : undefined;
-  if (!selected) return undefined;
-  await cacheManager.delete(reviewKey(params.session, params.offerId));
-  await cacheManager.delete(stagePresenceKey(params.session, params.offerId), {
-    throwOnError: true,
-  });
-  return selected;
 }
 
 export async function clearHitlReview(params: {
   session: OpenAppaSession;
   offerId: string;
 }): Promise<void> {
-  await Promise.all([
-    cacheManager.delete(reviewKey(params.session, params.offerId)),
-    cacheManager.delete(stagePresenceKey(params.session, params.offerId)),
-    ...HITL_RULINGS.map((ruling) =>
-      cacheManager.delete(rulingKey(params.session, params.offerId, ruling)),
-    ),
-  ]);
+  await cacheManager.withLock(
+    stagePresenceKey(params.session, params.offerId),
+    async (cache) => {
+      await cache.getAndDeleteMany([
+        reviewKey(params.session, params.offerId),
+        stagePresenceKey(params.session, params.offerId),
+        ...HITL_RULINGS.map((ruling) =>
+          rulingKey(params.session, params.offerId, ruling),
+        ),
+      ]);
+    },
+  );
 }
 
 export function hitlRulingFromLabels(

@@ -1034,6 +1034,7 @@ describe("APPA feature boundary", () => {
       expect(result.toolResultUpdates.remedy).toEqual({
         content: `${NOT_APPLIED}${REFUSAL}${ASK}`,
         outputSource: "runtime",
+        code: "unreleased_call",
       });
     });
 
@@ -1768,6 +1769,39 @@ describe("APPA feature boundary", () => {
       output: "SUMMARY(24 characters): safe",
       outcome: "success",
     });
+  });
+
+  test("accepts only the engine's exact already-closed SpawnResult reason", async () => {
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({ decision: "block", reason: "no open dispatch" }),
+    );
+    await expect(
+      approveSpawnReturn({
+        session,
+        toolCallId: "spawn-call",
+        childId: "conversation:child",
+        value: "SUMMARY(24 characters): safe",
+      }),
+    ).resolves.toBeUndefined();
+  });
+
+  test.each([
+    { reason: "Denied: no open dispatch" },
+    { reason: "no open dispatch; child return withheld" },
+    { feedback: "no open dispatch" },
+    { approved_output: "no open dispatch" },
+  ])("does not treat incidental SpawnResult text as idempotent success: %j", async (fields) => {
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({ decision: "block", ...fields }),
+    );
+    await expect(
+      approveSpawnReturn({
+        session,
+        toolCallId: "spawn-call",
+        childId: "conversation:child",
+        value: "SUMMARY(24 characters): safe",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
   });
 
   test("fails closed when SpawnResult does not attest the crossed bytes", async () => {

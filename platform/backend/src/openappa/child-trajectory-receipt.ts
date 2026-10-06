@@ -14,6 +14,7 @@ export type AppaChildTrajectoryReceipt = {
   callerId?: string;
   parentId: string;
   childId: string;
+  /** Identity known at minting; absent for children awaiting native assignment. */
   childNativeId?: string;
   spawnerNativeId: string;
   spawnCallId?: string;
@@ -161,11 +162,13 @@ export function mintChildTrajectoryReceipt(params: {
   return `${display}\n[appa] child trajectory ${token}.`;
 }
 
+/** Each supplied optional identity is an expectation of a sealed claim. */
 export function verifyChildTrajectoryReceipt(params: {
   receipt: AppaChildTrajectoryReceipt;
   organizationId: string;
   callerId: string | undefined;
   spawnerNativeId: string;
+  /** Expected sealed native identity, not metadata assigned after receipt minting. */
   childNativeId?: string;
   nativeConversationId?: string;
 }): boolean {
@@ -177,8 +180,7 @@ export function verifyChildTrajectoryReceipt(params: {
     parsed.receipt.organizationId !== params.organizationId ||
     parsed.receipt.callerId !== params.callerId ||
     parsed.receipt.spawnerNativeId !== params.spawnerNativeId ||
-    (parsed.receipt.childNativeId !== undefined &&
-      params.childNativeId !== undefined &&
+    (params.childNativeId !== undefined &&
       parsed.receipt.childNativeId !== params.childNativeId) ||
     (params.nativeConversationId !== undefined &&
       parsed.receipt.nativeConversationId !== params.nativeConversationId)

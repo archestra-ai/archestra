@@ -135,10 +135,66 @@ describe("McpHttpSessionModel", () => {
         connectionKey: "stale-key",
         sessionId: "stale-session",
       });
-      await McpHttpSessionModel.deleteStaleSession("stale-key");
+      await McpHttpSessionModel.deleteStaleSession(
+        "stale-key",
+        "stale-session",
+      );
 
       const result = await McpHttpSessionModel.findByConnectionKey("stale-key");
       expect(result).toBeNull();
+    });
+
+    test("preserves a replacement another pod persisted after the stale session was read", async () => {
+      await McpHttpSessionModel.upsert({
+        connectionKey: "shared-key",
+        sessionId: "old-session",
+      });
+      const failedSessionId =
+        await McpHttpSessionModel.findByConnectionKey("shared-key");
+      expect(failedSessionId).toBe("old-session");
+      if (failedSessionId === null) throw new Error("Missing seeded session");
+      await McpHttpSessionModel.upsert({
+        connectionKey: "shared-key",
+        sessionId: "fresh-session",
+        sessionEndpointUrl: "http://10.0.0.12:8080/mcp",
+        sessionEndpointPodName: "replacement-pod",
+      });
+
+      await McpHttpSessionModel.deleteStaleSession(
+        "shared-key",
+        failedSessionId,
+      );
+
+      expect(
+        await McpHttpSessionModel.findRecordByConnectionKey("shared-key"),
+      ).toEqual({
+        sessionId: "fresh-session",
+        sessionEndpointUrl: "http://10.0.0.12:8080/mcp",
+        sessionEndpointPodName: "replacement-pod",
+      });
+    });
+
+    test("deletes a matching stale session only for its connection key", async () => {
+      await McpHttpSessionModel.upsert({
+        connectionKey: "failed-key",
+        sessionId: "same-session-id",
+      });
+      await McpHttpSessionModel.upsert({
+        connectionKey: "other-key",
+        sessionId: "same-session-id",
+      });
+
+      await McpHttpSessionModel.deleteStaleSession(
+        "failed-key",
+        "same-session-id",
+      );
+
+      expect(
+        await McpHttpSessionModel.findByConnectionKey("failed-key"),
+      ).toBeNull();
+      expect(await McpHttpSessionModel.findByConnectionKey("other-key")).toBe(
+        "same-session-id",
+      );
     });
   });
 

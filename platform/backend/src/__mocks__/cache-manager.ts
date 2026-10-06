@@ -67,6 +67,14 @@ class FakeCacheManager {
     return entries;
   }
 
+  /** Non-concurrency tests only; locking tests use setupTestCacheManager's real DB. */
+  async withLock<T>(
+    _scope: string,
+    callback: (cache: FakeCacheManager) => Promise<T>,
+  ): Promise<T> {
+    return callback(this);
+  }
+
   async deleteExpiredByPrefix(_prefix: string): Promise<void> {}
 
   async deleteByPrefix(prefix: string): Promise<number> {

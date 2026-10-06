@@ -40,6 +40,7 @@ import {
   delegationEnabled,
   isDelegatedPrompt,
   mintDelegationMarker,
+  verifyDelegatedPrompt,
 } from "@/openappa/delegation";
 import {
   getHitlAskUserArguments,
@@ -117,11 +118,12 @@ import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-nam
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
+import { claudeCodeNativeChildIds } from "./adapters/claude-code";
 import {
   appendPeerMessageMarker,
   escapeRelayMarkup,
 } from "./adapters/claude-code-relay";
-import { referencesChildTranscriptPath } from "./adapters/trajectory";
+import { nativeId, referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
 import {
   APPA_CHILD_TRAJECTORY_RECEIPT,
@@ -227,24 +229,20 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return;
     }
     const chat = trustedContext.chatSource !== undefined;
-    let trajectory = appaTrajectory({
+    const teammateId = await correlatedClaudeTeammateId({
       adapters: this.clientAdapters,
       headers: context.headers,
       requestBody: context.requestBody,
       trustedContext,
     });
-    const teammateId = await correlatedClaudeTeammateId(trajectory);
-    if (teammateId) {
-      trajectory = appaTrajectory({
-        adapters: this.clientAdapters,
-        headers: context.headers,
-        requestBody: context.requestBody,
-        trustedContext: {
-          ...trustedContext,
-          claudeTeammateNativeId: teammateId,
-        },
-      });
-    }
+    const trajectory = appaTrajectory({
+      adapters: this.clientAdapters,
+      headers: context.headers,
+      requestBody: context.requestBody,
+      trustedContext: teammateId
+        ? { ...trustedContext, claudeTeammateNativeId: teammateId }
+        : trustedContext,
+    });
     const binding: AppaPluginBinding = {
       session: trajectory.session,
       identity: trustedContext.toolIdentity,
@@ -362,11 +360,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.nativeHitlRulings.map((entry) => entry.offerId),
       ),
     });
-    binding.requiresRemedyContinuation = hasRemedyOfferResult({
-      binding,
-      results: toolResults,
-      verifiedNativeQuestionResults,
-    });
     // A handback's result and a message's delivery receipt are the client's
     // acknowledgements of calls the runtime already governed as crossings. A
     // child return that OpenAPPA ignores never reaches the runtime.
@@ -428,6 +421,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       deliverReturnContract: (text) => {
         binding.returnContract = text;
       },
+    });
+    binding.requiresRemedyContinuation = await hasRemedyOfferResult({
+      binding,
+      results: toolResults,
+      toolResultUpdates: result.toolResultUpdates,
+      verifiedNativeQuestionResults,
     });
     if (result.returnContract) {
       binding.returnContract = result.returnContract;
@@ -1595,33 +1594,55 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
 }
 
 async function correlatedClaudeTeammateId(
-  trajectory: ReturnType<typeof appaTrajectory>,
+  params: Parameters<typeof appaTrajectory>[0],
 ): Promise<string | undefined> {
-  const { adapter, child, matchContext, session } = trajectory;
-  const lineage = child?.lineage;
-  const trusted = matchContext.trustedContext;
+  const trusted = params.trustedContext;
+  const matchContext = {
+    headers: params.headers,
+    requestBody: params.requestBody,
+    trustedContext: { ...trusted, session: { ...trusted.session } },
+  };
+  const adapter = params.adapters.find((candidate) =>
+    candidate.matches(matchContext),
+  );
+  if (adapter?.id !== "claude-code") return undefined;
+  const native = claudeCodeNativeChildIds(matchContext);
+  const parentNativeId = nativeId(native.parentNativeId);
+  const childNativeId = nativeId(native.childNativeId);
+  const nativeConversationId = adapter.nativeConversationId(matchContext);
   if (
-    adapter?.id !== "claude-code" ||
-    !child ||
-    !lineage ||
-    !trusted ||
-    lineage.childNativeId !== adapter.nativeConversationId(matchContext)
+    !parentNativeId ||
+    !childNativeId ||
+    childNativeId === parentNativeId ||
+    childNativeId !== nativeConversationId
   )
     return undefined;
 
+  const session = trusted.session;
   const receipt = trusted.request.childTrajectoryReceipts?.find((candidate) =>
     verifyChildTrajectoryReceipt({
       receipt: candidate,
       organizationId: session.organization_id,
       callerId: session.caller_id,
-      spawnerNativeId: lineage.nativeParentId,
-      nativeConversationId: adapter.nativeConversationId(matchContext),
+      spawnerNativeId: parentNativeId,
+      nativeConversationId,
     }),
   );
-  const marker = lineage.source === "marker" && lineage.spawnPromptDigest;
-  const spawnCallId = marker ? lineage.spawnCallId : receipt?.spawnCallId;
+  const marker =
+    !receipt &&
+    trusted.request.delegation?.markers.find(
+      (candidate) =>
+        !`:${candidate.parentId}:`.includes(`:${childNativeId}:`) &&
+        verifyDelegatedPrompt({
+          marker: candidate,
+          organizationId: session.organization_id,
+          callerId: session.caller_id,
+          spawnerNativeId: parentNativeId,
+        })?.promptDigest,
+    );
+  const spawnCallId = marker ? marker.spawnCallId : receipt?.spawnCallId;
   if (!spawnCallId) return undefined;
-  const parentId = marker ? child.parentId : receipt?.parentId;
+  const parentId = marker ? marker.parentId : receipt?.parentId;
   if (!parentId) return undefined;
   const aliases = await OpenAppaSpawnCorrelationModel.allowedSpawnAliases({
     organizationId: session.organization_id,
@@ -3218,6 +3239,8 @@ function issueChildTrajectoryReceipt(
 ): void {
   const lineage = child.lineage;
   if (!lineage) return;
+  const trustedContext = getTrustedContext(context.resources);
+  const runtimeSessionId = trustedContext?.runtimeSessionId;
   const footer = mintChildTrajectoryReceipt({
     organizationId: session.organization_id,
     callerId: session.caller_id,
@@ -3227,12 +3250,7 @@ function issueChildTrajectoryReceipt(
     spawnerNativeId: lineage.nativeParentId,
     spawnCallId: lineage.spawnCallId,
     nativeConversationId: lineage.nativeConversationId,
-    ...(getTrustedContext(context.resources)?.runtimeSessionId
-      ? {
-          runtimeSessionId: getTrustedContext(context.resources)
-            ?.runtimeSessionId,
-        }
-      : {}),
+    ...(runtimeSessionId ? { runtimeSessionId } : {}),
   });
   if (!footer) return;
   context.resources.set(APPA_CHILD_TRAJECTORY_RECEIPT, {
@@ -4420,26 +4438,70 @@ async function pendingNativeHitlOfferIds(params: {
     .map((entry) => entry.offerId);
 }
 
-function hasRemedyOfferResult(params: {
+async function hasRemedyOfferResult(params: {
   binding: AppaPluginBinding;
   results: LlmProxyToolResultsContext["toolResults"];
+  toolResultUpdates: Awaited<
+    ReturnType<typeof processProxyResults>
+  >["toolResultUpdates"];
   verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
-}): boolean {
-  let latestBlockedResult = -1;
-  for (const [index, result] of params.results.entries()) {
-    if (result.isError) continue;
-    const content =
-      typeof result.content === "string"
-        ? result.content
-        : JSON.stringify(result.content ?? null);
+}): Promise<boolean> {
+  // Restored notice IDs are client-carried structure, not proof of issuance.
+  // The runtime must supply the ruling and this session must own its call.
+  const session = params.binding.session;
+  const recorded = await OpenAppaSessionModel.recordedToolCallDecisions({
+    organizationId: session.organization_id,
+    sessionId: session.session_id,
+    callerId: session.caller_id,
+    parentId: session.parent_id,
+    toolCallIds: params.results.map((result) =>
+      withoutTrajectoryStamp(result.id),
+    ),
+  });
+  const blocked = params.results.flatMap((result, index) => {
+    const id = withoutTrajectoryStamp(result.id);
+    if (!recorded.has(id)) return [];
+    const decision = recorded.get(id);
+    const offeredRuling =
+      isRecord(decision) &&
+      decision.decision === "deny_call" &&
+      typeof decision.feedback === "string" &&
+      Array.isArray(decision.offers) &&
+      decision.offers.some(
+        (offer) =>
+          isRecord(offer) &&
+          typeof offer.offer_id === "string" &&
+          offer.offer_id.length > 0,
+      )
+        ? decision.feedback
+        : undefined;
     if (
-      content.includes("[appa] Blocked") &&
-      content.includes("execute_remedy_plan") &&
-      content.includes("offer_id")
+      params.toolResultUpdates[result.id] === undefined &&
+      offeredRuling !== undefined
     ) {
-      latestBlockedResult = index;
+      // Restored spawn notices stay pending, so the service correctly skips
+      // execution results. Their ruling still comes from the runtime journal.
+      params.toolResultUpdates[result.id] = {
+        content: offeredRuling,
+        outputSource: "runtime",
+      };
     }
-  }
+    const approved = params.toolResultUpdates[result.id];
+    if (
+      approved?.outputSource !== "runtime" ||
+      approved.code === "unreleased_call"
+    )
+      return [];
+    if (
+      offeredRuling === undefined &&
+      (!approved.content.includes("[appa] Blocked") ||
+        !approved.content.includes("execute_remedy_plan") ||
+        !approved.content.includes("offer_id"))
+    )
+      return [];
+    return [index];
+  });
+  const latestBlockedResult = blocked.at(-1) ?? -1;
   if (latestBlockedResult < 0) return false;
 
   const control = params.binding.request.tools?.control;
@@ -4449,23 +4511,23 @@ function hasRemedyOfferResult(params: {
     index++
   ) {
     const result = params.results[index];
-    if (params.verifiedNativeQuestionResults.has(result)) return false;
+    if (
+      params.verifiedNativeQuestionResults.has(result) ||
+      isUserQuestionResult({ binding: params.binding, answer: result })
+    )
+      return false;
     if (!control) continue;
+    const namespace = result.namespace;
+    if (namespace !== control.namespace) continue;
     const canonicalResult = params.binding.identity.canonicalize(
       result.name,
-      params.binding.request.tools?.namespaces?.get(result.name),
+      namespace,
     );
     const canonicalControl = params.binding.identity.canonicalize(
       control.name,
       control.namespace,
     );
-    if (
-      result.name === control.name ||
-      canonicalResult === canonicalControl ||
-      archestraMcpBranding.getToolShortName(result.name) ===
-        TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
-      result.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME)
-    ) {
+    if (canonicalResult === canonicalControl) {
       return false;
     }
   }

@@ -70,7 +70,10 @@ const mockSetNotificationHandler = vi.fn();
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test..
   Client: vi.fn(function (this: any) {
-    this.connect = mockConnect;
+    this.connect = vi.fn((transport: unknown) => {
+      this.transport = transport;
+      return mockConnect(transport);
+    });
     this.callTool = mockCallTool;
     this.close = mockClose;
     this.listTools = mockListTools;
@@ -393,7 +396,7 @@ describe("McpClient", () => {
     await mcpClient.invalidateConnectionsForServer(mcpServerId);
 
     expect(mockClose).toHaveBeenCalled();
-    expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalled();
+    expect(McpHttpSessionModel.deleteByConnectionKey).toHaveBeenCalled();
 
     mockConnect.mockClear();
 
@@ -7063,11 +7066,15 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        // deleteStaleSession should have been called
-        expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalled();
+        expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalledWith(
+          `${localCatalogId}:${localMcpServerId}`,
+          "stale-session-id",
+        );
 
         // connect should have been called twice (first stale, then fresh)
         expect(mockConnect).toHaveBeenCalledTimes(2);
+        // A failed client never enters the reuse cache; it must still be closed.
+        expect(mockClose).toHaveBeenCalledTimes(1);
       });
 
       test("does not retry more than once for stale sessions", async () => {
@@ -7185,8 +7192,10 @@ describe("McpClient", () => {
           isError: false,
         });
 
-        // deleteStaleSession should have been called
-        expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalled();
+        expect(McpHttpSessionModel.deleteStaleSession).toHaveBeenCalledWith(
+          `${localCatalogId}:${localMcpServerId}`,
+          "stale-session-id",
+        );
 
         // callTool should have been called twice (first stale, then fresh)
         expect(mockCallTool).toHaveBeenCalledTimes(2);

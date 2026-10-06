@@ -369,7 +369,9 @@ class OpenAiResponsesRequestAdapter
           ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
           arguments: toolCall?.arguments,
           content: item.output,
-          isError: false,
+          // Compatible clients may extend tool outputs with a boolean status;
+          // native Responses has no is_error field. Do not infer it from output.
+          isError: "is_error" in item && item.is_error === true,
         },
       ];
     });
@@ -910,31 +912,19 @@ class OpenAiResponsesStreamAdapter
           (terminal
             ? []
             : holdResponsesHostedOutput(this.toProviderResponse().output, [])
-          )
-            .filter(
-              (item) =>
-                item.type !== "function_call" &&
-                item.type !== "custom_tool_call",
-            )
-            .map((item) => {
-              if (item.type !== "message") return item;
-              const content = [...item.content];
-              for (const [key, text] of this.textByPart) {
-                const [itemId, , contentIndex] = key.split("\u0000");
-                if (itemId === item.id) {
-                  content[Number(contentIndex)] = {
-                    type: "output_text",
-                    text,
-                    annotations: [],
-                  };
-                }
-              }
-              return { ...item, content };
-            }),
+          ).filter(
+            (item) =>
+              item.type !== "function_call" && item.type !== "custom_tool_call",
+          ),
         ),
         events: [],
         items: new Map(),
       };
+    }
+    // Record starts after freezing the pre-hosted snapshot so the first hosted
+    // item cannot displace text already forwarded from an unfinished message.
+    if (chunk.type === "response.output_item.added") {
+      this.outputItemsByIndex.set(chunk.output_index, chunk.item);
     }
     if (this.hosted) {
       return this.withholdChunk(chunk, this.hosted);
@@ -1188,6 +1178,10 @@ class OpenAiResponsesStreamAdapter
     notices: StreamAccumulatorState["toolCalls"],
   ): string[] {
     const upstream = this.terminalResponse;
+    // Keep the observed envelope before clearing private output state. Only
+    // the output rebuilt below is approved for the replacement turn.
+    const envelope = upstream ?? this.toProviderResponse();
+    const outputBefore = this.hosted?.outputBefore;
     this.state.text = this.hosted?.textBefore ?? this.state.text;
     this.state.rawToolCallEvents = [];
     this.state.toolCalls = [...notices];
@@ -1198,13 +1192,18 @@ class OpenAiResponsesStreamAdapter
     this.terminalResponse = null;
     this.observedResponse = null;
     this.outputItemsByIndex.clear();
-    const base =
-      upstream && Array.isArray(upstream.output)
-        ? {
-            ...upstream,
-            output: holdResponsesHostedOutput(upstream.output, notices),
-          }
-        : this.toProviderResponse();
+    // A terminal message can extend a pre-hosted item with unadmitted text,
+    // or omit it entirely. Only the frozen pre-hosted output is authoritative.
+    const output = outputBefore
+      ? holdResponsesHostedOutput(outputBefore, notices)
+      : this.toProviderResponse().output;
+    const base = {
+      ...envelope,
+      output,
+      ...("output_text" in envelope
+        ? { output_text: responseOutputText(output) }
+        : {}),
+    };
     const held = {
       ...base,
       status: "completed",
@@ -1471,7 +1470,25 @@ class OpenAiResponsesStreamAdapter
       // A failure envelope can omit items that have already streamed.
       const streamed = [...this.outputItemsByIndex.entries()]
         .sort(([left], [right]) => left - right)
-        .map(([, item]) => item);
+        .map(([outputIndex, item]) => {
+          if (item.type !== "message") return item;
+          const content = [...item.content];
+          for (const [key, text] of this.textByPart) {
+            const [itemId, partOutputIndex, contentIndex] = key.split("\u0000");
+            if (itemId === item.id && Number(partOutputIndex) === outputIndex) {
+              const index = Number(contentIndex);
+              const part = content[index];
+              content[index] = {
+                ...(part?.type === "output_text" ? part : {}),
+                type: "output_text",
+                text,
+                annotations:
+                  part?.type === "output_text" ? part.annotations : [],
+              };
+            }
+          }
+          return { ...item, content };
+        });
       const terminalOutput = Array.isArray(upstreamOutput)
         ? upstreamOutput
         : [];
@@ -2041,7 +2058,7 @@ function toCommonMessages(
             ...(toolCall?.namespace ? { namespace: toolCall.namespace } : {}),
             arguments: toolCall?.arguments,
             content,
-            isError: false,
+            isError: "is_error" in item && item.is_error === true,
           },
         ],
       },

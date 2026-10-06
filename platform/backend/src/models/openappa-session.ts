@@ -257,6 +257,56 @@ class OpenAppaSessionModel {
     return row ?? null;
   }
 
+  /** Call rulings recorded by this exact session, never inherited fork history. */
+  static async recordedToolCallDecisions(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    parentId?: string;
+    toolCallIds: readonly string[];
+  }): Promise<Map<string, unknown>> {
+    if (params.toolCallIds.length === 0) return new Map();
+    const operations = schema.openappaOperationsTable;
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        decision: operations.decision,
+      })
+      .from(operations)
+      .innerJoin(
+        table,
+        and(
+          eq(table.organizationId, operations.organizationId),
+          eq(table.sessionId, operations.sessionId),
+          eq(table.root, operations.root),
+        ),
+      )
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          params.callerId
+            ? and(
+                eq(operations.callerId, params.callerId),
+                eq(table.callerId, params.callerId),
+              )
+            : and(isNull(operations.callerId), isNull(table.callerId)),
+          params.parentId
+            ? eq(table.parentId, params.parentId)
+            : isNull(table.parentId),
+          inArray(
+            operations.operationId,
+            params.toolCallIds.map((id) => `call:${id}`),
+          ),
+          eq(operations.status, "complete"),
+          sql`COALESCE(${operations.input}->'semantic'->>'event', ${operations.input}->>'event') = 'tool_call'`,
+        ),
+      );
+    return new Map(
+      rows.map((row) => [row.operationId.slice("call:".length), row.decision]),
+    );
+  }
+
   /**
    * The journaled output of a tool result the runtime already recorded.
    * A client echo is delivered only when it matches this text.

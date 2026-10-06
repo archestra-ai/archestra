@@ -359,6 +359,8 @@ class ConnectionLimiter {
     return new Promise<T>((resolve, reject) => {
       const execute = () => {
         state.activeCount += 1;
+        // Adopt the complete operation, including its recursive retries, before
+        // releasing this lease. A retry must not acquire a second limiter slot.
         Promise.resolve()
           .then(fn)
           .then(resolve, reject)
@@ -929,6 +931,7 @@ class McpClient {
         // The client this attempt ran on. Recovery closes only this one: the
         // cached client may already be a fresh one a sibling call is using.
         let attemptClient: Client | undefined;
+        let attemptSessionId: string | undefined;
         try {
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
@@ -982,6 +985,12 @@ class McpClient {
             options?.elicitationHandler,
           );
           attemptClient = client;
+          // The candidate transport may not be used when a cached client wins.
+          // Capture the actual session before a failed RPC or close mutates it.
+          attemptSessionId =
+            client.transport instanceof StreamableHTTPClientTransport
+              ? client.transport.sessionId
+              : undefined;
           this.clientRequestsInFlight.set(
             client,
             (this.clientRequestsInFlight.get(client) ?? 0) + 1,
@@ -1194,7 +1203,7 @@ class McpClient {
                 "Waiting for concurrent session recovery",
               );
               await existingRecovery;
-              return executeToolCall(getTransport, currentSecrets, true);
+              return await executeToolCall(getTransport, currentSecrets, true);
             }
 
             logger.info(
@@ -1210,13 +1219,24 @@ class McpClient {
             this.sessionRecoveryLocks.set(connectionKey, recoveryPromise);
 
             try {
-              try {
-                await McpHttpSessionModel.deleteStaleSession(connectionKey);
-              } catch (err) {
-                logger.warn(
-                  { connectionKey, err },
-                  "Failed to delete stale MCP HTTP session",
-                );
+              const cachedClient = this.activeConnections.get(connectionKey);
+              if (
+                attemptSessionId &&
+                (!cachedClient || cachedClient === attemptClient)
+              ) {
+                try {
+                  // Ownership can change across this await or on another pod;
+                  // the DB predicate must still match the failed session.
+                  await McpHttpSessionModel.deleteStaleSession(
+                    connectionKey,
+                    attemptSessionId,
+                  );
+                } catch (err) {
+                  logger.warn(
+                    { connectionKey, err },
+                    "Failed to delete stale MCP HTTP session",
+                  );
+                }
               }
               // Retire the client this attempt ran on. When a sibling already
               // replaced it, the cached client is fresh and in use: leave it
@@ -1518,12 +1538,16 @@ class McpClient {
         .get(connectionKey)
         ?.catch(() => {});
     }
-    const initialization = this.initializeClient(
-      connectionKey,
-      transport,
-      targetMcpServerId,
-      effectiveServerState,
-      elicitationHandler,
+    // Publish ownership before invoking SDK code, including on a fresh retry.
+    // This lock ends at initialization, not at the subsequent tool RPC.
+    const initialization = Promise.resolve().then(() =>
+      this.initializeClient(
+        connectionKey,
+        transport,
+        targetMcpServerId,
+        effectiveServerState,
+        elicitationHandler,
+      ),
     );
     this.connectionInitializationLocks.set(connectionKey, initialization);
     try {
@@ -1564,6 +1588,10 @@ class McpClient {
 
     const reusableClient = this.activeConnections.get(connectionKey);
     if (reusableClient) {
+      const reusableSessionId =
+        reusableClient.transport instanceof StreamableHTTPClientTransport
+          ? reusableClient.transport.sessionId
+          : undefined;
       // Health check idle clients to verify the connection is still alive.
       // Recently-used clients skip the ping and recover on actual call failure.
       try {
@@ -1591,15 +1619,13 @@ class McpClient {
           "Client ping failed, creating fresh client",
         );
         this.clearConnectionState(connectionKey);
-        // If the transport carries a stored session ID the session is likely
-        // stale (e.g. Playwright pod restarted).  Delete it from the DB so
-        // the retry path creates a truly fresh connection instead of reading
-        // the same stale ID again.
-        if (
-          transport instanceof StreamableHTTPClientTransport &&
-          transport.sessionId
-        ) {
-          McpHttpSessionModel.deleteStaleSession(connectionKey).catch(() => {});
+        // Delete only the cached client's failed session, not the candidate
+        // transport's potentially newer session read from another pod's row.
+        if (reusableSessionId) {
+          McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            reusableSessionId,
+          ).catch(() => {});
         }
         // Fall through to create new client
       }
@@ -1626,19 +1652,24 @@ class McpClient {
     }
 
     // Track whether we're using a stored session ID (for stale session cleanup)
-    const usedStoredSession =
-      transport instanceof StreamableHTTPClientTransport &&
-      !!transport.sessionId;
+    const storedSessionId =
+      transport instanceof StreamableHTTPClientTransport
+        ? transport.sessionId
+        : undefined;
 
     try {
       await client.connect(transport);
     } catch (error) {
+      this.closeWhenIdle(connectionKey, client);
       // If we used a stored session ID and connection failed, the session is
       // likely stale (e.g. Playwright pod restarted).  Delete it and throw a
       // StaleSessionError so executeToolCall can retry with a fresh session.
-      if (usedStoredSession) {
+      if (storedSessionId) {
         try {
-          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+          await McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            storedSessionId,
+          );
         } catch (err) {
           logger.warn(
             { connectionKey, err },
@@ -1656,12 +1687,16 @@ class McpClient {
     // re-persisting the (potentially stale) session ID.  Without this check
     // concurrent calls would re-persist the stale ID into the DB, undoing
     // another call's cleanup and creating a thundering-herd loop.
-    if (usedStoredSession) {
+    if (storedSessionId) {
       try {
         await client.ping();
       } catch {
+        this.closeWhenIdle(connectionKey, client);
         try {
-          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+          await McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            storedSessionId,
+          );
         } catch (err) {
           logger.warn(
             { connectionKey, err },
@@ -1684,7 +1719,7 @@ class McpClient {
     // Only persist *new* session IDs (obtained via fresh init), not stored ones
     // we just verified — those are already in the DB with the correct value.
     if (
-      !usedStoredSession &&
+      !storedSessionId &&
       transport instanceof StreamableHTTPClientTransport &&
       transport.sessionId
     ) {
@@ -4355,7 +4390,7 @@ class McpClient {
         }
 
         this.clearConnectionState(connectionKey);
-        await McpHttpSessionModel.deleteStaleSession(connectionKey).catch(
+        await McpHttpSessionModel.deleteByConnectionKey(connectionKey).catch(
           (error) => {
             logger.warn(
               { connectionKey, targetMcpServerId, error },

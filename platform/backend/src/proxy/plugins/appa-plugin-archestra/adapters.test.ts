@@ -10,7 +10,10 @@ import { mintDelegationMarker } from "@/openappa/delegation";
 import { prepareAppaRequest } from "@/openappa/request";
 import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
-import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
+import {
+  AppaClaudeCodeAdapter,
+  claudeCodeNativeChildIds,
+} from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
@@ -22,6 +25,25 @@ describe("APPA child trajectory adapters", () => {
   const codex = new AppaCodexAdapter();
   const openCode = new AppaOpenCodeAdapter();
   const chat = new AppaChatAdapter();
+
+  test("reads native Claude child ids without composing or binding a trajectory", () => {
+    expect(
+      claudeCodeNativeChildIds({
+        headers: {
+          "x-claude-code-session-id": "same-native-id",
+          "x-claude-code-agent-id": "same-native-id",
+        },
+        requestBody: {},
+      }),
+    ).toEqual({
+      parentNativeId: "same-native-id",
+      childNativeId: "same-native-id",
+    });
+    expect(claudeCodeNativeChildIds({ headers: {}, requestBody: {} })).toEqual({
+      parentNativeId: undefined,
+      childNativeId: undefined,
+    });
+  });
 
   test("reads a Claude Code teammate launch only from its spawn call's own result", () => {
     const receipt =
@@ -858,6 +880,139 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
       parentId: "s1",
       lineage: { source: "native", nativeParentId: "s1", childNativeId: "a1" },
     });
+  });
+
+  test.each([
+    { name: "empty", value: "" },
+    { name: "overlong", value: "p".repeat(513) },
+    { name: "overlong UTF-8", value: "\u00e9".repeat(257) },
+    { name: "control character", value: "parent\u0007id" },
+    { name: "null", value: null },
+    { name: "number", value: 42 },
+    { name: "object", value: { id: "parent" } },
+    { name: "array", value: ["parent"] },
+  ])("rejects an explicit $name Claude parent rather than falling back to a valid header", ({
+    value,
+  }) => {
+    const context = {
+      headers: {
+        "x-claude-code-session-id": "child-conversation",
+        "x-claude-code-agent-id": "child-agent",
+      },
+      requestBody: {
+        metadata: {
+          user_id: JSON.stringify({
+            session_id: "child-conversation",
+            parent_session_id: value,
+          }),
+        },
+      },
+    };
+    expect(() => claudeCode.bindChildTrajectory(context)).toThrow(
+      "OpenAPPA requires a well-formed Claude Code parent session id",
+    );
+    expect(() =>
+      claudeCode.nativeSpawnParentId(context, "child-conversation"),
+    ).toThrow(ApiError);
+  });
+
+  test.each([
+    { name: "empty", value: "" },
+    { name: "overlong", value: "p".repeat(513) },
+    { name: "overlong UTF-8", value: "\u00e9".repeat(257) },
+    { name: "control character", value: "parent\u0000id" },
+  ])("validates the $name opaque fallback at the native parent source", ({
+    value,
+  }) => {
+    const context = {
+      headers: {},
+      requestBody: { metadata: { user_id: value } },
+    };
+    // No child ID exists to trigger downstream binding validation.
+    expect(() => claudeCode.nativeConversationId(context)).toThrow(
+      "OpenAPPA requires a well-formed Claude Code parent session id",
+    );
+  });
+
+  test.each([
+    { name: "empty", value: "" },
+    { name: "control character", value: "parent\u007fid" },
+    { name: "overlong", value: "p".repeat(513) },
+    { name: "malformed", value: { id: "parent" } },
+  ])("rejects a $name parsed session before minting a native child", ({
+    value,
+  }) => {
+    const context = {
+      headers: { "x-claude-code-agent-id": "child-agent" },
+      requestBody: {
+        metadata: { user_id: JSON.stringify({ session_id: value }) },
+      },
+    };
+    expect(() => claudeCode.bindChildTrajectory(context)).toThrow(
+      "OpenAPPA requires a well-formed Claude Code parent session id",
+    );
+  });
+
+  test.each([
+    {
+      name: "JSON session",
+      userId: JSON.stringify({ session_id: "native-session" }),
+      parent: "native-session",
+    },
+    {
+      name: "legacy session",
+      userId:
+        "user_hash_account_account-id_session_12345678-1234-1234-1234-123456789abc",
+      parent: "12345678-1234-1234-1234-123456789abc",
+    },
+    {
+      name: "opaque session",
+      userId: "tenant-A|work/session:2@client",
+      parent: "tenant-A|work/session:2@client",
+    },
+  ])("preserves a valid $name and native-header precedence", ({
+    userId,
+    parent,
+  }) => {
+    const context = {
+      headers: { "x-claude-code-agent-id": "child-agent" },
+      requestBody: { metadata: { user_id: userId } },
+    };
+    expect(claudeCode.bindChildTrajectory(context)).toMatchObject({
+      sessionId: `${parent}:child-agent`,
+      parentId: parent,
+    });
+    expect(
+      claudeCode.bindChildTrajectory({
+        ...context,
+        headers: {
+          ...context.headers,
+          "x-claude-code-session-id": "header-parent",
+        },
+      }),
+    ).toMatchObject({
+      sessionId: "header-parent:child-agent",
+      parentId: "header-parent",
+    });
+  });
+
+  test("keeps bounded opaque native IDs rather than imposing a UUID format", () => {
+    const parent = "\u00e9".repeat(256);
+    expect(
+      claudeCode.nativeConversationId({
+        headers: {},
+        requestBody: { metadata: { user_id: parent } },
+      }),
+    ).toBe(parent);
+    expect(() =>
+      claudeCode.bindChildTrajectory({
+        headers: {
+          "x-claude-code-session-id": "",
+          "x-claude-code-agent-id": "child-agent",
+        },
+        requestBody: { metadata: { user_id: "valid-opaque-parent" } },
+      }),
+    ).toThrow("OpenAPPA requires a well-formed Claude Code parent session id");
   });
 
   test("binds split-pane Claude metadata to the lead while keeping its own conversation id", () => {

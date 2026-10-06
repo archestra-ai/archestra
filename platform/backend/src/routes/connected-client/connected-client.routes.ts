@@ -1,15 +1,22 @@
-import { RouteId } from "@archestra/shared";
+import {
+  createPaginatedResponseSchema,
+  PaginationQuerySchema,
+  RouteId,
+} from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import {
   disconnectClient,
   listConnectedClients,
+  listMemberConnections,
 } from "@/services/connected-client";
 import {
   ConnectedClientIdSchema,
   ConnectedClientSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
+  MemberConnectionStatusSchema,
+  MemberConnectionsSchema,
 } from "@/types";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -26,6 +33,44 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async ({ organizationId, user }) =>
       listConnectedClients({ organizationId, userId: user.id }),
+  );
+
+  app.get(
+    "/api/connected-clients/members",
+    {
+      schema: {
+        operationId: RouteId.GetMemberConnectedClients,
+        description:
+          "List the organization's members with the coding clients each connected through the Connect page and when, most recently connected first and never-connected members last. The summary counts every member, whatever the filters.",
+        tags: ["Connection Setups"],
+        querystring: PaginationQuerySchema.extend({
+          name: z
+            .string()
+            .optional()
+            .describe(
+              "Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email.",
+            ),
+          status: MemberConnectionStatusSchema.optional().describe(
+            "Only members who connected at least one client, or only those who never did",
+          ),
+        }),
+        response: constructResponseSchema(
+          createPaginatedResponseSchema(MemberConnectionsSchema).extend({
+            summary: z.object({
+              memberCount: z.number().int(),
+              connectedCount: z.number().int(),
+            }),
+          }),
+        ),
+      },
+    },
+    async ({ organizationId, query: { limit, offset, name, status } }) =>
+      listMemberConnections({
+        organizationId,
+        pagination: { limit, offset },
+        name: name || undefined,
+        status,
+      }),
   );
 
   app.delete(

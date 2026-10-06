@@ -38,3 +38,33 @@ export interface ConnectedClientRecord extends ConnectedClient {
   /** First connect for this client. */
   connectedAt: Date;
 }
+
+/** One of a member's connected agents, as admins see it under Logs. */
+export const MemberConnectedClientSchema = ConnectedClientSchema.extend({
+  /** First connect for this client. */
+  connectedAt: z.date(),
+});
+
+export const MemberConnectionStatusSchema = z.enum([
+  "connected",
+  "not_connected",
+]);
+export type MemberConnectionStatus = z.infer<
+  typeof MemberConnectionStatusSchema
+>;
+
+/**
+ * An organization member with the agents they connected through the Connect
+ * page; `clients` is empty for members who never connected one.
+ */
+export const MemberConnectionsSchema = z.object({
+  userId: z.string(),
+  name: z.string(),
+  email: z.string(),
+  image: z.string().nullable(),
+  /** Most recent connect across their agents; null when never connected. */
+  lastConnectedAt: z.date().nullable(),
+  /** Most recently connected first. */
+  clients: z.array(MemberConnectedClientSchema),
+});
+export type MemberConnections = z.infer<typeof MemberConnectionsSchema>;

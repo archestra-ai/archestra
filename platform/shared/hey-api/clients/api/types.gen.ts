@@ -40805,6 +40805,124 @@ export type GetConnectedClientsResponses = {
 
 export type GetConnectedClientsResponse = GetConnectedClientsResponses[keyof GetConnectedClientsResponses];
 
+export type GetMemberConnectedClientsData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        offset?: number;
+        /**
+         * Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email.
+         */
+        name?: string;
+        /**
+         * Only members who connected at least one client, or only those who never did
+         */
+        status?: 'connected' | 'not_connected';
+    };
+    url: '/api/connected-clients/members';
+};
+
+export type GetMemberConnectedClientsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetMemberConnectedClientsError = GetMemberConnectedClientsErrors[keyof GetMemberConnectedClientsErrors];
+
+export type GetMemberConnectedClientsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            userId: string;
+            name: string;
+            email: string;
+            image: string | null;
+            lastConnectedAt: string | null;
+            clients: Array<{
+                clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'amp';
+                lastConnectedAt: string;
+                deviceNames: Array<string>;
+                connectedAt: string;
+            }>;
+        }>;
+        pagination: {
+            currentPage: number;
+            limit: number;
+            total: number;
+            totalPages: number;
+            hasNext: boolean;
+            hasPrev: boolean;
+        };
+        summary: {
+            memberCount: number;
+            connectedCount: number;
+        };
+    };
+};
+
+export type GetMemberConnectedClientsResponse = GetMemberConnectedClientsResponses[keyof GetMemberConnectedClientsResponses];
+
 export type DisconnectConnectedClientData = {
     body?: never;
     path: {

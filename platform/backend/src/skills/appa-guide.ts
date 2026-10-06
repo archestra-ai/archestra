@@ -52,8 +52,8 @@ The policy-writing rules at the end of this skill apply on every host and name o
 | Operation | In Archestra |
 |---|---|
 | Read the policy | \`archestra__get_guardrails_policy\` |
-| Check a change | \`archestra__preview_guardrails_policy_change\` with the complete draft and the revision you read; \`archestra__validate_guardrails_policy\` for a draft without a diff |
-| Publish a change (write or reload the config) | \`archestra__update_guardrails_policy\` with the previewed content and \`expectedRevision\` |
+| Check a change | \`archestra__preview_guardrails_policy_change\` with \`edits\` (or \`content\` for a first policy) and the revision you read; \`archestra__validate_guardrails_policy\` for a complete draft without a diff |
+| Publish a change (write or reload the config) | \`archestra__update_guardrails_policy\` with the same \`edits\` or \`content\` and \`expectedRevision\` you previewed |
 | The runtime's remedy tool | \`archestra__execute_remedy_plan\` |
 | The runtime's battery matcher | \`archestra__list_guardrails_battery_fits\` |
 | Tools judged call by call or refused | \`archestra__inspect_guardrails_server\` coverage rows: the catch-all fallback, or unlisted |
@@ -64,6 +64,7 @@ The policy-writing rules at the end of this skill apply on every host and name o
 Two Archestra approval rules replace the shared ones:
 
 - An **Approve** answer to \`archestra__ask_user\` is the operator's approval of the proposal it presented. Ask it in the same turn as the proposal and continue in the same response, as in **Ask for approval**. Only a plain-text proposal without a question tool waits for a later message.
+- The shared rules say "End the first turn with the proposal" and "Act only after a later message". In Archestra the \`archestra__ask_user\` card is that ending and its answer is that later message. So a turn that previews a change always ends with the card, also when the operator said to preview only, to show the change first, or not to publish until they approve. The card is how they approve. Never end a turn on a preview with no question.
 - Call \`archestra__execute_remedy_plan\` with the offered \`offer_id\` without asking first. The call requests the review itself when the policy requires one, or returns the review to ask with \`archestra__ask_user\`.
 
 ## First policy: a small, usable start
@@ -189,11 +190,11 @@ If an MCP server could not be inspected, state: "<server> is configured, but I c
 
 At the end of the proposal, add **Needed for this to work** if any required support is missing. Group missing requirements there and propose concrete fixes.
 
-Then ask for approval.
+Then ask for approval in the same turn.
 
 ### Ask for approval
 
-Call \`archestra__ask_user\` with the question "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR) and options "Approve", "Show TOML", and "Change something". For the first policy, use the more specific question above. Without that tool, use the client's own question tool with the same options. With neither, end with: **Approve, or tell me what to change.** Wait for the reply.
+In the same turn as the proposal, call \`archestra__ask_user\` with the question "Apply this policy?" ("Open this pull request?" when approval opens a GitHub PR) and options "Approve", "Show TOML", and "Change something". For the first policy, use the more specific question above. Without that tool, use the client's own question tool with the same options. With neither, end with: **Approve, or tell me what to change.** Wait for the reply.
 
 - **Approve** approves the proposal. Continue with the steps below in the same response.
 - **Show TOML**: for a change made with \`edits\`, show the preview's \`diff\` in a fenced diff block. For a first policy or a full rewrite, show the complete proposed root TOML you previewed. Then ask for approval with Approve and Change something. Do not save; inspecting text is not approval.
@@ -218,8 +219,8 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 2. For syntax or rules not shown in the current config, read \`references/contracts.md\` or \`references/policy-writing.md\` with \`archestra__load_skill\`. Preserve \`[policy.deployment]\` while editing. For tool or client changes, ask whether provider-hosted tools are in use and whether their unmediated execution is acceptable; a tool rule cannot refuse them before the provider runs them. If the requested boundary needs signed local substitution, report it as unavailable rather than proposing an ineffective rule.
 3. If a battery helps, check \`archestra__list_guardrails_battery_fits\` for it and add it to the draft \`include\` list. Describe it as **Propose a battery** says. Existing root rules keep priority.
 4. Preview the change with \`archestra__preview_guardrails_policy_change\`, using \`edits\` and the current \`revision\`. Use \`content\` only for a full rewrite. Fix errors and preview again. If it produces no change, report that without approval language.
-5. Summarize what changes, what stays the same, and any warnings. State whether approval will save locally or open a GitHub PR.
-6. Ask for approval as described in **Ask for approval**.
+5. Summarize what changes, what stays the same, and any warnings. State whether approval will save locally or open a GitHub PR. If the operator asked to see the change, show the preview's \`diff\` in a fenced diff block.
+6. In the SAME turn, ask for approval with \`archestra__ask_user\` as described in **Ask for approval**. Do not end the turn on the summary.
 7. Preview the exact approved change again with the same \`edits\` and the same \`expectedRevision\`. Do not read the policy again first: the preview refuses when the policy changed since you read it, and its result reports the delivery mode. If the diff, warnings, or delivery mode changed, ask for approval again. Do not publish an invalid or unchanged preview.
 8. Call \`archestra__update_guardrails_policy\` with the same \`edits\` and the same \`expectedRevision\`. Give a GitHub PR a clear \`title\` and \`summary\`.
 9. On a conflict, when the preview or the publish says the policy changed, read the policy again, merge, preview, and request approval again if the proposed behavior changes.

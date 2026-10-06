@@ -608,6 +608,12 @@ const registry = defineArchestraTools([
           before: before.content,
           after,
           ...validation,
+          // A model that only read the skill ends its turn on the preview;
+          // the next step is repeated here, where it decides what to do next.
+          ...(validation.valid &&
+          (after !== before.content || before.revision === 0)
+            ? { instruction: PREVIEW_APPROVAL_INSTRUCTION }
+            : {}),
         });
       }),
   }),
@@ -926,6 +932,9 @@ async function enforced(organizationId: string) {
     })),
   };
 }
+
+const PREVIEW_APPROVAL_INSTRUCTION =
+  "Nothing is saved yet. In this same turn, explain the change and ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
 
 const CONSULT_LIST_LIMIT = 50;
 const CONSULT_TEXT_LIMIT = 2000;

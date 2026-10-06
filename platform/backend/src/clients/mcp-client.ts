@@ -1527,7 +1527,8 @@ class McpClient {
   ): Promise<Client> {
     // Snapshot this caller's headers before waiting: another transport for the
     // same key can update the shared latest fingerprint during initialization.
-    const effectiveServerState = this.withLatestCredentialFingerprint(
+    // This caller-bound state is what a fresh initialization advertises.
+    const callerServerState = this.withLatestCredentialFingerprint(
       connectionKey,
       currentServerState,
     );
@@ -1538,6 +1539,15 @@ class McpClient {
         .get(connectionKey)
         ?.catch(() => {});
     }
+    // Re-resolve after the wait: the lock holder may have rotated credentials
+    // (e.g. an OAuth refresh) while this caller was parked, leaving the
+    // pre-wait snapshot stale. The latest state only vetoes reuse of a cached
+    // client whose credentials are no longer current; it never substitutes
+    // for the caller-bound state a fresh initialization advertises.
+    const latestServerState = this.withLatestCredentialFingerprint(
+      connectionKey,
+      currentServerState,
+    );
     // Publish ownership before invoking SDK code, including on a fresh retry.
     // This lock ends at initialization, not at the subsequent tool RPC.
     const initialization = Promise.resolve().then(() =>
@@ -1545,7 +1555,7 @@ class McpClient {
         connectionKey,
         transport,
         targetMcpServerId,
-        effectiveServerState,
+        { callerServerState, latestServerState },
         elicitationHandler,
       ),
     );
@@ -1561,9 +1571,13 @@ class McpClient {
     connectionKey: string,
     transport: Transport,
     targetMcpServerId: string,
-    effectiveServerState: CachedServerState,
+    serverStates: {
+      callerServerState: CachedServerState;
+      latestServerState: CachedServerState;
+    },
     elicitationHandler?: McpElicitationHandler,
   ): Promise<Client> {
+    const { callerServerState, latestServerState } = serverStates;
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
@@ -1571,14 +1585,18 @@ class McpClient {
         this.activeConnectionServerState.get(connectionKey);
       if (
         !cachedServerState ||
-        !this.hasMatchingServerState(cachedServerState, effectiveServerState)
+        !this.hasMatchingServerState(cachedServerState, callerServerState) ||
+        // A cached client matching this caller's pre-wait snapshot is still
+        // stale when the credential fingerprint advanced during the lock
+        // wait; reusing it would skip the rebuild the rotation requires.
+        !this.hasMatchingServerState(cachedServerState, latestServerState)
       ) {
         logger.info(
           {
             connectionKey,
             targetMcpServerId,
             cachedSecretId: cachedServerState?.secretId ?? null,
-            currentSecretId: effectiveServerState.secretId,
+            currentSecretId: callerServerState.secretId,
           },
           "Discarding cached MCP client after MCP server credentials changed",
         );
@@ -1600,14 +1618,16 @@ class McpClient {
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
         logger.debug({ connectionKey }, "Reusing cached MCP client");
+        // The cached client won, so this caller's candidate transport is
+        // unused. Close it (fire-and-forget) so its sockets and abort
+        // controllers do not linger; the SDK's transport close never sends
+        // the session-terminating DELETE, so a stored session id is safe.
+        this.closeDiscardedTransport(connectionKey, transport);
         if (elicitationHandler) {
           configureMcpElicitation(reusableClient, elicitationHandler);
         }
         this.activeConnections.set(connectionKey, reusableClient);
-        this.activeConnectionServerState.set(
-          connectionKey,
-          effectiveServerState,
-        );
+        this.activeConnectionServerState.set(connectionKey, callerServerState);
         return reusableClient;
       } catch (error) {
         // Connection is dead, invalidate cache and create fresh client
@@ -1710,7 +1730,7 @@ class McpClient {
     // Store the connection before releasing the initialization lock so waiting
     // callers reuse it rather than starting another handshake.
     this.activeConnections.set(connectionKey, client);
-    this.activeConnectionServerState.set(connectionKey, effectiveServerState);
+    this.activeConnectionServerState.set(connectionKey, callerServerState);
     this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
 
     // Persist the MCP session ID so other backend pods can reuse it.
@@ -1771,6 +1791,26 @@ class McpClient {
     Promise.resolve(client.close()).catch((error) => {
       logger.warn({ connectionKey, error }, "Error closing retired MCP client");
     });
+  }
+
+  /**
+   * Close a candidate transport that lost the race to a cached client.
+   * Fire-and-forget like closeWhenIdle: the SDK's transport close only aborts
+   * pending streams and never sends the session-terminating DELETE, so a
+   * transport carrying a stored session id is safe to close here.
+   */
+  private closeDiscardedTransport(
+    connectionKey: string,
+    transport: Transport,
+  ): void {
+    Promise.resolve()
+      .then(() => transport.close())
+      .catch((error) => {
+        logger.warn(
+          { connectionKey, error },
+          "Error closing discarded MCP transport",
+        );
+      });
   }
 
   private releaseClient(client: Client): void {

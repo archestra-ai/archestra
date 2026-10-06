@@ -336,7 +336,7 @@ class AnthropicRequestAdapter
                 name: toolUse.name,
                 arguments: toolUse.arguments,
                 content: toolResult,
-                isError: false,
+                isError: contentBlock.is_error ?? false,
               });
             }
           }

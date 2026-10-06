@@ -1,6 +1,7 @@
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
 
+import type { ServerResponse } from "node:http";
 import { extractMcpHumanRuling } from "@archestra/shared";
 import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import { eq } from "drizzle-orm";
@@ -24,6 +25,7 @@ import config, { parseLlmProxyPlugins, parseOpenAppaConfig } from "@/config";
 import db, * as database from "@/database";
 import * as toolInvocation from "@/guardrails/tool-invocation";
 import * as trustedData from "@/guardrails/trusted-data";
+import { logRingBuffer } from "@/logging/log-ring-buffer";
 import {
   A2AContextModel,
   A2ATaskModel,
@@ -1223,6 +1225,128 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       "prompt",
       "tool_call",
     ]);
+  });
+
+  test("a client disconnect mid-stream causes no write-after-end and the turn still cleans up", async () => {
+    let release!: () => void;
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    async function* gatedStream() {
+      yield {
+        type: "message_start",
+        message: {
+          id: "msg-disconnect",
+          type: "message",
+          container: null,
+          role: "assistant",
+          content: [],
+          model: "claude-3-5-sonnet-20241022",
+          stop_reason: null,
+          stop_sequence: null,
+          usage: { input_tokens: 12, output_tokens: 1 },
+        },
+      };
+      yield {
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "", citations: [] },
+      };
+      yield {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "before disconnect" },
+      };
+      await gate;
+      // The client is gone: every frame from here reaches writeToClient with
+      // reply.raw already destroyed.
+      yield {
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: " after disconnect" },
+      };
+      yield { type: "content_block_stop", index: 0 };
+      yield {
+        type: "message_delta",
+        delta: { stop_reason: "end_turn", stop_sequence: null },
+        usage: { output_tokens: 5 },
+      };
+      yield { type: "message_stop" };
+    }
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          messages: { create: async () => gatedStream() },
+        }) as never,
+    );
+    const startedAt = Date.now();
+    let serverRaw: ServerResponse | undefined;
+    const writesAfterDestroy: string[] = [];
+    app.addHook("preHandler", async (_request, reply) => {
+      serverRaw = reply.raw;
+      // Observe the socket boundary the destroyed guard is meant to close:
+      // without it, writeToClient keeps pushing frames into the dead socket.
+      const original = reply.raw.write.bind(reply.raw);
+      reply.raw.write = ((chunk: unknown, ...rest: unknown[]) => {
+        if (reply.raw.destroyed) writesAfterDestroy.push(String(chunk));
+        return (original as (...args: unknown[]) => boolean)(chunk, ...rest);
+      }) as typeof reply.raw.write;
+    });
+
+    // A real socket: app.inject buffers the body and cannot disconnect.
+    const baseUrl = await app.listen({ port: 0, host: "127.0.0.1" });
+    const response = await fetch(
+      `${baseUrl}/v1/anthropic/${agent.id}/v1/messages`,
+      {
+        method: "POST",
+        headers: { ...headers(), "content-type": "application/json" },
+        body: JSON.stringify(payload(true)),
+      },
+    );
+    expect(response.status).toBe(200);
+    if (!response.body) throw new Error("Expected a streaming body");
+    const reader = response.body.getReader();
+    await reader.read();
+    // The client hangs up; the server socket is destroyed.
+    await reader.cancel();
+    await vi.waitFor(() => expect(serverRaw?.destroyed).toBe(true), {
+      timeout: 5000,
+    });
+
+    // The upstream turn keeps streaming into the dead socket.
+    release();
+    await vi.waitFor(
+      async () => {
+        const rows = await db
+          .select()
+          .from(database.schema.interactionsTable)
+          .where(eq(database.schema.interactionsTable.profileId, agent.id));
+        expect(rows).toHaveLength(1);
+      },
+      { timeout: 5000 },
+    );
+
+    // The cleanup path ran the completed turn to the end: usage was recorded.
+    const [row] = await db
+      .select()
+      .from(database.schema.interactionsTable)
+      .where(eq(database.schema.interactionsTable.profileId, agent.id));
+    expect(row.outputTokens).toBeGreaterThan(0);
+
+    // The guard's contract: not one byte is written after the disconnect, so
+    // no write-after-end can escape.
+    expect(writesAfterDestroy).toEqual([]);
+
+    // Without the destroyed guard the first post-disconnect frame throws
+    // write-after-destroy out of writeToClient and handleError logs it.
+    const errors = logRingBuffer
+      .getRecent({ limit: 250 })
+      .filter((record) => record.time >= startedAt && record.level >= 50)
+      .map((record) => record.msg)
+      .join("\n");
+    expect(errors).not.toMatch(
+      /write after end|write after a stream was destroyed|ERR_STREAM_DESTROYED/i,
+    );
   });
 
   test("native failures release no tool call and leak no diagnostics", async () => {

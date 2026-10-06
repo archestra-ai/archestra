@@ -66,6 +66,7 @@ const mockReadResource = vi.fn();
 const mockPing = vi.fn();
 const mockSetRequestHandler = vi.fn();
 const mockSetNotificationHandler = vi.fn();
+const mockTransportClose = vi.fn();
 
 vi.mock("@modelcontextprotocol/sdk/client/index.js", () => ({
   // biome-ignore lint/suspicious/noExplicitAny: test..
@@ -10930,5 +10931,159 @@ describe("x-mcp-header mirroring (SEP-2243)", () => {
 
     const headers = await lastTransportHeaders();
     expect(headers.get("mcp-param-region")).toBe("eu-central1");
+  });
+
+  function mockCandidateTransports(
+    StreamableHTTPClientTransport: typeof import("@modelcontextprotocol/sdk/client/streamableHttp.js").StreamableHTTPClientTransport,
+  ): void {
+    vi.mocked(StreamableHTTPClientTransport).mockImplementation(function (
+      this: { sessionId?: string; headers?: Headers; close?: unknown },
+      _url: URL,
+      options?: { sessionId?: string; requestInit?: { headers?: Headers } },
+    ) {
+      this.sessionId = options?.sessionId;
+      this.headers = options?.requestInit?.headers;
+      this.close = mockTransportClose;
+    } as
+      // biome-ignore lint/suspicious/noExplicitAny: cast required for mock constructor
+      any);
+  }
+
+  test("a parked caller revalidates the credential fingerprint after the init-lock wait", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    // The race this guards: a caller parked on the initialization lock holds
+    // a pre-wait fingerprint. When a sibling advances the shared fingerprint
+    // during the wait (the shape of an OAuth refresh rotating the token), the
+    // parked caller's snapshot still matches the freshly cached client, so a
+    // stale comparison would reuse it and skip the rebuild the rotation
+    // requires. The parked caller must rebuild with its own transport
+    // instead — and must not adopt the later caller's fingerprint either.
+    const { agent, tokenAuth } = await seedAnnotatedTool({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    await mcpClient.disconnectAll();
+    mockConnect.mockReset();
+    mockCallTool.mockReset();
+    mockTransportClose.mockReset();
+
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+    mockCandidateTransports(StreamableHTTPClientTransport);
+
+    let releaseFirstConnect!: () => void;
+    mockConnect
+      .mockImplementationOnce(
+        () =>
+          new Promise<void>((resolve) => {
+            releaseFirstConnect = resolve;
+          }),
+      )
+      .mockResolvedValue(undefined);
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const callTool = (id: string, region: string, query: string) =>
+      mcpClient.executeToolCallForOwner(
+        { id, name: "spanner__execute_sql", arguments: { region, query } },
+        agentOwner(agent.id),
+        tokenAuth,
+      );
+
+    const first = callTool("call_rv_1", "us-west1", "SELECT 1");
+    await vi.waitFor(() => expect(mockConnect).toHaveBeenCalledTimes(1));
+
+    // Same headers as the lock holder: its pre-wait snapshot will match the
+    // client the first call caches.
+    const second = callTool("call_rv_2", "us-west1", "SELECT 2");
+    await vi.waitFor(() =>
+      expect(vi.mocked(StreamableHTTPClientTransport).mock.calls.length).toBe(
+        2,
+      ),
+    );
+
+    // A third caller advances the shared fingerprint while the second one is
+    // parked on the lock.
+    const third = callTool("call_rv_3", "eu-central1", "SELECT 3");
+    await vi.waitFor(() =>
+      expect(vi.mocked(StreamableHTTPClientTransport).mock.calls.length).toBe(
+        3,
+      ),
+    );
+
+    releaseFirstConnect();
+    const results = await Promise.all([first, second, third]);
+
+    expect(results.map((result) => result.isError)).toEqual([
+      false,
+      false,
+      false,
+    ]);
+    // The parked second caller revalidated after the wait: three handshakes,
+    // each initialized with its own caller's headers.
+    const connectRegions = mockConnect.mock.calls.map(([transport]) =>
+      (transport as { headers?: Headers }).headers?.get("mcp-param-region"),
+    );
+    expect(connectRegions).toEqual(["us-west1", "us-west1", "eu-central1"]);
+  });
+
+  test("closes the caller's discarded candidate transport when the cached client is reused", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { agent, tokenAuth } = await seedAnnotatedTool({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    await mcpClient.disconnectAll();
+    mockConnect.mockReset();
+    mockCallTool.mockReset();
+    mockTransportClose.mockReset();
+
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+    mockCandidateTransports(StreamableHTTPClientTransport);
+
+    mockConnect.mockResolvedValue(undefined);
+    mockCallTool.mockResolvedValue({
+      content: [{ type: "text", text: "ok" }],
+      isError: false,
+    });
+
+    const callTool = (id: string) =>
+      mcpClient.executeToolCallForOwner(
+        {
+          id,
+          name: "spanner__execute_sql",
+          arguments: { region: "us-west1", query: "SELECT 1" },
+        },
+        agentOwner(agent.id),
+        tokenAuth,
+      );
+
+    const first = await callTool("call_dt_1");
+    const second = await callTool("call_dt_2");
+
+    expect(first.isError).toBe(false);
+    expect(second.isError).toBe(false);
+    // One handshake total: the second call reused the cached client, so its
+    // freshly-built candidate transport was discarded — it must be closed,
+    // not leaked.
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+    expect(mockTransportClose).toHaveBeenCalledTimes(1);
   });
 });

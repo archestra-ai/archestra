@@ -45,6 +45,112 @@ describe("APPA child trajectory adapters", () => {
     });
   });
 
+  test.each([
+    {
+      name: "control character in the x-claude-code-agent-id header",
+      context: {
+        headers: { "x-claude-code-agent-id": "agent\u0007id" },
+        requestBody: {},
+      },
+    },
+    {
+      name: "x-claude-code-agent-id header over the 512-byte bound",
+      context: {
+        headers: { "x-claude-code-agent-id": "a".repeat(513) },
+        requestBody: {},
+      },
+    },
+    {
+      name: "control character in metadata.agent_id",
+      context: {
+        headers: {},
+        requestBody: { metadata: { agent_id: "agent\u0000id" } },
+      },
+    },
+    {
+      name: "overlong metadata.agent_id",
+      context: {
+        headers: {},
+        requestBody: { metadata: { agent_id: "a".repeat(513) } },
+      },
+    },
+    {
+      name: "control character in user_id.agent_id",
+      context: {
+        headers: {},
+        requestBody: {
+          metadata: { user_id: JSON.stringify({ agent_id: "agent\u0007id" }) },
+        },
+      },
+    },
+    {
+      name: "overlong user_id.agent_id",
+      context: {
+        headers: {},
+        requestBody: {
+          metadata: {
+            user_id: JSON.stringify({
+              session_id: "s1",
+              agent_id: "a".repeat(513),
+            }),
+          },
+        },
+      },
+    },
+  ])("rejects a malformed Claude Code child agent id: $name", ({ context }) => {
+    expect(() => claudeCodeNativeChildIds(context)).toThrowError(
+      expect.objectContaining({
+        statusCode: 400,
+        message: expect.stringContaining(
+          "OpenAPPA requires a well-formed Claude Code child agent id",
+        ),
+      }),
+    );
+  });
+
+  test("preserves valid opaque Claude Code child ids from every source verbatim", () => {
+    const uuid = "123e4567-e89b-12d3-a456-426614174000";
+    expect(
+      claudeCodeNativeChildIds({
+        headers: { "x-claude-code-agent-id": uuid },
+        requestBody: {},
+      }),
+    ).toEqual({ parentNativeId: undefined, childNativeId: uuid });
+
+    const teammate = "sched-tools@audit";
+    expect(
+      claudeCodeNativeChildIds({
+        headers: {},
+        requestBody: { metadata: { agent_id: teammate } },
+      }).childNativeId,
+    ).toBe(teammate);
+
+    const dotted = "researcher.review.v2";
+    expect(
+      claudeCodeNativeChildIds({
+        headers: {},
+        requestBody: {
+          metadata: { user_id: JSON.stringify({ agent_id: dotted }) },
+        },
+      }).childNativeId,
+    ).toBe(dotted);
+
+    // The split-pane fallback yields the session id itself as the child.
+    expect(
+      claudeCodeNativeChildIds({
+        headers: {},
+        requestBody: {
+          metadata: {
+            user_id: JSON.stringify({
+              session_id: uuid,
+              parent_session_id: "lead-session",
+            }),
+          },
+        },
+      }),
+    ).toEqual({ parentNativeId: "lead-session", childNativeId: uuid });
+  });
+
   test("reads a Claude Code teammate launch only from its spawn call's own result", () => {
     const receipt =
       "Spawned successfully.\nagent_id: sched-tools@audit\nname: sched-tools";
@@ -1153,6 +1259,64 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
       sessionId: "thread-parent:thread-child",
       parentId: "thread-parent",
     });
+  });
+
+  test("rejects a malformed Codex client_metadata child id instead of binding it", () => {
+    // No turn-metadata header: the client-controlled body is the only claim.
+    expect(() =>
+      codex.bindChildTrajectory({
+        headers: {},
+        requestBody: {
+          client_metadata: {
+            parent_thread_id: "thread-parent",
+            thread_id: "thread\u0007child",
+          },
+        },
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        statusCode: 400,
+        message: expect.stringContaining(
+          "OpenAPPA requires a well-formed Codex child thread id",
+        ),
+      }),
+    );
+  });
+
+  test("binds a valid Codex child_thread_id fallback under the metadata parent", () => {
+    expect(
+      codex.bindChildTrajectory({
+        headers: {},
+        requestBody: {
+          client_metadata: {
+            parent_thread_id: "thread-parent",
+            child_thread_id: "thread-child",
+          },
+        },
+      }),
+    ).toEqual({
+      sessionId: "thread-parent:thread-child",
+      parentId: "thread-parent",
+      lineage: {
+        source: "native",
+        nativeParentId: "thread-parent",
+        childNativeId: "thread-child",
+      },
+    });
+  });
+
+  test("a Codex fallback equal to the parent thread opens no child", () => {
+    expect(
+      codex.bindChildTrajectory({
+        headers: {},
+        requestBody: {
+          client_metadata: {
+            parent_thread_id: "thread-parent",
+            child_thread_id: "thread-parent",
+          },
+        },
+      }),
+    ).toBeUndefined();
   });
 
   test("does not open a Codex guardian auto-review as an unprepared child", () => {

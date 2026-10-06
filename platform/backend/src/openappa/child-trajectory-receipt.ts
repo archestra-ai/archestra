@@ -352,7 +352,7 @@ function sameReceipt(
 
 function receiptKey(): Buffer | undefined {
   const secret = config.openappa.offerSigningSecret;
-  if (secret.length === 0) return undefined;
+  if (secret.trim().length === 0) return undefined;
   return createHmac("sha256", secret).update(PROOF_LABEL).digest();
 }
 

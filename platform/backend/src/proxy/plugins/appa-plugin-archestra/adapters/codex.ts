@@ -19,6 +19,7 @@ import {
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,
+  nativeId,
   parseJsonHeader,
   stringField,
   stripRecordFields,
@@ -535,7 +536,9 @@ function childThreadId(
     stringField(metadata?.child_thread_id) ??
     stringField(metadata?.thread_id) ??
     nested?.threadId;
+  // The body metadata fallback is a compat path a client fully controls, so a
+  // present malformed claim is rejected rather than bound as a child id.
   return fromMetadata && fromMetadata !== parentNativeId
-    ? fromMetadata
+    ? nativeId(fromMetadata, "Codex child thread id")
     : undefined;
 }

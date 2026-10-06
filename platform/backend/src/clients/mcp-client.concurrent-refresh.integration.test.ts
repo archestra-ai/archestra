@@ -381,6 +381,69 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
       { index: 2, context: "A" },
     ]);
   });
+
+  test("a parked caller revalidates the credential fingerprint after the init-lock wait", async ({
+    makeUser,
+  }) => {
+    upstream = await startSessionServer({ initializationLatencyMs: 150 });
+    upstream.setValidToken("token-0");
+    const { agent, user } = await installOAuthServer({
+      makeUser,
+      url: upstream.url,
+      expiresAt: Date.now() + 8 * 3_600_000,
+    });
+    expect(
+      await fanOut({
+        agentId: agent.id,
+        userId: user.id,
+        count: 3,
+        contexts: ["A", "A", "B"],
+      }),
+    ).toEqual([]);
+    expect(upstream.toolContexts.sort((a, b) => a.index - b.index)).toEqual([
+      { index: 0, context: "A" },
+      { index: 1, context: "A" },
+      { index: 2, context: "B" },
+    ]);
+    // The parked A caller's pre-wait snapshot matched the freshly cached
+    // client, but B's transport advanced the shared fingerprint during the
+    // wait — the same shape as an OAuth refresh rotating the token under a
+    // parked caller. Reusing would have skipped the rebuild a rotation
+    // requires, so the parked caller initializes its own client: three
+    // handshakes, still serialized to one at a time by the lock.
+    expect(upstream.activity.initializations).toBe(3);
+    expect(upstream.activity.maxInitializations).toBe(1);
+    await expectNoSseRetriesAfterDisconnect(upstream);
+  });
+
+  test("a parked caller closes its discarded candidate transport when the cached client is reused", async ({
+    makeUser,
+  }) => {
+    upstream = await startSessionServer({ initializationLatencyMs: 150 });
+    upstream.setValidToken("token-0");
+    const { agent, user } = await installOAuthServer({
+      makeUser,
+      url: upstream.url,
+      expiresAt: Date.now() + 8 * 3_600_000,
+    });
+    const { StreamableHTTPClientTransport } = await import(
+      "@modelcontextprotocol/sdk/client/streamableHttp.js"
+    );
+    const closeTransport = vi.spyOn(
+      StreamableHTTPClientTransport.prototype,
+      "close",
+    );
+
+    expect(await fanOut({ agentId: agent.id, userId: user.id })).toEqual([]);
+
+    // One shared handshake; the five parked callers reused the cached client,
+    // so each of their freshly-built candidate transports was discarded and
+    // must have been closed rather than leaked. (The cached client's own
+    // transport is closed later, at disconnect.)
+    expect(upstream.activity.initializations).toBe(1);
+    expect(closeTransport).toHaveBeenCalledTimes(FAN_OUT - 1);
+    await expectNoSseRetriesAfterDisconnect(upstream);
+  });
 });
 
 // =============================================================================

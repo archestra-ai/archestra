@@ -1656,13 +1656,17 @@ export async function handleLLMProxy<
             secret: config.auth.secret,
           }),
       );
-    let connectionSetupBypass = appaActive && approvedProxySetup;
-    if (connectionSetupBypass) {
+    const installerSetupBypass = appaActive && approvedProxySetup;
+    if (installerSetupBypass) {
       logger.info(
         { profileId: resolvedAgent.id, proof: "approved-installer" },
         "Connection setup APPA bypass active",
       );
     }
+    // Set once below, when a verified native-session setup scope resolves.
+    // connectionSetupBypass is derived from the two sources at a single
+    // point after the session block; no guard mutates it mid-flow.
+    let nativeSessionSetupBypass = false;
     let appaCallerId: string | undefined;
     let appaFamily: ReturnType<typeof appaWireFamily>;
     let forkOf: string | undefined;
@@ -1725,7 +1729,7 @@ export async function handleLLMProxy<
           : { status: "unbound" as const };
       if (
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         runtimeLookup.status === "conflict"
       ) {
         throw new ApiError(
@@ -1748,7 +1752,7 @@ export async function handleLLMProxy<
       const presentedRuntimeSession = appaClaims.sessionId;
       if (
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         runtimeIdentity &&
         runtimeSessionConflicts({
           workloadName: runtimeIdentity.workloadName,
@@ -1771,7 +1775,7 @@ export async function handleLLMProxy<
         });
       if (
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         runtimeIdentity &&
         !runtimeBindingMatches
       ) {
@@ -1827,7 +1831,7 @@ export async function handleLLMProxy<
         !virtualKeyId;
       const unsupportedClient =
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         !isInternalChat &&
         !delegatedRun &&
         headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
@@ -1848,7 +1852,7 @@ export async function handleLLMProxy<
       }
       if (
         appaActive &&
-        !connectionSetupBypass &&
+        !installerSetupBypass &&
         !delegatedRun &&
         !unsupportedClient
       ) {
@@ -1898,7 +1902,7 @@ export async function handleLLMProxy<
               requestBody: body,
             },
           });
-          connectionSetupBypass = setupScope !== null;
+          nativeSessionSetupBypass = setupScope !== null;
           if (setupScope?.kind === "native-session") {
             logger.info(
               { clientId: setupScope.clientId },
@@ -1910,7 +1914,7 @@ export async function handleLLMProxy<
         // logging. APPA now resolves the collected codes into lineage evidence
         // owned by this caller.
         const receiptSessions =
-          !connectionSetupBypass && callerId
+          !nativeSessionSetupBypass && callerId
             ? await sessionReceiptEvidence({
                 organizationId: resolvedAgent.organizationId,
                 callerId,
@@ -1920,7 +1924,7 @@ export async function handleLLMProxy<
         // History carrying verified stamps or session receipts identifies
         // parent context. A new session opens as a fork of its deepest ancestor.
         const traceable =
-          !connectionSetupBypass &&
+          !nativeSessionSetupBypass &&
           appaCallerId &&
           appaIdentity.sessionId &&
           appaFamily &&
@@ -1955,7 +1959,7 @@ export async function handleLLMProxy<
         fillAppaSessionHeaders(headersForExtraction, appaIdentity);
         // Reading connect.md can taint the rest of setup, so the verified
         // session bypasses APPA trust and invocation decisions together.
-        openappaSession = connectionSetupBypass
+        openappaSession = nativeSessionSetupBypass
           ? undefined
           : sessionFromHeaders({
               headers: headersForExtraction,
@@ -1987,7 +1991,7 @@ export async function handleLLMProxy<
           // The launcher stored the authenticated parent before giving the pod data.
           openappaSession = runtimeSession;
         }
-        if (!openappaSession && !connectionSetupBypass)
+        if (!openappaSession && !nativeSessionSetupBypass)
           throw new ApiError(
             400,
             "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
@@ -2214,6 +2218,12 @@ export async function handleLLMProxy<
         };
       }
     }
+    // The single decision point for the connection-setup bypass. Both sources
+    // are settled above — the approved-installer proof before the guards, the
+    // native-session scope inside the session block — and neither is mutated
+    // past this line.
+    const connectionSetupBypass =
+      installerSetupBypass || nativeSessionSetupBypass;
     // Nothing OpenAPPA wrote for the client and the gateway goes on to the
     // provider, whether or not this request has a session (deployment switch
     // off, a connection-setup or unsupported-client bypass, a delegated run)
@@ -2756,6 +2766,7 @@ async function handleStreaming<
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
   let failedStreamResponse: unknown;
+  let clientGone = false;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -2772,6 +2783,13 @@ async function handleStreaming<
   );
   keepAlive.start();
   const writeToClient = (data: string | Uint8Array) => {
+    // A disconnected client can no longer read anything; writing would throw
+    // write-after-end. Call sites that gate work on the socket state keep
+    // their own checks — this one only skips the write itself.
+    if (reply.raw.destroyed) {
+      clientGone = true;
+      return;
+    }
     if (ctx.connectionVerification) {
       // Includes policy-generated frames as well as provider frames. Do not
       // let an executable call reach the native client's dispatcher.
@@ -3503,6 +3521,7 @@ async function handleStreaming<
     // Always record interaction (whether stream completed or was aborted)
     if (!streamCompleted) {
       logger.info(
+        { clientGone },
         "Stream was aborted before completion, recording partial interaction",
       );
     }

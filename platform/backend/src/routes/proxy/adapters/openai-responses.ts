@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
@@ -679,7 +680,7 @@ class OpenAiResponsesResponseAdapter
       status: "completed",
       output: [
         {
-          id: `msg_${Date.now()}`,
+          id: `msg_${randomUUID()}`,
           type: "message",
           role: "assistant",
           status: "completed",
@@ -708,7 +709,7 @@ class OpenAiResponsesResponseAdapter
       output_text: text,
       output: [
         {
-          id: `msg_${Date.now()}`,
+          id: `msg_${randomUUID()}`,
           type: "message",
           role: "assistant",
           status: "completed",
@@ -826,6 +827,11 @@ class OpenAiResponsesStreamAdapter
     { id: string; name: string; arguments: string; namespace?: string }
   >();
   private withholdsHosted = false;
+  // Date.now() ids and sequence numbers collide when several frames are built
+  // in the same millisecond. Ids are random instead; sequence numbers come
+  // from a counter seeded once per adapter, strictly increasing however fast
+  // frames are emitted.
+  private syntheticSequence = Date.now();
   /**
    * Namespaces declared on this request, by tool name, when that name belongs
    * to exactly one namespace. Codex Responses Lite puts these in an
@@ -1059,14 +1065,14 @@ class OpenAiResponsesStreamAdapter
   }
 
   formatTextDeltaSSE(text: string): string {
-    const responseId = this.state.responseId || `resp_${Date.now()}`;
-    const itemId = `msg_${Date.now()}`;
+    const responseId = this.state.responseId || `resp_${randomUUID()}`;
+    const itemId = `msg_${randomUUID()}`;
 
     return [
       toSse({
         type: "response.output_item.added",
         output_index: 0,
-        sequence_number: Date.now(),
+        sequence_number: this.nextSequenceNumber(),
         item: {
           id: itemId,
           type: "message",
@@ -1080,7 +1086,7 @@ class OpenAiResponsesStreamAdapter
         item_id: itemId,
         output_index: 0,
         content_index: 0,
-        sequence_number: Date.now() + 1,
+        sequence_number: this.nextSequenceNumber(),
         part: {
           type: "output_text",
           text: "",
@@ -1092,7 +1098,7 @@ class OpenAiResponsesStreamAdapter
         item_id: itemId,
         output_index: 0,
         content_index: 0,
-        sequence_number: Date.now() + 2,
+        sequence_number: this.nextSequenceNumber(),
         delta: text,
         logprobs: [],
       }),
@@ -1101,7 +1107,7 @@ class OpenAiResponsesStreamAdapter
         item_id: itemId,
         output_index: 0,
         content_index: 0,
-        sequence_number: Date.now() + 3,
+        sequence_number: this.nextSequenceNumber(),
         text,
         logprobs: [],
       }),
@@ -1110,7 +1116,7 @@ class OpenAiResponsesStreamAdapter
         item_id: itemId,
         output_index: 0,
         content_index: 0,
-        sequence_number: Date.now() + 4,
+        sequence_number: this.nextSequenceNumber(),
         part: {
           type: "output_text",
           text,
@@ -1120,7 +1126,7 @@ class OpenAiResponsesStreamAdapter
       toSse({
         type: "response.output_item.done",
         output_index: 0,
-        sequence_number: Date.now() + 5,
+        sequence_number: this.nextSequenceNumber(),
         item: {
           id: itemId,
           type: "message",
@@ -1137,7 +1143,7 @@ class OpenAiResponsesStreamAdapter
       }),
       toSse({
         type: "response.completed",
-        sequence_number: Date.now() + 6,
+        sequence_number: this.nextSequenceNumber(),
         response: {
           id: responseId,
           object: "response",
@@ -1221,17 +1227,16 @@ class OpenAiResponsesStreamAdapter
       ? prependPrefixToResponse(held, this.issuedPrefix)
       : held;
     this.terminalResponse = completedResponse;
-    let sequence = Date.now();
     const frames = formatResponsesFunctionCallFrames({
       toolCalls: notices,
       firstOutputIndex: completedResponse.output.length - notices.length,
-      nextSequenceNumber: () => sequence++,
+      nextSequenceNumber: () => this.nextSequenceNumber(),
     });
     frames.push(
       toSse(
         this.withCompactionContext({
           type: "response.completed",
-          sequence_number: sequence++,
+          sequence_number: this.nextSequenceNumber(),
           response: completedResponse,
         } as OpenAiResponsesStreamChunk),
       ),
@@ -1333,7 +1338,6 @@ class OpenAiResponsesStreamAdapter
       (item) =>
         item.type !== "function_call" && item.type !== "custom_tool_call",
     ).length;
-    let sequence = Date.now();
     // Released with the turn: what was withheld beside the calls goes first.
     const frames = (failed ? [] : (this.hosted?.events ?? [])).map((event) =>
       toSse(event),
@@ -1342,7 +1346,7 @@ class OpenAiResponsesStreamAdapter
       ...formatResponsesFunctionCallFrames({
         toolCalls,
         firstOutputIndex,
-        nextSequenceNumber: () => sequence++,
+        nextSequenceNumber: () => this.nextSequenceNumber(),
         itemIdByCallId,
         // Codex routes a namespaced call by the namespace its item names.
         namespaceByCallId: namespacesByCallId({
@@ -1361,7 +1365,7 @@ class OpenAiResponsesStreamAdapter
               : completedResponse.status === "failed"
                 ? "response.failed"
                 : "response.completed",
-          sequence_number: sequence++,
+          sequence_number: this.nextSequenceNumber(),
           response: completedResponse,
         } as OpenAiResponsesStreamChunk),
       ),
@@ -1402,7 +1406,7 @@ class OpenAiResponsesStreamAdapter
         : `${this.state.text}${this.replacedText}`;
     if (messageText) {
       outputItems.push({
-        id: this.firstTextDelta?.itemId ?? `msg_${Date.now()}`,
+        id: this.firstTextDelta?.itemId ?? `msg_${randomUUID()}`,
         type: "message",
         role: "assistant",
         status: outputStatus,
@@ -1451,7 +1455,7 @@ class OpenAiResponsesStreamAdapter
     // and restore the items we accumulated.
     const fallbackResponse = {
       ...(this.replacedText === null ? (this.observedResponse ?? {}) : {}),
-      id: this.state.responseId || `resp_${Date.now()}`,
+      id: this.state.responseId || `resp_${randomUUID()}`,
       object: "response",
       created_at:
         this.observedResponse?.created_at ?? Math.floor(Date.now() / 1000),
@@ -1541,6 +1545,10 @@ class OpenAiResponsesStreamAdapter
       return "";
     }
     return this.getTextSuffix(firstText);
+  }
+
+  private nextSequenceNumber(): number {
+    return this.syntheticSequence++;
   }
 
   private withCompactionContext(

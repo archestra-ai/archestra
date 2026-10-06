@@ -342,6 +342,50 @@ describe("AnthropicRequestAdapter", () => {
     });
   });
 
+  describe("getMessages - tool result error status", () => {
+    // toCommonFormat feeds getMessages(), which is what tool-invocation and
+    // trusted-data policies evaluate. Dropping is_error there records every
+    // tool result as a success even when the tool reported an error.
+    test.each([
+      ["true", { is_error: true }, true],
+      ["false", { is_error: false }, false],
+      ["absent", {}, false],
+    ] as const)("propagates is_error %s onto the common tool call", (_label, extension, isError) => {
+      const messages = [
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "tool_1", name: "read", input: {} },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool_1",
+              content: "result body",
+              ...extension,
+            },
+          ],
+        },
+      ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+      const adapter = anthropicAdapterFactory.createRequestAdapter(
+        createMockRequest(messages),
+      );
+
+      const toolMessage = adapter
+        .getMessages()
+        .find((message) => message.toolCalls);
+      expect(toolMessage?.toolCalls?.[0]).toMatchObject({
+        id: "tool_1",
+        name: "read",
+        isError,
+      });
+    });
+  });
+
   describe("toProviderRequest - tool results handling", () => {
     test("handles empty tool results (no tool_result blocks)", () => {
       const messages = [

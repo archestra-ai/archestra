@@ -824,6 +824,46 @@ describe("OpenAiResponsesResponseAdapter.withReplacedText", () => {
   });
 });
 
+describe("OpenAiResponsesStreamAdapter synthesized frame identity", () => {
+  // Two replacements synthesized in the same millisecond used to share one
+  // Date.now() item id and one sequence range: the client then saw two items
+  // with a single id and frames whose ordering numbers replayed. Ids must be
+  // unique per synthesized message and sequence numbers strictly increasing
+  // per adapter, regardless of the clock.
+  test("two rapid formatTextDeltaSSE calls produce distinct ids and increasing sequence numbers", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+
+    const parse = (sse: string | Uint8Array) =>
+      String(sse)
+        .split("\n\n")
+        .filter(Boolean)
+        .map(
+          (frame) =>
+            JSON.parse(frame.replace(/^data: /, "")) as {
+              sequence_number?: number;
+              item?: { id?: string };
+            },
+        );
+    const first = parse(adapter.formatTextDeltaSSE("one"));
+    const second = parse(adapter.formatTextDeltaSSE("two"));
+
+    expect(first[0]?.item?.id).toMatch(/^msg_/);
+    expect(second[0]?.item?.id).toMatch(/^msg_/);
+    expect(second[0]?.item?.id).not.toBe(first[0]?.item?.id);
+
+    const sequences = [...first, ...second].map(
+      (frame) => frame.sequence_number,
+    );
+    expect(sequences).toHaveLength(first.length + second.length);
+    for (const sequence of sequences) {
+      expect(typeof sequence).toBe("number");
+    }
+    for (let index = 1; index < sequences.length; index++) {
+      expect(sequences[index]).toBeGreaterThan(sequences[index - 1] ?? 0);
+    }
+  });
+});
+
 describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
   test.each([
     "incomplete",

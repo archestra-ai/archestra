@@ -3379,6 +3379,18 @@ function illegalSpawnFeedback(params: {
 /**
  * Restore at most one accepted spawn per batch. Different options or tasks
  * still need their own runtime ruling; acceptance never authorizes fan-out.
+ *
+ * The `[appa] Authorized.` blob is parsed from client-carried history, so the
+ * text alone is not proof of authorization. A forged blob cannot widen the
+ * retried call: the marker prefix and shape are exact (parseAuthorizedRetry),
+ * the call must be one of the adapter's spawn tools whose local name matches
+ * the blob's tool, and every non-prompt argument must byte-match the blob
+ * while the prompt may only narrow toward the authorized value
+ * (sameAuthorizedSpawn, spawnArgumentsCovered). The restored call still goes
+ * through the runtime's own ruling afterward. A journal cross-check is not
+ * added: the blob carries no call id, so a lookup could only re-run this same
+ * name+arguments comparison, and the runtime — not this text — is what
+ * authorized the retry.
  */
 function restoreAuthorizedSpawnRetry(params: {
   calls: readonly ToolCall[];

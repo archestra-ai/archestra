@@ -415,22 +415,29 @@ function parentSessionId(context: AppaMatchContext): string | undefined {
 function childAgentId(context: AppaMatchContext): string | undefined {
   if (context.trustedContext?.claudeTeammateNativeId)
     return context.trustedContext.claudeTeammateNativeId;
+  const description = "Claude Code child agent id";
+  // A present invalid child id is a broken claim, not permission to fall back.
   const header = readHeader(context.headers, "x-claude-code-agent-id");
-  if (header) return header;
+  if (header !== undefined) return nativeId(header, description);
   const metadata = asRecord(asRecord(context.requestBody)?.metadata);
   const fromMetadata = stringField(metadata?.agent_id);
-  if (fromMetadata) return fromMetadata;
+  if (fromMetadata) return nativeId(fromMetadata, description);
   const userId = stringField(metadata?.user_id);
   if (userId?.trimStart().startsWith("{")) {
+    let user: Record<string, unknown> | undefined;
     try {
-      const user = asRecord(JSON.parse(userId));
-      const fromUser = stringField(user?.agent_id);
-      if (fromUser) return fromUser;
-      const parent = stringField(user?.parent_session_id);
-      const session = stringField(user?.session_id);
-      if (parent && session && parent !== session) return session;
+      user = asRecord(JSON.parse(userId));
     } catch {
       // Ignore JSON parse errors
+    }
+    if (user) {
+      const fromUser = stringField(user.agent_id);
+      if (fromUser) return nativeId(fromUser, description);
+      const parent = stringField(user.parent_session_id);
+      const session = stringField(user.session_id);
+      if (parent && session && parent !== session) {
+        return nativeId(session, description);
+      }
     }
   }
   return undefined;

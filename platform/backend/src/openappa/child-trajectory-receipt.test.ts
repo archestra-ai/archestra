@@ -310,6 +310,24 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
     expect(mintChildTrajectoryReceipt(BINDING)).toBeUndefined();
   });
 
+  test("treats a whitespace-only signing secret as no secret", () => {
+    const footer = mintChildTrajectoryReceipt(BINDING);
+    if (!footer) throw new Error("expected a child trajectory receipt");
+    const [receipt] = stripChildTrajectoryReceipts(footer).receipts;
+
+    config.openappa.offerSigningSecret = " \t\n ";
+    expect(mintChildTrajectoryReceipt(BINDING)).toBeUndefined();
+    expect(
+      verifyChildTrajectoryReceipt({
+        receipt,
+        organizationId: BINDING.organizationId,
+        callerId: BINDING.callerId,
+        spawnerNativeId: BINDING.spawnerNativeId,
+        childNativeId: BINDING.childNativeId,
+      }),
+    ).toBe(false);
+  });
+
   test("passes benign oversized text through unchanged", () => {
     const large = `start ${"x".repeat(8 * 1024 * 1024)} end`;
     const stripped = stripChildTrajectoryReceipts(large);

@@ -73,7 +73,7 @@ import { ClientConnectionApproval } from "./client-connection-approval";
 import {
   type ConnectClient,
   FINISH_OAUTH_FLOW_TITLE,
-  type ScriptClientId,
+  type InstallerClientId,
 } from "./clients";
 import type { ConnectionBaseUrl } from "./connection-flow.utils";
 import { GatewayServersSummary } from "./gateway-servers-summary";
@@ -542,7 +542,7 @@ export function ConnectCommandPanel({
   const runGeneration = useCallback(
     async (key: string) => {
       const inputs = JSON.parse(key) as {
-        clientId: ScriptClientId;
+        clientId: InstallerClientId;
         platform: NonNullable<CreateConnectionSetupBody["platform"]>;
         baseUrl: string;
         gatewayId: string | null;
@@ -1133,7 +1133,7 @@ export function ConnectCommandPanel({
                   <PluginsDetail
                     plugins={selectedPlugins}
                     incompatiblePlugins={incompatiblePlugins}
-                    clientId={client.id as ScriptClientId}
+                    clientId={client.id as InstallerClientId}
                     platform={platform}
                   />
                 }
@@ -1746,7 +1746,7 @@ function PluginsDetail({
 }: {
   plugins: PluginListItem[];
   incompatiblePlugins: PluginListItem[];
-  clientId: ScriptClientId;
+  clientId: InstallerClientId;
   platform: ConnectPlatformOption;
 }) {
   const shown = plugins.slice(0, SKILL_NAME_PREVIEW_LIMIT);

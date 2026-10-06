@@ -10,7 +10,7 @@ import config from "@/lib/config/config";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
 import type { ConnectClient } from "./clients";
-import { isScriptClient, usesGenericInstructions } from "./clients";
+import { isInstallerClientId, usesGenericInstructions } from "./clients";
 import {
   getConnectableProviders,
   resolveAdminDefaultBaseUrl,
@@ -34,7 +34,7 @@ import {
 export type SetupMode = "prompt" | "prompt-or-manual" | "manual";
 
 export function setupModeFor(client: ConnectClient): SetupMode {
-  if (isScriptClient(client.id)) return "prompt";
+  if (isInstallerClientId(client.id)) return "prompt";
   if (usesGenericInstructions(client)) return "prompt-or-manual";
   return "manual";
 }

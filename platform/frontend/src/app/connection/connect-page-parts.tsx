@@ -314,8 +314,8 @@ function DisconnectSteps({
       {!manualOnly && guard && (
         <div className="space-y-2">
           <p className="text-muted-foreground">
-            If {nameOf(client)} won't run it, run this in a terminal yourself (
-            {windows ? "Windows PowerShell" : "macOS or Linux"}):
+            If {nameOf(client)}
+            {` won't run it, run this in a terminal yourself (${windows ? "Windows PowerShell" : "macOS or Linux"}):`}
           </p>
           <CopyPrompt
             text={

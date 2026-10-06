@@ -9,7 +9,7 @@ import { WizardStep } from "@/components/wizard-step";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { CONNECT_CLIENTS, isScriptClient } from "./clients";
+import { CONNECT_CLIENTS, isInstallerClientId } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
 import {
   type ConnectionBaseUrl,
@@ -152,7 +152,8 @@ export function ConnectionFlow({
 
   // Manual flow (n8n / Any client): one wizard-rail entry per instruction
   // block, numbered after the client step.
-  const manualClient = client && !isScriptClient(client.id) ? client : null;
+  const manualClient =
+    client && !isInstallerClientId(client.id) ? client : null;
   const manualSteps: {
     key: string;
     title: string;
@@ -235,7 +236,7 @@ export function ConnectionFlow({
     <div className="flex flex-col">
       <div inert={isRevalidating} className="contents">
         {/* Steps 2-3 (script clients) — review, then run the command */}
-        {client && isScriptClient(client.id) && (
+        {client && isInstallerClientId(client.id) && (
           <ConnectCommandPanel
             client={client}
             mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}

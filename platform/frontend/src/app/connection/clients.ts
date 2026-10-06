@@ -8,7 +8,6 @@ import {
   type SupportedProvider,
 } from "@archestra/shared";
 import { NATIVE_SESSION_CLIENT_LABELS } from "@archestra/shared/connection-setup";
-import type { CreateConnectionSetupBody } from "@/lib/connection-setup.query";
 
 const [ANTHROPIC_BASE_URL_KEY] = CLAUDE_CODE_PROXY_ENV_KEYS.anthropic;
 const [CLAUDE_USE_BEDROCK_KEY, AWS_REGION_KEY, BEDROCK_BASE_URL_KEY] =
@@ -985,23 +984,12 @@ export function usesGenericInstructions(client: ConnectClient): boolean {
   return client.mcp.kind === "generic";
 }
 
-export type ScriptClientId = CreateConnectionSetupBody["clientId"];
-
-const SCRIPT_CLIENT_IDS: readonly string[] = [
-  "claude-code",
-  "claude-desktop",
-  "codex",
-  "copilot-cli",
-  "cursor",
-  "opencode",
-] satisfies ScriptClientId[];
-
-/** Clients whose whole setup is delivered as a single `curl | bash` command. */
-export function isScriptClient(
-  clientId: string | null,
-): clientId is ScriptClientId {
-  return clientId !== null && SCRIPT_CLIENT_IDS.includes(clientId);
-}
+// Apps with an installer: the one shared list the installer, connect.md and
+// disconnect.md read too.
+export {
+  type InstallerClientId,
+  isInstallerClientId,
+} from "@archestra/shared/connection-setup";
 
 // === Internal helpers ===
 

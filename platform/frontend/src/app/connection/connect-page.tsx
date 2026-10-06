@@ -26,6 +26,7 @@ import {
   Copy,
   Cpu,
   Download,
+  Gauge,
   Info,
   ListOrdered,
   MessageSquareText,
@@ -230,7 +231,7 @@ export function ConnectPage() {
               usable in your agent of choice.
             </p>
 
-            <h2 className="mt-6 text-sm font-medium">
+            <h2 className="mt-6 text-sm font-semibold">
               {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
             </h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
@@ -482,7 +483,7 @@ function Tile({
         active
           ? // The muted tint is layered over the card fill, so the page's
             // dots never show through a selected tile.
-            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-medium text-foreground ring-1 ring-primary"
+            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-semibold text-foreground ring-1 ring-primary"
           : "text-muted-foreground",
       )}
     >
@@ -728,7 +729,9 @@ function ConnectArea({
           {script && (
             <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
               <div>
-                <p className="font-medium text-foreground">When it finishes</p>
+                <p className="font-semibold text-foreground">
+                  When it finishes
+                </p>
                 <ol className="mt-1 list-decimal space-y-0.5 pl-4">
                   {scriptNextSteps(client).map((line) => (
                     <li key={line}>{line}</li>
@@ -906,7 +909,7 @@ function ManualSteps({
             {i + 1}
           </span>
           <div className="min-w-0">
-            <h3 className="pt-1 text-sm font-medium">{s.title}</h3>
+            <h3 className="pt-1 text-sm font-semibold">{s.title}</h3>
             <div className="mt-3 min-w-0 max-w-5xl">{s.content}</div>
           </div>
         </li>
@@ -935,7 +938,7 @@ function ModeSwitch({
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors [&_svg]:size-3.5",
         alt === value
-          ? "bg-background font-medium text-foreground shadow-sm"
+          ? "bg-background font-semibold text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -1147,14 +1150,10 @@ function ProfileCard({
                 sub={
                   <>
                     from {fmt(servers.length)} MCP{" "}
-                    {plural(servers.length, "server")} ·{" "}
-                    {data.progressive ? "load on demand" : "all load at start"}
-                    <InfoTip label="How tools load">
+                    {plural(servers.length, "server")}
+                    <InfoTip label="What MCP servers are">
                       Tools your agent calls, served through your organization's
-                      gateway{gatewayName ? ` (${gatewayName})` : ""}.{" "}
-                      {data.progressive
-                        ? "Your agent starts with a small fixed set and finds the rest when a task needs them, so adding servers doesn't grow it."
-                        : "Every included tool loads at the start of each session; more tools take more of your agent's working memory."}
+                      gateway{gatewayName ? ` (${gatewayName})` : ""}.
                     </InfoTip>
                   </>
                 }
@@ -1164,6 +1163,14 @@ function ProfileCard({
                     : "See all"
                 }
                 onMore={() => onOpen("servers")}
+                footer={
+                  tools > 0 && (
+                    <ToolLoadingNote
+                      progressive={data.progressive}
+                      tools={tools}
+                    />
+                  )
+                }
               >
                 {servers.length === 0 ? (
                   <span className="block py-1 text-muted-foreground">
@@ -1184,7 +1191,7 @@ function ProfileCard({
                           catalogId={s.catalogId ?? undefined}
                           size={15}
                         />
-                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-foreground">
                           {s.name}
                         </span>
                         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover/row:text-foreground motion-safe:group-hover/row:translate-x-0.5" />
@@ -1235,7 +1242,7 @@ function ProfileCard({
                         title={s.description}
                         className="-mx-1.5 flex h-6.5 min-w-0 items-center rounded-md px-1.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       >
-                        <span className="min-w-0 truncate font-mono text-xs text-foreground">
+                        <span className="min-w-0 truncate text-foreground">
                           {s.name}
                         </span>
                       </UnstyledButton>
@@ -1303,6 +1310,7 @@ function ListBlock({
   muted,
   more,
   onMore,
+  footer,
   children,
 }: {
   icon: ReactNode;
@@ -1311,39 +1319,78 @@ function ListBlock({
   muted?: boolean;
   more?: string;
   onMore?: () => void;
+  /** A tinted strip across the bottom of the block. */
+  footer?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border bg-background py-2 pr-3.5 pl-2">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <ChipIcon>{icon}</ChipIcon>
-        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-          <span
-            className={cn(
-              "text-sm font-semibold tracking-tight tabular-nums",
-              muted && "text-muted-foreground",
-            )}
-          >
-            {title}
+    <div className="overflow-hidden rounded-xl border bg-background">
+      <div className="py-2 pr-3.5 pl-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <ChipIcon>{icon}</ChipIcon>
+          <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+            <span
+              className={cn(
+                "text-sm font-semibold tracking-tight tabular-nums",
+                muted && "text-muted-foreground",
+              )}
+            >
+              {title}
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              {sub}
+            </span>
           </span>
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            {sub}
-          </span>
-        </span>
-        {more && onMore && (
-          <UnstyledButton
-            type="button"
-            onClick={onMore}
-            className="shrink-0 rounded-sm text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            {more}
-          </UnstyledButton>
+          {more && onMore && (
+            <UnstyledButton
+              type="button"
+              onClick={onMore}
+              className="shrink-0 rounded-sm text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              {more}
+            </UnstyledButton>
+          )}
+        </div>
+        {children && (
+          <div className="mt-1.5 border-t pt-1 pl-1 text-xs">{children}</div>
         )}
       </div>
-      {children && (
-        <div className="mt-1.5 border-t pt-1 pl-1 text-xs">{children}</div>
+      {footer && (
+        <div className="border-t bg-muted/40 px-3 py-2 text-xs">{footer}</div>
       )}
     </div>
+  );
+}
+
+/** How the included tools reach the agent, as the tools block's footer. */
+function ToolLoadingNote({
+  progressive,
+  tools,
+}: {
+  progressive: boolean;
+  tools: number;
+}) {
+  return (
+    <p className="flex items-start gap-2 text-muted-foreground">
+      <Gauge
+        className={cn(
+          "mt-px size-3.5 shrink-0",
+          progressive
+            ? "text-emerald-600 dark:text-emerald-400"
+            : "text-amber-600 dark:text-amber-400",
+        )}
+      />
+      <span>
+        <span className="font-semibold text-foreground">
+          {progressive
+            ? "Tools load on demand."
+            : `All ${fmt(tools)} ${plural(tools, "tool")} load at session start.`}
+        </span>{" "}
+        {progressive
+          ? "Your agent starts with a few search tools and pulls in the rest when a task needs them, so more servers don't fill its context."
+          : "Every tool takes up some of your agent's context, so more servers leave it less room."}
+      </span>
+    </p>
   );
 }
 

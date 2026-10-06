@@ -285,7 +285,7 @@ export function BrowseDialog({
                                 <span
                                   key={t.name}
                                   title={t.description ?? undefined}
-                                  className="rounded border bg-muted/40 px-1.5 py-0.5 font-mono text-xs"
+                                  className="rounded border bg-muted/40 px-1.5 py-0.5 text-xs"
                                 >
                                   {t.name}
                                 </span>
@@ -334,7 +334,7 @@ export function BrowseDialog({
                           htmlFor="include-skills"
                           className="min-w-0 flex-1 cursor-pointer"
                         >
-                          <span className="block text-sm font-medium">
+                          <span className="block text-sm font-semibold">
                             Include skills
                           </span>
                           <span className="block text-xs text-muted-foreground">
@@ -362,9 +362,7 @@ export function BrowseDialog({
                             className="flex w-full min-w-0 items-center gap-3 px-4 py-2.5 text-left hover:bg-muted/50 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                           >
                             <span className="min-w-0 flex-1">
-                              <span className="block font-mono text-xs">
-                                {s.name}
-                              </span>
+                              <span className="block text-sm">{s.name}</span>
                               <span className="block truncate text-xs text-muted-foreground">
                                 {s.description}
                               </span>
@@ -432,7 +430,7 @@ function SkillReader({
           <ArrowLeft />
           <span className="sr-only">Back to skills</span>
         </Button>
-        <span className="min-w-0 flex-1 truncate font-mono text-sm font-medium">
+        <span className="min-w-0 flex-1 truncate text-sm font-semibold">
           {skill.name}
         </span>
         <span className="text-xs capitalize text-muted-foreground">

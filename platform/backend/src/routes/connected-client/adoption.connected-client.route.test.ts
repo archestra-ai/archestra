@@ -379,7 +379,7 @@ describe("GET /api/connected-clients/adoption", () => {
 
     expect(await memberById(ada.id)).toMatchObject({
       status: "active",
-      agents: [{ clientId: null, name: "Unknown agent" }],
+      agents: [{ clientId: "generic", name: "Generic client" }],
     });
     expect(await memberById(bob.id)).toMatchObject({
       status: "notConnected",

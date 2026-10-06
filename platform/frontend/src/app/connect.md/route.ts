@@ -280,10 +280,7 @@ Only if the app lets you change its model provider's base URL. Keep the provider
 and API key the user already has, and set the base URL to ${base}/<provider>, for
 example ${base}/openai, ${base}/anthropic or ${base}/gemini. An app that speaks the
 OpenAI API can instead use ${base}/model-router with provider-qualified model IDs such
-as openai:gpt-5.4. Do not switch providers or models.
-If the app can add custom headers to its model requests, also send
-X-Archestra-Agent-Id with a short lowercase id for the app, such as amp, droid or kiro,
-so this deployment can tell which app made each request.`);
+as openai:gpt-5.4. Do not switch providers or models.`);
   }
 
   return `# Connect This App

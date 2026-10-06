@@ -73,7 +73,11 @@ const adoption: AgentAdoption = {
       agents: [
         agent({ clientId: "claude-code", name: "Claude Code", setUpAt: now }),
         agent({ clientId: null, name: "Droid", gatewayLastSeenAt: now }),
-        agent({ clientId: null, name: "Unknown agent", llmLastSeenAt: now }),
+        agent({
+          clientId: "generic",
+          name: "Generic client",
+          llmLastSeenAt: now,
+        }),
       ],
     }),
     member({
@@ -129,7 +133,7 @@ describe("agentChartData", () => {
       { id: "claude-code", label: "Claude Code", members: 2 },
       { id: "codex", label: "Codex", members: 1 },
       { id: "droid", label: "Droid", members: 1 },
-      { id: "name:unknown agent", label: "Unknown agent", members: 1 },
+      { id: "generic", label: "Generic client", members: 1 },
       { id: "none", label: "Not connected", members: 1 },
     ]);
   });

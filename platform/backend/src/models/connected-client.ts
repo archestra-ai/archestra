@@ -432,14 +432,12 @@ class ConnectedClientModel {
       if (!member) continue;
       const lastSeen = toUtcDate(row.last_seen_at);
       member.gatewayLastSeenAt = latest(member.gatewayLastSeenAt, lastSeen);
-      // Outside agents on a pasted token can't be told apart; older rows
+      // Outside agents on a pasted token send nothing to name them by; older rows
       // (no source) predate recording the OAuth client, so name no agent.
       if (!row.oauth_client_id && row.source !== "api") continue;
       const agent = agentOf(
         member,
-        row.oauth_client_id
-          ? oauthAgentIdentity(row)
-          : { clientId: null, name: "Unknown agent" },
+        row.oauth_client_id ? oauthAgentIdentity(row) : GENERIC_AGENT,
       );
       agent.gatewayLastSeenAt = latest(agent.gatewayLastSeenAt, lastSeen);
     }
@@ -615,6 +613,12 @@ function adoptionStatus(
     : "notConnected";
 }
 
+/**
+ * Best effort ends here: an agent that sent nothing we can name is the
+ * Connect page's "Generic client".
+ */
+const GENERIC_AGENT = { clientId: "generic", name: "Generic client" };
+
 /** An OAuth client as the adoption queries read it. */
 interface OAuthAgentRow extends Record<string, unknown> {
   user_id: string;
@@ -645,7 +649,8 @@ function oauthAgentIdentity(row: OAuthAgentRow): {
           : INSTALLER_CLIENT_LABELS[connectClient],
     };
   }
-  const name = row.name?.trim() || "Unnamed agent";
+  const name = row.name?.trim();
+  if (!name) return GENERIC_AGENT;
   const byLabel = INSTALLER_CLIENT_IDS.find(
     (id) => INSTALLER_CLIENT_LABELS[id].toLowerCase() === name.toLowerCase(),
   );
@@ -665,15 +670,16 @@ const LLM_AGENT_CLIENT: Record<string, ConnectionSetupClientId> = {
 };
 
 /**
- * Which agent an LLM proxy call came from, by its `external_agent_id`: a
- * Connect client's id (the generic instructions send the picked agent's id,
- * such as "amp"), a generic Claude client, or nothing at all.
+ * Which agent an LLM proxy call came from, best effort, by its
+ * `external_agent_id`: an id the proxy recognised or the agent sent itself,
+ * a Claude client it couldn't tell apart, or the generic client when nothing
+ * named it.
  */
 function llmAgentIdentity(agent: string | null): {
   clientId: string | null;
   name: string;
 } {
-  if (!agent) return { clientId: null, name: "Unknown agent" };
+  if (!agent) return GENERIC_AGENT;
   const installer = LLM_AGENT_CLIENT[agent];
   if (installer) {
     return { clientId: installer, name: INSTALLER_CLIENT_LABELS[installer] };

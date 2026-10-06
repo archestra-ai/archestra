@@ -10,6 +10,13 @@ export type McpRegistryVisibilityInstall = {
   scope: "personal" | "team" | "org";
   ownerId?: string | null;
   teamId?: string | null;
+  /**
+   * The backend's per-viewer verdict: the viewer's own connection, one shared
+   * with a team they belong to, or an organization-wide one. False for another
+   * member's personal connection and for another team's connection, both of
+   * which an admin's listing still returns.
+   */
+  canUseCredential: boolean;
 };
 
 export type McpRegistryOwnershipFilters = {
@@ -20,31 +27,42 @@ export type McpRegistryOwnershipFilters = {
   excludeOtherPersonal?: true;
 };
 
-export function isMcpRegistryInstallUsableByViewer(
-  server: McpRegistryVisibilityInstall,
-  currentUserId: string | undefined,
+/**
+ * The one answer to "is this MCP server installed for me?". The card's
+ * Install button, the Installed / Not installed filter, the table's status and
+ * Install action, and the server page's header status all read it, so they
+ * cannot disagree about the same server.
+ *
+ * Installed means the viewer has a connection they can actually use: their
+ * own personal one, one shared with a team they belong to, or an
+ * organization-wide one. Installs that only appear because the viewer is an
+ * admin — another member's personal connection, another team's connection —
+ * do not count; the viewer still has to install the server to use it.
+ *
+ * Multi-tenant servers follow the same rule. They share one deployment, but
+ * every member connects through an install row of their own (or a shared
+ * one), so a colleague's row does not make the server installed for the
+ * viewer.
+ *
+ * `servers` is every install of ONE catalog item the viewer can see.
+ */
+export function isMcpServerInstalledForViewer(
+  servers: readonly Pick<McpRegistryVisibilityInstall, "canUseCredential">[],
 ): boolean {
-  if (server.scope === "team" || server.scope === "org") return true;
-  return !!currentUserId && server.ownerId === currentUserId;
+  return servers.some((server) => server.canUseCredential);
 }
 
 export function mcpRegistryInstallPriority(
   server: McpRegistryVisibilityInstall,
   currentUserId: string | undefined,
 ): number {
+  // An install the viewer cannot use never stands in for the catalog item
+  // while one they can use exists.
+  if (!server.canUseCredential) return 3;
   if (server.scope === "personal" && server.ownerId === currentUserId) return 0;
   if (server.scope === "team") return 1;
   if (server.scope === "org") return 2;
   return 3;
-}
-
-export function hasMcpRegistryInstallForViewer(
-  servers: readonly McpRegistryVisibilityInstall[],
-  currentUserId: string | undefined,
-): boolean {
-  return servers.some((server) =>
-    isMcpRegistryInstallUsableByViewer(server, currentUserId),
-  );
 }
 
 export function matchesMcpRegistryOwnershipFilters({
@@ -58,7 +76,7 @@ export function matchesMcpRegistryOwnershipFilters({
   filters: McpRegistryOwnershipFilters;
   currentUserId: string | undefined;
 }): boolean {
-  const usableInstall = hasMcpRegistryInstallForViewer(servers, currentUserId);
+  const usableInstall = isMcpServerInstalledForViewer(servers);
   const authoredByViewer = !!currentUserId && item.authorId === currentUserId;
 
   if (

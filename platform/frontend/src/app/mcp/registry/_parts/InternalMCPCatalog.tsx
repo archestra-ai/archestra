@@ -101,7 +101,7 @@ import {
 } from "./local-server-install-dialog";
 import { ManageUsersDialog } from "./manage-users-dialog";
 import {
-  hasMcpRegistryInstallForViewer,
+  isMcpServerInstalledForViewer,
   matchesMcpRegistryOwnershipFilters,
   mcpRegistryInstallPriority,
 } from "./mcp-registry-visibility";
@@ -828,16 +828,6 @@ export function InternalMCPCatalog({
     );
   };
 
-  // Live connection status (vs the stable snapshot used for the default sort).
-  const connectedCatalogIds = useMemo(
-    () =>
-      new Set(
-        (installedServers ?? [])
-          .map((s) => s.catalogId)
-          .filter(Boolean) as string[],
-      ),
-    [installedServers],
-  );
   const serversByCatalog = useMemo(() => {
     const map = new Map<string, InstalledServer[]>();
     for (const server of installedServers ?? []) {
@@ -856,17 +846,16 @@ export function InternalMCPCatalog({
       ),
     [serversByCatalog, currentUserId],
   );
+  // Installed-for-me, the same rule the cards' Install button and the server
+  // page use. Drives the Installed / Not installed filter and the sort.
   const installedForViewerCatalogIds = useMemo(
     () =>
       new Set(
-        (installedServers ?? [])
-          .filter((server) =>
-            hasMcpRegistryInstallForViewer([server], currentUserId),
-          )
-          .map((server) => server.catalogId)
-          .filter(Boolean) as string[],
+        [...serversByCatalog]
+          .filter(([, servers]) => isMcpServerInstalledForViewer(servers))
+          .map(([catalogId]) => catalogId),
       ),
-    [installedServers, currentUserId],
+    [serversByCatalog],
   );
   const envLabelByCatalog = useMemo(() => {
     const envs = environmentList?.environments ?? [];
@@ -955,7 +944,7 @@ export function InternalMCPCatalog({
     const wantsInstalled = filters.status.has(INSTALLED_STATUS_VALUE);
     const wantsNotInstalled = filters.status.has(NOT_INSTALLED_STATUS_VALUE);
     if (wantsInstalled || wantsNotInstalled) {
-      const installed = connectedCatalogIds.has(item.id);
+      const installed = installedForViewerCatalogIds.has(item.id);
       if (!((installed && wantsInstalled) || (!installed && wantsNotInstalled)))
         return false;
     }

@@ -3,9 +3,8 @@ import { renderHook, waitFor } from "@testing-library/react";
 import type { ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-const { getConnectedClientsMock, getConnectedUsersMock } = vi.hoisted(() => ({
+const { getConnectedClientsMock } = vi.hoisted(() => ({
   getConnectedClientsMock: vi.fn(),
-  getConnectedUsersMock: vi.fn(),
 }));
 
 vi.mock("@archestra/shared", async (importOriginal) => {
@@ -15,15 +14,11 @@ vi.mock("@archestra/shared", async (importOriginal) => {
     archestraApiSdk: {
       ...actual.archestraApiSdk,
       getConnectedClients: getConnectedClientsMock,
-      getConnectedUsers: getConnectedUsersMock,
     },
   };
 });
 
-import {
-  useConnectedClients,
-  useConnectedUsers,
-} from "./connected-client.query";
+import { useConnectedClients } from "./connected-client.query";
 
 function createWrapper(queryClient: QueryClient) {
   return ({ children }: { children: ReactNode }) => (
@@ -50,20 +45,5 @@ describe("connected client queries", () => {
     });
 
     await waitFor(() => expect(result.current.data).toEqual(rows));
-  });
-
-  it("pages through connected members", async () => {
-    const page = { data: [], pagination: { total: 0 } };
-    getConnectedUsersMock.mockResolvedValue({ data: page, error: null });
-
-    const { result } = renderHook(
-      () => useConnectedUsers({ limit: 20, offset: 40 }),
-      { wrapper: createWrapper(queryClient) },
-    );
-
-    await waitFor(() => expect(result.current.data).toEqual(page));
-    expect(getConnectedUsersMock).toHaveBeenCalledWith({
-      query: { limit: 20, offset: 40 },
-    });
   });
 });

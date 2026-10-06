@@ -959,9 +959,7 @@ export const RouteId = {
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionHealth: "getConnectionHealth",
   GetConnectedClients: "getConnectedClients",
-  GetConnectedUsers: "getConnectedUsers",
   DisconnectConnectedClient: "disconnectConnectedClient",
-  DisconnectConnectedUserClient: "disconnectConnectedUserClient",
 
   // MCP App Routes
   GetApps: "getApps",

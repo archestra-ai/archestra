@@ -92,19 +92,20 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    // The refresh token and both access tokens.
-    expect(response.json()).toEqual({
-      setups: 1,
-      oauthClients: 1,
-      tokens: 3,
-      shareLinks: 1,
-    });
+    expect(response.json()).toEqual({ success: true });
     const remaining = await ConnectedClientModel.listForUser({
       organizationId,
       userId: user.id,
     });
     expect(remaining.map((c) => c.clientId)).toEqual(["codex"]);
     expect(await OAuthRefreshTokenModel.getById(refresh.id)).toBeNull();
+    // Both access tokens, including the one not minted from a refresh token.
+    expect(await accessTokenCount(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID)).toBe(
+      0,
+    );
+    expect(await accessTokenCount(other.id, CLAUDE_CODE_OAUTH_CLIENT_ID)).toBe(
+      1,
+    );
     for (const row of kept) {
       expect(await OAuthRefreshTokenModel.getById(row.id)).not.toBeNull();
     }
@@ -152,7 +153,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
       url: "/api/connected-clients/claude-code",
     });
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({ setups: 0, tokens: 2 });
+    expect(response.json()).toEqual({ success: true });
     expect(
       await ConnectedClientModel.listForUser({
         organizationId,
@@ -203,12 +204,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     });
 
     expect(response.statusCode).toBe(200);
-    expect(response.json()).toEqual({
-      setups: 0,
-      oauthClients: 1,
-      tokens: 2,
-      shareLinks: 0,
-    });
+    expect(response.json()).toEqual({ success: true });
     expect(await OAuthRefreshTokenModel.getById(refresh.id)).toBeNull();
     expect(await OAuthRefreshTokenModel.getById(kept.id)).not.toBeNull();
     expect(
@@ -263,6 +259,19 @@ describe("DELETE /api/connected-clients/:clientId", () => {
       .insert(schema.oauthConsentsTable)
       .values({ id, clientId, userId, scopes: ["mcp"] });
     return id;
+  }
+
+  async function accessTokenCount(userId: string, clientId: string) {
+    const rows = await db
+      .select({ id: schema.oauthAccessTokensTable.id })
+      .from(schema.oauthAccessTokensTable)
+      .where(
+        and(
+          eq(schema.oauthAccessTokensTable.userId, userId),
+          eq(schema.oauthAccessTokensTable.clientId, clientId),
+        ),
+      );
+    return rows.length;
   }
 
   async function consentExists(id: string) {

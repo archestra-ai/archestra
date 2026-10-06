@@ -45,7 +45,7 @@ describe("GET /api/connected-clients", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual([
-      expect.objectContaining({ clientId: "claude-code", platform: "macos" }),
+      expect.objectContaining({ clientId: "claude-code" }),
     ]);
   });
 
@@ -72,31 +72,14 @@ describe("GET /api/connected-clients", () => {
     expect(response.statusCode).toBe(200);
     const body = response.json();
     expect(body).toHaveLength(1);
-    expect(body[0]).toMatchObject({
+    expect(body[0]).toEqual({
       clientId: "claude-code",
-      platform: "macos",
+      lastConnectedAt: expect.any(String),
+      deviceNames: [],
     });
     expect(new Date(body[0].lastConnectedAt).getTime()).toBeGreaterThanOrEqual(
       signedIn.createdAt.getTime(),
     );
-  });
-
-  test("lists connected members for admins, paginated", async () => {
-    await redeem(user.id, "claude-code");
-
-    const response = await app.inject({
-      method: "GET",
-      url: "/api/connected-clients/users?limit=10&offset=0",
-    });
-
-    expect(response.statusCode).toBe(200);
-    const body = response.json();
-    expect(body.pagination.total).toBe(1);
-    expect(body.data[0]).toMatchObject({
-      userId: user.id,
-      clientIds: ["claude-code"],
-      gatewayCallCount: 0,
-    });
   });
 
   async function redeem(userId: string, clientId: "claude-code" | "codex") {

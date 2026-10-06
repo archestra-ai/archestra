@@ -370,7 +370,7 @@ export function ConnectPage() {
           download={download}
           choices={choices}
           prompt={prompt}
-          firstPrompt={suggestFirstPrompt(servers, skills)}
+          firstPrompt={suggestFirstPrompt(data.appName, servers, skills)}
           includeLabel={
             leftOut.length === 0
               ? "Choose what to include"

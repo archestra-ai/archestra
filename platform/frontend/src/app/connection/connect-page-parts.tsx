@@ -866,35 +866,17 @@ function Empty({ children }: { children: ReactNode }) {
 
 // === Helpers ===
 
-/** One concrete first task, built from a real server or skill name. */
+/**
+ * The first thing to try after connecting: one walkthrough of what the agent
+ * got, rather than example tasks. null when nothing was included.
+ */
 export function suggestFirstPrompt(
+  appName: string,
   servers: ConnectServer[],
   skills: ConnectPageSkill[],
 ): string | null {
-  const rules: [RegExp, (name: string) => string][] = [
-    [/slack/i, () => "Summarize my unread Slack threads from today"],
-    [/github/i, () => "List the GitHub pull requests waiting on my review"],
-    [/jira/i, () => "Show my Jira tickets that are in progress"],
-    [/linear/i, () => "Which Linear issues are assigned to me this week?"],
-    [
-      /notion/i,
-      () => "Find our latest roadmap page in Notion and summarize it",
-    ],
-    [/drive|gdrive/i, () => "Find the Google Drive doc I edited most recently"],
-    [
-      /postgres|sql|database/i,
-      (n) => `Which tables are in ${n}? Describe the largest one`,
-    ],
-  ];
-  for (const s of servers) {
-    const hit = rules.find(([re]) => re.test(s.name));
-    if (hit) return hit[1](s.name);
-  }
-  if (servers[0])
-    return `Show me what you can do with ${servers[0].name}, then try one thing`;
-  if (skills[0])
-    return `Use the ${skills[0].name} skill on what I'm working on`;
-  return null;
+  if (servers.length === 0 && skills.length === 0) return null;
+  return `Summarize the tools and skills you got from ${appName} and show me one thing you can do with them.`;
 }
 
 export function labelOf(client: ConnectClient) {

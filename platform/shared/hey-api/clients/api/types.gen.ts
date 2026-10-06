@@ -40031,6 +40031,8 @@ export type StartClientConnectionData = {
     body: {
         clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
+        exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
+        deviceName?: string;
     };
     path?: never;
     query?: never;
@@ -40284,6 +40286,8 @@ export type GetClientConnectionResponses = {
     200: {
         clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
+        exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
+        deviceName: string | null;
         userCode: string;
         expiresAt: string;
     };
@@ -40785,121 +40789,12 @@ export type GetConnectedClientsResponses = {
      */
     200: Array<{
         clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'amp';
-        platform: 'macos' | 'linux' | 'windows';
-        mcpGatewayId: string | null;
-        llmProxyId: string | null;
-        connectedAt: string;
         lastConnectedAt: string;
         deviceNames: Array<string>;
     }>;
 };
 
 export type GetConnectedClientsResponse = GetConnectedClientsResponses[keyof GetConnectedClientsResponses];
-
-export type GetConnectedUsersData = {
-    body?: never;
-    path?: never;
-    query?: {
-        limit?: number;
-        offset?: number;
-    };
-    url: '/api/connected-clients/users';
-};
-
-export type GetConnectedUsersErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type GetConnectedUsersError = GetConnectedUsersErrors[keyof GetConnectedUsersErrors];
-
-export type GetConnectedUsersResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        data: Array<{
-            userId: string;
-            name: string;
-            email: string;
-            clientIds: Array<'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode'>;
-            firstConnectedAt: string;
-            lastConnectedAt: string;
-            lastGatewayCallAt: string | null;
-            gatewayCallCount: number;
-            lastLlmRequestAt: string | null;
-            llmRequestCount: number;
-        }>;
-        pagination: {
-            currentPage: number;
-            limit: number;
-            total: number;
-            totalPages: number;
-            hasNext: boolean;
-            hasPrev: boolean;
-        };
-    };
-};
-
-export type GetConnectedUsersResponse = GetConnectedUsersResponses[keyof GetConnectedUsersResponses];
 
 export type DisconnectConnectedClientData = {
     body?: never;
@@ -40980,103 +40875,11 @@ export type DisconnectConnectedClientResponses = {
      * Default Response
      */
     200: {
-        setups: number;
-        oauthClients: number;
-        tokens: number;
-        shareLinks: number;
+        success: boolean;
     };
 };
 
 export type DisconnectConnectedClientResponse = DisconnectConnectedClientResponses[keyof DisconnectConnectedClientResponses];
-
-export type DisconnectConnectedUserClientData = {
-    body?: never;
-    path: {
-        userId: string;
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'amp';
-    };
-    query?: never;
-    url: '/api/connected-clients/users/{userId}/{clientId}';
-};
-
-export type DisconnectConnectedUserClientErrors = {
-    /**
-     * Default Response
-     */
-    400: {
-        error: {
-            message: string;
-            type: 'api_validation_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    401: {
-        error: {
-            message: string;
-            type: 'api_authentication_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    403: {
-        error: {
-            message: string;
-            type: 'api_authorization_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    404: {
-        error: {
-            message: string;
-            type: 'api_not_found_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    409: {
-        error: {
-            message: string;
-            type: 'api_conflict_error';
-            internal_code?: string;
-        };
-    };
-    /**
-     * Default Response
-     */
-    500: {
-        error: {
-            message: string;
-            type: 'api_internal_server_error';
-            internal_code?: string;
-        };
-    };
-};
-
-export type DisconnectConnectedUserClientError = DisconnectConnectedUserClientErrors[keyof DisconnectConnectedUserClientErrors];
-
-export type DisconnectConnectedUserClientResponses = {
-    /**
-     * Default Response
-     */
-    200: {
-        setups: number;
-        oauthClients: number;
-        tokens: number;
-        shareLinks: number;
-    };
-};
-
-export type DisconnectConnectedUserClientResponse = DisconnectConnectedUserClientResponses[keyof DisconnectConnectedUserClientResponses];
 
 export type BeginConnectionPromptSessionData = {
     body: {

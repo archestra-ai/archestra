@@ -1,8 +1,4 @@
-import {
-  ConnectedClientModel,
-  ConnectionSetupModel,
-  McpToolCallModel,
-} from "@/models";
+import { ConnectedClientModel, ConnectionSetupModel } from "@/models";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { ConnectionSetupClientId } from "@/types";
 
@@ -67,71 +63,6 @@ describe("ConnectedClientModel", () => {
     expect(byId.get("codex")?.deviceNames).toEqual([]);
   });
 
-  test("admin list counts recent gateway and LLM proxy use per connected member", async ({
-    makeUser,
-    makeMember,
-    makeAgent,
-    makeInteraction,
-  }) => {
-    const active = await makeUser();
-    const idle = await makeUser();
-    const never = await makeUser();
-    for (const user of [active, idle, never]) {
-      await makeMember(user.id, organizationId);
-    }
-    await redeem(active.id, "claude-code", "macos");
-    await redeem(active.id, "codex", "macos");
-    await redeem(idle.id, "claude-code", "macos");
-
-    const gateway = await makeAgent({
-      organizationId,
-      agentType: "mcp_gateway",
-    });
-    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
-    for (let i = 0; i < 2; i++) {
-      await McpToolCallModel.create({
-        agentId: gateway.id,
-        mcpServerName: "github",
-        method: "tools/call",
-        toolCall: { id: `${i}`, name: "github__search", arguments: {} },
-        toolResult: null,
-        userId: active.id,
-        authMethod: null,
-      });
-    }
-    await makeInteraction(proxy.id, { userId: active.id });
-    // Outside the usage window: not counted.
-    await makeInteraction(proxy.id, {
-      userId: idle.id,
-      createdAt: new Date(Date.now() - 60 * 24 * 60 * 60 * 1000),
-    });
-
-    const { data, pagination } = await ConnectedClientModel.listConnectedUsers({
-      organizationId,
-      limit: 20,
-      offset: 0,
-    });
-
-    expect(pagination.total).toBe(2);
-    expect(data.map((row) => row.userId).sort()).toEqual(
-      [active.id, idle.id].sort(),
-    );
-    const activeRow = data.find((row) => row.userId === active.id);
-    expect(activeRow).toMatchObject({
-      email: active.email,
-      clientIds: ["claude-code", "codex"],
-      gatewayCallCount: 2,
-      llmRequestCount: 1,
-    });
-    expect(activeRow?.lastGatewayCallAt).not.toBeNull();
-    expect(data.find((row) => row.userId === idle.id)).toMatchObject({
-      gatewayCallCount: 0,
-      lastGatewayCallAt: null,
-      llmRequestCount: 0,
-      lastLlmRequestAt: null,
-    });
-  });
-
   async function setup(userId: string, clientId: ConnectionSetupClientId) {
     const { setup: row, rawToken } = await ConnectionSetupModel.create({
       organizationId,
@@ -159,6 +90,8 @@ describe("ConnectedClientModel", () => {
       baseUrl: "http://localhost:9000/v1",
       expiresAt: new Date(Date.now() + 60_000),
     });
+    // Redeems in one millisecond tie on consumedAt, and the list orders by it.
+    await new Promise((resolve) => setTimeout(resolve, 2));
     const claimed = await ConnectionSetupModel.claimByToken({ rawToken });
     if (!claimed) throw new Error("setup was not claimed");
     return claimed;

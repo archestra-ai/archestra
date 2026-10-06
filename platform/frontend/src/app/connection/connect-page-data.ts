@@ -8,7 +8,6 @@ import type { SupportedProvider } from "@archestra/shared";
 import {
   buildConnectionPrompt,
   CONNECT_SETUP_PARTS,
-  INSTALLER_CLIENT_FOOTPRINT,
   INSTALLER_CLIENT_IDS,
 } from "@archestra/shared/connection-setup";
 import { useEffect, useMemo, useState } from "react";
@@ -16,10 +15,6 @@ import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
-import {
-  type ConnectedClient,
-  useConnectedClients,
-} from "@/lib/connected-client.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
@@ -27,7 +22,6 @@ import { useOrganization } from "@/lib/organization.query";
 import { isDeliverablePlugin, usePlugins } from "@/lib/plugins/plugin.query";
 import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
 import {
-  CONNECT_CLIENTS,
   type ConnectClient,
   usesGenericInstructions,
   visibleClients,
@@ -52,21 +46,9 @@ export interface ConnectServer {
 
 export type ConnectPageSkill = ConnectSkill;
 
-/** An agent this user connected (a redeemed setup), newest first. */
-export interface ConnectedAgent {
-  clientId: ConnectedClient["clientId"];
-  client: ConnectClient;
-  /** Latest connect for this agent; changes when another machine connects. */
-  lastConnectedAt: ConnectedClient["lastConnectedAt"];
-  /** Machines this agent is connected on, most recent first; may be empty. */
-  deviceNames: ConnectedClient["deviceNames"];
-}
-
-/** What the setup adds to one agent, which disconnect.md removes. */
+/** What the setup adds to one agent. */
 export interface ConnectFootprint {
   skillsInstalled: number;
-  /** Files/entries the setup changed on the user's machine. */
-  localChanges: string[];
 }
 
 export interface ConnectPlugin {
@@ -126,9 +108,7 @@ export interface ConnectPageData {
   guardrails: { name: string; state: "off" | "bypass" | "block" | null };
   /** Can open /settings/connection (admin). */
   canManage: boolean;
-  /** Agents this user connected; empty while loading or on error. */
-  connected: ConnectedAgent[];
-  /** What connecting this client would create / disconnecting would remove. */
+  /** What connecting this client would create. */
   footprintFor: (client: ConnectClient) => ConnectFootprint;
   /**
    * The connect prompt, carrying what the user left out: `exclude=` for apps
@@ -139,8 +119,6 @@ export interface ConnectPageData {
     client: ConnectClient,
     choices: ConnectChoices,
   ) => string | null;
-  /** The cleanup prompt: disconnect.md removes what connect.md set up. */
-  disconnectPrompt: (client: ConnectClient) => string;
   /**
    * The terminal command that runs the public installer for an app with one
    * (the same installer the prompt has the agent run), carrying what the user
@@ -156,16 +134,7 @@ export interface ConnectPageData {
 /** What connect.md?client=generic can set up; it has no plugins. */
 const GENERIC_PARTS = ["tools", "skills", "proxy"] as const;
 
-/** What a setup leaves on the machine, per app (n8n has no installer). */
-const LOCAL_CHANGES: Record<string, string[]> = {
-  ...INSTALLER_CLIENT_FOOTPRINT,
-  n8n: ["The MCP Client Tool node you added in n8n"],
-};
-
-export function useConnectPageData(params?: {
-  /** Re-read the connected agents every few seconds, e.g. while one connects. */
-  pollConnected?: boolean;
-}): ConnectPageData {
+export function useConnectPageData(): ConnectPageData {
   // A fresh read: these settings decide what a setup may include.
   const orgQuery = useOrganization(true, { fresh: true });
   const { data: org, isPending: orgPending } = orgQuery;
@@ -267,21 +236,14 @@ export function useConnectPageData(params?: {
     plugins: !usesGenericInstructions(client) && pluginsFor(client).length > 0,
   });
 
-  // A failed read just shows nothing connected.
-  const connectedQuery = useConnectedClients({
-    refetchInterval: params?.pollConnected ? 4000 : false,
-  });
   const appName = useAppName();
 
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
 
-  const footprint = (client: ConnectClient): ConnectFootprint => ({
+  const footprint: ConnectFootprint = {
     skillsInstalled: skillsEnabled ? skills.length : 0,
-    localChanges: LOCAL_CHANGES[client.id] ?? [
-      `The ${appName} MCP entry in your agent's config`,
-    ],
-  });
+  };
 
   return {
     loading: orgPending || (!!gatewayId && profilePending),
@@ -317,15 +279,7 @@ export function useConnectPageData(params?: {
           : "off",
     },
     canManage: canManage === true,
-    connected: (connectedQuery.data ?? []).flatMap(
-      ({ clientId, lastConnectedAt, deviceNames }) => {
-        const client = CONNECT_CLIENTS.find((c) => c.id === clientId);
-        return client
-          ? [{ clientId, client, lastConnectedAt, deviceNames }]
-          : [];
-      },
-    ),
-    footprintFor: (client) => footprint(client),
+    footprintFor: () => footprint,
     connectPrompt: (client, choices) => {
       const parts = partsFor(client);
       const on = (part: keyof ConnectChoices) => parts[part] && choices[part];
@@ -355,16 +309,6 @@ export function useConnectPageData(params?: {
         : "";
       const fetch = windows ? "irm" : "curl -fsSL";
       return `${fetch} ${origin}/api/client-connections/installer | node - --url ${origin} --client ${client.id}${excludeFlag}`;
-    },
-    disconnectPrompt: (client) => {
-      // Same split as connectPrompt: apps with an installer get their own
-      // steps; other agents get the generic ones. Both point at the base the
-      // setup wrote, when it isn't this page's own.
-      const params = new URLSearchParams({
-        client: usesGenericInstructions(client) ? "generic" : client.id,
-      });
-      if (baseUrl !== `${origin}/v1`) params.set("base", baseUrl);
-      return `Read ${origin}/disconnect.md?${decodeURIComponent(params.toString())} and disconnect ${client.label} from ${appName}.`;
     },
   };
 }

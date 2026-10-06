@@ -7,15 +7,13 @@
 // the agent picker (featured apps plus one "Other agents" tile that becomes
 // the picked app, in place; with 1 to 3 tiles they sit in one row, centered
 // in the picker area, unboxed). Hero right: a compact profile card for the
-// chosen agent: its connection status (disconnect lives in "Manage" above
-// the picker), light server and skill
-// rows, then status chips (routing, guardrails). A future capability
-// (budgets, audit...) is one more entry in `statusChips` in ProfileCard.
+// chosen agent: light server and skill rows, then status chips (routing,
+// guardrails). A future capability (budgets, audit...) is one more entry in
+// `statusChips` in ProfileCard.
 // Under the hero, spanning the page: the copy prompt, or the manual steps
 // themselves when Manual is chosen.
 
 import {
-  CONNECTION_SETUP_WINDOW_MS,
   hasNativeSetupSession,
   type NativeSessionClientId,
 } from "@archestra/shared/connection-setup";
@@ -33,8 +31,6 @@ import {
   ListOrdered,
   MessageSquareText,
   MoreHorizontal,
-  Plus,
-  RotateCcw,
   Settings,
   ShieldCheck,
   ShieldOff,
@@ -42,7 +38,6 @@ import {
   SquareTerminal,
   Terminal,
   TriangleAlert,
-  Unplug,
   Wrench,
 } from "lucide-react";
 import dynamic from "next/dynamic";
@@ -94,17 +89,12 @@ import {
 import {
   AgentSearch,
   BrowseDialog,
-  CopyLine,
-  DisconnectDialog,
   fmt,
   IncludeDialog,
   InfoDialog,
-  ManageDialog,
   nameOf,
   plural,
-  suggestFirstPrompt,
   toolLoading,
-  UndoDialog,
 } from "./connect-page-parts";
 import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
@@ -125,7 +115,6 @@ type DialogKind =
   | "routing"
   | "guardrails"
   | "cursor";
-type Status = "idle" | "waiting" | "connected";
 
 /** The parts a user can leave out, in the words the page uses. */
 const PART_LABELS: [keyof ConnectChoices, string][] = [
@@ -156,24 +145,7 @@ const MOTION_CSS = `
 
 export function ConnectPage() {
   usePageTitle("Connect");
-  // The agent whose setup is running, and since when. While it runs the
-  // page re-reads the connected agents, so it turns green on its own, and
-  // stops once the setup window has passed.
-  const [waitingFor, setWaitingFor] = useState<{
-    clientId: string;
-    since: number;
-  } | null>(null);
-  const [timedOut, setTimedOut] = useState(false);
-  useEffect(() => {
-    setTimedOut(false);
-    if (!waitingFor) return;
-    const timer = window.setTimeout(
-      () => setTimedOut(true),
-      waitingFor.since + CONNECTION_SETUP_WINDOW_MS - Date.now(),
-    );
-    return () => window.clearTimeout(timer);
-  }, [waitingFor]);
-  const data = useConnectPageData({ pollConnected: !!waitingFor && !timedOut });
+  const data = useConnectPageData();
   // Links (connect.md, docs) can open the page on an app, and on its manual
   // setup with ?mode=manual. Picks and the Manual toggle are written back.
   const searchParams = useSearchParams();
@@ -184,47 +156,9 @@ export function ConnectPage() {
   const [manualChosen, setManualChosen] = useState<boolean | null>(null);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focusServer, setFocusServer] = useState<string | null>(null);
-  const [manageOpen, setManageOpen] = useState(false);
-  const [disconnecting, setDisconnecting] = useState<ConnectClient | null>(
-    null,
-  );
-  // Connecting an already connected agent again, e.g. on another machine:
-  // the agent and its latest connect time when the user started.
-  const [another, setAnother] = useState<{
-    clientId: string;
-    since: string;
-  } | null>(null);
   // What the user leaves out, per agent. The prompt carries it, and this
   // browser keeps it for a while (connect-choices.ts).
   const [choices, setChoices] = useState<ConnectChoices>(ALL_INCLUDED);
-
-  const connectedIds = useMemo(
-    () => new Set<string>(data.connected.map((c) => c.clientId)),
-    [data.connected],
-  );
-  // The tiles mark only agents the admin still shows; Manage lists them all.
-  const shownConnectedIds = useMemo(
-    () =>
-      new Set(
-        data.clients.filter((c) => connectedIds.has(c.id)).map((c) => c.id),
-      ),
-    [data.clients, connectedIds],
-  );
-  const anotherConnectedAt = data.connected.find(
-    (c) => c.clientId === another?.clientId,
-  )?.lastConnectedAt;
-  const waitingId = waitingFor?.clientId;
-  useEffect(() => {
-    if (!waitingId || !connectedIds.has(waitingId)) return;
-    // A repeat connect is done once the agent's latest connect time moves.
-    if (
-      another?.clientId === waitingId &&
-      String(anotherConnectedAt) === another.since
-    )
-      return;
-    setWaitingFor(null);
-    setAnother(null);
-  }, [waitingId, connectedIds, another, anotherConnectedAt]);
 
   const skillsSorted = useMemo(
     () => [...data.skills].sort((a, b) => b.usageCount - a.usageCount),
@@ -272,34 +206,23 @@ export function ConnectPage() {
   const manualOn =
     manualChosen ??
     (searchParams.get("mode") === "manual" && setup === "prompt-or-manual");
-  const status: Status =
-    connectedIds.has(client.id) && another?.clientId !== client.id
-      ? "connected"
-      : waitingId === client.id
-        ? "waiting"
-        : "idle";
   const manual =
-    status !== "connected" &&
-    (setup === "manual" || (setup === "prompt-or-manual" && manualOn));
+    setup === "manual" || (setup === "prompt-or-manual" && manualOn);
   // Apps with an installer can also run it straight from a terminal. Claude
   // Desktop keeps its own download flow.
   const scriptable = setup === "prompt" && client.id !== "claude-desktop";
-  const script = status !== "connected" && scriptable && manualOn;
+  const script = scriptable && manualOn;
   // Claude Desktop installs from a downloaded installer by default; its
   // Prompt (for Cowork) is the alternative, so the toggle reads inverted.
-  const download =
-    status !== "connected" && client.id === "claude-desktop" && !manualOn;
-  const step = currentStep(client, status, manual, script, download);
+  const download = client.id === "claude-desktop" && !manualOn;
+  const step = currentStep(client, manual, script, download);
 
   const pick = (id: string) => {
     setPickedId(id);
-    setWaitingFor(null);
     setManualChosen(false);
-    setAnother(null);
     // Manual steps bookmark a provider; providers vary per app.
     updateUrlParams({ clientId: id, mode: null, providerId: null });
   };
-  const connectedRecord = data.connected.find((c) => c.clientId === client.id);
 
   return (
     <div className="relative w-full overflow-hidden text-foreground">
@@ -334,46 +257,20 @@ export function ConnectPage() {
               usable in your agent of choice.
             </p>
 
-            <div className="mt-6 flex max-w-xl items-center justify-between gap-3">
-              <h2 className="text-sm font-medium">
-                {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
-              </h2>
-              {data.connected.length > 0 && (
-                <span className="inline-flex items-center gap-2 text-xs text-muted-foreground">
-                  <span className="size-1.5 rounded-full bg-emerald-500" />
-                  <span className="tabular-nums">
-                    {data.connected.length} connected
-                  </span>
-                  <span aria-hidden>·</span>
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setManageOpen(true)}
-                    className="h-7 gap-1.5 rounded-md px-2.5 text-xs text-foreground [&_svg]:size-3.5"
-                  >
-                    <SlidersHorizontal />
-                    Manage
-                  </Button>
-                </span>
-              )}
-            </div>
+            <h2 className="mt-6 text-sm font-medium">
+              {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
+            </h2>
             <p className="mt-1 max-w-xl text-sm text-muted-foreground">
               Your organization's tools and skills get added to the agent you
               pick.
             </p>
-            <AgentTiles
-              data={data}
-              selected={client}
-              connectedIds={shownConnectedIds}
-              onPick={pick}
-            />
+            <AgentTiles data={data} selected={client} onPick={pick} />
           </div>
 
           {/* Right: the agent's profile card */}
           <ProfileCard
             data={data}
             client={client}
-            status={status}
             servers={servers}
             tools={tools}
             skills={skills}
@@ -391,7 +288,6 @@ export function ConnectPage() {
           data={data}
           client={client}
           setup={setup}
-          status={status}
           step={step}
           manual={manual}
           scriptable={scriptable}
@@ -399,7 +295,6 @@ export function ConnectPage() {
           download={download}
           choices={choices}
           prompt={prompt}
-          firstPrompt={suggestFirstPrompt(data.appName, servers, skills)}
           includeLabel={
             leftOut.length === 0
               ? "Choose what to include"
@@ -412,44 +307,11 @@ export function ConnectPage() {
             if (setup === "prompt-or-manual")
               updateUrlParams({ mode: v ? "manual" : null });
           }}
-          // Other agents ask before changing anything and never show up as
-          // connected, so there is nothing to wait for.
-          onCopied={() => {
-            if (setup !== "prompt-or-manual")
-              setWaitingFor({ clientId: client.id, since: Date.now() });
-          }}
-          timedOut={status === "waiting" && timedOut}
-          onStartOver={() => {
-            setWaitingFor(null);
-            setAnother(null);
-          }}
           onCursorNote={() => setDialog("cursor")}
-          onDisconnect={() => setDisconnecting(client)}
-          onConnectAnother={
-            connectedRecord
-              ? () =>
-                  setAnother({
-                    clientId: client.id,
-                    since: String(connectedRecord.lastConnectedAt),
-                  })
-              : undefined
-          }
           footprint={data.footprintFor(client)}
           skillCount={skillCount}
         />
       </div>
-
-      <ManageDialog
-        open={manageOpen}
-        onOpenChange={setManageOpen}
-        data={data}
-        onDisconnect={setDisconnecting}
-      />
-      <DisconnectDialog
-        data={data}
-        client={disconnecting}
-        onOpenChange={(v) => !v && setDisconnecting(null)}
-      />
 
       <IncludeDialog
         open={dialog === "include"}
@@ -560,12 +422,10 @@ function tileCount(data: ConnectPageData) {
 function AgentTiles({
   data,
   selected,
-  connectedIds,
   onPick,
 }: {
   data: ConnectPageData;
   selected: ConnectClient;
-  connectedIds: Set<string>;
   onPick: (id: string) => void;
 }) {
   const featuredIds = new Set(data.featuredClients.map((c) => c.id));
@@ -593,27 +453,16 @@ function AgentTiles({
           key={c.id}
           roomy={row}
           active={c.id === selected.id}
-          connected={connectedIds.has(c.id)}
           onClick={() => onPick(c.id)}
           icon={<ClientIcon client={c} size={iconSize} />}
           label={c.label}
         />
       ))}
       {showOther && (
-        <AgentSearch
-          data={data}
-          selectedId={selected.id}
-          connectedIds={connectedIds}
-          onPick={onPick}
-        >
+        <AgentSearch data={data} selectedId={selected.id} onPick={onPick}>
           <Tile
             roomy={row}
             active={!!otherPicked}
-            connected={
-              otherPicked
-                ? connectedIds.has(otherPicked.id)
-                : [...connectedIds].some((id) => !featuredIds.has(id))
-            }
             aria-label={
               otherPicked
                 ? `${otherPicked.label}, change agent`
@@ -650,7 +499,6 @@ function AgentTiles({
 function Tile({
   roomy,
   active,
-  connected,
   icon,
   label,
   sub,
@@ -658,7 +506,6 @@ function Tile({
   ...rest
 }: {
   active: boolean;
-  connected: boolean;
   icon: ReactNode;
   label: ReactNode;
   /** One small line under the label, shown in full. */
@@ -690,15 +537,6 @@ function Tile({
           {sub}
         </span>
       )}
-      {connected && (
-        <span
-          className="absolute top-1.5 right-1.5 grid size-4 place-items-center rounded-full bg-emerald-500 text-white"
-          title="Connected"
-        >
-          <Check className="size-2.5" strokeWidth={3} />
-          <span className="sr-only">Connected</span>
-        </span>
-      )}
     </UnstyledButton>
   );
 }
@@ -709,7 +547,6 @@ function ConnectArea({
   data,
   client,
   setup,
-  status,
   step,
   manual,
   scriptable,
@@ -717,24 +554,17 @@ function ConnectArea({
   download,
   choices,
   prompt,
-  firstPrompt,
   includeLabel,
   onInclude,
   onManual,
-  onCopied,
-  timedOut,
-  onStartOver,
   onCursorNote,
-  onDisconnect,
-  onConnectAnother,
   footprint,
   skillCount,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
   setup: SetupMode;
-  status: Status;
-  step: CurrentStep;
+  step: string;
   manual: boolean;
   /** The app has an installer, so it offers Prompt / Script. */
   scriptable: boolean;
@@ -745,18 +575,10 @@ function ConnectArea({
   choices: ConnectChoices;
   /** null when every part is left out. */
   prompt: string | null;
-  firstPrompt: string | null;
   includeLabel: string;
   onInclude: () => void;
   onManual: (v: boolean) => void;
-  onCopied: () => void;
-  /** The setup window passed without the agent connecting. */
-  timedOut: boolean;
-  onStartOver: () => void;
   onCursorNote: () => void;
-  onDisconnect: () => void;
-  /** Set while connected: start a new connection, e.g. on another machine. */
-  onConnectAnother?: () => void;
   footprint: ConnectFootprint;
   skillCount: number;
 }) {
@@ -792,7 +614,6 @@ function ConnectArea({
       }
       await copyToClipboard(text);
       setCopied(true);
-      onCopied();
       window.setTimeout(() => setCopied(false), 1800);
     } catch {
       toast.error("Could not copy. Select the prompt and copy it manually.");
@@ -802,55 +623,9 @@ function ConnectArea({
   const leftOutParts = PART_LABELS.filter(([part]) => !choices[part]).map(
     ([part]) => part,
   );
-  const disconnectNote = (
-    <span className="text-muted-foreground">
-      You can{" "}
-      <UndoDialog data={data} client={client}>
-        disconnect at any time
-      </UndoDialog>
-      .
-    </span>
-  );
-
-  if (status === "connected") {
-    return (
-      <Band
-        tone="connected"
-        className="motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
-      >
-        <StepHeading step={step} />
-        {firstPrompt ? (
-          <div className="mt-4">
-            <div className="mb-2 text-sm text-muted-foreground">
-              Try this in a new {nameOf(client)} session:
-            </div>
-            <CopyLine text={firstPrompt} label="Copy" primary />
-          </div>
-        ) : (
-          <p className="mt-2 text-sm text-muted-foreground">
-            Start a new {nameOf(client)} session to pick up the changes.
-          </p>
-        )}
-        <BandFooter>
-          {onConnectAnother && (
-            <MetaButton icon={<Plus />} onClick={onConnectAnother}>
-              Connect on another machine
-            </MetaButton>
-          )}
-          <MetaButton
-            icon={<Unplug />}
-            onClick={onDisconnect}
-            className="md:ml-auto"
-          >
-            Disconnect {client.label}
-          </MetaButton>
-        </BandFooter>
-      </Band>
-    );
-  }
 
   return (
-    <Band tone="current" busy={data.revalidating}>
+    <Band busy={data.revalidating}>
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         <StepHeading step={step} />
         {setup === "prompt-or-manual" && (
@@ -905,17 +680,11 @@ function ConnectArea({
             onBaseUrlChange={data.selectBaseUrl}
             skillsEnabled={data.skillsEnabled}
             pluginsEnabled={data.pluginsEnabled}
-            onDownloaded={onCopied}
           />
           <BandFooter>
             <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
               {includeLabel}
             </MetaButton>
-            {status === "waiting" && (
-              <MetaButton icon={<RotateCcw />} onClick={onStartOver}>
-                Start over
-              </MetaButton>
-            )}
             <span className="md:ml-auto">
               {footprintSummary(client, footprint, skillCount)}
             </span>
@@ -929,7 +698,6 @@ function ConnectArea({
         >
           <div className="mt-1 flex flex-wrap items-center gap-x-4 gap-y-1 px-1 text-xs text-muted-foreground">
             <span>Copy each block into {nameOf(client)}, top to bottom.</span>
-            <UndoDialog data={data} client={client} />
           </div>
           <ManualSteps client={client} data={data} />
         </div>
@@ -937,30 +705,11 @@ function ConnectArea({
         <>
           {/* What happens next, right above the prompt it's about. */}
           <div className="mt-2 space-y-1 px-1 text-xs text-muted-foreground">
-            {timedOut ? (
-              <p className="text-foreground">
-                {script
-                  ? "Didn't connect. Start over and run it again."
-                  : "Didn't connect. Start over or try the Script option."}
-              </p>
-            ) : script ? (
-              status === "waiting" ? (
-                <p className="text-foreground">
-                  Run it, approve the browser page it opens, then follow the
-                  next steps below. {disconnectNote}
-                </p>
-              ) : (
-                <p>
-                  Run it in a terminal on the computer where you use{" "}
-                  {nameOf(client)}. It needs Node.js 18 or newer, opens a
-                  browser page, and changes nothing until you approve.{" "}
-                  {disconnectNote}
-                </p>
-              )
-            ) : status === "waiting" ? (
-              <p className="text-foreground">
-                {`Paste it into ${nameOf(client)}, then approve the browser page it opens.`}{" "}
-                {disconnectNote}
+            {script ? (
+              <p>
+                Run it in a terminal on the computer where you use{" "}
+                {nameOf(client)}. It needs Node.js 18 or newer, opens a browser
+                page, and changes nothing until you approve.
               </p>
             ) : (
               <p>
@@ -969,8 +718,7 @@ function ConnectArea({
                   : nameOf(client)}{" "}
                 {generic
                   ? "checks what it supports and asks before changing anything."
-                  : "opens a browser page. Nothing changes until you approve."}{" "}
-                {disconnectNote}
+                  : "opens a browser page. Nothing changes until you approve."}
               </p>
             )}
             {client.id === "cursor" && (
@@ -1042,11 +790,6 @@ function ConnectArea({
             <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
               {includeLabel}
             </MetaButton>
-            {status === "waiting" && (
-              <MetaButton icon={<RotateCcw />} onClick={onStartOver}>
-                Start over
-              </MetaButton>
-            )}
             {/* Other agents use the admin's default gateway and read the
                 endpoint from the prompt; apps with an installer pick both on
                 the approval page. */}
@@ -1145,66 +888,25 @@ function scriptNextSteps(client: ConnectClient): string[] {
 
 // === Connect band heading: the one instruction ===
 
-type StepKind = "current" | "waiting" | "connected";
-
-interface CurrentStep {
-  kind: StepKind;
-  text: string;
-}
-
 function currentStep(
   client: ConnectClient,
-  status: Status,
   manual: boolean,
   script: boolean,
   download: boolean,
-): CurrentStep {
+): string {
   const name = nameOf(client);
-  const Name = name === "your agent" ? "Your agent" : name;
-  if (status === "connected")
-    return { kind: "connected", text: `Connected. ${Name} is ready to use` };
-  if (status === "waiting")
-    return { kind: "waiting", text: `Waiting for ${name}` };
-  if (manual) return { kind: "current", text: `Follow the steps for ${name}` };
-  if (script)
-    return { kind: "current", text: "Run the command in your terminal" };
-  if (download)
-    return { kind: "current", text: `Download the installer for ${name}` };
-  return { kind: "current", text: `Paste the prompt into ${name}` };
-}
-
-function StepMarker({ kind }: { kind: StepKind }) {
-  return (
-    <span
-      aria-hidden
-      className={cn(
-        "grid size-6 shrink-0 place-items-center rounded-full [&_svg]:size-3.5",
-        kind === "connected"
-          ? "bg-emerald-500 text-white"
-          : "bg-primary text-primary-foreground",
-      )}
-    >
-      {kind === "connected" ? (
-        <Check strokeWidth={3} />
-      ) : kind === "waiting" ? (
-        <span className="size-2 rounded-full bg-primary-foreground motion-safe:animate-pulse" />
-      ) : (
-        <ArrowDown strokeWidth={2.5} />
-      )}
-    </span>
-  );
+  if (manual) return `Follow the steps for ${name}`;
+  if (script) return "Run the command in your terminal";
+  if (download) return `Download the installer for ${name}`;
+  return `Paste the prompt into ${name}`;
 }
 
 function Band({
-  tone,
   busy,
-  className,
   children,
 }: {
-  tone: "current" | "connected";
   /** Settings are being re-read: hold actions until they land. */
   busy?: boolean;
-  className?: string;
   children: ReactNode;
 }) {
   // Same accent as the heading's marker.
@@ -1213,13 +915,7 @@ function Band({
       aria-label="Connect"
       aria-busy={busy}
       inert={busy}
-      className={cn(
-        "mt-6 rounded-3xl border bg-card/80 p-5 shadow-sm transition-colors duration-300 md:px-7 md:py-6",
-        tone === "connected"
-          ? "border-emerald-500/35 ring-1 ring-emerald-500/15"
-          : "border-primary/40 ring-1 ring-primary/15",
-        className,
-      )}
+      className="mt-6 rounded-3xl border border-primary/40 bg-card/80 p-5 shadow-sm ring-1 ring-primary/15 transition-colors duration-300 md:px-7 md:py-6"
     >
       {children}
     </section>
@@ -1235,14 +931,19 @@ function BandFooter({ children }: { children: ReactNode }) {
   );
 }
 
-function StepHeading({ step }: { step: CurrentStep }) {
+function StepHeading({ step }: { step: string }) {
   return (
     <h2
-      key={step.text}
+      key={step}
       className="inline-flex items-center gap-2.5 text-base font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
     >
-      <StepMarker kind={step.kind} />
-      {step.text}
+      <span
+        aria-hidden
+        className="grid size-6 shrink-0 place-items-center rounded-full bg-primary text-primary-foreground [&_svg]:size-3.5"
+      >
+        <ArrowDown strokeWidth={2.5} />
+      </span>
+      {step}
     </h2>
   );
 }
@@ -1423,7 +1124,6 @@ interface StatusChip {
 function ProfileCard({
   data,
   client,
-  status,
   servers,
   tools,
   skills,
@@ -1433,7 +1133,6 @@ function ProfileCard({
 }: {
   data: ConnectPageData;
   client: ConnectClient;
-  status: Status;
   /** This agent's model requests go through the LLM proxy. */
   routed: boolean;
   servers: ConnectServer[];
@@ -1442,9 +1141,7 @@ function ProfileCard({
   skillCount: number;
   onOpen: (d: DialogKind, server?: string) => void;
 }) {
-  const on = status === "connected";
   const gatewayName = data.gateway?.name;
-  const plus = on ? "" : "+";
   const skillsOn = data.skillsEnabled && data.totalSkills > 0;
 
   // Small status chips under the lists. A future capability is one entry.
@@ -1494,11 +1191,8 @@ function ProfileCard({
         <div key={`icon-${client.id}`} className="connect-icon">
           <ClientIcon client={client} size={44} />
         </div>
-        <div className="min-w-0 flex-1">
-          <div className="truncate text-xl font-semibold tracking-tight">
-            {client.label}
-          </div>
-          <StatusLine status={status} />
+        <div className="min-w-0 flex-1 truncate text-xl font-semibold tracking-tight">
+          {client.label}
         </div>
       </div>
 
@@ -1525,7 +1219,7 @@ function ProfileCard({
             ) : (
               <ListBlock
                 icon={<Wrench />}
-                title={`${plus}${fmt(tools)} ${plural(tools, "tool")}`}
+                title={`+${fmt(tools)} ${plural(tools, "tool")}`}
                 sub={
                   <>
                     from {fmt(servers.length)} MCP{" "}
@@ -1582,7 +1276,7 @@ function ProfileCard({
             >
               <ListBlock
                 icon={<BookOpen />}
-                title={`${plus}${fmt(skillCount)} ${plural(skillCount, "skill")}`}
+                title={`+${fmt(skillCount)} ${plural(skillCount, "skill")}`}
                 sub="loaded when a task needs one"
                 more={
                   skillCount > SKILL_ROWS
@@ -1769,28 +1463,6 @@ function ChipIcon({
       )}
     >
       {children}
-    </span>
-  );
-}
-
-function StatusLine({ status }: { status: Status }) {
-  if (status === "connected")
-    return (
-      <span className="mt-1 flex items-center gap-1.5 text-sm text-emerald-600 dark:text-emerald-400">
-        <span className="size-1.5 rounded-full bg-emerald-500" />
-        Connected
-      </span>
-    );
-  if (status === "waiting")
-    return (
-      <span className="mt-1 flex items-center gap-1.5 text-sm text-foreground">
-        <span className="size-1.5 rounded-full bg-primary motion-safe:animate-pulse" />
-        Waiting for approval
-      </span>
-    );
-  return (
-    <span className="mt-1 block text-sm text-muted-foreground">
-      Not connected yet
     </span>
   );
 }

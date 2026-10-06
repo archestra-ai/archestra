@@ -232,7 +232,6 @@ export const handlers: HttpHandler[] = [
     activatedAt: null,
   }),
   ...getJson("/api/organization/mcp-preset-entries", []),
-  ...getJson("/api/connected-clients", []),
   ...getJson("/api/projects", []),
   ...getJson("/api/apps", {
     data: [],

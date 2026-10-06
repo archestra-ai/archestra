@@ -40810,15 +40810,27 @@ export type GetConnectedClientLogData = {
     path?: never;
     query?: {
         limit?: number;
-        offset?: number;
+        cursor?: string;
         /**
-         * Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email.
+         * Only events for this user's clients
          */
-        search?: string;
+        userId?: string;
         /**
-         * Only connections of this client
+         * Only events for this client
          */
         clientId?: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
+        /**
+         * Only connects or only disconnects
+         */
+        action?: 'connected' | 'disconnected';
+        /**
+         * Events on or after this date (ISO 8601)
+         */
+        startDate?: string;
+        /**
+         * Events on or before this date (ISO 8601)
+         */
+        endDate?: string;
     };
     url: '/api/connected-clients/log';
 };
@@ -40895,12 +40907,13 @@ export type GetConnectedClientLogResponses = {
     200: {
         data: Array<{
             id: string;
-            connectedAt: string;
+            action: 'connected' | 'disconnected';
+            occurredAt: string;
             userId: string;
             userName: string;
             userEmail: string;
             clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
-            platform: 'macos' | 'linux' | 'windows';
+            platform: 'macos' | 'linux' | 'windows' | null;
             deviceName: string | null;
             mcpGateway: {
                 id: string;
@@ -40908,15 +40921,15 @@ export type GetConnectedClientLogResponses = {
             } | null;
             modelRouting: boolean;
             includeSkills: boolean;
-            disconnectedAt: string | null;
+            disconnectedBy: {
+                id: string;
+                name: string;
+            } | null;
         }>;
         pagination: {
-            currentPage: number;
             limit: number;
-            total: number;
-            totalPages: number;
+            nextCursor: string | null;
             hasNext: boolean;
-            hasPrev: boolean;
         };
     };
 };

@@ -3,7 +3,7 @@ import { render, screen, within } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
-  ConnectionLogEntry,
+  ConnectionEvent,
   ConnectionLogPage,
 } from "@/lib/connected-client.query";
 import { ConnectionLogTable } from "./connection-log-table";
@@ -20,11 +20,20 @@ vi.mock("next/navigation");
 vi.mock("@/lib/connected-client.query", () => ({
   useConnectionLog: (...args: unknown[]) => mockUseConnectionLog(...args),
 }));
+vi.mock("@/lib/member.query", () => ({
+  useMemberSearch: () => ({
+    users: [],
+    isSearching: false,
+    onSearchQueryChange: vi.fn(),
+    emptyMessage: "No matching users found.",
+  }),
+}));
 
-function entry(overrides: Partial<ConnectionLogEntry>): ConnectionLogEntry {
+function event(overrides: Partial<ConnectionEvent>): ConnectionEvent {
   return {
-    id: "setup-1",
-    connectedAt: "2026-10-01T09:00:00.000Z",
+    id: "c:setup-1",
+    action: "connected",
+    occurredAt: "2026-10-01T09:00:00.000Z",
     userId: "user-1",
     userName: "Ada Lovelace",
     userEmail: "ada@example.com",
@@ -34,22 +43,15 @@ function entry(overrides: Partial<ConnectionLogEntry>): ConnectionLogEntry {
     mcpGateway: null,
     modelRouting: false,
     includeSkills: false,
-    disconnectedAt: null,
+    disconnectedBy: null,
     ...overrides,
   };
 }
 
-function page(rows: ConnectionLogEntry[]): ConnectionLogPage {
+function page(rows: ConnectionEvent[]): ConnectionLogPage {
   return {
     data: rows,
-    pagination: {
-      currentPage: 1,
-      limit: 10,
-      total: rows.length,
-      totalPages: 1,
-      hasNext: false,
-      hasPrev: false,
-    },
+    pagination: { limit: 10, nextCursor: null, hasNext: false },
   };
 }
 
@@ -75,57 +77,57 @@ describe("ConnectionLogTable", () => {
     vi.mocked(usePathname).mockReturnValue("/connections/logs");
   });
 
-  it("shows who connected which agent, where, to what and when", () => {
+  it("shows each connect and disconnect as its own event", () => {
     mockUseConnectionLog.mockReturnValue({
       data: page([
-        entry({
+        event({
+          id: "d:setup-2",
+          action: "disconnected",
+          clientId: "codex",
+          userName: "Grace Hopper",
+          platform: null,
+          deviceName: null,
+          disconnectedBy: { id: "admin-1", name: "Admin" },
+        }),
+        event({
           mcpGateway: { id: "gw-1", name: "Engineering tools" },
           modelRouting: true,
         }),
-        entry({
-          id: "setup-2",
-          clientId: "codex",
-          userName: "Grace Hopper",
-          deviceName: null,
-          platform: "windows",
-          disconnectedAt: "2026-10-02T09:00:00.000Z",
-        }),
       ]),
-      isPending: false,
       isFetching: false,
     });
 
     renderTable();
 
-    const [, ada, grace] = screen.getAllByRole("row");
-    expect(within(ada).getByText("Ada Lovelace")).toBeInTheDocument();
-    expect(within(ada).getByText("Claude Code")).toBeInTheDocument();
-    expect(within(ada).getByText("work-laptop")).toBeInTheDocument();
+    const [, disconnect, connect] = screen.getAllByRole("row");
+    expect(within(disconnect).getByText("Disconnect")).toBeInTheDocument();
+    expect(within(disconnect).getByText("by Admin")).toBeInTheDocument();
+    expect(within(disconnect).getByText("Codex")).toBeInTheDocument();
+    expect(within(connect).getByText("Connect")).toBeInTheDocument();
+    expect(within(connect).getByText("Claude Code")).toBeInTheDocument();
     expect(
-      within(ada).getByText("Tools: Engineering tools"),
+      within(connect).getByText("work-laptop · macOS"),
     ).toBeInTheDocument();
-    expect(within(ada).getByText("Model routing")).toBeInTheDocument();
-    expect(within(ada).queryByText("Disconnected")).not.toBeInTheDocument();
-    expect(within(grace).getByText("Codex")).toBeInTheDocument();
-    expect(within(grace).getByText("Unknown device")).toBeInTheDocument();
-    expect(within(grace).getByText("Windows")).toBeInTheDocument();
-    expect(within(grace).getByText("Disconnected")).toBeInTheDocument();
+    expect(
+      within(connect).getByText("Tools: Engineering tools"),
+    ).toBeInTheDocument();
+    expect(within(connect).getByText("Model routing")).toBeInTheDocument();
   });
 
-  it("asks for the page, search and agent in the URL", () => {
+  it("asks for the user, agent and action in the URL", () => {
     mockUseConnectionLog.mockReturnValue({
       data: page([]),
-      isPending: false,
       isFetching: false,
     });
 
-    renderTable("page=3&limit=20&search=ada&agent=cursor");
+    renderTable("userId=user-1&agent=cursor&action=disconnected");
 
-    expect(mockUseConnectionLog).toHaveBeenCalledWith({
-      limit: 20,
-      offset: 40,
-      search: "ada",
-      clientId: "cursor",
-    });
+    expect(mockUseConnectionLog).toHaveBeenCalledWith(
+      expect.objectContaining({
+        userId: "user-1",
+        clientId: "cursor",
+        action: "disconnected",
+      }),
+    );
   });
 });

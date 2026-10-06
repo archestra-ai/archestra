@@ -1,6 +1,6 @@
 import {
-  createPaginatedResponseSchema,
-  PaginationQuerySchema,
+  CursorQuerySchema,
+  createCursorPaginatedResponseSchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -13,7 +13,8 @@ import {
 import {
   ConnectedClientIdSchema,
   ConnectedClientSchema,
-  ConnectionLogEntrySchema,
+  ConnectionEventActionSchema,
+  ConnectionEventSchema,
   ConnectionSetupClientIdSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
@@ -41,30 +42,47 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetConnectedClientLog,
         description:
-          "Log of the organization's agent connections, newest first: one entry each time a member connected a coding client through the Connect page, with the machine and what the setup included.",
+          "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, and each time one was disconnected.",
         tags: ["Connection Setups"],
-        querystring: PaginationQuerySchema.extend({
-          search: z
+        querystring: CursorQuerySchema.extend({
+          userId: z
             .string()
             .optional()
-            .describe(
-              "Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email.",
-            ),
+            .describe("Only events for this user's clients"),
           clientId: ConnectionSetupClientIdSchema.optional().describe(
-            "Only connections of this client",
+            "Only events for this client",
           ),
+          action: ConnectionEventActionSchema.optional().describe(
+            "Only connects or only disconnects",
+          ),
+          startDate: z
+            .string()
+            .datetime()
+            .optional()
+            .describe("Events on or after this date (ISO 8601)"),
+          endDate: z
+            .string()
+            .datetime()
+            .optional()
+            .describe("Events on or before this date (ISO 8601)"),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(ConnectionLogEntrySchema),
+          createCursorPaginatedResponseSchema(ConnectionEventSchema),
         ),
       },
     },
-    async ({ organizationId, query: { limit, offset, search, clientId } }) =>
-      ConnectedClientModel.listLog({
+    async ({
+      organizationId,
+      query: { limit, cursor, userId, clientId, action, startDate, endDate },
+    }) =>
+      ConnectedClientModel.listEvents({
         organizationId,
-        pagination: { limit, offset },
-        search: search || undefined,
+        pagination: { limit, cursor },
+        userId,
         clientId,
+        action,
+        startDate,
+        endDate,
       }),
   );
 

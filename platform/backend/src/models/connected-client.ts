@@ -1,17 +1,18 @@
-import type { PaginationQuery } from "@archestra/shared";
-import { and, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
-import { alias } from "drizzle-orm/pg-core";
+import type { CursorQuery } from "@archestra/shared";
+import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import {
-  createPaginatedResult,
-  type PaginatedResult,
+  type CursorPaginatedResult,
+  createCursorPaginatedResult,
+  decodeCursor,
 } from "@/database/utils/pagination";
-import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import type {
   ConnectedClientId,
   ConnectedClientRecord,
-  ConnectionLogEntry,
+  ConnectionEvent,
+  ConnectionEventAction,
   ConnectionSetupClientId,
+  ConnectionSetupPlatform,
 } from "@/types";
 
 const setups = schema.connectionSetupsTable;
@@ -76,80 +77,126 @@ class ConnectedClientModel {
   }
 
   /**
-   * The organization's redeemed setups, newest first: one log entry per time
-   * someone connected an agent through the Connect page. Search matches the
-   * user's name or email.
+   * The organization's connection events, newest first: a "connected" event
+   * each time a setup was redeemed, and a "disconnected" event each time a
+   * user's client was disconnected (one event per disconnect, however many
+   * setups it stamped). Keyset-paginated on (time, event id).
    */
-  static async listLog(params: {
+  static async listEvents(params: {
     organizationId: string;
-    pagination: PaginationQuery;
-    search?: string;
+    pagination: CursorQuery;
+    userId?: string;
     clientId?: ConnectionSetupClientId;
-  }): Promise<PaginatedResult<ConnectionLogEntry>> {
+    action?: ConnectionEventAction;
+    startDate?: string;
+    endDate?: string;
+  }): Promise<CursorPaginatedResult<ConnectionEvent>> {
+    const { organizationId, pagination } = params;
     const users = schema.usersTable;
-    const gateways = alias(schema.agentsTable, "mcp_gateways");
-    const where = and(
-      eq(setups.organizationId, params.organizationId),
-      isNotNull(setups.consumedAt),
-      params.clientId ? eq(setups.clientId, params.clientId) : undefined,
-      buildTokenizedSearchFilter({
-        query: params.search,
-        columns: [users.name, users.email],
+    const conditions = [
+      params.userId ? sql`e.user_id = ${params.userId}` : undefined,
+      params.clientId ? sql`e.client_id = ${params.clientId}` : undefined,
+      params.action ? sql`e.action = ${params.action}` : undefined,
+      params.startDate
+        ? sql`e.occurred_at >= ${params.startDate}::timestamp`
+        : undefined,
+      params.endDate
+        ? sql`e.occurred_at <= ${params.endDate}::timestamp`
+        : undefined,
+    ];
+    const position = decodeCursor(pagination.cursor);
+    if (position && !Number.isNaN(new Date(position.value).getTime())) {
+      conditions.push(
+        sql`(e.occurred_at, e.id) < (${position.value}::timestamp, ${position.id})`,
+      );
+    }
+    const where = conditions.filter((c) => c !== undefined);
+
+    // Timestamps are millisecond-truncated so a cursor taken from a JS Date
+    // compares equal to the row it came from.
+    const { rows } = await db.execute<ConnectionEventRow>(sql`
+      WITH e AS (
+        SELECT
+          'c:' || ${setups.id}::text AS id,
+          'connected' AS action,
+          date_trunc('milliseconds', ${setups.consumedAt}) AS occurred_at,
+          ${setups.userId} AS user_id,
+          ${setups.clientId} AS client_id,
+          ${setups.platform} AS platform,
+          ${setups.deviceName} AS device_name,
+          ${setups.mcpGatewayId} AS mcp_gateway_id,
+          ${setups.llmProxyId} IS NOT NULL AS model_routing,
+          ${setups.includeSkills} AS include_skills,
+          NULL::text AS actor_user_id
+        FROM ${setups}
+        WHERE ${setups.organizationId} = ${organizationId}
+          AND ${setups.consumedAt} IS NOT NULL
+        UNION ALL
+        SELECT
+          'd:' || min(${setups.id}::text),
+          'disconnected',
+          date_trunc('milliseconds', ${setups.revokedAt}),
+          ${setups.userId},
+          ${setups.clientId},
+          NULL,
+          NULL,
+          NULL,
+          false,
+          false,
+          ${setups.revokedByUserId}
+        FROM ${setups}
+        WHERE ${setups.organizationId} = ${organizationId}
+          AND ${setups.revokedAt} IS NOT NULL
+        GROUP BY ${setups.userId}, ${setups.clientId}, ${setups.revokedAt},
+          ${setups.revokedByUserId}
+      )
+      SELECT
+        e.*,
+        u.name AS user_name,
+        u.email AS user_email,
+        g.name AS mcp_gateway_name,
+        actor.name AS actor_name,
+        actor.email AS actor_email
+      FROM e
+      JOIN ${users} u ON u.id = e.user_id
+      LEFT JOIN ${schema.agentsTable} g ON g.id = e.mcp_gateway_id
+      LEFT JOIN ${users} actor ON actor.id = e.actor_user_id
+      ${where.length > 0 ? sql`WHERE ${sql.join(where, sql` AND `)}` : sql``}
+      ORDER BY e.occurred_at DESC, e.id DESC
+      LIMIT ${pagination.limit + 1}
+    `);
+
+    const events = rows.map(
+      (row): ConnectionEvent => ({
+        id: row.id,
+        action: row.action,
+        occurredAt: toUtcDate(row.occurred_at),
+        userId: row.user_id,
+        userName: row.user_name,
+        userEmail: row.user_email,
+        clientId: row.client_id,
+        platform: row.platform,
+        deviceName: row.device_name,
+        mcpGateway:
+          row.mcp_gateway_id && row.mcp_gateway_name
+            ? { id: row.mcp_gateway_id, name: row.mcp_gateway_name }
+            : null,
+        modelRouting: row.model_routing,
+        includeSkills: row.include_skills,
+        // Only an admin acting on someone else's client is worth naming.
+        disconnectedBy:
+          row.actor_user_id && row.actor_user_id !== row.user_id
+            ? {
+                id: row.actor_user_id,
+                name: row.actor_name ?? row.actor_email ?? "Deleted user",
+              }
+            : null,
       }),
     );
-
-    const [rows, [{ total }]] = await Promise.all([
-      db
-        .select({
-          id: setups.id,
-          consumedAt: setups.consumedAt,
-          userId: setups.userId,
-          userName: users.name,
-          userEmail: users.email,
-          clientId: setups.clientId,
-          platform: setups.platform,
-          deviceName: setups.deviceName,
-          mcpGatewayId: gateways.id,
-          mcpGatewayName: gateways.name,
-          llmProxyId: setups.llmProxyId,
-          includeSkills: setups.includeSkills,
-          revokedAt: setups.revokedAt,
-        })
-        .from(setups)
-        .innerJoin(users, eq(setups.userId, users.id))
-        .leftJoin(gateways, eq(setups.mcpGatewayId, gateways.id))
-        .where(where)
-        .orderBy(desc(setups.consumedAt), desc(setups.id))
-        .limit(params.pagination.limit)
-        .offset(params.pagination.offset),
-      db
-        .select({ total: count() })
-        .from(setups)
-        .innerJoin(users, eq(setups.userId, users.id))
-        .where(where),
-    ]);
-
-    return createPaginatedResult(
-      rows.map((row) => ({
-        id: row.id,
-        connectedAt: row.consumedAt as Date,
-        userId: row.userId,
-        userName: row.userName,
-        userEmail: row.userEmail,
-        clientId: row.clientId,
-        platform: row.platform,
-        deviceName: row.deviceName,
-        mcpGateway:
-          row.mcpGatewayId && row.mcpGatewayName
-            ? { id: row.mcpGatewayId, name: row.mcpGatewayName }
-            : null,
-        modelRouting: row.llmProxyId !== null,
-        includeSkills: row.includeSkills,
-        disconnectedAt: row.revokedAt,
-      })),
-      Number(total),
-      params.pagination,
-    );
+    return createCursorPaginatedResult(events, pagination, (event) => ({
+      value: event.occurredAt.toISOString(),
+      id: event.id,
+    }));
   }
 
   /**
@@ -184,6 +231,37 @@ class ConnectedClientModel {
       ),
     };
   }
+}
+
+/** A raw row of {@link ConnectedClientModel.listEvents}' query. */
+interface ConnectionEventRow extends Record<string, unknown> {
+  id: string;
+  action: ConnectionEventAction;
+  occurred_at: Date | string;
+  user_id: string;
+  user_name: string;
+  user_email: string;
+  client_id: ConnectionSetupClientId;
+  platform: ConnectionSetupPlatform | null;
+  device_name: string | null;
+  mcp_gateway_id: string | null;
+  mcp_gateway_name: string | null;
+  model_routing: boolean;
+  include_skills: boolean;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+}
+
+/**
+ * A raw `timestamp without time zone` holds UTC wall time; read it as UTC
+ * whether the driver hands back a string or a local-time Date.
+ */
+function toUtcDate(value: Date | string): Date {
+  if (value instanceof Date) {
+    return new Date(value.getTime() - value.getTimezoneOffset() * 60_000);
+  }
+  return new Date(`${value.replace(" ", "T")}Z`);
 }
 
 export default ConnectedClientModel;

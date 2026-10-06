@@ -42,13 +42,16 @@ describe("GET /api/connected-clients/log", () => {
   const getLog = async (query = "") => {
     const response = await app.inject({
       method: "GET",
-      url: `/api/connected-clients/log?limit=10&offset=0${query}`,
+      // A page size in the query replaces the default one.
+      url: `/api/connected-clients/log?${
+        query.includes("limit=") ? query.slice(1) : `limit=10${query}`
+      }`,
     });
     expect(response.statusCode).toBe(200);
     return response.json();
   };
 
-  test("logs each redeemed setup, newest first", async ({
+  test("logs each redeemed setup as a connect event, newest first", async ({
     makeUser,
     makeMember,
     makeAgent,
@@ -77,49 +80,59 @@ describe("GET /api/connected-clients/log", () => {
 
     const body = await getLog();
 
-    expect(body.pagination.total).toBe(2);
     expect(body.data).toEqual([
       expect.objectContaining({
+        action: "connected",
         userName: "Ada Lovelace",
         clientId: "claude-code",
+        platform: "macos",
         deviceName: "home-mac",
         mcpGateway: { id: gateway.id, name: "Engineering tools" },
         modelRouting: false,
-        disconnectedAt: null,
+        disconnectedBy: null,
       }),
       expect.objectContaining({
+        action: "connected",
         clientId: "codex",
         deviceName: "work-laptop",
         mcpGateway: null,
       }),
     ]);
+    expect(Date.parse(body.data[0].occurredAt)).toBeGreaterThan(
+      Date.now() - 60_000,
+    );
   });
 
-  test("keeps disconnected agents, marked as such", async ({
+  test("logs one disconnect event per disconnect, naming an admin who did it", async ({
     makeUser,
     makeMember,
   }) => {
     const ada = await makeUser();
     await makeMember(ada.id, organizationId);
-    await redeem(ada.id, "codex");
-    await withDbTransaction((tx) =>
-      ConnectedClientModel.revokeForUser({
-        organizationId,
-        userId: ada.id,
-        clientId: "codex",
-        revokedByUserId: ada.id,
-        tx,
-      }),
-    );
+    await redeem(ada.id, "codex", { deviceName: "work-laptop" });
+    await redeem(ada.id, "codex", { deviceName: "home-mac" });
+    await disconnect(ada.id, "codex", admin.id);
 
-    const [entry] = (await getLog()).data;
-    expect(entry.disconnectedAt).toEqual(expect.any(String));
+    const body = await getLog();
+
+    expect(body.data.map((e: { action: string }) => e.action)).toEqual([
+      "disconnected",
+      "connected",
+      "connected",
+    ]);
+    expect(body.data[0]).toMatchObject({
+      clientId: "codex",
+      deviceName: null,
+      disconnectedBy: { id: admin.id, name: "Admin" },
+    });
+    expect(
+      (await getLog("&action=disconnected")).data.map(
+        (e: { action: string }) => e.action,
+      ),
+    ).toEqual(["disconnected"]);
   });
 
-  test("filters by agent and by the user's name or email", async ({
-    makeUser,
-    makeMember,
-  }) => {
+  test("filters by user and by agent", async ({ makeUser, makeMember }) => {
     const ada = await makeUser({ name: "Ada Lovelace" });
     await makeMember(ada.id, organizationId);
     const grace = await makeUser({ name: "Grace Hopper" });
@@ -131,10 +144,35 @@ describe("GET /api/connected-clients/log", () => {
     const names = (body: { data: { userName: string }[] }) =>
       body.data.map((entry) => entry.userName);
     expect(names(await getLog("&clientId=cursor"))).toEqual(["Grace Hopper"]);
-    expect(names(await getLog("&search=lovelace"))).toEqual(["Ada Lovelace"]);
+    expect(names(await getLog(`&userId=${ada.id}`))).toEqual(["Ada Lovelace"]);
   });
 
-  test("leaves out other organizations' connections", async ({
+  test("pages with a cursor without repeating or skipping events", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser();
+    await makeMember(ada.id, organizationId);
+    for (const clientId of ["codex", "cursor", "opencode"] as const) {
+      await redeem(ada.id, clientId);
+    }
+
+    const first = await getLog("&limit=2");
+    expect(first.data.map((e: { clientId: string }) => e.clientId)).toEqual([
+      "opencode",
+      "cursor",
+    ]);
+    expect(first.pagination.hasNext).toBe(true);
+    const second = await getLog(
+      `&limit=2&cursor=${first.pagination.nextCursor}`,
+    );
+    expect(second.data.map((e: { clientId: string }) => e.clientId)).toEqual([
+      "codex",
+    ]);
+    expect(second.pagination.hasNext).toBe(false);
+  });
+
+  test("leaves out other organizations' events", async ({
     makeOrganization,
     makeUser,
     makeMember,
@@ -165,7 +203,7 @@ describe("GET /api/connected-clients/log", () => {
     try {
       const response = await gated.inject({
         method: "GET",
-        url: "/api/connected-clients/log?limit=10&offset=0",
+        url: "/api/connected-clients/log?limit=10",
         headers: { [USER_HEADER]: caller.id },
       });
       expect(response.statusCode).toBe(statusCode);
@@ -173,6 +211,22 @@ describe("GET /api/connected-clients/log", () => {
       await gated.close();
     }
   });
+
+  async function disconnect(
+    userId: string,
+    clientId: ConnectionSetupClientId,
+    revokedByUserId: string,
+  ) {
+    await withDbTransaction((tx) =>
+      ConnectedClientModel.revokeForUser({
+        organizationId,
+        userId,
+        clientId,
+        revokedByUserId,
+        tx,
+      }),
+    );
+  }
 
   async function redeem(
     userId: string,

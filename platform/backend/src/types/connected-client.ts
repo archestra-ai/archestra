@@ -40,24 +40,34 @@ export interface ConnectedClientRecord extends ConnectedClient {
   connectedAt: Date;
 }
 
-/** One redeemed Connect page setup: a user connected an agent on a machine. */
-export const ConnectionLogEntrySchema = z.object({
+export const ConnectionEventActionSchema = z.enum([
+  "connected",
+  "disconnected",
+]);
+export type ConnectionEventAction = z.infer<typeof ConnectionEventActionSchema>;
+
+/**
+ * One entry of the organization's agent connection log: a member connected an
+ * agent through the Connect page, or that agent was disconnected.
+ */
+export const ConnectionEventSchema = z.object({
   id: z.string(),
-  /** When the installer redeemed the setup. */
-  connectedAt: z.date(),
+  action: ConnectionEventActionSchema,
+  occurredAt: z.date(),
   userId: z.string(),
   userName: z.string(),
   userEmail: z.string(),
   clientId: ConnectionSetupClientIdSchema,
-  platform: ConnectionSetupPlatformSchema,
-  /** Hostname the installer reported; null for installers that predate it. */
+  /** Connect events only. */
+  platform: z.union([ConnectionSetupPlatformSchema, z.null()]),
+  /** Hostname the installer reported; null for disconnects and old installers. */
   deviceName: z.string().nullable(),
   /** Gateway the agent got tools from; null when tools were left out. */
   mcpGateway: z.object({ id: z.string(), name: z.string() }).nullable(),
   /** Whether model calls were routed through the LLM proxy. */
   modelRouting: z.boolean(),
   includeSkills: z.boolean(),
-  /** Set once this agent was disconnected. */
-  disconnectedAt: z.date().nullable(),
+  /** Set when someone other than the user disconnected the agent. */
+  disconnectedBy: z.object({ id: z.string(), name: z.string() }).nullable(),
 });
-export type ConnectionLogEntry = z.infer<typeof ConnectionLogEntrySchema>;
+export type ConnectionEvent = z.infer<typeof ConnectionEventSchema>;

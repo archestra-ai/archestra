@@ -85,6 +85,7 @@ import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
+import { latestCreatedAtByKey } from "./latest-created-at";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
@@ -525,32 +526,16 @@ class AgentModel {
    * with none. Read straight off `interactions` rather than through
    * `InteractionModel`, which imports this module — the same reason the
    * `lastUsedAt` sort below reads `mcpToolCallsTable` directly.
-   *
-   * The `IN` list is one page of agents, so the
-   * `(profile_id, created_at DESC)` index answers each agent's max with a
-   * backward scan instead of walking a very large table.
    */
   private static async getLastInteractionAtForAgents(
     agentIds: string[],
   ): Promise<Map<string, Date>> {
-    if (agentIds.length === 0) return new Map();
-
-    const rows = await db
-      .select({
-        profileId: schema.interactionsTable.profileId,
-        lastInteractionAt: max(schema.interactionsTable.createdAt),
-      })
-      .from(schema.interactionsTable)
-      .where(inArray(schema.interactionsTable.profileId, agentIds))
-      .groupBy(schema.interactionsTable.profileId);
-
-    const lastInteractionMap = new Map<string, Date>();
-    for (const row of rows) {
-      if (row.profileId && row.lastInteractionAt) {
-        lastInteractionMap.set(row.profileId, row.lastInteractionAt);
-      }
-    }
-    return lastInteractionMap;
+    return latestCreatedAtByKey({
+      table: schema.interactionsTable,
+      keyColumn: schema.interactionsTable.profileId,
+      createdAtColumn: schema.interactionsTable.createdAt,
+      keys: agentIds,
+    });
   }
 
   /**

@@ -1870,6 +1870,51 @@ describe("ConversationModel", () => {
     expect(results[0].messages.length).toBeLessThanOrEqual(10);
   });
 
+  test("findAll search previews each conversation's first messages in order", async ({
+    makeUser,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const user = await makeUser();
+    const org = await makeOrganization();
+    const agent = await makeAgent({ name: "Preview Order Agent" });
+    const MessageModel = (await import("./message")).default;
+
+    const longChat = await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Long chat",
+    });
+    for (let i = 0; i < 12; i++) {
+      await MessageModel.create({
+        conversationId: longChat.id,
+        role: "user",
+        content: {
+          id: `long-${i}`,
+          role: "user",
+          parts: [
+            { type: "text", text: i === 11 ? "the needle" : `Message ${i}` },
+          ],
+        },
+      });
+    }
+    await ConversationModel.create({
+      userId: user.id,
+      organizationId: org.id,
+      agentId: agent.id,
+      title: "Empty needle chat",
+    });
+
+    const results = await ConversationModel.findAll(user.id, org.id, "needle");
+
+    const byTitle = new Map(results.map((c) => [c.title, c]));
+    expect(byTitle.get("Empty needle chat")?.messages).toEqual([]);
+    expect(
+      byTitle.get("Long chat")?.messages.map((m) => m.parts[0].text),
+    ).toEqual(Array.from({ length: 10 }, (_, i) => `Message ${i}`));
+  });
+
   test("can pin a conversation by setting pinnedAt", async ({
     makeUser,
     makeOrganization,

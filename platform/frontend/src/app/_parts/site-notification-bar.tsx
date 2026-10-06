@@ -65,8 +65,8 @@ export function SiteNotificationBar({
         <Button
           type="button"
           variant="ghost"
-          size="sm"
-          className="h-6 w-6 shrink-0 p-0 text-primary-foreground hover:bg-primary-foreground hover:text-primary"
+          size="icon-xs"
+          className="shrink-0 text-primary-foreground hover:bg-primary-foreground hover:text-primary"
           onClick={handleDismiss}
           aria-label="Dismiss notification"
         >

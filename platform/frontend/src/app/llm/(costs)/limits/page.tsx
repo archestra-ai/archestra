@@ -287,6 +287,7 @@ export default function LimitsPage() {
     setActionButton(
       <PermissionButton
         permissions={{ llmLimit: ["create"] }}
+        size="sm"
         onClick={handleCreateOpen}
       >
         <Plus className="h-4 w-4" />

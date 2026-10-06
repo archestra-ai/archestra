@@ -473,6 +473,7 @@ function PluginsList() {
               <PermissionButton
                 permissions={{ plugin: ["create", "update"] }}
                 permissionScope="*"
+                size="sm"
                 asChild
               >
                 <Link href="/plugins/new">
@@ -845,6 +846,7 @@ function PluginsEmptyState() {
         <PermissionButton
           permissions={{ plugin: ["create", "update"] }}
           permissionScope="*"
+          size="sm"
           asChild
         >
           <Link href="/plugins/new">

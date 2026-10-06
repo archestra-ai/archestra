@@ -264,12 +264,7 @@ export function FilterBar({
               </Popover>
             )}
             {onClearFilters && (
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={onClearFilters}
-                className="h-8 gap-1.5 px-2"
-              >
+              <Button variant="ghost" size="sm" onClick={onClearFilters}>
                 <X className="h-3.5 w-3.5" />
                 <span>Clear</span>
               </Button>

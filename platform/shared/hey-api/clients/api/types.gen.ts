@@ -87787,6 +87787,115 @@ export type ConsultOpenappaBatteryHelperResponses = {
 
 export type ConsultOpenappaBatteryHelperResponse = ConsultOpenappaBatteryHelperResponses[keyof ConsultOpenappaBatteryHelperResponses];
 
+export type GetOpenappaTrustAudienceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/trust-audience';
+};
+
+export type GetOpenappaTrustAudienceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaTrustAudienceError = GetOpenappaTrustAudienceErrors[keyof GetOpenappaTrustAudienceErrors];
+
+export type GetOpenappaTrustAudienceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        trust: Array<string>;
+        audiences: Array<{
+            name: string;
+            kind: 'builtin';
+        } | {
+            name: string;
+            kind: 'mapped';
+            mappingLine: number | null;
+            from: Array<{
+                entry: string | null;
+                line: number | null;
+                source: string;
+                selector: string;
+                declaredBy: {
+                    battery: string;
+                    runBy: 'archestra' | 'helper';
+                    lastConsult: {
+                        outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+                        at: string;
+                    } | null;
+                } | null;
+            }>;
+            within: string | null;
+        } | {
+            name: string;
+            kind: 'unmapped';
+        }>;
+    };
+};
+
+export type GetOpenappaTrustAudienceResponse = GetOpenappaTrustAudienceResponses[keyof GetOpenappaTrustAudienceResponses];
+
 export type GetOpenAppaYellsData = {
     body?: never;
     path?: never;

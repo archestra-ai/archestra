@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
@@ -276,14 +277,14 @@ function SaveAttachmentButton({ attachment }: { attachment: FileAttachment }) {
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             onClick={() => setSaving(true)}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/attachment:opacity-100"
           >
             <BookPlus className="h-3.5 w-3.5" />
             <span className="sr-only">Save {name} to knowledge</span>
-          </button>
+          </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent>Save to knowledge</TooltipContent>
       </Tooltip>

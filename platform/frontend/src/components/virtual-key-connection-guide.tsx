@@ -619,10 +619,10 @@ function CopyButton({
   return (
     <Button
       type="button"
-      size="icon"
+      size="icon-xs"
       variant={primary ? "default" : "outline"}
       aria-label={copied ? "Copied" : label}
-      className="size-7 shrink-0"
+      className="shrink-0"
       onClick={async () => {
         await copyToClipboard(value);
         setCopied(true);

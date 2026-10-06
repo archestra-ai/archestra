@@ -49,7 +49,7 @@ export default function EnvironmentsPageClient() {
           <PermissionButton
             permissions={{ environment: ["update"] }}
             variant="secondary"
-            size="icon"
+            size="icon-sm"
             aria-label="Where new resources land"
             tooltip="Where new resources land"
             onClick={openResourceDefaults}
@@ -59,6 +59,7 @@ export default function EnvironmentsPageClient() {
         ) : null}
         <PermissionButton
           permissions={{ environment: ["create"] }}
+          size="sm"
           onClick={openCreate}
         >
           <Plus className="h-4 w-4" />

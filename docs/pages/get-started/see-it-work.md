@@ -21,7 +21,7 @@ A response containing `"status":"ok"` confirms the backend API and gateway are a
 
 ## In Chat
 
-1. Open **Chat** (`http://localhost:3000/chat`) in the Archestra sidebar.
+1. Open **Chat** in the Archestra sidebar.
 2. Connect a model provider: click **Sign in with ChatGPT**, another subscription, or **Add API Key** (such as Anthropic, OpenAI, or Gemini) and follow the dialog.
 3. Send a message, such as *"What tools can you use?"*, to verify the built-in MCP tools respond.
 
@@ -43,4 +43,4 @@ Open **Logs** in the Archestra sidebar:
 
 Click a row to see the full request. Your requests from Chat and from your client are both there. See [Logs and Auditing](/docs/admin/logs) for the other tabs.
 
-**Next:** [build an agent](/docs/agents), or [add MCP servers](/docs/mcp/servers) to give your agents more tools.
+**Next:** [build an agent](/docs/agents), [add MCP servers](/docs/mcp/servers) to give your agents more tools, or [migrate your agents](/docs/get-started/migrate).

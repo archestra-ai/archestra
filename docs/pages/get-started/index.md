@@ -3,7 +3,7 @@ title: Get Started
 description: Run Archestra, connect your clients, and see your first governed request
 order: 1
 explore: false
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-05
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -22,7 +22,7 @@ Already have an agent set up in Claude Code or OpenClaw? [Migrate it](/docs/get-
 
 :::quickstart:::
 
-Once running, open `http://localhost:3000` to access the Archestra console.
+**Next:** [Connect your agents](/docs/get-started/connect).
 
 <span id="pricing"></span>
 
@@ -34,8 +34,3 @@ Enterprise features are free for companies with fewer than 30 users. Archestra t
 
 - **Who counts:** every person who is invited or can sign in, active or not. See [`LICENSE_ENTERPRISE`](https://github.com/archestra-ai/archestra/blob/main/LICENSE_ENTERPRISE).
 - **30 users or more:** production use needs an Enterprise license. Contact sales@archestra.ai, then set [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED=true`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED).
-
----
-
-**Next step:** [Connect your agents](/docs/get-started/connect).
-

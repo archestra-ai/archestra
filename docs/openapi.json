@@ -312318,6 +312318,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "source": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "api",
+                              "chat"
+                            ]
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -312344,6 +312352,7 @@
                           "runId",
                           "authMethod",
                           "oauthClientId",
+                          "source",
                           "createdAt",
                           "userName",
                           "appName"
@@ -312775,6 +312784,14 @@
                       "nullable": true,
                       "type": "string"
                     },
+                    "source": {
+                      "nullable": true,
+                      "type": "string",
+                      "enum": [
+                        "api",
+                        "chat"
+                      ]
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -312801,6 +312818,7 @@
                     "runId",
                     "authMethod",
                     "oauthClientId",
+                    "source",
                     "createdAt",
                     "userName",
                     "appName"

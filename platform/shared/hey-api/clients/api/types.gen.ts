@@ -80107,6 +80107,7 @@ export type GetMcpToolCallsResponses = {
             runId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
             oauthClientId: string | null;
+            source: 'api' | 'chat';
             createdAt: string;
             userName: string | null;
             appName: string | null;
@@ -80224,6 +80225,7 @@ export type GetMcpToolCallResponses = {
         runId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
         oauthClientId: string | null;
+        source: 'api' | 'chat';
         createdAt: string;
         userName: string | null;
         appName: string | null;

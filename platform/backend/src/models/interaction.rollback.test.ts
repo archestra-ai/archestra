@@ -3602,6 +3602,45 @@ describe("InteractionModel", () => {
     });
   });
 
+  describe("log filter values", () => {
+    const seed = (row: { profileId: string; externalAgentId?: string }) =>
+      db.insert(schema.interactionsTable).values({
+        ...row,
+        request: { model: "gpt-4", messages: [] },
+        response: {
+          id: "r",
+          object: "chat.completion",
+          created: 0,
+          model: "gpt-4",
+          choices: [],
+        } as InteractionResponse,
+        type: "openai:chatCompletions",
+      });
+
+    test("external agent ids are the organization's distinct ids, ascending", async ({
+      makeAgent,
+      makeOrganization,
+    }) => {
+      const org = await makeOrganization();
+      const otherOrg = await makeOrganization();
+      const agent = await makeAgent({ organizationId: org.id });
+      const otherAgent = await makeAgent({ organizationId: otherOrg.id });
+
+      for (const externalAgentId of ["zeta", "alpha", "zeta", "mid", "alpha"]) {
+        await seed({ profileId: agent.id, externalAgentId });
+      }
+      await seed({ profileId: agent.id });
+      await seed({ profileId: otherAgent.id, externalAgentId: "beta" });
+      await seed({ profileId: otherAgent.id, externalAgentId: "omega" });
+
+      const ids = await InteractionModel.getUniqueExternalAgentIds({
+        organizationId: org.id,
+      });
+
+      expect(ids.map((entry) => entry.id)).toEqual(["alpha", "mid", "zeta"]);
+    });
+  });
+
   describe("preserves interactions when profile is deleted", () => {
     test("interaction is preserved with null profileId when profile is deleted", async ({
       makeAdmin,

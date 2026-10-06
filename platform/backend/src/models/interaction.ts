@@ -1109,32 +1109,32 @@ class InteractionModel {
       conditions.push(eq(schema.interactionsTable.userId, ownUserId));
     }
 
-    if (requestingUserId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        requestingUserId,
-        false,
-      );
-
+    const accessibleAgentIds =
+      requestingUserId && !isAgentAdmin
+        ? await AgentTeamModel.getUserAccessibleAgentIds(
+            requestingUserId,
+            false,
+          )
+        : null;
+    if (accessibleAgentIds) {
       if (accessibleAgentIds.length === 0) {
         return [];
       }
-
       conditions.push(
         inArray(schema.interactionsTable.profileId, accessibleAgentIds),
       );
     }
 
-    const result = await db
-      .selectDistinct({
-        externalAgentId: schema.interactionsTable.externalAgentId,
-      })
-      .from(schema.interactionsTable)
-      .where(and(...conditions))
-      .orderBy(asc(schema.interactionsTable.externalAgentId));
-
-    const externalAgentIds = result
-      .map((r) => r.externalAgentId)
-      .filter((id): id is string => id !== null);
+    // A caller narrowed to their own rows or accessible agents reaches them
+    // through the user_id / profile_id indexes, so a plain DISTINCT is cheap;
+    // a skip scan there would walk the whole external_agent_id index. The
+    // org-wide view walks that index one distinct value at a time instead of
+    // reading every row.
+    const where = and(...conditions) ?? sql`true`;
+    const externalAgentIds =
+      ownUserId || accessibleAgentIds
+        ? await InteractionModel.distinctExternalAgentIds(where)
+        : await InteractionModel.skipScanExternalAgentIds(where);
 
     // Get all unique agent IDs from the external agent IDs (including from chains)
     const allAgentIds =
@@ -2500,6 +2500,44 @@ class InteractionModel {
       );
 
     return Number(row?.activeUsers) || 0;
+  }
+
+  private static async distinctExternalAgentIds(where: SQL): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({
+        externalAgentId: schema.interactionsTable.externalAgentId,
+      })
+      .from(schema.interactionsTable)
+      .where(where)
+      .orderBy(asc(schema.interactionsTable.externalAgentId));
+    return rows
+      .map((row) => row.externalAgentId)
+      .filter((id): id is string => id !== null);
+  }
+
+  /**
+   * Distinct external agent ids in ascending order, found by a loose index
+   * scan: each step jumps the external_agent_id index to the next value with
+   * a row matching `where`, so the cost follows the number of distinct ids
+   * rather than the number of interactions.
+   */
+  private static async skipScanExternalAgentIds(where: SQL): Promise<string[]> {
+    const column = schema.interactionsTable.externalAgentId;
+    const result = await db.execute<{ value: string }>(sql`
+      WITH RECURSIVE external_agent_ids AS (
+        (SELECT ${column} AS value FROM ${schema.interactionsTable}
+         WHERE ${where} AND ${column} IS NOT NULL
+         ORDER BY ${column} LIMIT 1)
+        UNION ALL
+        SELECT (SELECT ${column} FROM ${schema.interactionsTable}
+                WHERE ${where} AND ${column} > previous.value
+                ORDER BY ${column} LIMIT 1)
+        FROM external_agent_ids previous
+        WHERE previous.value IS NOT NULL
+      )
+      SELECT value FROM external_agent_ids WHERE value IS NOT NULL
+    `);
+    return result.rows.map((row) => row.value);
   }
 }
 

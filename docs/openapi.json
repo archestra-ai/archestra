@@ -134597,12 +134597,18 @@
                         "nullable": true,
                         "type": "object",
                         "additionalProperties": {}
+                      },
+                      "tokens": {
+                        "type": "integer",
+                        "minimum": -9007199254740991,
+                        "maximum": 9007199254740991
                       }
                     },
                     "required": [
                       "name",
                       "description",
-                      "parameters"
+                      "parameters",
+                      "tokens"
                     ],
                     "additionalProperties": false
                   }

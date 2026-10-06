@@ -87,6 +87,7 @@ import {
 } from "./connect-page-data";
 import {
   AgentSearch,
+  approxTokens,
   BrowseDialog,
   fmt,
   InfoDialog,
@@ -1243,6 +1244,7 @@ function ProfileCard({
                     <ToolLoadingNote
                       progressive={data.progressive}
                       tools={tools}
+                      tokens={data.toolTokens?.total ?? null}
                     />
                   )
                 }
@@ -1428,20 +1430,33 @@ function ListBlock({
 function ToolLoadingNote({
   progressive,
   tools,
+  tokens,
 }: {
   progressive: boolean;
   tools: number;
+  /** Estimated tokens of the tool list the agent starts with. */
+  tokens: number | null;
 }) {
+  const cost = tokens
+    ? progressive
+      ? `, ${approxTokens(tokens)} to start`
+      : `, ${approxTokens(tokens)}`
+    : "";
   return (
     <p className="flex items-center gap-1.5 text-muted-foreground">
       <Gauge className="size-3.5 shrink-0" />
       {progressive
-        ? "Tools load on demand"
-        : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`}
+        ? `Tools load on demand${cost}`
+        : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts${cost}`}
       <InfoTip label="How tools load">
         {progressive
           ? "Your agent starts with a small fixed set of tools and finds the rest when a task needs them. Adding servers doesn't grow it."
           : "Every included tool loads at the start of each session. More tools take more of your agent's working memory."}
+        <span hidden={!tokens}>
+          {" "}
+          The token count is an estimate; your agent's model may count a little
+          differently.
+        </span>
       </InfoTip>
     </p>
   );

@@ -267,6 +267,7 @@ export function BrowseDialog({
                             <span className="truncate">{s.name}</span>
                             <span className="text-xs tabular-nums text-muted-foreground">
                               {s.toolCount} {plural(s.toolCount, "tool")}
+                              <span>{serverCost(data, s.key)}</span>
                             </span>
                             <ChevronDown
                               className={cn(
@@ -480,6 +481,22 @@ export function plural(n: number, word: string) {
 
 export function fmt(n: number) {
   return n.toLocaleString("en-US");
+}
+
+/** A token estimate, rounded so it doesn't read as exact: "about 3.2k tokens". */
+export function approxTokens(n: number) {
+  if (n < 1000)
+    return `about ${fmt(Math.max(100, Math.round(n / 100) * 100))} tokens`;
+  const k = n / 1000;
+  return `about ${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}k tokens`;
+}
+
+/** One server's share of the context: its tokens, or that it loads when used. */
+function serverCost(data: ConnectPageData, key: string) {
+  if (!data.toolTokens) return "";
+  if (data.progressive) return " · loads when used";
+  const tokens = data.toolTokens.byServer[key];
+  return tokens ? ` · ${approxTokens(tokens)}` : "";
 }
 
 /** A SKILL.md body without its YAML frontmatter (name, description). */

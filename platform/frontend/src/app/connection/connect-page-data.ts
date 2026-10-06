@@ -1,8 +1,7 @@
 "use client";
 
-// Data for the Connect page. Real data where the app has it (gateway,
-// servers, tools, skills, apps, admin settings); clearly marked mocks where
-// the backend has nothing yet (context cost).
+// Data for the Connect page: gateway, servers, tools and their estimated
+// context cost, skills, apps, admin settings.
 
 import type { SupportedProvider } from "@archestra/shared";
 import {
@@ -14,6 +13,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useChatProfileMcpTools } from "@/lib/chat/chat.query";
 import { useConfig } from "@/lib/config/config.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -85,6 +85,13 @@ export interface ConnectPageData {
   totalSkills: number;
   /** Gateway "progressive tool loading": tools load on demand. */
   progressive: boolean;
+  /**
+   * Estimated tokens the gateway's tool list takes in the agent's context,
+   * counted from the same tool list and tokenizer as the chat's context
+   * window view. `byServer` is keyed by ConnectServer key and only has the
+   * servers whose tools load at session start. null until it loads.
+   */
+  toolTokens: { total: number; byServer: Record<string, number> } | null;
   llmProxyEnabled: boolean;
   /** The org's LLM Proxy, when the user can route through it. */
   llmProxyId: string | null;
@@ -222,6 +229,26 @@ export function useConnectPageData(): ConnectPageData {
     ? { ...profile, slug: profile.slug ?? profile.id }
     : null;
   const toolsAvailable = canReadGateways === true && !!gateway;
+  // The gateway's real tool list, as the agent gets it: in on-demand mode
+  // that's the small fixed set, in full mode every server's tools.
+  const { data: listedTools } = useChatProfileMcpTools(
+    toolsAvailable ? gateway?.id : undefined,
+    { silent: true },
+  );
+  const toolTokens = useMemo(() => {
+    if (!listedTools?.length) return null;
+    const serverOf = new Map(
+      (profile?.tools ?? []).map((t) => [t.name, t.catalogId ?? "other"]),
+    );
+    const byServer: Record<string, number> = {};
+    let total = 0;
+    for (const tool of listedTools) {
+      total += tool.tokens;
+      const key = serverOf.get(tool.name);
+      if (key) byServer[key] = (byServer[key] ?? 0) + tool.tokens;
+    }
+    return { total, byServer };
+  }, [listedTools, profile?.tools]);
   const partsFor = (client: ConnectClient): ConnectChoices => ({
     tools: toolsAvailable,
     skills: skillsAvailable,
@@ -254,6 +281,7 @@ export function useConnectPageData(): ConnectPageData {
     skills,
     totalSkills: skills.length,
     progressive,
+    toolTokens,
     llmProxyEnabled: proxyAvailable,
     llmProxyId: proxyAvailable ? (llmProxy?.id ?? null) : null,
     shownProviders: getConnectableProviders(org),

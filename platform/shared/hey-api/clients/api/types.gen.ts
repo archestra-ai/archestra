@@ -37135,6 +37135,7 @@ export type GetChatAgentMcpToolsResponses = {
         parameters: {
             [key: string]: unknown;
         } | null;
+        tokens: number;
     }>;
 };
 

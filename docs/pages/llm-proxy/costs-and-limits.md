@@ -7,9 +7,11 @@ lastUpdated: 2026-10-05
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-See what AI costs your company, per person, team, and app, and stop spend before it passes a budget. Find the team that spends the most on Claude. Cap a trial project at a fixed amount. Show how much the Claude and ChatGPT subscriptions saved.
+Archestra records the cost of every model request from chat, agents, and the [LLM Proxy](/docs/llm-proxy). Use it to:
 
-Archestra counts every request that goes through chat, agents, or the [LLM Proxy](/docs/llm-proxy).
+- See spend by person, team, agent, app, and model.
+- Set budgets that block requests when spend reaches the limit.
+- See how much use your Claude and ChatGPT subscriptions cover.
 
 ![Costs & Limits → Costs for the last 30 days: billed spend, subscription-covered use, requests, tokens, and daily cost and cache-savings charts](/docs/automated_screenshots/llm-proxy_costs.webp)
 
@@ -90,9 +92,9 @@ Archestra tells the two apart from the credential on each request. You configure
 - A Claude subscription that runs into paid usage credits turns metered. Archestra reads this from Anthropic's response headers.
 - To count every new request as metered, set [`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false`](/docs/reference/configuration#ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT). Past requests keep their classification.
 
-<span id="model-pricing"></span><span id="prompt-caching"></span><span id="get-accurate-numbers"></span>
+<span id="model-pricing"></span><span id="prompt-caching"></span><span id="get-accurate-numbers"></span><span id="where-prices-come-from"></span>
 
-## Where Prices Come From
+## Where Token Prices Come From
 
 Every cost uses the model's price. Archestra syncs input, output, and cache prices for known models. A model it does not know gets an estimated price. For a custom or self-hosted model, set the price yourself. See [Model Pricing, Limits, and Modalities](/docs/llm-proxy/providers#model-pricing-limits-and-modalities).
 
@@ -100,5 +102,5 @@ Prompt caching lowers the cost of a prompt that starts the same way each time. C
 
 ## What to Know
 
-- **Export the numbers** with `GET /api/statistics/users` for everyone, or `GET /api/statistics/me` for yourself. See the [API Reference](/docs/reference/api).
-- **For dashboards** in Grafana or similar, see [Observability](/docs/admin/observability).
+- **Need the raw numbers?** Get them per person from [`GET /api/statistics/users`](/docs/reference/api#/Statistics/getUserStatistics), or your own from [`GET /api/statistics/me`](/docs/reference/api#/Statistics/getMyStatistics).
+- **Already use Prometheus or Grafana?** Archestra exports cost and token metrics, so you can chart spend next to your other dashboards. See [Metrics](/docs/admin/observability/metrics#llm-metrics).

@@ -104,6 +104,8 @@ def page_file(slug: str) -> Path | None:
 
 
 def check_anchor(target: Path, fragment: str, url: str, source: Path | str) -> str | None:
+    if fragment.startswith("/") and target.as_posix().endswith("reference/api.md"):
+        return None  # a Swagger UI operation deep link; check-docs-api-links.py validates it
     if not fragment or fragment in page_anchors(target):
         return None
     where = source.as_posix() if isinstance(source, Path) else source

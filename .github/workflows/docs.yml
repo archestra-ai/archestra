@@ -70,6 +70,9 @@ jobs:
       - name: Check built-in MCP tool mentions link to the tool reference
         run: python3 .github/scripts/check-docs-mcp-tool-links.py
 
+      - name: Check API route mentions deep-link to the API reference
+        run: python3 .github/scripts/check-docs-api-links.py
+
       - name: Check RBAC permission mentions link to the permissions reference
         run: python3 .github/scripts/check-docs-permission-links.py
 

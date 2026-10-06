@@ -73,7 +73,7 @@ If another administrator saves first, the editor preserves your draft and asks y
 
 ### API Example
 
-For API-based sharing, read the policy with `GET /api/resource-permissions/mcpRegistry/<catalog-id>`. Replace direct grants with `PUT` to the same URL, using the returned revision:
+For API-based sharing, read the policy with [`GET /api/resource-permissions/mcpRegistry/<catalog-id>`](/docs/reference/api#/Permissions/getResourcePermissions). Replace direct grants with `PUT` to the same URL, using the returned revision:
 
 ```json
 {

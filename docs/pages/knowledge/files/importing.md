@@ -9,9 +9,9 @@ Keep Knowledge Files current from your own pipeline: one API call creates or rep
 
 | Call | Does |
 | --- | --- |
-| `PUT /api/knowledge-files/:fileId/content` | Creates or replaces a file, then indexes it. Use this for repeated imports. |
-| `POST /api/knowledge-files` | Stores a new file only |
-| `POST /api/knowledge-files/index` | Indexes stored files into a knowledge base |
+| [`PUT /api/knowledge-files/:fileId/content`](/docs/reference/api#/Knowledge%20Files/upsertKnowledgeFile) | Creates or replaces a file, then indexes it. Use this for repeated imports. |
+| [`POST /api/knowledge-files`](/docs/reference/api#/Knowledge%20Files/uploadKnowledgeFile) | Stores a new file only |
+| [`POST /api/knowledge-files/index`](/docs/reference/api#/Knowledge%20Files/indexKnowledgeFiles) | Indexes stored files into a knowledge base |
 
 For repeated imports, make a UUID once for each source document, and reuse it on every import. Replacing keeps the file's permissions and labels. A new file gives its uploader full access, and only that uploader can replace it.
 

@@ -1164,7 +1164,7 @@ test("picking a key for a repository-owned policy shows the line to change inste
         credentials: [
           {
             variable: "APPA_PROVIDER_GITHUB_TOKEN",
-            key: "lobster-app",
+            key: "org-github-app",
             readers: ["github"],
           },
         ],
@@ -1179,8 +1179,8 @@ test("picking a key for a repository-owned policy shows the line to change inste
         {
           ...credential,
           id: "cred-0",
-          key: "lobster-app",
-          name: "lobster-app",
+          key: "org-github-app",
+          name: "org-github-app",
         },
         credential,
       ]),
@@ -1197,7 +1197,7 @@ test("picking a key for a repository-owned policy shows the line to change inste
     name: "APPA_PROVIDER_GITHUB_TOKEN",
   });
   await waitFor(() => expect(select).toBeEnabled());
-  expect(select).toHaveTextContent("lobster-app");
+  expect(select).toHaveTextContent("org-github-app");
   expect(select).not.toHaveTextContent(/no such credential|not available/);
   await user.click(select);
   await user.click(await screen.findByRole("option", { name: "GitHub token" }));

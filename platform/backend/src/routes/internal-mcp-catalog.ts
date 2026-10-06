@@ -256,9 +256,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             }),
             flagImageApprovalRequired(list, request.organizationId),
             McpServerAlertMuteModel.findForViewer({
-                  userId: request.user.id,
-                  catalogIds: list.map((item) => item.id),
-                }),
+              userId: request.user.id,
+              catalogIds: list.map((item) => item.id),
+            }),
           ]);
         // SPDX-SnippetEnd
         return reply.send(
@@ -291,9 +291,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         AppModel.getAppIdsByCatalogIds(appCatalogIds),
         AppModel.getAppEnabledByCatalogIds(appCatalogIds),
         McpServerAlertMuteModel.findForViewer({
-              userId: request.user.id,
-              catalogIds: items.map((item) => item.id),
-            }),
+          userId: request.user.id,
+          catalogIds: items.map((item) => item.id),
+        }),
         ResourcePermissions.getCatalogActions({
           organizationId: request.organizationId,
           userId: request.user.id,

@@ -255,11 +255,11 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const [alertMutesByCatalogId, credentialUsableIds] = await Promise.all([
         McpServerAlertMuteModel.findForViewer({
-              userId: user.id,
-              catalogIds: [
-                ...new Set(allServers.map((server) => server.catalogId)),
-              ],
-            }),
+          userId: user.id,
+          catalogIds: [
+            ...new Set(allServers.map((server) => server.catalogId)),
+          ],
+        }),
         McpServerModel.getCredentialUsableServerIds(
           user.id,
           allServers.map((server) => server.id),

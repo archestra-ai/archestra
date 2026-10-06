@@ -1589,14 +1589,14 @@ function DesktopDownload({
             <span>Try again</span>
           </Button>
         ) : installerUrl ? (
-          <Button asChild size="lg" className="h-12 rounded-xl px-6 text-base">
+          <Button asChild size="lg" className="h-12 rounded-xl px-6">
             <a href={installerUrl} download>
               <Download />
               <span>Download installer</span>
             </a>
           </Button>
         ) : (
-          <Button size="lg" disabled className="h-12 rounded-xl px-6 text-base">
+          <Button size="lg" disabled className="h-12 rounded-xl px-6">
             <Download />
             <span>
               {pending ? "Preparing installer" : "Download installer"}

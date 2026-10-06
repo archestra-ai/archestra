@@ -225,7 +225,7 @@ export function ConnectPage() {
             <h1 className="text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl xl:text-6xl">
               Connect your agent to {data.appName}
             </h1>
-            <p className="mt-4 max-w-[34rem] text-lg leading-relaxed text-muted-foreground">
+            <p className="mt-4 max-w-[34rem] text-sm leading-relaxed text-muted-foreground">
               The MCP servers and skills your organization runs for itself, now
               usable in your agent of choice.
             </p>
@@ -338,18 +338,24 @@ export function ConnectPage() {
 // === Background ===
 
 function DotField() {
-  const mask =
-    "linear-gradient(to bottom, black 0%, black 45%, transparent 100%)";
+  // Fades out down the page, and clears behind the headline and picker so
+  // the dots never sit under text.
+  const mask = [
+    "radial-gradient(ellipse 55% 65% at 28% 38%, transparent 35%, black 80%)",
+    "linear-gradient(to bottom, black 0%, black 45%, transparent 100%)",
+  ].join(", ");
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 top-0 h-[760px] opacity-70"
+      className="pointer-events-none absolute inset-x-0 top-0 h-[760px] opacity-50 dark:opacity-70"
       style={{
         backgroundImage:
           "radial-gradient(circle, var(--border) 1.1px, transparent 1.4px)",
         backgroundSize: "26px 26px",
         maskImage: mask,
+        maskComposite: "intersect",
         WebkitMaskImage: mask,
+        WebkitMaskComposite: "source-in",
       }}
     />
   );
@@ -472,7 +478,7 @@ function Tile({
       {...rest}
       className={cn(
         "relative flex min-w-0 flex-col items-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,transform] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none motion-safe:hover:-translate-y-0.5",
-        roomy ? "pt-4 pb-3 text-[13px]" : "pt-3 pb-2.5",
+        roomy ? "pt-4 pb-3" : "pt-3 pb-2.5",
         active
           ? // The muted tint is layered over the card fill, so the page's
             // dots never show through a selected tile.
@@ -486,7 +492,7 @@ function Tile({
         {label}
       </span>
       {sub && (
-        <span className="-mt-1 w-full text-center text-[11px] leading-tight font-normal text-muted-foreground">
+        <span className="-mt-1 w-full text-center text-xs leading-tight font-normal text-muted-foreground">
           {sub}
         </span>
       )}
@@ -712,7 +718,7 @@ function ConnectArea({
               size="lg"
               onClick={copy}
               disabled={!text || !origin || data.revalidating}
-              className="h-12 shrink-0 rounded-xl px-6 text-base"
+              className="h-12 shrink-0 rounded-xl px-6"
             >
               {copied ? <Check /> : <Copy />}
               {copied ? "Copied" : script ? "Copy command" : "Copy prompt"}
@@ -855,7 +861,7 @@ function StepHeading({ step }: { step: string }) {
   return (
     <h2
       key={step}
-      className="inline-flex items-center gap-2.5 text-base font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
+      className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
     >
       <span
         aria-hidden
@@ -1109,13 +1115,13 @@ function ProfileCard({
         <div key={`icon-${client.id}`} className="connect-icon">
           <ClientIcon client={client} size={44} />
         </div>
-        <div className="min-w-0 flex-1 truncate text-xl font-semibold tracking-tight">
+        <div className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
           {client.label}
         </div>
       </div>
 
       {/* One short line; the lists below speak for themselves. */}
-      <p className="mt-4 text-[15px] leading-snug text-pretty text-foreground">
+      <p className="mt-4 text-sm leading-snug text-pretty text-foreground">
         {cardIntro(data, servers, skillsOn ? skillCount : 0)}
       </p>
 
@@ -1251,7 +1257,7 @@ function ProfileCard({
                     <>
                       {c.icon}
                       <span className="min-w-0 flex-1">
-                        <span className="block truncate text-[13px] font-semibold tracking-tight">
+                        <span className="block truncate text-sm font-semibold tracking-tight">
                           {c.title}
                         </span>
                         <span className="block text-xs leading-snug text-muted-foreground">
@@ -1314,7 +1320,7 @@ function ListBlock({
         <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
           <span
             className={cn(
-              "text-[15px] font-semibold tracking-tight tabular-nums",
+              "text-sm font-semibold tracking-tight tabular-nums",
               muted && "text-muted-foreground",
             )}
           >

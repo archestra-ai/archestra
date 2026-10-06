@@ -4,7 +4,7 @@ sidebarTitle: Batteries
 description: Cover an MCP server's tools with a ready-made policy package
 order: 2
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -27,6 +27,10 @@ An included battery that cannot run shows a problem instead of **Active**:
 
 - **Needs a credential:** the battery calls an API, for example to check if a repository is public. Bind a key from [Credentials](/docs/admin/security/credentials) in the battery's edit dialog. A battery holds no keys, and the key never appears in the policy.
 - **No server bound:** attach the battery to an installed MCP server.
+
+What to know:
+
+- When [GitHub sync](/docs/agents/guardrails/policies#github-sync) owns the policy, the dialog cannot save a key. Pick the key there to get the line to change in the repository.
 
 ## Write Your Own
 

@@ -26,6 +26,7 @@ import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
+import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FileDropInput } from "@/components/files/file-drop-input";
 import {
@@ -36,6 +37,10 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RuntimeCredentialIcon,
+  runtimeCredentialIconOf,
+} from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
 import {
   StandardDialog,
@@ -86,6 +91,7 @@ import {
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
 import { useCoverageSummary } from "@/lib/openappa-coverage.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   type RuntimeCredentialDefinition,
   useRuntimeCredentials,
@@ -97,7 +103,10 @@ import {
   BATTERY_STATUS_GROUPS,
   type BatteryStatusGroup,
 } from "./battery-status";
-import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
+import {
+  GithubManagedPolicyNotice,
+  githubPolicyFileUrl,
+} from "./github-managed-policy-notice";
 import { batteryStatusBadge } from "./policy-decorations";
 
 type BatteryStatus = PolicyBattery["status"];
@@ -449,6 +458,7 @@ export function BatteriesPanel() {
           enforced={enforced}
           writable={writable}
           bindable={bindable}
+          managedInGithub={managedInGithub}
           onClose={() => {
             setEditing(null);
             if (searchParams.has("battery"))
@@ -582,6 +592,7 @@ function BatteryDialog({
   enforced,
   writable,
   bindable,
+  managedInGithub,
   onClose,
 }: {
   row: BatteryTableRow;
@@ -592,6 +603,7 @@ function BatteryDialog({
   enforced: boolean;
   writable: boolean;
   bindable: boolean;
+  managedInGithub: boolean;
   onClose: () => void;
 }) {
   const { summary, included } = row;
@@ -784,6 +796,7 @@ function BatteryDialog({
                 : "Attach the battery to a server to bind the keys its helpers read."
           }
           bindable={bindable}
+          managedInGithub={managedInGithub}
           pending={pending}
         />
       )}
@@ -973,6 +986,11 @@ function ServerOption({ entry }: { entry: CatalogEntry }) {
  * The keys a battery's helpers read, each picked from the organization's
  * credentials. Those are set up on the Credentials settings page, which opens
  * in a new tab so the dialog's edits survive; the list reloads on return.
+ *
+ * Anyone who can read credentials sees the list, so a bound key reads as what
+ * it is even when this reader cannot change it. While the repository owns the
+ * policy, a pick is a draft: nothing is saved here, and the section shows the
+ * line to change in the repository instead.
  */
 function CredentialsSection({
   batteryName,
@@ -980,6 +998,7 @@ function CredentialsSection({
   onChange,
   disabledReason,
   bindable,
+  managedInGithub,
   pending,
 }: {
   batteryName: string;
@@ -987,21 +1006,40 @@ function CredentialsSection({
   onChange: (variable: string, key: string) => void;
   disabledReason: string | null;
   bindable: boolean;
+  managedInGithub: boolean;
   pending: boolean;
 }) {
-  const available = useRuntimeCredentials(bindable);
+  const { data: canRead } = useHasPermissions({ credential: ["read"] });
+  const listable = canRead === true;
+  const available = useRuntimeCredentials(listable);
   const { refetch } = available;
   useEffect(() => {
-    if (!bindable) return;
+    if (!listable) return;
     const reload = () => refetch();
     window.addEventListener("focus", reload);
     return () => window.removeEventListener("focus", reload);
-  }, [bindable, refetch]);
+  }, [listable, refetch]);
   const options = available.data ?? [];
+  const drafting =
+    managedInGithub && available.isSuccess && disabledReason === null;
+  const [drafts, setDrafts] = useState<Record<string, string>>({});
+  const changed = credentials.flatMap((credential) => {
+    const draft = drafts[credential.variable];
+    return draft === undefined || draft === (credential.key ?? UNBOUND)
+      ? []
+      : [{ variable: credential.variable, key: draft }];
+  });
   return (
     <DialogSection
       title="Credentials"
-      description={disabledReason ?? "Keys its helpers read when they run."}
+      description={
+        disabledReason ??
+        (managedInGithub
+          ? "The policy repository sets these keys. Pick a key to see the line to change there."
+          : bindable
+            ? "Keys its helpers read when they run."
+            : "Changing a key takes permission to update guardrails and credentials.")
+      }
       action={
         <Button asChild variant="link" size="sm" className="h-auto p-0">
           <Link href="/settings/credentials" target="_blank" rel="noreferrer">
@@ -1011,29 +1049,113 @@ function CredentialsSection({
         </Button>
       }
     >
-      {bindable && available.isSuccess && options.length === 0 && (
-        <InlineNotice variant="info">
-          <KeyRound />
-          <span className="font-medium">No credentials yet</span>
-          <InlineNoticeText>
-            Add one in Credentials, then pick it here.
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
+      {(bindable || drafting) &&
+        available.isSuccess &&
+        options.length === 0 && (
+          <InlineNotice variant="info">
+            <KeyRound />
+            <span className="font-medium">No credentials yet</span>
+            <InlineNoticeText>
+              Add one in Credentials, then pick it here.
+            </InlineNoticeText>
+          </InlineNotice>
+        )}
       <div className="space-y-4">
         {credentials.map((credential) => (
           <CredentialRow
             key={credential.variable}
             batteryName={batteryName}
             credential={credential}
-            value={credential.key ?? UNBOUND}
+            value={drafts[credential.variable] ?? credential.key ?? UNBOUND}
             options={options}
-            disabled={!bindable || pending || disabledReason !== null}
-            onChange={(key) => onChange(credential.variable, key)}
+            listed={available.isSuccess}
+            disabled={
+              drafting ? false : !bindable || pending || disabledReason !== null
+            }
+            onChange={(key) =>
+              drafting
+                ? setDrafts((current) => ({
+                    ...current,
+                    [credential.variable]: key,
+                  }))
+                : onChange(credential.variable, key)
+            }
           />
         ))}
       </div>
+      {changed.length > 0 && <RepositoryChangeNotice changes={changed} />}
     </DialogSection>
+  );
+}
+
+/**
+ * What to change in the synced policy file to bind the picked keys: this
+ * deployment cannot write a policy the repository owns, so the reader takes
+ * the lines there.
+ */
+function RepositoryChangeNotice({
+  changes,
+}: {
+  changes: { variable: string; key: string }[];
+}) {
+  const { data } = useAppaGithubSync();
+  const href = githubPolicyFileUrl(data?.source, "edit");
+  const set = changes.filter((change) => change.key !== UNBOUND);
+  const unset = changes.filter((change) => change.key === UNBOUND);
+  const lines = set
+    .map((change) => `${change.variable} = "${change.key}"`)
+    .join("\n");
+  return (
+    <InlineNotice variant="info" role="status">
+      <GitPullRequestArrow />
+      <span className="font-medium">Change this in the repository</span>
+      <InlineNoticeText className="w-full space-y-2">
+        <p>
+          <span>Nothing is saved here. In </span>
+          {href ? (
+            <a
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="inline-flex items-center gap-1 underline underline-offset-2 hover:no-underline"
+            >
+              <span>the policy file</span>
+              <ExternalLink className="size-3" aria-hidden />
+              <span className="sr-only">(opens in new tab)</span>
+            </a>
+          ) : (
+            <span>the policy file</span>
+          )}
+          <span>, under </span>
+          <code className="font-mono">[credentials]</code>
+          {set.length > 0 && <span>, set:</span>}
+          {set.length === 0 && <span>:</span>}
+        </p>
+        {set.length > 0 && (
+          <CopyableCode value={lines} className="border bg-background">
+            <pre className="overflow-x-auto font-mono text-xs">{lines}</pre>
+          </CopyableCode>
+        )}
+        {unset.length > 0 && (
+          <p>
+            <span>Delete the line for </span>
+            {unset.map((change, index) => (
+              <span key={change.variable}>
+                {index > 0 && <span>, </span>}
+                <code className="font-mono">{change.variable}</code>
+              </span>
+            ))}
+            <span>.</span>
+          </p>
+        )}
+        <p>
+          After the change merges, it waits until someone who can update
+          credentials clicks{" "}
+          <span className="font-medium">Accept repository text</span> on this
+          page.
+        </p>
+      </InlineNoticeText>
+    </InlineNotice>
   );
 }
 
@@ -1042,6 +1164,7 @@ function CredentialRow({
   credential,
   value,
   options,
+  listed,
   disabled,
   onChange,
 }: {
@@ -1049,14 +1172,16 @@ function CredentialRow({
   credential: BatteryCredential;
   value: string;
   options: RuntimeCredentialDefinition[];
+  /** The organization's credentials loaded, so a key missing from them is gone. */
+  listed: boolean;
   disabled: boolean;
   onChange: (key: string) => void;
 }) {
   const [kept, setKept] = useState(false);
   const others = credential.readers.filter((reader) => reader !== batteryName);
-  // The policy can name a key the list does not offer — deleted, closed to
-  // the organization, or a list this reader never loads — and the binding
-  // still has to read as what it is.
+  // The policy can name a key the list does not offer — deleted, never
+  // created, or a list this reader cannot load — and the binding still has
+  // to read as what it is. Only a loaded list can say the key is missing.
   const unlisted =
     credential.key !== null &&
     !options.some((entry) => entry.key === credential.key)
@@ -1083,11 +1208,18 @@ function CredentialRow({
         <SelectTrigger id={id} className="w-full">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent
+          position="popper"
+          className="w-[var(--radix-select-trigger-width)]"
+        >
           <SelectItem value={UNBOUND}>Not bound</SelectItem>
           {unlisted !== null && (
-            <SelectItem value={unlisted} disabled>
-              {`${unlisted} (not available)`}
+            <SelectItem
+              value={unlisted}
+              disabled
+              description={listed ? "No credential has this key" : undefined}
+            >
+              <CredentialOptionLabel icon={null} name={unlisted} />
             </SelectItem>
           )}
           {options.map((entry) => (
@@ -1097,12 +1229,25 @@ function CredentialRow({
               // The helper runs for the whole organization, so a personal-only
               // credential cannot be bound; it is listed as such rather than hidden.
               disabled={!entry.allowOrganization}
+              description={
+                <span className="line-clamp-2 whitespace-normal">
+                  <span>
+                    {!entry.allowOrganization
+                      ? "Personal credential · batteries need an organization credential"
+                      : entry.organizationConfigured
+                        ? "Organization credential"
+                        : "Organization credential · no organization value yet"}
+                  </span>
+                  {entry.description && (
+                    <span>{` · ${entry.description}`}</span>
+                  )}
+                </span>
+              }
             >
-              {!entry.allowOrganization
-                ? `${entry.name} (personal only)`
-                : entry.organizationConfigured
-                  ? entry.name
-                  : `${entry.name} (no organization value)`}
+              <CredentialOptionLabel
+                icon={runtimeCredentialIconOf(entry)}
+                name={entry.name}
+              />
             </SelectItem>
           ))}
         </SelectContent>
@@ -1122,6 +1267,24 @@ function CredentialRow({
         </InlineNotice>
       )}
     </div>
+  );
+}
+
+/** A credential's icon and name, which the select's trigger shows as well. */
+function CredentialOptionLabel({
+  icon,
+  name,
+}: {
+  icon: string | null;
+  name: string;
+}) {
+  // One row of its own: Radix drops ItemText's class, so the open list would
+  // otherwise stack the block-level icon above the name.
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <RuntimeCredentialIcon icon={icon} className="size-4" size={16} />
+      <span className="truncate">{name}</span>
+    </span>
   );
 }
 

@@ -123,7 +123,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(23);
+    expect(originalToolIds).toHaveLength(24);
     const extraTools = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("whoami"),
     ]);
@@ -297,7 +297,7 @@ describe("syncBuiltInAgents", () => {
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(23);
+    ).toHaveLength(24);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -405,7 +405,7 @@ describe("syncBuiltInAgents", () => {
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(23);
+    expect(managedToolIds).toHaveLength(24);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -451,7 +451,7 @@ describe("syncBuiltInAgents", () => {
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(20);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(21);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -461,7 +461,7 @@ describe("syncBuiltInAgents", () => {
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(23);
+    expect(assigned).toHaveLength(24);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 

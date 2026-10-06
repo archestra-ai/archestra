@@ -332,7 +332,8 @@ export function ConnectPage() {
 
 function DotField() {
   // Fades out down the page, and clears behind the headline and picker so
-  // the dots never sit under text.
+  // the dots never sit under text. Dark mode's border is too faint to see,
+  // so its dots use the muted text color, kept low.
   const mask = [
     "radial-gradient(ellipse 55% 65% at 28% 38%, transparent 35%, black 80%)",
     "linear-gradient(to bottom, black 0%, black 45%, transparent 100%)",
@@ -340,10 +341,10 @@ function DotField() {
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 top-0 h-[760px] opacity-50 dark:opacity-70"
+      className="pointer-events-none absolute inset-x-0 top-0 h-[760px] opacity-50 [--dot:var(--border)] dark:opacity-20 dark:[--dot:var(--muted-foreground)]"
       style={{
         backgroundImage:
-          "radial-gradient(circle, var(--border) 1.1px, transparent 1.4px)",
+          "radial-gradient(circle, var(--dot) 1.1px, transparent 1.4px)",
         backgroundSize: "26px 26px",
         maskImage: mask,
         maskComposite: "intersect",

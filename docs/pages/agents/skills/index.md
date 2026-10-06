@@ -2,7 +2,7 @@
 title: Skills
 description: Reusable SKILL.md instruction sets that agents load on demand
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -49,7 +49,10 @@ An agent reads a skill in three steps, so only what it needs enters its context:
 
 [`load_skill`](/docs/reference/archestra-mcp-server#load_skill) also puts the skill at `/skills/<name>` in the agent's [Code Sandbox](/docs/agents#code-sandbox), so the agent can run its scripts. A connected client without a sandbox gets the files as text and saves them itself.
 
-New agents get these tools, plus the tools for [writing skills from chat](/docs/agents/skills/writing#authoring-skills-from-chat). To keep an agent away from skills, remove them in its tool picker.
+What to know:
+
+- **Template variables:** add `templated: true` to a skill's frontmatter to use the same expressions as [prompt templates](/docs/agents#prompt-templates), such as `{{user.name}}`. Archestra fills them in when the skill loads. See [Writing Skills](/docs/agents/skills/writing#what-goes-in-a-skill).
+- New agents get skill tools by default, plus tools to [write skills from chat](/docs/agents/skills/writing#authoring-skills-from-chat). To keep an agent away from skills, remove them in its tool picker.
 
 ## Choosing an Agent's Skills
 

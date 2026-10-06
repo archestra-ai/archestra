@@ -90,7 +90,7 @@ You help {{user.name}}. Today is {{currentDate}}.
 What to know:
 
 - **Helpers:** Handlebars [blocks](https://handlebarsjs.com/guide/builtin-helpers.html) such as `#if` and `#each` work, and so do `includes`, `equals`, `contains`, and `json`.
-- Skills can use templates too. Add `templated: true` to the skill's frontmatter.
+- [Skills](/docs/agents/skills) can use templates too. Add `templated: true` to the skill's frontmatter. See [Writing Skills](/docs/agents/skills/writing).
 - To keep an expression as text, add a backslash: `\{{user.name}}`. An expression Handlebars cannot read stays as written.
 
 ## Code Sandbox

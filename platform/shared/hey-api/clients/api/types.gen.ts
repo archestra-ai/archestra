@@ -97879,7 +97879,7 @@ export type GetPublicFileLinksResponses = {
             id: string;
             organizationId: string;
             token: string;
-            fileId: string;
+            fileId: string | null;
             createdByUserId: string | null;
             agentId: string | null;
             conversationId: string | null;

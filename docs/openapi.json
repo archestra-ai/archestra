@@ -378832,7 +378832,7 @@
         "tags": [
           "Public File Links"
         ],
-        "description": "List the organization's public file links, newest first, revoked ones included.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
+        "description": "List the organization's public file links, newest first, revoked ones included.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`publicFileLink:read`: View every public file link in the organization",
         "parameters": [
           {
             "schema": {
@@ -378882,6 +378882,7 @@
                             "type": "string"
                           },
                           "fileId": {
+                            "nullable": true,
                             "type": "string",
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
@@ -379266,7 +379267,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:read"
+            "publicFileLink:read"
           ]
         }
       }
@@ -379277,7 +379278,7 @@
         "tags": [
           "Public File Links"
         ],
-        "description": "Revoke a public file link. The link stops serving immediately; revoking an already-revoked link is a no-op.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Revoke a public file link. The link stops serving immediately; revoking an already-revoked link is a no-op.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`publicFileLink:delete`: Revoke public file links",
         "parameters": [
           {
             "schema": {
@@ -379542,7 +379543,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "publicFileLink:delete"
           ]
         }
       }

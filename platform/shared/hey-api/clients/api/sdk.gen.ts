@@ -9574,7 +9574,7 @@ export const linkProjectApp = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `organizationSettings:read`: View every organization settings page, including messaging channels
+ * `publicFileLink:read`: View every public file link in the organization
  */
 export const getPublicFileLinks = <ThrowOnError extends boolean = false>(options?: Options<GetPublicFileLinksData, ThrowOnError>) => (options?.client ?? client).get<GetPublicFileLinksResponses, GetPublicFileLinksErrors, ThrowOnError>({ url: '/api/public-file-links', ...options });
 
@@ -9587,7 +9587,7 @@ export const getPublicFileLinks = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `publicFileLink:delete`: Revoke public file links
  */
 export const revokePublicFileLink = <ThrowOnError extends boolean = false>(options: Options<RevokePublicFileLinkData, ThrowOnError>) => (options.client ?? client).delete<RevokePublicFileLinkResponses, RevokePublicFileLinkErrors, ThrowOnError>({ url: '/api/public-file-links/{id}', ...options });
 

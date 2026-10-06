@@ -959,7 +959,8 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Code-execution runtime tools. Gated by `agent:read` and only seeded when
+ * Code-execution runtime tools. Gated by `agent:read` (`share_file_publicly`
+ * by its own `publicFileLink:create`) and only seeded when
  * the skills-sandbox runtime is on (`config.skillsSandbox.enabled`). They
  * materialize a Dagger container, so they genuinely need the runtime, and they
  * participate in the `search_tools`/`run_tool` dynamic tool access relaxation

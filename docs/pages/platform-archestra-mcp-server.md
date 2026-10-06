@@ -3190,7 +3190,7 @@ These tools are served only when the code runtime is enabled — set `ARCHESTRA_
 | `run_command` | Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). | `agent:read` |
 | `download_file` | Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files. | `agent:read` |
 | `upload_file` | Place a file into the conversation's sandbox at a path, from a chat attachment, inline base64, inline text, or one of your persistent files. | `agent:read` |
-| `share_file_publicly` | Publish a file as a PUBLIC link and return its URL — for handing an image, video, or PDF to an external service that needs a URL it can fetch without logging in, such as a social media scheduler. | `agent:read` |
+| `share_file_publicly` | Publish a file as a PUBLIC link and return its URL — for handing an image, video, or PDF to an external service that needs a URL it can fetch without logging in, such as a social media scheduler. | `publicFileLink:create` |
 
 #### run_command
 
@@ -3285,7 +3285,7 @@ Required RBAC permission: `agent:read`
 
 #### share_file_publicly
 
-Required RBAC permission: `agent:read`
+Required RBAC permission: `publicFileLink:create`
 
 ##### Input
 

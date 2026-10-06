@@ -3,7 +3,7 @@ title: "Access Control"
 category: Administration
 description: "Role-based access control (RBAC) system for managing user permissions in Archestra"
 order: 1
-lastUpdated: 2026-10-04
+lastUpdated: 2026-10-06
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -53,6 +53,7 @@ Full access to core resources, but cannot change organization settings or manage
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
+| Public File Links | `create` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create` |
 | LLM Virtual Keys | `read`, `create` |
@@ -89,6 +90,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Skills | `read`, `create`, `delete` |
 | Apps | `read`, `create` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
+| Public File Links | `create` |
 | LLM Proxy | `read` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read`, `create` |
@@ -232,6 +234,9 @@ The following table lists all available permissions that can be assigned to cust
 | `project:create` | Create projects |
 | `project:update` | Edit project descriptions, instructions, and sharing |
 | `project:delete` | Delete projects |
+| `publicFileLink:read` | View every public file link in the organization |
+| `publicFileLink:create` | Let agents publish files as public links (when the organization allows it) |
+| `publicFileLink:delete` | Revoke public file links |
 | `scheduledTask:read` | View scheduled tasks and their run history |
 | `scheduledTask:create` | Create new scheduled tasks and trigger runs |
 | `scheduledTask:update` | Modify scheduled task configuration |

@@ -74,7 +74,7 @@ export function PublicFileSharingSection() {
       }
     >
       <WithPermissions
-        permissions={{ organizationSettings: ["read"] }}
+        permissions={{ publicFileLink: ["read"] }}
         noPermissionHandle="hide"
       >
         <SharedFilesList />
@@ -153,7 +153,7 @@ function SharedFileRow({ link }: { link: PublicFileLink }) {
         <div className="flex shrink-0 items-center gap-1">
           <CopyButton text={link.url} buttonSize="icon-sm" />
           <WithPermissions
-            permissions={{ organizationSettings: ["update"] }}
+            permissions={{ publicFileLink: ["delete"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (

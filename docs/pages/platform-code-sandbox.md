@@ -30,11 +30,15 @@ When the agent produces a file — a cleaned dataset or a chart, for example —
 
 Some services only take a file as a URL they can fetch without logging in — a social media scheduler, for example. The agent publishes a sandbox file or a saved file with the `share_file_publicly` tool and gets back a public link. Anyone with the link can open the file.
 
+The link serves a copy taken at share time. Editing or deleting the original file never changes what the link serves.
+
 Public sharing is off by default. An admin turns it on under the organization's agent settings. Turning it off also stops every existing link.
+
+Publishing needs the `publicFileLink:create` permission, which Admin, Editor, and Member have by default. Listing and revoking every link needs `publicFileLink:read` and `publicFileLink:delete`, which only Admin and Platform Admin have. See [Access Control](./platform-access-control).
 
 Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared. Archestra checks the file's bytes, not its name.
 
-A link stays live until an admin revokes it from the shared-files list in the same settings section. Deleting the file also removes its link. A revoked link returns 404, and shared caches may keep a copy for up to ten minutes.
+A link stays live until an admin revokes it from the shared-files list in the same settings section. Revoking deletes the stored copy, so a revoked link returns 404 for good. Shared caches may keep a copy for up to ten minutes.
 
 Links have the form `https://<host>/public-files/<token>/<filename>`. The token alone grants access, and `/public-files/` serves nothing else. To expose only this path, allow `/public-files/` at your ingress, WAF, or load balancer and keep everything else private. To serve links from a separate host, set `ARCHESTRA_PUBLIC_FILES_BASE_URL` — see [Deployment](./platform-deployment#application--api-configuration).
 

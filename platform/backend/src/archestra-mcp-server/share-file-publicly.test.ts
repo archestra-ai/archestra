@@ -1,5 +1,6 @@
 import {
   getArchestraToolFullName,
+  TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
 } from "@archestra/shared";
 import config from "@/config";
@@ -15,6 +16,7 @@ import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runti
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import { asSandboxId } from "@/types";
 import { executeArchestraTool } from "./index";
+import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
 
 const SHARE = getArchestraToolFullName(TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME);
@@ -67,6 +69,41 @@ describe("share_file_publicly", () => {
 
   const enableSharing = () =>
     OrganizationModel.patch(organizationId, { allowPublicFileSharing: true });
+
+  test("needs its own permission: a role without publicFileLink:create neither sees nor runs it", async ({
+    makeCustomRole,
+    makeMember,
+    makeUser,
+  }) => {
+    await enableSharing();
+    // Can use agents and their sandbox, but was not given public sharing.
+    const role = await makeCustomRole(organizationId, {
+      permission: { agent: ["read"] },
+    });
+    const restricted = await makeUser();
+    await makeMember(restricted.id, organizationId, { role: role.role });
+    const download = getArchestraToolFullName(TOOL_DOWNLOAD_FILE_SHORT_NAME);
+
+    const visible = await filterToolNamesByPermission(
+      [SHARE, download],
+      restricted.id,
+      organizationId,
+    );
+    expect([...visible]).toEqual([download]);
+
+    const file = await putFile("banner.png", PNG);
+    const result = await executeArchestraTool(
+      SHARE,
+      { fileId: file.id },
+      { ...context, userId: restricted.id },
+    );
+    expect(result.isError).toBe(true);
+    const { data } = await PublicFileLinkModel.listForOrganization({
+      organizationId,
+      pagination: { limit: 10, offset: 0 },
+    });
+    expect(data).toHaveLength(0);
+  });
 
   test("refuses with an admin-must-enable message while the org switch is off", async () => {
     const file = await putFile("banner.png", PNG);

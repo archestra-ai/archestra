@@ -163,7 +163,7 @@ class OpenappaExternalConsultModel {
   }
 }
 
-interface ExternalConsultFilters {
+export interface ExternalConsultFilters {
   externalName?: string;
   role?: ExternalConsultRole;
   outcome?: ExternalConsultOutcome;

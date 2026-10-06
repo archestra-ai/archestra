@@ -68,6 +68,7 @@ import {
   STATE_PRIORITY,
 } from "./deployment-status";
 import { getLocalInstallationCopy } from "./local-installation-copy";
+import { UninstallServerDialog } from "./uninstall-server-dialog";
 
 type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
 
@@ -252,8 +253,17 @@ export function ManageUsersContent({
   };
 
   const deleteMcpServerMutation = useDeleteMcpServer();
+  const [sharedRevokeTarget, setSharedRevokeTarget] = useState<
+    (typeof allServers)[number] | null
+  >(null);
 
   const handleRevoke = async (mcpServer: (typeof allServers)[number]) => {
+    // A team or organization connection serves everyone who resolves to it,
+    // so removing one is confirmed against the agents it affects first.
+    if (resolveServerScope(mcpServer) !== "personal") {
+      setSharedRevokeTarget(mcpServer);
+      return;
+    }
     await deleteMcpServerMutation.mutateAsync({
       id: mcpServer.id,
       name: mcpServer.name,
@@ -496,6 +506,26 @@ export function ManageUsersContent({
             onAddSharedConnection?.(target.teamId);
           }
         }}
+      />
+
+      <UninstallServerDialog
+        open={!!sharedRevokeTarget}
+        onClose={() => setSharedRevokeTarget(null)}
+        installs={
+          sharedRevokeTarget
+            ? [
+                {
+                  server: {
+                    id: sharedRevokeTarget.id,
+                    name: sharedRevokeTarget.name,
+                    scope: sharedRevokeTarget.scope,
+                    teamId: sharedRevokeTarget.teamId,
+                  },
+                  assignedAgents: sharedRevokeTarget.assignedAgents ?? [],
+                },
+              ]
+            : []
+        }
       />
 
       {!hideHeader && (

@@ -143,7 +143,12 @@ export function McpServerAttentionList({
     : [];
   const selectedUninstallInstalls: UninstallServerInstall[] =
     selectedConnections.map((server) => ({
-      server: { id: server.id, name: server.name },
+      server: {
+        id: server.id,
+        name: server.name,
+        scope: server.scope,
+        teamId: server.teamId,
+      },
       assignedAgents: server.assignedAgents ?? [],
     }));
   const canRemoveSelected =

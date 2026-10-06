@@ -1,18 +1,25 @@
 "use client";
 
-import { type ChatProvider, LLM_PROXY_OAUTH_SCOPE } from "@archestra/shared";
-import { Info } from "lucide-react";
-import Link from "next/link";
-import { useMemo, useState } from "react";
 import {
-  getConnectableProviders,
+  isModelRouterSupportedProvider,
+  LLM_PROXY_OAUTH_SCOPE,
+  type SupportedProvider,
+  VIRTUAL_KEY_HEADER,
+} from "@archestra/shared";
+import { Check, Eye, EyeOff, Loader2, Plus, Waypoints } from "lucide-react";
+import Link from "next/link";
+import { useId, useMemo, useState } from "react";
+import {
+  getProxyEndpointProviders,
+  type ProxyEndpointProvider,
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
 } from "@/app/connection/connection-flow.utils";
 import { TerminalBlock } from "@/app/connection/terminal-block";
-import { AuthMethodRow } from "@/components/auth-method-row";
+import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
 import {
+  type CreatedVirtualKey,
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
@@ -22,8 +29,15 @@ import {
   type CreatedCredentials,
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { SecretCopyButton } from "@/components/secret-copy-button";
+import {
+  TerminalCard,
+  terminalActionClass,
+  terminalCodeClass,
+} from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
+import { Label } from "@/components/ui/label";
+import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Select,
@@ -32,63 +46,150 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  RequestExample,
+  type RevealableSecret,
+} from "@/components/virtual-key-connection-guide";
+import type {
+  RequestCredential,
+  RequestTarget,
+} from "@/components/virtual-key-request-example";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useCreateLlmOauthClient } from "@/lib/llm-oauth-clients.query";
+import {
+  useCreateLlmOauthClient,
+  useLlmOauthClients,
+} from "@/lib/llm-oauth-clients.query";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
 import { useLlmProxy, useUpdateLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
 import { cn } from "@/lib/utils/tailwind";
+import {
+  useAllVirtualApiKeys,
+  useFetchVirtualApiKeyValue,
+} from "@/lib/virtual-api-keys.query";
 
 /**
- * The LLM Proxy connection page: the endpoint URLs a client points at, and an
- * overview of every way a request can authenticate — with links into the
- * Virtual Keys and OAuth Clients tabs that manage those credentials.
+ * The LLM Proxy connection page, read top to bottom: pick the endpoint, pick
+ * how requests authenticate, then follow the steps for that pair. Each step
+ * shows what already exists — provider keys, virtual keys, OAuth clients — so
+ * the request at the end is the one this deployment can actually serve.
  */
 export default function LlmProxyPage() {
   const { baseUrl, organization } = useConnectionBaseUrl();
-  const [selected, setSelected] = useState<"model-router" | ChatProvider>(
-    "model-router",
-  );
-  const providers = getConnectableProviders(organization);
+  const providerCatalog = useModelProviderCatalog();
+  const [selected, setSelected] = useState<
+    "model-router" | ProxyEndpointProvider
+  >("model-router");
+  const [auth, setAuth] = useState<AuthMethod>("standard");
+  const providers = getProxyEndpointProviders(organization);
+  // Passthrough has no Model Router route; picking the router falls back to
+  // a standard key, and the choice returns when a provider is picked again.
+  const effectiveAuth =
+    selected === "model-router" && auth === "passthrough" ? "standard" : auth;
+  const targetLabel =
+    selected === "model-router"
+      ? "Model Router"
+      : providerCatalog.label(selected);
 
   return (
     // No inner cap: the page column is PageLayout's band, which is centred.
-    // A narrower wrapper inside it is not centred in turn, so the cards sat
+    // A narrower wrapper inside it is not centred in turn, so the steps sat
     // against the band's left edge with the leftover stranded on the right.
-    <div className="space-y-4">
-      <ProxyEndpointCard
+    <ol>
+      <PageSection number={1} title="Endpoint">
+        <ProxyEndpointCard
+          baseUrl={baseUrl}
+          providers={[...providers]}
+          selected={selected}
+          onSelect={setSelected}
+        />
+        <p className="text-sm text-muted-foreground">
+          {endpointHint(selected, targetLabel)}
+        </p>
+      </PageSection>
+      <PageSection number={2} title="Authentication">
+        <AuthMethodPicker
+          value={effectiveAuth}
+          onChange={setAuth}
+          unavailable={
+            selected === "model-router"
+              ? { passthrough: PASSTHROUGH_ROUTER_REASON }
+              : undefined
+          }
+        />
+      </PageSection>
+      <ConnectSteps
+        // Selections belong to one endpoint and auth method; start over
+        // when either changes.
+        key={`${selected}:${effectiveAuth}`}
+        firstNumber={3}
         baseUrl={baseUrl}
-        providers={[...providers]}
-        routerSelected={selected === "model-router"}
-        selectedProvider={selected === "model-router" ? null : selected}
-        onSelectRouter={() => setSelected("model-router")}
-        onSelectProvider={setSelected}
+        selected={selected}
+        auth={effectiveAuth}
+        targetLabel={targetLabel}
       />
-      {selected === "model-router" && (
-        <Alert variant="info">
-          <Info />
-          <AlertTitle>How Model Router works</AlertTitle>
-          <AlertDescription>
-            Use one OpenAI-compatible endpoint for models from different
-            providers. The provider at the start of the model name tells Model
-            Router where to send the request.
-          </AlertDescription>
-        </Alert>
-      )}
-      <AuthenticationOverview />
-    </div>
+    </ol>
   );
 }
 
 // =========================================================================
-// Endpoint card
+// Layout
 // =========================================================================
 
-const PRIMARY_PROVIDERS: ChatProvider[] = [
+function PageSection({
+  number,
+  title,
+  done,
+  titleAction,
+  children,
+}: {
+  number: number;
+  title: string;
+  done?: boolean;
+  /** A secondary action at the end of the title line, e.g. "+ Create new". */
+  titleAction?: React.ReactNode;
+  children: React.ReactNode;
+}) {
+  return (
+    // One step of the page's rail: a numbered marker with a line running down
+    // to the next one, as in the virtual key connection guide.
+    <li className="relative flex gap-3.5 pb-10 before:absolute before:top-8 before:bottom-1 before:left-3.5 before:w-px before:bg-border last:pb-0 last:before:hidden">
+      <span className="flex size-7 shrink-0 items-center justify-center rounded-full border border-muted-foreground/40 bg-background text-xs font-semibold text-muted-foreground tabular-nums">
+        {number}
+      </span>
+      <section className="min-w-0 flex-1 space-y-3">
+        <div className="flex min-h-7 items-center justify-between gap-3">
+          <h2 className="flex items-center gap-1.5 text-base leading-7 font-semibold">
+            {title}
+            {done && (
+              <Check
+                className="size-4 text-green-600 dark:text-green-500"
+                aria-label="Done"
+              />
+            )}
+          </h2>
+          {titleAction}
+        </div>
+        {children}
+      </section>
+    </li>
+  );
+}
+
+// =========================================================================
+// 1 · Endpoint
+// =========================================================================
+
+const PRIMARY_PROVIDERS: ProxyEndpointProvider[] = [
   "openai",
   "anthropic",
   "gemini",
@@ -99,222 +200,622 @@ const PRIMARY_PROVIDERS: ChatProvider[] = [
 /** Tab button in the endpoint terminal card. */
 function endpointTabClass(active: boolean) {
   return cn(
-    "border-b-2 px-2.5 py-2.5 font-mono text-xs transition-colors",
+    "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors",
     active
-      ? "border-terminal-foreground font-semibold text-terminal-foreground"
-      : "border-transparent text-terminal-muted hover:text-terminal-emphasis",
+      ? "bg-terminal-emphasis/10 font-semibold text-terminal-foreground shadow-sm"
+      : "text-terminal-muted hover:text-terminal-emphasis",
   );
 }
 
 /**
- * The proxy endpoint card: a terminal block with a Model Router tab and
- * per-provider tabs (primary providers inline, the rest behind a searchable
- * "…"). URLs are id-less — the proxy is a singleton, so the path is just
- * `/v1/<provider>` or `/v1/model-router`.
+ * A terminal block with a Model Router tab and per-provider tabs (primary
+ * providers inline, the rest behind a searchable "More providers"). URLs are
+ * id-less — the proxy is a singleton, so the path is just `/v1/<provider>` or
+ * `/v1/model-router`.
  */
 function ProxyEndpointCard({
   baseUrl,
   providers,
-  routerSelected,
-  selectedProvider,
-  onSelectRouter,
-  onSelectProvider,
+  selected,
+  onSelect,
 }: {
   baseUrl: string;
-  providers: ChatProvider[];
-  routerSelected: boolean;
-  selectedProvider: ChatProvider | null;
-  onSelectRouter: () => void;
-  onSelectProvider: (provider: ChatProvider) => void;
+  providers: ProxyEndpointProvider[];
+  selected: "model-router" | ProxyEndpointProvider;
+  onSelect: (target: "model-router" | ProxyEndpointProvider) => void;
 }) {
   const providerCatalog = useModelProviderCatalog();
-  const primary = providers.filter((p) => PRIMARY_PROVIDERS.includes(p));
-  const rest = providers.filter((p) => !PRIMARY_PROVIDERS.includes(p));
+  const { data: providerApiKeys = [] } = useLlmProviderApiKeys();
+  // Providers with a key are the ones a client can reach, so they lead; the
+  // usual defaults fill the row up to its minimum width.
+  const configured = providers.filter((p) =>
+    providerApiKeys.some((key) => key.provider === p),
+  );
+  const primary = [
+    ...configured,
+    ...PRIMARY_PROVIDERS.filter(
+      (p) => providers.includes(p) && !configured.includes(p),
+    ),
+  ].slice(0, Math.max(PRIMARY_PROVIDERS.length, configured.length));
+  const rest = providers.filter((p) => !primary.includes(p));
   const selectedFromRest =
-    selectedProvider && rest.includes(selectedProvider)
-      ? selectedProvider
-      : null;
+    selected !== "model-router" && rest.includes(selected) ? selected : null;
   const tabProviders = selectedFromRest
     ? [...primary, selectedFromRest]
     : primary;
+  const moreCount = rest.length - (selectedFromRest ? 1 : 0);
 
-  const url = routerSelected
-    ? `${baseUrl}/model-router`
-    : `${baseUrl}/${selectedProvider}`;
+  const url = endpointUrl(baseUrl, selected);
 
-  // Bedrock exposes two endpoints; both live in the same card as labeled rows.
+  // Jev's URL is the endpoint itself; every other one is a base URL clients
+  // append paths to. Bedrock exposes two, as labeled rows in the same card.
+  const badge = selected === "jev" ? "POST" : "BASE URL";
   const rows =
-    !routerSelected && selectedProvider === "bedrock"
+    selected === "bedrock"
       ? [
           {
             comment: "Bedrock Converse API",
+            badge,
             code: `${baseUrl}/bedrock`,
           },
           {
             comment: "OpenAI Completions API compatible clients",
+            badge,
             code: `${baseUrl}/bedrock/openai`,
           },
         ]
-      : undefined;
+      : [{ badge, code: url }];
 
   return (
-    <div className="space-y-2 rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-semibold">Endpoint</h3>
-      <TerminalBlock
-        code={url}
-        rows={rows}
-        header={
-          <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge px-3">
+    <TerminalBlock
+      rows={rows}
+      header={
+        <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge p-1.5">
+          <UnstyledButton
+            type="button"
+            onClick={() => onSelect("model-router")}
+            className={endpointTabClass(selected === "model-router")}
+          >
+            <Waypoints className="size-3.5" />
+            Model Router
+          </UnstyledButton>
+          {tabProviders.map((provider) => (
             <UnstyledButton
+              key={provider}
               type="button"
-              onClick={onSelectRouter}
-              className={endpointTabClass(routerSelected)}
+              onClick={() => onSelect(provider)}
+              className={endpointTabClass(selected === provider)}
             >
-              Model Router
-            </UnstyledButton>
-            {tabProviders.map((provider) => (
-              <UnstyledButton
-                key={provider}
-                type="button"
-                onClick={() => onSelectProvider(provider)}
-                className={endpointTabClass(selectedProvider === provider)}
-              >
-                {providerCatalog.label(provider)}
-              </UnstyledButton>
-            ))}
-            {rest.length > (selectedFromRest ? 1 : 0) && (
-              <SearchableSelect
-                value=""
-                onValueChange={(value) =>
-                  onSelectProvider(value as ChatProvider)
-                }
-                placeholder="…"
-                ariaLabel="More providers"
-                searchPlaceholder="Search providers..."
-                emptyMessage="No providers found."
-                items={rest.map((provider) => {
-                  const label = providerCatalog.label(provider);
-                  return {
-                    value: provider,
-                    label,
-                    content: (
-                      <LlmProviderOptionLabel
-                        icon={PROVIDER_CONFIG[provider].icon}
-                        name={label}
-                      />
-                    ),
-                  };
-                })}
-                className={cn(
-                  endpointTabClass(false),
-                  "h-auto w-auto min-w-0 justify-start rounded-none border-0 bg-transparent shadow-none hover:bg-transparent",
-                )}
-                contentClassName="w-64"
+              <img
+                src={PROVIDER_CONFIG[provider].icon}
+                alt=""
+                className="size-3.5 rounded-sm"
               />
-            )}
-          </div>
-        }
-      />
-    </div>
+              {providerCatalog.label(provider)}
+            </UnstyledButton>
+          ))}
+          {moreCount > 0 && (
+            <SearchableSelect
+              value=""
+              onValueChange={(value) =>
+                onSelect(value as ProxyEndpointProvider)
+              }
+              placeholder={`More providers (${moreCount})`}
+              ariaLabel="More providers"
+              searchPlaceholder="Search providers..."
+              emptyMessage="No providers found."
+              items={rest.map((provider) => {
+                const label = providerCatalog.label(provider);
+                return {
+                  value: provider,
+                  label,
+                  content: (
+                    <LlmProviderOptionLabel
+                      icon={PROVIDER_CONFIG[provider].icon}
+                      name={label}
+                    />
+                  ),
+                };
+              })}
+              className="ml-1 h-auto w-auto min-w-0 justify-start gap-2 rounded-full border border-dashed border-terminal-edge bg-transparent px-3 py-1.5 font-normal text-terminal-muted text-xs shadow-none hover:bg-transparent hover:text-terminal-emphasis"
+              contentClassName="w-64"
+            />
+          )}
+        </div>
+      }
+    />
   );
 }
 
 // =========================================================================
-// Authentication overview
+// 2 · Authentication
 // =========================================================================
 
-function AuthenticationOverview() {
-  const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
-    null,
-  );
-  const [oauthCreateOpen, setOauthCreateOpen] = useState(false);
+type AuthMethod = "standard" | "passthrough" | "oauth" | "idp";
 
+const AUTH_METHODS: Array<{
+  value: AuthMethod;
+  title: string;
+  description: string;
+  manageLabel: string;
+  manageHref: string;
+}> = [
+  {
+    value: "standard",
+    title: "Standard virtual key",
+    description:
+      "One key for your app. The proxy maps it to your provider keys.",
+    manageLabel: "Manage virtual keys",
+    manageHref: "/llm/proxy/virtual-keys?keyType=standard",
+  },
+  {
+    value: "passthrough",
+    title: "Passthrough",
+    description:
+      "Send your own provider key. A header can link requests to a user.",
+    manageLabel: "Manage passthrough keys",
+    manageHref: "/llm/proxy/virtual-keys?keyType=passthrough",
+  },
+  {
+    value: "oauth",
+    title: "OAuth client",
+    description: "Apps call the proxy as themselves or for signed-in users.",
+    manageLabel: "Manage OAuth clients",
+    manageHref: "/settings/oauth-clients?type=llm",
+  },
+  {
+    value: "idp",
+    title: "Identity provider",
+    description:
+      "Use a JWT from your identity provider. Requests run with that user's access.",
+    manageLabel: "Manage identity providers",
+    manageHref: "/settings/identity-providers",
+  },
+];
+
+/** The one control that picks how requests authenticate. */
+function AuthMethodPicker({
+  value,
+  onChange,
+  unavailable,
+}: {
+  value: AuthMethod;
+  onChange: (value: AuthMethod) => void;
+  /** Methods the chosen endpoint can't take, with the reason shown on hover. */
+  unavailable?: Partial<Record<AuthMethod, string>>;
+}) {
+  const id = useId();
+  return (
+    <RadioGroup
+      aria-label="Authentication method"
+      value={value}
+      onValueChange={(next) => onChange(next as AuthMethod)}
+      className="grid gap-3 md:grid-cols-2"
+    >
+      {AUTH_METHODS.map((method) => {
+        const checked = value === method.value;
+        const reason = unavailable?.[method.value];
+        const card = (
+          <div
+            key={method.value}
+            className={cn(
+              "flex flex-col gap-2 rounded-md border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
+              reason
+                ? "opacity-50"
+                : checked
+                  ? "border-foreground bg-muted/40"
+                  : "hover:bg-muted/30",
+            )}
+          >
+            <Label
+              htmlFor={`${id}-${method.value}`}
+              className={cn(
+                "flex items-start gap-3 font-normal",
+                reason ? "cursor-not-allowed" : "cursor-pointer",
+              )}
+            >
+              <RadioGroupItem
+                id={`${id}-${method.value}`}
+                value={method.value}
+                disabled={!!reason}
+                className="mt-0.5"
+              />
+              <span className="space-y-1">
+                <span className="block text-sm font-medium">
+                  {method.title}
+                </span>
+                <span className="block text-xs text-muted-foreground">
+                  {method.description}
+                </span>
+              </span>
+            </Label>
+            <Link
+              href={method.manageHref}
+              className="ml-7 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+            >
+              {method.manageLabel} →
+            </Link>
+          </div>
+        );
+        if (!reason) return card;
+        return (
+          <Tooltip key={method.value}>
+            <TooltipTrigger asChild>{card}</TooltipTrigger>
+            <TooltipContent className="max-w-64">{reason}</TooltipContent>
+          </Tooltip>
+        );
+      })}
+    </RadioGroup>
+  );
+}
+
+const PASSTHROUGH_ROUTER_REASON =
+  "The Model Router calls providers with your organization's provider keys, so it can't take your own. Pick a provider endpoint to use passthrough.";
+
+// =========================================================================
+// 3 · Connect
+// =========================================================================
+
+/**
+ * The steps for one endpoint and auth method, each showing what exists:
+ * the provider keys behind the endpoint, the credential to connect with
+ * (create one, or pick an existing one), and the request to send.
+ */
+function ConnectSteps({
+  firstNumber,
+  baseUrl,
+  selected,
+  auth,
+  targetLabel,
+}: {
+  /** The page rail's number for the first of these steps. */
+  firstNumber: number;
+  baseUrl: string;
+  selected: "model-router" | ProxyEndpointProvider;
+  auth: AuthMethod;
+  targetLabel: string;
+}) {
+  const providerCatalog = useModelProviderCatalog();
+  const isRouter = selected === "model-router";
+  const servesTarget = (provider: SupportedProvider) =>
+    isRouter ? isModelRouterSupportedProvider(provider) : provider === selected;
+
+  const { data: providerApiKeys = [], isPending: providerKeysPending } =
+    useLlmProviderApiKeys();
+  const targetProviderKeys = providerApiKeys.filter((key) =>
+    servesTarget(key.provider),
+  );
+
+  const { data: virtualKeys } = useAllVirtualApiKeys({
+    keyType: auth === "passthrough" ? "passthrough" : "standard",
+    limit: 100,
+    offset: 0,
+    enabled: auth === "standard" || auth === "passthrough",
+    toastOnError: false,
+  });
+  const { data: oauthClients } = useLlmOauthClients({
+    limit: 100,
+    enabled: auth === "oauth",
+    toastOnError: false,
+  });
+  const { data: session } = useSession();
   const { data: canCreateKey } = useHasPermissions({
     llmVirtualKey: ["create"],
-  });
-  const { data: canReadKeys } = useHasPermissions({
-    llmVirtualKey: ["read"],
   });
   const { data: canCreateOauth } = useHasPermissions({
     llmOauthClient: ["create"],
   });
-  const { data: canReadOauth } = useHasPermissions({
-    llmOauthClient: ["read"],
-  });
+
+  const [createKeyType, setCreateKeyType] = useState<VirtualKeyType | null>(
+    null,
+  );
+  const [oauthCreateOpen, setOauthCreateOpen] = useState(false);
+  const [created, setCreated] = useState<CreatedVirtualKey | null>(null);
+  // undefined: nothing picked yet; null: "None" picked.
+  const [pickedId, setPickedId] = useState<string | null | undefined>();
+
+  // A standard key or OAuth client is usable here only if it maps a provider
+  // key behind this endpoint; a passthrough key carries none and always fits.
+  const keyOptions = (virtualKeys?.data ?? []).filter(
+    (key) =>
+      auth === "passthrough" ||
+      key.providerApiKeys.some((mapping) => servesTarget(mapping.provider)),
+  );
+  const clientOptions = (oauthClients?.data ?? []).filter((client) =>
+    client.providerApiKeys.some((mapping) => servesTarget(mapping.provider)),
+  );
+  const options =
+    auth === "oauth"
+      ? clientOptions.map((client) => ({
+          id: client.id,
+          authorId: client.authorId,
+          tokenStart: null,
+          name: client.name,
+          label: client.name,
+          mappings: client.providerApiKeys,
+          oauth: { clientId: client.clientId, grantType: client.grantType },
+        }))
+      : keyOptions.map((key) => ({
+          id: key.id,
+          authorId: key.authorId,
+          tokenStart: key.tokenStart,
+          name: key.name,
+          // The key's start shows in the key field; the picker stays short.
+          label: key.name,
+          mappings: key.providerApiKeys,
+          oauth: null,
+        }));
+  // Like a standard key, the first fits until another is picked. Passthrough
+  // attribution is optional, so "None" (an explicit null) stays none.
+  const picked =
+    pickedId === null
+      ? undefined
+      : (options.find((option) => option.id === pickedId) ?? options[0]);
+  // The chosen key goes into the request masked, revealed or copied on
+  // request — but only for keys the reader may read (their own, or one just
+  // created here); anyone else's key is read from an env var.
+  const isVirtualKey = auth === "standard" || auth === "passthrough";
+  const fetchKeyValue = useFetchVirtualApiKeyValue();
+  const createdHere = created && picked?.id === created.id ? created : null;
+  const [revealed, setRevealed] = useState<string | null>(null);
+  const secret: RevealableSecret | undefined =
+    isVirtualKey &&
+    picked &&
+    (createdHere || (session?.user && picked.authorId === session.user.id))
+      ? {
+          resolve: async () =>
+            createdHere
+              ? createdHere.value
+              : await fetchKeyValue.mutateAsync(picked.id),
+          revealed,
+          onRevealedChange: setRevealed,
+        }
+      : undefined;
+  const pickKey = (id: string | null) => {
+    setPickedId(id);
+    setRevealed(null);
+  };
+  const keyField = picked && isVirtualKey && (
+    <KeyField
+      masked={`${picked.tokenStart ?? "arch_"}••••••••••••`}
+      secret={secret}
+    />
+  );
+
+  const hasProviderKey = targetProviderKeys.length > 0;
+  const [addProviderKeyOpen, setAddProviderKeyOpen] = useState(false);
+  // A virtual key maps one key per provider, so a new key starts with the
+  // first key of each provider; the create dialog shows and changes them.
+  const firstKeyPerProvider = targetProviderKeys
+    .filter(
+      (key, index) =>
+        targetProviderKeys.findIndex((k) => k.provider === key.provider) ===
+        index,
+    )
+    .map((key) => ({ provider: key.provider, providerApiKeyId: key.id }));
+  const idpStep = useIdentityProviderStep();
+
+  // Which provider key a request uses belongs to the credential, so the
+  // provider-key step only appears when there is none to use yet.
+  const providerKeyStep: StepRowProps | null =
+    hasProviderKey || providerKeysPending
+      ? null
+      : {
+          done: false,
+          title: `${isRouter ? "Provider" : targetLabel} key`,
+          detail: `No ${isRouter ? "provider" : targetLabel} key yet. The proxy needs one to call the provider.`,
+          actions: (
+            <Button size="sm" onClick={() => setAddProviderKeyOpen(true)}>
+              Add {isRouter ? "provider" : targetLabel} key
+            </Button>
+          ),
+        };
+  const blockedDetail = "Add the provider key first.";
+  const mappingChips = (
+    mappings: Array<{
+      provider: SupportedProvider;
+      providerApiKeyId: string;
+      providerApiKeyName: string;
+    }>,
+  ) => (
+    <span className="flex flex-wrap gap-1.5">
+      {mappings
+        .filter((mapping) => servesTarget(mapping.provider))
+        .map((mapping) => (
+          <span
+            key={mapping.providerApiKeyId}
+            className="rounded-full border bg-muted px-2 py-0.5 text-xs text-foreground"
+          >
+            {providerCatalog.label(mapping.provider)} ·{" "}
+            {mapping.providerApiKeyName}
+          </span>
+        ))}
+    </span>
+  );
+  const target: RequestTarget = isRouter
+    ? { kind: "model-router" }
+    : { kind: "provider", provider: selected };
+
+  let credentialSteps: StepRowProps[];
+  let credential: RequestCredential;
+  let credentialEnvVar: string;
+  let ready: boolean;
+  let mappedProviderKeys: Array<{
+    provider: SupportedProvider;
+    providerApiKeyId: string;
+  }> = [];
+
+  if (auth === "standard") {
+    credential = "standard";
+    credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY";
+    ready = hasProviderKey && !!picked;
+    mappedProviderKeys = picked?.mappings ?? [];
+    credentialSteps = [
+      {
+        done: !!picked,
+        title: "Set up virtual key",
+        titleAction: hasProviderKey && options.length > 0 && canCreateKey && (
+          <CreateNewLink
+            label="Create new virtual key"
+            onCreate={() => setCreateKeyType("standard")}
+          />
+        ),
+        detail: !hasProviderKey
+          ? blockedDetail
+          : picked
+            ? mappingChips(picked.mappings)
+            : "Create one, or pick one you already have.",
+        actions: hasProviderKey && (
+          <CredentialSelect
+            label="Virtual key"
+            createLabel="Create new virtual key"
+            canCreate={!!canCreateKey}
+            onCreate={() => setCreateKeyType("standard")}
+            options={options}
+            value={picked?.id}
+            onChange={pickKey}
+          />
+        ),
+        children: keyField,
+      },
+    ];
+  } else if (auth === "passthrough") {
+    credential = "passthrough";
+    credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY";
+    ready = true;
+    credentialSteps = [
+      {
+        done: !!picked,
+        title: "Passthrough key (optional)",
+        titleAction: options.length > 0 && canCreateKey && (
+          <CreateNewLink
+            label="Create new passthrough key"
+            onCreate={() => setCreateKeyType("passthrough")}
+          />
+        ),
+        detail: (
+          <>
+            You send your own {targetLabel} key, and this passthrough key in the{" "}
+            <code className="font-mono text-xs">{VIRTUAL_KEY_HEADER}</code>{" "}
+            header.
+          </>
+        ),
+        actions: (
+          <CredentialSelect
+            label="Passthrough key"
+            createLabel="Create new passthrough key"
+            canCreate={!!canCreateKey}
+            onCreate={() => setCreateKeyType("passthrough")}
+            options={options}
+            value={picked?.id}
+            onChange={pickKey}
+            noneLabel="None"
+          />
+        ),
+        children: keyField || (
+          <p className="text-sm text-muted-foreground">
+            No passthrough key: requests aren't linked to a user.
+          </p>
+        ),
+      },
+    ];
+  } else if (auth === "oauth") {
+    credential = "token";
+    credentialEnvVar = "ARCHESTRA_LLM_ACCESS_TOKEN";
+    ready = hasProviderKey && !!picked;
+    mappedProviderKeys = picked?.mappings ?? [];
+    credentialSteps = [
+      {
+        done: !!picked,
+        title: "OAuth client",
+        titleAction: hasProviderKey && options.length > 0 && canCreateOauth && (
+          <CreateNewLink
+            label="Create new OAuth client"
+            onCreate={() => setOauthCreateOpen(true)}
+          />
+        ),
+        detail: !hasProviderKey
+          ? blockedDetail
+          : picked
+            ? mappingChips(picked.mappings)
+            : "Create one, or pick one you already have.",
+        actions: hasProviderKey && (
+          <CredentialSelect
+            label="OAuth client"
+            createLabel="Create new OAuth client"
+            canCreate={!!canCreateOauth}
+            onCreate={() => setOauthCreateOpen(true)}
+            options={options}
+            value={picked?.id}
+            onChange={pickKey}
+          />
+        ),
+        children: picked?.oauth && <OauthTokenRequest {...picked.oauth} />,
+      },
+    ];
+  } else {
+    credential = "token";
+    credentialEnvVar = "ARCHESTRA_LLM_IDP_TOKEN";
+    ready = hasProviderKey && idpStep.configured;
+    credentialSteps = [idpStep.row];
+  }
+
+  const request = ready && (
+    <RequestExample
+      key={`${picked?.id ?? "none"}:${secret ? "secret" : "env"}`}
+      connectionBaseUrl={baseUrl}
+      target={target}
+      keyType={credential}
+      secret={secret}
+      // Passthrough with "None": the request carries only the provider key.
+      keyValue={auth === "passthrough" && !picked ? "" : undefined}
+      // A virtual key shows in its own step above, so no env-var hint here.
+      credentialField={
+        isVirtualKey ? (
+          false
+        ) : auth === "oauth" ? (
+          <p className="text-sm text-muted-foreground">
+            <code className="font-mono text-xs">
+              $ARCHESTRA_LLM_ACCESS_TOKEN
+            </code>{" "}
+            is the <code className="font-mono text-xs">access_token</code> from
+            the token request above.
+          </p>
+        ) : undefined
+      }
+      credentialEnvVar={credentialEnvVar}
+      routerProviders={
+        mappedProviderKeys.length > 0
+          ? mappedProviderKeys
+              .map((mapping) => mapping.provider)
+              .filter(isModelRouterSupportedProvider)
+          : targetProviderKeys
+              .map((key) => key.provider)
+              .filter(isModelRouterSupportedProvider)
+      }
+      mappedProviderKeys={mappedProviderKeys}
+    />
+  );
+
+  const rows: StepRowProps[] = [
+    // Passthrough calls the provider with the caller's own key.
+    ...(providerKeyStep && auth !== "passthrough" ? [providerKeyStep] : []),
+    ...credentialSteps,
+    {
+      done: false,
+      title: "Send a request",
+      detail: ready
+        ? undefined
+        : "The request appears here once the steps above are done.",
+      children: request,
+    },
+  ];
 
   return (
-    <section className="rounded-lg border bg-card p-4">
-      <h3 className="text-sm font-semibold">Authentication</h3>
-      <div className="mt-1 divide-y">
-        <AuthMethodRow
-          title="Standard virtual keys"
-          description="One key that authenticates your app; the proxy maps it to your provider keys on each request."
-          action={
-            canCreateKey ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCreateKeyType("standard")}
-              >
-                Create standard virtual key
-              </Button>
-            ) : null
-          }
-          manageHref={
-            canReadKeys ? "/llm/proxy/virtual-keys?keyType=standard" : null
-          }
-          manageLabel="Manage standard virtual keys"
-        />
-
-        <AuthMethodRow
-          title="Passthrough"
-          description="You send your own provider key or subscription token; the proxy forwards it unchanged. A passthrough virtual key grants no access: it only attributes those requests to a user."
-          action={
-            canCreateKey ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setCreateKeyType("passthrough")}
-              >
-                Create passthrough virtual key
-              </Button>
-            ) : null
-          }
-          manageHref={
-            canReadKeys ? "/llm/proxy/virtual-keys?keyType=passthrough" : null
-          }
-          manageLabel="Manage passthrough virtual keys"
-        >
-          <TerminalBlock
-            rows={[
-              {
-                comment: "optional: link the request to a user",
-                code: "X-Archestra-Virtual-Key: arch_<passthrough-key>",
-              },
-            ]}
-          />
-        </AuthMethodRow>
-
-        <AuthMethodRow
-          title="OAuth clients"
-          description="Register apps that call the proxy as themselves or for signed-in users."
-          action={
-            canCreateOauth ? (
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={() => setOauthCreateOpen(true)}
-              >
-                Create OAuth client
-              </Button>
-            ) : null
-          }
-          manageHref={canReadOauth ? "/settings/oauth-clients?type=llm" : null}
-          manageLabel="Manage OAuth clients"
-        />
-
-        <IdentityProviderRow />
-      </div>
+    <>
+      {rows.map((row, index) => (
+        <StepRow key={row.title} number={firstNumber + index} {...row} />
+      ))}
 
       <CreateVirtualKeyDialogWithData
         open={createKeyType !== null}
@@ -322,83 +823,341 @@ function AuthenticationOverview() {
           if (!open) setCreateKeyType(null);
         }}
         keyType={createKeyType ?? "standard"}
+        initialProviderApiKeys={firstKeyPerProvider}
+        targetLabel={targetLabel}
+        onCreated={(key) => {
+          setCreated(key);
+          pickKey(key.id);
+        }}
       />
       <OauthClientCreateFlow
         open={oauthCreateOpen}
         onOpenChange={setOauthCreateOpen}
       />
-    </section>
+      <CreateLlmProviderApiKeyDialog
+        open={addProviderKeyOpen}
+        onOpenChange={setAddProviderKeyOpen}
+        title={`Add ${isRouter ? "provider" : targetLabel} key`}
+        description="The proxy uses this key to call the provider."
+        allowedProviders={isRouter ? undefined : [selected]}
+        credentialMode="api-key"
+        showConsoleLink
+      />
+    </>
+  );
+}
+
+type StepRowProps = {
+  done: boolean;
+  title: string;
+  /** A secondary action on the title line, e.g. "+ Create new". */
+  titleAction?: React.ReactNode;
+  detail?: React.ReactNode;
+  actions?: React.ReactNode;
+  /** Content under the step, e.g. the request in "Send a request". */
+  children?: React.ReactNode;
+};
+
+/**
+ * One connect step as a page rail item: the details and the step's control on
+ * one line, then any content under them (e.g. the request).
+ */
+function StepRow({
+  number,
+  done,
+  title,
+  titleAction,
+  detail,
+  actions,
+  children,
+}: StepRowProps & { number: number }) {
+  return (
+    <PageSection
+      number={number}
+      title={title}
+      done={done}
+      titleAction={titleAction}
+    >
+      {(detail || actions) && (
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          {detail && (
+            <div className="min-w-0 flex-[1_1_16rem] text-sm text-muted-foreground">
+              {detail}
+            </div>
+          )}
+          {actions && (
+            <div className="flex flex-wrap items-center gap-2">{actions}</div>
+          )}
+        </div>
+      )}
+      {children}
+    </PageSection>
   );
 }
 
 /**
- * IdP status plus the admin control for it. The identity-provider roster is an
- * enterprise feature — `useIdentityProviders` stays disabled without it, so
- * the select is hidden and the section reads as status only.
+ * The chosen key on its own line, masked like the MCP gateway's token: the eye
+ * reveals it (with the request below), and copying is an explicit choice
+ * between the real key and a placeholder. Someone else's key stays masked —
+ * only its author can read it.
  */
-function IdentityProviderRow() {
+function KeyField({
+  masked,
+  secret,
+}: {
+  masked: string;
+  secret: RevealableSecret | undefined;
+}) {
+  const [isRevealing, setIsRevealing] = useState(false);
+  const revealed = secret?.revealed ?? null;
+  return (
+    <TerminalCard className="relative">
+      {secret && (
+        <div className="absolute top-1.5 right-1.5 flex items-center gap-1">
+          <UnstyledButton
+            type="button"
+            disabled={isRevealing}
+            aria-label={revealed ? "Hide key" : "Show key"}
+            className={cn(terminalActionClass, "size-7")}
+            onClick={async () => {
+              if (revealed) {
+                secret.onRevealedChange(null);
+                return;
+              }
+              setIsRevealing(true);
+              try {
+                secret.onRevealedChange(await secret.resolve());
+              } finally {
+                setIsRevealing(false);
+              }
+            }}
+          >
+            {isRevealing ? (
+              <Loader2 className="size-3.5 animate-spin" />
+            ) : revealed ? (
+              <EyeOff className="size-3.5" />
+            ) : (
+              <Eye className="size-3.5" />
+            )}
+          </UnstyledButton>
+          <SecretCopyButton
+            variant="terminal"
+            getSecretText={async () => revealed ?? (await secret.resolve())}
+            placeholderText="$ARCHESTRA_LLM_VIRTUAL_KEY"
+          />
+        </div>
+      )}
+      <pre
+        className={cn(
+          "m-0 overflow-x-auto px-4 py-2.5 pr-20 text-xs",
+          terminalCodeClass,
+        )}
+      >
+        {revealed ?? masked}
+      </pre>
+      {!secret && (
+        <p className="px-4 pb-2.5 text-xs text-terminal-muted">
+          Only its author can reveal this key.
+        </p>
+      )}
+    </TerminalCard>
+  );
+}
+
+const NONE_VALUE = "__none__";
+
+/**
+ * The credential control: the existing ones that fit this endpoint in a
+ * picker, joined to creating a new one as the primary action.
+ */
+function CredentialSelect({
+  label,
+  createLabel,
+  canCreate,
+  onCreate,
+  options,
+  value,
+  onChange,
+  noneLabel,
+}: {
+  label: string;
+  createLabel: string;
+  canCreate: boolean;
+  onCreate: () => void;
+  options: Array<{ id: string; label: string }>;
+  value: string | undefined;
+  onChange: (id: string | null) => void;
+  /** Offered when picking nothing is valid. */
+  noneLabel?: string;
+}) {
+  const hasChoices = options.length > 0;
+  const createButton = canCreate && (
+    <Button onClick={onCreate}>
+      <Plus />
+      {createLabel}
+    </Button>
+  );
+  // Nothing to pick yet: creating is the whole control.
+  if (!hasChoices) return createButton || null;
+
+  const picker = (
+    <Select
+      value={value ?? (noneLabel ? NONE_VALUE : "")}
+      onValueChange={(next) => onChange(next === NONE_VALUE ? null : next)}
+    >
+      <SelectTrigger aria-label={label} className="w-64">
+        <SelectValue placeholder={`Choose a ${label.toLowerCase()}`} />
+      </SelectTrigger>
+      <SelectContent>
+        {noneLabel && <SelectItem value={NONE_VALUE}>{noneLabel}</SelectItem>}
+        {options.map((option) => (
+          <SelectItem key={option.id} value={option.id}>
+            {option.label}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+  // Creating another lives on the row's title line (CreateNewLink).
+  return picker;
+}
+
+/**
+ * The secondary "+ Create new" on a step's title line, beside a picker that
+ * already has choices. It opens the create dialog, which hands the new
+ * credential back already selected.
+ */
+function CreateNewLink({
+  label,
+  onCreate,
+}: {
+  label: string;
+  onCreate: () => void;
+}) {
+  return (
+    <Button
+      variant="link"
+      size="sm"
+      className="h-7 px-0"
+      aria-label={label}
+      onClick={onCreate}
+    >
+      <Plus />
+      Create new
+    </Button>
+  );
+}
+
+/**
+ * How the chosen OAuth client gets the access token the request sends: a
+ * token request for an application, or the sign-in flow for user tokens.
+ */
+function OauthTokenRequest({
+  clientId,
+  grantType,
+}: {
+  clientId: string;
+  grantType: "client_credentials" | "authorization_code";
+}) {
+  const origin = typeof window === "undefined" ? "" : window.location.origin;
+  if (grantType === "authorization_code") {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Your app signs the user in at{" "}
+        <code className="font-mono text-xs">
+          {origin}/api/auth/oauth2/authorize
+        </code>{" "}
+        (PKCE, scope{" "}
+        <code className="font-mono text-xs">{LLM_PROXY_OAUTH_SCOPE}</code>),
+        then exchanges the code for an access token at{" "}
+        <code className="font-mono text-xs">
+          {origin}/api/auth/oauth2/token
+        </code>
+        .
+      </p>
+    );
+  }
+  return (
+    <div className="space-y-2">
+      <p className="text-sm text-muted-foreground">
+        Get an access token with the client's secret. It lasts an hour.
+      </p>
+      <TerminalBlock
+        code={[
+          `curl -X POST "${origin}/api/auth/oauth2/token" \\`,
+          `  -d "grant_type=client_credentials" \\`,
+          `  -d "client_id=${clientId}" \\`,
+          `  -d "client_secret=$CLIENT_SECRET" \\`,
+          `  -d "scope=${LLM_PROXY_OAUTH_SCOPE}"`,
+        ].join("\n")}
+      />
+    </div>
+  );
+}
+
+/**
+ * The identity provider the proxy trusts for JWTs. The roster is an enterprise
+ * feature — `useIdentityProviders` stays disabled without it, so only the setup
+ * link shows.
+ */
+function useIdentityProviderStep(): {
+  configured: boolean;
+  row: StepRowProps;
+} {
   const { data: proxy } = useLlmProxy();
   const { data: identityProviders } = useIdentityProviders();
   const { data: canUpdate } = useHasPermissions({ llmProxy: ["update"] });
   const updateProxy = useUpdateLlmProxy();
+  const selectId = useId();
 
   const idpId = proxy?.identityProviderId ?? null;
   const idpName = identityProviders?.find((idp) => idp.id === idpId)?.issuer;
   const orgHasIdps = (identityProviders?.length ?? 0) > 0;
 
-  return (
-    <AuthMethodRow
-      title="Identity provider"
-      description="Use a JWT from your identity provider. Requests are linked to the user in the token and use that user's access."
-      action={
-        !canUpdate ? null : orgHasIdps ? (
-          <div className="w-full space-y-1 sm:w-72">
-            <Select
-              value={idpId ?? "none"}
-              disabled={updateProxy.isPending}
-              onValueChange={(value) =>
-                updateProxy.mutate({
-                  identityProviderId: value === "none" ? null : value,
-                })
-              }
-            >
-              <SelectTrigger className="w-full">
-                <SelectValue placeholder="No Identity Provider selected" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="none">No Identity Provider</SelectItem>
-                {identityProviders?.map((provider) => (
-                  <SelectItem key={provider.id} value={provider.id}>
-                    {provider.providerId} ({provider.issuer})
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <p className="text-xs text-muted-foreground sm:text-right">
-              The OIDC identity provider the proxy trusts for JWT
-              authentication.
-            </p>
-          </div>
-        ) : (
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/settings/identity-providers">
-              Set up identity providers
-            </Link>
-          </Button>
-        )
-      }
-    >
-      <p className="text-xs">
-        {idpId ? (
-          <span className="text-green-600 dark:text-green-500">
-            {idpName ?? "Identity provider"} is configured
-          </span>
-        ) : (
-          <span className="text-muted-foreground">Not configured</span>
-        )}
-      </p>
-    </AuthMethodRow>
-  );
+  return {
+    configured: !!idpId,
+    row: {
+      done: !!idpId,
+      title: "Identity provider",
+      detail: idpId
+        ? `Trusting ${idpName ?? "the selected identity provider"}. Send its JWT as the bearer token.`
+        : "Not configured.",
+      actions: !canUpdate ? null : orgHasIdps ? (
+        <>
+          <Label htmlFor={selectId} className="sr-only">
+            Identity provider
+          </Label>
+          <Select
+            value={idpId ?? NONE_VALUE}
+            disabled={updateProxy.isPending}
+            onValueChange={(value) =>
+              updateProxy.mutate({
+                identityProviderId: value === NONE_VALUE ? null : value,
+              })
+            }
+          >
+            <SelectTrigger id={selectId} className="w-64">
+              <SelectValue placeholder="No identity provider" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value={NONE_VALUE}>No identity provider</SelectItem>
+              {identityProviders?.map((provider) => (
+                <SelectItem key={provider.id} value={provider.id}>
+                  {provider.providerId} ({provider.issuer})
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </>
+      ) : (
+        <Button asChild size="sm">
+          <Link href="/settings/identity-providers">
+            Set up identity provider
+          </Link>
+        </Button>
+      ),
+    },
+  };
 }
 
 /**
@@ -455,6 +1214,10 @@ function OauthClientCreateFlow({
   );
 }
 
+// =========================================================================
+// Internal helpers
+// =========================================================================
+
 /** Same base-URL resolution as the /connection page. */
 function useConnectionBaseUrl() {
   const { data: organization } = useOrganization();
@@ -471,4 +1234,25 @@ function useConnectionBaseUrl() {
       : candidates[0];
   }, [connectionBaseUrls]);
   return { baseUrl, organization };
+}
+
+/** Jev serves one decisions endpoint rather than a base URL clients extend. */
+function endpointUrl(
+  baseUrl: string,
+  selected: "model-router" | ProxyEndpointProvider,
+) {
+  if (selected === "model-router") return `${baseUrl}/model-router`;
+  if (selected === "jev") return `${baseUrl}/jev/decisions`;
+  return `${baseUrl}/${selected}`;
+}
+
+function endpointHint(
+  selected: "model-router" | ProxyEndpointProvider,
+  label: string,
+) {
+  if (selected === "model-router") {
+    return "OpenAI-compatible. Prefix the model with its provider, like openai:gpt-5.4.";
+  }
+  if (selected === "jev") return "Decisions only: one endpoint, no chat.";
+  return `Keep your ${label} SDK and change only the base URL.`;
 }

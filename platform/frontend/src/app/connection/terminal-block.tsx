@@ -22,6 +22,8 @@ interface TerminalBlockProps {
    */
   rows?: {
     comment?: string;
+    /** A short tag before the code saying what it is, e.g. "BASE URL". */
+    badge?: string;
     code: string;
     /**
      * When set, the row's `code` is a placeholder rendering of something that
@@ -97,6 +99,11 @@ export function TerminalBlock({ code, rows, header }: TerminalBlockProps) {
               <span className="select-none text-terminal-comment">
                 # {row.comment}
                 {"\n"}
+              </span>
+            )}
+            {row.badge && (
+              <span className="mr-3 select-none rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-semibold text-green-800 dark:bg-green-950 dark:text-green-300">
+                {row.badge}
               </span>
             )}
             {row.code}

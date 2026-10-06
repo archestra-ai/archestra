@@ -331,7 +331,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     ]);
   });
 
-  test("the default policy covers run_command at the root and search_tools through the archestra battery, and leaves other built-in tools to the fallback", async ({
+  test("the default policy covers run_command at the root and search_tools, search_files, and load_skill through the archestra battery, and leaves other built-in tools to the fallback", async ({
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
@@ -347,7 +347,13 @@ describe("GET /api/openappa/coverage/entities", () => {
       organizationId: null,
       name: "Archestra",
     });
-    for (const rawName of ["run_command", "search_tools", "list_skills"]) {
+    for (const rawName of [
+      "run_command",
+      "search_tools",
+      "search_files",
+      "load_skill",
+      "list_skills",
+    ]) {
       const tool = await makeTool({
         catalogId: builtInCatalog.id,
         name: `archestra__${rawName}`,
@@ -372,6 +378,8 @@ describe("GET /api/openappa/coverage/entities", () => {
     expect(sources).toEqual({
       archestra__run_command: "root",
       archestra__search_tools: "battery",
+      archestra__search_files: "battery",
+      archestra__load_skill: "battery",
       archestra__list_skills: "not_covered",
     });
   });

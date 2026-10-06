@@ -49,7 +49,7 @@ export default function MsTeamsPage() {
         allStepsCompleted={allStepsCompleted}
         isLoading={setupDataLoading}
         providerLabel={channelLabel}
-        docsUrl={getFrontendDocsUrl("platform-ms-teams")}
+        docsUrl={getFrontendDocsUrl("agents/triggers-and-channels/ms-teams")}
       >
         <LlmKeySetupStep />
         {isLocalDev ? (

@@ -653,7 +653,7 @@ export const AUDIT_DECISIONS = {
   connectionSetupsTable: {
     audited: false,
     reason:
-      "ephemeral 15-minute render tickets for /connection setup scripts; durable artifacts (virtual key, skill share link) carry the audit signal",
+      "15-minute render tickets for /connection setup scripts, kept as the connected-client history; the approval (clientConnection.updated), disconnecting (connectedClient.disconnected) and the durable artifacts (virtual key, skill share link) carry the audit signal",
   },
   connectionSetupSkillsTable: {
     audited: false,

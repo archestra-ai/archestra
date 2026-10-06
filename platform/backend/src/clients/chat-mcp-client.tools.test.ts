@@ -1664,3 +1664,30 @@ describe("getChatMcpTools approval-gated execution idempotency (#5132)", () => {
     expect(mcpClient.executeToolCallForOwner).toHaveBeenCalledTimes(2);
   });
 });
+
+describe("getChatMcpTools OpenAPPA delegated runs", () => {
+  test("a delegated run is not offered OpenAPPA tools the gateway lists", async () => {
+    const policyTool = getArchestraToolFullName("get_guardrails_policy");
+    const { agent, baseParams } = await setupChatToolEnv({
+      gatewayTools: [
+        externalTool(policyTool),
+        externalTool("extsrv__fetch_data"),
+      ],
+    });
+
+    const root = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+    });
+    expect(Object.keys(root)).toEqual(
+      expect.arrayContaining([policyTool, "extsrv__fetch_data"]),
+    );
+
+    const delegated = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: `${crypto.randomUUID()}:${agent.id}`,
+    });
+    expect(Object.keys(delegated)).toContain("extsrv__fetch_data");
+    expect(Object.keys(delegated)).not.toContain(policyTool);
+  });
+});

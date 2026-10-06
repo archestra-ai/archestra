@@ -1,0 +1,329 @@
+import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
+import db, { schema, withDbTransaction } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import {
+  ConnectionSetupModel,
+  OAuthAccessTokenModel,
+  OAuthRefreshTokenModel,
+  SkillShareLinkModel,
+} from "@/models";
+import { listConnectedClients } from "@/services/connected-client";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { User } from "@/types";
+
+const CLAUDE_CODE_OAUTH_CLIENT_ID =
+  "https://claude.ai/oauth/claude-code-client-metadata";
+
+describe("DELETE /api/connected-clients/:clientId", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId);
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = user;
+    });
+    registerAuditLogHook(app);
+    const { default: routes } = await import("./connected-client.routes");
+    await app.register(routes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("drops the client, revokes its gateway grant and share link, and leaves everything else", async ({
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+    makeSkill,
+  }) => {
+    const setupId = await redeem(user.id, "claude-code");
+    await redeem(user.id, "codex");
+    const skill = await makeSkill(organizationId, { authorId: user.id });
+    const { link } = await SkillShareLinkModel.create({
+      organizationId,
+      createdByUserId: user.id,
+      skillIds: [skill.id],
+      marketplaceName: "test",
+    });
+    await withDbTransaction((tx) =>
+      ConnectionSetupModel.attachSkillShareLink({
+        connectionSetupId: setupId,
+        skillShareLinkId: link.id,
+        tx,
+      }),
+    );
+
+    await makeOAuthClient({ clientId: CLAUDE_CODE_OAUTH_CLIENT_ID });
+    const unrelated = await makeOAuthClient();
+    const other = await makeUser();
+    await makeMember(other.id, organizationId);
+    const refresh = await token(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
+    // An access token not minted from a refresh token.
+    await OAuthAccessTokenModel.create({
+      tokenHash: crypto.randomUUID(),
+      clientId: CLAUDE_CODE_OAUTH_CLIENT_ID,
+      userId: user.id,
+      scopes: ["mcp"],
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    const kept = [
+      await token(user.id, unrelated.clientId),
+      await token(other.id, CLAUDE_CODE_OAUTH_CLIENT_ID),
+    ];
+    const consentId = await consent(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
+    const keptConsentId = await consent(other.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/claude-code",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    const remaining = await listConnectedClients({
+      organizationId,
+      userId: user.id,
+    });
+    expect(remaining.map((c) => c.clientId)).toEqual(["codex"]);
+    expect(await OAuthRefreshTokenModel.getById(refresh.id)).toBeNull();
+    // Both access tokens, including the one not minted from a refresh token.
+    expect(await accessTokenCount(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID)).toBe(
+      0,
+    );
+    expect(await accessTokenCount(other.id, CLAUDE_CODE_OAUTH_CLIENT_ID)).toBe(
+      1,
+    );
+    for (const row of kept) {
+      expect(await OAuthRefreshTokenModel.getById(row.id)).not.toBeNull();
+    }
+    expect((await SkillShareLinkModel.findById(link.id))?.revokedAt).toEqual(
+      expect.any(Date),
+    );
+    // Without its consent the client cannot sign the user back in silently.
+    expect(await consentExists(consentId)).toBe(false);
+    expect(await consentExists(keptConsentId)).toBe(true);
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.action, "connectedClient.disconnected"),
+            eq(schema.auditLogsTable.resourceId, user.id),
+          ),
+        );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        outcome: "success",
+        before: { clientId: "claude-code" },
+      });
+    });
+  });
+
+  test("shows Claude Code from its gateway sign-in alone, and revoking it signs it out", async ({
+    makeOAuthClient,
+  }) => {
+    await makeOAuthClient({ clientId: CLAUDE_CODE_OAUTH_CLIENT_ID });
+    await token(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
+
+    expect(
+      await listConnectedClients({
+        organizationId,
+        userId: user.id,
+      }),
+    ).toEqual([
+      expect.objectContaining({ clientId: "claude-code", platform: null }),
+    ]);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/claude-code",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    expect(
+      await listConnectedClients({
+        organizationId,
+        userId: user.id,
+      }),
+    ).toEqual([]);
+  });
+
+  test("an expired sign-in is not listed, but revoking still clears it and its consent", async ({
+    makeOAuthClient,
+  }) => {
+    await makeOAuthClient({ clientId: CLAUDE_CODE_OAUTH_CLIENT_ID });
+    await OAuthRefreshTokenModel.create({
+      tokenHash: crypto.randomUUID(),
+      clientId: CLAUDE_CODE_OAUTH_CLIENT_ID,
+      userId: user.id,
+      scopes: ["mcp"],
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    const consentId = await consent(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
+
+    expect(
+      await listConnectedClients({ organizationId, userId: user.id }),
+    ).toEqual([]);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/claude-code",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(await consentExists(consentId)).toBe(false);
+  });
+
+  test("a client connected again after a revoke is listed again, once", async () => {
+    await redeem(user.id, "codex");
+    await app.inject({ method: "DELETE", url: "/api/connected-clients/codex" });
+    await redeem(user.id, "codex");
+
+    const listed = await listConnectedClients({
+      organizationId,
+      userId: user.id,
+    });
+    expect(listed.map((c) => c.clientId)).toEqual(["codex"]);
+  });
+
+  test("lists and disconnects Amp from its OAuth sign-in alone", async ({
+    makeOAuthClient,
+  }) => {
+    // Amp set up by hand: no setup ticket, just its DCR client and a grant.
+    const amp = await makeOAuthClient({
+      name: "Amp MCP Client (archestra)",
+      redirectUris: ["http://localhost:41592/oauth/callback"],
+    });
+    // Another app that merely names itself Amp is not trusted.
+    const lookalike = await makeOAuthClient({
+      name: "Amp MCP Client (archestra)",
+      redirectUris: ["http://localhost:1234/callback"],
+    });
+    const refresh = await token(user.id, amp.clientId);
+    const kept = await token(user.id, lookalike.clientId);
+
+    const listed = await listConnectedClients({
+      organizationId,
+      userId: user.id,
+    });
+    expect(listed).toEqual([
+      expect.objectContaining({ clientId: "amp", platform: null }),
+    ]);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/amp",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual({ success: true });
+    expect(await OAuthRefreshTokenModel.getById(refresh.id)).toBeNull();
+    expect(await OAuthRefreshTokenModel.getById(kept.id)).not.toBeNull();
+    expect(
+      await listConnectedClients({
+        organizationId,
+        userId: user.id,
+      }),
+    ).toEqual([]);
+  });
+
+  test("returns 404 for a client the caller has not connected", async () => {
+    await redeem(user.id, "claude-code");
+    await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/claude-code",
+    });
+
+    const again = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/claude-code",
+    });
+    const never = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/codex",
+    });
+    const noAmp = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/amp",
+    });
+
+    expect(again.statusCode).toBe(404);
+    expect(never.statusCode).toBe(404);
+    expect(noAmp.statusCode).toBe(404);
+  });
+
+  async function redeem(userId: string, clientId: "claude-code" | "codex") {
+    const { setup, rawToken } = await ConnectionSetupModel.create({
+      organizationId,
+      userId,
+      clientId,
+      platform: "macos",
+      baseUrl: "http://localhost:9000/v1",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await ConnectionSetupModel.claimByToken({ rawToken });
+    return setup.id;
+  }
+
+  async function consent(userId: string, clientId: string) {
+    const id = crypto.randomUUID();
+    await db
+      .insert(schema.oauthConsentsTable)
+      .values({ id, clientId, userId, scopes: ["mcp"] });
+    return id;
+  }
+
+  async function accessTokenCount(userId: string, clientId: string) {
+    const rows = await db
+      .select({ id: schema.oauthAccessTokensTable.id })
+      .from(schema.oauthAccessTokensTable)
+      .where(
+        and(
+          eq(schema.oauthAccessTokensTable.userId, userId),
+          eq(schema.oauthAccessTokensTable.clientId, clientId),
+        ),
+      );
+    return rows.length;
+  }
+
+  async function consentExists(id: string) {
+    const rows = await db
+      .select({ id: schema.oauthConsentsTable.id })
+      .from(schema.oauthConsentsTable)
+      .where(eq(schema.oauthConsentsTable.id, id));
+    return rows.length > 0;
+  }
+
+  /** A refresh token plus the access token minted from it. */
+  async function token(userId: string, clientId: string) {
+    const refresh = await OAuthRefreshTokenModel.create({
+      tokenHash: crypto.randomUUID(),
+      clientId,
+      userId,
+      scopes: ["mcp"],
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await OAuthAccessTokenModel.create({
+      tokenHash: crypto.randomUUID(),
+      clientId,
+      userId,
+      scopes: ["mcp"],
+      expiresAt: new Date(Date.now() + 60_000),
+      refreshId: refresh.id,
+    });
+    return refresh;
+  }
+});

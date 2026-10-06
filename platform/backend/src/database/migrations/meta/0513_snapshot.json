@@ -1,5 +1,5 @@
 {
-  "id": "211c1aed-22bf-44ee-bc0d-a566ae948377",
+  "id": "dce6d93a-2ff5-4589-9ecc-c59655d340ff",
   "prevId": "0f3bbff9-15c3-4e63-9b3b-2ea6224b34fb",
   "version": "7",
   "dialect": "postgresql",
@@ -7563,6 +7563,24 @@
           "primaryKey": false,
           "notNull": false
         },
+        "revoked_at": {
+          "name": "revoked_at",
+          "type": "timestamp",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "device_name": {
+          "name": "device_name",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "revoked_by_user_id": {
+          "name": "revoked_by_user_id",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": false
+        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -7690,6 +7708,19 @@
           "tableTo": "skill_share_link",
           "columnsFrom": [
             "skill_share_link_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
+          "onUpdate": "no action"
+        },
+        "connection_setups_revoked_by_user_id_user_id_fk": {
+          "name": "connection_setups_revoked_by_user_id_user_id_fk",
+          "tableFrom": "connection_setups",
+          "tableTo": "user",
+          "columnsFrom": [
+            "revoked_by_user_id"
           ],
           "columnsTo": [
             "id"
@@ -18046,13 +18077,6 @@
           "notNull": true,
           "default": true
         },
-        "allow_public_file_sharing": {
-          "name": "allow_public_file_sharing",
-          "type": "boolean",
-          "primaryKey": false,
-          "notNull": true,
-          "default": false
-        },
         "allow_tool_auto_assignment": {
           "name": "allow_tool_auto_assignment",
           "type": "boolean",
@@ -20061,217 +20085,6 @@
           "tableTo": "agents",
           "columnsFrom": [
             "default_agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {},
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
-    "public.public_file_links": {
-      "name": "public_file_links",
-      "schema": "",
-      "columns": {
-        "id": {
-          "name": "id",
-          "type": "uuid",
-          "primaryKey": true,
-          "notNull": true,
-          "default": "gen_random_uuid()"
-        },
-        "organization_id": {
-          "name": "organization_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "token": {
-          "name": "token",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "file_id": {
-          "name": "file_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_by_user_id": {
-          "name": "created_by_user_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "agent_id": {
-          "name": "agent_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "filename": {
-          "name": "filename",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "mime_type": {
-          "name": "mime_type",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "size_bytes": {
-          "name": "size_bytes",
-          "type": "integer",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "data": {
-          "name": "data",
-          "type": "bytea",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        },
-        "revoked_at": {
-          "name": "revoked_at",
-          "type": "timestamp",
-          "primaryKey": false,
-          "notNull": false
-        }
-      },
-      "indexes": {
-        "public_file_links_token_idx": {
-          "name": "public_file_links_token_idx",
-          "columns": [
-            {
-              "expression": "token",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": true,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "public_file_links_org_created_at_idx": {
-          "name": "public_file_links_org_created_at_idx",
-          "columns": [
-            {
-              "expression": "organization_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            },
-            {
-              "expression": "created_at",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        },
-        "public_file_links_file_id_idx": {
-          "name": "public_file_links_file_id_idx",
-          "columns": [
-            {
-              "expression": "file_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "public_file_links_organization_id_organization_id_fk": {
-          "name": "public_file_links_organization_id_organization_id_fk",
-          "tableFrom": "public_file_links",
-          "tableTo": "organization",
-          "columnsFrom": [
-            "organization_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "public_file_links_file_id_files_id_fk": {
-          "name": "public_file_links_file_id_files_id_fk",
-          "tableFrom": "public_file_links",
-          "tableTo": "files",
-          "columnsFrom": [
-            "file_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "public_file_links_created_by_user_id_user_id_fk": {
-          "name": "public_file_links_created_by_user_id_user_id_fk",
-          "tableFrom": "public_file_links",
-          "tableTo": "user",
-          "columnsFrom": [
-            "created_by_user_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "public_file_links_agent_id_agents_id_fk": {
-          "name": "public_file_links_agent_id_agents_id_fk",
-          "tableFrom": "public_file_links",
-          "tableTo": "agents",
-          "columnsFrom": [
-            "agent_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "public_file_links_conversation_id_conversations_id_fk": {
-          "name": "public_file_links_conversation_id_conversations_id_fk",
-          "tableFrom": "public_file_links",
-          "tableTo": "conversations",
-          "columnsFrom": [
-            "conversation_id"
           ],
           "columnsTo": [
             "id"

@@ -124,7 +124,11 @@ describe("EditVirtualKeyDialog", () => {
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));
     expect(screen.getByText("Use your saved key")).toBeVisible();
-    expect(screen.getByText(/X-Archestra-Virtual-Key/)).toBeVisible();
+    // Named in the explanation, and sent in the example request too: before
+    // any model syncs, the request falls back to the provider's default model.
+    for (const header of screen.getAllByText(/X-Archestra-Virtual-Key/)) {
+      expect(header).toBeVisible();
+    }
   });
 
   it("edits access through the key's own permission policy", () => {

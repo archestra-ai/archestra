@@ -25,13 +25,15 @@ import { cn } from "@/lib/utils/tailwind";
 import { BatteriesCard, hasBatteries } from "./batteries-card";
 import { CoverageWarnings } from "./coverage-warnings";
 import { OpenAppaChatButton } from "./openappa-chat-button";
+import { UnrecognizedClientsCard } from "./overview-setup-cards";
 import { RULE_BUCKETS } from "./rule-coverage-bar";
 
 type Totals = CoverageSummary["totals"];
 
 /**
- * How many of the visible tools a rule covers, and the batteries that cover or
- * could cover them. Each card takes the width its content needs.
+ * How many of the visible tools a rule covers, beside the batteries that cover
+ * or could cover them and the clients the guardrail follows. Tool coverage
+ * takes the width its content needs; the other two stack beside it.
  */
 export function CoverageCharts() {
   const summary = useCoverageSummary();
@@ -44,7 +46,15 @@ export function CoverageCharts() {
     <div className="@container">
       <div className="grid gap-4 @3xl:grid-cols-[auto_minmax(0,1fr)]">
         <ToolCoverageCard summary={summary} />
-        {batteries && <BatteriesCard summary={summary.data ?? undefined} />}
+        <div className="flex min-w-0 flex-col gap-4">
+          {batteries && (
+            <BatteriesCard
+              summary={summary.data ?? undefined}
+              className="flex-1"
+            />
+          )}
+          <UnrecognizedClientsCard />
+        </div>
       </div>
     </div>
   );

@@ -1129,13 +1129,23 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           ),
           policy,
         );
-        await recordOpenAppaClientFailure({
-          session,
-          toolCallId: call.id,
-          ruling: decision.feedback,
-        });
-        const contentMessage =
-          binding.request.declaredTools.length === 0
+        // Clients connect MCP servers in the background, so a session's first
+        // request often leaves before the gateway's tool list arrives. One
+        // resend normally carries the tools; only a repeat within the same
+        // session is a client that cannot receive remedies.
+        const transient =
+          binding.request.declaredTools.length > 0 &&
+          !(await this.remedyToolsMissingBefore(session));
+        if (!transient) {
+          await recordOpenAppaClientFailure({
+            session,
+            toolCallId: call.id,
+            ruling: decision.feedback,
+          });
+        }
+        const contentMessage = transient
+          ? `${decision.feedback}\n\n[appa] This request did not include the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the ruling could not be offered as a remedy and the call is refused. The gateway tools usually finish loading a moment after the session starts. Send your message again.`
+          : binding.request.declaredTools.length === 0
             ? `${decision.feedback}\n\n[appa] This client declared no tools, so the ruling cannot be delivered as a remedy notice and the call is refused. A client whose tools are not on the wire cannot be governed. Declare the tools on the wire; for Codex, set code_mode_host = false.`
             : `${decision.feedback}\n\n[appa] This client did not declare the ${archestraMcpBranding.serverName} MCP gateway remedy tools, so the call is refused. Connect the MCP gateway and allow both remedy tools to use approval plans.`;
         return {
@@ -1537,6 +1547,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       custom: binding.request.customTools.has(call.name),
       namespace: call.namespace,
     };
+  }
+
+  /**
+   * Whether this session was already refused once for a request without the
+   * gateway remedy tools. Records the current refusal so the next one counts.
+   */
+  private async remedyToolsMissingBefore(
+    session: OpenAppaSession,
+  ): Promise<boolean> {
+    const key: AllowedCacheKey = `${CacheKey.OpenAppaRemedyToolsMissing}-${Buffer.from(
+      `${session.organization_id}:${session.session_id}`,
+    ).toString("base64url")}`;
+    const seen = await cacheManager.get<boolean>(key);
+    if (seen) return true;
+    await cacheManager.set(key, true, TimeInMs.Day);
+    return false;
   }
 }
 

@@ -251,13 +251,21 @@ class ActiveChatRunModel {
     };
   }
 
+  // Sets only the stop marker. `updatedAt` is the producer's liveness signal
+  // (the stale reaper keys on it), so a Stop must not refresh it: if it did,
+  // every Stop click on a run whose owner died would restart the stale clock
+  // and keep the conversation blocked indefinitely. The explicit self-assign
+  // overrides the column's `$onUpdate` default.
   static async requestStop(params: {
     conversationId: string;
     organizationId: string;
   }): Promise<ChatActiveRun | null> {
     const [run] = await db
       .update(schema.chatActiveRunsTable)
-      .set({ stopRequestedAt: new Date(), updatedAt: new Date() })
+      .set({
+        stopRequestedAt: new Date(),
+        updatedAt: sql`${schema.chatActiveRunsTable.updatedAt}`,
+      })
       .where(
         and(
           eq(schema.chatActiveRunsTable.conversationId, params.conversationId),
@@ -328,7 +336,7 @@ class ActiveChatRunModel {
       .update(schema.chatActiveRunsTable)
       .set({
         status: "failed",
-        error: "Chat stream became stale before completing.",
+        error: STALE_RUN_ERROR,
         updatedAt: new Date(),
       })
       .where(
@@ -340,6 +348,33 @@ class ActiveChatRunModel {
       .returning({ id: schema.chatActiveRunsTable.id });
 
     return runs.length;
+  }
+
+  // Single-run variant of markStaleRunningAsFailed. The staleness check is part
+  // of the UPDATE, so a liveness touch that lands first wins and a live run is
+  // never failed on a stale read.
+  static async markRunAsFailedIfStale(params: {
+    runId: string;
+    staleMs: number;
+  }): Promise<ChatActiveRun | null> {
+    const cutoff = new Date(Date.now() - params.staleMs);
+    const [run] = await db
+      .update(schema.chatActiveRunsTable)
+      .set({
+        status: "failed",
+        error: STALE_RUN_ERROR,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.chatActiveRunsTable.id, params.runId),
+          eq(schema.chatActiveRunsTable.status, "running"),
+          lt(schema.chatActiveRunsTable.updatedAt, cutoff),
+        ),
+      )
+      .returning();
+
+    return run ?? null;
   }
 
   static async deleteTerminalOlderThan(retentionMs: number): Promise<number> {
@@ -363,6 +398,8 @@ export default ActiveChatRunModel;
 // === internal helpers ===
 
 const RUN_EVENT_PAYLOADS_CONTEXT = "chat_active_run_events.payloads" as const;
+
+const STALE_RUN_ERROR = "Chat stream became stale before completing.";
 
 /**
  * A batch this reader cannot open replays as nothing rather than throwing:

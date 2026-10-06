@@ -2,10 +2,7 @@
 
 import { CoverageCharts } from "./coverage-charts";
 import { EntitiesTable } from "./entities-table";
-import {
-  OverviewSetupCards,
-  UnrecognizedClientsCard,
-} from "./overview-setup-cards";
+import { OverviewSetupCards } from "./overview-setup-cards";
 import { TrustAudienceCard } from "./trust-audience-card";
 import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 
@@ -37,7 +34,6 @@ export function OverviewTab() {
             </div>
             <CoverageCharts />
           </section>
-          <UnrecognizedClientsCard />
           <section
             aria-labelledby="overview-servers-and-gateways"
             className="space-y-3"

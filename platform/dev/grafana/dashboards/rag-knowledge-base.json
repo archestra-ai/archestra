@@ -79,7 +79,7 @@
       "title": "Documentation",
       "tooltip": "Archestra Documentation",
       "type": "link",
-      "url": "https://archestra.ai/docs/platform-observability"
+      "url": "https://archestra.ai/docs/administration/observability"
     }
   ],
   "panels": [

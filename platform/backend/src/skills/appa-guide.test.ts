@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import config from "@/config";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -66,22 +67,14 @@ describe("APPA Guide feature availability", () => {
     expect(JSON.stringify(loaded)).toContain(
       "archestra__get_guardrails_policy",
     );
-    const reference = await executeArchestraTool(
-      "archestra__load_skill",
-      { name: APPA_GUIDE_SKILL.name, path: "references/policy-writing.md" },
-      context,
-    );
-    expect(reference.isError).not.toBe(true);
-    expect(JSON.stringify(reference)).toContain("Writing OpenAPPA policies");
-    const contracts = await executeArchestraTool(
-      "archestra__load_skill",
-      { name: APPA_GUIDE_SKILL.name, path: "references/contracts.md" },
-      context,
-    );
-    expect(contracts.isError).not.toBe(true);
-    expect(JSON.stringify(contracts)).toContain(
-      "OpenAPPA policy configuration and contracts reference",
-    );
+    for (const path of ["references/contracts.md", "references/archestra.md"]) {
+      const reference = await executeArchestraTool(
+        "archestra__load_skill",
+        { name: APPA_GUIDE_SKILL.name, path },
+        context,
+      );
+      expect(reference.isError).not.toBe(true);
+    }
   });
 
   test("disabling APPA hides persisted and assigned guides without deleting user edits", async ({
@@ -165,24 +158,22 @@ describe("APPA Guide feature availability", () => {
   }) => {
     config.openappa.enabled = true;
     const organizationId = (await makeOrganization()).id;
-    const reference = APPA_GUIDE_SKILL.files[0].content;
-    const blocks = [...reference.matchAll(/```toml\n([\s\S]*?)```/g)].map(
-      (match) => match[1],
-    );
-    const [header, read, write, fallback, remote, declarations] = blocks;
-    expect(blocks).toHaveLength(6);
-    expect(header).toContain("[policy.deployment]\ncontext_control = true");
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/archestra.md",
+    )?.content;
+    if (!reference) throw new Error("Archestra reference not found");
+    const [fallback, declarations] = [
+      ...reference.matchAll(/```toml\n([\s\S]*?)```/g),
+    ].map((match) => match[1]);
+    const header =
+      "[policy]\nversion = 2\n\n[policy.deployment]\ncontext_control = true\n";
     expect(initialPolicy()).toContain(
       "[policy.deployment]\ncontext_control = true",
     );
     const binding =
       '\n[externals.annotators.noop]\nurl = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"\n';
     for (const candidate of [
-      header,
-      header + read,
-      header + write,
       header + fallback + binding,
-      header + remote,
       // Declarations are root-level keys, so they precede the first table.
       declarations + header,
     ]) {
@@ -194,151 +185,28 @@ describe("APPA Guide feature availability", () => {
         warnings: [],
       });
     }
-
-    const contracts = APPA_GUIDE_SKILL.files.find(
-      (f) => f.path === "references/contracts.md",
-    );
-    expect(contracts).toBeDefined();
-    if (!contracts) throw new Error("contracts not found");
-    const contractBlocks = [
-      ...contracts.content.matchAll(/```toml\n([\s\S]*?)```/g),
-    ].map((match) => match[1]);
-    for (const candidate of contractBlocks) {
-      expect(
-        await guardrailsPolicyService.validate(candidate, { organizationId }),
-      ).toEqual({
-        valid: true,
-        errors: [],
-        warnings: [],
-      });
-    }
   });
 
-  test("preserves the cross-host policy workflow and safety instructions", () => {
-    const content = APPA_GUIDE_SKILL.content;
-
-    // Frontmatter and argument hint
-    expect(content).toMatch(/^---\nname: appa-guide\n/);
-    expect(content).toContain('argument-hint: "init|adjust"');
-    expect(content).toContain("Guardrails v2 (OpenAPPA)");
-
-    // Modes
-    expect(content).toContain("**`init`**");
-    expect(content).toContain("**`adjust`**");
-    expect(content).toContain("diagnose");
-    expect(content).toContain("inspect only");
-    expect(content).toContain("show policy");
-
-    // P01: Canonical router and host guidance
-    expect(content).toContain("archestra__get_guardrails_policy");
-    expect(content).toContain("archestra__preview_guardrails_policy_change");
-    expect(content).toContain("archestra__update_guardrails_policy");
-    expect(content).toContain("archestra__get_guardrails_policy_change_status");
-
-    // P02: Inspect available inventory and account for the caller's scope
-    expect(content).toContain("archestra__list_mcp_server_deployments");
-    expect(content).toContain("archestra__inspect_guardrails_server");
-    expect(content).toContain("archestra__get_mcp_server_tools");
-    expect(content).toContain("archestra__search_tools");
-
-    // P03: Root config and serving policy as truth
-    expect(content).toContain(
-      "The root config is the operator's source of truth",
+  test("inlines OpenAPPA's shared policy-writing rules into the always-loaded skill body", () => {
+    const core = readFileSync(
+      new URL("./appa-guide.core.generated.md", import.meta.url),
+      "utf8",
     );
-    expect(content).toContain("effective.content");
+    expect(APPA_GUIDE_SKILL.content).toContain(core);
+    expect(
+      APPA_GUIDE_SKILL.files.some((file) => file.content.includes(core)),
+    ).toBe(false);
+  });
 
-    // P04: Distinguish available, matched, and included batteries with declarations
-    expect(content).toContain("A battery is available when it exists");
-    expect(content).toContain("It is declared by `include`");
-    expect(content).toContain("under 20 words");
-    expect(content).toContain("effective.batteries");
-    expect(content).toContain("include");
-
-    // P05: Generate IFC-first defaults
-    expect(content).toContain("IFC monoids first");
-    expect(content).toContain('delta = { audience = ["self"] }');
-    expect(content).toContain('delta = { audience = ["internal"] }');
-    expect(content).toContain(
-      'requires = { audience = { contains = ["public"] } }',
+  test("serves OpenAPPA's policy reference unchanged", () => {
+    const contracts = readFileSync(
+      new URL("./appa-guide.contracts.generated.md", import.meta.url),
+      "utf8",
     );
-    expect(content).toContain(
-      'requires = { trust = "trusted", audience = { contains = ["internal"] } }',
-    );
-
-    // P06: Read-only inspection & complete proposal before approval
-    expect(content).toContain(
-      "Inspection and proposal drafting never require approval",
-    );
-    expect(content).toContain(
-      'Call `archestra__ask_user` with the question "Apply this policy?"',
-    );
-    expect(content).toContain(
-      "With neither, end with: **Approve, or tell me what to change.**",
-    );
-
-    // P07: Approval applies only to exact pending proposal; never invent offer id
-    expect(content).toContain("Never invent an offer id");
-    expect(content).toContain(
-      "Call `execute_remedy_plan` only when the previous tool result quoted `offer_id",
-    );
-
-    // P08: Revalidate immediately before mutation
-    expect(content).toContain("expectedRevision");
-    expect(content).toContain("preview the exact approved draft again");
-    expect(content).toContain("the PR merges and repository sync succeeds");
-
-    // P09: Saved no-ops stay unchanged; an unsaved starter still needs approval.
-    expect(content).toContain(
-      "If a saved policy already provides the complete proposed behavior",
-    );
-    expect(content).toContain("report that no change is needed");
-    expect(content).toContain(
-      "An unsaved local revision-0 starter still needs preview, approval, and publication even when its text is unchanged",
-    );
-
-    // P10: User-facing replies report outcomes, not inspection mechanics
-    expect(content).toContain("Talk about outcomes, not config machinery");
-
-    // P11: Sensitive inspection is least privilege
-    expect(content).toContain("Keep secrets out of policy text");
-
-    // P12: Unsupported host behavior is explicit and cannot be described as protected
-    expect(content).toContain(
-      "Without the catch-all, declare `archestra__search_tools` with `delta = {}`",
-    );
-
-    expect(content).toContain(
-      "every proxied request fails closed without retry",
-    );
-
-    // P13: Multi-runtime / session isolation
-    expect(content).toContain(
-      "New conversations will use it; this conversation keeps the policy it started with",
-    );
-    expect(content).toContain("policy it started with.");
-
-    // P14: Battery inclusion preserves maintained defaults; root overrides
-    expect(content).toContain("Never edit a battery.");
-    expect(content).toContain("Override a tool contract with a root rule");
-
-    // P15: Battery credentials live in runtime environment, never in policy
-    expect(content).toContain("token_env");
-    expect(content).toContain("[credentials]");
-
-    // A saved policy replaces the initial policy; init must keep native spawn support.
-    expect(content).toContain(
-      "A saved revision replaces the complete document",
-    );
-    expect(content).toContain("host/archestra/task");
-    expect(content).toContain("context_control = true");
-
-    // Provider-hosted calls do not become governed just because a rule names them.
-    expect(content).toContain("Ask which clients use provider-hosted tools");
-    expect(content).toContain("signed offer to use a local counterpart");
-    const contracts = APPA_GUIDE_SKILL.files.find(
-      (file) => file.path === "references/contracts.md",
-    );
-    expect(contracts?.content).toContain("### Provider-hosted tools");
-    expect(contracts?.content).toContain("no supported policy switch");
+    expect(
+      APPA_GUIDE_SKILL.files.find(
+        (file) => file.path === "references/contracts.md",
+      )?.content,
+    ).toBe(contracts);
   });
 });

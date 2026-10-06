@@ -1,9 +1,11 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  isImplicitOpenAppaReadToolShortName,
   isSkillTool,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
@@ -33,7 +35,10 @@ import {
   openappaYellEnabled,
 } from "@/openappa/service";
 import { authenticatedRuntimeSpender } from "@/services/agent-runtime/runtime-identity";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import {
+  agentToolExclusionsService,
+  isToolIdentityExcluded,
+} from "@/services/agent-tool-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
@@ -627,6 +632,18 @@ async function resolveToolAssignment(
   const exclusionSets = await agentToolExclusionsService.getActiveExclusionSets(
     context.agentId,
   );
+  if (
+    openappaEnabled() &&
+    isImplicitOpenAppaReadToolShortName(shortName) &&
+    !isToolIdentityExcluded(
+      {
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        name: archestraMcpBranding.getToolName(shortName),
+      },
+      exclusionSets,
+    )
+  )
+    return null;
   const available = await isArchestraToolAvailableToAgent({
     toolName,
     agentId: context.agentId,

@@ -13,28 +13,32 @@ import {
   INSTALLER_CLIENT_LABELS,
   type InstallerClientId,
 } from "@archestra/shared/connection-setup";
-import { Users } from "lucide-react";
 import { useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, XAxis, YAxis } from "recharts";
+import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
 import { ClientIcon } from "@/app/connection/client-icon";
 import { CONNECT_CLIENTS } from "@/app/connection/clients";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import {
   type ChartConfig,
   ChartContainer,
-  ChartLegend,
-  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
 import {
-  Empty,
-  EmptyDescription,
-  EmptyHeader,
-  EmptyMedia,
-  EmptyTitle,
-} from "@/components/ui/empty";
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Table,
@@ -50,7 +54,6 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
-import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   type AgentAdoption,
   type AgentAdoptionMember,
@@ -109,17 +112,17 @@ const LLM_AGENT_CLIENT: Record<string, InstallerClientId> = {
 
 const CLIENTS_BY_ID = new Map(CONNECT_CLIENTS.map((c) => [c.id, c]));
 const OTHER_AGENTS = "other";
+const NO_AGENT = "none";
 
 type StatusFilter = AgentAdoptionStatus | "all";
 
 /**
  * Who has connected an agent and who is using it, judged by gateway and LLM
- * proxy traffic: a headline split of the organization's members, the members
- * themselves (not connected first), and how many use each agent.
+ * proxy traffic: summary tiles, members per agent, and the members themselves
+ * (not connected first).
  */
 export function AgentAdoptionOverview() {
   const { data, isPending, isLoadingError, refetch } = useAgentAdoption();
-  const [status, setStatus] = useState<StatusFilter>("notConnected");
 
   if (isLoadingError) {
     return (
@@ -133,117 +136,155 @@ export function AgentAdoptionOverview() {
 
   return (
     <div className="flex flex-col gap-6">
-      <StatusSummary adoption={data} status={status} onStatus={setStatus} />
-      <div className="grid gap-6 xl:grid-cols-5">
-        <MemberList
-          adoption={data}
-          status={status}
-          onStatus={setStatus}
-          className="xl:col-span-3"
-        />
-        <AgentChart adoption={data} className="xl:col-span-2" />
+      <SummaryTiles adoption={data} />
+      <div className="grid gap-6 xl:grid-cols-3">
+        <AgentChart adoption={data} />
+        <MemberList adoption={data} className="xl:col-span-2" />
       </div>
     </div>
   );
 }
 
-function StatusSummary({
-  adoption,
-  status,
-  onStatus,
-}: {
-  adoption: AgentAdoption;
-  status: StatusFilter;
-  onStatus: (status: StatusFilter) => void;
-}) {
+function SummaryTiles({ adoption }: { adoption: AgentAdoption }) {
   const total = adoption.members.length;
-  const counts = countByStatus(adoption.members);
-  const connected = total - counts.notConnected;
+  const notConnected = adoption.members.filter(
+    (m) => m.status === "notConnected",
+  ).length;
+  const gateway = adoption.members.filter((m) => m.gatewayLastSeenAt).length;
+  const llm = adoption.members.filter((m) => m.llmLastSeenAt).length;
+  const window = `in the last ${adoption.lookbackDays} days`;
 
   return (
-    <section
-      aria-labelledby="adoption-headline"
-      className="flex flex-col gap-3"
-    >
-      <div className="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-1">
-        <h2 id="adoption-headline" className="text-sm font-semibold">
-          <span className="tabular-nums">{counts.notConnected}</span>
-          <span>{` of ${total} ${total === 1 ? "member hasn't" : "members haven't"} connected an agent`}</span>
-        </h2>
-        <p className="text-xs text-muted-foreground tabular-nums">
-          {`${formatShare(connected, total)} connected · ${formatShare(counts.active, total)} active in the last ${adoption.activeDays} days`}
-        </p>
-      </div>
+    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <SummaryTile
+        label="Not connected"
+        value={notConnected}
+        total={total}
+        description="No agent set up and no calls from one"
+      />
+      <SummaryTile
+        label="Connected"
+        value={total - notConnected}
+        total={total}
+        description="Set up an agent, or made gateway or LLM proxy calls"
+      />
+      <SummaryTile
+        label="Used the MCP gateway"
+        value={gateway}
+        total={total}
+        description={`Tool calls from an agent ${window}`}
+      />
+      <SummaryTile
+        label="Used the LLM proxy"
+        value={llm}
+        total={total}
+        description={`Model calls from an agent ${window}`}
+      />
+    </div>
+  );
+}
 
-      {/* One bar for the whole organization, worst share first. */}
-      <div
-        aria-hidden
-        className="flex h-2 w-full overflow-hidden rounded-full bg-muted"
-      >
-        {STATUS_ORDER.map((key) =>
-          counts[key] > 0 ? (
-            <div
-              key={key}
-              className={cn("h-full", STATUS_META[key].dot)}
-              style={{ width: `${(counts[key] / Math.max(total, 1)) * 100}%` }}
-            />
-          ) : null,
-        )}
-      </div>
+/** Same shape as the summary tiles on Costs & limits. */
+function SummaryTile({
+  label,
+  value,
+  total,
+  description,
+}: {
+  label: string;
+  value: number;
+  total: number;
+  description: string;
+}) {
+  return (
+    <Card>
+      <CardHeader className="gap-1">
+        <CardDescription>{label}</CardDescription>
+        <CardTitle className="text-2xl tabular-nums">
+          {value.toLocaleString()}
+          <span className="ml-1.5 text-sm font-normal text-muted-foreground">
+            {`of ${total.toLocaleString()} · ${formatShare(value, total)}`}
+          </span>
+        </CardTitle>
+        <p className="text-muted-foreground text-xs">{description}</p>
+      </CardHeader>
+    </Card>
+  );
+}
 
-      <div className="grid grid-cols-2 divide-x divide-y overflow-hidden rounded-lg border sm:grid-cols-4 sm:divide-y-0">
-        {STATUS_ORDER.map((key) => (
-          <UnstyledButton
-            key={key}
-            type="button"
-            onClick={() => onStatus(status === key ? "all" : key)}
-            aria-pressed={status === key}
-            className={cn(
-              "flex flex-col-reverse px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring",
-              status === key && "bg-muted/60",
-            )}
+const chartConfig = {
+  members: { label: "Members", color: "var(--chart-1)" },
+} satisfies ChartConfig;
+
+function AgentChart({ adoption }: { adoption: AgentAdoption }) {
+  const data = useMemo(() => agentChartData(adoption), [adoption]);
+  const height = Math.max(160, data.length * 36 + 24);
+
+  return (
+    <Card className="min-w-0">
+      <CardHeader>
+        <CardTitle>Members per agent</CardTitle>
+        <CardDescription>
+          {`Agents set up from the Connect page or seen on the LLM proxy in the last ${adoption.lookbackDays} days. A member with two agents counts twice.`}
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
+        <ChartContainer
+          config={chartConfig}
+          className="aspect-auto w-full"
+          style={{ height }}
+        >
+          <BarChart
+            accessibilityLayer
+            data={data}
+            layout="vertical"
+            margin={{ left: 0, right: 12 }}
           >
-            <span className="mt-0.5 flex items-center gap-1.5 truncate text-xs text-muted-foreground">
-              <span
-                aria-hidden
-                className={cn(
-                  "size-2 shrink-0 rounded-full",
-                  STATUS_META[key].dot,
-                )}
-              />
-              <Tooltip>
-                <TooltipTrigger asChild>
-                  <span className="truncate">{STATUS_META[key].label}</span>
-                </TooltipTrigger>
-                <TooltipContent>
-                  {STATUS_META[key].describe(adoption)}
-                </TooltipContent>
-              </Tooltip>
-            </span>
-            <span className="text-2xl font-semibold tabular-nums">
-              {counts[key].toLocaleString()}
-              <span className="ml-1.5 text-xs font-normal text-muted-foreground">
-                {formatShare(counts[key], total)}
-              </span>
-            </span>
-          </UnstyledButton>
-        ))}
-      </div>
-    </section>
+            <CartesianGrid horizontal={false} />
+            <XAxis
+              type="number"
+              allowDecimals={false}
+              tickLine={false}
+              axisLine={false}
+            />
+            <YAxis
+              type="category"
+              dataKey="label"
+              tickLine={false}
+              axisLine={false}
+              width={104}
+            />
+            <ChartTooltip
+              cursor={{ fill: "var(--muted)", fillOpacity: 0.6 }}
+              content={<ChartTooltipContent indicator="dot" hideLabel />}
+            />
+            <Bar dataKey="members" radius={3} isAnimationActive={false}>
+              {data.map((row) => (
+                <Cell
+                  key={row.id}
+                  fill={
+                    row.id === NO_AGENT
+                      ? "var(--destructive)"
+                      : "var(--color-members)"
+                  }
+                />
+              ))}
+            </Bar>
+          </BarChart>
+        </ChartContainer>
+      </CardContent>
+    </Card>
   );
 }
 
 function MemberList({
   adoption,
-  status,
-  onStatus,
   className,
 }: {
   adoption: AgentAdoption;
-  status: StatusFilter;
-  onStatus: (status: StatusFilter) => void;
   className?: string;
 }) {
+  const [status, setStatus] = useState<StatusFilter>("notConnected");
   const [query, setQuery] = useState("");
 
   const rows = useMemo(() => {
@@ -263,80 +304,90 @@ function MemberList({
       );
   }, [adoption.members, status, query]);
 
-  const title = status === "all" ? "All members" : STATUS_META[status].label;
-
   return (
-    <section
-      aria-labelledby="adoption-members"
-      className={cn("flex min-w-0 flex-col gap-3", className)}
-    >
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <h3 id="adoption-members" className="text-sm font-semibold">
-          <span>{title}</span>
-          <span className="ml-2 font-normal text-muted-foreground tabular-nums">
-            {rows.length.toLocaleString()}
-          </span>
-          {status !== "all" ? (
-            <UnstyledButton
-              type="button"
-              onClick={() => onStatus("all")}
-              className="ml-3 text-xs font-normal text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+    <Card className={cn("min-w-0", className)}>
+      <CardHeader>
+        <CardTitle>Members</CardTitle>
+        <CardDescription>
+          {`When each member's agents last used the MCP gateway, the LLM proxy and a skill, over the last ${adoption.lookbackDays} days.`}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Select
+            value={status}
+            onValueChange={(value) => setStatus(value as StatusFilter)}
+          >
+            <SelectTrigger
+              aria-label="Filter members by status"
+              className="w-48"
             >
-              Show all
-            </UnstyledButton>
-          ) : null}
-        </h3>
-        <SearchInput
-          placeholder="Search members..."
-          className="w-full sm:w-56"
-          syncQueryParams={false}
-          value={query}
-          debounceMs={150}
-          onSearchChange={setQuery}
-        />
-      </div>
-
-      {rows.length === 0 ? (
-        <p className="rounded-lg border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
-          {query.trim()
-            ? `No members match “${query.trim()}”.`
-            : status === "notConnected"
-              ? "Everyone has connected an agent."
-              : "No members here."}
-        </p>
-      ) : (
-        // Long lists scroll inside the section so the chart stays in view;
-        // see SkillUsagePanel for why the cap sits on the table's container.
-        <div className="rounded-lg border [&_[data-slot=table-container]]:max-h-[28rem] [&_[data-slot=table-container]]:overflow-y-auto">
-          <Table>
-            <TableHeader className="sticky top-0 z-10 bg-card">
-              <TableRow>
-                <TableHead>Member</TableHead>
-                <TableHead className="w-28">Agents</TableHead>
-                <TableHead className="hidden w-28 md:table-cell">
-                  MCP gateway
-                </TableHead>
-                <TableHead className="hidden w-28 md:table-cell">
-                  LLM proxy
-                </TableHead>
-                <TableHead className="hidden w-24 lg:table-cell">
-                  Skills
-                </TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {rows.map((member) => (
-                <MemberRow
-                  key={member.userId}
-                  member={member}
-                  adoption={adoption}
-                />
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All members</SelectItem>
+              {STATUS_ORDER.map((key) => (
+                <SelectItem key={key} value={key}>
+                  {STATUS_META[key].label}
+                </SelectItem>
               ))}
-            </TableBody>
-          </Table>
+            </SelectContent>
+          </Select>
+          <SearchInput
+            placeholder="Search members..."
+            className="w-full sm:w-56"
+            syncQueryParams={false}
+            value={query}
+            debounceMs={150}
+            onSearchChange={setQuery}
+          />
+          <span className="ml-auto text-xs text-muted-foreground tabular-nums">
+            {`${rows.length.toLocaleString()} ${rows.length === 1 ? "member" : "members"}`}
+          </span>
         </div>
-      )}
-    </section>
+
+        {rows.length === 0 ? (
+          <p className="rounded-md border border-dashed px-4 py-8 text-center text-sm text-muted-foreground">
+            {query.trim()
+              ? `No members match “${query.trim()}”.`
+              : status === "notConnected"
+                ? "Everyone has connected an agent."
+                : "No members here."}
+          </p>
+        ) : (
+          // Long lists scroll inside the card; see SkillUsagePanel for why the
+          // cap sits on the table's container.
+          <div className="rounded-md border [&_[data-slot=table-container]]:max-h-[28rem] [&_[data-slot=table-container]]:overflow-y-auto">
+            <Table>
+              <TableHeader className="sticky top-0 z-10 bg-card">
+                <TableRow>
+                  <TableHead>Member</TableHead>
+                  <TableHead className="w-28">Agents</TableHead>
+                  <TableHead className="hidden w-28 md:table-cell">
+                    MCP gateway
+                  </TableHead>
+                  <TableHead className="hidden w-28 md:table-cell">
+                    LLM proxy
+                  </TableHead>
+                  <TableHead className="hidden w-24 lg:table-cell">
+                    Skills
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {rows.map((member) => (
+                  <MemberRow
+                    key={member.userId}
+                    member={member}
+                    adoption={adoption}
+                  />
+                ))}
+              </TableBody>
+            </Table>
+          </div>
+        )}
+      </CardContent>
+    </Card>
   );
 }
 
@@ -364,7 +415,9 @@ function MemberRow({
                 )}
               />
             </TooltipTrigger>
-            <TooltipContent>{STATUS_META[member.status].label}</TooltipContent>
+            <TooltipContent>
+              {`${STATUS_META[member.status].label}: ${STATUS_META[member.status].describe(adoption)}`}
+            </TooltipContent>
           </Tooltip>
           <div className="min-w-0">
             <TruncatedTooltip content={member.name || member.email}>
@@ -444,120 +497,23 @@ function LastSeenCell({
   );
 }
 
-const chartConfig = {
-  setUp: { label: "Set up", color: "var(--chart-1)" },
-  llm: { label: "Used the LLM proxy", color: "var(--chart-2)" },
-} satisfies ChartConfig;
-
-function AgentChart({
-  adoption,
-  className,
-}: {
-  adoption: AgentAdoption;
-  className?: string;
-}) {
-  const data = useMemo(() => agentChartData(adoption), [adoption]);
-  const height = Math.max(160, data.length * 36 + 40);
-
-  return (
-    <section
-      aria-labelledby="adoption-agents"
-      className={cn("flex min-w-0 flex-col gap-3", className)}
-    >
-      <div className="flex flex-col gap-0.5">
-        <h3 id="adoption-agents" className="text-sm font-semibold">
-          Members per agent
-        </h3>
-        <p className="text-xs text-muted-foreground">
-          {`Set up from the Connect page, and seen on the LLM proxy in the last ${adoption.lookbackDays} days. Gateway calls are counted per member, not per agent.`}
-        </p>
-      </div>
-      {data.length === 0 ? (
-        <Empty className="border">
-          <EmptyHeader>
-            <EmptyMedia variant="icon">
-              <Users />
-            </EmptyMedia>
-            <EmptyTitle>No agents yet</EmptyTitle>
-            <EmptyDescription>
-              Agents appear here once members connect one.
-            </EmptyDescription>
-          </EmptyHeader>
-        </Empty>
-      ) : (
-        <div className="rounded-lg border px-3 pt-3 pb-1">
-          <ChartContainer
-            config={chartConfig}
-            className="aspect-auto w-full"
-            style={{ height }}
-          >
-            <BarChart
-              accessibilityLayer
-              data={data}
-              layout="vertical"
-              margin={{ left: 0, right: 12 }}
-              barGap={2}
-            >
-              <CartesianGrid horizontal={false} />
-              <XAxis
-                type="number"
-                allowDecimals={false}
-                tickLine={false}
-                axisLine={false}
-              />
-              <YAxis
-                type="category"
-                dataKey="label"
-                tickLine={false}
-                axisLine={false}
-                width={96}
-              />
-              <ChartTooltip
-                cursor={{ fill: "var(--muted)", fillOpacity: 0.6 }}
-                content={<ChartTooltipContent indicator="dot" />}
-              />
-              <ChartLegend content={<ChartLegendContent />} />
-              <Bar
-                dataKey="setUp"
-                fill="var(--color-setUp)"
-                radius={2}
-                isAnimationActive={false}
-              />
-              <Bar
-                dataKey="llm"
-                fill="var(--color-llm)"
-                radius={2}
-                isAnimationActive={false}
-              />
-            </BarChart>
-          </ChartContainer>
-        </div>
-      )}
-    </section>
-  );
-}
-
 function AdoptionSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <Skeleton className="h-[110px] w-full" />
-      <div className="grid gap-6 xl:grid-cols-5">
-        <Skeleton className="h-72 w-full xl:col-span-3" />
-        <Skeleton className="h-72 w-full xl:col-span-2" />
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        {[0, 1, 2, 3].map((i) => (
+          <Skeleton key={i} className="h-[106px] w-full rounded-xl" />
+        ))}
+      </div>
+      <div className="grid gap-6 xl:grid-cols-3">
+        <Skeleton className="h-72 w-full rounded-xl" />
+        <Skeleton className="h-72 w-full rounded-xl xl:col-span-2" />
       </div>
     </div>
   );
 }
 
 // === helpers
-
-function countByStatus(
-  members: AgentAdoptionMember[],
-): Record<AgentAdoptionStatus, number> {
-  const counts = { notConnected: 0, setUp: 0, inactive: 0, active: 0 };
-  for (const member of members) counts[member.status] += 1;
-  return counts;
-}
 
 /** Connect page agents a member set up or was seen using, in page order. */
 function memberAgents(member: AgentAdoptionMember): string[] {
@@ -570,36 +526,36 @@ function memberAgents(member: AgentAdoptionMember): string[] {
 }
 
 /**
- * Per agent: members who set it up, and members whose LLM proxy calls came
- * from it. Calls from agents the Connect page doesn't set up are one "Other"
- * row. Agents nobody uses are left out.
+ * Members per agent, counting a member once per agent they set up or whose
+ * LLM proxy calls came from it. Calls from agents the Connect page doesn't set
+ * up are one "Other" row, and members who haven't connected are the last row.
+ * Agents nobody uses are left out.
  */
 export function agentChartData(adoption: AgentAdoption) {
-  const setUp = new Map<string, Set<string>>();
-  const llm = new Map<string, Set<string>>();
-  const add = (map: Map<string, Set<string>>, key: string, user: string) => {
-    const users = map.get(key) ?? new Set<string>();
-    users.add(user);
-    map.set(key, users);
-  };
+  const counts = new Map<string, number>();
+  const bump = (id: string) => counts.set(id, (counts.get(id) ?? 0) + 1);
   for (const member of adoption.members) {
-    for (const id of member.setUpAgents) add(setUp, id, member.userId);
-    for (const agent of member.llmAgents) {
-      add(llm, LLM_AGENT_CLIENT[agent] ?? OTHER_AGENTS, member.userId);
-    }
+    const agents = memberAgents(member);
+    const other = member.llmAgents.some((a) => !LLM_AGENT_CLIENT[a]);
+    for (const id of agents) bump(id);
+    if (other) bump(OTHER_AGENTS);
+    if (member.status === "notConnected") bump(NO_AGENT);
   }
-  return [...INSTALLER_CLIENT_IDS, OTHER_AGENTS]
+  const rows = [...INSTALLER_CLIENT_IDS, OTHER_AGENTS]
     .map((id) => ({
       id,
       label:
         id === OTHER_AGENTS
           ? "Other"
           : INSTALLER_CLIENT_LABELS[id as InstallerClientId],
-      setUp: setUp.get(id)?.size ?? 0,
-      llm: llm.get(id)?.size ?? 0,
+      members: counts.get(id) ?? 0,
     }))
-    .filter((row) => row.setUp > 0 || row.llm > 0)
-    .sort((a, b) => b.setUp + b.llm - (a.setUp + a.llm));
+    .filter((row) => row.members > 0)
+    .sort((a, b) => b.members - a.members);
+  const none = counts.get(NO_AGENT) ?? 0;
+  return none > 0
+    ? [...rows, { id: NO_AGENT, label: "Not connected", members: none }]
+    : rows;
 }
 
 function formatShare(part: number, total: number): string {

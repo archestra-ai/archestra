@@ -1,4 +1,4 @@
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { render, screen, within } from "@testing-library/react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
   AgentAdoption,
@@ -77,38 +77,34 @@ describe("AgentAdoptionOverview", () => {
   it("leads with who hasn't connected and lists only them", () => {
     render(<AgentAdoptionOverview />);
 
-    expect(screen.getByRole("heading", { level: 2 })).toHaveTextContent(
-      "1 of 3 members haven't connected an agent",
-    );
+    expect(
+      screen.getByText("Not connected", {
+        selector: "[data-slot=card-description]",
+      }),
+    ).toBeInTheDocument();
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText("Ada Lovelace")).toBeInTheDocument();
   });
 
-  it("switches the list by status and back to everyone", () => {
+  it("counts gateway and LLM proxy use in the tiles", () => {
     render(<AgentAdoptionOverview />);
 
-    fireEvent.click(screen.getByRole("button", { name: /^Active/ }));
-    let rows = screen.getAllByRole("row").slice(1);
-    expect(rows).toHaveLength(1);
-    expect(within(rows[0]).getByText("Grace Hopper")).toBeInTheDocument();
-
-    fireEvent.click(screen.getByRole("button", { name: "Show all" }));
-    rows = screen.getAllByRole("row").slice(1);
-    expect(rows.map((row) => row.textContent)).toEqual([
-      expect.stringContaining("Ada Lovelace"),
-      expect.stringContaining("Alan Turing"),
-      expect.stringContaining("Grace Hopper"),
-    ]);
+    const tile = (label: string) =>
+      screen.getByText(label).closest("[data-slot=card]") as HTMLElement;
+    expect(tile("Used the MCP gateway")).toHaveTextContent("1of 3 · 33%");
+    expect(tile("Used the LLM proxy")).toHaveTextContent("0of 3 · 0%");
+    expect(tile("Connected")).toHaveTextContent("2of 3 · 67%");
   });
 });
 
 describe("agentChartData", () => {
-  it("counts members per agent, folding unknown LLM agents into Other", () => {
+  it("counts members per agent, with Other and Not connected rows", () => {
     expect(agentChartData(adoption)).toEqual([
-      { id: "claude-code", label: "Claude Code", setUp: 2, llm: 1 },
-      { id: "codex", label: "Codex", setUp: 1, llm: 0 },
-      { id: "other", label: "Other", setUp: 0, llm: 1 },
+      { id: "claude-code", label: "Claude Code", members: 2 },
+      { id: "codex", label: "Codex", members: 1 },
+      { id: "other", label: "Other", members: 1 },
+      { id: "none", label: "Not connected", members: 1 },
     ]);
   });
 });

@@ -4,17 +4,19 @@ import {
   TOOL_TODO_WRITE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import config from "@/config";
 import logger from "@/logging";
-import OpenAppaSessionModel from "@/models/openappa-session";
+import {
+  CurrentTrajectorySchema,
+  parseCurrentTrajectory,
+} from "@/openappa/current-trajectory";
 import {
   getHitlAskUserArguments,
   hitlRulingFromLabels,
   recordHitlRuling,
+  reviewSessionFromTrajectory,
 } from "@/openappa/hitl-review";
-import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
 import { awaitRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
-import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
+import type { OpenAppaSession } from "@/openappa/service";
 import {
   authenticatedRuntimeSpender,
   parseWorkloadPrincipal,
@@ -76,49 +78,44 @@ const AskUserOutputSchema = z.object({
     .describe("True when the question expired without an answer."),
 });
 
-const AskUserSchema = z
-  .object({
-    question: z
-      .string()
-      .min(1)
-      .max(2000)
-      .describe("The question shown above the options."),
-    header: z
-      .string()
-      .trim()
-      .min(1)
-      .max(30)
-      .optional()
-      .describe(
-        "A very short label shown as the question's tab, e.g. 'Visibility'.",
-      ),
-    options: z
-      .array(AskUserOptionSchema)
-      .min(2)
-      .max(12)
-      .describe("The options the user can pick. Labels must be unique."),
-    allowMultiple: z
-      .boolean()
-      .optional()
-      .describe(
-        "When true, the user may select more than one option. Defaults to false (exactly one).",
-      ),
-    remedy_offer_ids: z
-      .array(z.string().min(1).max(128))
-      .max(12)
-      .optional()
-      .describe(
-        "Exact offer IDs from the blocked ruling that this question asks the user to decide: a review execute_remedy_plan requires, or a plan that would prevent what the user asked for. Say in the question what it would prevent. Omit for ordinary questions.",
-      ),
-  })
-  .strict();
+const AskUserSchema = z.object({
+  question: z
+    .string()
+    .min(1)
+    .max(2000)
+    .describe("The question shown above the options."),
+  header: z
+    .string()
+    .trim()
+    .min(1)
+    .max(30)
+    .optional()
+    .describe(
+      "A very short label shown as the question's tab, e.g. 'Visibility'.",
+    ),
+  options: z
+    .array(AskUserOptionSchema)
+    .min(2)
+    .max(12)
+    .describe("The options the user can pick. Labels must be unique."),
+  allowMultiple: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the user may select more than one option. Defaults to false (exactly one).",
+    ),
+  remedy_offer_ids: z
+    .array(z.string().min(1).max(128))
+    .max(12)
+    .optional()
+    .describe(
+      "Exact offer IDs from the blocked ruling that this question asks the user to decide: a review execute_remedy_plan requires, or a plan that would prevent what the user asked for. Say in the question what it would prevent. Omit for ordinary questions.",
+    ),
+});
 
 const AskUserExecutionSchema = AskUserSchema.extend({
-  remedy_offers: z
-    .array(OfferJwsSchema)
-    .optional()
-    .describe("Signed live offers added by the proxy for this question."),
-}).strict();
+  trajectory: CurrentTrajectorySchema.optional(),
+});
 
 const NO_CHOICE_FORM_MESSAGE =
   "This client did not answer the choice form. If it has its own question tool (AskUserQuestion, Codex, OpenCode), use that instead. Do not ask this as a plain-text chat question.";
@@ -171,13 +168,9 @@ const registry = defineArchestraTools([
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
     async handler({ args, context, toolName }) {
-      const verifiedOffers = await verifiedRemedyOffers(
-        args.remedy_offers,
-        args.remedy_offer_ids,
-        context,
-      );
-      const liveOffers = verifiedOffers?.ids ?? [];
-      const session = verifiedOffers?.session;
+      const review = remedyReviewScope(args, context);
+      const liveOffers = review?.ids ?? [];
+      const session = review?.session;
       const hitlArgs = session
         ? await getHitlAskUserArguments({
             session,
@@ -306,11 +299,16 @@ const registry = defineArchestraTools([
         return errorResult("The HITL review returned an invalid choice.");
       }
       if (hitlArgs && hitlRuling && session) {
-        await recordHitlRuling({
+        const recorded = await recordHitlRuling({
           session,
           offerId: hitlArgs.remedy_offer_ids[0],
           ruling: hitlRuling,
         });
+        if (!recorded) {
+          return errorResult(
+            "This review is no longer pending. No ruling was recorded. Keep the call blocked and do not reopen the review automatically.",
+          );
+        }
       }
 
       return structuredSuccessResult(
@@ -362,122 +360,37 @@ function optionKey(index: number) {
   return `option_${index}`;
 }
 
-/**
- * Uses the offer's signed child scope to locate the staged review. Gateway
- * calls may have only the parent's session header, or no session header at all.
- */
-async function verifiedRemedyOffers(
-  envelopes: unknown,
-  declaredIds: unknown,
+function remedyReviewScope(
+  args: {
+    remedy_offer_ids?: string[];
+    trajectory?: unknown;
+  },
   context: ArchestraContext,
-): Promise<{ session: OpenAppaSession; ids: string[] } | undefined> {
+): { session: OpenAppaSession; ids: string[] } | undefined {
+  const ids = args.remedy_offer_ids;
+  if (!ids || ids.length === 0 || !context.organizationId) return undefined;
+  const trajectory = parseCurrentTrajectory(args.trajectory);
+  if (!trajectory) return undefined;
+  const session = reviewSessionFromTrajectory({
+    organizationId: context.organizationId,
+    trajectory,
+    context,
+  });
+  const callerId = session.caller_id;
   const spender = authenticatedRuntimeSpender({
     userId: context.userId,
     callerId: context.openappaSession?.caller_id,
   });
-  if (!Array.isArray(envelopes) || !context.organizationId || !spender) {
-    return undefined;
-  }
-  const gatewaySession = callOpenAppaSession(context);
-  const gatewayId = gatewaySession?.session_id;
-  const normalizedGatewayId =
-    gatewayId && !gatewayId.startsWith(`${spender}|`)
-      ? `${spender}|${gatewayId}`
-      : gatewayId;
-  const secret = config.openappa.offerSigningSecret;
-  const ids = new Set<string>();
-  let session: OpenAppaSession | undefined;
-  for (const envelope of envelopes) {
-    const claims = verifyOfferClaims(envelope, secret);
-    if (!claims || claims.organization_id !== context.organizationId) continue;
-    if (!offerOwnerIsSpender(claims.caller_id, spender)) continue;
-    if (gatewayId) {
-      if (
-        claims.session_id !== gatewayId &&
-        claims.parent_id !== gatewayId &&
-        claims.session_id !== normalizedGatewayId &&
-        claims.parent_id !== normalizedGatewayId
-      ) {
-        const recorded = await OpenAppaSessionModel.familySession({
-          organizationId: context.organizationId,
-          sessionId: claims.session_id,
-          callerId: spender,
-        });
-        if (
-          recorded?.parentId !== claims.parent_id ||
-          !(await OpenAppaSessionModel.hasAncestor({
-            organizationId: context.organizationId,
-            callerId: spender,
-            sessionId: claims.session_id,
-            ancestorSessionId: normalizedGatewayId ?? gatewayId,
-          }))
-        )
-          continue;
-      }
-    } else if (!claims.parent_id || claims.caller_id !== spender) {
-      // Without a gateway session header, only this user's child offers can
-      // supply the missing session scope.
-      continue;
-    }
-    const scope: OpenAppaSession = {
-      organization_id: claims.organization_id,
-      session_id: claims.session_id,
-      caller_id: claims.caller_id ?? undefined,
-      parent_id: claims.parent_id ?? undefined,
-    };
-    if (
-      session &&
-      (scope.session_id !== session.session_id ||
-        scope.parent_id !== session.parent_id ||
-        scope.caller_id !== session.caller_id)
-    ) {
-      return undefined;
-    }
-    session = scope;
-    ids.add(claims.offer_id);
-  }
   if (
-    Array.isArray(declaredIds) &&
-    declaredIds.some((id) => typeof id !== "string" || !ids.has(id))
-  ) {
+    !spender ||
+    (parseWorkloadPrincipal(spender) && callerId !== spender) ||
+    (parseWorkloadPrincipal(callerId) && callerId !== spender)
+  )
     return undefined;
-  }
-  return session ? { session, ids: [...ids] } : undefined;
-}
-
-/**
- * Resolves the OpenAPPA session for this call: either the gateway session
- * from the request header or the Chat conversation ID.
- */
-function callOpenAppaSession(
-  context: ArchestraContext,
-): OpenAppaSession | undefined {
-  if (context.openappaSession) {
-    return context.openappaSession;
-  }
-  const sessionId = context.sessionId ?? context.conversationId;
-  return context.organizationId && context.userId && sessionId
-    ? chatOpenAppaSession(context.organizationId, context.userId, sessionId)
-    : undefined;
-}
-
-/**
- * Checks if `spender` can use an offer minted by `owner`.
- * User offers belong exclusively to that user.
- * App and virtual-key offers are organization-scoped.
- * Offers without an owner cannot be used.
- */
-function offerOwnerIsSpender(owner: string | null, spender: string): boolean {
-  if (!owner) {
-    return false;
-  }
-  if (owner.startsWith("user:")) {
-    return owner.length > "user:".length && owner === spender;
-  }
-  if (parseWorkloadPrincipal(owner)) {
-    return owner === spender;
-  }
-  return !owner.startsWith("app:") && !owner.startsWith("virtual-key:");
+  return {
+    session,
+    ids,
+  };
 }
 
 function buildMultiChoiceSchema(

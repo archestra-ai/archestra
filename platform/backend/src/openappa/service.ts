@@ -26,6 +26,7 @@ import {
   expandCommandExecutionPolicyRules,
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
+import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { openappaFailure } from "@/openappa/failure";
@@ -530,29 +531,35 @@ export function sessionFromHeaders(params: {
   };
 }
 
+export const UNDELIVERABLE_RETURN_CONTRACT =
+  "This session requires an OpenAPPA return contract the proxy cannot deliver before inference";
+
 async function startSession(params: {
   session: OpenAppaSession;
   policy?: DispatchPolicy;
   deliverReturnContract?: (text: string) => void;
-}): Promise<void> {
+}): Promise<string | undefined> {
   const decision = await dispatch(
     params.session,
     { event: "session_start" },
     params.policy,
   );
   if (decision.decision === "context") {
-    if (decision.text && params.deliverReturnContract) {
-      validateReturnContract(decision.text);
-      params.deliverReturnContract(decision.text);
-      return;
+    const text = decision.text;
+    if (
+      params.session.parent_id &&
+      typeof text === "string" &&
+      text.trim().length > 0
+    ) {
+      validateReturnContract(text);
+      params.deliverReturnContract?.(text);
+      return text;
     }
-    throw new ApiError(
-      409,
-      "This session requires an OpenAPPA return contract the proxy cannot deliver before inference",
-    );
+    throw new ApiError(409, UNDELIVERABLE_RETURN_CONTRACT);
   }
   if (decision.decision !== "ack")
     throw new ApiError(409, decisionMessage(decision));
+  return undefined;
 }
 
 /** Binds the prepared fork before a runtime receives any prompt or file. */
@@ -568,7 +575,7 @@ export async function startRuntimeChild(params: {
     ...(params.spawnCallId ? { spawn_call_id: params.spawnCallId } : {}),
   });
   if (decision.decision === "ack") return {};
-  if (decision.decision === "context" && decision.text) {
+  if (decision.decision === "context" && decision.text?.trim()) {
     validateReturnContract(decision.text);
     return { contract: decision.text };
   }
@@ -681,6 +688,7 @@ function unexecutedControlResult(content: unknown): ProcessedToolResult {
   return {
     content: `[appa] The remedy did not run, so the plan is not applied. The result the client returned:\n\n${truncated(text, MAX_UNEXECUTED_RESULT_CHARS)}\n\n${UNEXECUTED_REMEDY_QUESTION_HINT}`,
     outputSource: "runtime",
+    code: UNRELEASED_CALL_CODE,
   };
 }
 
@@ -748,6 +756,10 @@ export async function processProxyResults(params: {
    * remedy never ran, and the model reads what the client returned.
    */
   isControlResult?: (result: CommonToolResult) => boolean;
+  /** Canonical status for this session's server-staged, still-pending review. */
+  pendingReviewResult?: (
+    result: CommonToolResult,
+  ) => Promise<string | undefined>;
   trustedChat?: boolean;
   /** The proxy must inject this host-authored contract before its provider call. */
   deliverReturnContract?: (text: string) => void;
@@ -758,7 +770,7 @@ export async function processProxyResults(params: {
 }) {
   // The results dispatch one after another; one policy read serves them all.
   const policy = await effectivePolicy(params.session.organization_id);
-  await startSession({
+  const returnContract = await startSession({
     session: params.session,
     policy,
     deliverReturnContract: params.deliverReturnContract,
@@ -790,14 +802,20 @@ export async function processProxyResults(params: {
       controlToolName: params.controlToolName,
       policy,
     });
-    updates[result.id] =
-      approved.code === UNRELEASED_CALL_CODE &&
-      params.isControlResult?.(result) === true
+    const pendingReview =
+      approved.code === UNRELEASED_CALL_CODE
+        ? await params.pendingReviewResult?.(result)
+        : undefined;
+    updates[result.id] = pendingReview
+      ? { content: pendingReview, outputSource: "runtime" }
+      : approved.code === UNRELEASED_CALL_CODE &&
+          params.isControlResult?.(result) === true
         ? unexecutedControlResult(result.content)
         : approved;
   }
   return {
     toolResultUpdates: updates,
+    ...(returnContract ? { returnContract } : {}),
     contextIsTrusted: true,
     dualLlmAnalyses: [],
     unsafeContextBoundary: undefined,
@@ -912,6 +930,7 @@ export async function evaluateToolCalls(
         operation_id: `call:${call.id}`,
         tool,
         ...(spelling ? { spelling } : {}),
+        ...(target.isRunToolDispatchTarget ? { dispatch: call.name } : {}),
         presentation: nativePresentation(
           options.control?.name,
           options.supportsDelegation,
@@ -1186,7 +1205,9 @@ export async function approveSpawnReturn(params: {
   });
   if (decision.decision === "block") {
     const msg = decisionMessage(decision);
-    if (msg.includes("no open dispatch")) {
+    // UnknownDispatch has this exact engine reason. Other fields and quoted
+    // reason fragments must not convert a denied return into idempotent success.
+    if (decision.reason === "no open dispatch") {
       logger.info(
         { toolCallId: params.toolCallId, childId: params.childId },
         "OpenAPPA spawn dispatch already closed; child return matches the retained crossing",
@@ -1253,21 +1274,15 @@ function decisionMessage(decision: NativeDecision): string {
 }
 
 /**
- * Executes a remedy using a verified host routing claim.
+ * Executes a remedy for the current trajectory supplied by the trusted proxy.
  */
 export async function executeRemedyByOffer(params: {
   organizationId: string;
   /** The principal the gateway authenticated, in the proxy's `user:<id>` form. */
   callerId?: string;
-  /** Minted session the signed offer claims name. */
+  /** Current caller-scoped session resolved by the client adapter. */
   sessionId: string;
   parentId?: string;
-  /** Principal that minted the offer, from verified claims. */
-  ownerCallerId?: string;
-  tool?: string;
-  spelling?: string;
-  /** The client's dispatch tool the blocked call went through, from verified claims. */
-  dispatch?: string;
   /** Provider or client-supplied logical execution identity, when available. */
   toolCallId?: string;
   controlToolName?: string;
@@ -1283,22 +1298,18 @@ export async function executeRemedyByOffer(params: {
   precheckRefusal?: string;
 }): Promise<{
   result: CallToolResult;
-  /** Authorized owner lookup, not proof that the offer remains spendable. */
+  /** Existing session route, not proof that the offer remains spendable. */
   known: boolean;
 }> {
   const decision = await withRuntime(params.organizationId, (module, policy) =>
     module.executeRemedyByOffer(
       JSON.stringify({
         organization_id: params.organizationId,
-        session_id: params.sessionId,
+        trajectory: currentTrajectory({
+          session_id: params.sessionId,
+          ...(params.parentId ? { parent_id: params.parentId } : {}),
+        }),
         ...(params.callerId ? { caller_id: params.callerId } : {}),
-        ...(params.parentId ? { parent_id: params.parentId } : {}),
-        ...(params.ownerCallerId
-          ? { owner_caller_id: params.ownerCallerId }
-          : {}),
-        ...(params.tool ? { tool: params.tool } : {}),
-        ...(params.spelling ? { spelling: params.spelling } : {}),
-        ...(params.dispatch ? { dispatch: params.dispatch } : {}),
         execution_mode: params.toolCallId ? "tracked" : "untracked",
         ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
         original_arguments: params.originalArguments,
@@ -1608,7 +1619,7 @@ export async function readPeerMessage(params: {
 
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
- * Session routing comes from the verified offer claims.
+ * Session routing comes from the proxy-stamped current trajectory.
  */
 export async function loadOfferReview(params: {
   organizationId: string;

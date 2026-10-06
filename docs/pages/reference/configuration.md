@@ -1427,10 +1427,11 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 
 [Guardrails](/docs/agents/guardrails) are a beta feature: set [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA) to show them. Enforcement is a separate switch on the Guardrails page and starts off.
 
-- **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs Guardrails remedy offers and session receipts.
+- **`ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`** - Key that signs delegation bindings, child-session recovery receipts, and peer proofs.
   - Default: generated and kept across upgrades by the Helm chart. Without Helm, derived from [`ARCHESTRA_AUTH_SESSION_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SESSION_SECRET).
   - Values: at least 32 characters. Every replica must use the same value.
   - Set it to rotate the key independently of the session secret.
+  - Remedy routing, native questions, session receipt codes, and child completion codes do not require it.
 
 - **`ARCHESTRA_OPENAPPA_YELL_ENABLED`** - Lets agents report confusing blocks with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. Reports are stored locally. They also go to the shared OpenAPPA reporting service when [`ARCHESTRA_ANALYTICS`](/docs/reference/configuration#ARCHESTRA_ANALYTICS) is enabled.
   - Default: `true` (when Guardrails are on)

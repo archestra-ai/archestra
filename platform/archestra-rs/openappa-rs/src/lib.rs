@@ -91,15 +91,14 @@ fn state_mutex() -> &'static Mutex<Option<State>> {
     STATE.get_or_init(|| Mutex::new(None))
 }
 
-/// Identity context associated with a denial offer for cross-replica routing.
+/// Route resolved from the proxy-stamped trajectory and the session row, plus
+/// the original call's retry text recovered from that call's stored context.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OfferOwner {
     pub organization_id: String,
-    pub caller_id: Option<String>,
     pub session_id: String,
     pub parent_id: Option<String>,
     pub root: String,
-    pub arguments: Option<String>,
     pub tool: Option<String>,
     pub spelling: Option<String>,
     /// Client spelling of the dispatch tool (`run_tool`) used for this call.
@@ -111,31 +110,14 @@ pub struct OfferOwner {
 #[serde(transparent)]
 pub struct OfferId(pub String);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Principal {
-    User(String),
-    App(String),
-    VirtualKey(String),
-    Opaque(String),
-}
-
-impl Principal {
-    fn parse(value: &str) -> napi::Result<Self> {
-        let parsed = if let Some(id) = value.strip_prefix("user:") {
-            Self::User(id.to_owned())
-        } else if let Some(id) = value.strip_prefix("app:") {
-            Self::App(id.to_owned())
-        } else if let Some(id) = value.strip_prefix("virtual-key:") {
-            Self::VirtualKey(id.to_owned())
-        } else {
-            Self::Opaque(value.to_owned())
-        };
-        if matches!(&parsed, Self::User(id) | Self::App(id) | Self::VirtualKey(id) if id.is_empty())
-        {
-            return Err(error("invalid caller identity"));
-        }
-        Ok(parsed)
-    }
+/// The current trajectory the proxy stamps on a remedy. Not a client claim.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrajectoryStamp {
+    v: u8,
+    session_id: String,
+    #[serde(default)]
+    parent_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -150,21 +132,11 @@ pub enum RulingInput {
 #[serde(deny_unknown_fields)]
 struct OfferInput {
     organization_id: String,
-    /// Authenticated caller identity.
+    /// Authenticated spender, recorded on a caller-bound receipt. Absent for an
+    /// anonymous organization token; never compared to an offer owner.
     #[serde(default)]
     caller_id: Option<String>,
-    session_id: String,
-    #[serde(default)]
-    parent_id: Option<String>,
-    /// Principal that minted the offer, from verified host claims.
-    #[serde(default)]
-    owner_caller_id: Option<String>,
-    #[serde(default)]
-    tool: Option<String>,
-    #[serde(default)]
-    spelling: Option<String>,
-    #[serde(default)]
-    dispatch: Option<String>,
+    trajectory: TrajectoryStamp,
     /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     tool_call_id: Option<String>,
@@ -325,6 +297,15 @@ struct RecordedCall {
     spawn: bool,
     #[serde(default)]
     presentation: Option<PresentationInput>,
+    /// Host retry text. Absent on rows written before it was stored. Not part
+    /// of the call the runtime judges, so a result does not read them; they
+    /// are accepted so a stored context still decodes.
+    #[serde(default)]
+    #[allow(dead_code)]
+    spelling: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    dispatch: Option<String>,
 }
 
 fn error(message: impl ToString) -> napi::Error {
@@ -990,7 +971,6 @@ fn validate(input: &Input) -> napi::Result<()> {
                 serde_json::from_str(required_arguments(input)?).map_err(error)?;
         }
         HookEventKind::Remedy => {
-            required(&input.caller_id, "caller_id")?;
             let _: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(input)?).map_err(error)?;
         }
@@ -1052,7 +1032,8 @@ async fn initialized() -> napi::Result<State> {
         .ok_or_else(|| error("OpenAPPA is not initialized"))
 }
 
-/// Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL.
+/// Executes a remedy for the proxy-stamped trajectory, resolving that session
+/// from PostgreSQL. The caller, when present, is the receipt spender.
 #[napi(js_name = "executeRemedyByOffer")]
 pub async fn execute_remedy_by_offer(
     input: String,
@@ -1065,12 +1046,7 @@ pub async fn execute_remedy_by_offer(
     {
         return Err(error("invalid organization identity"));
     }
-    if input.session_id.is_empty()
-        || input.session_id.len() > 1024
-        || input.session_id.chars().any(char::is_control)
-    {
-        return Err(error("invalid session identity"));
-    }
+    validate_trajectory(&input.trajectory)?;
     match (input.execution_mode, &input.tool_call_id) {
         (ExecutionMode::Tracked, Some(tool_call_id))
             if !tool_call_id.is_empty()
@@ -1085,19 +1061,10 @@ pub async fn execute_remedy_by_offer(
     let visible_arguments = object_raw(&input.arguments, "remedy arguments")?;
     let original_arguments = original_arguments_raw(&input.original_arguments)?;
     let _: ExecuteRemedyPlanArgs = serde_json::from_str(visible_arguments.get()).map_err(error)?;
-    let caller = input
-        .caller_id
-        .as_deref()
-        .map(Principal::parse)
-        .transpose()?;
     let state = initialized().await?;
     let owner = {
         let leased = state.lease().await?;
-        routing_owner(
-            postgres_store(&leased.state.store)?,
-            &input,
-            caller.as_ref(),
-        )?
+        routing_owner(postgres_store(&leased.state.store)?, &input)?
     };
     let Some(owner) = owner else {
         return Ok(
@@ -1107,7 +1074,8 @@ pub async fn execute_remedy_by_offer(
     let input = Input {
         yell_receiver: None,
         organization_id: owner.organization_id,
-        // Scopes receipt to the authenticated spender to prevent replay.
+        // Scopes a caller-bound receipt to the authenticated spender. Absent
+        // for an anonymous organization token.
         caller_id: input.caller_id.clone(),
         session_id: owner.session_id,
         parent_id: owner.parent_id,
@@ -1116,7 +1084,7 @@ pub async fn execute_remedy_by_offer(
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
-        tool: owner.tool.clone(),
+        tool: None,
         arguments: Some(visible_arguments),
         original_arguments: Some(original_arguments),
         spawn: false,
@@ -1126,8 +1094,8 @@ pub async fn execute_remedy_by_offer(
         child_native_id: None,
         outcome: None,
         owner_root: Some(owner.root),
-        spelling: owner.spelling,
-        dispatch: owner.dispatch,
+        spelling: None,
+        dispatch: None,
         presentation: Some(input.presentation),
         ruling: input.ruling,
         precheck_refusal: input.precheck_refusal,
@@ -1152,7 +1120,7 @@ pub struct OfferReviewOutput {
 }
 
 /// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
-/// Session routing comes from the verified offer claims; no offer-owner lookup.
+/// Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
 #[napi(js_name = "loadOfferReview")]
 pub async fn load_offer_review(
     organization_id: String,
@@ -1826,13 +1794,7 @@ impl State {
             ));
         }
 
-        let actor = Actor {
-            root: TrajectoryId(root.clone()),
-            child: input
-                .parent_id
-                .is_some()
-                .then(|| TrajectoryId(key.actor.clone())),
-        };
+        let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
         let existing = pg
             .with_client(move |client| {
@@ -1938,9 +1900,7 @@ impl State {
         if input.event == HookEventKind::Remedy {
             let operation = remedy_operation(&input)?;
             let request = remedy_request(&input)?;
-            let binding = ReceiptBinding::Caller {
-                caller_id: required(&input.caller_id, "caller_id")?.to_owned(),
-            };
+            let binding = remedy_binding(&input.caller_id);
             if let Some(decision) = claim_operation(
                 &self.store,
                 &input,
@@ -2028,20 +1988,26 @@ impl State {
                     response,
                 );
             }
+            // Before the runtime spends the offer. A missing row is empty
+            // presentation, not an error, so an old call still redeems.
+            let recorded = recorded_call_presentation(
+                pg,
+                &input.organization_id,
+                &input.session_id,
+                &offer_id,
+            )?;
             let outcome = self
                 .runtime
                 .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
                 .await;
             let owner = OfferOwner {
                 organization_id: input.organization_id.clone(),
-                caller_id: input.caller_id.clone(),
                 session_id: input.session_id.clone(),
                 parent_id: input.parent_id.clone(),
                 root: root.clone(),
-                arguments: None,
-                tool: input.tool.clone(),
-                spelling: input.spelling.clone(),
-                dispatch: input.dispatch.clone(),
+                tool: recorded.tool,
+                spelling: recorded.spelling,
+                dispatch: recorded.dispatch,
             };
             let response = render_remedy_outcome(
                 outcome,
@@ -2073,15 +2039,8 @@ impl State {
                 return Ok(decision);
             }
         }
-        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output, "spawn_call_id": input.spawn_call_id, "child_native_id": input.child_native_id });
-        let context = (input.event == HookEventKind::ToolCall).then(|| {
-            json!({
-                "tool": input.tool,
-                "arguments": input.arguments,
-                "spawn": input.spawn,
-                "presentation": input.presentation,
-            })
-        });
+        let mut request = operation_semantic(&input);
+        let context = (input.event == HookEventKind::ToolCall).then(|| tool_call_context(&input));
         if input.event == HookEventKind::ToolCall {
             // The receipt key is also the host call identity. Results reconstruct
             // the same namespace from the provider's tool-call ID.
@@ -3010,51 +2969,200 @@ fn spelled_tool(canonical: &str) -> String {
         .unwrap_or_else(|| canonical.to_owned())
 }
 
-fn routing_owner(
-    pg: &LeasedPostgres,
-    input: &OfferInput,
-    spender: Option<&Principal>,
-) -> napi::Result<Option<OfferOwner>> {
-    if !owner_can_be_spent_by(input.owner_caller_id.as_deref(), spender) {
-        return Ok(None);
+fn validate_trajectory(trajectory: &TrajectoryStamp) -> napi::Result<()> {
+    if trajectory.v != 1 {
+        return Err(error("invalid trajectory"));
     }
-    let key = SessionKey::new(&input.organization_id, &input.session_id);
-    let root = pg
+    if trajectory.session_id.is_empty()
+        || trajectory.session_id.len() > 1024
+        || trajectory.session_id.chars().any(char::is_control)
+    {
+        return Err(error("invalid session identity"));
+    }
+    if let Some(parent) = &trajectory.parent_id
+        && (parent.is_empty() || parent.len() > 1024 || parent.chars().any(char::is_control))
+    {
+        return Err(error("invalid parent identity"));
+    }
+    Ok(())
+}
+
+/// The actor the runtime must match. A child stamp names this session; a root
+/// stamp does not.
+fn expected_actor(root: &str, session_id: &str, parent_id: Option<&str>) -> Actor {
+    Actor {
+        root: TrajectoryId(root.to_owned()),
+        child: parent_id
+            .is_some()
+            .then(|| TrajectoryId(session_actor(session_id))),
+    }
+}
+
+/// A present caller is the receipt spender. An anonymous token has no user id,
+/// so its receipt is session-bound and still not an owner match.
+fn remedy_binding(caller_id: &Option<String>) -> ReceiptBinding {
+    match caller_id {
+        Some(caller_id) => ReceiptBinding::Caller {
+            caller_id: caller_id.clone(),
+        },
+        None => ReceiptBinding::Session { caller_id: None },
+    }
+}
+
+fn operation_semantic(input: &Input) -> Value {
+    json!({
+        "event": input.event,
+        "tool": input.tool,
+        "arguments": input.arguments,
+        "spawn": input.spawn,
+        "output": input.output,
+        "spawn_call_id": input.spawn_call_id,
+        "child_native_id": input.child_native_id,
+    })
+}
+
+/// Host retry text lives beside the call, not in the idempotency key. Absent
+/// fields are omitted so an old row and a call without them stay the same shape.
+fn tool_call_context(input: &Input) -> Value {
+    let mut context = json!({
+        "tool": input.tool,
+        "arguments": input.arguments,
+        "spawn": input.spawn,
+        "presentation": input.presentation,
+    });
+    if let Some(spelling) = &input.spelling {
+        context["spelling"] = Value::String(spelling.clone());
+    }
+    if let Some(dispatch) = &input.dispatch {
+        context["dispatch"] = Value::String(dispatch.clone());
+    }
+    context
+}
+
+#[derive(Default)]
+struct CallPresentation {
+    tool: Option<String>,
+    spelling: Option<String>,
+    dispatch: Option<String>,
+}
+
+fn presentation_from_context(context: Option<&Value>) -> CallPresentation {
+    let Some(context) = context else {
+        return CallPresentation::default();
+    };
+    CallPresentation {
+        tool: json_string(context, "tool"),
+        spelling: json_string(context, "spelling"),
+        dispatch: json_string(context, "dispatch"),
+    }
+}
+
+fn presentation_from_row(context: Option<&Value>, tool: Option<String>) -> CallPresentation {
+    let mut presentation = presentation_from_context(context);
+    if presentation.tool.is_none() {
+        presentation.tool = present(tool);
+    }
+    presentation
+}
+
+fn presentation_from_receipt(
+    context: Option<&Value>,
+    tool: Option<String>,
+    event: Option<&str>,
+) -> CallPresentation {
+    let mut presentation = presentation_from_row(context, tool);
+    if presentation.spelling.is_none() && event == Some("peer_read_notice") {
+        presentation.spelling = presentation.tool.clone();
+    }
+    presentation
+}
+
+fn json_string(value: &Value, key: &str) -> Option<String> {
+    present(value.get(key).and_then(Value::as_str).map(str::to_owned))
+}
+
+fn present(value: Option<String>) -> Option<String> {
+    value.filter(|text| !text.is_empty())
+}
+
+/// The original call's retry text. A missing row or missing fields is an empty
+/// presentation, not a refusal: the runtime still decides whether the offer is
+/// live, and old rows fall back to the canonical tool spelling.
+fn recorded_call_presentation(
+    pg: &LeasedPostgres,
+    organization_id: &str,
+    session_id: &str,
+    offer_id: &str,
+) -> napi::Result<CallPresentation> {
+    let (organization_id, session_id, offer_id) = (
+        organization_id.to_owned(),
+        session_id.to_owned(),
+        offer_id.to_owned(),
+    );
+    let row = pg
         .with_client(move |client| {
             Ok(client
                 .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                    &[&key.organization_id, &key.actor],
+                    "SELECT o.input->'context' AS context, \
+                     COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool', o.input->>'tool') AS tool, \
+                     COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event \
+                     FROM openappa_operations o \
+                     WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                     AND ( \
+                       EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(o.decision->'offers', '[]'::jsonb)) AS offer \
+                         WHERE offer->>'offer_id' = $3) \
+                       OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(o.decision->'review', '[]'::jsonb)) AS entry \
+                         WHERE entry->>'offer_id' = $3) \
+                     ) \
+                     ORDER BY o.created_at DESC \
+                     LIMIT 1",
+                    &[&organization_id, &session_id, &offer_id],
                 )?
-                .map(|row| row.get::<_, String>(0)))
+                .map(|row| {
+                    (
+                        row.get::<_, Option<Value>>("context"),
+                        row.get::<_, Option<String>>("tool"),
+                        row.get::<_, Option<String>>("event"),
+                    )
+                }))
         })
         .map_err(error)?;
-    Ok(root.map(|root| OfferOwner {
-        organization_id: input.organization_id.clone(),
-        caller_id: input.owner_caller_id.clone(),
-        session_id: input.session_id.clone(),
-        parent_id: input.parent_id.clone(),
-        root,
-        arguments: None,
-        tool: input.tool.clone(),
-        spelling: input.spelling.clone(),
-        dispatch: input.dispatch.clone(),
-    }))
+    Ok(match row {
+        Some((context, tool, event)) => {
+            presentation_from_receipt(context.as_ref(), tool, event.as_deref())
+        }
+        None => CallPresentation::default(),
+    })
 }
 
-fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bool {
-    let Some(spender) = spender else {
-        return false;
+fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option<OfferOwner>> {
+    let key = SessionKey::new(&input.organization_id, &input.trajectory.session_id);
+    let stamped_parent = input.trajectory.parent_id.clone();
+    let row = pg
+        .with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root, parent_id FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&key.organization_id, &key.actor],
+                )?
+                .map(|row| (row.get::<_, String>(0), row.get::<_, Option<String>>(1))))
+        })
+        .map_err(error)?;
+    let Some((root, recorded_parent)) = row else {
+        return Ok(None);
     };
-    match owner.map(Principal::parse).transpose() {
-        Ok(Some(Principal::User(owner))) => {
-            matches!(spender, Principal::User(actual) if actual == &owner)
-        }
-        // Credential owners are organization scoped. The caller has already
-        // authenticated into the organization selected by the owner lookup.
-        Ok(Some(Principal::App(_) | Principal::VirtualKey(_) | Principal::Opaque(_))) => true,
-        Ok(None) | Err(_) => false,
+    if recorded_parent != stamped_parent {
+        return Ok(None);
     }
+    Ok(Some(OfferOwner {
+        organization_id: input.organization_id.clone(),
+        session_id: input.trajectory.session_id.clone(),
+        parent_id: stamped_parent,
+        root,
+        tool: None,
+        spelling: None,
+        dispatch: None,
+    }))
 }
 
 fn claim_operation(
@@ -3187,7 +3295,7 @@ mod root_lock_tests {
 mod typed_tests {
     use super::{
         OfferId, OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
-        authoritative_unexecuted_response, owner_can_be_spent_by, presentation_offer_ids,
+        authoritative_unexecuted_response, presentation_from_context, presentation_offer_ids,
         render_released_call, render_remedy_outcome, unknown_result_response,
     };
     use appa_runtime_api::OfferedRemedy;
@@ -3276,30 +3384,211 @@ mod typed_tests {
     }
 
     #[test]
-    fn only_the_personal_owner_may_spend_a_personal_offer() {
-        let owner = super::Principal::parse("user:owner").unwrap();
-        let stranger = super::Principal::parse("user:stranger").unwrap();
-        let credential = super::Principal::parse("virtual-key:credential").unwrap();
+    fn a_remedy_takes_a_stamped_trajectory_and_rejects_owner_claims() {
+        let accepted = serde_json::from_str::<super::OfferInput>(
+            r#"{
+                "organization_id": "organization",
+                "caller_id": "user:spender",
+                "trajectory": {"v": 1, "session_id": "session"},
+                "arguments": {"offer_id": "0123456789abcdef"},
+                "execution_mode": "untracked",
+                "original_arguments": "{}",
+                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
+            }"#,
+        );
+        assert!(accepted.is_ok());
+        assert_eq!(accepted.unwrap().caller_id.as_deref(), Some("user:spender"));
 
-        assert!(owner_can_be_spent_by(Some("user:owner"), Some(&owner)));
-        assert!(!owner_can_be_spent_by(Some("user:owner"), Some(&stranger)));
-        assert!(owner_can_be_spent_by(
-            Some("virtual-key:credential"),
-            Some(&stranger)
-        ));
-        assert!(!owner_can_be_spent_by(Some("virtual-key:credential"), None));
-        assert!(matches!(credential, super::Principal::VirtualKey(_)));
+        for claimed in [
+            r#""owner_caller_id": "user:owner""#,
+            r#""session_id": "session""#,
+            r#""tool": "read_untrusted""#,
+            r#""spelling": "client_tool""#,
+            r#""dispatch": "run_tool""#,
+            r#""protected": "header""#,
+        ] {
+            let payload = format!(
+                r#"{{
+                    "organization_id": "organization",
+                    {claimed},
+                    "trajectory": {{"v": 1, "session_id": "session"}},
+                    "arguments": {{"offer_id": "0123456789abcdef"}},
+                    "execution_mode": "untracked",
+                    "original_arguments": "{{}}",
+                    "presentation": {{"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}}
+                }}"#
+            );
+            assert!(
+                serde_json::from_str::<super::OfferInput>(&payload).is_err(),
+                "{claimed} must not select a route"
+            );
+        }
+    }
+
+    #[test]
+    fn an_anonymous_remedy_omits_the_spender_and_a_foreign_version_is_invalid() {
+        let anonymous = serde_json::from_str::<super::OfferInput>(
+            r#"{
+                "organization_id": "organization",
+                "trajectory": {"v": 1, "session_id": "session", "parent_id": null},
+                "arguments": {"offer_id": "0123456789abcdef"},
+                "execution_mode": "untracked",
+                "original_arguments": "{}",
+                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
+            }"#,
+        )
+        .unwrap();
+        assert!(anonymous.caller_id.is_none());
+        assert!(anonymous.trajectory.parent_id.is_none());
+        assert!(super::validate_trajectory(&anonymous.trajectory).is_ok());
+
+        let foreign = super::TrajectoryStamp {
+            v: 2,
+            session_id: "session".to_owned(),
+            parent_id: None,
+        };
+        assert_eq!(
+            super::validate_trajectory(&foreign).unwrap_err().reason,
+            "invalid trajectory"
+        );
+    }
+
+    #[test]
+    fn a_child_stamp_is_the_expected_actor_and_a_root_stamp_is_not() {
+        let child = super::expected_actor("recorded-root", "child-session", Some("parent"));
+        let child_actor = super::session_actor("child-session");
+        assert_eq!(child.root.0, "recorded-root");
+        assert_eq!(
+            child.child.as_ref().map(|id| id.0.as_str()),
+            Some(child_actor.as_str())
+        );
+        assert!(
+            super::expected_actor("recorded-root", "session", None)
+                .child
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn retry_text_comes_from_recorded_context_and_old_rows_fall_back() {
+        let recorded = presentation_from_context(Some(&serde_json::json!({
+            "tool": "archestra__whoami",
+            "arguments": {"verbose": true},
+            "spawn": false,
+            "spelling": "client_whoami",
+            "dispatch": "my_gateway_archestra__run_tool"
+        })));
+        let call = appa_runtime_api::ProposedCall {
+            tool: "mcp/archestra/whoami".to_owned(),
+            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "verbose": true }))
+                .unwrap(),
+            cwd: None,
+        };
+        let hint = render_released_call("Authorized", &call, Some(&owner_from(recorded)));
+        let (prefix, arguments) = hint.split_once("exactly these arguments: ").unwrap();
+        assert_eq!(
+            prefix,
+            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(arguments).unwrap(),
+            serde_json::json!({ "tool_name": "archestra__whoami", "tool_args": { "verbose": true } })
+        );
+
+        let legacy = presentation_from_context(Some(&serde_json::json!({
+            "tool": "read_untrusted",
+            "arguments": {"path": "report.txt"},
+            "spawn": false
+        })));
+        assert!(legacy.spelling.is_none());
+        assert!(legacy.dispatch.is_none());
+        let direct = render_released_call(
+            "Authorized",
+            &appa_runtime_api::ProposedCall {
+                tool: "read_untrusted".to_owned(),
+                arguments: serde_json::value::to_raw_value(
+                    &serde_json::json!({ "path": "report.txt" }),
+                )
+                .unwrap(),
+                cwd: None,
+            },
+            Some(&owner_from(legacy)),
+        );
+        assert!(direct.contains("Call the read_untrusted tool again"));
+        assert!(!direct.contains("run_tool"));
+        assert!(presentation_from_context(None).tool.is_none());
+    }
+
+    #[test]
+    fn a_peer_read_notice_uses_its_stored_tool_as_retry_spelling() {
+        let peer = super::presentation_from_receipt(
+            None,
+            Some("acme__read_peer_message".to_owned()),
+            Some("peer_read_notice"),
+        );
+        assert_eq!(peer.spelling.as_deref(), Some("acme__read_peer_message"));
+        let ordinary = super::presentation_from_receipt(
+            None,
+            Some("read_untrusted".to_owned()),
+            Some("tool_call"),
+        );
+        assert!(ordinary.spelling.is_none());
+        assert_eq!(ordinary.tool.as_deref(), Some("read_untrusted"));
+    }
+
+    #[test]
+    fn retry_fields_stay_in_context_and_out_of_the_idempotency_key() {
+        let input: super::Input = serde_json::from_value(serde_json::json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "tool": "read_untrusted",
+            "arguments": {"path": "report.txt"},
+            "spelling": "client.read_untrusted",
+            "dispatch": "my_gateway_archestra__run_tool"
+        }))
+        .unwrap();
+        let semantic = super::operation_semantic(&input);
+        assert!(semantic.get("spelling").is_none());
+        assert!(semantic.get("dispatch").is_none());
+        let context = super::tool_call_context(&input);
+        assert_eq!(context["spelling"], "client.read_untrusted");
+        assert_eq!(context["dispatch"], "my_gateway_archestra__run_tool");
+
+        let legacy: super::Input = serde_json::from_value(serde_json::json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "tool": "read_untrusted",
+            "arguments": {}
+        }))
+        .unwrap();
+        let old = super::tool_call_context(&legacy);
+        assert!(old.get("spelling").is_none());
+        assert!(old.get("dispatch").is_none());
+        assert!(super::recorded_call(Some(context), serde_json::json!({})).is_ok());
+        assert!(super::recorded_call(Some(old), serde_json::json!({})).is_ok());
+    }
+
+    fn owner_from(presentation: super::CallPresentation) -> OfferOwner {
+        OfferOwner {
+            organization_id: "organization".to_owned(),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            tool: presentation.tool,
+            spelling: presentation.spelling,
+            dispatch: presentation.dispatch,
+        }
     }
 
     #[test]
     fn released_call_uses_saved_spelling_and_reports_the_accepted_plan() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
             tool: Some("canonical_tool".to_owned()),
             spelling: Some("client_tool".to_owned()),
             dispatch: None,
@@ -3367,11 +3656,9 @@ mod typed_tests {
     fn authorized_remedy_uses_released_arguments_and_saved_spelling() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
             tool: Some("canonical_tool".to_owned()),
             spelling: Some("client_tool".to_owned()),
             dispatch: None,
@@ -3448,11 +3735,9 @@ mod typed_tests {
     fn a_dispatched_call_is_retried_through_the_dispatch_tool() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: None,
             tool: Some("archestra__whoami".to_owned()),
             spelling: Some("archestra__whoami".to_owned()),
             dispatch: Some("my_gateway_archestra__run_tool".to_owned()),
@@ -3503,11 +3788,9 @@ mod remedy_tests {
     fn owner(spelling: Option<&str>) -> OfferOwner {
         OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: None,
             tool: Some("archestra__todo_write".to_owned()),
             spelling: spelling.map(str::to_owned),
             dispatch: None,
@@ -3669,9 +3952,10 @@ mod remedy_tests {
     }
 
     #[test]
-    fn a_remedy_requires_a_caller() {
-        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_err());
+    fn a_remedy_accepts_an_anonymous_spender() {
+        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_ok());
         assert!(validate(&remedy_input(json!({}))).is_ok());
+        assert!(validate(&remedy_input(json!({ "caller_id": "" }))).is_err());
     }
 }
 

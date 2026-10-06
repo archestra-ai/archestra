@@ -2,6 +2,7 @@ import { isDeepStrictEqual } from "node:util";
 import {
   isBuiltInCatalogId,
   MCP_HUMAN_RULING_META_KEY,
+  PROXY_STAMPED_TOOL_ARGUMENTS,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
@@ -21,21 +22,19 @@ import {
   openappaCoverageService,
 } from "@/openappa/coverage";
 import {
+  CurrentTrajectorySchema,
+  parseCurrentTrajectory,
+} from "@/openappa/current-trajectory";
+import {
   clearHitlReview,
   consumeHitlRuling,
+  getHitlReviewResult,
+  type HitlReviewOutcome,
+  recordHitlReviewResult,
+  reviewSessionFromTrajectory,
   stageHitlReview,
 } from "@/openappa/hitl-review";
-import {
-  NoticeArguments,
-  NoticePublicArguments,
-  RemedyExecutionSchema,
-} from "@/openappa/notice";
-import {
-  OfferJwsSchema,
-  signOfferClaims,
-  unsignedOfferClaims,
-  verifyOfferClaims,
-} from "@/openappa/offer-claims";
+import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
 import {
   type PeerProofAction,
   type PeerProofJws,
@@ -204,19 +203,7 @@ const registry = defineArchestraTools([
       ) {
         return response;
       }
-      const offers = refusedOffers.data.flatMap(({ offer_id: offerId }) => {
-        const signed = signOfferClaims(
-          unsignedOfferClaims({
-            organizationId: session.organization_id,
-            callerId: session.caller_id,
-            sessionId: session.session_id,
-            parentId: session.parent_id,
-            offerId,
-          }),
-          config.openappa.offerSigningSecret,
-        );
-        return signed ? [signed] : [];
-      });
+      const offers = refusedOffers.data.map(({ offer_id }) => ({ offer_id }));
       return {
         ...result({
           message: response.content
@@ -687,8 +674,6 @@ const registry = defineArchestraTools([
     description:
       "Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. The platform puts this call in the place of the blocked call. It runs nothing and changes nothing. A plan fits unless the narrower session could no longer do what the user asked for. Apply a fitting plan with execute_remedy_plan. Use the offer_id and plan from the ruling. execute_remedy_plan asks the user for approval when the policy requires it. After the plan is authorized, retry the original call. If the ruling offers no plan, explain the ruling to the user.",
     schema: NoticeArguments,
-    // The advertised schema leaves out the signed offers only the proxy writes.
-    publicSchema: NoticePublicArguments,
     async handler({ args }) {
       // The ruling the runtime already made, carried by the call itself. This
       // opens no root, emits no OpenAPPA event and reads no policy: the runtime
@@ -704,28 +689,23 @@ const registry = defineArchestraTools([
       "Apply a remedy plan that the organization's guardrails policy offers for a blocked call. Pass the offer_id and plan from the ruling. The policy decides when the user must approve a plan. In that case, the result is review_required. Ask the user with the declared ask_user tool and that offer ID. After the user approves, call execute_remedy_plan again with the same offer and plan. After the plan is authorized, retry the original call or use the admitted output. If the user denies the review, or the review is canceled, unavailable, or unanswered, tell the user that the action stays blocked.",
     // The proxy alone writes these members. They have no `.describe()` text,
     // so no rendering of the full schema can show the model their prose:
-    // - execution: the transport record for retry identity and exact history
-    //   restoration; it does not authorize the remedy.
-    // - protected/payload/signature: the flattened JWS of the offer (RFC 7515,
-    //   with the RFC 7797 unencoded payload).
+    // - execution: retry identity and history restoration; it does not authorize.
+    // - trajectory: the proxy-written current execution identity.
+    // Legacy protected/payload/signature are absent. This object strips them.
     schema: RemedyPlanArgumentsSchema.extend({
       execution: RemedyExecutionSchema.optional(),
-      protected: OfferJwsSchema.shape.protected.optional(),
-      payload: OfferJwsSchema.shape.payload.optional(),
-      signature: OfferJwsSchema.shape.signature.optional(),
+      trajectory: CurrentTrajectorySchema.optional(),
     }),
     // The model writes only these arguments. The proxy stamps the receipt and
-    // the signed offer onto the released call, so the advertised schema leaves
-    // them out; it is not strict, so a validating client accepts the stamp.
+    // the current trajectory onto the released call, so the advertised schema
+    // leaves them out; it is not strict, so a validating client accepts the stamp.
     publicSchema: RemedyPlanArgumentsSchema,
     async handler({ args, context }) {
-      const {
-        execution,
-        protected: protectedHeader,
-        payload,
-        signature,
-        ...submittedArguments
-      } = args;
+      const { execution, trajectory, ...submittedArguments } = args;
+      const stamp = parseCurrentTrajectory(trajectory);
+      if (!context.organizationId || !stamp) {
+        return unknownOfferResult();
+      }
       const submittedSemantic =
         RemedyPlanArgumentsSchema.parse(submittedArguments);
       const originalArguments = execution?.original_arguments;
@@ -754,49 +734,52 @@ const registry = defineArchestraTools([
       // `plan` remains in the exact original arguments for receipt matching but
       // is not runtime remedy input.
       const { plan: _plan, ...remedy } = submittedSemantic;
-      const claims = verifyOfferClaims(
-        {
-          protected: protectedHeader,
-          payload,
-          signature,
-        },
-        config.openappa.offerSigningSecret,
-      );
+      const reviewSession = reviewSessionFromTrajectory({
+        organizationId: context.organizationId,
+        trajectory: stamp,
+        context,
+      });
+      const spender = authenticatedRuntimeSpender({
+        userId: context.userId,
+        callerId: context.openappaSession?.caller_id,
+      });
       if (
-        !context.organizationId ||
-        !claims ||
-        claims.offer_id !== submittedSemantic.offer_id ||
-        claims.organization_id !== context.organizationId
+        !spender ||
+        (parseWorkloadPrincipal(spender) &&
+          !workloadSpenderMayUseOffer({
+            spender,
+            ownerCallerId: reviewSession.caller_id,
+          })) ||
+        (parseWorkloadPrincipal(reviewSession.caller_id) &&
+          reviewSession.caller_id !== spender)
       ) {
         return unknownOfferResult();
       }
-
-      // Check if this offer requires human review before executing or acquiring locks.
-      // Session routing uses the verified claims, so the review lookup
-      // requires no offer-owner table.
+      const callId = execution?.call_id ?? context.currentToolCallId;
+      if (callId) {
+        const previousOutcome = await getHitlReviewResult({
+          session: reviewSession,
+          callId,
+          offerId: remedy.offer_id,
+        });
+        if (previousOutcome && previousOutcome !== "review_required")
+          return unansweredReviewResult(remedy.offer_id, previousOutcome);
+      }
       const review = await loadOfferReview({
         organizationId: context.organizationId,
-        sessionId: claims.session_id,
+        sessionId: stamp.session_id,
         offerId: remedy.offer_id,
       });
 
       let ruling: "approve" | "deny" | undefined;
+      let reviewOutcome:
+        | Exclude<HitlReviewOutcome, "review_required">
+        | undefined;
       let precheckRefusal: string | undefined;
       if (review) {
-        const reviewSession = {
-          organization_id: claims.organization_id,
-          session_id: claims.session_id,
-          ...(claims.caller_id ? { caller_id: claims.caller_id } : {}),
-          ...(claims.parent_id ? { parent_id: claims.parent_id } : {}),
-        };
         // Check that the reviewed call can run before prompting the user.
         // A refusal is recorded as this remedy's result.
-        const precheck = {
-          review,
-          spelling: claims.spelling ?? claims.tool ?? undefined,
-          context,
-        };
-        precheckRefusal = await precheckReviewedCall(precheck);
+        precheckRefusal = await precheckReviewedCall({ review, context });
         if (precheckRefusal) {
           await clearHitlReview({
             session: reviewSession,
@@ -810,13 +793,16 @@ const registry = defineArchestraTools([
           if (cachedRuling === "approve" || cachedRuling === "deny") {
             ruling = cachedRuling;
           } else if (cachedRuling === "none") {
-            ruling = undefined;
+            // Legacy native answers did not distinguish dismissal from other
+            // missing rulings. Do not invent a timeout or explicit denial.
+            reviewOutcome = "review_invalid";
           } else if (context.mrtr) {
             // External MCP clients reach their native question tool through ask_user.
             // Stage the exact review first so the model cannot alter
             // the question or bind an answer to a different offer.
             await stageHitlReview({
               session: reviewSession,
+              callId,
               review: {
                 offerId: remedy.offer_id,
                 text: review.text,
@@ -857,36 +843,45 @@ const registry = defineArchestraTools([
             ruling = parseHitlRuling(
               outcome.status === "answered" ? outcome.result : undefined,
             );
+            if (!ruling) {
+              reviewOutcome =
+                outcome.status === "unanswered"
+                  ? "review_unanswered"
+                  : outcome.status === "no_viewer"
+                    ? "review_unavailable"
+                    : outcome.result.action === "cancel"
+                      ? "review_cancelled"
+                      : "review_invalid";
+            }
+          } else {
+            reviewOutcome = "review_unavailable";
           }
         }
       }
 
-      const spender = authenticatedRuntimeSpender({
-        userId: context.userId,
-        callerId: context.openappaSession?.caller_id,
-      });
-      if (
-        !spender ||
-        (parseWorkloadPrincipal(spender) &&
-          !workloadSpenderMayUseOffer({
-            spender,
-            ownerCallerId: claims.caller_id,
-          })) ||
-        (parseWorkloadPrincipal(claims.caller_id) &&
-          claims.caller_id !== spender)
-      ) {
-        return unknownOfferResult();
+      if (reviewOutcome) {
+        // No human ruling exists. Do not invoke the embedded HITL backend with
+        // undefined: without its own elicitation it would record Unreachable.
+        await clearHitlReview({
+          session: reviewSession,
+          offerId: remedy.offer_id,
+        });
+        if (callId)
+          await recordHitlReviewResult({
+            session: reviewSession,
+            callId,
+            offerId: remedy.offer_id,
+            outcome: reviewOutcome,
+          });
+        return unansweredReviewResult(remedy.offer_id, reviewOutcome);
       }
+
       const byOffer = await executeRemedyByOffer({
         organizationId: context.organizationId,
-        callerId: spender,
-        sessionId: claims.session_id,
-        ...(claims.parent_id ? { parentId: claims.parent_id } : {}),
-        ...(claims.caller_id ? { ownerCallerId: claims.caller_id } : {}),
-        ...(claims.tool ? { tool: claims.tool } : {}),
-        ...(claims.spelling ? { spelling: claims.spelling } : {}),
-        ...(claims.dispatch ? { dispatch: claims.dispatch } : {}),
-        toolCallId: execution?.call_id ?? context.currentToolCallId,
+        ...(spender ? { callerId: spender } : {}),
+        sessionId: stamp.session_id,
+        ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
+        toolCallId: callId,
         controlToolName: execution?.tool_name,
         originalArguments:
           originalArguments ?? JSON.stringify(submittedSemantic),
@@ -1042,14 +1037,35 @@ function nativeReviewRequiredResult(offerId: string): CallToolResult {
   });
 }
 
+function unansweredReviewResult(
+  offerId: string,
+  outcome: Exclude<HitlReviewOutcome, "review_required">,
+): CallToolResult {
+  const reason = {
+    review_unanswered: "The human review timed out without an answer.",
+    review_cancelled: "The human canceled the review without giving a ruling.",
+    review_unavailable:
+      "No human review channel is available in this execution.",
+    review_invalid:
+      "The review response contained no valid Approve or Deny ruling.",
+  }[outcome];
+  return result({
+    ok: false,
+    outcome,
+    offer_id: offerId,
+    instruction: `${reason} The dependent call did not run and remains blocked. No approval or denial was recorded. Do not retry the call or reopen this review automatically. Tell the user why it remains blocked. Independent calls may continue.`,
+  });
+}
+
 function unstampedRemedyArguments(
   args: Record<string, unknown>,
 ): Record<string, unknown> {
-  const result = { ...args };
-  for (const key of ["execution", "protected", "payload", "signature"]) {
-    delete result[key];
-  }
-  return result;
+  const stamped = new Set<string>(
+    PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME],
+  );
+  return Object.fromEntries(
+    Object.entries(args).filter(([key]) => !stamped.has(key)),
+  );
 }
 
 /**
@@ -1060,8 +1076,6 @@ function unstampedRemedyArguments(
  */
 async function precheckReviewedCall(params: {
   review: { tool?: string; arguments?: string };
-  /** The name the model knows the tool by, when the claims carry one. */
-  spelling?: string;
   context: ArchestraContext;
 }): Promise<string | undefined> {
   const { review, context } = params;
@@ -1088,7 +1102,7 @@ async function precheckReviewedCall(params: {
   }
   if (!refused) return undefined;
   return precheckRefusalText({
-    tool: params.spelling ?? review.tool,
+    tool: review.tool,
     detail: refused.content
       .flatMap((part) => (part.type === "text" ? [part.text] : []))
       .join("\n"),
@@ -1134,8 +1148,8 @@ function parseArgumentsRecord(
 /**
  * Parses the unified elicitation envelope into a remedy ruling.
  * An `accept` action must include an explicit `approve` or `deny` content action.
- * Malformed or missing actions yield no ruling, causing the upstream runtime
- * to resolve the review as `NoAnswer` (fail closed).
+ * Malformed or missing actions yield no ruling. The handler records a failed
+ * review as a history fact without invoking an authority or granting approval.
  * A `decline` action maps to `deny`.
  * A `cancel` action or unrecognized payload yields no ruling.
  */

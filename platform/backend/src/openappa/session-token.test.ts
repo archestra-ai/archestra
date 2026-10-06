@@ -1,5 +1,6 @@
 import { createHmac } from "node:crypto";
 import { describe, expect, test } from "vitest";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { OpenAppaSessionModel } from "@/models";
 import { openappaActor } from "./actor";
@@ -53,80 +54,27 @@ describe("session receipt minting", () => {
     });
   });
 
-  test("is deterministic and Crockford XXX-XXXX", () => {
-    const first = mintReceiptCode({
-      secret,
-      organizationId,
-      callerId,
-      sessionId,
-    });
-    const second = mintReceiptCode({
-      secret,
-      organizationId,
-      callerId,
-      sessionId,
-    });
-    expect(first).toBe(second);
-    expect(first).toMatch(CROCKFORD);
-    expect(first).not.toMatch(/[ILOU]/);
-  });
-
-  test("encodes the first 35 HMAC bits as Crockford", () => {
-    const digest = createHmac("sha256", secret)
-      .update(
-        `appa-session-receipt-v1\n${organizationId}\n${callerId}\n${sessionId}`,
-      )
-      .digest();
-    let bits = 0n;
-    for (let index = 0; index < 5; index++) {
-      bits = (bits << 8n) | BigInt(digest[index] ?? 0);
+  test("mints an opaque Crockford code without a signing key", () => {
+    const codes = new Set(Array.from({ length: 16 }, () => mintReceiptCode()));
+    expect(codes.size).toBeGreaterThan(1);
+    for (const code of codes) {
+      expect(code).toMatch(CROCKFORD);
+      expect(code).not.toMatch(/[ILOU]/);
     }
-    bits >>= 5n;
-    const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-    const chars: string[] = [];
-    for (let index = 0; index < 7; index++) {
-      chars.push(alphabet[Number(bits & 31n)] ?? "0");
-      bits >>= 5n;
-    }
-    const expected = chars.reverse().join("");
-    expect(
-      mintReceiptCode({ secret, organizationId, callerId, sessionId }),
-    ).toBe(`${expected.slice(0, 3)}-${expected.slice(3)}`);
-  });
-
-  test("retries HMAC input with a collision counter", () => {
-    const base = mintReceiptCode({
-      secret,
-      organizationId,
-      callerId,
-      sessionId,
-    });
-    const retry = mintReceiptCode({
-      secret,
-      organizationId,
-      callerId,
-      sessionId,
-      collision: 1,
-    });
-    expect(retry).toMatch(CROCKFORD);
-    expect(retry).not.toBe(base);
   });
 });
 
 describe("session receipt storage", () => {
-  test("assigns a token once and returns it on later calls", async () => {
+  test("assigns a token once without a signing key and returns it on later calls", async () => {
+    config.openappa.offerSigningSecret = "";
     await started({ sessionId });
     const first = await OpenAppaSessionModel.ensureReceiptToken({
       organizationId,
-      callerId,
       sessionId,
-      secret,
     });
     const second = await OpenAppaSessionModel.ensureReceiptToken({
       organizationId,
-      callerId,
       sessionId,
-      secret,
     });
     expect(first?.token).toMatch(CROCKFORD);
     expect(first?.receiptIssuedAt).toBeNull();
@@ -139,45 +87,83 @@ describe("session receipt storage", () => {
     ).toEqual({ sessionId, callerId });
   });
 
-  test("retries on a stored collision then degrades after three failures", async () => {
+  test("reuses a previously stored receipt code", async () => {
+    config.openappa.offerSigningSecret = "";
+    const legacy = legacyHmacReceiptCode();
+    await started({ sessionId, receiptToken: legacy });
+    const assigned = await OpenAppaSessionModel.ensureReceiptToken({
+      organizationId,
+      sessionId,
+    });
+    expect(assigned?.token).toBe(legacy);
+    expect(
+      await OpenAppaSessionModel.receiptTokenOwner({
+        organizationId,
+        token: legacy,
+      }),
+    ).toEqual({ sessionId, callerId });
+    const text = appendSessionReceipt("hello", legacy);
+    const codes = stripSessionReceiptsFromRequest({
+      family: "anthropic:messages",
+      body: { messages: [{ role: "assistant", content: text }] },
+    });
+    expect(
+      await sessionReceiptEvidence({ organizationId, callerId, codes }),
+    ).toEqual(["session-1"]);
+  });
+
+  test("retries a stored collision and then assigns a new code", async () => {
     const colliding = "user:alice|colliding";
+    const taken = "AAA-AAAA";
+    const fresh = "BBB-BBBB";
     await started({ sessionId: colliding });
-    const taken = [
-      mintReceiptCode({
-        secret,
-        organizationId,
-        callerId,
-        sessionId: colliding,
-      }),
-      mintReceiptCode({
-        secret,
-        organizationId,
-        callerId,
-        sessionId: colliding,
-        collision: 1,
-      }),
-      mintReceiptCode({
-        secret,
-        organizationId,
-        callerId,
-        sessionId: colliding,
-        collision: 2,
-      }),
-    ];
+    await started({
+      sessionId: "user:alice|holder",
+      receiptToken: taken,
+    });
+    const codes = [taken, fresh];
+    const assigned = await OpenAppaSessionModel.ensureReceiptToken({
+      organizationId,
+      sessionId: colliding,
+      mint: () => codes.shift() ?? "CCC-CCCC",
+    });
+    expect(assigned?.token).toBe(fresh);
+  });
+
+  test("gives up after three colliding receipt codes", async () => {
+    const colliding = "user:alice|colliding";
+    const taken = ["AAA-AAAA", "BBB-BBBB", "CCC-CCCC"];
+    await started({ sessionId: colliding });
     for (const [index, token] of taken.entries()) {
       await started({
         sessionId: `user:alice|holder-${index}`,
         receiptToken: token,
       });
     }
+    const codes = [...taken];
     expect(
       await OpenAppaSessionModel.ensureReceiptToken({
         organizationId,
-        callerId,
         sessionId: colliding,
-        secret,
+        mint: () => codes.shift() ?? "DDD-DDDD",
       }),
     ).toBeNull();
+  });
+
+  test("concurrent assignment persists one token", async () => {
+    await started({ sessionId });
+    const [first, second] = await Promise.all([
+      OpenAppaSessionModel.ensureReceiptToken({ organizationId, sessionId }),
+      OpenAppaSessionModel.ensureReceiptToken({ organizationId, sessionId }),
+    ]);
+    expect(first?.token).toMatch(CROCKFORD);
+    expect(second?.token).toBe(first?.token);
+    expect(
+      await OpenAppaSessionModel.receiptTokenOwner({
+        organizationId,
+        token: first?.token ?? "",
+      }),
+    ).toEqual({ sessionId, callerId });
   });
 });
 
@@ -186,9 +172,7 @@ describe("session receipt restore", () => {
     await started({ sessionId });
     const code = await OpenAppaSessionModel.ensureReceiptToken({
       organizationId,
-      callerId,
       sessionId,
-      secret,
     });
     expect(code?.token).toBeTruthy();
     const text = appendSessionReceipt("hello", code?.token ?? "");
@@ -341,3 +325,24 @@ describe("session receipt restore", () => {
     ]);
   });
 });
+
+function legacyHmacReceiptCode(): string {
+  const digest = createHmac("sha256", secret)
+    .update(
+      `appa-session-receipt-v1\n${organizationId}\n${callerId}\n${sessionId}`,
+    )
+    .digest();
+  let bits = 0n;
+  for (let index = 0; index < 5; index++) {
+    bits = (bits << 8n) | BigInt(digest[index] ?? 0);
+  }
+  bits >>= 5n;
+  const alphabet = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
+  const chars: string[] = [];
+  for (let index = 0; index < 7; index++) {
+    chars.push(alphabet[Number(bits & 31n)] ?? "0");
+    bits >>= 5n;
+  }
+  const code = chars.reverse().join("");
+  return `${code.slice(0, 3)}-${code.slice(3)}`;
+}

@@ -1,7 +1,6 @@
-import { beforeEach, describe, expect, test, vi } from "vitest";
+import { beforeEach, describe, expect, test } from "vitest";
 import config from "@/config";
 import {
-  childReturnMarkersConfigured,
   collectAndStripChildReturns,
   mintChildReturnMarker,
 } from "./child-return";
@@ -778,17 +777,6 @@ describe("OpenAPPA child-return markers", () => {
     );
   });
 
-  test("mints deterministically through a fresh module graph", async () => {
-    const marker = requiredMarker(RETURN);
-
-    vi.resetModules();
-    const reloadedConfig = (await import("@/config")).default;
-    reloadedConfig.openappa.offerSigningSecret = SECRET;
-    const reloaded = await import("./child-return");
-
-    expect(reloaded.mintChildReturnMarker(RETURN)).toBe(marker);
-  });
-
   test("bounds marker scanning and scans large indentation linearly", () => {
     const marker = requiredMarker(RETURN);
     const result = collectNativeResult(
@@ -802,20 +790,29 @@ describe("OpenAPPA child-return markers", () => {
     ]);
   }, 30_000);
 
-  test("requires a signing key to mint", () => {
+  test("mints and strips a display marker without a signing key", () => {
     config.openappa.offerSigningSecret = "";
 
-    expect(childReturnMarkersConfigured()).toBe(false);
-    expect(mintChildReturnMarker(RETURN)).toBeUndefined();
+    const marker = mintChildReturnMarker(RETURN);
+    expect(marker).toBe(mintChildReturnMarker(RETURN));
+    expect(
+      mintChildReturnMarker({ ...RETURN, value: "other summary" }),
+    ).not.toBe(marker);
+    const { body, collected } = collectNativeResult(
+      `${RETURN.value}\n\n${marker}`,
+      "Task",
+    );
+    expect(nativeResultContent(body)).toBe(RETURN.value);
+    expect(collected.completions).toEqual([
+      expect.objectContaining({ value: RETURN.value }),
+    ]);
   });
 });
 
 function requiredMarker(
   returned: Parameters<typeof mintChildReturnMarker>[0],
 ): string {
-  const marker = mintChildReturnMarker(returned);
-  if (!marker) throw new Error("expected a child-return marker");
-  return marker;
+  return mintChildReturnMarker(returned);
 }
 
 function carrier(marker: string, value: string = RETURN.value): string {

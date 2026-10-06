@@ -13,6 +13,7 @@ import {
 import { CODEX_CONNECTION_VERIFICATION_WINDOWS } from "./codex-connection-verification.windows";
 import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
 import { describeMarketplaceContents } from "./marketplace-copy";
+import { OPENCODE_HANDOFF_PLUGIN } from "./opencode-handoff";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
 /**
@@ -1006,7 +1007,11 @@ export function buildWindowsStartupGuardInstallSection(
         ? handoffEnabled
           ? `$null = New-Item -ItemType Directory -Force ($archGuardPath + '.instructions')\nCopy-Item -Force (Join-Path $env:USERPROFILE ${psq(promptRelpath)}) ($archGuardPath + '.instructions/AGENTS.md')`
           : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.instructions/AGENTS.md')`
-        : "";
+        : client.clientId === "opencode"
+          ? handoffEnabled
+            ? `[IO.File]::WriteAllBytes(($archGuardPath + '.handoff.mjs'), [Convert]::FromBase64String('${Buffer.from(OPENCODE_HANDOFF_PLUGIN).toString("base64")}'))`
+            : `Remove-Item -Force -ErrorAction SilentlyContinue ($archGuardPath + '.handoff.mjs')`
+          : "";
   const launchArgs =
     client.clientId === "codex"
       ? `try {
@@ -1016,7 +1021,7 @@ export function buildWindowsStartupGuardInstallSection(
       : client.clientId === "copilot-cli"
         ? `$archInstructionsDir = $archGuard + '.instructions'`
         : client.clientId === "opencode"
-          ? `$archOpencodeHandoff = $archPromptPath`
+          ? `if (Test-Path ($archGuard + '.handoff.mjs')) { $archOpencodeHandoff = [Uri]::new(($archGuard + '.handoff.mjs'), [UriKind]::Absolute).AbsoluteUri }`
           : `$archLaunchArgs = @('--append-system-prompt-file', $archPromptPath) + $archLaunchArgs`;
   const promptArgs = handoffEnabled
     ? `
@@ -1122,7 +1127,7 @@ function ${client.binary} {
         : handoffEnabled && client.clientId === "opencode"
           ? `$archPreviousConfigContent = $env:OPENCODE_CONFIG_CONTENT
     try {
-      if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:OPENCODE_CONFIG_CONTENT = (@{ instructions = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
+      if ($archOpencodeHandoff -and -not $archPreviousConfigContent) { $env:OPENCODE_CONFIG_CONTENT = (@{ plugin = @($archOpencodeHandoff) } | ConvertTo-Json -Compress) }`
           : ""
     }
     ${

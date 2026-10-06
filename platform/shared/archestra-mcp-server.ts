@@ -1182,7 +1182,7 @@ export function buildElicitationMandateInstruction(params?: {
 
 /**
  * Maps tools to arguments stamped by the OpenAPPA proxy before dispatching to the client.
- * Includes signed remedy offers on `ask_user` and execution receipts on `execute_remedy_plan`.
+ * Includes the current trajectory, peer-message proofs, and the remedy receipt.
  * The model never writes these arguments. The proxy strips them from provider history
  * and tool declarations to keep provider state clean.
  */
@@ -1199,7 +1199,7 @@ export const OPENAPPA_RUNTIME_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
-  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],
+  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers", "trajectory"],
   [TOOL_LIST_PEER_MESSAGES_SHORT_NAME]: ["peer_proof"],
   [TOOL_READ_PEER_MESSAGE_SHORT_NAME]: ["peer_proof"],
   [TOOL_START_RUN_SHORT_NAME]: ["runtime_proof"],
@@ -1213,6 +1213,8 @@ export const PROXY_STAMPED_TOOL_ARGUMENTS = {
   [TOOL_POST_RUN_FILE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
+    "trajectory",
+    // Strip legacy signed fields from persisted history without trusting them.
     "protected",
     "payload",
     "signature",

@@ -1,11 +1,15 @@
 import { describe, expect, test, vi } from "vitest";
 import { unwrapCompactionCarriersFromRequest } from "@/openappa/compaction-carrier";
 import { CommonToolCallSchema, type OpenAi } from "@/types";
+import { ResponsesRequestSchema } from "@/types/llm-providers/openai/api";
 import {
+  discardUnadmittedResponsesOutput,
   openAiResponsesAdapterFactory,
   openAiResponsesCompactAdapterFactory,
+  ResponsesStreamIncompleteError,
 } from "./openai-responses";
 import { responsesToOpenaiChat } from "./openai-responses-translator";
+import { perplexityResponsesAdapterFactory } from "./perplexity-responses";
 
 describe("CommonToolCallSchema", () => {
   test("requires a string input for discriminated custom calls", () => {
@@ -46,6 +50,67 @@ describe("CommonToolCallSchema", () => {
   });
 });
 
+describe("failed final Responses hosted snapshots", () => {
+  test.each([
+    "failed",
+    "incomplete",
+  ] as const)("drops ambiguous pre-created message snapshots for %s", (status) => {
+    const response: OpenAi.Types.ResponsesResponse = {
+      id: "resp_held",
+      object: "response",
+      created_at: 1,
+      model: "model",
+      status,
+      output_text: "Progress. UNADMITTED_SAME_MESSAGE_CONTINUATION",
+      instructions: null,
+      metadata: null,
+      parallel_tool_calls: true,
+      temperature: null,
+      tool_choice: "auto",
+      tools: [],
+      top_p: null,
+      error:
+        status === "failed"
+          ? { code: "server_error", message: "upstream failed" }
+          : null,
+      incomplete_details:
+        status === "incomplete" ? { reason: "max_output_tokens" } : null,
+      usage: {
+        input_tokens: 3,
+        input_tokens_details: { cached_tokens: 0 },
+        output_tokens: 2,
+        output_tokens_details: { reasoning_tokens: 0 },
+        total_tokens: 5,
+      },
+      output: [
+        {
+          id: "message-before-search",
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [
+            {
+              type: "output_text",
+              text: "Progress. UNADMITTED_SAME_MESSAGE_CONTINUATION",
+              annotations: [],
+            },
+          ],
+        },
+        {
+          id: "search",
+          type: "web_search_call",
+          status: "completed",
+          action: { type: "search", query: "unadmitted source" },
+        },
+      ],
+    };
+    const safe = discardUnadmittedResponsesOutput(response);
+    expect(safe).toEqual({ ...response, output: [], output_text: "" });
+    expect(JSON.stringify(safe)).not.toContain("UNADMITTED");
+    expect(response.output).toHaveLength(2);
+  });
+});
+
 describe("responsesToOpenaiChat", () => {
   test("translates AI SDK easy-input messages for the model router", () => {
     const request = {
@@ -63,6 +128,129 @@ describe("responsesToOpenaiChat", () => {
       { role: "system", content: "Follow repository instructions." },
       { role: "user", content: "Open the pull request." },
     ]);
+  });
+});
+
+describe("OpenAI Responses execution terminal guard", () => {
+  test.each([
+    false,
+    true,
+  ])("rejects clean EOF without a terminal (partial=%s)", async (partial) => {
+    const chunks: OpenAi.Types.ResponseChunk[] = partial
+      ? [
+          {
+            type: "response.output_text.delta",
+            item_id: "msg_partial",
+            output_index: 0,
+            content_index: 0,
+            sequence_number: 1,
+            delta: "Partial answer",
+          } as never,
+        ]
+      : [];
+    const create = vi.fn(async () => ({
+      async *[Symbol.asyncIterator]() {
+        yield* chunks;
+      },
+    }));
+    const stream = await openAiResponsesAdapterFactory.executeStream(
+      { responses: { create } },
+      { model: "test-model", input: "Test" },
+    );
+    const received: OpenAi.Types.ResponseChunk[] = [];
+    await expect(
+      (async () => {
+        for await (const chunk of stream) received.push(chunk);
+      })(),
+    ).rejects.toBeInstanceOf(ResponsesStreamIncompleteError);
+    expect(received).toEqual(chunks);
+    expect(create).toHaveBeenCalledOnce();
+  });
+
+  test.each([
+    "completed",
+    "failed",
+    "incomplete",
+  ] as const)("preserves a genuine %s terminal, including compaction output", async (status) => {
+    const terminal = {
+      type: `response.${status}`,
+      sequence_number: 1,
+      response: {
+        id: "resp_terminal",
+        model: "test-model",
+        status,
+        output:
+          status === "completed"
+            ? [
+                {
+                  type: "compaction",
+                  id: "cmp_1",
+                  encrypted_content: "fixture",
+                },
+              ]
+            : [],
+      },
+    } as never;
+    const stream = await openAiResponsesAdapterFactory.executeStream(
+      {
+        responses: {
+          create: async () => ({
+            async *[Symbol.asyncIterator]() {
+              yield terminal;
+            },
+          }),
+        },
+      },
+      { model: "test-model", input: "Test" },
+    );
+    const received: OpenAi.Types.ResponseChunk[] = [];
+    for await (const chunk of stream) received.push(chunk);
+    expect(received).toEqual([terminal]);
+  });
+
+  test("does not reclassify upstream iterator errors or impose the guard on aliases", async () => {
+    const originalError = new Error("Provider connection failed");
+    const throwingClient = {
+      responses: {
+        create: async () => ({
+          [Symbol.asyncIterator]() {
+            return {
+              async next() {
+                throw originalError;
+              },
+            };
+          },
+        }),
+      },
+    };
+    const stream = await openAiResponsesAdapterFactory.executeStream(
+      throwingClient,
+      { model: "test-model", input: "Test" },
+    );
+    await expect(
+      (async () => {
+        for await (const _chunk of stream) {
+          throw new Error("Unexpected provider output");
+        }
+      })(),
+    ).rejects.toBe(originalError);
+    const alias = {
+      ...openAiResponsesAdapterFactory,
+      provider: "github-copilot" as const,
+    };
+    const empty = await alias.executeStream(
+      {
+        responses: {
+          create: async () => ({
+            async *[Symbol.asyncIterator]() {},
+          }),
+        },
+      },
+      { model: "test-model", input: "Test" },
+    );
+    const received: OpenAi.Types.ResponseChunk[] = [];
+    for await (const chunk of empty) received.push(chunk);
+    expect(received).toEqual([]);
   });
 });
 
@@ -374,6 +562,83 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
 });
 
 describe("OpenAiResponsesRequestAdapter.toProviderRequest", () => {
+  test.each([
+    ["true", { is_error: true }, true],
+    ["false", { is_error: false }, false],
+    ["absent", {}, false],
+    ["string true", { is_error: "true" }, false],
+    ["string false", { is_error: "false" }, false],
+    ["number", { is_error: 1 }, false],
+    ["null", { is_error: null }, false],
+    ["object", { is_error: { value: true } }, false],
+  ] as const)("reads only boolean compatible status (%s), preserving it through rewrites", (_label, extension, isError) => {
+    for (const type of [
+      "function_call_output",
+      "custom_tool_call_output",
+    ] as const) {
+      const output = {
+        type,
+        call_id: "call_status",
+        output: '{"is_error":true,"error":"untrusted body is not status"}\r\n',
+        ...extension,
+        transport_extra: { opaque: "keep exactly" },
+      };
+      // The wire schema accepts extensions without coercing or rejecting them.
+      const request = ResponsesRequestSchema.parse({
+        model: "test-model",
+        input: [
+          type === "function_call_output"
+            ? {
+                type: "function_call",
+                call_id: output.call_id,
+                name: "tool",
+                arguments: "{}",
+              }
+            : {
+                type: "custom_tool_call",
+                call_id: output.call_id,
+                name: "tool",
+                input: "exact custom input\r\n",
+              },
+          output,
+        ],
+      }) as unknown as OpenAi.Types.ResponsesRequest;
+      for (const factory of [
+        openAiResponsesAdapterFactory,
+        openAiResponsesCompactAdapterFactory,
+      ]) {
+        const adapter = factory.createRequestAdapter(request);
+        expect(adapter.getToolResults()[0]).toMatchObject({
+          id: output.call_id,
+          content: output.output,
+          isError,
+        });
+        expect(adapter.getMessages()[0].toolCalls?.[0]).toMatchObject({
+          id: output.call_id,
+          content: output.output,
+          isError,
+        });
+        expect(adapter.toProviderRequest().input).toEqual(request.input);
+        adapter.applyToolResultUpdates({ [output.call_id]: "approved\r\n" });
+        const rewritten = adapter.toProviderRequest();
+        expect(rewritten.input).toEqual([
+          (request.input as unknown[])[0],
+          { ...output, output: "approved\r\n" },
+        ]);
+        // Reading a rewritten/remapped request must retain the transport status.
+        const remapped = factory.createRequestAdapter(
+          rewritten as OpenAi.Types.ResponsesRequest,
+        );
+        expect(remapped.getToolResults()[0].isError).toBe(isError);
+        expect(remapped.getMessages()[0].toolCalls?.[0].isError).toBe(isError);
+        expect(request.input).toEqual([
+          (request.input as unknown[])[0],
+          output,
+        ]);
+      }
+    }
+  });
+
   // Sanitized Dual LLM summaries flow back through applyToolResultUpdates and
   // must replace the raw output the upstream model would otherwise read.
   test("replaces function_call_output content for updated tool call ids", () => {
@@ -559,7 +824,365 @@ describe("OpenAiResponsesResponseAdapter.withReplacedText", () => {
   });
 });
 
+describe("OpenAiResponsesStreamAdapter synthesized frame identity", () => {
+  // Two replacements synthesized in the same millisecond used to share one
+  // Date.now() item id and one sequence range: the client then saw two items
+  // with a single id and frames whose ordering numbers replayed. Ids must be
+  // unique per synthesized message and sequence numbers strictly increasing
+  // per adapter, regardless of the clock.
+  test("two rapid formatTextDeltaSSE calls produce distinct ids and increasing sequence numbers", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+
+    const parse = (sse: string | Uint8Array) =>
+      String(sse)
+        .split("\n\n")
+        .filter(Boolean)
+        .map(
+          (frame) =>
+            JSON.parse(frame.replace(/^data: /, "")) as {
+              sequence_number?: number;
+              item?: { id?: string };
+            },
+        );
+    const first = parse(adapter.formatTextDeltaSSE("one"));
+    const second = parse(adapter.formatTextDeltaSSE("two"));
+
+    expect(first[0]?.item?.id).toMatch(/^msg_/);
+    expect(second[0]?.item?.id).toMatch(/^msg_/);
+    expect(second[0]?.item?.id).not.toBe(first[0]?.item?.id);
+
+    const sequences = [...first, ...second].map(
+      (frame) => frame.sequence_number,
+    );
+    expect(sequences).toHaveLength(first.length + second.length);
+    for (const sequence of sequences) {
+      expect(typeof sequence).toBe("number");
+    }
+    for (let index = 1; index < sequences.length; index++) {
+      expect(sequences[index]).toBeGreaterThan(sequences[index - 1] ?? 0);
+    }
+  });
+});
+
 describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
+  test.each([
+    "incomplete",
+    "failed",
+  ] as const)("formatToolCallsSSE([]) removes executable fragments without changing a %s terminal", (status) => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const reasoning = { id: "rs_kept", type: "reasoning", summary: [] };
+    const call = {
+      id: "fc_partial",
+      type: "function_call",
+      call_id: "partial_call",
+      name: "read",
+      arguments: '{"path":',
+      status: "incomplete",
+    };
+    const custom = {
+      id: "ct_partial",
+      type: "custom_tool_call",
+      call_id: "partial_custom",
+      name: "apply_patch",
+      input: "*** Begin Patch",
+      status: "incomplete",
+    };
+    for (const [output_index, item] of [reasoning, call, custom].entries()) {
+      adapter.processChunk({
+        type: "response.output_item.added",
+        sequence_number: output_index * 2,
+        output_index,
+        item,
+      } as never);
+      adapter.processChunk({
+        type: "response.output_item.done",
+        sequence_number: output_index * 2 + 1,
+        output_index,
+        item,
+      } as never);
+    }
+    const response = {
+      id: "resp_no_dispatch",
+      object: "response",
+      created_at: 123,
+      model: "test-model",
+      status,
+      // Missing non-tool items must be recovered even from nonempty output.
+      output: [call, custom],
+      error:
+        status === "failed"
+          ? { code: "server_error", message: "Failed" }
+          : null,
+      incomplete_details:
+        status === "incomplete" ? { reason: "max_messages" } : null,
+      usage: null,
+    };
+    const terminal = adapter.processChunk({
+      type: `response.${status}`,
+      sequence_number: 6,
+      response,
+    } as never);
+    expect(terminal).toMatchObject({ sseData: null, isFinal: true });
+    const frames = adapter.formatToolCallsSSE?.([]) ?? [];
+    expect(frames.map((frame) => parseSse(frame))).toEqual([
+      expect.objectContaining({
+        type: `response.${status}`,
+        response: { ...response, output: [reasoning] },
+      }),
+    ]);
+    expect(adapter.toProviderResponse()).toEqual({
+      ...response,
+      output: [reasoning],
+    });
+    expect(adapter.state.toolCalls).toEqual([]);
+    expect(adapter.getRawToolCallEvents()).toEqual([]);
+
+    // With only calls in the output, an empty rewrite must stay empty on read.
+    const onlyCalls = openAiResponsesAdapterFactory.createStreamAdapter();
+    onlyCalls.processChunk({
+      type: "response.output_item.added",
+      sequence_number: 0,
+      output_index: 0,
+      item: call,
+    } as never);
+    onlyCalls.processChunk({
+      type: "response.output_item.done",
+      sequence_number: 1,
+      output_index: 0,
+      item: call,
+    } as never);
+    onlyCalls.processChunk({
+      type: `response.${status}`,
+      sequence_number: 2,
+      response: { ...response, output: [] },
+    } as never);
+    onlyCalls.formatToolCallsSSE?.([]);
+    expect(onlyCalls.toProviderResponse()).toEqual({ ...response, output: [] });
+  });
+
+  test("preserves a failed terminal with null usage rather than inventing completion", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const response = {
+      id: "resp_failure",
+      object: "response",
+      created_at: 123,
+      model: "test-model",
+      status: "failed",
+      output: [],
+      error: { code: "server_error", message: "Provider failed" },
+      incomplete_details: null,
+      usage: null,
+    };
+    adapter.processChunk({
+      type: "response.failed",
+      sequence_number: 1,
+      response,
+    } as never);
+
+    expect(adapter.toProviderResponse()).toEqual(response);
+    expect(adapter.state.usage).toBeNull();
+  });
+
+  test.each([
+    "completed",
+    "incomplete",
+    "failed",
+  ] as const)("preserves the %s terminal envelope and accumulated output", (status) => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const reasoning = {
+      id: "reasoning_1",
+      type: "reasoning",
+      summary: [],
+    };
+    adapter.processChunk({
+      type: "response.output_item.done",
+      output_index: 0,
+      sequence_number: 1,
+      item: reasoning,
+    } as never);
+    adapter.processChunk({
+      type: "response.output_text.delta",
+      item_id: "msg_partial",
+      output_index: 1,
+      content_index: 0,
+      sequence_number: 2,
+      delta: "Partial answer",
+    } as never);
+    const response = {
+      id: "resp_terminal",
+      object: "response",
+      created_at: 123,
+      model: "test-model",
+      status,
+      output: [],
+      incomplete_details:
+        status === "incomplete" ? { reason: "max_messages" } : null,
+      error:
+        status === "failed"
+          ? { code: "server_error", message: "Provider failed" }
+          : null,
+      usage: {
+        input_tokens: 10,
+        input_tokens_details: { cached_tokens: 3 },
+        output_tokens: 7,
+        output_tokens_details: { reasoning_tokens: 5 },
+        total_tokens: 17,
+      },
+      store: false,
+    };
+    const terminal = adapter.processChunk({
+      type: `response.${status}`,
+      sequence_number: 3,
+      response,
+    } as never);
+
+    expect(terminal.isFinal).toBe(true);
+    expect(
+      parseSse(
+        terminal.sseData ?? adapter.getRawToolCallEvents().at(-1) ?? null,
+      ),
+    ).toMatchObject({
+      type: `response.${status}`,
+      response,
+    });
+    expect(adapter.toProviderResponse()).toEqual({
+      ...response,
+      output: [
+        reasoning,
+        {
+          id: "msg_partial",
+          type: "message",
+          role: "assistant",
+          status: status === "completed" ? "completed" : "incomplete",
+          content: [
+            { type: "output_text", text: "Partial answer", annotations: [] },
+          ],
+        },
+      ],
+    });
+    expect(adapter.state.stopReason).toBe(
+      status === "completed"
+        ? "stop"
+        : status === "failed"
+          ? "error"
+          : "max_messages",
+    );
+    expect(adapter.state.usage).toMatchObject({
+      inputTokens: 7,
+      cacheReadTokens: 3,
+      outputTokens: 7,
+      reasoningTokens: 5,
+    });
+  });
+
+  test.each([
+    "completed",
+    "incomplete",
+    "failed",
+  ] as const)("keeps rich %s output and terminal type during tool rewrites", (status) => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const call = {
+      id: "fc_1",
+      call_id: "call_1",
+      type: "function_call",
+      name: "read",
+      arguments: "{}",
+      status: "completed",
+    };
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: call,
+    } as never);
+    const response = {
+      id: "resp_tools",
+      object: "response",
+      created_at: 123,
+      model: "test-model",
+      status,
+      output: [call],
+      incomplete_details:
+        status === "incomplete" ? { reason: "max_messages" } : null,
+      error:
+        status === "failed"
+          ? { code: "server_error", message: "Provider failed" }
+          : null,
+      usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+    };
+    const terminal = adapter.processChunk({
+      type: `response.${status}`,
+      sequence_number: 2,
+      response,
+    } as never);
+    expect(terminal).toMatchObject({
+      sseData: null,
+      isToolCallChunk: true,
+      isFinal: true,
+    });
+    expect(adapter.toProviderResponse()).toEqual(response);
+    expect(parseSse(adapter.getRawToolCallEvents().at(-1) ?? null)).toEqual({
+      type: `response.${status}`,
+      sequence_number: 2,
+      response,
+    });
+
+    const frames = adapter.formatToolCallsSSE?.([
+      { id: "call_1", name: "notice", arguments: "{}" },
+    ]);
+    const rewritten = parseSse(frames?.at(-1) ?? null);
+    expect(rewritten).toMatchObject({
+      type: `response.${status}`,
+      response: {
+        ...response,
+        output:
+          status === "completed"
+            ? [expect.objectContaining({ name: "notice" })]
+            : [],
+      },
+    });
+    expect(adapter.toProviderResponse()).toEqual(
+      (rewritten as { response: unknown }).response,
+    );
+    if (status !== "completed") expect(adapter.state.toolCalls).toEqual([]);
+  });
+
+  test.each([
+    "incomplete",
+    "failed",
+  ] as const)("an intentional policy refusal replaces %s output without retaining failure details", (status) => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      type: `response.${status}`,
+      sequence_number: 1,
+      response: {
+        id: "resp_refused",
+        object: "response",
+        created_at: 123,
+        model: "test-model",
+        status,
+        output: [{ type: "reasoning", id: "withheld_reasoning", summary: [] }],
+        incomplete_details: { reason: "max_messages" },
+        error: { code: "server_error", message: "Provider failed" },
+        usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+      },
+    } as never);
+    adapter.prepareResponseReplacement?.();
+    adapter.formatCompleteTextSSE("Policy refusal");
+    const persisted = adapter.toProviderResponse();
+    expect(persisted).toMatchObject({
+      id: "resp_refused",
+      status: "completed",
+      usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+    });
+    expect(persisted).not.toHaveProperty("error");
+    expect(persisted).not.toHaveProperty("incomplete_details");
+    expect(JSON.stringify(persisted)).not.toContain("withheld_reasoning");
+    expect(persisted.output[0]).toMatchObject({
+      content: [expect.objectContaining({ text: "Policy refusal" })],
+    });
+  });
+
   // Reasoning turns (`store: false`) finish with `response.completed` carrying
   // an empty `output`, even though the text arrived in delta chunks. Persisting
   // that envelope verbatim dropped the assistant side of the interaction, so
@@ -1359,6 +1982,364 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
       (frame) => JSON.parse(String(frame).replace(/^data: /, "")).type,
     );
 
+  test.each([
+    ["full", false],
+    ["empty", false],
+    ["absent", false],
+    ["full", true],
+    ["empty", true],
+    ["absent", true],
+  ] as const)("held notice uses frozen pre-hosted output with %s terminal output (unfinished second=%s)", (terminalOutput, unfinishedSecond) => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    try {
+      for (const factory of [
+        openAiResponsesAdapterFactory,
+        perplexityResponsesAdapterFactory,
+      ]) {
+        const adapter = factory.createStreamAdapter();
+        adapter.withholdHostedToolCalls?.();
+        const firstText = unfinishedSecond ? "A" : "Safe before search. ";
+        const safeText = unfinishedSecond ? "AB" : firstText;
+        const marker = "UNADMITTED_SAME_MESSAGE_MARKER";
+        const metadata = {
+          id: "resp_shared_held",
+          object: "response",
+          model: "compatible-model",
+          created_at: 123,
+          metadata: { source: "compatible client" },
+          usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+        };
+        adapter.processChunk({
+          type: "response.created",
+          sequence_number: 0,
+          response: { ...metadata, status: "in_progress", output: [] },
+        } as never);
+        const message = {
+          id: "msg_shared_held",
+          type: "message",
+          role: "assistant",
+          status: "completed",
+          content: [
+            {
+              type: "output_text",
+              text: `${firstText}${marker}`,
+              annotations: [],
+            },
+          ],
+        };
+        adapter.processChunk({
+          type: "response.output_item.added",
+          output_index: 0,
+          sequence_number: 1,
+          item: { ...message, status: "in_progress", content: [] },
+        } as never);
+        const forwarded = adapter.processChunk({
+          type: "response.output_text.delta",
+          item_id: message.id,
+          output_index: 0,
+          content_index: 0,
+          delta: firstText,
+          sequence_number: 2,
+        } as never);
+        expect(parseSse(forwarded.sseData)).toMatchObject({ delta: firstText });
+        const firstDone = {
+          ...message,
+          content: [{ type: "output_text", text: firstText, annotations: [] }],
+        };
+        const secondStart = {
+          ...message,
+          id: "msg_unfinished",
+          phase: "final_answer",
+          status: "in_progress",
+          content: [],
+        };
+        const secondDone = {
+          ...secondStart,
+          status: "completed",
+          content: [
+            { type: "output_text", text: `B${marker}`, annotations: [] },
+          ],
+        };
+        if (unfinishedSecond) {
+          adapter.processChunk({
+            type: "response.output_item.done",
+            output_index: 0,
+            sequence_number: 3,
+            item: firstDone,
+          } as never);
+          adapter.processChunk({
+            type: "response.output_item.added",
+            output_index: 1,
+            sequence_number: 4,
+            item: secondStart,
+          } as never);
+          const second = adapter.processChunk({
+            type: "response.output_text.delta",
+            item_id: secondStart.id,
+            output_index: 1,
+            content_index: 0,
+            sequence_number: 5,
+            delta: "B",
+          } as never);
+          expect(parseSse(second.sseData)).toMatchObject({ delta: "B" });
+          expect(adapter.state.text).toBe("AB");
+        }
+        const continuedMessage = unfinishedSecond ? secondDone : message;
+        const continuedIndex = unfinishedSecond ? 1 : 0;
+        const hostedIndex = unfinishedSecond ? 2 : 1;
+        const executable = {
+          type: "function_call",
+          id: "fc_unadmitted",
+          call_id: "call_unadmitted",
+          name: "unadmitted_tool",
+          arguments: "{}",
+          status: "completed",
+        };
+        for (const chunk of [
+          {
+            type: "response.output_item.added",
+            output_index: hostedIndex,
+            sequence_number: 6,
+            item: searchItem,
+          },
+          {
+            type: "response.output_text.delta",
+            item_id: continuedMessage.id,
+            output_index: continuedIndex,
+            content_index: 0,
+            sequence_number: 7,
+            delta: marker,
+          },
+          {
+            type: "response.output_item.done",
+            output_index: continuedIndex,
+            sequence_number: 8,
+            item: continuedMessage,
+          },
+          {
+            type: "response.output_item.added",
+            output_index: hostedIndex + 1,
+            sequence_number: 9,
+            item: executable,
+          },
+        ]) {
+          expect(adapter.processChunk(chunk as never).sseData).toBeNull();
+        }
+        const terminal = adapter.processChunk({
+          type: "response.completed",
+          sequence_number: 10,
+          response: {
+            ...metadata,
+            status: "completed",
+            output_text: `${safeText}${marker}`,
+            ...(terminalOutput === "absent"
+              ? {}
+              : {
+                  output:
+                    terminalOutput === "empty"
+                      ? []
+                      : unfinishedSecond
+                        ? [firstDone, secondDone, searchItem, executable]
+                        : [message, searchItem, executable],
+                }),
+          },
+        } as never);
+        expect(terminal).toMatchObject({ sseData: null, isFinal: true });
+        clock.mockReturnValue(9_000_000);
+        const notice = { id: "ws_1", name: "notice", arguments: "{}" };
+        const frames = adapter.formatHeldHostedToolCallsSSE?.([notice]) ?? [];
+        const persisted = adapter.toProviderResponse();
+        expect(persisted).toMatchObject({
+          ...metadata,
+          status: "completed",
+          output_text: safeText,
+        });
+        expect(persisted.output).toEqual([
+          expect.objectContaining({
+            id: message.id,
+            type: "message",
+            content: [
+              { type: "output_text", text: firstText, annotations: [] },
+            ],
+          }),
+          ...(unfinishedSecond
+            ? [
+                {
+                  ...secondStart,
+                  content: [
+                    { type: "output_text", text: "B", annotations: [] },
+                  ],
+                },
+              ]
+            : []),
+          expect.objectContaining({
+            type: "function_call",
+            call_id: notice.id,
+            name: notice.name,
+          }),
+        ]);
+        expect(parseSse(frames.at(-1) ?? null)).toMatchObject({
+          type: "response.completed",
+          response: persisted,
+        });
+        const readback = factory.createResponseAdapter(persisted);
+        expect(readback.getText()).toBe(unfinishedSecond ? "A\nB" : safeText);
+        expect(readback.getToolCalls()).toEqual([
+          { id: notice.id, name: notice.name, kind: "function", arguments: {} },
+        ]);
+        expect(frames.join("")).not.toContain(marker);
+        expect(JSON.stringify(persisted)).not.toContain(marker);
+        expect(frames.join("")).not.toContain("unadmitted_tool");
+        expect(adapter.state.text).toBe(safeText);
+        expect(adapter.state.toolCalls).toEqual([notice]);
+        expect(adapter.getRawToolCallEvents()).toEqual([]);
+        expect(adapter.getHostedToolCalls?.()).toEqual([]);
+        expect(secondStart.content).toEqual([]);
+        expect(secondStart.status).toBe("in_progress");
+      }
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test.each([
+    ["OpenAI", openAiResponsesAdapterFactory],
+    ["Perplexity compatible alias", perplexityResponsesAdapterFactory],
+  ] as const)("%s preserves observed metadata before clearing a held fallback", (_provider, factory) => {
+    const clock = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    try {
+      for (const terminalWithoutOutput of [false, true]) {
+        const adapter = factory.createStreamAdapter();
+        adapter.withholdHostedToolCalls?.();
+        const envelope = {
+          id: "resp_observed",
+          object: "response",
+          created_at: 123,
+          model: "compatible-model",
+          metadata: { source: "compatible client" },
+          reasoning: { effort: "low" },
+          status: "in_progress",
+          output_text: "UNADMITTED_OBSERVED_OUTPUT",
+          output: [],
+        };
+        const preamble = adapter.processChunk({
+          type: "response.created",
+          sequence_number: 0,
+          response: envelope,
+        } as never);
+        expect(parseSse(preamble.sseData)).toMatchObject({
+          response: { created_at: envelope.created_at, model: envelope.model },
+        });
+        for (const chunk of turn.slice(0, -1)) adapter.processChunk(chunk);
+        if (terminalWithoutOutput) {
+          const { output: _output, ...metadata } = envelope;
+          adapter.processChunk({
+            type: "response.completed",
+            sequence_number: 6,
+            response: { ...metadata, status: "completed" },
+          } as never);
+        }
+        clock.mockReturnValue(9_000_000);
+        const notice = { id: "ws_1", name: "notice", arguments: "{}" };
+        const frames = adapter.formatHeldHostedToolCallsSSE?.([notice]) ?? [];
+        const response = adapter.toProviderResponse();
+        expect(response).toMatchObject({
+          id: envelope.id,
+          created_at: envelope.created_at,
+          model: envelope.model,
+          metadata: envelope.metadata,
+          reasoning: envelope.reasoning,
+          status: "completed",
+          output_text: "Let me look. ",
+        });
+        expect(response.output).toEqual([
+          expect.objectContaining({
+            type: "message",
+            content: [
+              { type: "output_text", text: "Let me look. ", annotations: [] },
+            ],
+          }),
+          expect.objectContaining({
+            type: "function_call",
+            call_id: notice.id,
+            name: notice.name,
+            arguments: notice.arguments,
+          }),
+        ]);
+        expect(parseSse(frames.at(-1) ?? null)).toMatchObject({
+          type: "response.completed",
+          response,
+        });
+        expect(JSON.stringify(response)).not.toContain("Rust 1.98");
+        expect(JSON.stringify(response)).not.toContain("UNADMITTED");
+        expect(adapter.state.toolCalls).toEqual([notice]);
+        expect(adapter.state.text).toBe("Let me look. ");
+        expect(adapter.getHostedToolCalls?.()).toEqual([]);
+        expect(adapter.getRawToolCallEvents()).toEqual([]);
+      }
+    } finally {
+      clock.mockRestore();
+    }
+  });
+
+  test.each([
+    "incomplete",
+    "failed",
+  ] as const)("preserves a withheld %s terminal unless policy explicitly replaces the turn", (status) => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.withholdHostedToolCalls?.();
+    for (const chunk of turn.slice(0, -1)) adapter.processChunk(chunk);
+    const response = {
+      id: "resp_search_failed",
+      object: "response",
+      created_at: 123,
+      model: "test-model",
+      status,
+      output: [searchItem, answerItem],
+      incomplete_details:
+        status === "incomplete" ? { reason: "max_messages" } : null,
+      error:
+        status === "failed"
+          ? { code: "server_error", message: "Provider failed" }
+          : null,
+      usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+    };
+    const terminal = adapter.processChunk({
+      type: `response.${status}`,
+      sequence_number: 6,
+      response,
+    } as never);
+    expect(terminal).toMatchObject({
+      sseData: null,
+      isToolCallChunk: true,
+      isFinal: true,
+    });
+    expect(adapter.toProviderResponse()).toEqual(response);
+    expect(
+      parseSse(adapter.getRawToolCallEvents().at(-1) ?? null),
+    ).toMatchObject({
+      type: `response.${status}`,
+      response,
+    });
+
+    const frames = adapter.formatHeldHostedToolCallsSSE?.([
+      { id: "ws_1", name: "notice", arguments: "{}" },
+    ]);
+    const replaced = adapter.toProviderResponse();
+    expect(parseSse(frames?.at(-1) ?? null)).toMatchObject({
+      type: "response.completed",
+      response: replaced,
+    });
+    expect(replaced).toMatchObject({
+      id: response.id,
+      status: "completed",
+      error: null,
+      incomplete_details: null,
+      usage: response.usage,
+    });
+    expect(JSON.stringify(replaced)).not.toContain("Rust 1.98");
+  });
+
   test("forwards a search-backed turn as it arrives when nothing rules on it", () => {
     const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
 
@@ -1367,6 +2348,99 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
     );
 
     expect(forwarded).toEqual(turn.map(() => true));
+    expect(adapter.getHostedToolCalls?.()).toEqual([]);
+  });
+
+  test.each([
+    "incomplete",
+    "failed",
+  ] as const)("discards a hosted-derived continuation of the same pre-hosted message on %s", (status) => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.withholdHostedToolCalls?.();
+    const message = {
+      id: "msg_shared",
+      type: "message",
+      role: "assistant",
+      status: "incomplete",
+      content: [
+        { type: "output_text", text: "Safe before search. ", annotations: [] },
+      ],
+    };
+    adapter.processChunk({
+      type: "response.output_text.delta",
+      item_id: message.id,
+      output_index: 0,
+      content_index: 0,
+      delta: message.content[0].text,
+      sequence_number: 1,
+    } as never);
+    adapter.processChunk({
+      type: "response.output_item.done",
+      output_index: 0,
+      item: message,
+      sequence_number: 2,
+    } as never);
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 1,
+      item: searchItem,
+      sequence_number: 3,
+    } as never);
+    adapter.processChunk({
+      type: "response.output_text.delta",
+      item_id: message.id,
+      output_index: 0,
+      content_index: 0,
+      delta: "UNADMITTED_SAME_MESSAGE_MARKER",
+      sequence_number: 4,
+    } as never);
+    const response = {
+      id: "resp_shared",
+      object: "response",
+      model: "test-model",
+      created_at: 123,
+      status,
+      output: [
+        {
+          ...message,
+          content: [
+            {
+              ...message.content[0],
+              text: "Safe before search. UNADMITTED_SAME_MESSAGE_MARKER",
+            },
+          ],
+        },
+        searchItem,
+      ],
+      usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+      incomplete_details:
+        status === "incomplete" ? { reason: "max_messages" } : null,
+      error:
+        status === "failed"
+          ? { code: "server_error", message: "Provider failed" }
+          : null,
+    };
+    adapter.processChunk({
+      type: `response.${status}`,
+      sequence_number: 5,
+      response,
+    } as never);
+    const frames = adapter.formatToolCallsSSE?.([]) ?? [];
+    expect(frames).toHaveLength(1);
+    expect(parseSse(frames[0])).toMatchObject({
+      type: `response.${status}`,
+      response: { ...response, output: [message] },
+    });
+    expect(adapter.toProviderResponse()).toMatchObject({
+      ...response,
+      output: [message],
+    });
+    expect(JSON.stringify(adapter.toProviderResponse())).not.toContain(
+      "UNADMITTED_",
+    );
+    expect(frames.join("")).not.toContain("Rust 1.98");
+    expect(adapter.state.text).toBe("Safe before search. ");
+    expect(adapter.state.toolCalls).toEqual([]);
     expect(adapter.getHostedToolCalls?.()).toEqual([]);
   });
 
@@ -1416,10 +2490,9 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
     expect(JSON.stringify(completedFrame.response)).toContain(prefix);
     expect(output.map((item) => item.type)).toEqual([
       "message",
-      "message",
       "function_call",
     ]);
-    expect(output[2]).toMatchObject({
+    expect(output[1]).toMatchObject({
       call_id: "ws_1",
       name: "archestra__get_remedy_plans",
     });
@@ -1433,13 +2506,19 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
           },
       )
       .find((frame) => frame.type === "response.output_item.added");
-    expect(addedFrame?.output_index).toBe(2);
-    expect(addedFrame?.item?.id).toBe(output[2]?.id);
+    expect(addedFrame?.output_index).toBe(1);
+    expect(addedFrame?.item?.id).toBe(output[1]?.id);
+    expect(
+      openAiResponsesAdapterFactory.createResponseAdapter(response).getText(),
+    ).toBe(`${prefix}\n\nLet me look. `);
     expect(adapter.state.text).toBe("Let me look. ");
     expect(adapter.state.toolCalls).toEqual([notice]);
   });
 
-  test("wraps compaction context only on the synthesized held completion wire", () => {
+  test.each([
+    "before",
+    "after",
+  ] as const)("retains compaction context only when observed %s the hosted call", (position) => {
     const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
     const proof = "protected child context";
     const compaction = {
@@ -1448,6 +2527,14 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
     };
     adapter.setCompactionContext?.(proof);
     adapter.withholdHostedToolCalls?.();
+    if (position === "before") {
+      adapter.processChunk({
+        type: "response.output_item.done",
+        output_index: 0,
+        sequence_number: 0,
+        item: compaction,
+      } as unknown as Chunk);
+    }
     adapter.processChunk({
       type: "response.output_item.added",
       output_index: 1,
@@ -1482,8 +2569,12 @@ describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
 
     expect(
       unwrapCompactionCarriersFromRequest({ input: clientResponse.output }),
-    ).toEqual([proof]);
+    ).toEqual(position === "before" ? [proof] : []);
     expect(clientResponse).toEqual(recordedResponse);
-    expect(recordedResponse.output).toContainEqual(compaction);
+    if (position === "before") {
+      expect(recordedResponse.output).toContainEqual(compaction);
+    } else {
+      expect(recordedResponse.output).not.toContainEqual(compaction);
+    }
   });
 });

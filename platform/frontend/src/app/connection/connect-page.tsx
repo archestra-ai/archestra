@@ -1073,7 +1073,7 @@ function ProfileCard({
           </InfoTip>
         </span>
       ),
-      sub: routed ? "On, through the LLM proxy" : "Off for this agent",
+      sub: routed ? "LLM proxy on" : "Off for this agent",
       control: (
         <Switch
           checked={routed}

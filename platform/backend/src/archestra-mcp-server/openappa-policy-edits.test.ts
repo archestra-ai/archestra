@@ -229,6 +229,21 @@ describe("policy edits", () => {
     }
   });
 
+  test("a preview that proposes a change tells the model to ask for approval; one that proposes nothing does not", async () => {
+    const policy = withRules(["github__list_issues"]);
+    const { revision } = await saveRevision(policy);
+
+    const change = modelText(
+      await preview({ edits: INSERT, expectedRevision: revision }),
+    );
+    const noChange = modelText(
+      await preview({ content: policy, expectedRevision: revision }),
+    );
+
+    expect(change.instruction).toContain("ask_user");
+    expect(noChange).not.toHaveProperty("instruction");
+  });
+
   test("content still replaces the whole policy and returns a diff", async () => {
     const content = withRules(["github__get_issue"]);
     const previewed = await preview({ content, expectedRevision: 0 });

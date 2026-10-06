@@ -52,7 +52,7 @@ export function TrustAudienceCard() {
           <Skeleton className="h-52 w-full" />
         ) : (
           <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-4 gap-y-5 text-sm">
-            <Term hint="How much the agent can believe what it has read. Text written by an outsider, such as a web page, lowers it, and it never rises again in the session.">
+            <Term hint="Text written by an outsider, such as a web page, lowers it, and it never rises again in the session.">
               Trust
             </Term>
             <dd>
@@ -60,7 +60,7 @@ export function TrustAudienceCard() {
             </dd>
             <Term
               className="pt-3"
-              hint="Who may see what the agent has read. Reading something private limits where the agent can send it."
+              hint="Reading something private limits where the agent can send it."
             >
               Audience
             </Term>

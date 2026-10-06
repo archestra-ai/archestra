@@ -575,7 +575,8 @@ function ConnectArea({
       toast.error("Could not copy. Select the prompt and copy it manually.");
     }
   };
-  const generic = setup === "prompt-or-manual";
+  // Other agents read the generic prompt, with or without a manual option.
+  const generic = setup === "prompt-or-manual" || setup === "generic-prompt";
   const leftOutParts = (
     Object.keys(choices) as (keyof ConnectChoices)[]
   ).filter((part) => !choices[part]);

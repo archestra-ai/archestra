@@ -18,15 +18,23 @@ import {
 /**
  * How an app gets set up:
  * - "prompt": first-party apps; one prompt, approve in the browser.
- * - "prompt-or-manual": other agents ("Any client", Amp, Kiro, OpenClaw...);
- *   a generic prompt by default, manual setup one toggle away.
+ * - "generic-prompt": other agents (Amp, Kiro, OpenClaw...); the generic
+ *   prompt only. The agent works out what it supports, which manual steps
+ *   can't (Amp has no LLM proxy setting, for one).
+ * - "prompt-or-manual": Generic client; the generic prompt by default,
+ *   manual setup one toggle away.
  * - "manual": n8n (and anything that can't run a prompt); manual only.
  */
-export type SetupMode = "prompt" | "prompt-or-manual" | "manual";
+export type SetupMode =
+  | "prompt"
+  | "generic-prompt"
+  | "prompt-or-manual"
+  | "manual";
 
 export function setupModeFor(client: ConnectClient): SetupMode {
   if (isInstallerClientId(client.id)) return "prompt";
-  if (usesGenericInstructions(client)) return "prompt-or-manual";
+  if (usesGenericInstructions(client))
+    return client.id === "generic" ? "prompt-or-manual" : "generic-prompt";
   return "manual";
 }
 

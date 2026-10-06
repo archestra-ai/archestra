@@ -334,6 +334,20 @@ describe("ConnectPage (no connect request)", () => {
     expect(screen.getByText("Follow the steps for your agent")).toBeVisible();
   });
 
+  it("gives other agents the prompt only, even when linked to manual setup", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=amp&mode=manual") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockOrganization({});
+    render(<ConnectionPage />);
+    expect(screen.getByText("Paste the prompt into Amp")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Manual setup" }),
+    ).not.toBeInTheDocument();
+  });
+
   it("opens Claude Desktop on its installer download when linked", async () => {
     window.localStorage.clear();
     saveConnectChoices("claude-desktop", {

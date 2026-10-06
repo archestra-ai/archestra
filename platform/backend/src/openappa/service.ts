@@ -26,6 +26,7 @@ import {
   expandCommandExecutionPolicyRules,
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
+import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { openappaFailure } from "@/openappa/failure";
@@ -523,22 +524,28 @@ export function sessionFromHeaders(params: {
   };
 }
 
+export const UNDELIVERABLE_RETURN_CONTRACT =
+  "This session requires an OpenAPPA return contract the proxy cannot deliver before inference";
+
 async function startSession(
   session: OpenAppaSession,
   policy?: DispatchPolicy,
-): Promise<void> {
+): Promise<string | undefined> {
   const decision = await dispatch(session, { event: "session_start" }, policy);
   if (decision.decision === "context") {
-    // The runtime returns start context (the child return contract) before inference.
-    // The proxy cannot send this contract to the model.
-    // Refuses the session instead of running without the return contract.
-    throw new ApiError(
-      409,
-      "This session requires an OpenAPPA return contract the proxy cannot deliver before inference",
-    );
+    const text = decision.text;
+    if (
+      session.parent_id &&
+      typeof text === "string" &&
+      text.trim().length > 0
+    ) {
+      return text;
+    }
+    throw new ApiError(409, UNDELIVERABLE_RETURN_CONTRACT);
   }
   if (decision.decision !== "ack")
     throw new ApiError(409, decisionMessage(decision));
+  return undefined;
 }
 
 function extractApprovedOutput(
@@ -697,6 +704,10 @@ export async function processProxyResults(params: {
    * remedy never ran, and the model reads what the client returned.
    */
   isControlResult?: (result: CommonToolResult) => boolean;
+  /** Canonical status for this session's server-staged, still-pending review. */
+  pendingReviewResult?: (
+    result: CommonToolResult,
+  ) => Promise<string | undefined>;
   trustedChat?: boolean;
   /** How a client-side spawn launch ended. */
   classifySpawnResult?: (
@@ -705,7 +716,7 @@ export async function processProxyResults(params: {
 }) {
   // The results dispatch one after another; one policy read serves them all.
   const policy = await effectivePolicy(params.session.organization_id);
-  await startSession(params.session, policy);
+  const returnContract = await startSession(params.session, policy);
   const updates: Record<string, ProcessedToolResult> = {};
   for (const result of params.results) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
@@ -733,14 +744,20 @@ export async function processProxyResults(params: {
       controlToolName: params.controlToolName,
       policy,
     });
-    updates[result.id] =
-      approved.code === UNRELEASED_CALL_CODE &&
-      params.isControlResult?.(result) === true
+    const pendingReview =
+      approved.code === UNRELEASED_CALL_CODE
+        ? await params.pendingReviewResult?.(result)
+        : undefined;
+    updates[result.id] = pendingReview
+      ? { content: pendingReview, outputSource: "runtime" }
+      : approved.code === UNRELEASED_CALL_CODE &&
+          params.isControlResult?.(result) === true
         ? unexecutedControlResult(result.content)
         : approved;
   }
   return {
     toolResultUpdates: updates,
+    ...(returnContract ? { returnContract } : {}),
     contextIsTrusted: true,
     dualLlmAnalyses: [],
     unsafeContextBoundary: undefined,
@@ -851,6 +868,7 @@ export async function evaluateToolCalls(
         operation_id: `call:${call.id}`,
         tool,
         ...(spelling ? { spelling } : {}),
+        ...(target.isRunToolDispatchTarget ? { dispatch: call.name } : {}),
         presentation: nativePresentation(
           options.control?.name,
           options.supportsDelegation,
@@ -1236,21 +1254,15 @@ function decisionMessage(decision: NativeDecision): string {
 }
 
 /**
- * Executes a remedy using a verified host routing claim.
+ * Executes a remedy for the current trajectory supplied by the trusted proxy.
  */
 export async function executeRemedyByOffer(params: {
   organizationId: string;
   /** The principal the gateway authenticated, in the proxy's `user:<id>` form. */
   callerId?: string;
-  /** Minted session the signed offer claims name. */
+  /** Current caller-scoped session resolved by the client adapter. */
   sessionId: string;
   parentId?: string;
-  /** Principal that minted the offer, from verified claims. */
-  ownerCallerId?: string;
-  tool?: string;
-  spelling?: string;
-  /** The client's dispatch tool the blocked call went through, from verified claims. */
-  dispatch?: string;
   /** Provider or client-supplied logical execution identity, when available. */
   toolCallId?: string;
   controlToolName?: string;
@@ -1266,22 +1278,18 @@ export async function executeRemedyByOffer(params: {
   precheckRefusal?: string;
 }): Promise<{
   result: CallToolResult;
-  /** Authorized owner lookup, not proof that the offer remains spendable. */
+  /** Existing session route, not proof that the offer remains spendable. */
   known: boolean;
 }> {
   const decision = await withRuntime(params.organizationId, (module, policy) =>
     module.executeRemedyByOffer(
       JSON.stringify({
         organization_id: params.organizationId,
-        session_id: params.sessionId,
+        trajectory: currentTrajectory({
+          session_id: params.sessionId,
+          ...(params.parentId ? { parent_id: params.parentId } : {}),
+        }),
         ...(params.callerId ? { caller_id: params.callerId } : {}),
-        ...(params.parentId ? { parent_id: params.parentId } : {}),
-        ...(params.ownerCallerId
-          ? { owner_caller_id: params.ownerCallerId }
-          : {}),
-        ...(params.tool ? { tool: params.tool } : {}),
-        ...(params.spelling ? { spelling: params.spelling } : {}),
-        ...(params.dispatch ? { dispatch: params.dispatch } : {}),
         execution_mode: params.toolCallId ? "tracked" : "untracked",
         ...(params.toolCallId ? { tool_call_id: params.toolCallId } : {}),
         original_arguments: params.originalArguments,

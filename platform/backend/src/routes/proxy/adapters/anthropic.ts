@@ -1651,8 +1651,14 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
  */
 function stripEmptyTextBlocks(messages: AnthropicMessages): AnthropicMessages {
   if (!Array.isArray(messages)) return messages;
-  return messages.map((message) => {
-    if (!Array.isArray(message.content)) return message;
+  return messages.flatMap((message) => {
+    if (!Array.isArray(message.content)) {
+      return message.role === "system" &&
+        typeof message.content === "string" &&
+        !message.content.trim()
+        ? []
+        : [message];
+    }
     const filtered = message.content.filter((part) => {
       const record = part as Record<string, unknown>;
       if (
@@ -1664,9 +1670,14 @@ function stripEmptyTextBlocks(messages: AnthropicMessages): AnthropicMessages {
       }
       return true;
     });
-    return {
-      ...message,
-      content: filtered.length > 0 ? filtered : [{ type: "text", text: " " }],
-    };
+    // Compaction can leave an empty system placeholder. A whitespace filler is
+    // valid for some conversational turns, but never for a system text block.
+    if (message.role === "system" && filtered.length === 0) return [];
+    return [
+      {
+        ...message,
+        content: filtered.length > 0 ? filtered : [{ type: "text", text: " " }],
+      },
+    ];
   });
 }

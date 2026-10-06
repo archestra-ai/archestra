@@ -17,6 +17,7 @@ export type AppaChildTrajectoryReceipt = {
   childNativeId?: string;
   spawnerNativeId: string;
   spawnCallId?: string;
+  nativeConversationId?: string;
 };
 
 const MARK_TOP = "▄█▄▄▄█▄";
@@ -46,6 +47,7 @@ type ReceiptClaims = readonly [
   string | null,
   string,
   string | null,
+  (string | null)?,
 ];
 
 export function mintChildTrajectoryReceipt(params: {
@@ -57,6 +59,7 @@ export function mintChildTrajectoryReceipt(params: {
   spawnerNativeId: string;
   spawnCallId?: string;
   format?: "full" | "inline";
+  nativeConversationId?: string;
 }): string | undefined {
   const { childId, childNativeId } = params;
   if (
@@ -66,7 +69,9 @@ export function mintChildTrajectoryReceipt(params: {
     !nonEmptyString(params.spawnerNativeId) ||
     (childNativeId !== undefined && !nonEmptyString(childNativeId)) ||
     (params.callerId !== undefined && !nonEmptyString(params.callerId)) ||
-    (params.spawnCallId !== undefined && !nonEmptyString(params.spawnCallId))
+    (params.spawnCallId !== undefined && !nonEmptyString(params.spawnCallId)) ||
+    (params.nativeConversationId !== undefined &&
+      !nonEmptyString(params.nativeConversationId))
   ) {
     return undefined;
   }
@@ -81,6 +86,9 @@ export function mintChildTrajectoryReceipt(params: {
     childNativeId ?? null,
     params.spawnerNativeId,
     params.spawnCallId ?? null,
+    ...(params.nativeConversationId === undefined
+      ? ([] as const)
+      : ([params.nativeConversationId] as const)),
   ];
   const canonicalClaims = JSON.stringify(claims);
   if (Buffer.byteLength(canonicalClaims, "utf8") > MAX_CLAIMS_BYTES) {
@@ -102,6 +110,7 @@ export function verifyChildTrajectoryReceipt(params: {
   callerId: string | undefined;
   spawnerNativeId: string;
   childNativeId?: string;
+  nativeConversationId?: string;
 }): boolean {
   const key = receiptKey();
   if (!key) return false;
@@ -113,7 +122,9 @@ export function verifyChildTrajectoryReceipt(params: {
     parsed.receipt.spawnerNativeId !== params.spawnerNativeId ||
     (parsed.receipt.childNativeId !== undefined &&
       params.childNativeId !== undefined &&
-      parsed.receipt.childNativeId !== params.childNativeId)
+      parsed.receipt.childNativeId !== params.childNativeId) ||
+    (params.nativeConversationId !== undefined &&
+      parsed.receipt.nativeConversationId !== params.nativeConversationId)
   ) {
     return false;
   }
@@ -194,6 +205,7 @@ function parseToken(token: string):
       childNativeId,
       spawnerNativeId,
       spawnCallId,
+      nativeConversationId,
     ] = claims;
     return {
       receipt: {
@@ -205,6 +217,9 @@ function parseToken(token: string):
         ...(childNativeId === null ? {} : { childNativeId }),
         spawnerNativeId,
         ...(spawnCallId === null ? {} : { spawnCallId }),
+        ...(nativeConversationId === undefined || nativeConversationId === null
+          ? {}
+          : { nativeConversationId }),
       },
       payload,
       tag,
@@ -215,7 +230,11 @@ function parseToken(token: string):
 }
 
 function isReceiptClaims(value: unknown): value is ReceiptClaims {
-  if (!Array.isArray(value) || value.length !== 8 || value[0] !== 2) {
+  if (
+    !Array.isArray(value) ||
+    (value.length !== 8 && value.length !== 9) ||
+    value[0] !== 2
+  ) {
     return false;
   }
   const [
@@ -227,6 +246,7 @@ function isReceiptClaims(value: unknown): value is ReceiptClaims {
     childNativeId,
     spawnerNativeId,
     spawnCallId,
+    nativeConversationId,
   ] = value;
   return (
     nonEmptyString(organizationId) &&
@@ -235,7 +255,10 @@ function isReceiptClaims(value: unknown): value is ReceiptClaims {
     nonEmptyString(childId) &&
     (childNativeId === null || nonEmptyString(childNativeId)) &&
     nonEmptyString(spawnerNativeId) &&
-    (spawnCallId === null || nonEmptyString(spawnCallId))
+    (spawnCallId === null || nonEmptyString(spawnCallId)) &&
+    (nativeConversationId === undefined ||
+      nativeConversationId === null ||
+      nonEmptyString(nativeConversationId))
   );
 }
 
@@ -255,7 +278,8 @@ function sameReceipt(
     left.childId === right.childId &&
     left.childNativeId === right.childNativeId &&
     left.spawnerNativeId === right.spawnerNativeId &&
-    left.spawnCallId === right.spawnCallId
+    left.spawnCallId === right.spawnCallId &&
+    left.nativeConversationId === right.nativeConversationId
   );
 }
 

@@ -51,6 +51,8 @@ export const CacheKey = {
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** Per-call server-issued review status, for history only; never a ruling. */
+  OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */

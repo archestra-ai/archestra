@@ -116,8 +116,7 @@ context_control = true
   const declared = JSON.parse(await native.executeRemedyByOffer(JSON.stringify({
     organization_id: parent.organization_id,
     caller_id: parent.caller_id,
-    session_id: parent.session_id,
-    owner_caller_id: parent.caller_id,
+    trajectory: { v: 1, session_id: parent.session_id },
     execution_mode: 'tracked',
     tool_call_id: 'declare-spawn',
     arguments: { offer_id: offer.offer_id, label: {} },
@@ -245,8 +244,7 @@ context_control = true
     const accepted = JSON.parse(await native.executeRemedyByOffer(JSON.stringify({
       organization_id: parent.organization_id,
       caller_id: parent.caller_id,
-      session_id: parent.session_id,
-      owner_caller_id: parent.caller_id,
+      trajectory: { v: 1, session_id: parent.session_id },
       execution_mode: 'tracked',
       tool_call_id: 'accept-narrow',
       arguments: { offer_id: narrowedHeld.offers[0].offer_id },
@@ -300,9 +298,7 @@ context_control = true
     const accepted = JSON.parse(await native.executeRemedyByOffer(JSON.stringify({
       organization_id: child.organization_id,
       caller_id: child.caller_id,
-      session_id: child.session_id,
-      parent_id: child.parent_id,
-      owner_caller_id: child.caller_id,
+      trajectory: { v: 1, session_id: child.session_id, parent_id: child.parent_id },
       execution_mode: 'tracked',
       tool_call_id: 'accept-read',
       arguments: { offer_id: firstRead.offers[0].offer_id },

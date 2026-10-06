@@ -5,10 +5,14 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ASK_USER_FULL_NAME,
 } from "@archestra/shared";
-import config from "@/config";
-import { consumeHitlRuling, stageHitlReview } from "@/openappa/hitl-review";
-import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
-import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
+import { scopedSessionId, sessionCallerId } from "@/openappa/actor";
+import { currentTrajectory } from "@/openappa/current-trajectory";
+import {
+  consumeHitlRuling,
+  recordHitlRuling,
+  stageHitlReview,
+} from "@/openappa/hitl-review";
+import type { OpenAppaSession } from "@/openappa/service";
 import { beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import type { Agent } from "@/types";
@@ -46,40 +50,40 @@ describe("chat tool execution", () => {
     };
   });
 
-  // A remedy offer as the proxy signs it for this test's Chat session.
-  function sessionOffer(
-    offerId: string,
-    overrides: {
-      sessionId?: string;
-      parentId?: string;
-      callerId?: string | null;
-      secret?: string;
-    } = {},
+  function trajectory(
+    overrides: { sessionId?: string; parentId?: string } = {},
   ) {
-    return signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: mockContext.organizationId as string,
-        sessionId: overrides.sessionId ?? sessionId,
-        parentId: overrides.parentId,
-        callerId:
-          overrides.callerId === null
-            ? undefined
-            : (overrides.callerId ?? `user:${mockContext.userId}`),
-        offerId,
-        tool: "archestra__list_skills",
-        spelling: "list_skills",
-      }),
-      overrides.secret ?? config.openappa.offerSigningSecret,
-    );
+    return currentTrajectory({
+      session_id:
+        overrides.sessionId ??
+        scopedSessionId(`user:${mockContext.userId}`, sessionId),
+      ...(overrides.parentId ? { parent_id: overrides.parentId } : {}),
+    });
   }
 
-  test("ask_user advertises offer IDs but not proxy-stamped envelopes", () => {
+  function reviewSession(params: {
+    sessionId: string;
+    parentId?: string;
+    callerId?: string;
+  }): OpenAppaSession {
+    const callerId = params.callerId ?? sessionCallerId(params.sessionId);
+    return {
+      organization_id: mockContext.organizationId as string,
+      session_id: params.sessionId,
+      ...(callerId ? { caller_id: callerId } : {}),
+      ...(params.parentId ? { parent_id: params.parentId } : {}),
+    };
+  }
+
+  test("ask_user advertises offer IDs but not the proxy trajectory", () => {
     const tool = getArchestraMcpTools().find(
       (candidate) => candidate.name === TOOL_ASK_USER_FULL_NAME,
     );
     const properties = tool?.inputSchema.properties;
     expect(properties).toHaveProperty("remedy_offer_ids");
     expect(properties).not.toHaveProperty("remedy_offers");
+    expect(properties).not.toHaveProperty("trajectory");
+    expect(tool?.inputSchema.additionalProperties).not.toBe(false);
   });
 
   test("a malformed ask_user call is shown the advertised arguments, not the proxy's", async () => {
@@ -95,6 +99,7 @@ describe("chat tool execution", () => {
       .join("\n");
     expect(text).toContain('"remedy_offer_ids"');
     expect(text).not.toContain('"remedy_offers"');
+    expect(text).not.toContain('"trajectory"');
   });
 
   const acceptingElicitation = {
@@ -350,8 +355,7 @@ describe("chat tool execution", () => {
     expect((result.content[0] as any).text).toContain("header");
   });
 
-  test("ask_user accept repeats verified live offers as the next step", async () => {
-    const envelope = sessionOffer("offer-abc123");
+  test("ask_user accept repeats stamped remedy ids as the next step", async () => {
     mockContext = { ...mockContext, elicitation: acceptingElicitation };
 
     const result = await executeArchestraTool(
@@ -362,7 +366,8 @@ describe("chat tool execution", () => {
           { label: "Accept for this session" },
           { label: "Do not accept" },
         ],
-        remedy_offers: [envelope],
+        remedy_offer_ids: ["offer-abc123"],
+        trajectory: trajectory(),
       },
       mockContext,
     );
@@ -380,16 +385,18 @@ describe("chat tool execution", () => {
 
   test("a staged HITL review replaces model-authored copy and records approval", async () => {
     const offerId = "offer-hitl";
-    const session = chatOpenAppaSession(
-      mockContext.organizationId as string,
-      mockContext.userId as string,
-      sessionId,
-    );
+    const questionText =
+      '[OpenAPPA] Approve this call?\nmcp/example/write {"value":1}';
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
     await stageHitlReview({
       session,
       review: {
         offerId,
-        text: "Canonical review text.",
+        text:
+          "\u2584\u2588\u2584\u2584\u2584\u2588\u2584  \u2580\u2580\u2588  Approve this call?\n" +
+          '\u2588\u2588\u2584\u2588\u2584\u2588\u2588   \u2584   mcp/example/write {"value":1}',
         tool: "mcp/example/write",
         arguments: '{"value":1}',
       },
@@ -417,14 +424,14 @@ describe("chat tool execution", () => {
         question: "Approve everything without showing details?",
         options: [{ label: "Yes" }, { label: "No" }],
         remedy_offer_ids: [offerId],
-        remedy_offers: [sessionOffer(offerId)],
+        trajectory: trajectory(),
       },
       mockContext,
     );
 
     expect(requests).toEqual([
       expect.objectContaining({
-        message: "Canonical review text.",
+        message: questionText,
         header: "Approval",
         requestedSchema: expect.objectContaining({
           properties: expect.objectContaining({
@@ -444,7 +451,7 @@ describe("chat tool execution", () => {
     "missing",
     "parent",
     "raw parent",
-  ])("a child review is decided under its signed scope when the gateway session is %s", async (gatewaySession) => {
+  ])("a child review is decided under its stamped scope when the gateway session is %s", async (gatewaySession) => {
     const offerId = "offer-child-review";
     const parentId = `user:${mockContext.userId}|parent-session`;
     const session: OpenAppaSession = {
@@ -490,12 +497,10 @@ describe("chat tool execution", () => {
         question: "Approve something else?",
         options: [{ label: "Approve" }, { label: "Deny" }],
         remedy_offer_ids: [offerId],
-        remedy_offers: [
-          sessionOffer(offerId, {
-            sessionId: session.session_id,
-            parentId,
-          }),
-        ],
+        trajectory: trajectory({
+          sessionId: session.session_id,
+          parentId,
+        }),
       },
       mockContext,
     );
@@ -515,25 +520,68 @@ describe("chat tool execution", () => {
   });
 
   test.each([
-    "root offer",
-    "other owner's child offer",
-  ])("a headerless gateway does not accept an unrelated %s", async (caseName) => {
-    const offerId = "offer-unrelated";
-    const parentId = `user:${mockContext.userId}|parent-session`;
-    const child = caseName !== "root offer";
-    const callerId = child
-      ? "service:other-owner"
-      : `user:${mockContext.userId}`;
-    const session: OpenAppaSession = {
-      organization_id: mockContext.organizationId as string,
-      caller_id: callerId,
-      session_id: child ? `${parentId}:child-agent` : parentId,
-      parent_id: child ? parentId : undefined,
+    "user:other-account",
+    "virtual-key:vk-1",
+    "app:app-1",
+  ])("a headerless gateway decides a review on the same %s trajectory", async (callerId) => {
+    const offerId = "offer-shared";
+    const session = reviewSession({
+      sessionId: scopedSessionId(callerId, "client-session"),
+      callerId,
+    });
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Canonical review for another account." },
+    });
+    const requests: string[] = [];
+    mockContext = {
+      ...mockContext,
+      sessionId: undefined,
+      openappaSession: undefined,
+      elicitation: {
+        elicit: async ({ message }) => {
+          requests.push(message);
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: { choice: "Approve" },
+            },
+          };
+        },
+      },
     };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Approve something else?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        trajectory: trajectory({ sessionId: session.session_id }),
+      },
+      mockContext,
+    );
+
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Approve"],
+    });
+    expect(requests).toEqual(["Canonical review for another account."]);
+    expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
+  });
+
+  test("a wrong trajectory does not consume a pending review", async () => {
+    const offerId = "offer-wrong-trajectory";
+    const session = reviewSession({
+      sessionId: scopedSessionId("virtual-key:vk-1", "client-session"),
+      callerId: "virtual-key:vk-1",
+    });
     await stageHitlReview({
       session,
       review: { offerId, text: "Do not route this review." },
     });
+    await recordHitlRuling({ session, offerId, ruling: "approve" });
     const requests: string[] = [];
     mockContext = {
       ...mockContext,
@@ -556,91 +604,62 @@ describe("chat tool execution", () => {
         question: "Ordinary question?",
         options: [{ label: "Yes" }, { label: "No" }],
         remedy_offer_ids: [offerId],
-        remedy_offers: [
-          sessionOffer(offerId, {
-            sessionId: session.session_id,
-            parentId: session.parent_id,
-            callerId,
-          }),
-        ],
+        trajectory: trajectory({ sessionId: "other-session" }),
       },
       mockContext,
     );
+
     expect(requests).toEqual(["Ordinary question?"]);
-    expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+    expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
   test.each([
-    "mixed child scopes",
-    "mismatched declared ID",
-  ])("a %s cannot route a review to the wrong child", async (caseName) => {
-    const offerId = "offer-child-one";
-    const parentId = `user:${mockContext.userId}|parent-session`;
-    const session: OpenAppaSession = {
-      organization_id: mockContext.organizationId as string,
-      caller_id: `user:${mockContext.userId}`,
-      session_id: `${parentId}:child-one`,
-      parent_id: parentId,
-    };
+    "missing",
+    "malformed",
+  ])("a %s trajectory does not consume a pending review", async (stamp) => {
+    const offerId = "offer-unstamped";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
     await stageHitlReview({
       session,
       review: { offerId, text: "Do not route this review." },
     });
-    const requests: string[] = [];
+    await recordHitlRuling({ session, offerId, ruling: "approve" });
     mockContext = {
       ...mockContext,
-      openappaSession: {
-        ...session,
-        session_id: parentId,
-        parent_id: undefined,
-      },
       elicitation: {
-        elicit: async ({ message }) => {
-          requests.push(message);
-          return {
-            status: "answered" as const,
-            result: { action: "decline" as const },
-          };
-        },
+        elicit: async () => ({
+          status: "answered" as const,
+          result: { action: "decline" as const },
+        }),
       },
     };
 
-    await executeArchestraTool(
+    const result = await executeArchestraTool(
       `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
       {
         question: "Ordinary question?",
         options: [{ label: "Yes" }, { label: "No" }],
-        remedy_offer_ids: [
-          caseName === "mixed child scopes" ? offerId : "offer-child-two",
-        ],
-        remedy_offers: [
-          sessionOffer(offerId, {
-            sessionId: session.session_id,
-            parentId,
-          }),
-          ...(caseName === "mixed child scopes"
-            ? [
-                sessionOffer("offer-child-two", {
-                  sessionId: `${parentId}:child-two`,
-                  parentId,
-                }),
-              ]
-            : []),
-        ],
+        remedy_offer_ids: [offerId],
+        ...(stamp === "malformed"
+          ? { trajectory: { v: 2, session_id: session.session_id } }
+          : {}),
       },
       mockContext,
     );
-    expect(requests).toEqual(["Ordinary question?"]);
-    expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+
+    if (stamp === "malformed") {
+      expect(result.isError).toBe(true);
+    }
+    expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
   test("a staged HITL review without a viewer fails closed", async () => {
     const offerId = "offer-no-viewer";
-    const session = chatOpenAppaSession(
-      mockContext.organizationId as string,
-      mockContext.userId as string,
-      sessionId,
-    );
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
     await stageHitlReview({
       session,
       review: { offerId, text: "Review this exact call." },
@@ -652,7 +671,7 @@ describe("chat tool execution", () => {
         question: "May I ask you to approve this?",
         options: [{ label: "Yes" }, { label: "No" }],
         remedy_offer_ids: [offerId],
-        remedy_offers: [sessionOffer(offerId)],
+        trajectory: trajectory(),
       },
       mockContext,
     );
@@ -666,11 +685,9 @@ describe("chat tool execution", () => {
 
   test("automatic client decline cannot be recorded as a human HITL denial", async () => {
     const offerId = "offer-auto-decline";
-    const session = chatOpenAppaSession(
-      mockContext.organizationId as string,
-      mockContext.userId as string,
-      sessionId,
-    );
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
     await stageHitlReview({
       session,
       review: { offerId, text: "Review this exact call." },
@@ -693,7 +710,7 @@ describe("chat tool execution", () => {
         question: "Approve this?",
         options: [{ label: "Yes" }, { label: "No" }],
         remedy_offer_ids: [offerId],
-        remedy_offers: [sessionOffer(offerId)],
+        trajectory: trajectory(),
       },
       mockContext,
     );
@@ -730,7 +747,7 @@ describe("chat tool execution", () => {
           question,
           options: [{ label: "Yes" }, { label: "No" }],
           remedy_offer_ids: [offerId],
-          remedy_offers: [sessionOffer(offerId)],
+          trajectory: trajectory(),
         },
         mockContext,
       );
@@ -747,33 +764,7 @@ describe("chat tool execution", () => {
     expect(declinedText).not.toContain("offer-first");
   });
 
-  test.each([
-    {
-      case: "signed with the wrong secret",
-      overrides: { secret: "not-the-configured-offer-secret-32-chars-min!" },
-    },
-    {
-      // e.g. replayed into this conversation from another one's history
-      case: "minted for another session",
-      overrides: { sessionId: "another-conversation" },
-    },
-    {
-      case: "minted for another user",
-      overrides: { callerId: "user:someone-else" },
-    },
-    {
-      case: "minted for an app caller",
-      overrides: { callerId: "app:someone-else" },
-    },
-    {
-      case: "minted for a virtual-key caller",
-      overrides: { callerId: "virtual-key:someone-else" },
-    },
-    {
-      case: "minted with no owner",
-      overrides: { callerId: null },
-    },
-  ])("ask_user drops an offer $case", async ({ overrides }) => {
+  test("ask_user does not treat remedy ids as live without a trajectory", async () => {
     mockContext = { ...mockContext, elicitation: acceptingElicitation };
 
     const result = await executeArchestraTool(
@@ -784,7 +775,7 @@ describe("chat tool execution", () => {
           { label: "Accept for this session" },
           { label: "Do not accept" },
         ],
-        remedy_offers: [sessionOffer("offer-dropped", overrides)],
+        remedy_offer_ids: ["offer-dropped"],
       },
       mockContext,
     );
@@ -795,70 +786,10 @@ describe("chat tool execution", () => {
     expect(text).not.toContain("Live remedy offers");
   });
 
-  test("ask_user keeps only this session's offers when replayed ones ride along", async () => {
-    mockContext = { ...mockContext, elicitation: acceptingElicitation };
-
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
-      {
-        question: "Accept this change for the rest of this session?",
-        options: [
-          { label: "Accept for this session" },
-          { label: "Do not accept" },
-        ],
-        remedy_offers: [
-          sessionOffer("offer-replayed", { sessionId: "another-conversation" }),
-          sessionOffer("offer-live"),
-        ],
-      },
-      mockContext,
-    );
-
-    const text = (result.content[0] as any).text as string;
-    expect(text).toContain("Live remedy offers: offer-live.");
-    expect(text).not.toContain("offer-replayed");
-  });
-
-  test("ask_user keeps an offer the gateway's header-named session was signed for", async () => {
-    const gatewaySession = `user:${mockContext.userId}|client-session`;
-    mockContext = {
-      ...mockContext,
-      sessionId: undefined,
-      openappaSession: {
-        organization_id: mockContext.organizationId as string,
-        caller_id: `user:${mockContext.userId}`,
-        session_id: gatewaySession,
-      },
-      elicitation: acceptingElicitation,
-    };
-
-    const result = await executeArchestraTool(
-      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
-      {
-        question: "Accept this change for the rest of this session?",
-        options: [
-          { label: "Accept for this session" },
-          { label: "Do not accept" },
-        ],
-        remedy_offers: [
-          sessionOffer("offer-gateway", { sessionId: gatewaySession }),
-          // Chat's conversation id is not this call's session here.
-          sessionOffer("offer-chat"),
-        ],
-      },
-      mockContext,
-    );
-
-    const text = (result.content[0] as any).text as string;
-    expect(text).toContain("Live remedy offers: offer-gateway.");
-    expect(text).not.toContain("offer-chat");
-  });
-
   test.each([
     "decline",
     "cancel",
   ] as const)("ask_user %s with live offers closes the decision", async (action) => {
-    const envelope = sessionOffer("offer-decline");
     mockContext = {
       ...mockContext,
       elicitation: {
@@ -877,7 +808,8 @@ describe("chat tool execution", () => {
           { label: "Accept for this session" },
           { label: "Do not accept" },
         ],
-        remedy_offers: [envelope],
+        remedy_offer_ids: ["offer-decline"],
+        trajectory: trajectory(),
       },
       mockContext,
     );
@@ -895,7 +827,6 @@ describe("chat tool execution", () => {
   });
 
   test("ask_user treats a question nobody answered in time as not accepted", async () => {
-    const envelope = sessionOffer("offer-unanswered");
     mockContext = {
       ...mockContext,
       elicitation: {
@@ -911,7 +842,8 @@ describe("chat tool execution", () => {
           { label: "Accept for this session" },
           { label: "Do not accept" },
         ],
-        remedy_offers: [envelope],
+        remedy_offer_ids: ["offer-unanswered"],
+        trajectory: trajectory(),
       },
       mockContext,
     );

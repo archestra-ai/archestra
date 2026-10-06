@@ -18,6 +18,7 @@ import type {
   SetupScriptProxySection,
 } from "./connection-setup-script";
 import { describeMarketplaceContents } from "./marketplace-copy";
+import { OPENCODE_HANDOFF_PLUGIN } from "./opencode-handoff";
 
 /**
  * Client-agnostic renderer for the CLI startup guard ("pre-loader"): a
@@ -1185,7 +1186,11 @@ export function buildStartupGuardInstallSection(
         ? handoffEnabled
           ? `mkdir -p "${guardPath}.instructions"\ncp "${promptPath}" "${guardPath}.instructions/AGENTS.md"`
           : `rm -f "${guardPath}.instructions/AGENTS.md"`
-        : "";
+        : client.clientId === "opencode"
+          ? handoffEnabled
+            ? `printf '%s' ${sh(OPENCODE_HANDOFF_PLUGIN)} > "${guardPath}.handoff.mjs"\nchmod 600 "${guardPath}.handoff.mjs"`
+            : `rm -f "${guardPath}.handoff.mjs"`
+          : "";
   const launchArgs =
     client.clientId === "codex"
       ? `local archestra_prompt_config
@@ -1194,7 +1199,7 @@ export function buildStartupGuardInstallSection(
       : client.clientId === "copilot-cli"
         ? `archestra_instructions_dir="${guardPath}.instructions"`
         : client.clientId === "opencode"
-          ? `archestra_opencode_handoff="${promptPath}"`
+          ? `if [ -r "${guardPath}.handoff.mjs" ]; then archestra_opencode_handoff="${guardPath}.handoff.mjs"; fi`
           : `set -- --append-system-prompt-file "${promptPath}" "$@"`;
   const promptArgs = handoffEnabled
     ? `
@@ -1283,7 +1288,7 @@ ${client.binary}() {
   else`
       : handoffEnabled && client.clientId === "opencode"
         ? `if [ -n "$archestra_opencode_handoff" ] && [ -z "\${OPENCODE_CONFIG_CONTENT:-}" ]; then
-    OPENCODE_CONFIG_CONTENT="{\\"instructions\\":[\\"$archestra_opencode_handoff\\"]}" command ${client.binary} "$@"
+    OPENCODE_CONFIG_CONTENT="{\\"plugin\\":[\\"file://$archestra_opencode_handoff\\"]}" command ${client.binary} "$@"
   else`
         : ""
   }

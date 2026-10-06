@@ -113,7 +113,10 @@ export interface EditedPolicy {
  */
 export declare function editOpenappaPolicy(content: string, edits: Array<PolicyEditInput>): Promise<EditedPolicy>
 
-/** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
+/**
+ * Executes a remedy for the proxy-stamped trajectory, resolving that session
+ * from PostgreSQL. The caller, when present, is the receipt spender.
+ */
 export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
 
 /** Read the current label of a started session without mutating its trajectory. */

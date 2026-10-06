@@ -190,6 +190,11 @@ import { trackBackgroundWork } from "@/utils/background-work";
 import { repairLoneSurrogates } from "@/utils/lone-surrogates";
 import { isLoopbackRequest } from "@/utils/network";
 import { isUuid } from "@/utils/uuid";
+import { CodexResponsesGenerationError } from "./adapters/openai-codex-translator";
+import {
+  discardUnadmittedResponsesOutput,
+  ResponsesStreamIncompleteError,
+} from "./adapters/openai-responses";
 import {
   assertAuthenticatedForKeylessProvider,
   assertConsistentUserCredentials,
@@ -2050,14 +2055,11 @@ export async function handleLLMProxy<
           (declaredToolEntries(body).length > 0 &&
             !isClientPromptSuggestion(body))) &&
         appaCallerId &&
-        appaFamily &&
-        config.openappa.offerSigningSecret.length > 0
+        appaFamily
       ) {
         const receipt = await OpenAppaSessionModel.ensureReceiptToken({
           organizationId: resolvedAgent.organizationId,
-          callerId: appaCallerId,
           sessionId: openappaSession.session_id,
-          secret: config.openappa.offerSigningSecret,
         });
         if (receipt && (receipt.receiptIssuedAt == null || clientCompaction)) {
           sessionReceipt = {
@@ -2396,6 +2398,16 @@ export async function handleLLMProxy<
     return await handleNonStreaming(client, finalRequest, reply, provider, ctx);
   } catch (error) {
     const lifecycleError = error;
+    if (lifecycleError instanceof RecordedCodexGenerationFailure) {
+      return handleError(
+        lifecycleError,
+        reply,
+        provider.extractErrorMessage,
+        false,
+        provider.extractInternalCode.bind(provider),
+        provider.formatStreamErrorFrame,
+      );
+    }
     if (pluginContext && pluginSessionInitialized) {
       try {
         pluginSessionInitialized = false;
@@ -2607,6 +2619,7 @@ async function handleStreaming<
   const streamStartTime = Date.now();
   let firstChunkTime: number | undefined;
   let streamCompleted = false;
+  let failedStreamResponse: unknown;
 
   // Every byte to the client goes through here so the keep-alive knows when
   // the stream last spoke. The keep-alive itself only ever writes to a stream
@@ -2941,6 +2954,31 @@ async function handleStreaming<
 
     logger.info("Stream loop completed, processing final events");
 
+    if (
+      await failResponsesGeneration({
+        response: streamAdapter.toProviderResponse(),
+        ctx,
+      })
+    ) {
+      // The adapter holds the failure terminal with any executable fragments.
+      // Drop those fragments, not the provider's terminal status or usage.
+      if (!streamAdapter.formatToolCallsSSE) {
+        throw new ApiError(
+          503,
+          "LLM provider cannot safely release a failed Responses generation",
+        );
+      }
+      const failureEvents = streamAdapter.formatToolCallsSSE([]);
+      if (bufferModelResponse) {
+        for (const event of bufferedModelEvents) writeToClient(event);
+      }
+      for (const event of failureEvents) writeToClient(event);
+      writeToClient(streamAdapter.formatEndSSE());
+      reply.raw.end();
+      streamCompleted = true;
+      return reply;
+    }
+
     const hostedToolCalls = streamAdapter.getHostedToolCalls?.() ?? [];
     const hostedHold = streamAdapter.formatHeldHostedToolCallsSSE
       ? await holdProxyPluginHostedToolCalls(
@@ -3190,6 +3228,57 @@ async function handleStreaming<
     return reply;
   } catch (error) {
     const lifecycleError = error;
+    const codexError =
+      error instanceof CodexResponsesGenerationError ? error : undefined;
+    if (codexError) {
+      // Translation keeps partial text and usage, but is not a successful turn.
+      failedStreamResponse = codexError.completion;
+      streamAdapter.state.usage = provider
+        .createResponseAdapter(codexError.completion as TResponse, request)
+        .getUsage();
+      streamAdapter.state.toolCalls = [];
+      streamAdapter.state.rawToolCallEvents = [];
+      streamAdapter.state.stopReason = codexError.isIncompleteTerminal
+        ? codexError.completion.choices[0].finish_reason
+        : "error";
+    }
+    const eofError =
+      error instanceof ResponsesStreamIncompleteError &&
+      provider.provider === "openai" &&
+      provider.interactionType === "openai:responses"
+        ? error
+        : undefined;
+    if (eofError) {
+      // Discard held executable fragments without emitting a synthetic success.
+      streamAdapter.formatToolCallsSSE?.([]);
+      streamAdapter.state.toolCalls = [];
+      streamAdapter.state.rawToolCallEvents = [];
+      streamAdapter.state.stopReason = "error";
+      const observed = asRecord(
+        discardUnadmittedResponsesOutput(
+          streamAdapter.toProviderResponse() as Parameters<
+            typeof discardUnadmittedResponsesOutput
+          >[0],
+        ),
+      );
+      failedStreamResponse = {
+        ...observed,
+        id: streamAdapter.state.responseId || `proxy_resp_${Date.now()}`,
+        object: "response",
+        model: streamAdapter.state.model || actualModel,
+        status: "incomplete",
+        incomplete_details: null,
+        error: { code: eofError.code, message: eofError.message },
+        output: Array.isArray(observed?.output)
+          ? observed.output.filter(
+              (item) =>
+                asRecord(item)?.type !== "function_call" &&
+                asRecord(item)?.type !== "custom_tool_call",
+            )
+          : [],
+        usage: observed?.usage ?? null,
+      };
+    }
     try {
       if (pluginRegistry && pluginContext) {
         await pluginRegistry.fail({ ...pluginContext, error });
@@ -3199,6 +3288,31 @@ async function handleStreaming<
         { err: pluginError },
         "Plugin cleanup failed while handling proxy error",
       );
+    }
+    if (codexError?.isIncompleteTerminal) {
+      // Preserve Chat's legal partial terminal only after failure cleanup.
+      if (bufferModelResponse) {
+        for (const event of bufferedModelEvents) writeToClient(event);
+      }
+      const terminal = streamAdapter.processChunk({
+        id: codexError.completion.id,
+        object: "chat.completion.chunk",
+        created: codexError.completion.created,
+        model: codexError.completion.model,
+        choices: [
+          {
+            index: 0,
+            delta: {},
+            finish_reason: codexError.completion.choices[0].finish_reason,
+          },
+        ],
+        usage: codexError.completion.usage,
+      } as TChunk);
+      if (terminal.sseData) writeToClient(terminal.sseData);
+      writeToClient(streamAdapter.formatEndSSE());
+      reply.raw.end();
+      streamCompleted = true;
+      return reply;
     }
     // If the stream never established (e.g. a provider 400 rejecting the
     // request), record the duration here for providers we instrument in the
@@ -3225,16 +3339,27 @@ async function handleStreaming<
         { profileId: agent.id, errorMessage },
         "Persisting error interaction record for failed stream",
       );
-      await recordUsagelessInteraction({ error: errorMessage });
+      await recordUsagelessInteraction(
+        failedStreamResponse ?? { error: errorMessage },
+      );
     }
 
+    const formatStreamErrorFrame = provider.formatStreamErrorFrame;
     return handleError(
       lifecycleError,
       reply,
       provider.extractErrorMessage,
       true,
       provider.extractInternalCode.bind(provider),
-      provider.formatStreamErrorFrame,
+      eofError && formatStreamErrorFrame
+        ? (event: unknown) => {
+            const source = asRecord(event);
+            return formatStreamErrorFrame({
+              ...source,
+              error: { ...asRecord(source?.error), code: eofError.code },
+            });
+          }
+        : formatStreamErrorFrame,
     );
   } finally {
     keepAlive.stop();
@@ -3335,7 +3460,7 @@ async function handleStreaming<
           request: originalRequest,
           processedRequest: request,
           response: withProviderToolCallIds(
-            streamAdapter.toProviderResponse(),
+            failedStreamResponse ?? streamAdapter.toProviderResponse(),
             streamAdapter.state.toolCalls,
           ),
           actualModel,
@@ -3363,7 +3488,7 @@ async function handleStreaming<
       // call must not disappear from interaction history.
       await recordUsagelessInteraction(
         withProviderToolCallIds(
-          streamAdapter.toProviderResponse(),
+          failedStreamResponse ?? streamAdapter.toProviderResponse(),
           streamAdapter.state.toolCalls,
         ),
       );
@@ -3433,6 +3558,7 @@ async function handleNonStreaming<
   };
   let billingMode = initialBillingMode;
   const requestStartTime = Date.now();
+  let codexGenerationError: CodexResponsesGenerationError | undefined;
 
   logger.debug(
     { model: actualModel },
@@ -3476,17 +3602,24 @@ async function handleNonStreaming<
         if (ctx.connectionVerification) assertVerificationResponse(result);
         billingMode = getBillingMode();
       } catch (error) {
-        if (provider.recordRequestDurationInHandler) {
-          metrics.llm.reportRequestDuration(
-            providerName,
-            agent,
-            actualModel,
-            (Date.now() - requestStartTime) / 1000,
-            extractDurationStatusCode(error),
-            source,
-          );
+        if (error instanceof CodexResponsesGenerationError) {
+          // Reuse accounting/persistence below without running success hooks.
+          codexGenerationError = error;
+          result = error.completion as TResponse;
+          billingMode = getBillingMode();
+        } else {
+          if (provider.recordRequestDurationInHandler) {
+            metrics.llm.reportRequestDuration(
+              providerName,
+              agent,
+              actualModel,
+              (Date.now() - requestStartTime) / 1000,
+              extractDurationStatusCode(error),
+              source,
+            );
+          }
+          throw error;
         }
-        throw error;
       }
       if (provider.recordRequestDurationInHandler) {
         metrics.llm.reportRequestDuration(
@@ -3494,7 +3627,9 @@ async function handleNonStreaming<
           agent,
           actualModel,
           (Date.now() - requestStartTime) / 1000,
-          "200",
+          codexGenerationError && !codexGenerationError.isIncompleteTerminal
+            ? extractDurationStatusCode(codexGenerationError)
+            : "200",
           source,
         );
       }
@@ -3586,13 +3721,19 @@ async function handleNonStreaming<
     },
   });
 
-  const hostedHold = responseAdapter.withHeldHostedToolCalls
-    ? await holdProxyPluginHostedToolCalls(
-        ctx.pluginRegistry,
-        ctx.pluginContext,
-        responseAdapter.getHostedToolCalls?.() ?? [],
-      )
-    : null;
+  const generationFailed = await failResponsesGeneration({
+    response: responseAdapter.getOriginalResponse(),
+    ctx,
+    error: codexGenerationError,
+  });
+  const hostedHold =
+    !generationFailed && responseAdapter.withHeldHostedToolCalls
+      ? await holdProxyPluginHostedToolCalls(
+          ctx.pluginRegistry,
+          ctx.pluginContext,
+          responseAdapter.getHostedToolCalls?.() ?? [],
+        )
+      : null;
   for (const blocked of hostedHold?.blocked ?? []) {
     recordBlockedToolCallMetrics({
       allToolCallNames: [blocked.name],
@@ -3609,7 +3750,8 @@ async function handleNonStreaming<
     });
   }
   // A held turn's own calls rest on what was withheld, so they go with it.
-  const toolCalls = hostedHold ? [] : responseAdapter.getToolCalls();
+  const toolCalls =
+    generationFailed || hostedHold ? [] : responseAdapter.getToolCalls();
   logger.debug(
     { toolCallCount: toolCalls.length },
     `[${providerName}Proxy] Non-streaming response received, checking tool invocation policies`,
@@ -3812,14 +3954,25 @@ async function handleNonStreaming<
   // Computed once: a translator adapter that rewrites remembers the inner
   // (logged) shape it produced, so `getLoggedResponse` below must observe the
   // same call that produced the client response.
-  const unobservedClientResponse =
-    hostedHold && responseAdapter.withHeldHostedToolCalls
+  const originalResponse = responseAdapter.getOriginalResponse();
+  const failedResponse =
+    generationFailed && !codexGenerationError
+      ? asRecord(originalResponse)
+      : null;
+  const unobservedClientResponse = failedResponse
+    ? (discardUnadmittedResponsesOutput(
+        originalResponse as Parameters<
+          typeof discardUnadmittedResponsesOutput
+        >[0],
+      ) as unknown as TResponse)
+    : hostedHold && responseAdapter.withHeldHostedToolCalls
       ? responseAdapter.withHeldHostedToolCalls(hostedHold.notices)
       : rewrittenToolCalls && responseAdapter.withRewrittenToolCalls
         ? responseAdapter.withRewrittenToolCalls(rewrittenToolCalls)
-        : responseAdapter.getOriginalResponse();
+        : originalResponse;
   let clientResponse = unobservedClientResponse;
   if (
+    !generationFailed &&
     pluginRegistry &&
     pluginContext &&
     pluginRegistry.buffersModelResponse(pluginContext)
@@ -3842,7 +3995,7 @@ async function handleNonStreaming<
       );
     }
   }
-  if (pluginRegistry && pluginContext) {
+  if (!generationFailed && pluginRegistry && pluginContext) {
     const pluginResponse = await pluginRegistry.onModelResponse({
       ...pluginContext,
       response: clientResponse,
@@ -3895,6 +4048,7 @@ async function handleNonStreaming<
     );
   });
 
+  let responsePersisted = false;
   try {
     const record = buildInteractionRecord({
       agent,
@@ -3921,7 +4075,9 @@ async function handleNonStreaming<
       // purpose, and after a rewrite they hand back that shape's rewritten form.
       // Either way under the provider's call ids, as the requests are logged.
       response: withProviderToolCallIds(
-        responseAdapter.getLoggedResponse?.() ?? clientResponse,
+        generationFailed
+          ? clientResponse
+          : (responseAdapter.getLoggedResponse?.() ?? clientResponse),
         [...(rewrittenToolCalls ?? []), ...(hostedHold?.notices ?? [])],
       ),
       actualModel,
@@ -3935,6 +4091,7 @@ async function handleNonStreaming<
       encryptedChat,
       delegationBillingEnvironmentId,
     );
+    responsePersisted = true;
   } catch (interactionError) {
     logger.error(
       { err: interactionError, profileId: agent.id },
@@ -3942,6 +4099,14 @@ async function handleNonStreaming<
     );
   }
 
+  if (generationFailed) {
+    if (codexGenerationError && !codexGenerationError.isIncompleteTerminal) {
+      throw responsePersisted
+        ? new RecordedCodexGenerationFailure(codexGenerationError)
+        : codexGenerationError;
+    }
+    return sendResponse(clientResponse);
+  }
   if (pluginRegistry && pluginContext) {
     await pluginRegistry.complete({
       ...pluginContext,
@@ -3984,6 +4149,53 @@ async function handleNonStreaming<
     if (appended) markSessionReceiptIssued(sessionReceipt);
   }
   return sendResponse(outboundResponse);
+}
+
+class RecordedCodexGenerationFailure extends ApiError {
+  constructor(error: CodexResponsesGenerationError) {
+    super(502, error.message);
+  }
+}
+
+/** A native terminal failure ends the HTTP response, not the governed turn. */
+async function failResponsesGeneration(params: {
+  response: unknown;
+  ctx: Pick<LLMProxyContext<unknown>, "pluginRegistry" | "pluginContext">;
+  error?: Error;
+}): Promise<boolean> {
+  const response = asRecord(params.response);
+  if (
+    !params.error &&
+    (response?.object !== "response" ||
+      (response.status !== "incomplete" && response.status !== "failed"))
+  ) {
+    return false;
+  }
+  const details = asRecord(response?.error);
+  const reason = asRecord(response?.incomplete_details)?.reason;
+  const error =
+    params.error ??
+    new Error(
+      typeof details?.message === "string"
+        ? details.message
+        : `Provider response ${response?.status}${
+            typeof reason === "string" ? `: ${reason}` : ""
+          }`,
+    );
+  const { pluginRegistry, pluginContext } = params.ctx;
+  if (pluginRegistry && pluginContext) {
+    try {
+      await pluginRegistry.fail({ ...pluginContext, error });
+    } catch (pluginError) {
+      // Cleanup still runs in registry.fail's finally block. The native failure
+      // remains the only client terminal, even if a plugin's error hook fails.
+      logger.warn(
+        { err: pluginError },
+        "Plugin cleanup failed while handling provider terminal failure",
+      );
+    }
+  }
+  return true;
 }
 
 // Verifies that preamble frames carry no content before release without buffering.

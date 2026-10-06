@@ -109677,6 +109677,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -110269,6 +110270,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -162041,6 +162043,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -162624,6 +162627,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -171407,6 +171411,7 @@
                                             "type": "string"
                                           },
                                           "usage": {
+                                            "nullable": true,
                                             "type": "object",
                                             "properties": {
                                               "input_tokens": {
@@ -201207,6 +201212,7 @@
                                         "type": "string"
                                       },
                                       "usage": {
+                                        "nullable": true,
                                         "type": "object",
                                         "properties": {
                                           "input_tokens": {
@@ -202260,6 +202266,7 @@
                                         "type": "string"
                                       },
                                       "usage": {
+                                        "nullable": true,
                                         "type": "object",
                                         "properties": {
                                           "input_tokens": {
@@ -203308,6 +203315,7 @@
                                         "type": "string"
                                       },
                                       "usage": {
+                                        "nullable": true,
                                         "type": "object",
                                         "properties": {
                                           "input_tokens": {
@@ -207418,6 +207426,7 @@
                                       "type": "string"
                                     },
                                     "usage": {
+                                      "nullable": true,
                                       "type": "object",
                                       "properties": {
                                         "input_tokens": {
@@ -237218,6 +237227,7 @@
                                   "type": "string"
                                 },
                                 "usage": {
+                                  "nullable": true,
                                   "type": "object",
                                   "properties": {
                                     "input_tokens": {
@@ -238271,6 +238281,7 @@
                                   "type": "string"
                                 },
                                 "usage": {
+                                  "nullable": true,
                                   "type": "object",
                                   "properties": {
                                     "input_tokens": {
@@ -239319,6 +239330,7 @@
                                   "type": "string"
                                 },
                                 "usage": {
+                                  "nullable": true,
                                   "type": "object",
                                   "properties": {
                                     "input_tokens": {
@@ -316324,6 +316336,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -316916,6 +316929,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -323611,6 +323625,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -324203,6 +324218,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -356072,6 +356088,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {
@@ -356664,6 +356681,7 @@
                       "type": "string"
                     },
                     "usage": {
+                      "nullable": true,
                       "type": "object",
                       "properties": {
                         "input_tokens": {

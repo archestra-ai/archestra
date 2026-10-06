@@ -25,11 +25,6 @@ import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import { ModelModel } from "@/models";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
-import {
-  type OfferJws,
-  signOfferClaims,
-  unsignedOfferClaims,
-} from "@/openappa/offer-claims";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createGeminiTestClient } from "@/test/llm-provider-stubs";
 import { ApiError } from "@/types";
@@ -966,23 +961,21 @@ describe("Gemini countTokens passthrough", () => {
   test("takes OpenAPPA's signed offers and remedy receipts out of a wrapped request", async () => {
     const secret = "test-offer-signing-secret-32chars";
     config.openappa.offerSigningSecret = secret;
-    const offer = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: "org-count-tokens",
-        callerId: "user:count-tokens",
-        sessionId: "user:count-tokens|count-tokens-session",
-        offerId: "offer-weather",
-      }),
-      secret,
-    );
-    const notice = (offers?: OfferJws[]) =>
-      buildNoticeArguments({
+    // Leftover offer material from persisted history. Not minted, and not a route.
+    const offer = {
+      protected: "eyJhbGciOiJIUzI1NiJ9",
+      payload: JSON.stringify({ session_id: "historical-offer-session" }),
+      signature: "historical-offer",
+    };
+    const notice = (offers?: Array<typeof offer>) => ({
+      ...buildNoticeArguments({
         id: "call_weather",
         tool: "get_weather",
         arguments: { location: "SF" },
         result: "[appa] get_weather is blocked until a plan is approved.",
-        ...(offers ? { offers } : {}),
-      });
+      }),
+      ...(offers ? { offers } : {}),
+    });
     const remedy = { offer_id: "offer-weather", plan: "approve" };
     const execution = {
       v: 1,
@@ -991,8 +984,9 @@ describe("Gemini countTokens passthrough", () => {
       tool_name: "archestra__execute_remedy_plan",
       original_arguments: JSON.stringify(remedy),
     } satisfies RemedyExecution;
-    // Gemini calls carry no ids here, so nothing names its own call: only
-    // what this deployment signed proves a member is the proxy's.
+    // The notice has no id, so only its historical offers field is dropped.
+    // The remedy call's execution receipt names its own call. The legacy
+    // offer fields go with that receipt. They are not checked.
     const contents = (noticeArgs: object, remedyArgs: object) => [
       { role: "user", parts: [{ text: "What's the weather in SF?" }] },
       {
@@ -1022,6 +1016,7 @@ describe("Gemini countTokens passthrough", () => {
         parts: [
           {
             functionCall: {
+              id: "call_remedy",
               name: "archestra__execute_remedy_plan",
               args: remedyArgs,
             },

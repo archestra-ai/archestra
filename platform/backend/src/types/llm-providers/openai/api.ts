@@ -265,7 +265,7 @@ export const ResponsesResponseSchema = z
     model: z.string(),
     output: z.array(ResponsesOutputItemSchema),
     status: z.string(),
-    usage: ResponsesUsageSchema.optional(),
+    usage: ResponsesUsageSchema.nullable().optional(),
   })
   .passthrough()
   .describe(

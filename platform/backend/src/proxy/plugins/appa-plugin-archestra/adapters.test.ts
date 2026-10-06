@@ -9,7 +9,8 @@ import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
-import type { AppaMatchContext } from "./types";
+import { appaTrajectory } from "./session-identity";
+import type { AppaMatchContext, AppaTrustedContext } from "./types";
 
 describe("APPA child trajectory adapters", () => {
   const claudeCode = new AppaClaudeCodeAdapter();
@@ -92,6 +93,71 @@ describe("APPA child trajectory adapters", () => {
     expect(claudeCode.isSpawnTool("Task")).toBe(true);
     expect(claudeCode.isSpawnTool("host/claude-code/Agent")).toBe(true);
     expect(claudeCode.isSpawnTool("Bash")).toBe(false);
+  });
+
+  test("refuses a Codex spawn field the declared schema does not accept", () => {
+    const codexSpawnDeclaration = (params: {
+      properties: string[];
+      additionalProperties: boolean;
+    }) => ({
+      tools: [
+        {
+          type: "namespace",
+          name: "collaboration",
+          tools: [
+            {
+              type: "function",
+              name: "spawn_agent",
+              parameters: {
+                type: "object",
+                properties: Object.fromEntries(
+                  params.properties.map((name) => [name, { type: "string" }]),
+                ),
+                additionalProperties: params.additionalProperties,
+              },
+            },
+          ],
+        },
+      ],
+    });
+    const body = codexSpawnDeclaration({
+      properties: ["message", "task_name", "model"],
+      additionalProperties: false,
+    });
+    expect(
+      codex.unsupportedSpawnFields?.({
+        requestBody: body,
+        name: "spawn_agent",
+        namespace: "collaboration",
+        arguments: {
+          message: "g-ciphertext",
+          task_name: "summary",
+          tool_output_contract: "qa-summary",
+        },
+      }),
+    ).toEqual(["tool_output_contract"]);
+    expect(
+      codex.unsupportedSpawnFields?.({
+        requestBody: body,
+        name: "spawn_agent",
+        namespace: "collaboration",
+        arguments: { message: "g-ciphertext", task_name: "summary" },
+      }),
+    ).toBeUndefined();
+    expect(
+      codex.unsupportedSpawnFields?.({
+        requestBody: codexSpawnDeclaration({
+          properties: ["message", "task_name"],
+          additionalProperties: true,
+        }),
+        name: "spawn_agent",
+        namespace: "collaboration",
+        arguments: {
+          message: "g-ciphertext",
+          tool_output_contract: "qa-summary",
+        },
+      }),
+    ).toBeUndefined();
   });
 
   test("classifies Codex spawn_agent as spawn, not wait or resume", () => {
@@ -467,6 +533,94 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     expect(openCode.isChildCompletionResult?.(openCodeResult)).toBe(true);
   });
 
+  test.each([
+    { message: "Wait completed.", timed_out: false },
+    { message: "Wait interrupted by new input.", timed_out: false },
+    { message: "Wait timed out.", timed_out: true },
+    {
+      message:
+        "Wait completed.\n\nRequested timeout of 100ms was clamped to the minimum of 10000ms.",
+      timed_out: false,
+    },
+  ])("does not turn a Codex mailbox wait into a child completion: $message", (content) => {
+    for (const output of [content, JSON.stringify(content)]) {
+      const before = structuredClone(output);
+      expect(
+        codex.isChildCompletionResult({
+          id: "mailbox-wait",
+          name: "wait_agent",
+          namespace: "collaboration",
+          arguments: { timeout_ms: 10000 },
+          content: output,
+          isError: false,
+        }),
+      ).toBe(false);
+      expect(output).toEqual(before);
+    }
+  });
+
+  test.each([
+    { status: {}, timed_out: true },
+    { status: { a1: "running", a2: "pending_init" }, timed_out: true },
+    {
+      status: { a1: { errored: "agent failed" }, a2: "not_found" },
+      timed_out: false,
+    },
+    { status: { a1: { completed: null } }, timed_out: false },
+    { status: { a1: { completed: 1 } }, timed_out: false },
+    { timed_out: false },
+    { message: "Agent a1 completed", timed_out: false },
+  ])("requires an actual structured Codex completion rather than a wait outcome: %j", (content) => {
+    const before = structuredClone(content);
+    expect(
+      codex.isChildCompletionResult({
+        id: "wait",
+        name: "wait_agent",
+        namespace: "multi_agent_v1",
+        arguments: { targets: ["a1", "a2"] },
+        content,
+        isError: false,
+      }),
+    ).toBe(false);
+    expect(content).toEqual(before);
+  });
+
+  test("recognizes completed Codex leaves without claiming that other requested agents completed", () => {
+    const content = {
+      status: {
+        a1: { completed: "CHILD RETURN" },
+        a2: "running",
+        a3: { errored: "agent failed" },
+      },
+      timed_out: false,
+    };
+    const before = structuredClone(content);
+    const result = {
+      id: "wait",
+      name: "wait_agent",
+      namespace: "multi_agent_v1",
+      arguments: { targets: ["a1", "a2", "a3", "a4"] },
+      content,
+      isError: false,
+    };
+    expect(codex.isChildCompletionResult(result)).toBe(true);
+    expect(content).toEqual(before);
+    // Recognition is not admission: the plugin must still verify each leaf
+    // against its own durable child crossing, including an unknown child.
+    expect(
+      codex.isChildCompletionResult({
+        ...result,
+        content: { status: { unknown: { completed: "UNRECORDED RETURN" } } },
+      }),
+    ).toBe(true);
+    expect(codex.isChildCompletionResult({ ...result, isError: true })).toBe(
+      false,
+    );
+    expect(
+      codex.isChildCompletionResult({ ...result, namespace: "mcp__foreign" }),
+    ).toBe(false);
+  });
+
   test("keeps OpenCode skill in-session before a real child spawn", () => {
     expect(openCode.isSpawnTool("skill")).toBe(false);
     expect(openCode.isSpawnTool("builtin:skill")).toBe(false);
@@ -698,6 +852,82 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
       sessionId: "s1:a1",
       parentId: "s1",
       lineage: { source: "native", nativeParentId: "s1", childNativeId: "a1" },
+    });
+  });
+
+  test("binds split-pane Claude metadata to the lead while keeping its own conversation id", () => {
+    const requestBody = {
+      metadata: {
+        user_id: JSON.stringify({
+          session_id: "teammate-session",
+          parent_session_id: "lead-session",
+        }),
+      },
+    };
+    const context = {
+      headers: { "x-claude-code-session-id": "teammate-session" },
+      requestBody,
+    };
+    expect(claudeCode.bindChildTrajectory(context)).toMatchObject({
+      sessionId: "lead-session:teammate-session",
+      parentId: "lead-session",
+      lineage: {
+        source: "native",
+        nativeParentId: "lead-session",
+        childNativeId: "teammate-session",
+      },
+    });
+    expect(claudeCode.nativeConversationId(context)).toBe("teammate-session");
+    expect(claudeCode.nativeSpawnParentId?.(context, "teammate-session")).toBe(
+      "lead-session",
+    );
+    expect(() =>
+      claudeCode.bindChildTrajectory({
+        ...context,
+        headers: { ...context.headers, "x-appa-parent-id": "another-lead" },
+      }),
+    ).toThrow(ApiError);
+    claudeCode.stripCarrierMetadata(requestBody);
+    expect(JSON.parse(requestBody.metadata.user_id)).toEqual({
+      session_id: "teammate-session",
+    });
+  });
+
+  test("does not fabricate an in-process child from a self parent metadata value", () => {
+    expect(
+      claudeCode.bindChildTrajectory({
+        headers: { "x-claude-code-session-id": "lead-session" },
+        requestBody: {
+          metadata: {
+            user_id: JSON.stringify({
+              session_id: "lead-session",
+              parent_session_id: "lead-session",
+            }),
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  test("prefers a native teammate id over the split-pane conversation as its child id", () => {
+    expect(
+      claudeCode.bindChildTrajectory({
+        headers: {
+          "x-claude-code-session-id": "teammate-session",
+          "x-claude-code-agent-id": "sender@team",
+        },
+        requestBody: {
+          metadata: {
+            user_id: JSON.stringify({
+              session_id: "teammate-session",
+              parent_session_id: "lead-session",
+            }),
+          },
+        },
+      }),
+    ).toMatchObject({
+      sessionId: "lead-session:sender@team",
+      parentId: "lead-session",
     });
   });
 
@@ -1256,6 +1486,64 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     });
   });
 
+  test("session-only SDK metadata fails closed instead of borrowing a child receipt", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const footer = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId: "user:user",
+      parentId: "s1",
+      childId: "s1:a1",
+      childNativeId: "a1",
+      spawnerNativeId: "s1",
+    });
+    const body = {
+      metadata: { user_id: JSON.stringify({ session_id: "s1" }) },
+      messages: [
+        { role: "assistant", content: `${footer}\nOld child output` },
+        { role: "user", content: "Continue my parent task" },
+      ],
+    };
+    for (const headers of [{ "x-claude-code-session-id": "s1" }, {}] as Record<
+      string,
+      string
+    >[]) {
+      const context = delegated({
+        headers,
+        interactionType: "anthropic:messages",
+        body: structuredClone(body),
+      });
+      expect(JSON.stringify(context.requestBody)).not.toContain("appact2-");
+      expect(() => claudeCode.bindChildTrajectory(context)).toThrowError(
+        expect.objectContaining({ statusCode: 409, shouldRetry: false }),
+      );
+      const root = delegated({
+        headers,
+        interactionType: "anthropic:messages",
+        body: {
+          metadata: { user_id: JSON.stringify({ session_id: "s1" }) },
+          messages: [{ role: "user", content: "Continue my parent task" }],
+        },
+      });
+      expect(claudeCode.extractSessionIdentity(root)?.sessionId).toBe("s1");
+      expect(claudeCode.bindChildTrajectory(root)).toBeUndefined();
+    }
+    const childBody = structuredClone(body);
+    childBody.metadata.user_id = JSON.stringify({
+      session_id: "s1",
+      parent_session_id: "s1",
+      agent_id: "a1",
+    });
+    expect(
+      claudeCode.bindChildTrajectory(
+        delegated({
+          headers: { "x-claude-code-session-id": "s1" },
+          interactionType: "anthropic:messages",
+          body: childBody,
+        }),
+      ),
+    ).toMatchObject({ sessionId: "s1:a1", parentId: "s1" });
+  });
+
   test("preserves a marker-only Claude child across compaction and later native metadata", () => {
     config.openappa.offerSigningSecret = SECRET;
     const started = claudeCode.bindChildTrajectory(
@@ -1263,6 +1551,7 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         headers: { "x-claude-code-session-id": "s1" },
         interactionType: "anthropic:messages",
         body: {
+          metadata: { user_id: JSON.stringify({ session_id: "s1" }) },
           messages: [
             {
               role: "user",
@@ -1301,6 +1590,36 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         { role: "user", content: "Summary of the conversation so far." },
       ],
     };
+    const ambiguous = delegated({
+      headers: { "x-claude-code-session-id": "s1" },
+      interactionType: "anthropic:messages",
+      body: {
+        ...structuredClone(compactedBody),
+        metadata: { user_id: JSON.stringify({ session_id: "s1" }) },
+      },
+    });
+    if (!ambiguous.trustedContext) throw new Error("expected trusted context");
+    expect(() =>
+      appaTrajectory({
+        adapters: [claudeCode],
+        headers: ambiguous.headers,
+        requestBody: ambiguous.requestBody,
+        trustedContext: {
+          ...ambiguous.trustedContext,
+          session: {
+            organization_id: "org",
+            caller_id: "user:user",
+            session_id: "user:user|s1",
+          },
+        },
+      }),
+    ).toThrowError(
+      expect.objectContaining({
+        statusCode: 409,
+        shouldRetry: false,
+        message: expect.stringContaining("Resume the correct native child"),
+      }),
+    );
     expect(
       claudeCode.bindChildTrajectory(
         delegated({
@@ -1343,7 +1662,10 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
             "x-claude-code-agent-id": "a1",
           },
           interactionType: "anthropic:messages",
-          body: structuredClone(compactedBody),
+          body: {
+            ...structuredClone(compactedBody),
+            metadata: { user_id: JSON.stringify({ session_id: "s1" }) },
+          },
         }),
       ),
     ).toEqual({
@@ -1356,6 +1678,127 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         spawnCallId: "spawn-call",
       },
     });
+  });
+
+  test("a Claude root never adopts callee receipts in results or wrapped notifications", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const footer = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId: "user:user",
+      parentId: "s1",
+      childId: "s1:spawn-call",
+      spawnerNativeId: "s1",
+      spawnCallId: "spawn-call",
+    });
+    if (!footer) throw new Error("expected signed carrier");
+    const carriers = [
+      `${footer}\nChild output`,
+      `Reminder:\n<task-notification><result>${footer}\nChild output</result></task-notification>\nContinue.`,
+      `Reminder:\n<subagent_notification>${footer}</subagent_notification>`,
+      `Reminder:\n<teammate-message teammate_id="worker">${footer}</teammate-message>`,
+    ];
+    for (const [index, carrier] of carriers.entries()) {
+      const body = {
+        metadata: { user_id: JSON.stringify({ session_id: "s1" }) },
+        messages: [
+          {
+            role: "user",
+            content:
+              index === 0
+                ? [
+                    {
+                      type: "tool_result",
+                      tool_use_id: "spawn-call",
+                      content: carrier,
+                    },
+                  ]
+                : carrier,
+          },
+        ],
+      };
+      const context = delegated({
+        headers: { "x-claude-code-session-id": "s1" },
+        interactionType: "anthropic:messages",
+        body,
+      });
+      expect(
+        context.trustedContext?.request.childTrajectoryReceipts,
+      ).toBeUndefined();
+      expect(JSON.stringify(body)).not.toContain("appact2-");
+      expect(claudeCode.bindChildTrajectory(context)).toBeUndefined();
+    }
+  });
+
+  test.each([
+    { organizationId: "other-org" },
+    { callerId: "user:other" },
+    { spawnerNativeId: "other-session" },
+    { nativeConversationId: "other-conversation" },
+  ])("a Claude root does not adopt a receipt from another scope: %j", (scope) => {
+    config.openappa.offerSigningSecret = SECRET;
+    const footer = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId: "user:user",
+      parentId: "s1",
+      childId: "s1:spawn-call",
+      spawnerNativeId: "s1",
+      spawnCallId: "spawn-call",
+      ...scope,
+    });
+    const context = delegated({
+      headers: { "x-claude-code-session-id": "s1" },
+      interactionType: "anthropic:messages",
+      body: {
+        metadata: { user_id: JSON.stringify({ session_id: "s1" }) },
+        messages: [{ role: "assistant", content: `${footer}\nSummary` }],
+      },
+    });
+    expect(claudeCode.bindChildTrajectory(context)).toBeUndefined();
+  });
+
+  test("a Claude root does not adopt altered signed receipt fields", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const footer = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId: "user:user",
+      parentId: "s1",
+      childId: "s1:spawn-call",
+      spawnerNativeId: "s1",
+      spawnCallId: "spawn-call",
+    });
+    const context = delegated({
+      headers: { "x-claude-code-session-id": "s1" },
+      interactionType: "anthropic:messages",
+      body: {
+        metadata: { user_id: JSON.stringify({ session_id: "s1" }) },
+        messages: [{ role: "assistant", content: `${footer}\nSummary` }],
+      },
+    });
+    const receipt =
+      context.trustedContext?.request.childTrajectoryReceipts?.[0];
+    if (!receipt) throw new Error("expected signed carrier");
+    for (const fields of [
+      { organizationId: "other-org" },
+      { callerId: "user:other" },
+      { spawnerNativeId: "other-session" },
+      { childNativeId: "other-child" },
+      { nativeConversationId: "s1" },
+      { childId: "s1:other-child" },
+    ]) {
+      if (!context.trustedContext) throw new Error("expected trusted context");
+      expect(
+        claudeCode.bindChildTrajectory({
+          ...context,
+          trustedContext: {
+            ...context.trustedContext,
+            request: {
+              ...context.trustedContext.request,
+              childTrajectoryReceipts: [{ ...receipt, ...fields }],
+            },
+          },
+        }),
+      ).toBeUndefined();
+    }
   });
 });
 
@@ -1384,7 +1827,7 @@ function delegated(params: {
   headers: Record<string, string>;
   interactionType: string;
   body: unknown;
-}): AppaMatchContext {
+}): AppaMatchContext & { trustedContext: AppaTrustedContext } {
   return {
     headers: params.headers,
     requestBody: params.body,

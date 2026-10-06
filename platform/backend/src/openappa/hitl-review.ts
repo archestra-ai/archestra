@@ -5,6 +5,13 @@ import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
 
+export type HitlReviewOutcome =
+  | "review_required"
+  | "review_unanswered"
+  | "review_cancelled"
+  | "review_unavailable"
+  | "review_invalid";
+
 type PendingHitlReview = {
   offerId: string;
   text: string;
@@ -27,12 +34,62 @@ const HITL_RULINGS: readonly HitlRuling[] = ["approve", "none", "deny"];
 export async function stageHitlReview(params: {
   session: OpenAppaSession;
   review: PendingHitlReview;
+  callId?: string;
 }): Promise<void> {
   await cacheManager.set(
     reviewKey(params.session, params.review.offerId),
     params.review,
     HITL_REVIEW_TTL_MS,
   );
+  if (params.callId) {
+    await recordHitlReviewResult({
+      session: params.session,
+      callId: params.callId,
+      offerId: params.review.offerId,
+      outcome: "review_required",
+    });
+  }
+}
+
+/** A history fact only: it neither stages a live review nor grants a ruling. */
+export async function recordHitlReviewResult(params: {
+  session: OpenAppaSession;
+  callId: string;
+  offerId: string;
+  outcome: HitlReviewOutcome;
+}): Promise<void> {
+  await cacheManager.set(
+    scopedKey(
+      CacheKey.OpenAppaHitlReviewHistory,
+      params.session,
+      JSON.stringify([params.callId, params.offerId]),
+    ),
+    { callId: params.callId, offerId: params.offerId, outcome: params.outcome },
+    0,
+  );
+}
+
+export async function getHitlReviewResult(params: {
+  session: OpenAppaSession;
+  callId: string;
+  offerId: string;
+}): Promise<HitlReviewOutcome | undefined> {
+  const record = await cacheManager.get<{
+    callId: string;
+    offerId: string;
+    outcome?: HitlReviewOutcome;
+  }>(
+    scopedKey(
+      CacheKey.OpenAppaHitlReviewHistory,
+      params.session,
+      JSON.stringify([params.callId, params.offerId]),
+    ),
+    { throwOnError: true },
+  );
+  if (record?.callId !== params.callId || record.offerId !== params.offerId)
+    return undefined;
+  // Previously issued review-required facts did not carry an outcome.
+  return record.outcome ?? "review_required";
 }
 
 export async function getHitlReview(params: {
@@ -54,7 +111,7 @@ export async function getHitlAskUserArguments(params: {
   const review = await getHitlReview({ session: params.session, offerId });
   if (!review) return undefined;
   return {
-    question: review.text,
+    question: formatReviewQuestion(review.text),
     header: "Approval",
     options: [
       {
@@ -143,6 +200,18 @@ export function hitlRulingFromLabels(
   return undefined;
 }
 
+function formatReviewQuestion(text: string): string {
+  // Native question renderers fold/indent rows independently, breaking pixel art.
+  // Replace only the runtime's decorative prefix, never the reviewed payload.
+  return text.startsWith(PIXEL_REVIEW_HEADING)
+    ? `[OpenAPPA] Approve this call?\n${text.slice(PIXEL_REVIEW_HEADING.length)}`
+    : text;
+}
+
+const PIXEL_REVIEW_HEADING =
+  "\u2584\u2588\u2584\u2584\u2584\u2588\u2584  \u2580\u2580\u2588  Approve this call?\n" +
+  "\u2588\u2588\u2584\u2588\u2584\u2588\u2588   \u2584   ";
+
 function reviewKey(session: OpenAppaSession, offerId: string): AllowedCacheKey {
   return scopedKey(CacheKey.OpenAppaHitlReview, session, offerId);
 }
@@ -162,7 +231,8 @@ function rulingKey(
 function scopedKey(
   prefix:
     | typeof CacheKey.OpenAppaHitlReview
-    | typeof CacheKey.OpenAppaHitlRuling,
+    | typeof CacheKey.OpenAppaHitlRuling
+    | typeof CacheKey.OpenAppaHitlReviewHistory,
   session: OpenAppaSession,
   offerId: string,
 ): AllowedCacheKey {

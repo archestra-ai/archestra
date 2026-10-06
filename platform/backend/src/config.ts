@@ -2050,7 +2050,7 @@ export function parseOpenAppaConfig(
   const isEnabled = betaEnabled === "true";
   if (isEnabled && secret.length === 0) {
     logger.warn(
-      "OpenAPPA is enabled without a signing key. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret, or signed remedy, native-question, session-receipt, and external-client tool-call requests will fail closed (503) until every replica uses the same secret.",
+      "OpenAPPA is enabled without a signing key. Signed delegation, history-based trajectory recovery, and peer inbox calls are unavailable. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret to use those paths.",
     );
   }
   return {

@@ -30999,7 +30999,7 @@ export type AzureResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -31170,7 +31170,7 @@ export type AzureResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -44900,7 +44900,7 @@ export type GithubCopilotResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -45068,7 +45068,7 @@ export type GithubCopilotResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -47595,7 +47595,7 @@ export type GetInteractionsResponses = {
                     output_tokens: number;
                     total_tokens: number;
                     [key: string]: unknown;
-                };
+                } | null;
                 [key: string]: unknown;
             } | {
                 id: string;
@@ -53522,7 +53522,7 @@ export type GetInteractionsResponses = {
                     output_tokens: number;
                     total_tokens: number;
                     [key: string]: unknown;
-                };
+                } | null;
                 [key: string]: unknown;
             } | {
                 error: string;
@@ -53726,7 +53726,7 @@ export type GetInteractionsResponses = {
                     output_tokens: number;
                     total_tokens: number;
                     [key: string]: unknown;
-                };
+                } | null;
                 [key: string]: unknown;
             } | {
                 error: string;
@@ -53930,7 +53930,7 @@ export type GetInteractionsResponses = {
                     output_tokens: number;
                     total_tokens: number;
                     [key: string]: unknown;
-                };
+                } | null;
                 [key: string]: unknown;
             } | {
                 error: string;
@@ -54858,7 +54858,7 @@ export type GetInteractionResponses = {
                 output_tokens: number;
                 total_tokens: number;
                 [key: string]: unknown;
-            };
+            } | null;
             [key: string]: unknown;
         } | {
             id: string;
@@ -60785,7 +60785,7 @@ export type GetInteractionResponses = {
                 output_tokens: number;
                 total_tokens: number;
                 [key: string]: unknown;
-            };
+            } | null;
             [key: string]: unknown;
         } | {
             error: string;
@@ -60989,7 +60989,7 @@ export type GetInteractionResponses = {
                 output_tokens: number;
                 total_tokens: number;
                 [key: string]: unknown;
-            };
+            } | null;
             [key: string]: unknown;
         } | {
             error: string;
@@ -61193,7 +61193,7 @@ export type GetInteractionResponses = {
                 output_tokens: number;
                 total_tokens: number;
                 [key: string]: unknown;
-            };
+            } | null;
             [key: string]: unknown;
         } | {
             error: string;
@@ -81571,7 +81571,7 @@ export type ModelRouterResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -81742,7 +81742,7 @@ export type ModelRouterResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -83770,7 +83770,7 @@ export type OpenAiResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -83941,7 +83941,7 @@ export type OpenAiResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -92034,7 +92034,7 @@ export type PerplexityResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -92205,7 +92205,7 @@ export type PerplexityResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };

@@ -225,6 +225,69 @@ describe("declared tools vs called tools", () => {
 });
 
 describe("AnthropicRequestAdapter", () => {
+  test.each([
+    { content: [] },
+    { content: "" },
+    { content: " \n" },
+    { content: [{ type: "text" as const, text: " \n" }] },
+  ])("drops an empty system placeholder after compaction (%j)", ({
+    content,
+  }) => {
+    const messages: Anthropic.Types.MessagesRequest["messages"] = [
+      { role: "user", content: "Before compaction" },
+      { role: "system", content },
+      { role: "user", content: "Continue after compaction" },
+    ];
+    const request = createMockRequest(messages);
+    const forwarded = anthropicAdapterFactory
+      .createRequestAdapter(request)
+      .toProviderRequest();
+    expect(forwarded.messages).toEqual([messages[0], messages[2]]);
+    expect(request.messages).toEqual(messages);
+  });
+
+  test("preserves real system instructions and conversational tool boundaries", () => {
+    const messages: Anthropic.Types.MessagesRequest["messages"] = [
+      {
+        role: "system",
+        content: [
+          { type: "text", text: "\n" },
+          {
+            type: "text",
+            text: "Keep this instruction",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "call-1", name: "read", input: {} }],
+      },
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "call-1", content: "" }],
+      },
+    ];
+    expect(
+      anthropicAdapterFactory
+        .createRequestAdapter(createMockRequest(messages))
+        .toProviderRequest().messages,
+    ).toEqual([
+      {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text: "Keep this instruction",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      },
+      messages[1],
+      messages[2],
+    ]);
+  });
+
   describe("declared tools", () => {
     const messages = [
       { role: "user", content: "Hello" },

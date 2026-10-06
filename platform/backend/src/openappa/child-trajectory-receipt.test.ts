@@ -60,6 +60,53 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
     );
   });
 
+  test("binds a mapped teammate receipt to its original native conversation", () => {
+    const footer = mintChildTrajectoryReceipt({
+      ...BINDING,
+      nativeConversationId: "native-child-session",
+    });
+    const [receipt] = stripChildTrajectoryReceipts(footer ?? "").receipts;
+    const checks = {
+      receipt,
+      organizationId: BINDING.organizationId,
+      callerId: BINDING.callerId,
+      spawnerNativeId: BINDING.spawnerNativeId,
+      childNativeId: BINDING.childNativeId,
+    };
+    expect(receipt.nativeConversationId).toBe("native-child-session");
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...checks,
+        nativeConversationId: "native-child-session",
+      }),
+    ).toBe(true);
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...checks,
+        nativeConversationId: "another-child-session",
+      }),
+    ).toBe(false);
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...checks,
+        receipt: { ...receipt, nativeConversationId: "another-child-session" },
+      }),
+    ).toBe(false);
+    const [old] = stripChildTrajectoryReceipts(
+      mintChildTrajectoryReceipt(BINDING) ?? "",
+    ).receipts;
+    expect(verifyChildTrajectoryReceipt({ ...checks, receipt: old })).toBe(
+      true,
+    );
+    expect(
+      verifyChildTrajectoryReceipt({
+        ...checks,
+        receipt: old,
+        nativeConversationId: "native-child-session",
+      }),
+    ).toBe(false);
+  });
+
   test("treats the pretty code as display-only", () => {
     const footer = mintChildTrajectoryReceipt(BINDING);
     if (!footer) throw new Error("expected a child trajectory receipt");

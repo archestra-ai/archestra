@@ -4,12 +4,14 @@ OpenAPPA evaluates tool calls and tool results at the LLM proxy guardrails. The 
 
 Session state is keyed by session ID. Internal requests over loopback use shared session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback is the platform trust boundary. Requests without a session header share a fallback session per credential and agent.
 
+The proxy, connected clients, and user are trusted. Model output and external tool content remain untrusted. Adapters obtain execution identity from client metadata, not from model-written arguments or text.
+
 ## Startup configuration
 
 OpenAPPA follows the `ARCHESTRA_BETA` master switch and has no flag of its
 own. `ARCHESTRA_BETA=true` enables APPA and the OpenAPPA editor and
 automatically registers the proxy plugin.
-The **Enable Guardrails v2** switch on `/openappa` controls APPA enforcement
+The deployment-wide guardrail setting controls APPA enforcement
 across every organization and agent in the deployment. It defaults to off and
 requires organization administration permission to change. Both the server flag
 and this shared switch must be on for APPA to enforce policies. Each request
@@ -312,6 +314,8 @@ The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice 
 
 A `run_tool` dispatch is ruled on as the tool it targets. The runtime receives the target's name and its own `tool_args`, so named rules, annotator bindings, and the wildcard catch-all apply to the tool that executes, not the wrapper. A denial presents the same identity: the notice names the target and carries its arguments, and history restores the target call with the ruling. A released call stays the wrapper the client declared.
 
+Codex spawn proposals are checked against the native tool's declared closed schema before a return-contract offer is created. Unsupported fields are refused, not silently removed. Return plans belong in the remedy call, not invented native spawn fields. Authorized retries still require the exact accepted arguments, including encrypted message bytes.
+
 On later requests, the proxy restores notice calls back to original tool calls and injects the ruling as their result. Restoration is a stateless pure function of the request body. It requires no database lookup, surviving restarts and replica changes. The runtime withholds results for call IDs it never released.
 
 ### What Reaches the Provider
@@ -319,17 +323,17 @@ On later requests, the proxy restores notice calls back to original tool calls a
 The provider never receives what the proxy writes for the client and the gateway. On every forwarded request, with or without an OpenAPPA session (deployment switch off, a bypassed client, a delegated run), the proxy:
 
 - restores notices, control calls, and ask_user calls on the three restoring families;
-- removes what restoration left on every wire: the notice record and signed offers, the execution frame and JWS members, and ask_user offers;
+- removes what restoration left on every wire: the notice record and legacy signed offers, the execution frame and legacy JWS members, ask_user offers, and signed peer proofs;
 - removes proxy-only parameters from the remedy and ask_user declarations of a client that still holds an old tool list (the notice keeps its record, which the gateway still advertises);
 - restores trajectory stamps that a client copied into message or tool-result text.
 
-A call is rewritten only when the request's gateway identity resolves it to a platform tool, or when it carries proof that only the proxy writes: a notice record that names its own call, or JWS signed with this deployment's key. A lookalike name alone is not enough. The catch-all routes (`/v1/messages/count_tokens` and similar) apply the same cleanup with proof-only matching. They also drop what the pipeline strips at entry: session receipts, child-trajectory receipts, delegation markers, child-return markers, and compaction carriers. A counted request thus matches the forwarded one.
+A call is rewritten only when the request's gateway identity resolves it to a platform tool, or when it carries a notice record that names its own call. A lookalike name alone is not enough. Legacy JWS members are stripped and are not used for routing. Signed peer proofs are a separate inbox proof. The proxy writes them and removes them before the provider. The catch-all routes (`/v1/messages/count_tokens` and similar) apply the same cleanup. They also drop what the pipeline strips at entry: session receipts, child-trajectory receipts, delegation markers, child-return markers, peer proofs, and compaction carriers. A counted request thus matches the forwarded one.
 
 Every rewrite gives an earlier turn the same bytes on every request. Claude Opus 5.5 and Fable 5.1 bind each thinking block to the bytes before it. On accounts that the API enforces, it refuses a request whose earlier turns changed. One exception remains: the plugin appends one-turn guidance to `system`, so `system` changes between requests. This guidance is the question and remedy continuations, and the HITL question and decision guidance.
 
 The A2A step-context guard summarizes older turns as plain text for a provider. It omits the members that only the proxy writes, because no sanitizer can remove them from that text.
 
-A native question call reaches the client under a signed `aq1` id (`<prefix>_aq1_<nonce>_<tag>`, an HMAC over the session, the tool, and the nonce) issued in place of the provider's id. The id is not restored: later history carries it to the provider unchanged, so the exchange keeps the same bytes on every turn. The plugin verifies the answer by that signed id and spends a one-shot claim that binds it to the staged review. Request entry also restores stamps that a client copied into text, so logging, policy evaluation, and the plugin read provider ids there too.
+A governed native approval question reaches the client under an id the proxy issues in place of the provider's id. The id is not restored: later history carries it to the provider unchanged, so the exchange keeps the same bytes on every turn. New question ids and cache keys use no HMAC. The plugin pairs the answer with the actual client question call and spends a one-use cache record. Pending questions can still consume an existing cache record during the ten-minute expiry window. Ordinary native questions keep their provider ids and create no approval cache record. Request entry also restores stamps that a client copied into text, so logging, policy evaluation, and the plugin read provider ids there too.
 
 Model-facing remedy text states who decides: the organization's policy, and the user when the policy requires approval. It does not tell the model to skip the user or to act immediately. Provider safety classifiers refused requests that carried such wording.
 
@@ -339,17 +343,51 @@ Two MCP tools handle remedies:
 1. `archestra__get_remedy_plans`: Returns the ruling and remedy plans from the notice arguments. It executes no code and changes no state.
 2. `archestra__execute_remedy_plan`: Runs the remedy plan selected by the model through the embedded OpenAPPA runtime.
 
-The gateway advertises only the arguments the model writes: `get_remedy_plans` omits `offers`, and `execute_remedy_plan` omits `execution`, `protected`, `payload`, and `signature`. The advertised schemas stay open, so a client that validates tool input accepts the members the proxy stamps. The handlers validate the full schemas.
+The gateway advertises only the arguments the model writes: `get_remedy_plans` omits `offers`, and `execute_remedy_plan` omits `execution`, `trajectory`, `protected`, `payload`, and `signature`. The advertised schemas stay open, so a client that validates tool input accepts the members the proxy stamps. The handlers validate the full schemas.
 
 The model selects each remedy. The proxy releases the model's `execute_remedy_plan` call to the client for execution.
 
 The remedy can fail to run. The client can decline the call: the user rejects a permission prompt, or Claude Code's auto-mode classifier blocks it. The gateway can also refuse it before the remedy, for example when the offer is gone. Only a remedy that runs leaves a record, so the runtime has none to match the result against. For a result of the request's declared control tool, other than a pending review, the proxy shows the model what the client returned, after a line that says the plan is not applied. The model then reads, for example, the client's instruction to stop and let the user decide. Any other result without a record stays withheld.
 
-Remedy routing is a flattened JWS (RFC 7515 §7.2.2, RFC 7797 unencoded payload) on the denial notice and `execute_remedy_plan` call: `protected`, `payload`, `signature`. That is integrity (JWS), not encryption (JWE). `protected.alg` selects the verify method; unknown algorithms fail closed. The event log is the authority for whether the offer still stands. A claim carries no expiry: it is a routing token, not an authorization, and the event log's operation idempotency gates the spend — replaying a claim from another conversation can only reach an offer the same session minted, and never twice.
+A `review_required` result has not applied a remedy. For the declared control tool, the proxy exposes canonical status from a same-scope staged review or its server-issued per-call history record. A result matching neither, or coming from a foreign tool, stays withheld. This visibility exception records no approval and authorizes no retry.
 
-Session receipts belong to authorized users within an organization. A personal offer requires its original user. An offer id alone cannot be spent; the caller must present a valid signature for that offer. Spent, unknown, or unauthorized offers return terminal feedback without executing.
+The gateway retains a per-call record of server-issued review status separately from the expiring review and one-use ruling. History uses that record after approval, cancellation, or expiry. It contains no ruling or review payload and cannot reopen a question or authorize a retry.
 
-Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. The ruling is recorded under the offer's signed session, including a child session when the gateway call has no session header. Approval in a parent session does not authorize a separate child offer.
+Chat distinguishes unanswered expiry, user cancellation, unavailable delivery, and invalid answers before native remedy execution. These outcomes grant no ruling. The proxy preserves only the exact same-scope, server-recorded status, never client-supplied instructions. An unanswered review is not reported as an unreachable authority.
+
+A native Deny or Cancel blocks the reviewed action and its offer, not unrelated requests. The proxy captures the server's reviewed identity before consuming the answer. Independent calls still undergo normal policy evaluation; the answer itself grants them no permission.
+
+The proxy writes `trajectory: { v: 1, session_id, parent_id? }` on remedy and approval calls. It uses the adapter's current resolved session, including child and fork identity. It replaces any model-written trajectory. The client forwards this field unchanged. The gateway uses its authenticated organization and this trajectory as the expected acting run. It does not select the run from an offer in history or a gateway session header. The event log is the authority for whether the offer still stands.
+
+The runtime checks that the offer belongs to the acting run and remains valid. Its stored state controls approval and repeat execution. There is no separate comparison between the original proxy account and the gateway account. Normal authentication, organization scope, and tool permissions still apply. Missing trajectory metadata fails closed before a pending approval is consumed.
+
+Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. The proxy replaces model-written review text with the staged server review. Native answers are paired with actual client question calls. Their one-use cache records bind answers to the exact offers. Earlier answers remain readable after that cache is consumed. Approval in a parent session does not authorize a child offer.
+
+Native questions and gateway `ask_user` forms replace only the decorative review prefix with `[OpenAPPA] Approve this call?`. Multi-line pixel art does not survive every terminal renderer or Claude's quoted answer summary. Reviewed tool names, arguments, authority, options, and offer bindings are unchanged.
+
+Offer routing and native questions require no signatures. Session receipt codes are random stored identifiers. Child completion codes are display-only; the parent checks returned text against the stored approved result. Signatures remain on history-based trajectory stamps, delegation bindings, and child recovery tokens where trusted client metadata is insufficient. Teammate inbox calls use a separate signed peer proof. A remedy field cannot authorize an inbox read. Gateway tool attestations still distinguish platform tools from external declarations.
+
+Legacy notice offers and JWS fields are stripped from provider history but never used for routing. An old in-flight remedy call without a trajectory must retry through the proxy. Pending native questions can consume their existing cache records during the ten-minute expiry window. New question IDs and cache keys use no HMAC.
+
+### Child contracts and completion
+
+Provider forwarding omits semantically empty Anthropic system messages left by compaction. It preserves real instructions and tool-result boundaries rather than inserting a whitespace system block that the provider rejects.
+
+A child `SessionStart` can return contract instructions rather than a refusal. The proxy injects non-empty instructions before child inference, including tool-free child requests. Empty instructions, unsupported delivery wires, and root-only context decisions fail closed. A sanitizer can still require the child to return its rewritten output verbatim before `ChildEnd` admits it.
+
+OpenCode's generated handoff plugin adds onboarding guidance only to a verified native root session. Child sessions do not inherit that root-only system instruction. Missing native identity omits the optional guidance rather than modifying returned model text.
+
+Incomplete and failed Responses generations retain their original terminal status, errors, details, usage, and safe output. Partial executable calls and unadmitted hosted-tool content are withheld. Streaming retains text captured before the hosted boundary. A failed final snapshot cannot establish when its message text was generated, so ambiguous hosted-derived output is dropped, including convenience text fields. Translated subscription failures also bypass successful end-of-turn and child-return hooks. The failure lifecycle still cleans up request resources and records the interaction once.
+
+Claude's declared native `SubagentHandback` is the return boundary when available; intermediate text stops do not close that child. Its dedicated progress-label request is also not a completion. Without handback, the checked final-text path remains. Finished-subagent display markers alone never prove that a result crossed.
+
+Split-pane Claude teammates report their own conversation id and a separate `parent_session_id` in native metadata. The adapter uses that parent for child binding, while keeping the child's own conversation id for later spawns. In-process teammates share the lead's conversation. Native parent metadata does not bypass prepared-spawn or return-contract validation and is removed before provider forwarding.
+
+The proxy correlates a split-pane conversation with its declared teammate name using a verified delegation marker and the same caller's recorded allowed spawn. Launch acknowledgements are control/status and need not appear in processed-result storage. The child receipt also binds the original native conversation for compaction recovery. Foreign spawn records and another child's receipt cannot supply that identity.
+
+Child receipts inside tool results or nested return notifications belong to the callee. The proxy strips them without adopting their lineage. Session-only Claude metadata does not prove that a request is a root. If a valid own-context child receipt conflicts with that ambiguous identity, the proxy refuses continuation rather than falling back to the parent. Genuine delegation markers and native child metadata retain their binding and recovery checks.
+
+Hosted peer reads require an exact declaration of `mcp/archestra/read_peer_message` with an empty delta. A wildcard rule is insufficient. The read applies the message's stored restrictions, not a tool annotator's replacement label.
 
 ## Persistence and current limits
 
@@ -359,7 +397,9 @@ The proxy sends `Prompt` at the start of each user turn, and `TurnEnd` after a t
 
 Submitting the same logical call ID and arguments returns the saved result without re-execution. Submitting changed arguments under that ID is refused. Spent offers return terminal feedback.
 
-Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, signed offers, and execution frames before forwarding. Azure Responses tool traffic is refused while OpenAPPA is enabled.
+Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, legacy signed offers, and execution frames before forwarding. Azure Responses tool traffic is refused while OpenAPPA is enabled.
+
+Subscription Responses translated to Chat Completions retain each tool's argument snapshots and deltas until completion. Conflicting identities or argument bytes fail closed. Incomplete generations do not release held tool calls. The translator does not replace malformed arguments with empty objects.
 
 Start new conversations after enabling OpenAPPA. Tool results from before activation have no receipts and are refused.
 

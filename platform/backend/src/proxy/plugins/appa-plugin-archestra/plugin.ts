@@ -1,5 +1,6 @@
-import { createHmac, randomBytes, timingSafeEqual } from "node:crypto";
+import { createHash, createHmac, randomBytes } from "node:crypto";
 import type { IncomingHttpHeaders } from "node:http";
+import { isDeepStrictEqual } from "node:util";
 import {
   buildElicitationMandateInstruction,
   PROXY_STAMPED_TOOL_ARGUMENTS,
@@ -20,11 +21,15 @@ import OpenAppaSpawnCorrelationModel, {
 import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
-  childReturnMarkersConfigured,
   mintChildReturnMarker,
 } from "@/openappa/child-return";
-import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
+import {
+  mintChildTrajectoryReceipt,
+  verifyChildTrajectoryReceipt,
+} from "@/openappa/child-trajectory-receipt";
 import { recordOpenAppaClientFailure } from "@/openappa/client-failure-report";
+import { normalizeCommandExecutionArguments } from "@/openappa/command-normalization";
+import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   delegationEnabled,
   isDelegatedPrompt,
@@ -33,16 +38,11 @@ import {
 import {
   getHitlAskUserArguments,
   getHitlReview,
+  getHitlReviewResult,
+  type HitlReviewOutcome,
   recordHitlRuling,
 } from "@/openappa/hitl-review";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
-import type { OfferJws } from "@/openappa/offer-claims";
-import {
-  offerIdFromJws,
-  offerSessionFromJws,
-  signOfferClaims,
-  unsignedOfferClaims,
-} from "@/openappa/offer-claims";
 import {
   PEER_PROOF_ARGUMENT,
   signPeerProof,
@@ -66,6 +66,7 @@ import {
   processProxyResults,
   sendPeerMessage,
   sharedPolicy,
+  UNDELIVERABLE_RETURN_CONTRACT,
   withCapturedGuardrailsActivation,
 } from "@/openappa/service";
 import {
@@ -118,7 +119,7 @@ import {
   type AppaTrustedContext,
   type AskUserArguments,
 } from "./types";
-import { withoutCallerScope } from "./utils";
+import { withCallerScope, withoutCallerScope } from "./utils";
 
 type AppaPluginBinding = {
   session: OpenAppaSession;
@@ -150,6 +151,8 @@ type AppaPluginBinding = {
   spawnerNativeId: string | undefined;
   /** Server-bound child metadata needed to correlate its terminal return. */
   child?: AppaChildTrajectory;
+  /** Child return contract for this request, injected before the provider call. */
+  returnContract?: string;
   /**
    * Unscoped client session id for trajectory stamps. Captured before child
    * overlay so stamps never encode a minted parent:child id.
@@ -182,6 +185,8 @@ type IssuedNativeQuestion = {
 type RecordedNativeHitlRuling = {
   offerId: string;
   ruling: "approve" | "deny" | "none";
+  reviewedTool?: string;
+  reviewedArguments?: string;
 };
 
 type ToolCall = LlmProxyToolCallsContext["toolCalls"][number];
@@ -205,12 +210,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       return;
     }
     const chat = trustedContext.chatSource !== undefined;
-    const trajectory = appaTrajectory({
+    let trajectory = appaTrajectory({
       adapters: this.clientAdapters,
       headers: context.headers,
       requestBody: context.requestBody,
       trustedContext,
     });
+    const teammateId = await correlatedClaudeTeammateId(trajectory);
+    if (teammateId) {
+      trajectory = appaTrajectory({
+        adapters: this.clientAdapters,
+        headers: context.headers,
+        requestBody: context.requestBody,
+        trustedContext: {
+          ...trustedContext,
+          claudeTeammateNativeId: teammateId,
+        },
+      });
+    }
     const binding: AppaPluginBinding = {
       session: trajectory.session,
       identity: trustedContext.toolIdentity,
@@ -235,6 +252,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       unenforcedCalls: { reasons: new Map(), children: new Set() },
     };
     if (trajectory.child) {
+      if (teammateId && trajectory.child.lineage) {
+        trajectory.child.lineage.nativeConversationId =
+          trajectory.adapter?.nativeConversationId(trajectory.matchContext);
+      }
       binding.child = trajectory.child;
       issueChildTrajectoryReceipt(context, binding.session, trajectory.child);
     }
@@ -292,10 +313,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       results,
       updates: childResultUpdates,
     });
-    // Requests with results submit them to runtime even if current request
-    // declares no tools. Proxy-only sessions declared local tools, so their
-    // session still starts; a session that declared nothing has nothing to do.
+    // Requests with results submit them even if this request declares no tools.
+    // A root that declared nothing has nothing to submit. A bound child still
+    // starts, so its return contract is delivered before inference.
     if (
+      !this.governedSession(binding).parent_id &&
       !binding.request.tools &&
       toolResults.length === 0 &&
       binding.request.declaredTools.length === 0
@@ -354,12 +376,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       results: nonHandbackResults,
       canonicalize: (name: string, namespace?: string) =>
         this.canonicalize(binding, { name, namespace }),
-      isUserQuestion: (answer) =>
-        isUserQuestionResult({
-          binding,
-          answer,
-          verifiedNativeQuestionResults,
-        }) || isIssuedQuestionAnswer(binding, answer),
+      isUserQuestion: (answer) => isUserQuestionResult({ binding, answer }),
       classifySpawnResult: (answer) => {
         if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
           return undefined;
@@ -374,8 +391,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         binding.request.tools?.control.name ??
         binding.request.historicalControlToolName,
       isControlResult: (answer) => isOwnControlResult(binding, answer),
+      pendingReviewResult: (answer) => pendingReviewResult(binding, answer),
       trustedChat: binding.chat,
     });
+    if (result.returnContract) {
+      binding.returnContract = result.returnContract;
+    }
     const toolResultUpdates = {
       ...childResultUpdates,
       ...Object.fromEntries(
@@ -394,7 +415,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           isUserQuestionResult({
             binding,
             answer,
-            verifiedNativeQuestionResults,
           }),
       )
     ) {
@@ -416,6 +436,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (binding) enterCapturedGuardrailsActivation("active");
     binding?.adapter?.stripCarrierMetadata(context.request);
     stripPeerProofs(context.request);
+    if (binding?.returnContract) {
+      deliverReturnContract({
+        request: context.request,
+        interactionType: context.interactionType,
+        contract: binding.returnContract,
+      });
+    }
     // A compaction summarizes the history, so an unchecked message would
     // survive into the summary: messages are admitted before either turn.
     if (binding) {
@@ -513,20 +540,24 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!binding) return;
     enterCapturedGuardrailsActivation("active");
     const tools = binding.request.tools;
-    if (!tools) {
-      // A proxy-only session declares no APPA tools, but the runtime still
-      // releases the client's own question calls, so their answers need the
-      // signed id too.
-      const issuedNativeQuestions: IssuedNativeQuestion[] = [];
-      const toolCalls = context.toolCalls.map((call) => {
-        const issued = withNativeQuestionId(binding, call);
-        if (!issued) return call;
-        issuedNativeQuestions.push({ ...issued.question, offerIds: [] });
-        return issued.call;
-      });
-      if (issuedNativeQuestions.length === 0) return;
-      await rememberNativeQuestions(binding, issuedNativeQuestions);
-      return { decision: "allow", toolCalls };
+    // Ordinary questions are identified by their actual client call/result
+    // frames. Only a pending review needs a proxy-issued, one-use binding.
+    if (!tools) return;
+    const illegalSpawn = unsupportedNativeSpawn(binding, context.toolCalls);
+    if (illegalSpawn) {
+      const message = illegalSpawnFeedback(illegalSpawn);
+      return {
+        decision: "refuse",
+        refusal: {
+          refusalMessage: message,
+          contentMessage: message,
+          reason: "openappa_invalid_spawn_arguments",
+          blockedToolName: illegalSpawn.name,
+          blockedToolId: illegalSpawn.id,
+          toolInput: { rejectedFields: illegalSpawn.fields },
+          allToolCallNames: context.toolCalls.map((call) => call.name),
+        },
+      };
     }
     // Restore before host validation; finalization may only append the child
     // receipt, never change the arguments the other policies already checked.
@@ -540,9 +571,40 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (binding.nativeHitlRulings.length > 0) {
       const blocked = context.toolCalls[0];
       if (!blocked) return;
-      if (
-        binding.nativeHitlRulings.some((entry) => entry.ruling !== "approve")
-      ) {
+      const rejected = binding.nativeHitlRulings.filter(
+        (entry) => entry.ruling !== "approve",
+      );
+      const rejectedCall = incomingToolCalls.find((call) => {
+        const [target] = normalizeToolCallsForPolicy(
+          [call],
+          this.resolution(binding),
+        );
+        return rejected.some((entry) => {
+          if (
+            call.name === tools.control.name &&
+            call.namespace === tools.control.namespace &&
+            toolInputOf(call.arguments).offer_id === entry.offerId
+          )
+            return true;
+          // An incomplete server-issued review cannot identify an independent
+          // action safely. Otherwise only the exact reviewed action is blocked.
+          if (!entry.reviewedTool) return true;
+          if (target.toolCallName !== entry.reviewedTool) return false;
+          if (!entry.reviewedArguments) return true;
+          try {
+            return isDeepStrictEqual(
+              normalizeCommandExecutionArguments(
+                target.toolCallName,
+                JSON.parse(target.toolCallArgs),
+              ),
+              JSON.parse(entry.reviewedArguments),
+            );
+          } catch {
+            return true;
+          }
+        });
+      });
+      if (rejectedCall) {
         const message =
           "The human did not approve this OpenAPPA review. Keep the dependent tool call blocked.";
         return {
@@ -551,80 +613,79 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             refusalMessage: message,
             contentMessage: message,
             reason: "openappa_hitl_not_approved",
-            blockedToolName: blocked.name,
-            blockedToolId: blocked.id,
-            toolInput: toolInputOf(blocked.arguments),
+            blockedToolName: rejectedCall.name,
+            blockedToolId: rejectedCall.id,
+            toolInput: toolInputOf(rejectedCall.arguments),
             allToolCallNames: context.toolCalls.map((call) => call.name),
           },
         };
       }
-      if (binding.nativeHitlRulings.length !== 1) {
-        const message = "Complete one approved OpenAPPA offer at a time.";
-        return {
-          decision: "refuse",
-          refusal: {
-            refusalMessage: message,
-            contentMessage: message,
-            reason: "openappa_hitl_offer_count",
-            blockedToolName: blocked.name,
-            blockedToolId: blocked.id,
-            toolInput: toolInputOf(blocked.arguments),
-            allToolCallNames: context.toolCalls.map((call) => call.name),
+      const approvedRulings = binding.nativeHitlRulings.filter(
+        (entry) => entry.ruling === "approve",
+      );
+      if (approvedRulings.length > 0) {
+        if (approvedRulings.length !== 1) {
+          const message = "Complete one approved OpenAPPA offer at a time.";
+          return {
+            decision: "refuse",
+            refusal: {
+              refusalMessage: message,
+              contentMessage: message,
+              reason: "openappa_hitl_offer_count",
+              blockedToolName: blocked.name,
+              blockedToolId: blocked.id,
+              toolInput: toolInputOf(blocked.arguments),
+              allToolCallNames: context.toolCalls.map((call) => call.name),
+            },
+          };
+        }
+        const approved = approvedRulings[0];
+        const pending = await getHitlReview({
+          session: binding.session,
+          offerId: approved.offerId,
+        });
+        if (!pending?.remedyArguments) {
+          const message =
+            "The approved OpenAPPA review is no longer available. Keep the tool call blocked.";
+          return {
+            decision: "refuse",
+            refusal: {
+              refusalMessage: message,
+              contentMessage: message,
+              reason: "openappa_hitl_review_missing",
+              blockedToolName: blocked.name,
+              blockedToolId: blocked.id,
+              toolInput: toolInputOf(blocked.arguments),
+              allToolCallNames: context.toolCalls.map((call) => call.name),
+            },
+          };
+        }
+        incomingToolCalls = [
+          {
+            id: blocked.id,
+            name: tools.control.name,
+            ...(tools.control.namespace
+              ? { namespace: tools.control.namespace }
+              : {}),
+            arguments: JSON.stringify(pending.remedyArguments),
           },
-        };
+        ];
+        binding.nativeHitlRulings = [];
+        changed = true;
       }
-      const approved = binding.nativeHitlRulings[0];
-      const pending = await getHitlReview({
-        session: binding.session,
-        offerId: approved.offerId,
-      });
-      if (!pending?.remedyArguments) {
-        const message =
-          "The approved OpenAPPA review is no longer available. Keep the tool call blocked.";
-        return {
-          decision: "refuse",
-          refusal: {
-            refusalMessage: message,
-            contentMessage: message,
-            reason: "openappa_hitl_review_missing",
-            blockedToolName: blocked.name,
-            blockedToolId: blocked.id,
-            toolInput: toolInputOf(blocked.arguments),
-            allToolCallNames: context.toolCalls.map((call) => call.name),
-          },
-        };
-      }
-      incomingToolCalls = [
-        {
-          id: blocked.id,
-          name: tools.control.name,
-          ...(tools.control.namespace
-            ? { namespace: tools.control.namespace }
-            : {}),
-          arguments: JSON.stringify(pending.remedyArguments),
-        },
-      ];
-      binding.nativeHitlRulings = [];
-      changed = true;
     }
     const claimedOfferIds = new Set<string>();
     const issuedNativeQuestions: IssuedNativeQuestion[] = [];
     const toolCalls: Array<(typeof context.toolCalls)[number]> = [];
     for (const call of incomingToolCalls) {
       // The declared control tool itself, in its own namespace: a same-named
-      // tool of another server gets no receipt. Only offers the client's own
-      // session minted may ride it.
+      // tool of another server gets no receipt. The acting run always comes
+      // from this request, never from an offer in replayed history.
       if (
         call.name === tools.control.name &&
         call.namespace === tools.control.namespace
       ) {
-        const stamped = stampControlExecution(
-          call,
-          sessionOfferClaims(
-            binding.request.offerClaims,
-            binding.session.session_id,
-          ),
-        );
+        const stamped = stampControlExecution(call, binding.session);
         changed ||= stamped !== call;
         toolCalls.push(stamped);
         continue;
@@ -638,9 +699,9 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           this.canonicalize(binding, call),
         ) === TOOL_ASK_USER_SHORT_NAME
       ) {
-        const stamped = stampAskUserOffers(
+        const stamped = stampAskUserTrajectory(
           call,
-          binding.request.askUserOfferClaims,
+          binding.session,
           claimedOfferIds,
         );
         prepared = stamped.call;
@@ -667,6 +728,7 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           };
         }
         prepared = canonical.call;
+        offerIds = canonical.offerIds;
         changed ||= prepared !== call;
       }
       // Before any policy sees it: the call the policies rule on is the one
@@ -674,7 +736,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       const nativeQuestion = this.asNativeQuestion(binding, prepared);
       changed ||= nativeQuestion !== prepared;
       prepared = nativeQuestion;
-      const issued = withNativeQuestionId(binding, prepared);
+      const issued =
+        offerIds.length > 0
+          ? withNativeQuestionId(binding, prepared)
+          : undefined;
       if (issued) {
         prepared = issued.call;
         issuedNativeQuestions.push({ ...issued.question, offerIds });
@@ -1054,12 +1119,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
             result: decision.feedback,
             custom: identity.custom,
             namespace: identity.namespace,
-            offers: signedOffersForDenial(session, {
-              offerIds: decision.offers ?? [],
-              tool: identity.name,
-              spelling: identity.name,
-              ...(identity.dispatch ? { dispatch: identity.dispatch } : {}),
-            }),
           }),
         ),
       });
@@ -1127,20 +1186,28 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     if (!binding || binding.turnOpen || !binding.session.parent_id) {
       return;
     }
+    if (
+      binding.adapter?.id === "claude-code" &&
+      (binding.request.declaredTools?.some(
+        (tool) =>
+          !tool.namespace &&
+          binding.adapter?.isChildHandbackTool?.(tool.name) === true,
+      ) ||
+        isClaudeProgressLabelRequest(binding.requestBody))
+    ) {
+      // With a native handback, intermediate text does not cross to the parent.
+      // Claude's progress-label side call also does not finish its active child.
+      return { decision: "release" };
+    }
     if (!binding.request.turnEndOperationId) {
       throw new ApiError(503, "OpenAPPA could not safely end the child turn");
     }
     enterCapturedGuardrailsActivation("active");
     // Check correlation data and the signing key before ChildEnd.
     // If the runtime admits a value, the value crosses the boundary.
-    // Fail before dispatch if the marker cannot be created.
     const childNativeId = binding.child?.lineage?.childNativeId;
     const spawnCallId = await resolveSpawnCallId(binding);
     if (!spawnCallId) throw uncorrelatedChild();
-    if (!childReturnMarkersConfigured()) {
-      throw new ApiError(503, "OpenAPPA could not protect the child return");
-    }
-
     const outcome = await endChild({
       session: this.governedSession(binding),
       operationId: binding.request.turnEndOperationId.replace(
@@ -1159,7 +1226,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     // A teammate's end reaches its lead as an idle notice, not as the result
     // of the call that started it, and it may end many turns: it carries no
     // return marker. The lead reads it only because it crossed here.
-    if (childNativeId && binding.adapter?.isTeammate?.(childNativeId)) {
+    if (
+      binding.child?.lineage?.nativeConversationId ||
+      (childNativeId && binding.adapter?.isTeammate?.(childNativeId))
+    ) {
       return admitted === context.responseText
         ? { decision: "release" }
         : { decision: "replace", responseText: admitted };
@@ -1174,9 +1244,6 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       value: admitted,
       ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
     });
-    if (!marker) {
-      throw new ApiError(503, "OpenAPPA could not protect the child return");
-    }
     return {
       decision: "replace",
       responseText: `${admitted}\n\n${marker}`,
@@ -1401,6 +1468,66 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       namespace: call.namespace,
     };
   }
+}
+
+async function correlatedClaudeTeammateId(
+  trajectory: ReturnType<typeof appaTrajectory>,
+): Promise<string | undefined> {
+  const { adapter, child, matchContext, session } = trajectory;
+  const lineage = child?.lineage;
+  const trusted = matchContext.trustedContext;
+  if (
+    adapter?.id !== "claude-code" ||
+    !child ||
+    !lineage ||
+    !trusted ||
+    lineage.childNativeId !== adapter.nativeConversationId(matchContext)
+  )
+    return undefined;
+
+  const receipt = trusted.request.childTrajectoryReceipts?.find((candidate) =>
+    verifyChildTrajectoryReceipt({
+      receipt: candidate,
+      organizationId: session.organization_id,
+      callerId: session.caller_id,
+      spawnerNativeId: lineage.nativeParentId,
+      nativeConversationId: adapter.nativeConversationId(matchContext),
+    }),
+  );
+  const marker = lineage.source === "marker" && lineage.spawnPromptDigest;
+  const spawnCallId = marker ? lineage.spawnCallId : receipt?.spawnCallId;
+  if (!spawnCallId) return undefined;
+  const parentId = marker ? child.parentId : receipt?.parentId;
+  if (!parentId) return undefined;
+  const aliases = await OpenAppaSpawnCorrelationModel.allowedSpawnAliases({
+    organizationId: session.organization_id,
+    callerId: session.caller_id,
+    parentSessionId: withCallerScope(session, parentId),
+  });
+  const ids = new Set(
+    aliases.flatMap((alias) => {
+      if (
+        withoutTrajectoryStamp(alias.spawnCallId) !==
+        withoutTrajectoryStamp(spawnCallId)
+      )
+        return [];
+      const launch = alias.launchText
+        ? adapter.launchIdentity?.(alias.launchText)
+        : undefined;
+      if (!alias.name || !/^[A-Za-z0-9_-]{1,64}$/.test(alias.name)) return [];
+      if (launch && launch.name !== alias.name) return [];
+      if (!marker && alias.name !== receipt?.childNativeId) return [];
+      // Launch acknowledgements are control/status, not necessarily stored
+      // results. The allowed native call supplies the stable teammate name.
+      return [alias.name];
+    }),
+  );
+  if (ids.size > 1)
+    throw new ApiError(
+      409,
+      "OpenAPPA found conflicting teammate launch identities for this spawn",
+    );
+  return [...ids][0];
 }
 
 async function approveChildReturnCarriers(params: {
@@ -1906,7 +2033,12 @@ async function spawnRanUnenforced(
 /** Whether a teammate envelope's sender is the child `id`: `<name>` or `<name>@<team>`. */
 function namesTeammate(name: string, id: string): boolean {
   if (id === name) return true;
-  return id.startsWith(`${name}@`) && !id.slice(name.length + 1).includes("@");
+  return (
+    (id.startsWith(`${name}@`) && !id.slice(name.length + 1).includes("@")) ||
+    (!id.includes("@") &&
+      name.startsWith(`${id}@`) &&
+      !name.slice(id.length + 1).includes("@"))
+  );
 }
 
 /**
@@ -2650,12 +2782,7 @@ async function withholdUnrecordedPeerReads(params: {
         toolCallId: result.id,
       });
       params.updates[result.id] = receipt
-        ? restoredPeerRead({
-            binding: params.binding,
-            session: params.session,
-            toolName: result.name,
-            receipt,
-          })
+        ? restoredPeerRead(receipt)
         : WITHHELD_PEER_READ;
       continue;
     }
@@ -2669,33 +2796,20 @@ async function withholdUnrecordedPeerReads(params: {
   }
 }
 
-function restoredPeerRead(params: {
-  binding: AppaPluginBinding;
-  session: OpenAppaSession;
-  toolName: string;
+function restoredPeerRead(
   receipt: Awaited<
     ReturnType<typeof OpenAppaSessionModel.retainedPeerReadReceipt>
-  >;
-}): string {
-  const { binding, session, toolName, receipt } = params;
+  >,
+): string {
   if (!receipt) return WITHHELD_PEER_READ;
   if (receipt.kind === "admitted") {
     return escapeRelayMarkup(receipt.approvedOutput);
   }
-  const offers = signedOffersForDenial(session, {
-    offerIds: receipt.offers.map((offer) => offer.offer_id),
-    tool: TOOL_READ_PEER_MESSAGE_SHORT_NAME,
-    spelling: toolName,
-  });
-  // These claims come from the runtime receipt, not the client's tool result.
-  // The next control call needs them as well as the model-visible ruling.
-  binding.request = {
-    ...binding.request,
-    offerClaims: [...(binding.request.offerClaims ?? []), ...offers],
-  };
+  // Offer ids remain presentation data. Remedy execution uses this request's
+  // current trajectory rather than routing claims recovered from history.
   return JSON.stringify({
     ruling: receipt.feedback,
-    ...(offers.length > 0 ? { offers } : {}),
+    ...(receipt.offers.length > 0 ? { offers: receipt.offers } : {}),
   });
 }
 
@@ -2726,9 +2840,6 @@ async function admitChildHandback(params: {
   if (!binding.request.turnEndOperationId) {
     throw new ApiError(503, "OpenAPPA could not safely end the child turn");
   }
-  if (!childReturnMarkersConfigured()) {
-    throw new ApiError(503, "OpenAPPA could not protect the child return");
-  }
   const outcome = await endChild({
     session: binding.session,
     operationId: binding.request.turnEndOperationId.replace(
@@ -2754,9 +2865,6 @@ async function admitChildHandback(params: {
     value: admitted,
     ...(binding.adapter?.id === "codex" ? { format: "inline" as const } : {}),
   });
-  if (!marker) {
-    throw new ApiError(503, "OpenAPPA could not protect the child return");
-  }
   const returnText = `${admitted}\n\n${marker}`;
   const rewritten = adapter?.rewriteChildHandback?.(call.arguments, returnText);
   return {
@@ -2846,67 +2954,13 @@ function issueChildTrajectoryReceipt(
     ...(lineage.childNativeId ? { childNativeId: lineage.childNativeId } : {}),
     spawnerNativeId: lineage.nativeParentId,
     spawnCallId: lineage.spawnCallId,
+    nativeConversationId: lineage.nativeConversationId,
   });
   if (!footer) return;
   context.resources.set(APPA_CHILD_TRAJECTORY_RECEIPT, {
     footer,
     inHistory: lineage.source === "receipt",
   });
-}
-
-function signedOffersForDenial(
-  session: OpenAppaSession,
-  params: {
-    offerIds: string[];
-    tool: string;
-    spelling: string;
-    dispatch?: string;
-  },
-): OfferJws[] {
-  const secret = config.openappa.offerSigningSecret;
-  if (params.offerIds.length === 0) return [];
-  if (secret.length === 0) {
-    throw new ApiError(
-      503,
-      "OpenAPPA offer signing is not configured (ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET)",
-    );
-  }
-  return params.offerIds.map((offerId) =>
-    signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: session.organization_id,
-        sessionId: session.session_id,
-        parentId: session.parent_id,
-        callerId: session.caller_id,
-        offerId,
-        tool: params.tool,
-        spelling: params.spelling,
-        ...(params.dispatch ? { dispatch: params.dispatch } : {}),
-      }),
-      secret,
-    ),
-  );
-}
-
-/**
- * Returns offers from history that belong to the current session.
- * A fork replays parent notices and offers. To prevent modifying parent state,
- * the fork excludes parent offers from its control calls.
- */
-function sessionOfferClaims(
-  envelopes: readonly OfferJws[] | undefined,
-  sessionId: string,
-): OfferJws[] | undefined {
-  return envelopes?.filter(
-    (envelope) => offerSessionFromJws(envelope) === sessionId,
-  );
-}
-
-function claimsForOffer(
-  offerId: string,
-  envelopes: readonly OfferJws[] | undefined,
-): OfferJws | undefined {
-  return envelopes?.find((envelope) => offerIdFromJws(envelope) === offerId);
 }
 
 /**
@@ -2984,13 +3038,51 @@ type AuthorizedSpawn = {
   namespace?: string;
 };
 
+function unsupportedNativeSpawn(
+  binding: AppaPluginBinding,
+  calls: readonly ToolCall[],
+):
+  | { id: string; name: string; namespace?: string; fields: string[] }
+  | undefined {
+  const report = binding.adapter?.unsupportedSpawnFields;
+  if (!report) return undefined;
+  for (const call of calls) {
+    const fields = report.call(binding.adapter, {
+      requestBody: binding.requestBody,
+      name: call.name,
+      namespace: call.namespace,
+      arguments: call.arguments,
+    });
+    if (!fields || fields.length === 0) continue;
+    return {
+      id: call.id,
+      name: call.name,
+      ...(call.namespace ? { namespace: call.namespace } : {}),
+      fields,
+    };
+  }
+  return undefined;
+}
+
+function illegalSpawnFeedback(params: {
+  name: string;
+  namespace?: string;
+  fields: readonly string[];
+}): string {
+  const tool = params.namespace
+    ? `${params.namespace}.${params.name}`
+    : params.name;
+  const fields = params.fields.map((field) => `\`${field}\``).join(", ");
+  return [
+    `OpenAPPA refused this spawn before any return-contract offer. ${tool} does not accept ${fields}.`,
+    "An APPA return plan is selected with execute_remedy_plan, not by adding a field to the native spawn arguments.",
+    "Re-propose the spawn with only the arguments its declaration accepts. Do not repeat the rejected field.",
+  ].join(" ");
+}
+
 /**
- * Replaces one rewritten retry of an authorized spawn with the arguments the
- * offer covers. The runtime matches the tool and those arguments, not the
- * call id. A different task name, a non-spawn, or a retry that already
- * carried the authorized arguments is not rewritten.
- * One pending acceptance restores at most one call in a batch; it does not
- * authorize fan-out. Every remaining call still needs its own runtime ruling.
+ * Restore at most one accepted spawn per batch. Different options or tasks
+ * still need their own runtime ruling; acceptance never authorizes fan-out.
  */
 function restoreAuthorizedSpawnRetry(params: {
   calls: readonly ToolCall[];
@@ -3279,7 +3371,7 @@ function protectNamedChildren(params: {
 /** Attaches execution metadata frame to remedy calls for receipt validation. */
 function stampControlExecution(
   call: LlmProxyToolCallsContext["toolCalls"][number],
-  offerClaims: readonly OfferJws[] | undefined,
+  session: OpenAppaSession,
 ): LlmProxyToolCallsContext["toolCalls"][number] {
   const originalArguments =
     typeof call.arguments === "string"
@@ -3298,8 +3390,7 @@ function stampControlExecution(
   )
     return call;
   const argumentRecord = argumentsValue as Record<string, unknown>;
-  // The proxy alone writes the receipt and JWS members. This prevents
-  // replaying stale signatures from previous remedy calls.
+  // Replace model-written transport fields, including old signed envelopes.
   const clientArguments = withoutStampedArguments({
     tool: TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
     args: argumentRecord,
@@ -3315,19 +3406,12 @@ function stampControlExecution(
         ? originalArguments
         : JSON.stringify(clientArguments),
   } satisfies RemedyExecution;
-  const offerId =
-    typeof argumentRecord.offer_id === "string"
-      ? argumentRecord.offer_id
-      : undefined;
-  const owner = offerId ? claimsForOffer(offerId, offerClaims) : undefined;
   return {
     ...call,
     arguments: JSON.stringify({
       ...clientArguments,
       execution,
-      // The matched offer's flattened JWS routing fields (protected,
-      // payload, signature) land as top-level keys beside the remedy args.
-      ...(owner ?? {}),
+      trajectory: currentTrajectory(session),
     }),
   };
 }
@@ -3358,13 +3442,12 @@ function parseAskUserArguments(
 const CODEX_MCP_NAMESPACE_PREFIX = "mcp__";
 
 /**
- * Attaches signed offer envelopes from this turn's notices to an ask_user call.
- * This lets the tool include a verified remedy continuation in its result.
- * The proxy is the sole writer of this field; client-supplied copies are stripped first.
+ * Attaches the current run to an ask_user call. Pending server-held reviews,
+ * not copied offers or model text, decide which approvals it may collect.
  */
-function stampAskUserOffers(
+function stampAskUserTrajectory(
   call: LlmProxyToolCallsContext["toolCalls"][number],
-  offerClaims: readonly OfferJws[] | undefined,
+  session: OpenAppaSession,
   claimedOfferIds: Set<string>,
 ): {
   call: LlmProxyToolCallsContext["toolCalls"][number];
@@ -3398,26 +3481,13 @@ function stampAskUserOffers(
     (id): id is string => typeof id === "string" && id.length > 0,
   );
   const requested = new Set(requestedOfferIds);
-  const offersById = new Map(
-    (offerClaims ?? []).flatMap((offer) => {
-      const offerId = offerIdFromJws(offer);
-      return offerId ? [[offerId, offer] as const] : [];
-    }),
-  );
   const validBinding =
     requested.size > 0 &&
     requested.size <= 12 &&
     requestedOfferIds.length === requestedOfferIdValues.length &&
     requested.size === requestedOfferIds.length &&
-    requestedOfferIds.every(
-      (id) => offersById.has(id) && !claimedOfferIds.has(id),
-    );
-  const selectedOffers = validBinding
-    ? requestedOfferIds.map((id) => offersById.get(id) as OfferJws)
-    : [];
-  if (selectedOffers.length === 0) {
-    // No offer from this turn to carry, but a copy the model wrote itself
-    // still goes.
+    requestedOfferIds.every((id) => !claimedOfferIds.has(id));
+  if (!validBinding) {
     return {
       call:
         Object.keys(clientArguments).length ===
@@ -3433,7 +3503,7 @@ function stampAskUserOffers(
       ...call,
       arguments: JSON.stringify({
         ...clientArguments,
-        remedy_offers: selectedOffers,
+        trajectory: currentTrajectory(session),
       }),
     },
     offerIds: requestedOfferIds,
@@ -3447,6 +3517,7 @@ async function canonicalizeHitlAskUserCall(params: {
 }): Promise<{
   call: LlmProxyToolCallsContext["toolCalls"][number];
   invalidOfferCount: boolean;
+  offerIds: string[];
 }> {
   if (params.offerIds.length !== 1) {
     const pending = await Promise.all(
@@ -3457,13 +3528,15 @@ async function canonicalizeHitlAskUserCall(params: {
     return {
       call: params.call,
       invalidOfferCount: pending.some(Boolean),
+      offerIds: [],
     };
   }
   const hitl = await getHitlAskUserArguments({
     session: params.binding.session,
     offerIds: params.offerIds,
   });
-  if (!hitl) return { call: params.call, invalidOfferCount: false };
+  if (!hitl)
+    return { call: params.call, invalidOfferCount: false, offerIds: [] };
   const raw =
     typeof params.call.arguments === "string"
       ? params.call.arguments
@@ -3472,20 +3545,20 @@ async function canonicalizeHitlAskUserCall(params: {
   try {
     parsed = JSON.parse(raw);
   } catch {
-    return { call: params.call, invalidOfferCount: false };
+    return { call: params.call, invalidOfferCount: false, offerIds: [] };
   }
-  if (!isRecord(parsed)) return { call: params.call, invalidOfferCount: false };
+  if (!isRecord(parsed))
+    return { call: params.call, invalidOfferCount: false, offerIds: [] };
   return {
     call: {
       ...params.call,
       arguments: JSON.stringify({
         ...hitl,
-        ...(Array.isArray(parsed.remedy_offers)
-          ? { remedy_offers: parsed.remedy_offers }
-          : {}),
+        trajectory: currentTrajectory(params.binding.session),
       }),
     },
     invalidOfferCount: false,
+    offerIds: [...params.offerIds],
   };
 }
 
@@ -3599,7 +3672,7 @@ const EXTERNAL_REMEDY_WORKFLOW_GUIDANCE = [
   "Retry the blocked call only after execute_remedy_plan reports that the plan is authorized.",
 ].join(" ");
 
-const NATIVE_QUESTION_ID_PATTERN =
+const LEGACY_NATIVE_QUESTION_ID_PATTERN =
   /^(toolu|call|aq)_aq1_([A-Za-z0-9_-]{16})_([A-Za-z0-9_-]{22})$/;
 
 function isGatewayAskUser(binding: AppaPluginBinding, name: string): boolean {
@@ -3661,10 +3734,8 @@ function releasesUserQuestion(
 }
 
 /**
- * Gives a native question call a signed id, but only when the runtime
- * releases that call as a user question. An answer under this id skips the
- * runtime's result check, so a call that the runtime rules on must keep its
- * own id.
+ * Gives a pending review a unique cache key only when the call is an actual
+ * native question. Ordinary questions keep their original identifiers.
  */
 function withNativeQuestionId(
   binding: AppaPluginBinding,
@@ -3673,8 +3744,6 @@ function withNativeQuestionId(
   const name = nativeQuestionName(binding, call.name);
   if (!name || !releasesUserQuestion(binding, call)) return undefined;
   const id = issueNativeQuestionId({
-    session: binding.session,
-    name,
     currentId: call.id,
   });
   return { call: { ...call, wireId: id }, question: { id, name } };
@@ -3705,63 +3774,37 @@ async function rememberNativeQuestions(
 
 function isUserQuestionResult(params: {
   binding: AppaPluginBinding;
-  answer: { id: string; name: string };
-  verifiedNativeQuestionResults: ReadonlyMap<object, NativeQuestionClaim>;
+  answer: { id: string; name: string; namespace?: string };
 }): boolean {
+  if (!releasesUserQuestion(params.binding, params.answer)) return false;
   if (
     params.binding.request.tools?.platformToolNames?.has(params.answer.name) ===
     true
   )
     return true;
   if (isGatewayAskUser(params.binding, params.answer.name)) return true;
-  const name = nativeQuestionName(params.binding, params.answer.name);
-  return (
-    name !== undefined &&
-    params.verifiedNativeQuestionResults.has(params.answer)
-  );
-}
-
-/**
- * An answer to a question the proxy issued in this session, by the question's
- * signed id. The claim on an issued question is spent by the first request
- * that carries its answer; the id is not, so every later turn that replays the
- * answer reads it too.
- */
-function isIssuedQuestionAnswer(
-  binding: AppaPluginBinding,
-  answer: { id: string; name: string },
-): boolean {
-  const name = nativeQuestionName(binding, answer.name);
-  return (
-    name !== undefined &&
-    verifyNativeQuestionId({ session: binding.session, name, id: answer.id })
-  );
+  // Adapters pair answers with real client tool-call frames, not tool text.
+  // Approval recording still requires the separate, one-use cache binding.
+  return nativeQuestionName(params.binding, params.answer.name) !== undefined;
 }
 
 async function claimNativeQuestionResults(params: {
   binding: AppaPluginBinding;
-  results: ReadonlyArray<{ id: string; name: string }>;
+  results: ReadonlyArray<{ id: string; name: string; namespace?: string }>;
 }): Promise<Map<object, NativeQuestionClaim>> {
   const candidates = params.results.flatMap((result) => {
     const name = nativeQuestionName(params.binding, result.name);
-    if (
-      !name ||
-      !verifyNativeQuestionId({
-        session: params.binding.session,
-        name,
-        id: result.id,
-      })
-    ) {
-      return [];
-    }
+    if (!name || !releasesUserQuestion(params.binding, result)) return [];
+    const scope = { session: params.binding.session, id: result.id };
+    const legacyKey = legacyNativeQuestionCacheKey(scope);
     return [
       {
         result,
         name,
-        key: nativeQuestionCacheKey({
-          session: params.binding.session,
-          id: result.id,
-        }),
+        keys: [
+          nativeQuestionCacheKey(scope),
+          ...(legacyKey ? [legacyKey] : []),
+        ],
       },
     ];
   });
@@ -3772,11 +3815,13 @@ async function claimNativeQuestionResults(params: {
       await cacheManager.getAndDeleteMany<{
         name?: unknown;
         offerIds?: unknown;
-      }>(candidates.map((candidate) => candidate.key))
+      }>(candidates.flatMap((candidate) => candidate.keys))
     ).map((entry) => [entry.key, entry.value]),
   );
   for (const candidate of candidates) {
-    const entry = claimed.get(candidate.key);
+    const entry = candidate.keys
+      .map((key) => claimed.get(key))
+      .find((value) => value?.name === candidate.name);
     if (entry?.name === candidate.name) {
       const offerIds = Array.isArray(entry.offerIds)
         ? entry.offerIds.filter(
@@ -3822,6 +3867,10 @@ async function recordNativeHitlRulings(params: {
       "Recorded native OpenAPPA HITL answer",
     );
     for (const offerId of claim.offerIds) {
+      const review = await getHitlReview({
+        session: params.binding.session,
+        offerId,
+      });
       if (
         await recordHitlRuling({
           session: params.binding.session,
@@ -3829,7 +3878,12 @@ async function recordNativeHitlRulings(params: {
           ruling,
         })
       ) {
-        recorded.push({ offerId, ruling });
+        recorded.push({
+          offerId,
+          ruling,
+          ...(review?.tool ? { reviewedTool: review.tool } : {}),
+          ...(review?.arguments ? { reviewedArguments: review.arguments } : {}),
+        });
       }
     }
   }
@@ -3838,25 +3892,18 @@ async function recordNativeHitlRulings(params: {
 
 function assertUniqueNativeQuestionResultIds(params: {
   binding: AppaPluginBinding;
-  results: ReadonlyArray<{ id: string; name: string }>;
+  results: ReadonlyArray<{ id: string; name: string; namespace?: string }>;
 }): void {
-  const signedIds = new Set<string>();
+  const questionIds = new Set<string>();
   for (const result of params.results) {
     const name = nativeQuestionName(params.binding, result.name);
-    if (
-      name &&
-      verifyNativeQuestionId({
-        session: params.binding.session,
-        name,
-        id: result.id,
-      })
-    ) {
-      signedIds.add(result.id);
+    if (name && releasesUserQuestion(params.binding, result)) {
+      questionIds.add(result.id);
     }
   }
   const seen = new Set<string>();
   for (const result of params.results) {
-    if (seen.has(result.id) && signedIds.has(result.id)) {
+    if (seen.has(result.id) && questionIds.has(result.id)) {
       throw new ApiError(
         400,
         "Duplicate native question result IDs are not allowed",
@@ -3896,67 +3943,45 @@ function declaresNativeQuestion(
   });
 }
 
-function issueNativeQuestionId(params: {
-  session: OpenAppaSession;
-  name: string;
-  currentId: string;
-}): string {
-  if (!config.openappa.offerSigningSecret) {
-    throw new ApiError(
-      503,
-      "OpenAPPA native question signing is not configured (ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET)",
-    );
-  }
+function issueNativeQuestionId(params: { currentId: string }): string {
   const nonce = randomBytes(12).toString("base64url");
   const prefix = params.currentId.startsWith("toolu_")
     ? "toolu"
     : params.currentId.startsWith("call_")
       ? "call"
       : "aq";
-  return `${prefix}_aq1_${nonce}_${nativeQuestionTag({
-    session: params.session,
-    name: params.name,
-    nonce,
-  }).toString("base64url")}`;
-}
-
-function verifyNativeQuestionId(params: {
-  session: OpenAppaSession;
-  name: string;
-  id: string;
-}): boolean {
-  if (!config.openappa.offerSigningSecret) return false;
-  const match = NATIVE_QUESTION_ID_PATTERN.exec(params.id);
-  if (!match) return false;
-  const [, , nonce, signature] = match;
-  const actual = Buffer.from(signature, "base64url");
-  if (actual.toString("base64url") !== signature) return false;
-  const expected = nativeQuestionTag({
-    session: params.session,
-    name: params.name,
-    nonce,
-  });
-  return actual.length === expected.length && timingSafeEqual(actual, expected);
+  return `${prefix}_aq2_${nonce}`;
 }
 
 function nativeQuestionCacheKey(params: {
   session: OpenAppaSession;
   id: string;
 }): AllowedCacheKey {
-  const scope = nativeQuestionTag({
-    session: params.session,
-    name: "cache",
-    nonce: params.id,
-  }).toString("base64url");
+  const scope = createHash("sha256")
+    .update(
+      JSON.stringify([
+        params.session.organization_id,
+        params.session.caller_id ?? "",
+        params.session.session_id,
+        params.session.parent_id ?? "",
+        params.id,
+      ]),
+    )
+    .digest("base64url");
   return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
 }
 
-function nativeQuestionTag(params: {
+/** Pending pre-upgrade questions expire after ten minutes. New IDs use no MAC. */
+function legacyNativeQuestionCacheKey(params: {
   session: OpenAppaSession;
-  name: string;
-  nonce: string;
-}): Buffer {
-  return createHmac("sha256", config.openappa.offerSigningSecret)
+  id: string;
+}): AllowedCacheKey | undefined {
+  if (
+    !config.openappa.offerSigningSecret ||
+    !LEGACY_NATIVE_QUESTION_ID_PATTERN.test(params.id)
+  )
+    return undefined;
+  const scope = createHmac("sha256", config.openappa.offerSigningSecret)
     .update("archestra-native-question-v1\0")
     .update(
       JSON.stringify([
@@ -3964,12 +3989,14 @@ function nativeQuestionTag(params: {
         params.session.caller_id ?? "",
         params.session.session_id,
         params.session.parent_id ?? "",
-        params.name,
-        params.nonce,
+        "cache",
+        params.id,
       ]),
     )
     .digest()
-    .subarray(0, 16);
+    .subarray(0, 16)
+    .toString("base64url");
+  return `${CacheKey.OpenAppaNativeQuestion}-${scope}`;
 }
 
 /**
@@ -3992,7 +4019,77 @@ function isOwnControlResult(
     binding.identity.canonicalize(control.name, control.namespace)
   )
     return false;
-  return reviewRequiredOfferId(result.content, 0) === null;
+  return reviewResultStatus(result.content, 0) === null;
+}
+
+async function pendingReviewResult(
+  binding: AppaPluginBinding,
+  result: LlmProxyToolResultsContext["toolResults"][number],
+): Promise<string | undefined> {
+  const control = binding.request.tools?.control;
+  const namespace =
+    result.namespace ?? binding.request.tools?.namespaces?.get(result.name);
+  if (
+    !control ||
+    result.isError ||
+    namespace !== control.namespace ||
+    binding.identity.canonicalize(result.name, namespace) !==
+      binding.identity.canonicalize(control.name, control.namespace)
+  )
+    return undefined;
+  const status = reviewResultStatus(result.content, 0);
+  if (!status) return undefined;
+  const { offerId, outcome } = status;
+  const pending =
+    outcome === "review_required"
+      ? await getHitlReview({ session: binding.session, offerId })
+      : undefined;
+  const recordedOutcome = await getHitlReviewResult({
+    session: binding.session,
+    callId: result.id,
+    offerId,
+  });
+  if (recordedOutcome !== undefined ? recordedOutcome !== outcome : !pending)
+    return undefined;
+  // Only a server-staged review may produce this status. Never forward arbitrary
+  // client instruction text or treat the status itself as an approval receipt.
+  return JSON.stringify({
+    ok: false,
+    outcome,
+    offer_id: offerId,
+    instruction: {
+      review_required:
+        "Ask the user with the declared ask_user tool and this offer ID in remedy_offer_ids. The platform shows the exact review with Approve and Deny choices. Call execute_remedy_plan again only after the user approves.",
+      review_unanswered:
+        "The approval review expired without an answer. The protected call remains blocked; no ruling was granted. Do not retry this expired review.",
+      review_cancelled:
+        "The user cancelled the approval review. The protected call remains blocked; no ruling was granted. Do not reopen this review.",
+      review_unavailable:
+        "The approval review could not be delivered in this session. The protected call remains blocked; no ruling was granted.",
+      review_invalid:
+        "The approval review did not receive a valid decision. The protected call remains blocked; no ruling was granted.",
+    }[outcome],
+  });
+}
+
+function isClaudeProgressLabelRequest(request: unknown): boolean {
+  if (!isRecord(request) || !Array.isArray(request.messages)) return false;
+  const last = request.messages.at(-1);
+  if (!isRecord(last) || last.role !== "user") return false;
+  const prompt =
+    typeof last.content === "string"
+      ? last.content
+      : Array.isArray(last.content)
+        ? last.content
+            .filter((block) => isRecord(block) && block.type === "text")
+            .map((block) => block.text)
+            .join("\n")
+        : "";
+  // Claude appends this dedicated user frame for a UI label, not a task result.
+  // Do not match tool_result text or historical task instructions.
+  return prompt.startsWith(
+    "Describe your most recent action in 3-5 words using present tense (-ing). Name the file or function, not the branch. Do not use tools.\n\n",
+  );
 }
 
 async function pendingNativeHitlOfferIds(params: {
@@ -4091,20 +4188,25 @@ function hasRemedyOfferResult(params: {
 }
 
 function reviewRequiredOfferId(value: unknown, depth: number): string | null {
+  const status = reviewResultStatus(value, depth);
+  return status?.outcome === "review_required" ? status.offerId : null;
+}
+
+function reviewResultStatus(
+  value: unknown,
+  depth: number,
+): { offerId: string; outcome: HitlReviewOutcome } | null {
   if (depth > 4 || value === null || value === undefined) return null;
   if (typeof value === "string") {
     try {
-      return reviewRequiredOfferId(JSON.parse(value), depth + 1);
+      return reviewResultStatus(JSON.parse(value), depth + 1);
     } catch {
       for (const line of value.split(/\r?\n/)) {
         const candidate = line.trim();
         if (!candidate.startsWith("{") && !candidate.startsWith("[")) continue;
         try {
-          const offerId = reviewRequiredOfferId(
-            JSON.parse(candidate),
-            depth + 1,
-          );
-          if (offerId) return offerId;
+          const status = reviewResultStatus(JSON.parse(candidate), depth + 1);
+          if (status) return status;
         } catch {
           // Continue past non-JSON log lines and bounded metadata.
         }
@@ -4114,22 +4216,26 @@ function reviewRequiredOfferId(value: unknown, depth: number): string | null {
   }
   if (Array.isArray(value)) {
     for (const item of value) {
-      const offerId = reviewRequiredOfferId(item, depth + 1);
-      if (offerId) return offerId;
+      const status = reviewResultStatus(item, depth + 1);
+      if (status) return status;
     }
     return null;
   }
   if (!isRecord(value)) return null;
   if (
-    value.outcome === "review_required" &&
+    (value.outcome === "review_required" ||
+      value.outcome === "review_unanswered" ||
+      value.outcome === "review_cancelled" ||
+      value.outcome === "review_unavailable" ||
+      value.outcome === "review_invalid") &&
     typeof value.offer_id === "string" &&
     value.offer_id.length > 0
   ) {
-    return value.offer_id;
+    return { offerId: value.offer_id, outcome: value.outcome };
   }
   for (const nested of [value.structuredContent, value.content, value.text]) {
-    const offerId = reviewRequiredOfferId(nested, depth + 1);
-    if (offerId) return offerId;
+    const status = reviewResultStatus(nested, depth + 1);
+    if (status) return status;
   }
   return null;
 }
@@ -4163,6 +4269,74 @@ function hitlDecisionGuidance(
     "Do not call execute_remedy_plan for it, and do not retry the blocked call.",
     "Tell the user briefly that the action stays blocked, and stop that action.",
   ].join(" ");
+}
+
+function deliverReturnContract(params: {
+  request: unknown;
+  interactionType: string;
+  contract: string;
+}): void {
+  appendQuestionContinuation({
+    request: params.request,
+    interactionType: params.interactionType,
+    guidance: params.contract,
+  });
+  if (
+    !requestCarriesInstruction({
+      request: params.request,
+      interactionType: params.interactionType,
+      text: params.contract,
+    })
+  ) {
+    throw new ApiError(409, UNDELIVERABLE_RETURN_CONTRACT);
+  }
+}
+
+function requestCarriesInstruction(params: {
+  request: unknown;
+  interactionType: string;
+  text: string;
+}): boolean {
+  const { request, interactionType, text } = params;
+  if (!isRecord(request)) return false;
+  if (interactionType === "openai:responses") {
+    return (
+      Array.isArray(request.input) &&
+      request.input.some(
+        (item) =>
+          isRecord(item) &&
+          item.role === "developer" &&
+          Array.isArray(item.content) &&
+          item.content.some(
+            (block) =>
+              isRecord(block) &&
+              block.type === "input_text" &&
+              block.text === text,
+          ),
+      )
+    );
+  }
+  if (interactionType === "openai:chatCompletions") {
+    return (
+      Array.isArray(request.messages) &&
+      request.messages.some(
+        (message) =>
+          isRecord(message) &&
+          message.role === "developer" &&
+          message.content === text,
+      )
+    );
+  }
+  if (interactionType === "anthropic:messages") {
+    if (Array.isArray(request.system)) {
+      return request.system.some(
+        (block) =>
+          isRecord(block) && block.type === "text" && block.text === text,
+      );
+    }
+    return typeof request.system === "string" && request.system.includes(text);
+  }
+  return false;
 }
 
 function appendQuestionContinuation(params: {

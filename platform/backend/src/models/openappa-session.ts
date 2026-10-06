@@ -47,18 +47,12 @@ class OpenAppaSessionModel {
 
   static async ensureReceiptToken(params: {
     organizationId: string;
-    callerId: string;
     sessionId: string;
-    secret: string;
+    mint?: () => string;
   }): Promise<{ token: string; receiptIssuedAt: Date | null } | null> {
+    const mint = params.mint ?? mintReceiptCode;
     for (let attempt = 0; attempt < MAX_RECEIPT_MINT_ATTEMPTS; attempt++) {
-      const token = mintReceiptCode({
-        secret: params.secret,
-        organizationId: params.organizationId,
-        callerId: params.callerId,
-        sessionId: params.sessionId,
-        collision: attempt,
-      });
+      const token = mint();
       try {
         const [assigned] = await db
           .update(table)

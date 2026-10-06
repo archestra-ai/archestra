@@ -1,6 +1,7 @@
 import fs from "node:fs";
 import { type ArchestraApi, items } from "./api";
 import {
+  AGENT_HOOKS,
   AGENTS,
   ENVIRONMENTS,
   KNOWLEDGE_BASES,
@@ -78,6 +79,38 @@ export async function seedDemoData(api: ArchestraApi): Promise<SeedState> {
     record("agents", agent.name, created.id);
     await own(`/api/agents/${created.id}`);
   }
+
+  for (const hook of AGENT_HOOKS) {
+    const agentId = state.agents?.[hook.agentName];
+    if (!agentId) continue;
+    const existingHooks = items(
+      await api.get<Listed>(`/api/hooks?agentId=${agentId}`),
+    ) as unknown as { id: string; fileName: string; event: string }[];
+    const existing = existingHooks.find(
+      (h) => h.fileName === hook.fileName && h.event === hook.event,
+    );
+    if (!existing) {
+      const created = await api.post<{ id: string }>("/api/hooks", {
+        agentId,
+        event: hook.event,
+        fileName: hook.fileName,
+        content: hook.content,
+        requirements: hook.requirements,
+        enabled: hook.enabled,
+      });
+      record("hooks", `${hook.agentName}:${hook.fileName}`, created.id);
+    } else {
+      await api.put(`/api/hooks/${existing.id}`, {
+        event: hook.event,
+        fileName: hook.fileName,
+        content: hook.content,
+        requirements: hook.requirements,
+        enabled: hook.enabled,
+      });
+      record("hooks", `${hook.agentName}:${hook.fileName}`, existing.id);
+    }
+  }
+
   for (const gateway of MCP_GATEWAYS) {
     const created = await api.ensureNamed({
       name: gateway.name,

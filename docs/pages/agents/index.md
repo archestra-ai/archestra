@@ -2,7 +2,7 @@
 title: Agents
 description: Build agents with instructions, tools, skills, subagents, and triggers
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -47,33 +47,27 @@ What to know:
 - Each person uses their own access. In **All** mode, two people can get different tools from one agent. In both modes, a tool that needs an account uses the person's own connection, unless you pin one.
 - Built-in platform tools are excluded by default in All mode. Review the exclusions before you give an agent tools that change Archestra itself.
 - The agent loads tools as it needs them. It starts with [`search_tools`](/docs/reference/archestra-mcp-server#search_tools) and [`run_tool`](/docs/reference/archestra-mcp-server#run_tool), not the full list. In **Manual** mode, you can turn off **Progressive tool loading** to send every assigned tool.
-
-<span id="missing-connections"></span>
-
-### Missing Connections
-
-This setting decides what the agent does when a tool needs an account the person has not connected. It applies in **Manual** mode. **All** mode always uses the default.
-
-- When a tool needs it (default): the agent asks the person to connect when it calls the tool.
-- **When the chat opens:** the agent offers to connect missing accounts at the start of the chat.
-- **Before they can chat:** the agent refuses to run until every account is connected.
-
-To use one shared account for everyone, pin a connection. Or [resolve credentials at call time](/docs/mcp/authentication/servers#resolve-at-call-time).
+- <span id="missing-connections"></span>**Missing connections:** in **Manual** mode, choose when the agent prompts users to connect missing tool accounts (on call, on chat open, or required before chat). To use one account for everyone, pin a connection or [resolve credentials at call time](/docs/mcp/authentication/servers#resolve-at-call-time).
 
 <span id="invocation-paths"></span>
 <span id="messaging-channel-assignment"></span>
 
 ## Use an Agent
 
-- **Chat:** pick the agent in [Chat](/docs/chat) or a [Project](/docs/chat/projects).
-- **Your coding agent:** once it is [connected](/docs/get-started/connect), it can hand a task to the agent with [`start_run`](/docs/reference/archestra-mcp-server#start_run) and check on it. See [Hand Off Work](/docs/agents/runtime/handoff).
-- **Messaging channels:** add a channel on the agent's **Messaging Channels** tab. See [Triggers & Channels](/docs/agents/triggers-and-channels).
-- **Other systems:** call it over [A2A or a webhook](/docs/agents/triggers-and-channels/webhook-a2a).
+Run an agent interactively, delegate work to it from your coding client, or trigger it from team channels and APIs:
+
+- **Chat and Projects:** select the agent from the picker in [Chat](/docs/chat) or scope it to a [Project](/docs/chat/projects).
+- **Coding agents:** once [connected](/docs/get-started/connect), hand off background tasks from your editor or CLI with [`start_run`](/docs/reference/archestra-mcp-server#start_run) and monitor their progress. See [Hand Off Work](/docs/agents/runtime/handoff).
+- **Messaging channels:** connect [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), [Telegram](/docs/agents/triggers-and-channels/telegram), or [Email](/docs/agents/triggers-and-channels/email) on the agent's **Messaging Channels** tab. See [Triggers & Channels](/docs/agents/triggers-and-channels).
+- **Automations and APIs:** invoke the agent programmatically via [Agent-to-Agent (A2A) calls or incoming webhooks](/docs/agents/triggers-and-channels/webhook-a2a).
 
 <span id="default-agents"></span>
 <span id="organizing-agents"></span>
 
-A new chat uses your default agent. To change it, click **Set as default** on **Agents**. **Pin** adds an agent to your sidebar.
+What to know:
+
+- **Default agent:** new chats automatically use your default agent. To change it, click **Set as default** on any agent card under **Agents**.
+- **Sidebar pinning:** click **Pin** on an agent to keep it in the left navigation sidebar for quick access.
 
 <span id="system-prompt-templating"></span>
 

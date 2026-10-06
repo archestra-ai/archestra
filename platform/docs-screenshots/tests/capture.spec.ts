@@ -31,6 +31,8 @@ for (const shot of selected) {
         window.localStorage.setItem("archestra-sidebar-open", "false");
       }, theme);
 
+      await shot.beforeNavigate?.(page, seed);
+
       await page.goto(shot.route(seed));
       await page.waitForLoadState("networkidle");
       await shot.prepare?.(page, seed);

@@ -10,6 +10,8 @@ export interface Shot {
   asset: string;
   /** Frontend route to open; ids come from the seed state. */
   route: (seed: SeedState) => string;
+  /** Setup before navigating to route (e.g. route interception or mocks). */
+  beforeNavigate?: (page: Page, seed: SeedState) => Promise<void>;
   /** UI steps after the page settles: open a dialog, switch a tab, hover. */
   prepare?: (page: Page, seed: SeedState) => Promise<void>;
   /** The element to capture; defaults to the whole viewport. */

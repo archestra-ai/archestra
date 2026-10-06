@@ -226,6 +226,40 @@ export const SHOTS: Shot[] = [
       }),
   },
   {
+    asset: "automated_screenshots/agents-hooks_hooks-editor",
+    route: (seed) => `/agents/${seed.agents["Support Triage"]}?section=tools`,
+    viewport: { width: 1440, height: 1200 },
+    beforeNavigate: async (page) => {
+      await page.route("**/api/config", async (route) => {
+        const response = await route.fetch();
+        const json = await response.json();
+        if (json?.features) {
+          json.features.agentHooksEnabled = true;
+          json.features.sandbox = true;
+        }
+        await route.fulfill({ response, json });
+      });
+    },
+    prepare: async (page) => {
+      await page.addStyleTag({
+        content: `
+          [data-page-header], [data-wizard-footer] {
+            display: none !important;
+          }
+        `,
+      });
+      await page.getByRole("heading", { name: "Hooks", exact: true }).scrollIntoViewIfNeeded();
+      await page.getByText("pre-tool-use.py").waitFor();
+      await page.getByRole("button", { name: "Edit pre-tool-use.py" }).click();
+      await page.locator(".monaco-editor").first().waitFor();
+      await page.waitForTimeout(500);
+    },
+    target: (page) =>
+      page.locator("section").filter({
+        has: page.getByRole("heading", { name: "Hooks", exact: true }),
+      }),
+  },
+  {
     asset: "automated_screenshots/agents-subagents-built-in_built-in-agents",
     route: () => "/agents?scope=built_in",
   },

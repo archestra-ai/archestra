@@ -267,6 +267,40 @@ Write one plain-language sentence per change and link the pull request.
   },
 ] as const;
 
+/** Lifecycle hooks on an agent's Tools, Skills & Knowledge → Hooks section. */
+export const AGENT_HOOKS = [
+  {
+    agentName: "Support Triage",
+    event: "session_start" as const,
+    fileName: "session-start.sh",
+    enabled: true,
+    requirements: [] as string[],
+    content: `#!/bin/sh
+# Inject current support operations context into system prompt
+echo "POLICY: Prioritize urgent tier-1 tickets. Always verify customer identity before sharing PII."
+`,
+  },
+  {
+    agentName: "Support Triage",
+    event: "pre_tool_use" as const,
+    fileName: "pre-tool-use.py",
+    enabled: true,
+    requirements: ["requests"],
+    content: `import json
+import sys
+
+payload = json.load(sys.stdin)
+tool_name = payload.get("tool_name", "")
+tool_input = payload.get("tool_input", {})
+
+# Block destructive operations without supervisor approval
+if tool_name in ["zendesk_delete_ticket", "crm_delete_customer"]:
+    print(f"Action '{tool_name}' blocked: requires supervisor approval.", file=sys.stderr)
+    sys.exit(2)
+`,
+  },
+] as const;
+
 /** Plugins on the Plugins page: hook and command bundles for coding clients. */
 export const PLUGINS = [
   {

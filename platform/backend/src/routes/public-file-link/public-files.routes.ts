@@ -13,8 +13,9 @@ import { PUBLIC_FILES_PREFIX } from "../route-paths";
  * the whole credential (allowlisted in the auth middleware, kept out of request
  * logs). The trailing filename is cosmetic and ignored.
  *
- * Unknown, revoked, switched-off, deleted, and no-longer-allowed all answer the
- * same 404, so a probe learns nothing about which links ever existed.
+ * Serves the copy frozen at share time, never the live file. Unknown,
+ * revoked, and switched-off all answer the same 404, so a probe learns nothing
+ * about which links ever existed.
  *
  * Headers: the Content-Type comes from sniffing the bytes, never from the
  * stored mime or the filename; `nosniff` stops the browser second-guessing it;

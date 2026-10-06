@@ -1,5 +1,5 @@
 {
-  "id": "fdac3a80-bbc9-436e-bd1b-26d22ae60da1",
+  "id": "211c1aed-22bf-44ee-bc0d-a566ae948377",
   "prevId": "0f3bbff9-15c3-4e63-9b3b-2ea6224b34fb",
   "version": "7",
   "dialect": "postgresql",
@@ -20102,7 +20102,7 @@
           "name": "file_id",
           "type": "uuid",
           "primaryKey": false,
-          "notNull": true
+          "notNull": false
         },
         "created_by_user_id": {
           "name": "created_by_user_id",
@@ -20139,6 +20139,12 @@
           "type": "integer",
           "primaryKey": false,
           "notNull": true
+        },
+        "data": {
+          "name": "data",
+          "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
         },
         "created_at": {
           "name": "created_at",
@@ -20231,7 +20237,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "public_file_links_created_by_user_id_user_id_fk": {

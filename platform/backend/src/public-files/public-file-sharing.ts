@@ -2,7 +2,6 @@ import { randomBytes } from "node:crypto";
 import config from "@/config";
 import { OrganizationModel, PublicFileLinkModel } from "@/models";
 import { PUBLIC_FILES_PREFIX } from "@/routes/route-paths";
-import { fileStore } from "@/skills-sandbox/file-store";
 import type { PublicFileLink } from "@/types/public-file-link";
 import {
   extensionForPublicFileMime,
@@ -13,12 +12,14 @@ import {
 /**
  * Public, login-free links to persistent files. The agent-facing half
  * (`share`) checks the organization switch, the media type and size, and mints
- * a link; the internet-facing half (`resolve`) turns a token back into bytes
- * for the `/public-files` route.
+ * a link holding a frozen copy of the bytes; the internet-facing half
+ * (`resolve`) turns a token back into those bytes for the `/public-files`
+ * route.
  *
- * A link points at the live file, so the route re-checks everything on every
- * request: the link must not be revoked, the organization's switch must still
- * be on, and the file's current bytes must still be an allowed media type.
+ * The copy is what makes a link safe to post ahead of time: editing,
+ * overwriting, or deleting the source file never changes or removes what the
+ * link serves — only a revoke does. The route still re-checks on every request
+ * that the link is live and the organization's switch is on.
  */
 class PublicFileSharingService {
   /** Mint a public link for a file the caller has already been authorized to read. */
@@ -29,7 +30,7 @@ class PublicFileSharingService {
     conversationId: string | null;
     file: { id: string; filename: string; data: Buffer };
   }): Promise<
-    | { link: PublicFileLink; url: string }
+    | { link: Omit<PublicFileLink, "data">; url: string }
     | { error: "disabled" | "too_large" | "unsupported_type"; message: string }
   > {
     if (!(await this.isEnabled(params.organizationId))) {
@@ -67,14 +68,14 @@ class PublicFileSharingService {
       filename: file.filename,
       mimeType,
       sizeBytes: file.data.byteLength,
+      data: file.data,
     });
     return { link, url: this.buildUrl(link) };
   }
 
   /**
-   * Bytes to serve for a token, or null for anything that must 404: an
-   * unknown or revoked token, an organization whose switch is off, a file
-   * that is gone, or bytes that are no longer an allowed media type.
+   * The frozen bytes to serve for a token, or null for anything that must
+   * 404: an unknown or revoked token, or an organization whose switch is off.
    */
   async resolve(
     token: string,
@@ -82,16 +83,18 @@ class PublicFileSharingService {
     if (!TOKEN_RE.test(token)) return null;
     const link = await PublicFileLinkModel.findActiveByToken(token);
     if (!link) return null;
+    if (!link.data) return null;
     if (!(await this.isEnabled(link.organizationId))) return null;
 
-    const file = await fileStore.getForPublicLink({
-      fileId: link.fileId,
-      organizationId: link.organizationId,
-    });
-    if (!file) return null;
-    const mimeType = sniffPublicFileMime(file.data);
+    // PGlite hands bytea back as Uint8Array; serve a Buffer either way.
+    const data = Buffer.isBuffer(link.data)
+      ? link.data
+      : Buffer.from(link.data as Uint8Array);
+    // Defense in depth: the copy was sniffed at share time, and is re-checked
+    // so a row written any other way can never serve a disallowed type.
+    const mimeType = sniffPublicFileMime(data);
     if (!mimeType) return null;
-    return { filename: link.filename, mimeType, data: file.data };
+    return { filename: link.filename, mimeType, data };
   }
 
   /**

@@ -1,4 +1,6 @@
+import { eq } from "drizzle-orm";
 import { authPlugin } from "@/auth/fastify-plugin";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { FileModel, OrganizationModel, PublicFileLinkModel } from "@/models";
@@ -18,10 +20,12 @@ describe("GET /public-files/:token", () => {
   let url: string;
   let linkId: string;
   let fileId: string;
+  let userId: string;
 
   beforeEach(async ({ makeOrganization, makeUser }) => {
     organizationId = (await makeOrganization()).id;
     const user = await makeUser();
+    userId = user.id;
     await OrganizationModel.patch(organizationId, {
       allowPublicFileSharing: true,
     });
@@ -125,18 +129,37 @@ describe("GET /public-files/:token", () => {
     }
   });
 
-  test("stops serving once the file's bytes are no longer an allowed type", async () => {
-    // Links point at the live file; an edit that turns it into HTML must not
-    // be served from a public origin.
+  test("serves the copy frozen at share time, whatever happens to the source", async () => {
+    // A post scheduled hours ahead must fetch exactly what was approved.
     const row = await FileModel.findById(fileId);
     if (!row) throw new Error("file row missing");
     await fileStore.update({
       file: row,
       mimeType: "image/png",
-      sizeBytes: 20,
+      sizeBytes: 23,
       data: Buffer.from("<html><script></script>"),
     });
+    const afterEdit = await app.inject({ method: "GET", url });
+    expect(afterEdit.statusCode).toBe(200);
+    expect(afterEdit.rawPayload.equals(PNG)).toBe(true);
+
+    expect(
+      await fileStore.delete({ ref: fileId, organizationId, userId }),
+    ).toBe(true);
+    const afterDelete = await app.inject({ method: "GET", url });
+    expect(afterDelete.statusCode).toBe(200);
+    expect(afterDelete.rawPayload.equals(PNG)).toBe(true);
+  });
+
+  test("revoking is the one way down, and it drops the frozen bytes", async () => {
+    await PublicFileLinkModel.revoke({ id: linkId, organizationId });
+
     expect((await app.inject({ method: "GET", url })).statusCode).toBe(404);
+    const [row] = await db
+      .select({ data: schema.publicFileLinksTable.data })
+      .from(schema.publicFileLinksTable)
+      .where(eq(schema.publicFileLinksTable.id, linkId));
+    expect(row.data).toBeNull();
   });
 
   test("other methods on the prefix still require a session", async () => {

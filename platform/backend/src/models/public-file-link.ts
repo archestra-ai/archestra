@@ -1,5 +1,5 @@
 import type { PaginationQuery } from "@archestra/shared";
-import { and, count, desc, eq, isNull } from "drizzle-orm";
+import { and, count, desc, eq, getTableColumns, isNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -7,8 +7,11 @@ import {
 } from "@/database/utils/pagination";
 import type { PublicFileLink } from "@/types/public-file-link";
 
+/** Link metadata without the frozen bytes (everything but the serve path). */
+type PublicFileLinkMetadata = Omit<PublicFileLink, "data">;
+
 /** A link row joined with the names the admin list shows. */
-type PublicFileLinkWithNames = PublicFileLink & {
+type PublicFileLinkWithNames = PublicFileLinkMetadata & {
   createdBy: { id: string; name: string; email: string } | null;
   agent: { id: string; name: string } | null;
 };
@@ -24,15 +27,17 @@ class PublicFileLinkModel {
     filename: string;
     mimeType: string;
     sizeBytes: number;
-  }): Promise<PublicFileLink> {
+    /** The frozen copy the link serves, taken now. */
+    data: Buffer;
+  }): Promise<PublicFileLinkMetadata> {
     const [row] = await db
       .insert(schema.publicFileLinksTable)
       .values(params)
-      .returning();
+      .returning(metadataColumns());
     return row;
   }
 
-  /** The live (not revoked) link for a token, or null. */
+  /** The live (not revoked) link for a token, with its frozen bytes, or null. */
   static async findActiveByToken(
     token: string,
   ): Promise<PublicFileLink | null> {
@@ -59,7 +64,7 @@ class PublicFileLinkModel {
     const [rows, [{ total }]] = await Promise.all([
       db
         .select({
-          link: table,
+          link: metadataColumns(),
           userId: schema.usersTable.id,
           userName: schema.usersTable.name,
           userEmail: schema.usersTable.email,
@@ -97,9 +102,10 @@ class PublicFileLinkModel {
   }
 
   /**
-   * Revoke a link in the organization. Idempotent: an already-revoked link
-   * keeps its original `revokedAt`. Returns false when no such link exists in
-   * the organization.
+   * Revoke a link in the organization and drop its frozen bytes — a revoked
+   * link never serves again, so they would only take up storage. Idempotent:
+   * an already-revoked link keeps its original `revokedAt`. Returns false when
+   * no such link exists in the organization.
    */
   static async revoke(params: {
     id: string;
@@ -111,7 +117,7 @@ class PublicFileLinkModel {
     if (existing.revokedAt) return true;
     await db
       .update(table)
-      .set({ revokedAt: new Date() })
+      .set({ revokedAt: new Date(), data: null })
       .where(and(eq(table.id, params.id), isNull(table.revokedAt)));
     return true;
   }
@@ -130,9 +136,9 @@ class PublicFileLinkModel {
   private static async findById(params: {
     id: string;
     organizationId: string;
-  }): Promise<PublicFileLink | null> {
+  }): Promise<PublicFileLinkMetadata | null> {
     const [row] = await db
-      .select()
+      .select(metadataColumns())
       .from(schema.publicFileLinksTable)
       .where(
         and(
@@ -146,3 +152,13 @@ class PublicFileLinkModel {
 }
 
 export default PublicFileLinkModel;
+
+// === internal helpers ===
+
+/** Every column but `data`, so listings and snapshots never load the bytes. */
+function metadataColumns() {
+  const { data: _data, ...columns } = getTableColumns(
+    schema.publicFileLinksTable,
+  );
+  return columns;
+}

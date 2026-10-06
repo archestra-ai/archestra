@@ -174,6 +174,7 @@ describe("public file link admin routes", () => {
       filename: "other.png",
       mimeType: "image/png",
       sizeBytes: PNG.byteLength,
+      data: PNG,
     });
 
     actAs(admin);

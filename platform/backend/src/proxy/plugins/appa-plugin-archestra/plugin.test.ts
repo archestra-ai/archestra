@@ -1601,7 +1601,66 @@ describe("rendering runtime text for this client", () => {
       expect(
         (outcome as { refusal: { contentMessage: string } }).refusal
           .contentMessage,
-      ).toContain("Connect the MCP gateway");
+      ).toContain("Send your message again");
+    } finally {
+      cancelCalls.mockRestore();
+      evaluateToolCalls.mockRestore();
+    }
+  });
+
+  test("asks for a resend the first time a request lacks the remedy tools and reports the client only on a repeat", async ({
+    makeOrganization,
+  }) => {
+    // A client connects MCP servers in the background, so a session's first
+    // request can leave before the gateway tools are listed. That is not a
+    // client that cannot receive remedies, so it gets no yell; the same
+    // session failing again does.
+    config.openappa.enabled = true;
+    config.openappa.yellEnabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const plugin = new AppaPluginArchestra([]);
+    const context = requestContext({
+      sessionId: "tools-still-loading",
+      organizationId,
+    });
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as Record<string, unknown>;
+    trusted.request = {
+      tools: undefined,
+      customTools: new Set(),
+      declaredTools: [{ name: "read_file" }],
+    };
+    const evaluateToolCalls = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockImplementation(async () => [
+        { kind: "deny" as const, feedback: "[appa] Refused: no plan." },
+      ]);
+    const cancelCalls = vi
+      .spyOn(appaService, "cancelCalls")
+      .mockResolvedValue(undefined);
+    const yells = () =>
+      OpenAppaYellModel.list({ organizationId, status: "all", limit: 10 });
+    const refuse = async () =>
+      (await plugin.onToolCalls({
+        ...context,
+        toolCalls: [{ id: "call", name: "read_file", arguments: {} }],
+      })) as { decision: string; refusal: { contentMessage: string } };
+    try {
+      await plugin.onSessionInit(context);
+      const first = await refuse();
+      expect(first.decision).toBe("refuse");
+      expect(first.refusal.contentMessage).toContain("Send your message again");
+      expect(first.refusal.contentMessage).not.toContain(
+        "Connect the MCP gateway",
+      );
+      expect((await yells()).data).toHaveLength(0);
+
+      const second = await refuse();
+      expect(second.refusal.contentMessage).toContain(
+        "Connect the MCP gateway",
+      );
+      expect((await yells()).data).toHaveLength(1);
     } finally {
       cancelCalls.mockRestore();
       evaluateToolCalls.mockRestore();

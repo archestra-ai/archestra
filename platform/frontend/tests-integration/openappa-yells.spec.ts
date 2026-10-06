@@ -59,6 +59,12 @@ for (const width of [1280, 390]) {
           resolvedBy: "reviewer",
         };
         const pagination = { limit: 20, hasNext: false, nextCursor: null };
+        const listRequest = (status: string) =>
+          page.waitForRequest(
+            (request) =>
+              new URL(request.url()).pathname === "/api/openappa/yells" &&
+              new URL(request.url()).searchParams.get("status") === status,
+          );
         await mswControl.registerMany([
           {
             method: "get",
@@ -135,17 +141,26 @@ for (const width of [1280, 390]) {
         await expect(
           page.getByText(yell.message, { exact: true }),
         ).toBeVisible();
-        const unresolvedTab = page.getByRole("tab", {
-          name: "Unresolved",
-          exact: true,
-        });
-        const resolvedTab = page.getByRole("tab", {
-          name: "Resolved",
-          exact: true,
-        });
-        await expect(unresolvedTab).toBeVisible();
-        await expect(resolvedTab).toBeVisible();
-        await expect(unresolvedTab).toHaveAttribute("aria-selected", "true");
+        if (width === 1280) {
+          const status = page.getByRole("combobox", { name: "Yell status" });
+          await expect(status).toHaveText("Unresolved");
+          await status.click();
+          await expect(page.getByRole("option")).toHaveText([
+            "Unresolved",
+            "Resolved",
+          ]);
+          const resolvedList = listRequest("resolved");
+          await page
+            .getByRole("option", { name: "Resolved", exact: true })
+            .click();
+          await resolvedList;
+          await expect(page).toHaveURL(/\/openappa\/yells\?status=resolved$/);
+          await page
+            .getByRole("button", { name: "Clear", exact: true })
+            .click();
+          await expect(status).toHaveText("Unresolved");
+          await expect(page).toHaveURL(/\/openappa\/yells$/);
+        }
         await expect(
           page.getByText(
             "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
@@ -201,13 +216,9 @@ for (const width of [1280, 390]) {
           .click();
         await expect(page.getByText("Yell marked resolved")).toBeVisible();
         await expect(page.getByText("No unresolved yells")).toBeVisible();
-        const resolvedList = page.waitForRequest(
-          (request) =>
-            new URL(request.url()).pathname === "/api/openappa/yells" &&
-            new URL(request.url()).searchParams.get("status") === "resolved",
-        );
-        await resolvedTab.click();
-        await resolvedList;
+        const sharedLink = listRequest("resolved");
+        await page.goto("/openappa/yells?status=resolved");
+        await sharedLink;
         await expect(
           page.getByText(yell.message, { exact: true }),
         ).toBeVisible();
@@ -231,8 +242,11 @@ for (const width of [1280, 390]) {
           },
         ]);
         await page.getByRole("button", { name: "Reopen", exact: true }).click();
-        await expect(page.getByText("No resolved yells")).toBeVisible();
-        await unresolvedTab.click();
+        await expect(page.getByText("Yell reopened")).toBeVisible();
+        await expect(page.getByText(yell.message, { exact: true })).toHaveCount(
+          0,
+        );
+        await page.goto("/openappa/yells");
         await expect(
           page.getByRole("button", { name: "Mark resolved", exact: true }),
         ).toBeVisible();

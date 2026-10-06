@@ -78,7 +78,7 @@ Yells report confusing blocks or remedies. Archestra saves each report and its c
 
 Archestra also saves a local diagnostic when a blocked client cannot receive a remedy. These automatic reports stay in your deployment.
 
-The overview counts unresolved reports. You can search reports, download their diagnostic archive, and investigate them with the configuration agent. **Investigate in chat** attaches the archive to a new chat, where the agent can read its diagnostic contents. Opening a chat leaves the report unresolved. The **Unresolved** tab lists open reports. Mark a report resolved after verifying the fix. It moves to the **Resolved** tab, where you can reopen it.
+The overview counts unresolved reports. You can search reports, download their diagnostic archive, and investigate them with the configuration agent. **Investigate in chat** attaches the archive to a new chat, where the agent can read its diagnostic contents. Opening a chat leaves the report unresolved. The list shows unresolved reports. Mark a report resolved after verifying the fix. Set the status filter to **Resolved** to see it again or reopen it. The link keeps that filter, so you can share it.
 
 ## Connect GitHub
 

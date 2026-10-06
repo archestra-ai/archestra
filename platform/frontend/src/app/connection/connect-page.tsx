@@ -226,7 +226,7 @@ export function ConnectPage() {
           </div>
         )}
 
-        <section className="grid items-start gap-10 @min-[66rem]:items-stretch @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16 [&>*]:max-w-2xl @min-[66rem]:[&>*]:max-w-none">
+        <section className="grid items-start gap-6 @min-[66rem]:items-stretch @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16">
           {/* Left: headline, then the picker. Beside a taller card the tiles
               grow a little, so the column ends level with the card. */}
           <div className="min-w-0 @min-[66rem]:flex @min-[66rem]:flex-col">
@@ -396,7 +396,7 @@ function AgentTiles({
   return (
     <div
       className={cn(
-        "mt-3 max-w-xl gap-2.5",
+        "mt-3 gap-2.5 @min-[66rem]:max-w-xl",
         row
           ? "flex min-h-[10.75rem] items-center justify-center [&>*]:w-36"
           : "grid grid-cols-4 @min-[66rem]:max-h-[13rem] @min-[66rem]:flex-1 @min-[66rem]:auto-rows-fr",
@@ -1541,7 +1541,7 @@ function ChipIcon({
 function LoadingState() {
   return (
     <div className="@container mx-auto w-full max-w-7xl px-6 pt-12 md:px-10 lg:px-14">
-      <div className="grid gap-10 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16">
+      <div className="grid gap-6 @min-[66rem]:gap-12 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16">
         <div className="space-y-5">
           <Skeleton className="h-16 w-80 max-w-full" />
           <Skeleton className="h-16 w-64 max-w-full" />

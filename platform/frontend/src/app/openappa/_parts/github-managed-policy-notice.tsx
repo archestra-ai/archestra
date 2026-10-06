@@ -5,14 +5,15 @@ import Link from "next/link";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 
+type AppaGithubSource = NonNullable<
+  NonNullable<ReturnType<typeof useAppaGithubSync>["data"]>["source"]
+>;
+
 export function GithubManagedPolicyNotice() {
   const { data } = useAppaGithubSync();
   const source = data?.source;
   const failed = Boolean(source?.lastSyncError);
-  const href =
-    source?.repo && source.path
-      ? `https://github.com/${source.repo}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`
-      : null;
+  const href = githubPolicyFileUrl(source, "blob");
 
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>
@@ -56,4 +57,14 @@ export function GithubManagedPolicyNotice() {
       </InlineNoticeText>
     </InlineNotice>
   );
+}
+
+/** The synced policy file on GitHub, to read (`blob`) or to change (`edit`). */
+export function githubPolicyFileUrl(
+  source: AppaGithubSource | null | undefined,
+  view: "blob" | "edit",
+): string | null {
+  if (!source?.repo || !source.path) return null;
+  const path = source.path.split("/").map(encodeURIComponent).join("/");
+  return `https://github.com/${source.repo}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
 }

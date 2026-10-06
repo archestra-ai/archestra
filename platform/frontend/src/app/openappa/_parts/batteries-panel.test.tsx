@@ -294,6 +294,32 @@ async function attach(battery: string, serverName: string) {
   await user.click(await screen.findByRole("button", { name: "Attach" }));
 }
 
+/** A GitHub source that owns the policy, as the sync settings report it. */
+const githubSyncSource = () =>
+  http.get(`${baseUrl}/api/openappa/github-sync`, () =>
+    HttpResponse.json({
+      enabled: true,
+      hasPolicy: true,
+      source: {
+        organizationId: "org-1",
+        repo: "acme/policy",
+        ref: "main",
+        path: "org.appa.toml",
+        interval: "1h",
+        githubPatId: null,
+        githubAppConfigId: null,
+        revision: "2d1c0b9a-8f7e-4d6c-9b5a-4f3e2d1c0b9a",
+        sourceCommit: "abc123",
+        lastSyncedAt: "2026-10-06T12:00:00Z",
+        lastSyncError: null,
+        declarationsPendingPublish: false,
+        heldContentHash: null,
+        heldSourceCommit: null,
+        heldReasons: [],
+      },
+    }),
+  );
+
 /** Pick an item from the row's "More actions" menu. */
 async function rowMenu(battery: string) {
   const user = userEvent.setup();
@@ -1030,7 +1056,7 @@ test("a personal-only credential is listed but cannot be bound", async () => {
   ).not.toHaveAttribute("aria-disabled", "true");
 });
 
-test("a binding to a key the credential list no longer offers still reads as that key", async () => {
+test("a binding to a key the loaded credential list does not hold reads as missing", async () => {
   declarations = emptyDeclarations({
     batteries: [
       declaredGithub({
@@ -1049,10 +1075,12 @@ test("a binding to a key the credential list no longer offers still reads as tha
   const select = within(row).getByRole("combobox", {
     name: "APPA_PROVIDER_GITHUB_TOKEN",
   });
-  await waitFor(() => expect(select).toHaveTextContent("retired-token"));
+  await waitFor(() =>
+    expect(select).toHaveTextContent("retired-token (no such credential)"),
+  );
 });
 
-test("a reader who cannot bind still sees which key a variable is bound to", async () => {
+test("a reader who cannot load credentials sees the bound key without a verdict on it", async () => {
   grantOnly();
   declarations = emptyDeclarations({
     batteries: [
@@ -1074,6 +1102,36 @@ test("a reader who cannot bind still sees which key a variable is bound to", asy
   });
   expect(select).toBeDisabled();
   await waitFor(() => expect(select).toHaveTextContent("github-token"));
+  expect(select).not.toHaveTextContent(/no such credential|not available/);
+});
+
+test("a reader who can read credentials but not bind sees the bound credential by name", async () => {
+  grantOnly("credential");
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+  });
+  show();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  expect(select).toBeDisabled();
+  await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
+  expect(
+    within(row).getByText(
+      "Changing a key takes permission to update guardrails and credentials.",
+    ),
+  ).toBeVisible();
 });
 
 test("a policy the repository owns is read-only", async () => {
@@ -1081,6 +1139,7 @@ test("a policy the repository owns is read-only", async () => {
     batteries: [declaredGithub()],
     managedInGithub: true,
   });
+  server.use(githubSyncSource());
   show();
   expect(
     await screen.findByRole("button", { name: "View github" }),
@@ -1093,11 +1152,66 @@ test("a policy the repository owns is read-only", async () => {
   ).not.toBeInTheDocument();
   const row = await entry("github");
   expect(
-    within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
-  ).toBeDisabled();
-  expect(
     within(row).queryByRole("button", { name: /Detach|Attach/ }),
   ).not.toBeInTheDocument();
+});
+
+test("picking a key for a repository-owned policy shows the line to change instead of saving it", async () => {
+  let saved = false;
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "lobster-app",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+    managedInGithub: true,
+  });
+  server.use(
+    githubSyncSource(),
+    http.get(`${baseUrl}/api/credentials`, () =>
+      HttpResponse.json([
+        {
+          ...credential,
+          id: "cred-0",
+          key: "lobster-app",
+          name: "lobster-app",
+        },
+        credential,
+      ]),
+    ),
+    http.patch(`${baseUrl}/api/openappa/battery-installs/install-1`, () => {
+      saved = true;
+      return HttpResponse.json(declarations.batteries[0]);
+    }),
+  );
+  show();
+  const user = userEvent.setup();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  await waitFor(() => expect(select).toBeEnabled());
+  expect(select).toHaveTextContent("lobster-app");
+  expect(select).not.toHaveTextContent(/no such credential|not available/);
+  await user.click(select);
+  await user.click(await screen.findByRole("option", { name: "GitHub token" }));
+  const notice = await within(row).findByRole("status");
+  expect(notice).toHaveTextContent(
+    'APPA_PROVIDER_GITHUB_TOKEN = "github-token"',
+  );
+  expect(
+    within(notice).getByRole("link", { name: /the policy file/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/acme/policy/edit/main/org.appa.toml",
+  );
+  expect(saved).toBe(false);
 });
 
 test("without the permission to manage guardrails the controls are read-only", async () => {

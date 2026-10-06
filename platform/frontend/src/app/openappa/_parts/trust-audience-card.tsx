@@ -1,11 +1,12 @@
 "use client";
 
-import { Info } from "lucide-react";
+import { Info, MessageCircle } from "lucide-react";
 import Link from "next/link";
 import type { ReactNode } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -24,7 +25,9 @@ import {
   useTrustAudience,
 } from "@/lib/openappa-trust-audience.query";
 import { cn } from "@/lib/utils/tailwind";
+import { batteryDisplayName } from "./battery-display-name";
 import { BatteryIcon } from "./battery-icon";
+import { OpenAppaChatButton } from "./openappa-chat-button";
 
 /** The Overview's trust chain, and its audiences nested by containment. */
 export function TrustAudienceCard() {
@@ -38,6 +41,16 @@ export function TrustAudienceCard() {
           Each agent session has a security label — its audience and trust. It
           determines what the agent can do, based on the data it has read.
         </CardDescription>
+        <CardAction>
+          <OpenAppaChatButton
+            size="sm"
+            variant="outline"
+            promptKey="explainSecurityLabel"
+          >
+            <MessageCircle />
+            <span>Ask about the security label</span>
+          </OpenAppaChatButton>
+        </CardAction>
       </CardHeader>
       <CardContent className="px-5">
         {view.isLoadingError ? (
@@ -221,24 +234,33 @@ function LevelBox({
   );
 }
 
-/** A battery an audience reads members from, as its icon; it opens that battery. */
+/** A battery an audience reads members from, as its icon; it names that battery on hover and opens it. */
 function BatteryLink({ battery }: { battery: string }) {
   const batteries = useBatteries();
   const catalog = useInternalMcpCatalog();
   const summary = batteries.data?.find((each) => each.name === battery);
   return (
-    <Link
-      href={`/openappa/batteries?${new URLSearchParams({ battery })}`}
-      aria-label={`Open the ${battery} battery`}
-      className="flex size-7 items-center justify-center rounded-md border bg-background transition-colors hover:bg-muted"
-    >
-      <BatteryIcon
-        name={battery}
-        bundled={summary?.source === "bundled"}
-        catalogIds={summary?.installs.map((install) => install.catalogId) ?? []}
-        catalog={catalog.data ?? []}
-        size={16}
-      />
-    </Link>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          href={`/openappa/batteries?${new URLSearchParams({ battery })}`}
+          aria-label={`Open the ${battery} battery`}
+          className="flex size-7 items-center justify-center rounded-md border bg-background transition-colors hover:bg-muted"
+        >
+          <BatteryIcon
+            name={battery}
+            bundled={summary?.source === "bundled"}
+            catalogIds={
+              summary?.installs.map((install) => install.catalogId) ?? []
+            }
+            catalog={catalog.data ?? []}
+            size={16}
+          />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent>
+        <span>{batteryDisplayName(battery)}</span>
+      </TooltipContent>
+    </Tooltip>
   );
 }

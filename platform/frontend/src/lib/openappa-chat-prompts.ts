@@ -16,6 +16,9 @@ const POLICY_LAUNCH_PROMPTS = {
   /** Policy tab header, next to the policy text. */
   explainPolicy:
     "Walk me through my current OpenAPPA policy in plain language: what it allows, denies, and sends for approval. Then ask me what I'd like to change.",
+  /** Security label card: the trust levels, the audiences, and their batteries. */
+  explainSecurityLabel:
+    "Explain the security label my OpenAPPA policy gives an agent session, in plain language. List the trust levels it configures, from most to least trusted, and say what lowers a session's trust. Then list the audiences from widest to narrowest, including any groups and the audience each one sits within, and say what reading data at each audience stops the agent from doing. For each audience, name the batteries it reads its members from. Then ask me what I'd like to change.",
 } as const;
 
 const TARGET_LAUNCH_PROMPTS = {

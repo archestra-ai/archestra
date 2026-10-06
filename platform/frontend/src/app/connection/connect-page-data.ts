@@ -279,7 +279,7 @@ export function useConnectPageData(params?: {
   const footprint = (client: ConnectClient): ConnectFootprint => ({
     skillsInstalled: skillsEnabled ? skills.length : 0,
     localChanges: LOCAL_CHANGES[client.id] ?? [
-      "The Archestra MCP entry in your agent's config",
+      `The ${appName} MCP entry in your agent's config`,
     ],
   });
 

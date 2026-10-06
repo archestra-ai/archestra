@@ -96,7 +96,7 @@ export function startupGuardStem(id: string): string | undefined {
 export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
   "claude-code": [
     "MCP server entry (claude mcp add, user scope)",
-    "Archestra plugin and skills",
+    "Plugin and skills",
     "~/.claude/settings.json (model routing)",
     "Startup check in your shell profile",
   ],
@@ -106,7 +106,7 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
     "Plugins from the skills marketplace",
     "Startup check in your shell profile",
   ],
-  "claude-desktop": ["A Claude Desktop profile for Archestra"],
+  "claude-desktop": ["A dedicated Claude Desktop profile"],
   "copilot-cli": [
     "MCP server entry (copilot mcp add)",
     "~/.copilot/settings.json (skills marketplace)",

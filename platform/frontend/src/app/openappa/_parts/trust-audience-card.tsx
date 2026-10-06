@@ -18,6 +18,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useBatteries } from "@/lib/openappa-batteries.query";
 import {
@@ -107,13 +108,12 @@ function Term({
       <span>{children}</span>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
-            type="button"
+          <UnstyledButton
             aria-label={`About ${String(children).toLowerCase()}`}
             className="mt-px hover:text-foreground"
           >
             <Info className="size-3.5" />
-          </button>
+          </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent className="max-w-xs">{hint}</TooltipContent>
       </Tooltip>

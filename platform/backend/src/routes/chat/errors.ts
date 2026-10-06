@@ -1444,6 +1444,8 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   // OpenAI-compatible handler stands in so an unexpected caller still gets a
   // classified error rather than a crash.
   voyage: openAiCompatibleErrorHandler,
+  // Decisions-only provider: never on the chat path either.
+  jev: openAiCompatibleErrorHandler,
   openai: openAiCompatibleErrorHandler,
   archestra: openAiCompatibleErrorHandler,
   anthropic: providerErrorHandler(parseAnthropicError, mapAnthropicErrorToCode),

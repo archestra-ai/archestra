@@ -622,8 +622,7 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
             <DropdownMenuTrigger asChild>
               <Button
                 variant="outline"
-                size="icon"
-                className="h-8 w-8"
+                size="icon-sm"
                 aria-label="Connector actions"
               >
                 <MoreHorizontal className="h-4 w-4" />
@@ -1215,8 +1214,7 @@ function KnowledgeBasesValue({ connectorId }: { connectorId: string }) {
           <span className="text-muted-foreground">None</span>
           <Button
             variant="ghost"
-            size="icon"
-            className="h-5 w-5"
+            size="icon-xs"
             onClick={() => setIsAddDialogOpen(true)}
             aria-label="Add knowledge base"
           >
@@ -1243,8 +1241,7 @@ function KnowledgeBasesValue({ connectorId }: { connectorId: string }) {
           ))}
           <Button
             variant="ghost"
-            size="icon"
-            className="h-5 w-5"
+            size="icon-xs"
             onClick={() => setIsAddDialogOpen(true)}
             disabled={availableKbs.length === 0}
             aria-label="Add knowledge base"

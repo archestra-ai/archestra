@@ -1,4 +1,5 @@
 import { CheckCircle2, type LucideIcon } from "lucide-react";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -21,7 +22,7 @@ export function ModeTile({
   description: React.ReactNode;
 }) {
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={onSelect}
       aria-pressed={selected}
@@ -47,6 +48,6 @@ export function ModeTile({
         )}
       </span>
       <span className="text-xs text-muted-foreground">{description}</span>
-    </button>
+    </UnstyledButton>
   );
 }

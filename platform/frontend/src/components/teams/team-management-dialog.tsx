@@ -46,6 +46,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -599,13 +600,13 @@ function TeamMembersSection(props: {
         <p>
           <span className="font-medium">Optional:</span> add members manually,
           or use{" "}
-          <button
+          <UnstyledButton
             type="button"
             onClick={props.onGoToExternalGroups}
             className="text-primary hover:underline"
           >
             External Group Sync
-          </button>{" "}
+          </UnstyledButton>{" "}
           to sync membership. Configure roles through{" "}
           <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoRoleMapping)}>
             Role Mapping

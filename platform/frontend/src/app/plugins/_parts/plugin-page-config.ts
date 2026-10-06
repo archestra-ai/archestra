@@ -14,60 +14,6 @@ export const pluginDetailHref = (id: string) => `/plugins/${id}`;
  */
 export const pluginEditHref = (id: string) => pluginDetailHref(id);
 
-/**
- * Attribution shown on the vendor's own plugin. Deliberately not
- * `useAppName()`: the badge names who authored and publishes the plugin
- * (archestra-ai/OpenAPPA upstream), not the brand of the deployment rendering
- * it — a white-labeled instance still installs a plugin written by Archestra.
- */
-// white-label-ok: names the plugin's upstream author, not this deployment's brand
-export const ARCHESTRA_PLUGIN_AUTHOR_LABEL = "Archestra";
-
-export function isArchestraPlugin(plugin: {
-  sourceMarketplaceRepo?: string | null;
-  sourceMarketplacePath?: string | null;
-  sourceMarketplacePluginName?: string | null;
-}): boolean {
-  return (
-    plugin.sourceMarketplaceRepo?.toLowerCase() === "archestra-ai/openappa" &&
-    plugin.sourceMarketplacePath === ".claude-plugin/marketplace.json" &&
-    plugin.sourceMarketplacePluginName?.toLowerCase() === "appa-runtime"
-  );
-}
-
-export function comparePluginCatalogOrder(
-  left: Parameters<typeof isArchestraPlugin>[0] & { displayName: string },
-  right: Parameters<typeof isArchestraPlugin>[0] & { displayName: string },
-): number {
-  const specialOrder =
-    Number(isArchestraPlugin(right)) - Number(isArchestraPlugin(left));
-  return specialOrder || left.displayName.localeCompare(right.displayName);
-}
-
-export function comparePluginRepositoryOrder(left: string, right: string) {
-  const isLeftOpenAppa = left.toLowerCase() === "archestra-ai/openappa";
-  const isRightOpenAppa = right.toLowerCase() === "archestra-ai/openappa";
-  return (
-    Number(isRightOpenAppa) - Number(isLeftOpenAppa) ||
-    left.localeCompare(right)
-  );
-}
-
-export function comparePinnedPluginTableOrder(params: {
-  left: Parameters<typeof isArchestraPlugin>[0];
-  right: Parameters<typeof isArchestraPlugin>[0];
-  descending: boolean;
-  fallbackResult: number;
-}): number {
-  const specialOrder =
-    Number(isArchestraPlugin(params.right)) -
-    Number(isArchestraPlugin(params.left));
-  if (specialOrder === 0) return params.fallbackResult;
-  // TanStack reverses the sorting function for descending columns. Reverse
-  // only the pin here first so OpenAPPA remains above ordinary rows either way.
-  return params.descending ? -specialOrder : specialOrder;
-}
-
 export function resolvePluginInstallSelection(
   plugins: readonly {
     clientType: "claude-code" | "codex" | "copilot-cli" | "cursor";

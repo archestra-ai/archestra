@@ -937,7 +937,7 @@ Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_
 - The Helm chart's runtime permissions in each execution namespace.
 - Outbound access from runtime workloads to your image registry, DNS, and Archestra's API, proxy, and gateway.
 
-Install the tested controller version before enabling the feature:
+The quickstart Docker image installs the controller in its KinD cluster when `ARCHESTRA_AGENT_RUNTIME_ENABLED=true`. On other clusters, install the tested version before enabling the feature:
 
 ```sh
 kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox-with-extensions.yaml
@@ -1376,6 +1376,9 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_OPENROUTER_BASE_URL`** - Override OpenRouter API base URL.
   - Default: `https://openrouter.ai/api/v1`
   - Use this to point to your own proxy, an OpenRouter-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/platform-supported-llm-providers#jev).
+  - Default: `https://api.typesafe.ai/v1/systemone`
 
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
   - Required to enable the OpenAI-compatible provider

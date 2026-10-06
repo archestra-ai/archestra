@@ -74,9 +74,6 @@ test("remedy tools open human review without asking for prior consent", () => {
   );
 
   expect(getPlans?.description).toContain(
-    "apply that plan with execute_remedy_plan",
-  );
-  expect(getPlans?.description).toContain(
     "execute_remedy_plan asks the user for approval when the policy requires it",
   );
   expect(getPlans?.description).not.toContain("use ask_user");

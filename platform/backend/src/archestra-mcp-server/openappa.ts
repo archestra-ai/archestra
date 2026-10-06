@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
 import {
-  BUILT_IN_AGENT_IDS,
   isBuiltInCatalogId,
   MCP_HUMAN_RULING_META_KEY,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
@@ -13,7 +12,6 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import AgentModel from "@/models/agent";
 import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
@@ -86,6 +84,7 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
@@ -343,17 +342,13 @@ const registry = defineArchestraTools([
       const { organizationId, userId } = context;
       if (!organizationId || !userId)
         throw new ApiError(401, "Organization and user context are required");
-      const agent = await AgentModel.findById(context.agent.id);
-      if (
-        !agent ||
-        agent.organizationId !== organizationId ||
-        (context.agentId !== undefined && context.agentId !== agent.id)
-      ) {
+      const caller = await resolveCallerScope(context);
+      if (!caller)
         throw new ApiError(
           403,
           "Valid agent context for this organization is required",
         );
-      }
+      const { agent, scope } = caller;
       if (
         !(await userHasPermission(
           userId,
@@ -399,9 +394,7 @@ const registry = defineArchestraTools([
         });
         // SPDX-SnippetEnd
       }
-      const organizationScope =
-        agent.agentType === "agent" &&
-        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
+      const organizationScope = scope === "organization";
       const allowedIds = organizationScope
         ? null
         : await inspectableToolIds({ ...context, agentId: agent.id });
@@ -422,7 +415,7 @@ const registry = defineArchestraTools([
         catalogId: catalog.id,
       });
       return result({
-        scope: organizationScope ? "organization" : "agent",
+        scope,
         mcpServer: {
           id: catalog.id,
           name: catalog.name,
@@ -611,7 +604,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_REMEDY_PLANS_SHORT_NAME,
     title: "Read a blocked call's ruling and remedy plans",
     description:
-      "Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. The platform puts this call in the place of the blocked call. It runs nothing and changes nothing. When the ruling offers a plan that fits the user's request, apply that plan with execute_remedy_plan. Use the offer_id and plan from the ruling. execute_remedy_plan asks the user for approval when the policy requires it. After the plan is authorized, retry the original call. If the ruling offers no plan, explain the ruling to the user.",
+      "Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. The platform puts this call in the place of the blocked call. It runs nothing and changes nothing. A plan fits unless the narrower session could no longer do what the user asked for. Apply a fitting plan with execute_remedy_plan. Use the offer_id and plan from the ruling. execute_remedy_plan asks the user for approval when the policy requires it. After the plan is authorized, retry the original call. If the ruling offers no plan, explain the ruling to the user.",
     schema: NoticeArguments,
     // The advertised schema leaves out the signed offers only the proxy writes.
     publicSchema: NoticePublicArguments,

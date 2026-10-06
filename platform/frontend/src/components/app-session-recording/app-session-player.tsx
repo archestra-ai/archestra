@@ -73,6 +73,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   cancelAppRecordingVideoRender,
   type EnhancementFailureReason,
@@ -612,7 +613,7 @@ export function AppSessionPlayer({
   // The over-length tooltips end with the fix, not just the diagnosis.
   // Quietly: an invitation to trim, not an alarm — neutral until hovered.
   const trimPill = (
-    <button
+    <UnstyledButton
       type="button"
       className="mt-1.5 flex w-fit items-center gap-1 rounded-full border bg-background px-2 py-0.5 font-medium text-foreground transition-colors hover:border-destructive/50 hover:text-destructive"
       // A tooltip dismisses on pointerdown — its content unmounts before a
@@ -625,7 +626,7 @@ export function AppSessionPlayer({
     >
       <Scissors className="size-3" />
       Trim to {finalCutLimitLabel}
-    </button>
+    </UnstyledButton>
   );
 
   const closeTour = useCallback(() => {
@@ -832,8 +833,7 @@ export function AppSessionPlayer({
                         <Button
                           type="button"
                           variant="ghost"
-                          size="icon"
-                          className="size-7"
+                          size="icon-xs"
                           aria-label="Undo edit"
                           disabled={!editor.canUndo || editor.isSaving}
                           onClick={editor.undo}
@@ -850,8 +850,7 @@ export function AppSessionPlayer({
                         <Button
                           type="button"
                           variant="ghost"
-                          size="icon"
-                          className="size-7"
+                          size="icon-xs"
                           aria-label="Redo edit"
                           disabled={!editor.canRedo || editor.isSaving}
                           onClick={editor.redo}
@@ -887,8 +886,8 @@ export function AppSessionPlayer({
                           <Button
                             type="button"
                             variant="ghost"
-                            size="icon"
-                            className="group size-7 text-muted-foreground hover:text-foreground"
+                            size="icon-xs"
+                            className="group text-muted-foreground hover:text-foreground"
                             aria-label={
                               rendering
                                 ? "Cancel preparing the video"
@@ -973,8 +972,8 @@ export function AppSessionPlayer({
                       <Button
                         type="button"
                         variant="ghost"
-                        size="icon"
-                        className="size-7 text-muted-foreground hover:text-foreground"
+                        size="icon-xs"
+                        className="text-muted-foreground hover:text-foreground"
                         aria-label="Show the player tour"
                         data-tour="tour"
                         onClick={() => setTourOpen(true)}
@@ -999,8 +998,8 @@ export function AppSessionPlayer({
                     <Button
                       type="button"
                       variant="ghost"
-                      size="icon"
-                      className="size-7 text-muted-foreground hover:text-foreground"
+                      size="icon-xs"
+                      className="text-muted-foreground hover:text-foreground"
                       aria-label="Close player"
                     >
                       <X className="size-4" />
@@ -1104,9 +1103,8 @@ export function SubmissionReadinessNotice({
           {needsDescription && (
             <Button
               type="button"
-              size="sm"
+              size="xs"
               variant="outline"
-              className="h-7 gap-1 text-xs"
               onClick={onAddDescription}
             >
               <Pencil className="size-3" />
@@ -1116,9 +1114,8 @@ export function SubmissionReadinessNotice({
           {needsPrompt && (
             <Button
               type="button"
-              size="sm"
+              size="xs"
               variant="outline"
-              className="h-7 gap-1 text-xs"
               onClick={onWriteBuildPrompt}
             >
               <Sparkles className="size-3" />
@@ -1129,9 +1126,9 @@ export function SubmissionReadinessNotice({
       </div>
       <Button
         type="button"
-        size="icon"
+        size="icon-xs"
         variant="ghost"
-        className="size-6 shrink-0 text-muted-foreground"
+        className="shrink-0 text-muted-foreground"
         aria-label="Dismiss"
         onClick={onDismiss}
       >
@@ -2790,7 +2787,7 @@ function PlayerSurface({
               button below. */}
           {/* z-20: must sit ABOVE the stage's own read-only shield (z-10,
               painted later), which would otherwise swallow hover and click. */}
-          <button
+          <UnstyledButton
             type="button"
             aria-label={
               playState === "playing" ? "Pause playback" : "Resume playback"
@@ -2814,7 +2811,7 @@ function PlayerSurface({
                 <Play className="size-4 fill-current" />
               )}
             </span>
-          </button>
+          </UnstyledButton>
           <ReplayAppStage viewport={viewport}>
             {/* Held until the sandbox origin is KNOWN (undefined = the config
                 queries are still resolving; they always settle to a domain or
@@ -2910,7 +2907,7 @@ function PlayerSurface({
                 type="button"
                 size="icon"
                 variant="default"
-                className="-mb-0.5 size-9 rounded-md"
+                className="-mb-0.5 rounded-md"
                 aria-label={playState === "playing" ? "Pause" : "Play"}
                 disabled={editingActive}
                 onClick={togglePlay}
@@ -2960,7 +2957,7 @@ function PlayerSurface({
                   type="button"
                   size="icon"
                   variant="ghost"
-                  className="-mb-0.5 size-9 rounded-md text-muted-foreground hover:text-foreground"
+                  className="-mb-0.5 rounded-md text-muted-foreground hover:text-foreground"
                   aria-label={label}
                   aria-pressed={audioMuted}
                   disabled={!audioReady}
@@ -3105,10 +3102,10 @@ function ReplayPromptEditorCard({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
+            size="xs"
             // Outlined like the description's Regenerate, but in the bubble's
             // own ink: `border` would resolve against the pane, not the tint.
-            className="!pointer-events-auto h-7 gap-1.5 border border-black/15 px-2.5 text-xs hover:bg-black/10"
+            className="!pointer-events-auto gap-1.5 border border-black/15 hover:bg-black/10"
             disabled={editor.generating || editor.saving}
             onClick={editor.regenerate}
           >
@@ -3122,8 +3119,8 @@ function ReplayPromptEditorCard({
           <Button
             type="button"
             variant="secondary"
-            size="sm"
-            className="!pointer-events-auto h-7 px-3 text-xs"
+            size="xs"
+            className="!pointer-events-auto"
             disabled={editor.generating || editor.saving || !draft.trim()}
             onClick={editor.save}
           >
@@ -3225,7 +3222,7 @@ function ReplayDescriptionRow({
   // and leaving edit mode never reflows the header or the player below.
   return (
     <div className="relative w-full max-w-2xl">
-      <button
+      <UnstyledButton
         type="button"
         aria-label="Edit description"
         title="Click to edit"
@@ -3255,7 +3252,7 @@ function ReplayDescriptionRow({
         >
           <Pencil className="size-3.5" />
         </span>
-      </button>
+      </UnstyledButton>
       {editing && (
         // One seamless field-in-a-card: the textarea carries no chrome of its
         // own (a bordered field inside a bordered card reads as nested boxes)
@@ -3298,8 +3295,8 @@ function ReplayDescriptionRow({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="ml-auto h-7 gap-1.5 px-2.5 text-xs"
+              size="xs"
+              className="ml-auto gap-1.5"
               disabled={saving || generate.isPending}
               onClick={() =>
                 generate.mutate(
@@ -3331,8 +3328,7 @@ function ReplayDescriptionRow({
             </Button>
             <Button
               type="button"
-              size="sm"
-              className="h-7 px-3 text-xs"
+              size="xs"
               disabled={saving}
               onClick={() => close(true)}
             >
@@ -4008,7 +4004,7 @@ function ReplayTimeline({
                 key={`cut-restore-${cuts[index].fromMs}-${cuts[index].toMs}`}
               >
                 <TooltipTrigger asChild>
-                  <button
+                  <UnstyledButton
                     type="button"
                     aria-label="Restore this cut"
                     className="group absolute inset-y-0 z-10 cursor-pointer"
@@ -4024,7 +4020,7 @@ function ReplayTimeline({
                         <Undo2 className="size-3" />
                       </span>
                     </span>
-                  </button>
+                  </UnstyledButton>
                 </TooltipTrigger>
                 <TooltipContent className="text-xs">
                   Restore this cut
@@ -4046,7 +4042,7 @@ function ReplayTimeline({
                 action should be the closest one. */}
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
+                <UnstyledButton
                   type="button"
                   aria-label="Dismiss the selection"
                   // A definite border: the default one is too faint to read
@@ -4055,13 +4051,13 @@ function ReplayTimeline({
                   onClick={() => setSelection(null)}
                 >
                   <X className="size-3" />
-                </button>
+                </UnstyledButton>
               </TooltipTrigger>
               <TooltipContent className="text-xs">Dismiss</TooltipContent>
             </Tooltip>
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
+                <UnstyledButton
                   type="button"
                   aria-label="Cut the selection"
                   className="flex size-5 items-center justify-center rounded-full border border-destructive/50 bg-background text-destructive shadow-sm hover:bg-destructive/10 disabled:opacity-50"
@@ -4072,7 +4068,7 @@ function ReplayTimeline({
                   }}
                 >
                   <Scissors className="size-3" />
-                </button>
+                </UnstyledButton>
               </TooltipTrigger>
               <TooltipContent className="text-xs">Cut</TooltipContent>
             </Tooltip>
@@ -4116,7 +4112,7 @@ function ReplayTimeline({
         {!readOnly && exportLimit !== null && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <button
+              <UnstyledButton
                 type="button"
                 aria-label={`Trim to the maximum allowed length (${exportLimitLabel})`}
                 className="group absolute top-0 z-30 flex h-2.5 -translate-x-1/2 cursor-pointer items-center"
@@ -4133,7 +4129,7 @@ function ReplayTimeline({
                       well to the right of the tick that shares its number. */}
                   max {exportLimitLabel}
                 </span>
-              </button>
+              </UnstyledButton>
             </TooltipTrigger>
             <TooltipContent className="text-xs">
               Trim to the max allowed length ({exportLimitLabel})
@@ -4507,7 +4503,7 @@ function ReplayChatPane({
           action, clicking opens the chat editor. (Hidden while the prompt
           editor is open — that IS editing — and in read-only review.) */}
       {promptEditor.draft === null && !filming && !review && (
-        <button
+        <UnstyledButton
           type="button"
           aria-label="Edit the replayed chat"
           className="!pointer-events-auto absolute inset-0 z-20 cursor-pointer"
@@ -4523,7 +4519,7 @@ function ReplayChatPane({
           >
             <Pencil className="size-4" />
           </span>
-        </button>
+        </UnstyledButton>
       )}
       <Conversation className="flex-1">
         <ConversationContent>
@@ -4667,8 +4663,7 @@ export function ReplayChatEditPane({
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                className="h-7 gap-1 text-xs"
+                size="xs"
                 disabled={promptEditor.generating || saving}
                 onClick={promptEditor.regenerate}
               >
@@ -4684,8 +4679,7 @@ export function ReplayChatEditPane({
               <Button
                 type="button"
                 variant="ghost"
-                size="sm"
-                className="h-7 gap-1 text-xs"
+                size="xs"
                 disabled={
                   promptEditor.generating ||
                   saving ||
@@ -4698,12 +4692,7 @@ export function ReplayChatEditPane({
               </Button>
             </div>
           )}
-          <Button
-            type="button"
-            size="sm"
-            className="ml-auto h-7 px-3 text-xs"
-            onClick={onDone}
-          >
+          <Button type="button" size="xs" className="ml-auto" onClick={onDone}>
             Save
           </Button>
         </div>
@@ -4799,7 +4788,7 @@ function ReplayAiResponseBubble({
         <MessageContent className="relative bg-secondary px-4 py-3 ring-2 ring-primary/50">
           {/* The bubble itself is the edit control — same as the AI prompt,
               the description and every captured message. */}
-          <button
+          <UnstyledButton
             type="button"
             aria-label="Edit the AI response"
             className="group/msg absolute inset-0 z-10 cursor-pointer rounded-[inherit]"
@@ -4814,7 +4803,7 @@ function ReplayAiResponseBubble({
             >
               <Pencil className="size-4" />
             </span>
-          </button>
+          </UnstyledButton>
           <div className="whitespace-pre-wrap break-words">
             <RedactedText text={response} />
           </div>
@@ -4847,7 +4836,7 @@ function MessageCornerAction({
 }) {
   const removing = action === "remove";
   return (
-    <button
+    <UnstyledButton
       type="button"
       aria-label={removing ? "Remove from the replay" : "Restore message"}
       className={cn(
@@ -4864,7 +4853,7 @@ function MessageCornerAction({
       onClick={onClick}
     >
       {removing ? <Trash2 className="size-4" /> : <Undo2 className="size-4" />}
-    </button>
+    </UnstyledButton>
   );
 }
 
@@ -4933,7 +4922,7 @@ function ReplayAiPromptBubble({
         {/* The bubble itself is the edit control, like the description and
             every captured message: click it, edit and regenerate in the card
             that replaces it. */}
-        <button
+        <UnstyledButton
           type="button"
           aria-label="Edit the AI prompt"
           className="group/msg absolute inset-0 z-10 cursor-pointer rounded-[inherit]"
@@ -4948,7 +4937,7 @@ function ReplayAiPromptBubble({
           >
             <Pencil className="size-4" />
           </span>
-        </button>
+        </UnstyledButton>
         <div className="whitespace-pre-wrap break-words">
           <RedactedText text={prompt} />
         </div>
@@ -6942,8 +6931,8 @@ function PlayerTour({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="ml-auto h-7 text-xs"
+            size="xs"
+            className="ml-auto"
             disabled={index === 0}
             onClick={() => setIndex((current) => current - 1)}
           >
@@ -6951,8 +6940,7 @@ function PlayerTour({
           </Button>
           <Button
             type="button"
-            size="sm"
-            className="h-7 text-xs"
+            size="xs"
             onClick={() =>
               index >= steps.length - 1
                 ? onClose()

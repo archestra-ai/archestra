@@ -44,6 +44,7 @@ import {
   validateFieldAgainstRegex,
 } from "./environment-validation-helpers";
 import { InlineCredentialFormShell } from "./inline-credential-form-shell";
+import { getLocalInstallationCopy } from "./local-installation-copy";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
@@ -607,8 +608,11 @@ export function LocalServerInstallDialog({
 
       {!isReauth && personalOnly && !hasPromptedConfiguration && (
         <p className="text-sm text-muted-foreground">
-          This server needs no credentials or configuration. Install creates a
-          private hosted instance available only to you.
+          This server needs no credentials or configuration.{" "}
+          {
+            getLocalInstallationCopy(catalogItem?.multitenant === true)
+              .installForMe
+          }
         </p>
       )}
 

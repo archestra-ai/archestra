@@ -2061,6 +2061,69 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Unlink the signed-in user's Telegram account.
+   * Deletes the user's own linked Telegram DM binding, so the bot stops
+   * resolving that Telegram user to this account and asks them to /start
+   * again. Users can only remove their own link (self-service).
+   */
+  fastify.delete(
+    "/api/chatops/telegram/link",
+    {
+      schema: {
+        operationId: RouteId.UnlinkTelegramChatOpsAccount,
+        description: "Unlink the current user's Telegram account",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const email = request.user.email;
+      const dmBinding =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: request.organizationId,
+          provider: "telegram",
+          dmOwnerEmail: email,
+        });
+      // A pending binding has no Telegram chat behind it yet — nothing to unlink.
+      if (!dmBinding || dmBinding.channelId.startsWith("dm:pending:")) {
+        throw new ApiError(404, "No linked Telegram account found.");
+      }
+
+      request.auditResourceId = { value: dmBinding.id };
+      request.auditBefore = await ChatOpsChannelBindingModel.findByIdForAudit(
+        dmBinding.id,
+        request.organizationId,
+      );
+
+      const deleted =
+        await ChatOpsChannelBindingModel.deleteByIdAndOrganization(
+          dmBinding.id,
+          request.organizationId,
+        );
+      if (!deleted) {
+        throw new ApiError(404, "No linked Telegram account found.");
+      }
+
+      await invalidateChannelAnswerAll({
+        provider: deleted.provider,
+        channelId: deleted.channelId,
+        workspaceId: deleted.workspaceId,
+      });
+
+      // Tell the Telegram chat it was unlinked (non-blocking)
+      chatOpsManager
+        .getTelegramProvider()
+        ?.sendDirectMessage({
+          userId: deleted.channelId,
+          text: `This Telegram account was unlinked from ${email}. Send /start to link it again.`,
+        })
+        .catch(() => {});
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
    * supports it (e.g., Slack). Otherwise channels are re-discovered on the

@@ -361,6 +361,7 @@ export default function ApiKeysPage() {
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
       <Button
+        size="sm"
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >

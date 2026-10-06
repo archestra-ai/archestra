@@ -155,7 +155,7 @@ export function BatteriesUploadAction() {
     return null;
   return (
     <>
-      <Button onClick={() => setUploading(true)}>
+      <Button size="sm" onClick={() => setUploading(true)}>
         <Upload className="size-4" />
         <span>Upload package</span>
       </Button>

@@ -1,9 +1,6 @@
 "use client";
 
-import {
-  PLUGIN_MARKETPLACE_IMPORT_LIMIT,
-  POPULAR_PLUGIN_MARKETPLACES,
-} from "@archestra/shared";
+import { PLUGIN_MARKETPLACE_IMPORT_LIMIT } from "@archestra/shared";
 import type { RowSelectionState } from "@tanstack/react-table";
 import {
   AlertTriangle,
@@ -132,8 +129,7 @@ export function ImportMarketplaceDialog({
   // check cadence for every plugin selected in this import: new commits become
   // review candidates and never replace approved bytes automatically.
   const [syncInterval, setSyncInterval] = useState<"15m" | "1h" | "1d">("1d");
-  // Generic marketplaces do not declare setup OS compatibility. Curated
-  // marketplaces can narrow the available targets when compatibility is known.
+  // Marketplaces do not declare setup OS compatibility.
   const [platforms, setPlatforms] = useState<ConnectPlatformOption[]>(() => [
     ...CONNECT_PLATFORM_OPTIONS,
   ]);
@@ -226,7 +222,7 @@ export function ImportMarketplaceDialog({
     });
     if (data && !data.reason) {
       setMarketplace(data);
-      setPlatforms(marketplacePlatformOptions(data.repoUrl));
+      setPlatforms([...CONNECT_PLATFORM_OPTIONS]);
       setClients(marketplaceClientOptions(data.entries));
       setSelected(
         new Set(
@@ -493,9 +489,6 @@ export function ImportMarketplaceDialog({
     ).length ?? 0;
   const totalUnsupported =
     marketplace?.entries.filter((entry) => !entry.supported).length ?? 0;
-  const availablePlatforms = marketplacePlatformOptions(
-    marketplace?.repoUrl ?? repoUrl,
-  );
 
   return (
     <StandardDialog
@@ -511,8 +504,7 @@ export function ImportMarketplaceDialog({
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-7 w-7"
+                size="icon-xs"
                 onClick={backToDiscover}
                 aria-label="Go back"
               >
@@ -657,7 +649,6 @@ export function ImportMarketplaceDialog({
                           id="marketplace-platforms"
                           value={platforms}
                           onValueChange={setPlatforms}
-                          options={availablePlatforms}
                         />
                         <FieldDescription>
                           Applies to every selected plugin. Only supported setup
@@ -1086,8 +1077,8 @@ function MarketplaceEntryRow({
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-7 gap-1.5 px-2 text-xs text-muted-foreground opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
+            size="xs"
+            className="text-muted-foreground opacity-100 transition-opacity sm:opacity-0 sm:group-hover:opacity-100 focus-visible:opacity-100"
             onClick={onPreview}
             aria-label={`Preview ${entry.name}`}
           >
@@ -1102,15 +1093,6 @@ function MarketplaceEntryRow({
 
 function marketplaceEntryKey(repo: string, pluginName: string): string {
   return `${normalizeRepository(repo)}::${pluginName.toLowerCase()}`;
-}
-
-function marketplacePlatformOptions(repo: string): ConnectPlatformOption[] {
-  const marketplace = POPULAR_PLUGIN_MARKETPLACES.find(
-    (item) => normalizeRepository(item.repo) === normalizeRepository(repo),
-  );
-  return (marketplace?.supportedPlatforms ?? ["posix", "windows"]).map(
-    (platform) => (platform === "windows" ? "windows" : "macos"),
-  );
 }
 
 function marketplaceClientOptions(

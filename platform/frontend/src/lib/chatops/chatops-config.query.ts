@@ -179,6 +179,27 @@ export function useLinkTelegramAccount() {
   });
 }
 
+export function useUnlinkTelegramAccount() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: async () => {
+      const { data, error } =
+        await archestraApiSdk.unlinkTelegramChatOpsAccount();
+      if (error) {
+        handleApiError(error);
+        return null;
+      }
+      return data ?? null;
+    },
+    onSuccess: (data) => {
+      if (!data?.success) return;
+      toast.success("Telegram account unlinked");
+      queryClient.invalidateQueries({ queryKey: ["chatops", "bindings"] });
+    },
+  });
+}
+
 export function useUpdateSlackChatOpsConfig() {
   const queryClient = useQueryClient();
 

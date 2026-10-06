@@ -104,12 +104,7 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
           <InlineNoticeText>
             Review and merge it to apply this policy change.
           </InlineNoticeText>
-          <Button
-            variant="outline"
-            size="sm"
-            className="ml-auto h-6 px-2 text-xs"
-            asChild
-          >
+          <Button variant="outline" size="xs" className="ml-auto" asChild>
             <a href={change.url} target="_blank" rel="noreferrer">
               Review pull request
             </a>
@@ -145,12 +140,7 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
                 ? "Enforcement is off. Check the Policy page."
                 : "Check composition and enforcement on the Policy page.")}
         </InlineNoticeText>
-        <Button
-          variant="outline"
-          size="sm"
-          className="ml-auto h-6 px-2 text-xs"
-          asChild
-        >
+        <Button variant="outline" size="xs" className="ml-auto" asChild>
           <Link href={active ? "/openappa" : "/openappa/policy"}>
             <span>{active ? "View Guardrails" : "Check policy"}</span>
           </Link>

@@ -26,6 +26,7 @@ import {
   ChevronRight,
   Copy,
   Cpu,
+  Download,
   Gauge,
   Info,
   ListOrdered,
@@ -41,7 +42,9 @@ import {
   Unplug,
   Wrench,
 } from "lucide-react";
+import dynamic from "next/dynamic";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   type ComponentProps,
   type ReactNode,
@@ -51,7 +54,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 import { ClientIcon } from "@/app/connection/client-icon";
-import type { ConnectClient } from "@/app/connection/clients";
+import { CONNECT_CLIENTS, type ConnectClient } from "@/app/connection/clients";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -102,6 +105,14 @@ import {
 } from "./connect-page-parts";
 import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
+import { useUpdateUrlParams } from "./use-update-url-params";
+
+// The approval panel is large; the page only needs it for Claude Desktop's
+// installer download, so it loads on demand.
+const ConnectCommandPanel = dynamic(
+  () => import("./connect-command-panel").then((m) => m.ConnectCommandPanel),
+  { ssr: false },
+);
 
 type DialogKind =
   | "servers"
@@ -142,8 +153,19 @@ const MOTION_CSS = `
 export function ConnectPage() {
   usePageTitle("Connect");
   const data = useConnectPageData();
-  const [pickedId, setPickedId] = useState<string | null>(null);
-  const [manualChosen, setManualChosen] = useState(false);
+  // Links (connect.md, docs) can open the page on an app, and on its manual
+  // setup with ?mode=manual. Picks and the Manual toggle are written back.
+  const searchParams = useSearchParams();
+  const updateUrlParams = useUpdateUrlParams();
+  const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
+  const [manualChosen, setManualChosen] = useState(() => {
+    const linked = CONNECT_CLIENTS.find((c) => c.id === pickedId);
+    return (
+      searchParams.get("mode") === "manual" &&
+      !!linked &&
+      setupModeFor(linked) === "prompt-or-manual"
+    );
+  });
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focusServer, setFocusServer] = useState<string | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
@@ -195,6 +217,7 @@ export function ConnectPage() {
 
   const client =
     data.clients.find((c) => c.id === pickedId) ??
+    data.clients.find((c) => c.id === data.defaultClientId) ??
     data.featuredClients[0] ??
     data.clients[0];
   const clientId = client?.id;
@@ -234,13 +257,19 @@ export function ConnectPage() {
   // Desktop keeps its own download flow.
   const scriptable = setup === "prompt" && client.id !== "claude-desktop";
   const script = status !== "connected" && scriptable && manualChosen;
-  const step = currentStep(client, status, manual, script);
+  // Claude Desktop installs from a downloaded installer by default; its
+  // Prompt (for Cowork) is the alternative, so the toggle reads inverted.
+  const download =
+    status !== "connected" && client.id === "claude-desktop" && !manualChosen;
+  const step = currentStep(client, status, manual, script, download);
 
   const pick = (id: string) => {
     setPickedId(id);
     setWaitingFor(null);
     setManualChosen(false);
     setAnother(null);
+    // Manual steps bookmark a provider; providers vary per app.
+    updateUrlParams({ clientId: id, mode: null, providerId: null });
   };
   const connectedRecord = data.connected.find((c) => c.clientId === client.id);
 
@@ -338,6 +367,7 @@ export function ConnectPage() {
           manual={manual}
           scriptable={scriptable}
           script={script}
+          download={download}
           choices={choices}
           prompt={prompt}
           firstPrompt={suggestFirstPrompt(servers, skills)}
@@ -350,7 +380,12 @@ export function ConnectPage() {
             setFocusServer(null);
             setDialog("servers");
           }}
-          onManual={setManualChosen}
+          onManual={(v) => {
+            setManualChosen(v);
+            // Only manual setup is bookmarkable; Script is a view of Prompt.
+            if (setup === "prompt-or-manual")
+              updateUrlParams({ mode: v ? "manual" : null });
+          }}
           onCopied={() => setWaitingFor(client.id)}
           onCursorNote={() => setDialog("cursor")}
           onDisconnect={() => setDisconnecting(client)}
@@ -633,6 +668,7 @@ function ConnectArea({
   manual,
   scriptable,
   script,
+  download,
   choices,
   prompt,
   firstPrompt,
@@ -656,6 +692,8 @@ function ConnectArea({
   scriptable: boolean;
   /** Script is chosen: show the installer command instead of the prompt. */
   script: boolean;
+  /** Claude Desktop's installer download replaces the prompt. */
+  download: boolean;
   choices: ConnectChoices;
   /** null when every part is left out. */
   prompt: string | null;
@@ -710,6 +748,9 @@ function ConnectArea({
     }
   };
   const generic = setup === "prompt-or-manual";
+  const leftOutParts = PART_LABELS.filter(([part]) => !choices[part]).map(
+    ([part]) => part,
+  );
   const disconnectNote = (
     <span className="text-muted-foreground">
       You can{" "}
@@ -769,6 +810,14 @@ function ConnectArea({
             onChange={onManual}
           />
         )}
+        {client.id === "claude-desktop" && (
+          <ModeSwitch
+            alt={download}
+            altIcon={<Download />}
+            altLabel="Download"
+            onChange={(v) => onManual(!v)}
+          />
+        )}
         {scriptable && (
           <ModeSwitch
             alt={script}
@@ -784,7 +833,39 @@ function ConnectArea({
         )}
       </div>
 
-      {manual ? (
+      {download ? (
+        <>
+          <ConnectCommandPanel
+            // Remount on a changed selection; the panel reads it once.
+            key={leftOutParts.join(",")}
+            variant="download"
+            client={client}
+            exclude={leftOutParts}
+            mcpGateways={data.gateway ? [data.gateway] : null}
+            mcpGatewayId={data.gateway?.id ?? null}
+            onMcpGatewaySelect={() => {}}
+            llmProxyId={data.llmProxyId}
+            shownProviders={data.shownProviders}
+            urlProvider={null}
+            onProviderSelect={() => {}}
+            baseUrl={data.baseUrl}
+            candidateBaseUrls={data.baseUrls}
+            baseUrlMetadata={data.baseUrlMetadata}
+            onBaseUrlChange={data.selectBaseUrl}
+            skillsEnabled={data.skillsEnabled}
+            pluginsEnabled={data.pluginsEnabled}
+            onDownloaded={onCopied}
+          />
+          <BandFooter>
+            <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
+              {includeLabel}
+            </MetaButton>
+            <span className="md:ml-auto">
+              {footprintSummary(client, footprint, skillCount)}
+            </span>
+          </BandFooter>
+        </>
+      ) : manual ? (
         // The steps take the prompt's place, starting right here.
         <div
           key={`manual-${client.id}`}
@@ -1009,6 +1090,7 @@ function currentStep(
   status: Status,
   manual: boolean,
   script: boolean,
+  download: boolean,
 ): CurrentStep {
   const name = nameOf(client);
   const Name = name === "your agent" ? "Your agent" : name;
@@ -1019,6 +1101,8 @@ function currentStep(
   if (manual) return { kind: "current", text: `Follow the steps for ${name}` };
   if (script)
     return { kind: "current", text: "Run the command in your terminal" };
+  if (download)
+    return { kind: "current", text: `Download the installer for ${name}` };
   return { kind: "current", text: `Paste the prompt into ${name}` };
 }
 

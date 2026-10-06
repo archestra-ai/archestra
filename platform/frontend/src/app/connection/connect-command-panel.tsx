@@ -7,6 +7,7 @@ import {
   resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
+import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
 import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -166,6 +167,15 @@ interface ConnectCommandPanelProps {
   skillsEnabled?: boolean;
   /** When false, plugins are not offered in the setup. */
   pluginsEnabled?: boolean;
+  /** Parts the user left out on the Connect page; they stay off. */
+  exclude?: readonly ConnectSetupPart[];
+  /**
+   * "download": only the Claude Desktop installer download, for the Connect
+   * page's band. The full review flow is what the approval page shows.
+   */
+  variant?: "full" | "download";
+  /** The installer was downloaded (download variant). */
+  onDownloaded?: () => void;
 }
 
 /**
@@ -190,6 +200,9 @@ export function ConnectCommandPanel({
   onBaseUrlChange,
   skillsEnabled = true,
   pluginsEnabled = true,
+  exclude,
+  variant = "full",
+  onDownloaded,
 }: ConnectCommandPanelProps) {
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
@@ -281,7 +294,7 @@ export function ConnectCommandPanel({
   // Parts the copied prompt left out. The deployment won't approve a setup
   // that includes one, so they start off here and stay off.
   const { data: connection } = useClientConnection(connectRequest ?? "");
-  const excludeKey = (connection?.exclude ?? []).join(",");
+  const excludeKey = (connection?.exclude ?? exclude ?? []).join(",");
   const excluded = useMemo(
     () => new Set(excludeKey.split(",").filter(Boolean)),
     [excludeKey],
@@ -946,6 +959,27 @@ export function ConnectCommandPanel({
               ? "Generating setup command"
               : "No setup command selected";
 
+  if (variant === "download") {
+    return (
+      <DesktopDownload
+        installerUrl={result?.installerUrl ?? null}
+        command={result?.command ?? null}
+        pending={hasRunnableAnything && !result && !failed}
+        failed={failed}
+        onRetry={() => runGeneration(inputsKey)}
+        onDownloaded={onDownloaded}
+        proxyActive={proxyActive}
+        gate={
+          !hasRunnableAnything
+            ? "Everything is left out. Choose at least one thing to include."
+            : needsPerUserConnect || virtualKeyUnbacked
+              ? `${commandStatus}. Use the Prompt option, or ask your admin.`
+              : null
+        }
+      />
+    );
+  }
+
   if (!hasAnything) {
     // Nothing to put in a setup command — but skills install from their own
     // marketplace URL, so a caller who can read them still has something to do.
@@ -1502,6 +1536,94 @@ export function ConnectCommandPanel({
 // ===================================================================
 // Internal pieces
 // ===================================================================
+
+/** The Connect page's Claude Desktop band: one installer download. */
+function DesktopDownload({
+  installerUrl,
+  command,
+  pending,
+  failed,
+  onRetry,
+  onDownloaded,
+  proxyActive,
+  gate,
+}: {
+  installerUrl: string | null;
+  command: string | null;
+  pending: boolean;
+  failed: boolean;
+  onRetry: () => void;
+  onDownloaded?: () => void;
+  proxyActive: boolean;
+  /** Why no installer can be made here; null when one can. */
+  gate: string | null;
+}) {
+  if (gate)
+    return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
+  return (
+    <div className="mt-2 space-y-3 px-1">
+      <p className="text-xs text-muted-foreground">
+        Open it in Claude Desktop and confirm Install. Your browser guides you
+        through subscription sign-in and restarting Desktop. Finish active
+        Desktop tasks first.
+        {proxyActive && (
+          <span>
+            {" "}
+            Model routing switches Desktop to third-party mode, with its own
+            conversation history; Settings, Import brings your Claude.ai
+            conversations over.
+          </span>
+        )}
+      </p>
+      {failed ? (
+        <div role="alert" className="flex items-center gap-3 text-sm">
+          <span>Could not prepare the installer.</span>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            <span>Try again</span>
+          </Button>
+        </div>
+      ) : installerUrl ? (
+        <Button
+          asChild
+          size="lg"
+          className="h-12 rounded-xl px-6 text-base"
+          onClick={onDownloaded}
+        >
+          <a href={installerUrl} download>
+            <Download />
+            <span>Download installer</span>
+          </a>
+        </Button>
+      ) : (
+        <Button size="lg" disabled className="h-12 rounded-xl px-6 text-base">
+          <Download />
+          <span>{pending ? "Preparing installer" : "Download installer"}</span>
+        </Button>
+      )}
+      <p className="text-xs text-muted-foreground">
+        The installer expires in 15 minutes. Already using a third-party Desktop
+        profile? Use the terminal option.
+      </p>
+      {command && (
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Advanced: terminal setup</summary>
+          <p className="mt-2">
+            The terminal option requires Python 3.9+ and Claude Code for
+            subscription sign-in.
+          </p>
+          <TerminalCard className="mt-2">
+            <SetupCommandLine
+              command={command}
+              pending={false}
+              failed={false}
+              onRetry={onRetry}
+            />
+          </TerminalCard>
+        </details>
+      )}
+    </div>
+  );
+}
 
 /**
  * Shown in place of the command when a per-user provider (GitHub Copilot) is

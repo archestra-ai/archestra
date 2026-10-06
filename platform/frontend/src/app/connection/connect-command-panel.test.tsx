@@ -340,6 +340,43 @@ describe("ConnectCommandPanel", () => {
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 
+  it("gives the Connect page one Desktop installer download that keeps left-out parts out", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    createSetupMock.mockResolvedValue({
+      id: "desktop-setup",
+      command: COMMAND,
+      installerUrl: "https://proxy.example/desktop-installer",
+      expiresAt: new Date().toISOString(),
+      tokenStart: "tok",
+      plugins: [],
+    });
+    const onDownloaded = vi.fn();
+    renderPanel({
+      client: findClient("claude-desktop"),
+      variant: "download",
+      exclude: ["tools"],
+      onDownloaded,
+    });
+    const link = await screen.findByRole("link", {
+      name: "Download installer",
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://proxy.example/desktop-installer",
+    );
+    expect(createSetupMock).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: "claude-desktop" }),
+    );
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ mcpGatewayId: "g1" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Customize setup" }),
+    ).toBeNull();
+    await userEvent.click(link);
+    expect(onDownloaded).toHaveBeenCalled();
+  });
+
   it("regenerates Desktop setup when the platform or API-key authentication changes", async () => {
     const user = userEvent.setup();
     renderPanel({ client: findClient("claude-desktop") });

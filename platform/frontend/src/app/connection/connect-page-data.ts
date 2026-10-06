@@ -4,7 +4,7 @@
 // servers, tools, skills, apps, admin settings); clearly marked mocks where
 // the backend has nothing yet (context cost, guardrails status).
 
-import { archestraApiSdk } from "@archestra/shared";
+import { archestraApiSdk, type SupportedProvider } from "@archestra/shared";
 import {
   buildConnectionPrompt,
   CONNECT_SETUP_PARTS,
@@ -37,6 +37,7 @@ import {
 import type { ConnectChoices } from "./connect-choices";
 import {
   type ConnectionBaseUrl,
+  getConnectableProviders,
   resolveAdminDefaultBaseUrl,
   resolveCandidateBaseUrls,
 } from "./connection-flow.utils";
@@ -96,6 +97,8 @@ export interface ConnectPageData {
   clients: ConnectClient[];
   /** The handful of apps with first-class setup, for hero rows and pickers. */
   featuredClients: ConnectClient[];
+  /** The app the admin picks first, when set. */
+  defaultClientId: string | null;
   /** The instance's configured name ("Archestra" unless white-labeled). */
   appName: string;
   gateway: ConnectGateway | null;
@@ -113,6 +116,10 @@ export interface ConnectPageData {
   /** Gateway "progressive tool loading": tools load on demand. */
   progressive: boolean;
   llmProxyEnabled: boolean;
+  /** The org's LLM Proxy, when the user can route through it. */
+  llmProxyId: string | null;
+  /** Model providers the admin offers for routing. */
+  shownProviders: SupportedProvider[];
   skillsEnabled: boolean;
   pluginsEnabled: boolean;
   /** Approved plugins the setup bundles for this client. */
@@ -358,6 +365,7 @@ export function useConnectPageData(): ConnectPageData {
     revalidating: orgQuery.isFetching,
     clients,
     featuredClients,
+    defaultClientId: org?.connectionDefaultClientId ?? null,
     appName,
     gateway,
     baseUrls,
@@ -371,6 +379,8 @@ export function useConnectPageData(): ConnectPageData {
     totalSkills: skills.length,
     progressive,
     llmProxyEnabled: proxyAvailable,
+    llmProxyId: proxyAvailable ? (llmProxy?.id ?? null) : null,
+    shownProviders: getConnectableProviders(org),
     skillsEnabled,
     pluginsEnabled,
     pluginsFor,

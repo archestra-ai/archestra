@@ -69,6 +69,17 @@ vi.mock("@/components/page-layout", () => ({
     </>
   ),
 }));
+vi.mock("./connect-command-panel", () => ({
+  ConnectCommandPanel: (props: {
+    variant?: string;
+    exclude?: readonly string[];
+  }) => (
+    <div
+      data-testid={props.variant === "download" ? "desktop-download" : "panel"}
+      data-exclude={props.exclude?.join(",")}
+    />
+  ),
+}));
 vi.mock("./connection-flow", () => ({
   ConnectionFlow: (props: unknown) => connectionFlowMock(props),
 }));
@@ -218,6 +229,47 @@ describe("ConnectPage (no connect request)", () => {
         /connect\.md\?client=generic&gateway=team&setup=tools(&base=[^ ]+)? and connect /,
       ),
     ).toBeVisible();
+  });
+
+  it("opens a linked agent on its manual setup", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=generic&mode=manual") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockOrganization({});
+    render(<ConnectionPage />);
+    expect(
+      screen.getByRole("button", { name: "Manual setup", pressed: true }),
+    ).toBeVisible();
+    expect(screen.getByText("Follow the steps for your agent")).toBeVisible();
+  });
+
+  it("opens Claude Desktop on its installer download when linked", async () => {
+    window.localStorage.clear();
+    saveConnectChoices("claude-desktop", {
+      tools: true,
+      skills: false,
+      proxy: true,
+      plugins: true,
+    });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=claude-desktop") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockOrganization({});
+    render(<ConnectionPage />);
+    expect(
+      screen.getByRole("button", { name: /Claude Desktop/, pressed: true }),
+    ).toBeVisible();
+    expect(
+      screen.getByText("Download the installer for Claude Desktop"),
+    ).toBeVisible();
+    expect(await screen.findByTestId("desktop-download")).toHaveAttribute(
+      "data-exclude",
+      "skills",
+    );
   });
 
   it("re-reads the connection settings when the tab comes back", () => {

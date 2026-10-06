@@ -61,6 +61,7 @@ describe("syncBuiltInAgents", () => {
     const organization = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, organization.id);
+    config.skillsSandbox.enabled = true;
     config.openappa.enabled = false;
     await syncBuiltInAgents();
     await syncOpenAppaConfigAgentCapabilities();
@@ -122,7 +123,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(21);
+    expect(originalToolIds).toHaveLength(24);
     const extraTools = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("whoami"),
     ]);
@@ -228,6 +229,14 @@ describe("syncBuiltInAgents", () => {
     expect((await AgentModel.findById(previous.id))?.systemPrompt).toBe(
       BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG],
     );
+    await AgentModel.update(previous.id, {
+      systemPrompt:
+        "Configure this deployment's OpenAPPA policy. When the appa-guide skill is available, load it before policy work and follow its current workflow. Use your assigned policy and discovery tools to inspect the current effective policy and relevant agents, MCP gateways, and MCP server tools. When the user identifies a target, look it up by its ID before explaining or changing its rules; ask for clarification when the target is missing or unavailable, and keep changes scoped to it unless the user says otherwise. Preview proposed changes and explain their effects before publishing, and publish only changes the user requested. Publishing creates a GitHub pull request when sync is configured, or saves a local revision otherwise. For questions or inspection, explain the current effective policy without saving. Never claim a proposed change is active until the policy tool confirms it. During initial setup, after saving the first policy, offer GitHub sync. List credentials visible to the user and select a connected organization GitHub App. If none is ready, call request_runtime_credential_setup so the user can create and connect one through the native chat dialog; never ask for secrets in chat. Then ask for the GitHub owner and repository name and create the private repository only after the user agrees.",
+    });
+    await syncBuiltInAgents();
+    expect((await AgentModel.findById(previous.id))?.systemPrompt).toBe(
+      BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS[BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG],
+    );
     expect(
       await ResourcePermissionPolicyModel.find({
         organizationId: organization.id,
@@ -241,6 +250,7 @@ describe("syncBuiltInAgents", () => {
     makeOrganization,
   }) => {
     config.openappa.enabled = true;
+    config.skillsSandbox.enabled = true;
     const organization = await makeOrganization();
     await syncBuiltInAgents();
     const existing = await AgentModel.getBuiltInAgent(
@@ -287,7 +297,7 @@ describe("syncBuiltInAgents", () => {
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(21);
+    ).toHaveLength(24);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -366,6 +376,7 @@ describe("syncBuiltInAgents", () => {
     makeOrganization,
   }) => {
     config.openappa.enabled = true;
+    config.skillsSandbox.enabled = true;
     const withGuide = await makeOrganization();
     const withoutGuide =
       guideState === "soft-deleted" ? await makeOrganization() : null;
@@ -394,7 +405,7 @@ describe("syncBuiltInAgents", () => {
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(21);
+    expect(managedToolIds).toHaveLength(24);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -415,6 +426,43 @@ describe("syncBuiltInAgents", () => {
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
+  });
+
+  test("gives the OpenAPPA agent the sandbox tools only while the sandbox is on", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    config.skillsSandbox.enabled = false;
+    const organization = await makeOrganization();
+    await syncBuiltInSkills();
+    await syncBuiltInAgents();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+    const agentId =
+      (
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        )
+      )?.id ?? "";
+    const sandboxToolNames = (
+      ["run_command", "upload_file", "download_file"] as const
+    ).map((shortName) => archestraMcpBranding.getToolName(shortName));
+    expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
+      [],
+    );
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(21);
+
+    config.skillsSandbox.enabled = true;
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+
+    const sandboxToolIds =
+      await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
+    expect(sandboxToolIds).toHaveLength(3);
+    const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
+    expect(assigned).toHaveLength(24);
+    expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 
   test("leaves the OpenAPPA agent's tools alone while OpenAPPA is disabled", async ({

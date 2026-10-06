@@ -38,7 +38,7 @@ You need [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:up
 1. Go to **Guardrails** and click **Create my policy**. A chat with the configuration agent opens.
 2. The agent drafts a starting policy from your tools and explains what it allows and blocks.
 3. Approve the policy. Saving the first policy turns enforcement on.
-4. Optionally, let the agent set up [GitHub sync](/docs/agents/guardrails/policies#github-sync).
+4. Optionally, accept the agent's offer to connect a GitHub repository for [GitHub sync](/docs/agents/guardrails/policies#github-sync).
 
 The **Enforcement** card on **Overview** now shows **On**.
 

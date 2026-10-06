@@ -36,9 +36,8 @@ export function TrustAudienceCard() {
       <CardHeader className="px-5">
         <CardTitle>Security label</CardTitle>
         <CardDescription>
-          Every agent session carries a security label: its audience and its
-          trust. The label only becomes more restrictive as the agent reads
-          data, so what the agent has read decides what it can do next.
+          Each agent session has a security label — its audience and trust. It
+          only gets stricter as the agent reads.
         </CardDescription>
       </CardHeader>
       <CardContent className="px-5">

@@ -13,14 +13,26 @@ import {
   INSTALLER_CLIENT_LABELS,
   type InstallerClientId,
 } from "@archestra/shared/connection-setup";
-import { useMemo, useState } from "react";
-import { Bar, BarChart, CartesianGrid, Cell, XAxis, YAxis } from "recharts";
+import { format, parseISO } from "date-fns";
+import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useMemo, useState } from "react";
+import {
+  Bar,
+  BarChart,
+  CartesianGrid,
+  Cell,
+  Line,
+  LineChart,
+  XAxis,
+  YAxis,
+} from "recharts";
 import { ClientIcon } from "@/app/connection/client-icon";
 import { CONNECT_CLIENTS } from "@/app/connection/clients";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import {
   Card,
+  CardAction,
   CardContent,
   CardDescription,
   CardHeader,
@@ -29,6 +41,8 @@ import {
 import {
   type ChartConfig,
   ChartContainer,
+  ChartLegend,
+  ChartLegendContent,
   ChartTooltip,
   ChartTooltipContent,
 } from "@/components/ui/chart";
@@ -54,11 +68,13 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TruncatedTooltip } from "@/components/ui/truncated-tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   type AgentAdoption,
   type AgentAdoptionMember,
   type AgentAdoptionStatus,
   useAgentAdoption,
+  useAgentAdoptionUsage,
 } from "@/lib/connected-client.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
@@ -118,11 +134,26 @@ type StatusFilter = AgentAdoptionStatus | "all";
 
 /**
  * Who has connected an agent and who is using it, judged by gateway and LLM
- * proxy traffic: summary tiles, members per agent, and the members themselves
- * (not connected first).
+ * proxy traffic: summary tiles, calls over time, members per agent, and the
+ * members themselves (not connected first). Selecting a member narrows the
+ * calls chart and, through the shared `userId` URL param, the connection log.
  */
 export function AgentAdoptionOverview() {
   const { data, isPending, isLoadingError, refetch } = useAgentAdoption();
+  const router = useRouter();
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
+  const selectedUserId = searchParams.get("userId") ?? undefined;
+
+  const selectMember = useCallback(
+    (userId: string | undefined) => {
+      const params = new URLSearchParams(searchParams.toString());
+      if (userId) params.set("userId", userId);
+      else params.delete("userId");
+      router.push(`${pathname}?${params.toString()}`, { scroll: false });
+    },
+    [searchParams, router, pathname],
+  );
 
   if (isLoadingError) {
     return (
@@ -138,9 +169,19 @@ export function AgentAdoptionOverview() {
     <div className="flex flex-col gap-6">
       <SummaryTiles adoption={data} />
       <div className="grid gap-6 xl:grid-cols-3">
+        <UsageChart
+          adoption={data}
+          selectedUserId={selectedUserId}
+          onSelect={selectMember}
+          className="xl:col-span-2"
+        />
         <AgentChart adoption={data} />
-        <MemberList adoption={data} className="xl:col-span-2" />
       </div>
+      <MemberList
+        adoption={data}
+        selectedUserId={selectedUserId}
+        onSelect={selectMember}
+      />
     </div>
   );
 }
@@ -212,6 +253,125 @@ function SummaryTile({
   );
 }
 
+const usageChartConfig = {
+  gatewayCalls: { label: "MCP gateway", color: "var(--chart-1)" },
+  llmCalls: { label: "LLM proxy", color: "var(--chart-2)" },
+} satisfies ChartConfig;
+
+function UsageChart({
+  adoption,
+  selectedUserId,
+  onSelect,
+  className,
+}: {
+  adoption: AgentAdoption;
+  selectedUserId: string | undefined;
+  onSelect: (userId: string | undefined) => void;
+  className?: string;
+}) {
+  const { data, isPending, isLoadingError } =
+    useAgentAdoptionUsage(selectedUserId);
+  const selected = adoption.members.find((m) => m.userId === selectedUserId);
+  const who = selected ? selected.name || selected.email : "all members";
+  const totals = (data?.days ?? []).reduce(
+    (sum, day) => ({
+      gateway: sum.gateway + day.gatewayCalls,
+      llm: sum.llm + day.llmCalls,
+    }),
+    { gateway: 0, llm: 0 },
+  );
+
+  return (
+    <Card className={cn("min-w-0", className)}>
+      <CardHeader>
+        <CardTitle>Calls from agents</CardTitle>
+        <CardDescription>
+          {`MCP gateway and LLM proxy calls per day from ${selected ? `${who}'s agents` : "all members' agents"}, last ${adoption.lookbackDays} days.`}
+          {data ? (
+            <span className="ml-1 tabular-nums">
+              {`${totals.gateway.toLocaleString()} gateway · ${totals.llm.toLocaleString()} LLM proxy.`}
+            </span>
+          ) : null}
+        </CardDescription>
+        {selected ? (
+          <CardAction>
+            <UnstyledButton
+              type="button"
+              onClick={() => onSelect(undefined)}
+              className="text-xs text-muted-foreground underline-offset-2 hover:text-foreground hover:underline"
+            >
+              Show all members
+            </UnstyledButton>
+          </CardAction>
+        ) : null}
+      </CardHeader>
+      <CardContent>
+        {isLoadingError ? (
+          <p className="py-16 text-center text-sm text-muted-foreground">
+            Couldn't load calls.
+          </p>
+        ) : isPending || !data ? (
+          <Skeleton className="h-56 w-full" />
+        ) : (
+          <ChartContainer
+            config={usageChartConfig}
+            className="aspect-auto h-56 w-full"
+          >
+            <LineChart
+              accessibilityLayer
+              data={data.days}
+              margin={{ top: 8, left: 0, right: 12 }}
+            >
+              <CartesianGrid vertical={false} />
+              <XAxis
+                dataKey="date"
+                tickLine={false}
+                axisLine={false}
+                tickMargin={8}
+                minTickGap={24}
+                tickFormatter={formatDay}
+              />
+              <YAxis
+                allowDecimals={false}
+                tickLine={false}
+                axisLine={false}
+                width={40}
+              />
+              <ChartTooltip
+                content={
+                  <ChartTooltipContent
+                    indicator="dot"
+                    labelFormatter={(_, payload) =>
+                      formatDay(String(payload?.[0]?.payload?.date ?? ""))
+                    }
+                  />
+                }
+              />
+              <ChartLegend content={<ChartLegendContent />} />
+              <Line
+                dataKey="gatewayCalls"
+                type="monotone"
+                stroke="var(--color-gatewayCalls)"
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+              <Line
+                dataKey="llmCalls"
+                type="monotone"
+                stroke="var(--color-llmCalls)"
+                strokeWidth={2}
+                dot={false}
+                isAnimationActive={false}
+              />
+            </LineChart>
+          </ChartContainer>
+        )}
+      </CardContent>
+    </Card>
+  );
+}
+
 const chartConfig = {
   members: { label: "Members", color: "var(--chart-1)" },
 } satisfies ChartConfig;
@@ -279,9 +439,13 @@ function AgentChart({ adoption }: { adoption: AgentAdoption }) {
 
 function MemberList({
   adoption,
+  selectedUserId,
+  onSelect,
   className,
 }: {
   adoption: AgentAdoption;
+  selectedUserId: string | undefined;
+  onSelect: (userId: string | undefined) => void;
   className?: string;
 }) {
   const [status, setStatus] = useState<StatusFilter>("notConnected");
@@ -309,7 +473,7 @@ function MemberList({
       <CardHeader>
         <CardTitle>Members</CardTitle>
         <CardDescription>
-          {`When each member's agents last used the MCP gateway, the LLM proxy and a skill, over the last ${adoption.lookbackDays} days.`}
+          {`When each member's agents last used the MCP gateway, the LLM proxy and a skill, over the last ${adoption.lookbackDays} days. Select a member to see their calls per day and their connection log.`}
         </CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
@@ -380,6 +544,8 @@ function MemberList({
                     key={member.userId}
                     member={member}
                     adoption={adoption}
+                    selected={member.userId === selectedUserId}
+                    onSelect={onSelect}
                   />
                 ))}
               </TableBody>
@@ -394,14 +560,23 @@ function MemberList({
 function MemberRow({
   member,
   adoption,
+  selected,
+  onSelect,
 }: {
   member: AgentAdoptionMember;
   adoption: AgentAdoption;
+  selected: boolean;
+  onSelect: (userId: string | undefined) => void;
 }) {
   const agents = memberAgents(member);
   const never = `None in the last ${adoption.lookbackDays} days`;
+  const toggle = () => onSelect(selected ? undefined : member.userId);
   return (
-    <TableRow>
+    <TableRow
+      data-state={selected ? "selected" : undefined}
+      onClick={toggle}
+      className="cursor-pointer"
+    >
       <TableCell className="py-2">
         <div className="flex min-w-0 items-center gap-2.5">
           <Tooltip>
@@ -421,9 +596,17 @@ function MemberRow({
           </Tooltip>
           <div className="min-w-0">
             <TruncatedTooltip content={member.name || member.email}>
-              <div className="truncate text-sm font-medium">
+              <UnstyledButton
+                type="button"
+                aria-pressed={selected}
+                onClick={(event) => {
+                  event.stopPropagation();
+                  toggle();
+                }}
+                className="block max-w-full truncate text-left text-sm font-medium focus-visible:underline focus-visible:outline-none"
+              >
                 {member.name || member.email}
-              </div>
+              </UnstyledButton>
             </TruncatedTooltip>
             <div className="truncate text-xs text-muted-foreground">
               {member.email}
@@ -506,9 +689,10 @@ function AdoptionSkeleton() {
         ))}
       </div>
       <div className="grid gap-6 xl:grid-cols-3">
-        <Skeleton className="h-72 w-full rounded-xl" />
         <Skeleton className="h-72 w-full rounded-xl xl:col-span-2" />
+        <Skeleton className="h-72 w-full rounded-xl" />
       </div>
+      <Skeleton className="h-72 w-full rounded-xl" />
     </div>
   );
 }
@@ -556,6 +740,10 @@ export function agentChartData(adoption: AgentAdoption) {
   return none > 0
     ? [...rows, { id: NO_AGENT, label: "Not connected", members: none }]
     : rows;
+}
+
+function formatDay(date: string): string {
+  return date ? format(parseISO(date), "MMM d") : "";
 }
 
 function formatShare(part: number, total: number): string {

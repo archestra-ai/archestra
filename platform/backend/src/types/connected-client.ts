@@ -120,3 +120,19 @@ export const AgentAdoptionSchema = z.object({
   members: z.array(AgentAdoptionMemberSchema),
 });
 export type AgentAdoption = z.infer<typeof AgentAdoptionSchema>;
+
+/** Calls from members' agents per UTC day, oldest first. */
+export const AgentAdoptionUsageSchema = z.object({
+  lookbackDays: z.number(),
+  days: z.array(
+    z.object({
+      /** UTC day, YYYY-MM-DD. */
+      date: z.string(),
+      /** MCP gateway calls from signed-in agents. */
+      gatewayCalls: z.number(),
+      /** LLM proxy calls from agents (external API traffic). */
+      llmCalls: z.number(),
+    }),
+  ),
+});
+export type AgentAdoptionUsage = z.infer<typeof AgentAdoptionUsageSchema>;

@@ -215,6 +215,54 @@ describe("GET /api/connected-clients/adoption", () => {
     });
   });
 
+  test("usage counts calls per day, for one member or everyone", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    const bob = await makeUser({ name: "Bob" });
+    await makeMember(ada.id, organizationId);
+    await makeMember(bob.id, organizationId);
+    await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 0 });
+    await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 0 });
+    await gatewayCall(ada.id, { authMethod: "user_token", daysAgo: 0 });
+    await gatewayCall(bob.id, { authMethod: "oauth", daysAgo: 2 });
+    await makeInteraction(gateway.id, { userId: bob.id, source: "api" });
+    await makeInteraction(gateway.id, { userId: bob.id, source: "chat" });
+
+    const usage = async (userId?: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connected-clients/adoption/usage${userId ? `?userId=${userId}` : ""}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json() as {
+        lookbackDays: number;
+        days: { date: string; gatewayCalls: number; llmCalls: number }[];
+      };
+    };
+    const total = (body: Awaited<ReturnType<typeof usage>>) =>
+      body.days.reduce(
+        (sum, d) => ({
+          gateway: sum.gateway + d.gatewayCalls,
+          llm: sum.llm + d.llmCalls,
+        }),
+        { gateway: 0, llm: 0 },
+      );
+
+    const everyone = await usage();
+    expect(everyone.days).toHaveLength(30);
+    expect(everyone.days.at(-1)).toMatchObject({
+      date: new Date().toISOString().slice(0, 10),
+      gatewayCalls: 2,
+      llmCalls: 1,
+    });
+    expect(total(everyone)).toEqual({ gateway: 3, llm: 1 });
+    expect(total(await usage(ada.id))).toEqual({ gateway: 2, llm: 0 });
+    expect(total(await usage(bob.id))).toEqual({ gateway: 1, llm: 1 });
+  });
+
   async function redeem(userId: string, clientId: ConnectionSetupClientId) {
     const { rawToken } = await ConnectionSetupModel.create({
       organizationId,

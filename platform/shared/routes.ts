@@ -962,6 +962,7 @@ export const RouteId = {
   DisconnectConnectedClient: "disconnectConnectedClient",
   GetConnectedClientLog: "getConnectedClientLog",
   GetAgentAdoption: "getAgentAdoption",
+  GetAgentAdoptionUsage: "getAgentAdoptionUsage",
 
   // MCP App Routes
   GetApps: "getApps",

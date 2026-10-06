@@ -22,6 +22,11 @@ vi.mock("next/navigation", () => ({
 
 vi.mock("@/lib/connected-client.query", () => ({
   useAgentAdoption: () => mockUseAgentAdoption(),
+  useAgentAdoptionUsage: () => ({
+    data: { lookbackDays: 30, days: [] },
+    isPending: false,
+    isLoadingError: false,
+  }),
 }));
 
 function member(overrides: Partial<AgentAdoptionMember>): AgentAdoptionMember {

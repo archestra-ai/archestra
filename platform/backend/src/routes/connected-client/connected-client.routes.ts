@@ -12,6 +12,7 @@ import {
 } from "@/services/connected-client";
 import {
   AgentAdoptionSchema,
+  AgentAdoptionUsageSchema,
   ConnectedClientIdSchema,
   ConnectedClientSchema,
   ConnectionEventActionSchema,
@@ -107,6 +108,33 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         organizationId,
         activeDays: ADOPTION_ACTIVE_DAYS,
         lookbackDays: ADOPTION_LOOKBACK_DAYS,
+      }),
+  );
+
+  app.get(
+    "/api/connected-clients/adoption/usage",
+    {
+      schema: {
+        operationId: RouteId.GetAgentAdoptionUsage,
+        description:
+          "MCP gateway and LLM proxy calls from members' agents per day over the last 30 days, for one member or the whole organization. Counts the same traffic as the adoption summary.",
+        tags: ["Connection Setups"],
+        querystring: z.object({
+          userId: z
+            .string()
+            .optional()
+            .describe(
+              "Only this member's calls; the whole organization when left out",
+            ),
+        }),
+        response: constructResponseSchema(AgentAdoptionUsageSchema),
+      },
+    },
+    async ({ organizationId, query }) =>
+      ConnectedClientModel.getAdoptionUsage({
+        organizationId,
+        lookbackDays: ADOPTION_LOOKBACK_DAYS,
+        userId: query.userId,
       }),
   );
 

@@ -10,6 +10,7 @@ import type {
   AgentAdoption,
   AgentAdoptionMember,
   AgentAdoptionStatus,
+  AgentAdoptionUsage,
   ConnectedClientId,
   ConnectedClientRecord,
   ConnectionEvent,
@@ -345,6 +346,72 @@ class ConnectedClientModel {
     }
 
     return { activeDays, lookbackDays, members: [...byUser.values()] };
+  }
+
+  /**
+   * Daily MCP gateway and LLM proxy calls from members' agents over the
+   * lookback window, oldest day first, for one member or the whole
+   * organization. Counts the same traffic as `getAdoption`.
+   */
+  static async getAdoptionUsage(params: {
+    organizationId: string;
+    lookbackDays: number;
+    userId?: string;
+    now?: Date;
+  }): Promise<AgentAdoptionUsage> {
+    const { organizationId, lookbackDays, userId } = params;
+    const now = params.now ?? new Date();
+    const firstDay = new Date(
+      Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) -
+        (lookbackDays - 1) * DAY_MS,
+    );
+    const sinceTs = sql`${firstDay.toISOString()}::timestamp`;
+    const orgAgents = sql`SELECT ${schema.agentsTable.id} FROM ${schema.agentsTable} WHERE ${schema.agentsTable.organizationId} = ${organizationId}`;
+    const orgMembers = userId
+      ? sql`SELECT ${schema.membersTable.userId} FROM ${schema.membersTable} WHERE ${schema.membersTable.organizationId} = ${organizationId} AND ${schema.membersTable.userId} = ${userId}`
+      : sql`SELECT ${schema.membersTable.userId} FROM ${schema.membersTable} WHERE ${schema.membersTable.organizationId} = ${organizationId}`;
+    const interactions = schema.interactionsTable;
+    const toolCalls = schema.mcpToolCallsTable;
+
+    const [gateway, llm] = await Promise.all([
+      db.execute<{ day: string; calls: number }>(sql`
+        SELECT to_char(date_trunc('day', ${toolCalls.createdAt}), 'YYYY-MM-DD') AS day,
+          count(*)::int AS calls
+        FROM ${toolCalls}
+        WHERE ${toolCalls.createdAt} >= ${sinceTs}
+          AND ${toolCalls.authMethod} = 'oauth'
+          AND ${toolCalls.agentId} IN (${orgAgents})
+          AND ${toolCalls.userId} IN (${orgMembers})
+        GROUP BY 1
+      `),
+      db.execute<{ day: string; calls: number }>(sql`
+        SELECT to_char(date_trunc('day', ${interactions.createdAt}), 'YYYY-MM-DD') AS day,
+          count(*)::int AS calls
+        FROM ${interactions}
+        LEFT JOIN ${schema.virtualApiKeysTable} k
+          ON k.id = ${interactions.passthroughVirtualKeyId}
+        WHERE ${interactions.createdAt} >= ${sinceTs}
+          AND (${interactions.source} = 'api' OR ${interactions.source} IS NULL)
+          AND (${interactions.profileId} IN (${orgAgents})
+            OR ${interactions.profileId} IS NULL)
+          AND coalesce(k.author_id, ${interactions.userId}) IN (${orgMembers})
+        GROUP BY 1
+      `),
+    ]);
+
+    const gatewayByDay = new Map(gateway.rows.map((r) => [r.day, r.calls]));
+    const llmByDay = new Map(llm.rows.map((r) => [r.day, r.calls]));
+    const days = Array.from({ length: lookbackDays }, (_, i) => {
+      const date = new Date(firstDay.getTime() + i * DAY_MS)
+        .toISOString()
+        .slice(0, 10);
+      return {
+        date,
+        gatewayCalls: gatewayByDay.get(date) ?? 0,
+        llmCalls: llmByDay.get(date) ?? 0,
+      };
+    });
+    return { lookbackDays, days };
   }
 
   /**

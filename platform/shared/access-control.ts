@@ -598,6 +598,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetConnectedClientLog]: { log: ["admin"], member: ["read"] },
   // The same per-employee activity, summarized per member.
   [RouteId.GetAgentAdoption]: { log: ["admin"], member: ["read"] },
+  [RouteId.GetAgentAdoptionUsage]: { log: ["admin"], member: ["read"] },
   /**
    * Existence check for a connected remote, used by the Claude Code startup
    * guard on machines with no session. Returns only ok/missing.

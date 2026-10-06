@@ -21,7 +21,7 @@ OpenTelemetry traces, and Prometheus metrics — first-class, not bolted on.*
 
 <br />
 
-<video src="https://github.com/user-attachments/assets/4b278679-9615-4d4a-9bd0-57d0585041c4" controls playsinline width="800"></video>
+https://github.com/user-attachments/assets/4b278679-9615-4d4a-9bd0-57d0585041c4
 
 </div>
 

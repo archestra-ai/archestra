@@ -14,14 +14,13 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
   FilterBar,
-  FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
@@ -37,9 +36,7 @@ import { useOpenAppaChatLaunch } from "./openappa-chat-button";
 
 export function YellsTable() {
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"unresolved" | "resolved" | "all">(
-    "all",
-  );
+  const [tab, setTab] = useState<YellTab>("unresolved");
   const pagination = useCursorPagination();
   const isMobile = useIsMobile();
   const { data: canRead, isPending: permissionsLoading } = useHasPermissions({
@@ -51,7 +48,7 @@ export function YellsTable() {
   const yells = useOpenAppaYells(
     {
       search: search || undefined,
-      status,
+      status: tab,
       cursor: pagination.cursor,
       limit: pagination.pageSize,
     },
@@ -60,7 +57,6 @@ export function YellsTable() {
   const resolve = useResolveOpenAppaYell();
   const clearFilters = () => {
     setSearch("");
-    setStatus("all");
     pagination.goNewest();
   };
   const columns: ColumnDef<OpenAppaYell>[] = [
@@ -77,7 +73,6 @@ export function YellsTable() {
             <span className="block space-y-1 text-xs font-normal text-muted-foreground">
               <YellCaller yell={row.original} />
               <span className="block">
-                {row.original.resolvedAt ? "Resolved" : "Unresolved"} ·{" "}
                 {formatRelativeTimeFromNow(row.original.createdAt)}
               </span>
             </span>
@@ -90,16 +85,6 @@ export function YellsTable() {
       header: "Reported by",
       size: 280,
       cell: ({ row }) => <YellCaller yell={row.original} />,
-    },
-    {
-      id: "status",
-      header: "Status",
-      size: 110,
-      cell: ({ row }) => (
-        <Badge variant="outline">
-          {row.original.resolvedAt ? "Resolved" : "Unresolved"}
-        </Badge>
-      ),
     },
     {
       accessorKey: "createdAt",
@@ -142,6 +127,23 @@ export function YellsTable() {
   return (
     <div className="space-y-4">
       <CollectionFilters>
+        <Tabs
+          value={tab}
+          onValueChange={(value) => {
+            if (value === "unresolved" || value === "resolved") {
+              setTab(value);
+              pagination.goNewest();
+            }
+          }}
+        >
+          <TabsList size="sm" aria-label="Yell status">
+            {Object.entries(YELL_TABS).map(([value, { label }]) => (
+              <TabsTrigger key={value} value={value}>
+                {label}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+        </Tabs>
         <FilterBar
           search={
             <SearchInput
@@ -156,31 +158,8 @@ export function YellsTable() {
               }}
             />
           }
-          onClearFilters={search || status !== "all" ? clearFilters : undefined}
-        >
-          <FilterSelect
-            value={status}
-            inactiveValue="all"
-            ariaLabel="Yell status"
-            placeholder="Status"
-            showSearch={false}
-            items={[
-              { value: "all", label: "All statuses" },
-              { value: "unresolved", label: "Unresolved" },
-              { value: "resolved", label: "Resolved" },
-            ]}
-            onValueChange={(value) => {
-              if (
-                value === "unresolved" ||
-                value === "resolved" ||
-                value === "all"
-              ) {
-                setStatus(value);
-                pagination.goNewest();
-              }
-            }}
-          />
-        </FilterBar>
+          onClearFilters={search ? clearFilters : undefined}
+        />
       </CollectionFilters>
       {yells.isError ? (
         <QueryLoadError
@@ -193,7 +172,6 @@ export function YellsTable() {
             isMobile
               ? columns.filter(
                   (column) =>
-                    column.id !== "status" &&
                     !(
                       "accessorKey" in column &&
                       (column.accessorKey === "createdAt" ||
@@ -202,7 +180,7 @@ export function YellsTable() {
                 )
               : columns
           }
-          fixedWidthColumnIds={["caller", "status", "createdAt"]}
+          fixedWidthColumnIds={["caller", "createdAt"]}
           flexibleColumnIds={["message"]}
           data={yells.data?.data ?? []}
           getRowId={(row) => row.id}
@@ -219,15 +197,9 @@ export function YellsTable() {
               pagination.goOlder(yells.data?.pagination.nextCursor ?? null),
           }}
           emptyIcon={Megaphone}
-          emptyMessage={
-            status === "unresolved"
-              ? "No unresolved yells"
-              : status === "resolved"
-                ? "No resolved yells"
-                : "No yells yet"
-          }
-          emptyDescription="Reports appear here when an agent uses the yell tool."
-          hasActiveFilters={!!search || status !== "all"}
+          emptyMessage={YELL_TABS[tab].emptyMessage}
+          emptyDescription={YELL_TABS[tab].emptyDescription}
+          hasActiveFilters={!!search}
           filteredEmptyMessage="No reports match these filters."
           onClearFilters={clearFilters}
         />
@@ -336,3 +308,17 @@ function YellCaller({ yell }: { yell: OpenAppaYell }) {
           : "Unattributed caller";
   return <span className="text-xs text-muted-foreground">{label}</span>;
 }
+
+const YELL_TABS = {
+  unresolved: {
+    label: "Unresolved",
+    emptyMessage: "No unresolved yells",
+    emptyDescription: "Reports appear here when an agent uses the yell tool.",
+  },
+  resolved: {
+    label: "Resolved",
+    emptyMessage: "No resolved yells",
+    emptyDescription: "Yells you mark resolved move here.",
+  },
+} as const;
+type YellTab = keyof typeof YELL_TABS;

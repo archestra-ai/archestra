@@ -53,6 +53,11 @@ for (const width of [1280, 390]) {
           resolvedAt: null,
           resolvedBy: null,
         };
+        const resolvedYell = {
+          ...yell,
+          resolvedAt: "2026-09-30T13:00:00Z",
+          resolvedBy: "reviewer",
+        };
         const pagination = { limit: 20, hasNext: false, nextCursor: null };
         await mswControl.registerMany([
           {
@@ -104,22 +109,19 @@ for (const width of [1280, 390]) {
           {
             method: "get",
             url: "/api/openappa/yells",
+            query: { status: "unresolved" },
             body: { data: [yell], pagination },
           },
           {
             method: "get",
             url: "/api/openappa/yells",
-            query: { search: "missing" },
+            query: { status: "resolved" },
             body: { data: [], pagination },
           },
           {
             method: "patch",
             url: `/api/openappa/yells/${yell.id}`,
-            body: {
-              ...yell,
-              resolvedAt: "2026-09-30T13:00:00Z",
-              resolvedBy: "reviewer",
-            },
+            body: resolvedYell,
           },
         ]);
         const initialList = page.waitForRequest(
@@ -129,32 +131,21 @@ for (const width of [1280, 390]) {
         await page.goto("/openappa/yells");
         expect(
           new URL((await initialList).url()).searchParams.get("status"),
-        ).toBe("all");
+        ).toBe("unresolved");
         await expect(
           page.getByText(yell.message, { exact: true }),
         ).toBeVisible();
-        if (width === 1280) {
-          const status = page.getByRole("combobox", { name: "Yell status" });
-          await expect(status).toHaveText("All statuses");
-          await status.click();
-          await expect(page.getByRole("option").first()).toHaveText(
-            "All statuses",
-          );
-          const filteredList = page.waitForRequest(
-            (request) =>
-              new URL(request.url()).pathname === "/api/openappa/yells" &&
-              new URL(request.url()).searchParams.get("status") ===
-                "unresolved",
-          );
-          await page
-            .getByRole("option", { name: "Unresolved", exact: true })
-            .click();
-          await filteredList;
-          await page
-            .getByRole("button", { name: "Clear", exact: true })
-            .click();
-          await expect(status).toHaveText("All statuses");
-        }
+        const unresolvedTab = page.getByRole("tab", {
+          name: "Unresolved",
+          exact: true,
+        });
+        const resolvedTab = page.getByRole("tab", {
+          name: "Resolved",
+          exact: true,
+        });
+        await expect(unresolvedTab).toBeVisible();
+        await expect(resolvedTab).toBeVisible();
+        await expect(unresolvedTab).toHaveAttribute("aria-selected", "true");
         await expect(
           page.getByText(
             "Yells are agent reports of confusing blocks or remedies. Investigate them in chat and mark them resolved once fixed.",
@@ -195,29 +186,43 @@ for (const width of [1280, 390]) {
           {
             method: "get",
             url: "/api/openappa/yells",
-            body: {
-              data: [
-                {
-                  ...yell,
-                  resolvedAt: "2026-09-30T13:00:00Z",
-                  resolvedBy: "reviewer",
-                },
-              ],
-              pagination,
-            },
+            query: { status: "unresolved" },
+            body: { data: [], pagination },
+          },
+          {
+            method: "get",
+            url: "/api/openappa/yells",
+            query: { status: "resolved" },
+            body: { data: [resolvedYell], pagination },
           },
         ]);
         await page
           .getByRole("button", { name: "Mark resolved", exact: true })
           .click();
+        await expect(page.getByText("Yell marked resolved")).toBeVisible();
+        await expect(page.getByText("No unresolved yells")).toBeVisible();
+        const resolvedList = page.waitForRequest(
+          (request) =>
+            new URL(request.url()).pathname === "/api/openappa/yells" &&
+            new URL(request.url()).searchParams.get("status") === "resolved",
+        );
+        await resolvedTab.click();
+        await resolvedList;
         await expect(
-          page.getByRole("button", { name: "Reopen", exact: true }),
+          page.getByText(yell.message, { exact: true }),
         ).toBeVisible();
         await mswControl.registerMany([
           {
             method: "get",
             url: "/api/openappa/yells",
+            query: { status: "unresolved" },
             body: { data: [yell], pagination },
+          },
+          {
+            method: "get",
+            url: "/api/openappa/yells",
+            query: { status: "resolved" },
+            body: { data: [], pagination },
           },
           {
             method: "patch",
@@ -226,20 +231,11 @@ for (const width of [1280, 390]) {
           },
         ]);
         await page.getByRole("button", { name: "Reopen", exact: true }).click();
+        await expect(page.getByText("No resolved yells")).toBeVisible();
+        await unresolvedTab.click();
         await expect(
           page.getByRole("button", { name: "Mark resolved", exact: true }),
         ).toBeVisible();
-        await mswControl.registerMany([
-          {
-            method: "patch",
-            url: `/api/openappa/yells/${yell.id}`,
-            body: {
-              ...yell,
-              resolvedAt: "2026-09-30T13:00:00Z",
-              resolvedBy: "reviewer",
-            },
-          },
-        ]);
         await mswControl.use({
           method: "get",
           url: "/api/openappa/yells",

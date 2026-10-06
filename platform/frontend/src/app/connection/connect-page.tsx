@@ -226,10 +226,11 @@ export function ConnectPage() {
           </div>
         )}
 
-        <section className="grid items-start gap-10 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16 [&>*]:max-w-2xl @min-[66rem]:[&>*]:max-w-none">
-          {/* Left: headline, picker */}
-          <div className="min-w-0">
-            <h1 className="text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @7xl:text-6xl">
+        <section className="grid items-start gap-10 @min-[66rem]:items-stretch @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16 [&>*]:max-w-2xl @min-[66rem]:[&>*]:max-w-none">
+          {/* Left: headline, then the picker, which sits on the card's
+              bottom edge so the setup below follows straight on. */}
+          <div className="min-w-0 @min-[66rem]:flex @min-[66rem]:flex-col">
+            <h1 className="max-w-[11em] text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @7xl:text-6xl">
               Connect your agent to {data.appName}
             </h1>
             <p className="mt-4 max-w-[34rem] text-sm leading-relaxed text-muted-foreground">
@@ -237,14 +238,16 @@ export function ConnectPage() {
               usable in your agent of choice.
             </p>
 
-            <h2 className="mt-6 text-sm font-semibold">
-              {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
-            </h2>
-            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Your organization's tools and skills get added to the agent you
-              pick.
-            </p>
-            <AgentTiles data={data} selected={client} onPick={pick} />
+            <div className="mt-6 @min-[66rem]:mt-auto @min-[66rem]:pt-6">
+              <h2 className="text-sm font-semibold">
+                {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
+              </h2>
+              <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                Your organization's tools and skills get added to the agent you
+                pick.
+              </p>
+              <AgentTiles data={data} selected={client} onPick={pick} />
+            </div>
           </div>
 
           {/* Right: the agent's profile card */}
@@ -389,7 +392,7 @@ function AgentTiles({
   // roomier, centered both ways in the space two grid rows would take, with
   // no box around it.
   const row = count <= ROW_MAX;
-  const iconSize = row ? 40 : 34;
+  const iconSize = row ? 40 : 36;
   return (
     <div
       className={cn(
@@ -472,7 +475,7 @@ function Tile({
       {...rest}
       className={cn(
         "relative flex min-w-0 flex-col items-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,color] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-        roomy ? "pt-4 pb-3" : "pt-3 pb-2.5",
+        roomy ? "pt-4 pb-3" : "pt-3.5 pb-3",
         active
           ? // The muted tint is layered over the card fill, so the page's
             // dots never show through a selected tile.
@@ -1192,7 +1195,7 @@ function ProfileCard({
   return (
     <aside
       aria-label={`What ${client.label} gets`}
-      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm @min-[66rem]:mt-2"
+      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm @min-[66rem]:mt-2 @min-[66rem]:self-start"
     >
       <div className="flex items-center gap-3.5">
         <div key={`icon-${client.id}`} className="connect-icon">

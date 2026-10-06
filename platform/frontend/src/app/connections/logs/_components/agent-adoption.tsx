@@ -357,7 +357,7 @@ function MemberList({
         ) : (
           // Long lists scroll inside the card; see SkillUsagePanel for why the
           // cap sits on the table's container.
-          <div className="rounded-md border [&_[data-slot=table-container]]:max-h-[28rem] [&_[data-slot=table-container]]:overflow-y-auto">
+          <div className="overflow-hidden rounded-md border [&_[data-slot=table-container]]:max-h-[28rem] [&_[data-slot=table-container]]:overflow-y-auto">
             <Table>
               <TableHeader className="sticky top-0 z-10 bg-card">
                 <TableRow>

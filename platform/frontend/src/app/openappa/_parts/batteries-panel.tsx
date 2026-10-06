@@ -1,6 +1,12 @@
 "use client";
 
-import { DocsPage, getDocsUrl } from "@archestra/shared";
+import {
+  ARCHESTRA_MCP_CATALOG_ID,
+  ARCHESTRA_MCP_SERVER_NAME,
+  DocsPage,
+  getDocsUrl,
+  matchBatteries,
+} from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -22,14 +28,17 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
 import {
+  siClaude,
   siCloudflare,
   siDatabricks,
   siGithub,
+  siGoogle,
   siHuggingface,
   siLinear,
   siNotion,
   siPagerduty,
   siPosthog,
+  siSentry,
 } from "simple-icons";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
@@ -499,21 +508,30 @@ type BatteryTableRow = {
 };
 
 const BUNDLED_PROVIDER_ICONS: Record<string, { path: string; hex: string }> = {
+  "claude-code": siClaude,
   cloudflare: siCloudflare,
   databricks: siDatabricks,
   github: siGithub,
+  "google-workspace": siGoogle,
   huggingface: siHuggingface,
   linear: siLinear,
   notion: siNotion,
   pagerduty: siPagerduty,
   posthog: siPosthog,
+  sentry: siSentry,
 };
 
 const UNBOUND = "__unbound__";
 
 type BatteryCredential = PolicyBattery["credentials"][number];
 
-type CatalogEntry = { id: string; name: string; icon?: string | null };
+type CatalogEntry = {
+  id: string;
+  name: string;
+  icon?: string | null;
+  serverUrl?: string | null;
+  localConfig?: { dockerImage?: string } | null;
+};
 
 function HeldPullNotice({
   heldPull,
@@ -554,7 +572,11 @@ function HeldPullNotice({
   );
 }
 
-/** A row's mark: its catalog entry's icon, else the bundled provider's, else a battery. */
+/**
+ * A row's mark: the icon of a catalog entry it is installed on, else of one it
+ * matches the way "Fits your servers" does or that shares its name, else the
+ * bundled provider's, else a battery.
+ */
 function BatteryIcon({
   row,
   catalog,
@@ -562,14 +584,30 @@ function BatteryIcon({
   row: BatteryTableRow;
   catalog: CatalogEntry[];
 }) {
-  const match = catalog.find(
-    (entry) =>
-      row.summary?.installs.some((install) => install.catalogId === entry.id) ||
-      entry.name.toLowerCase() === row.name.toLowerCase(),
-  );
+  const match = catalog
+    .flatMap((entry) => {
+      if (!entry.icon) return [];
+      if (
+        row.summary?.installs.some((install) => install.catalogId === entry.id)
+      )
+        return [{ entry, rank: 0 }];
+      const evidence = matchBatteries(entry, new Set([row.name]))[0]?.evidence;
+      if (evidence) return [{ entry, rank: evidence === "name" ? 2 : 1 }];
+      // An uploaded battery has no match rule; its catalog entry may share its name.
+      return entry.name.toLowerCase() === row.name.toLowerCase()
+        ? [{ entry, rank: 3 }]
+        : [];
+    })
+    .sort((a, b) => a.rank - b.rank)[0]?.entry;
   const providerIcon = BUNDLED_PROVIDER_ICONS[row.name];
-  if (match?.icon)
+  if (match)
     return <McpCatalogIcon icon={match.icon} catalogId={match.id} size={20} />;
+  // Archestra's own catalog entry has no icon; McpCatalogIcon draws the app logo for its id.
+  if (
+    row.summary?.source === "bundled" &&
+    row.name === ARCHESTRA_MCP_SERVER_NAME
+  )
+    return <McpCatalogIcon catalogId={ARCHESTRA_MCP_CATALOG_ID} size={20} />;
   if (row.summary?.source === "bundled" && providerIcon)
     return (
       <svg

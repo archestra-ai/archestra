@@ -1,10 +1,11 @@
-import type { InternalMcpCatalog } from "@/types";
-import type { BatteryMatchEvidence } from "@/types/openappa-batteries";
+/** What a catalog entry was matched on; a name alone is a weak signal. */
+type BatteryMatchEvidence = "host" | "image" | "name";
 
-type BatteryMatchCatalog = Pick<
-  InternalMcpCatalog,
-  "name" | "serverUrl" | "localConfig"
->;
+type BatteryMatchCatalog = {
+  name: string;
+  serverUrl?: string | null;
+  localConfig?: { dockerImage?: string } | null;
+};
 
 type BatteryMatch = { battery: string; evidence: BatteryMatchEvidence };
 
@@ -102,6 +103,7 @@ const BATTERY_MATCH_RULES: BatteryMatchRule[] = [
     images: [],
     names: ["microsoft learn", "ms learn", "mslearn"],
   },
+  { battery: "monday", hosts: ["monday.com"], images: [], names: ["monday"] },
   {
     battery: "notion",
     hosts: ["mcp.notion.com", "notion.so", "notion.com"],
@@ -128,7 +130,7 @@ const BATTERY_MATCH_RULES: BatteryMatchRule[] = [
   },
 ];
 
-function urlHost(serverUrl: string | null): string | null {
+function urlHost(serverUrl: string | null | undefined): string | null {
   if (!serverUrl) return null;
   try {
     return new URL(serverUrl).hostname.toLowerCase();

@@ -26,7 +26,6 @@ import {
   Copy,
   Cpu,
   Download,
-  Gauge,
   Info,
   ListOrdered,
   MessageSquareText,
@@ -34,7 +33,6 @@ import {
   Settings,
   ShieldCheck,
   ShieldOff,
-  SlidersHorizontal,
   SquareTerminal,
   Terminal,
   TriangleAlert,
@@ -54,6 +52,7 @@ import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -84,11 +83,9 @@ import {
   AgentSearch,
   BrowseDialog,
   fmt,
-  IncludeDialog,
   InfoDialog,
   nameOf,
   plural,
-  toolLoading,
 } from "./connect-page-parts";
 import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
@@ -101,22 +98,7 @@ const ConnectCommandPanel = dynamic(
   { ssr: false },
 );
 
-type DialogKind =
-  | "include"
-  | "servers"
-  | "skills"
-  | "plugins"
-  | "routing"
-  | "guardrails"
-  | "cursor";
-
-/** The parts a user can leave out, in the words the page uses. */
-const PART_LABELS: [keyof ConnectChoices, string][] = [
-  ["tools", "tools"],
-  ["skills", "skills"],
-  ["proxy", "model routing"],
-  ["plugins", "plugins"],
-];
+type DialogKind = "servers" | "skills" | "plugins" | "guardrails" | "cursor";
 
 const MOTION_CSS = `
 @keyframes connect-pop {
@@ -149,7 +131,7 @@ export function ConnectPage() {
   // page actually lands on.
   const [manualChosen, setManualChosen] = useState<boolean | null>(null);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
-  const [focusServer, setFocusServer] = useState<string | null>(null);
+  const [focus, setFocus] = useState<string | null>(null);
   // What the user leaves out, per agent. The prompt carries it, and this
   // browser keeps it for a while (connect-choices.ts).
   const [choices, setChoices] = useState<ConnectChoices>(ALL_INCLUDED);
@@ -187,9 +169,6 @@ export function ConnectPage() {
   const skills = skillsOn && choices.skills ? skillsSorted : [];
   const skillCount = skills.length;
   const prompt = data.connectPrompt(client, choices);
-  const leftOut = PART_LABELS.filter(
-    ([part]) => parts[part] && !choices[part],
-  ).map(([, label]) => label);
   const setChoice = (part: keyof ConnectChoices, value: boolean) => {
     const next = { ...choices, [part]: value };
     setChoices(next);
@@ -269,9 +248,11 @@ export function ConnectPage() {
             tools={tools}
             skills={skills}
             skillCount={skillCount}
+            skillsOff={parts.skills && !choices.skills}
             routed={routed}
-            onOpen={(d, server) => {
-              setFocusServer(server ?? null);
+            onRouting={(on) => setChoice("proxy", on)}
+            onOpen={(d, item) => {
+              setFocus(item ?? null);
               setDialog(d);
             }}
           />
@@ -289,12 +270,6 @@ export function ConnectPage() {
           download={download}
           choices={choices}
           prompt={prompt}
-          includeLabel={
-            leftOut.length === 0
-              ? "Choose what to include"
-              : `Leaving out ${leftOut.join(", ")}`
-          }
-          onInclude={() => setDialog("include")}
           onManual={(v) => {
             setManualChosen(v);
             // Only manual setup is bookmarkable; Script is a view of Prompt.
@@ -307,26 +282,19 @@ export function ConnectPage() {
         />
       </div>
 
-      <IncludeDialog
-        open={dialog === "include"}
-        onOpenChange={(v) => !v && setDialog(null)}
-        data={data}
-        client={client}
-        choices={choices}
-        onChoice={setChoice}
-      />
       <BrowseDialog
         open={
           dialog === "servers" || dialog === "skills" || dialog === "plugins"
         }
         tab={dialog === "skills" || dialog === "plugins" ? dialog : "servers"}
-        focus={focusServer}
+        focus={focus}
         onTab={(t) => setDialog(t)}
         onOpenChange={(v) => !v && setDialog(null)}
         data={data}
         client={client}
         skills={skillsSorted}
         choices={choices}
+        onChoice={setChoice}
       />
       <InfoDialog
         open={dialog === "cursor"}
@@ -348,17 +316,6 @@ export function ConnectPage() {
             key.
           </p>
         </div>
-      </InfoDialog>
-      <InfoDialog
-        open={dialog === "routing"}
-        onOpenChange={(v) => !v && setDialog(null)}
-        title={`Model requests go through ${data.appName}`}
-      >
-        <p>
-          {routed
-            ? `${client.label} sends model requests through ${data.appName} instead of straight to the provider. You keep the same models; your org's limits, logging and cost tracking apply.`
-            : `Model routing is turned off, so ${client.label} keeps sending model requests straight to its provider. Turn it on under Choose what to include.`}
-        </p>
       </InfoDialog>
       <InfoDialog
         open={dialog === "guardrails"}
@@ -550,8 +507,6 @@ function ConnectArea({
   download,
   choices,
   prompt,
-  includeLabel,
-  onInclude,
   onManual,
   onCursorNote,
   footprint,
@@ -571,8 +526,6 @@ function ConnectArea({
   choices: ConnectChoices;
   /** null when every part is left out. */
   prompt: string | null;
-  includeLabel: string;
-  onInclude: () => void;
   onManual: (v: boolean) => void;
   onCursorNote: () => void;
   footprint: ConnectFootprint;
@@ -616,9 +569,9 @@ function ConnectArea({
     }
   };
   const generic = setup === "prompt-or-manual";
-  const leftOutParts = PART_LABELS.filter(([part]) => !choices[part]).map(
-    ([part]) => part,
-  );
+  const leftOutParts = (
+    Object.keys(choices) as (keyof ConnectChoices)[]
+  ).filter((part) => !choices[part]);
 
   return (
     <Band busy={data.revalidating}>
@@ -693,12 +646,7 @@ function ConnectArea({
             pluginsEnabled={data.pluginsEnabled}
           />
           <BandFooter>
-            <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
-              {includeLabel}
-            </MetaButton>
-            <span className="md:ml-auto">
-              {footprintSummary(client, footprint, skillCount)}
-            </span>
+            <span>{footprintSummary(client, footprint, skillCount)}</span>
           </BandFooter>
         </>
       ) : manual ? (
@@ -796,14 +744,9 @@ function ConnectArea({
             </div>
           )}
 
-          {/* Footer: what to include, and what it adds. */}
+          {/* Footer: what connecting adds. */}
           <BandFooter>
-            <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
-              {includeLabel}
-            </MetaButton>
-            <span className="md:ml-auto">
-              {footprintSummary(client, footprint, skillCount)}
-            </span>
+            <span>{footprintSummary(client, footprint, skillCount)}</span>
           </BandFooter>
         </>
       )}
@@ -966,33 +909,6 @@ function ManualSteps({
   );
 }
 
-function MetaButton({
-  icon,
-  children,
-  onClick,
-  className,
-  ...rest
-}: {
-  icon: ReactNode;
-  children: ReactNode;
-  onClick?: () => void;
-} & ComponentProps<"button">) {
-  return (
-    <UnstyledButton
-      type="button"
-      onClick={onClick}
-      {...rest}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm tabular-nums underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&_svg]:size-3.5",
-        className,
-      )}
-    >
-      {icon}
-      {children}
-    </UnstyledButton>
-  );
-}
-
 /** Prompt, or the app's other way in (Manual setup or Script). */
 function ModeSwitch({
   alt,
@@ -1093,9 +1009,12 @@ const SKILL_ROWS = 6;
 interface StatusChip {
   id: string;
   icon: ReactNode;
-  title: string;
+  title: ReactNode;
   sub: ReactNode;
-  onOpen: () => void;
+  /** Opens its details; a chip with a control instead has none. */
+  onOpen?: () => void;
+  /** A switch on the chip itself. */
+  control?: ReactNode;
 }
 
 function ProfileCard({
@@ -1105,18 +1024,25 @@ function ProfileCard({
   tools,
   skills,
   skillCount,
+  skillsOff,
   routed,
+  onRouting,
   onOpen,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
   /** This agent's model requests go through the LLM proxy. */
   routed: boolean;
+  /** Turns model routing on or off for this agent. */
+  onRouting: (on: boolean) => void;
+  /** The user turned skills off (in See all, Skills). */
+  skillsOff: boolean;
   servers: ConnectServer[];
   tools: number;
   skills: ConnectPageSkill[];
   skillCount: number;
-  onOpen: (d: DialogKind, server?: string) => void;
+  /** Opens a dialog; for servers and skills, on one row's item. */
+  onOpen: (d: DialogKind, item?: string) => void;
 }) {
   const gatewayName = data.gateway?.name;
   const skillsOn = data.skillsEnabled && data.totalSkills > 0;
@@ -1131,9 +1057,24 @@ function ProfileCard({
           <Cpu />
         </ChipIcon>
       ),
-      title: "Model routing",
-      sub: routed ? `On, through ${data.appName}` : "Off for this agent",
-      onOpen: () => onOpen("routing"),
+      title: (
+        <span className="inline-flex items-center gap-1">
+          Model routing
+          <InfoTip label="What model routing does">
+            {client.label} sends model requests through {data.appName}'s LLM
+            proxy instead of straight to the provider. Same models; your org's
+            limits, logging and cost tracking apply.
+          </InfoTip>
+        </span>
+      ),
+      sub: routed ? "On, through the LLM proxy" : "Off for this agent",
+      control: (
+        <Switch
+          checked={routed}
+          onCheckedChange={onRouting}
+          aria-label="Model routing"
+        />
+      ),
     });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)
@@ -1200,11 +1141,14 @@ function ProfileCard({
                 sub={
                   <>
                     from {fmt(servers.length)} MCP{" "}
-                    {plural(servers.length, "server")}
-                    <InfoTip label="What MCP servers are">
+                    {plural(servers.length, "server")} ·{" "}
+                    {data.progressive ? "load on demand" : "all load at start"}
+                    <InfoTip label="How tools load">
                       Tools your agent calls, served through your organization's
-                      gateway
-                      {gatewayName ? ` (${gatewayName})` : ""}.
+                      gateway{gatewayName ? ` (${gatewayName})` : ""}.{" "}
+                      {data.progressive
+                        ? "Your agent starts with a small fixed set and finds the rest when a task needs them, so adding servers doesn't grow it."
+                        : "Every included tool loads at the start of each session; more tools take more of your agent's working memory."}
                     </InfoTip>
                   </>
                 }
@@ -1253,29 +1197,42 @@ function ProfileCard({
             >
               <ListBlock
                 icon={<BookOpen />}
-                title={`+${fmt(skillCount)} ${plural(skillCount, "skill")}`}
-                sub="loaded when a task needs one"
+                title={
+                  skillsOff
+                    ? "Skills off"
+                    : `+${fmt(skillCount)} ${plural(skillCount, "skill")}`
+                }
+                sub={
+                  skillsOff
+                    ? "turn them on under See all"
+                    : "loaded when a task needs one"
+                }
+                muted={skillsOff}
                 more={
-                  skillCount > SKILL_ROWS
+                  !skillsOff && skillCount > SKILL_ROWS
                     ? `See all ${fmt(skillCount)}`
                     : "See all"
                 }
                 onMore={() => onOpen("skills")}
               >
-                {skills.length === 0 ? (
+                {skillsOff ? null : skills.length === 0 ? (
                   <span className="block py-1 text-muted-foreground">
-                    Every skill is left out.
+                    No skills yet.
                   </span>
                 ) : (
                   <span className="grid grid-cols-2 gap-x-2">
                     {skills.slice(0, SKILL_ROWS).map((s) => (
-                      <span
+                      <UnstyledButton
                         key={s.id}
+                        type="button"
+                        onClick={() => onOpen("skills", s.id)}
                         title={s.description}
-                        className="flex h-6 min-w-0 items-center truncate font-mono text-[11px] text-foreground"
+                        className="-mx-1.5 flex h-6.5 min-w-0 items-center rounded-md px-1.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       >
-                        {s.name}
-                      </span>
+                        <span className="min-w-0 truncate font-mono text-xs text-foreground">
+                          {s.name}
+                        </span>
+                      </UnstyledButton>
                     ))}
                   </span>
                 )}
@@ -1289,43 +1246,45 @@ function ProfileCard({
               style={{ animationDelay: "360ms" }}
             >
               <div className="grid gap-2 sm:grid-cols-2">
-                {statusChips.map((c) => (
-                  <UnstyledButton
-                    key={c.id}
-                    type="button"
-                    onClick={c.onOpen}
-                    className="flex min-w-0 items-center gap-2.5 rounded-xl border bg-background py-2 pr-3 pl-2 text-left transition-colors hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                  >
-                    {c.icon}
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold tracking-tight">
-                        {c.title}
+                {statusChips.map((c) => {
+                  const body = (
+                    <>
+                      {c.icon}
+                      <span className="min-w-0 flex-1">
+                        <span className="block truncate text-[13px] font-semibold tracking-tight">
+                          {c.title}
+                        </span>
+                        <span className="block text-xs leading-snug text-muted-foreground">
+                          {c.sub}
+                        </span>
                       </span>
-                      <span className="block text-xs leading-snug text-muted-foreground">
-                        {c.sub}
-                      </span>
-                    </span>
-                  </UnstyledButton>
-                ))}
+                      {c.control}
+                    </>
+                  );
+                  const chip =
+                    "flex min-w-0 items-center gap-2.5 rounded-xl border bg-background py-2 pr-3 pl-2 text-left";
+                  return c.onOpen ? (
+                    <UnstyledButton
+                      key={c.id}
+                      type="button"
+                      onClick={c.onOpen}
+                      className={cn(
+                        chip,
+                        "transition-colors hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                      )}
+                    >
+                      {body}
+                    </UnstyledButton>
+                  ) : (
+                    <div key={c.id} className={chip}>
+                      {body}
+                    </div>
+                  );
+                })}
               </div>
             </li>
           )}
         </ul>
-      </div>
-
-      {/* Footer: what it costs. */}
-      <div className="mt-4 space-y-1.5 border-t pt-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <span className="flex min-w-0 items-center gap-2">
-            <Gauge className="size-3.5 shrink-0" />
-            <span>{toolLoading(data, tools)}</span>
-          </span>
-          <InfoTip label="How tools load">
-            {data.progressive
-              ? "Your agent starts with a small fixed set of tools and finds the rest when a task needs them. Adding servers doesn't grow it."
-              : "Every included tool loads at the start of each session. More tools take more of your agent's working memory."}
-          </InfoTip>
-        </div>
       </div>
     </aside>
   );

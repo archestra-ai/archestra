@@ -5,6 +5,7 @@ import {
   render as rtlRender,
   screen,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -268,6 +269,32 @@ describe("ConnectPage (no connect request)", () => {
         /connect\.md\?client=cursor&exclude=skills and connect Cursor\./,
       ),
     ).toBeVisible();
+  });
+
+  it("turns model routing off from the profile card", async () => {
+    window.localStorage.clear();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useLlmProxy).mockReturnValue({
+      data: { id: "proxy-1" },
+    } as unknown as ReturnType<typeof useLlmProxy>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["cursor"],
+        connectionLlmProxyEnabled: true,
+      },
+    });
+    render(<ConnectionPage />);
+
+    await userEvent.click(
+      screen.getByRole("switch", { name: "Model routing" }),
+    );
+
+    expect(
+      screen.getByText(/connect\.md\?client=cursor&exclude=proxy/),
+    ).toBeVisible();
+    expect(screen.getByText("Off for this agent")).toBeVisible();
   });
 
   it("gives other agents the generic prompt with the gateway to set up", () => {

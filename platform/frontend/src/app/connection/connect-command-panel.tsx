@@ -1555,48 +1555,61 @@ function DesktopDownload({
 }) {
   if (gate)
     return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
+  // Same shape as the Connect page's prompt row, so picking Claude Desktop
+  // doesn't make the page taller.
   return (
-    <div className="mt-2 space-y-3 px-1">
-      <p className="text-xs text-muted-foreground">
-        Open it in Claude Desktop and confirm Install. Your browser guides you
-        through subscription sign-in and restarting Desktop. Finish active
-        Desktop tasks first.
+    <div className="mt-2">
+      <p className="px-1 text-xs text-muted-foreground">
+        Open it in Claude Desktop and confirm Install; your browser guides you
+        through sign-in and the restart. Finish active Desktop tasks first.
         {proxyActive && (
           <span>
             {" "}
-            Model routing switches Desktop to third-party mode, with its own
-            conversation history; Settings, Import brings your Claude.ai
-            conversations over.
+            With model routing, Desktop switches to third-party mode with its
+            own history; Settings, Import brings your Claude.ai conversations
+            over.
           </span>
         )}
       </p>
-      {failed ? (
-        <div role="alert" className="flex items-center gap-3 text-sm">
-          <span>Could not prepare the installer.</span>
-          <Button variant="outline" size="sm" onClick={onRetry}>
+      <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+        <Download className="size-4 shrink-0 text-muted-foreground" />
+        {failed ? (
+          <span role="alert" className="min-w-0 flex-1 truncate text-sm">
+            Could not prepare the installer.
+          </span>
+        ) : (
+          <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+            {pending
+              ? "Preparing your installer"
+              : "Your installer, ready for 15 minutes"}
+          </span>
+        )}
+        {failed ? (
+          <Button variant="outline" size="lg" onClick={onRetry}>
             <span>Try again</span>
           </Button>
-        </div>
-      ) : installerUrl ? (
-        <Button asChild size="lg" className="h-12 rounded-xl px-6 text-base">
-          <a href={installerUrl} download>
+        ) : installerUrl ? (
+          <Button asChild size="lg" className="h-12 rounded-xl px-6 text-base">
+            <a href={installerUrl} download>
+              <Download />
+              <span>Download installer</span>
+            </a>
+          </Button>
+        ) : (
+          <Button size="lg" disabled className="h-12 rounded-xl px-6 text-base">
             <Download />
-            <span>Download installer</span>
-          </a>
-        </Button>
-      ) : (
-        <Button size="lg" disabled className="h-12 rounded-xl px-6 text-base">
-          <Download />
-          <span>{pending ? "Preparing installer" : "Download installer"}</span>
-        </Button>
-      )}
-      <p className="text-xs text-muted-foreground">
-        The installer expires in 15 minutes. Already using a third-party Desktop
-        profile? Use the terminal option.
-      </p>
+            <span>
+              {pending ? "Preparing installer" : "Download installer"}
+            </span>
+          </Button>
+        )}
+      </div>
       {command && (
-        <details className="text-xs text-muted-foreground">
-          <summary className="cursor-pointer">Advanced: terminal setup</summary>
+        <details className="mt-2 px-1 text-xs text-muted-foreground">
+          <summary className="cursor-pointer">
+            Advanced: terminal setup, for a Desktop already on a third-party
+            profile
+          </summary>
           <p className="mt-2">
             The terminal option requires Python 3.9+ and Claude Code for
             subscription sign-in.

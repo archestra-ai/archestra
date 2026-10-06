@@ -365,16 +365,9 @@ const registry = defineArchestraTools([
     title: "Read OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Use this read to recover after a lost local publish response, without publishing again. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing. `effective.content` is the whole composed policy and is often larger than the policy itself; pass omitEffectiveContent when you only need the policy's own text and revision.",
-    schema: z.strictObject({
-      omitEffectiveContent: z
-        .boolean()
-        .nullish()
-        .describe(
-          "Set true to leave out `effective.content`, the composed policy text. `effective.error` and `effective.batteries` are still returned.",
-        ),
-    }),
-    async handler({ args, context }) {
+      "Read organization.appa.toml and its revision before changing guardrails. This is the organization's own policy text, used for new conversations; its `include` list names the batteries that compose into enforcement on top of it, `[server_aliases]` points each battery's namespace at the MCP servers it governs, `[credentials]` names the runtime credential each battery helper reads, and `effective` shows the composed result the runtime enforces, with one entry per declared battery and the status it composed under. `enforcement.active` reports whether deployment enforcement is actually on; healthy composition alone does not prove enforcement. Use this read to recover after a lost local publish response, without publishing again. Report any battery whose status is not `active`, and any `effective.error`, to the user. Preserve unrelated rules and comments when editing.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
       if (!context.organizationId)
         throw new ApiError(401, "Organization context is required");
       const [root, effective] = await Promise.all([
@@ -384,9 +377,7 @@ const registry = defineArchestraTools([
       const sync = await getAppaGithubSync(context.organizationId);
       return result({
         ...root,
-        effective: args.omitEffectiveContent
-          ? { error: effective.error, batteries: effective.batteries }
-          : effective,
+        effective,
         enforcement: await getGuardrailsDeployment(),
         delivery: sync.source?.interval
           ? {

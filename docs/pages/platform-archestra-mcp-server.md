@@ -151,11 +151,7 @@ Required RBAC permission: None (no additional RBAC permission required)
 
 Required RBAC permission: `openappaPolicy:read`
 
-##### Input
-
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| `omitEffectiveContent` | `boolean \| null` | No | Set true to leave out `effective.content`, the composed policy text. `effective.error` and `effective.batteries` are still returned. |
+This tool takes no arguments.
 
 
 #### inspect_guardrails_server

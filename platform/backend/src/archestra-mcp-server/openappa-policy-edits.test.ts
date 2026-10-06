@@ -243,36 +243,3 @@ describe("policy edits", () => {
     ).toMatchObject({ revision: 1, content });
   });
 });
-
-describe("reading the policy", () => {
-  async function read(args: Record<string, unknown>) {
-    const result = await executeArchestraTool(
-      "archestra__get_guardrails_policy",
-      args,
-      context,
-    );
-    return modelText(result) as unknown as {
-      content: string;
-      revision: number;
-      effective: Record<string, unknown>;
-    };
-  }
-
-  test("omitEffectiveContent leaves out only the composed text", async () => {
-    const policy = withRules(["github__list_issues"]);
-    await saveRevision(policy);
-
-    const full = await read({});
-    const filler = await read({ omitEffectiveContent: false });
-    const lean = await read({ omitEffectiveContent: true });
-
-    expect(full.effective).toHaveProperty("content");
-    expect(filler.effective).toEqual(full.effective);
-    expect(lean.effective).toEqual({
-      error: full.effective.error,
-      batteries: full.effective.batteries,
-    });
-    expect(lean.content).toBe(policy);
-    expect(lean.revision).toBe(full.revision);
-  });
-});

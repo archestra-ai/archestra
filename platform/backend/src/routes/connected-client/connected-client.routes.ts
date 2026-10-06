@@ -11,6 +11,7 @@ import {
   listConnectedClients,
 } from "@/services/connected-client";
 import {
+  AgentAdoptionSchema,
   ConnectedClientIdSchema,
   ConnectedClientSchema,
   ConnectionEventActionSchema,
@@ -19,6 +20,10 @@ import {
   constructResponseSchema,
   DeleteObjectResponseSchema,
 } from "@/types";
+
+/** Traffic this recent counts as active; older traffic is read this far back. */
+const ADOPTION_ACTIVE_DAYS = 7;
+const ADOPTION_LOOKBACK_DAYS = 30;
 
 const routes: FastifyPluginAsyncZod = async (app) => {
   app.get(
@@ -83,6 +88,25 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         action,
         startDate,
         endDate,
+      }),
+  );
+
+  app.get(
+    "/api/connected-clients/adoption",
+    {
+      schema: {
+        operationId: RouteId.GetAgentAdoption,
+        description:
+          "Every organization member with their agent adoption: agents set up through the Connect page, and the last MCP gateway, LLM proxy and skill use seen from their agents. A member counts as active when their agents made gateway or LLM proxy calls in the last 7 days; setups alone only show the installer ran.",
+        tags: ["Connection Setups"],
+        response: constructResponseSchema(AgentAdoptionSchema),
+      },
+    },
+    async ({ organizationId }) =>
+      ConnectedClientModel.getAdoption({
+        organizationId,
+        activeDays: ADOPTION_ACTIVE_DAYS,
+        lookbackDays: ADOPTION_LOOKBACK_DAYS,
       }),
   );
 

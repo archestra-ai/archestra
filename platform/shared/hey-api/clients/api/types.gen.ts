@@ -40936,6 +40936,102 @@ export type GetConnectedClientLogResponses = {
 
 export type GetConnectedClientLogResponse = GetConnectedClientLogResponses[keyof GetConnectedClientLogResponses];
 
+export type GetAgentAdoptionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connected-clients/adoption';
+};
+
+export type GetAgentAdoptionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionError = GetAgentAdoptionErrors[keyof GetAgentAdoptionErrors];
+
+export type GetAgentAdoptionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        activeDays: number;
+        lookbackDays: number;
+        members: Array<{
+            userId: string;
+            name: string;
+            email: string;
+            status: 'active' | 'inactive' | 'setUp' | 'notConnected';
+            setUpAgents: Array<'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode'>;
+            lastSetUpAt: string | null;
+            gatewayLastSeenAt: string | null;
+            llmLastSeenAt: string | null;
+            llmAgents: Array<string>;
+            skillLastUsedAt: string | null;
+        }>;
+    };
+};
+
+export type GetAgentAdoptionResponse = GetAgentAdoptionResponses[keyof GetAgentAdoptionResponses];
+
 export type DisconnectConnectedClientData = {
     body?: never;
     path: {

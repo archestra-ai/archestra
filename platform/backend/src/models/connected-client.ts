@@ -7,6 +7,9 @@ import {
   decodeCursor,
 } from "@/database/utils/pagination";
 import type {
+  AgentAdoption,
+  AgentAdoptionMember,
+  AgentAdoptionStatus,
   ConnectedClientId,
   ConnectedClientRecord,
   ConnectionEvent,
@@ -200,6 +203,151 @@ class ConnectedClientModel {
   }
 
   /**
+   * Every organization member with what their agents have done: redeemed
+   * setups (any time) and gateway, LLM proxy and skill traffic over the last
+   * `lookbackDays`. Traffic, not tickets, decides whether a member counts as
+   * connected, because a ticket is redeemed before its install runs.
+   *
+   * Gateway traffic counts only OAuth sign-ins: that is how every agent set up
+   * from the Connect page reaches the gateway, and it leaves out the built-in
+   * chat and apps, which write to the same log with other credentials. LLM
+   * proxy traffic counts external API calls, attributed to the passthrough
+   * key's owner when one was sent, since the user header alone is only a hint.
+   */
+  static async getAdoption(params: {
+    organizationId: string;
+    activeDays: number;
+    lookbackDays: number;
+    now?: Date;
+  }): Promise<AgentAdoption> {
+    const { organizationId, activeDays, lookbackDays } = params;
+    const now = params.now ?? new Date();
+    const since = new Date(now.getTime() - lookbackDays * DAY_MS);
+    const activeSince = new Date(now.getTime() - activeDays * DAY_MS);
+    // Raw timestamps hold UTC wall time; an ISO string cast drops its zone.
+    const sinceTs = sql`${since.toISOString()}::timestamp`;
+    const orgAgents = sql`SELECT ${schema.agentsTable.id} FROM ${schema.agentsTable} WHERE ${schema.agentsTable.organizationId} = ${organizationId}`;
+    const interactions = schema.interactionsTable;
+    const toolCalls = schema.mcpToolCallsTable;
+    const skillEvents = [
+      schema.skillUsageEventsTable,
+      schema.pluginSkillUsageEventsTable,
+      schema.externalMcpSkillUsageEventsTable,
+    ];
+
+    const [members, setUp, gateway, llm, skills] = await Promise.all([
+      db.execute<{ user_id: string; name: string; email: string }>(sql`
+        SELECT u.id AS user_id, u.name, u.email
+        FROM ${schema.membersTable} m
+        JOIN ${schema.usersTable} u ON u.id = m.user_id
+        WHERE m.organization_id = ${organizationId}
+      `),
+      db.execute<{
+        user_id: string;
+        client_id: ConnectionSetupClientId;
+        last_set_up_at: Date | string;
+      }>(sql`
+        SELECT ${setups.userId} AS user_id, ${setups.clientId} AS client_id,
+          max(${setups.consumedAt}) AS last_set_up_at
+        FROM ${setups}
+        WHERE ${setups.organizationId} = ${organizationId}
+          AND ${setups.consumedAt} IS NOT NULL
+          AND ${setups.revokedAt} IS NULL
+        GROUP BY ${setups.userId}, ${setups.clientId}
+      `),
+      db.execute<{ user_id: string; last_seen_at: Date | string }>(sql`
+        SELECT ${toolCalls.userId} AS user_id,
+          max(${toolCalls.createdAt}) AS last_seen_at
+        FROM ${toolCalls}
+        WHERE ${toolCalls.createdAt} >= ${sinceTs}
+          AND ${toolCalls.authMethod} = 'oauth'
+          AND ${toolCalls.userId} IS NOT NULL
+          AND ${toolCalls.agentId} IN (${orgAgents})
+        GROUP BY ${toolCalls.userId}
+      `),
+      db.execute<{
+        user_id: string;
+        agent: string | null;
+        last_seen_at: Date | string;
+      }>(sql`
+        SELECT coalesce(k.author_id, ${interactions.userId}) AS user_id,
+          ${interactions.externalAgentId} AS agent,
+          max(${interactions.createdAt}) AS last_seen_at
+        FROM ${interactions}
+        LEFT JOIN ${schema.virtualApiKeysTable} k
+          ON k.id = ${interactions.passthroughVirtualKeyId}
+        WHERE ${interactions.createdAt} >= ${sinceTs}
+          AND (${interactions.source} = 'api' OR ${interactions.source} IS NULL)
+          AND (${interactions.profileId} IN (${orgAgents})
+            OR ${interactions.profileId} IS NULL)
+          AND coalesce(k.author_id, ${interactions.userId}) IS NOT NULL
+        GROUP BY 1, 2
+      `),
+      db.execute<{ user_id: string; last_used_at: Date | string }>(sql`
+        SELECT user_id, max(created_at) AS last_used_at FROM (
+          ${sql.join(
+            skillEvents.map(
+              (table) =>
+                sql`SELECT ${table.userId} AS user_id, ${table.createdAt} AS created_at FROM ${table} WHERE ${table.createdAt} >= ${sinceTs} AND ${table.userId} IS NOT NULL`,
+            ),
+            sql` UNION ALL `,
+          )}
+        ) s
+        GROUP BY user_id
+      `),
+    ]);
+
+    const byUser = new Map<string, AgentAdoptionMember>();
+    for (const row of members.rows) {
+      byUser.set(row.user_id, {
+        userId: row.user_id,
+        name: row.name,
+        email: row.email,
+        status: "notConnected",
+        setUpAgents: [],
+        lastSetUpAt: null,
+        gatewayLastSeenAt: null,
+        llmLastSeenAt: null,
+        llmAgents: [],
+        skillLastUsedAt: null,
+      });
+    }
+    for (const row of setUp.rows) {
+      const member = byUser.get(row.user_id);
+      if (!member) continue;
+      member.setUpAgents.push(row.client_id);
+      member.lastSetUpAt = latest(
+        member.lastSetUpAt,
+        toUtcDate(row.last_set_up_at),
+      );
+    }
+    for (const row of gateway.rows) {
+      const member = byUser.get(row.user_id);
+      if (member) member.gatewayLastSeenAt = toUtcDate(row.last_seen_at);
+    }
+    for (const row of llm.rows) {
+      const member = byUser.get(row.user_id);
+      if (!member) continue;
+      member.llmLastSeenAt = latest(
+        member.llmLastSeenAt,
+        toUtcDate(row.last_seen_at),
+      );
+      member.llmAgents.push(row.agent || "unknown");
+    }
+    for (const row of skills.rows) {
+      const member = byUser.get(row.user_id);
+      if (member) member.skillLastUsedAt = toUtcDate(row.last_used_at);
+    }
+    for (const member of byUser.values()) {
+      member.status = adoptionStatus(member, activeSince);
+      member.setUpAgents.sort();
+      member.llmAgents.sort();
+    }
+
+    return { activeDays, lookbackDays, members: [...byUser.values()] };
+  }
+
+  /**
    * Mark the user's redeemed setups for one client as disconnected, so the
    * client drops out of both lists. Returns the stamped setups' skill share
    * link ids (for revocation) and how many setups changed.
@@ -231,6 +379,27 @@ class ConnectedClientModel {
       ),
     };
   }
+}
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+function latest(current: Date | null, next: Date): Date {
+  return current && current > next ? current : next;
+}
+
+function adoptionStatus(
+  member: AgentAdoptionMember,
+  activeSince: Date,
+): AgentAdoptionStatus {
+  const lastSeen = [
+    member.gatewayLastSeenAt,
+    member.llmLastSeenAt,
+  ].reduce<Date | null>(
+    (acc, value) => (value ? latest(acc, value) : acc),
+    null,
+  );
+  if (lastSeen) return lastSeen >= activeSince ? "active" : "inactive";
+  return member.setUpAgents.length > 0 ? "setUp" : "notConnected";
 }
 
 /** A raw row of {@link ConnectedClientModel.listEvents}' query. */

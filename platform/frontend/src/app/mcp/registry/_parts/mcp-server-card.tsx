@@ -69,7 +69,6 @@ import {
   canFixInstall,
   type McpServerIssue,
 } from "@/lib/mcp/mcp-server-issues";
-import { useCanReauthenticate } from "@/lib/mcp/use-can-reauthenticate";
 import { useAssignableTeams } from "@/lib/teams/team.query";
 import { isCardShowingInstallInProgress } from "./card-install-state";
 import { useCanModifyCatalogItem } from "./catalog-edit-access";
@@ -177,7 +176,6 @@ export function McpServerCard({
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
-  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
@@ -395,23 +393,18 @@ export function McpServerCard({
 
   const _mcpServersCount = mcpServerOfCurrentCatalogItem?.length ?? 0;
 
-  // Check for OAuth refresh errors on any credential the user can see
-  // The backend already filters mcpServerOfCurrentCatalogItem to only include visible credentials
-  // Re-auth entry point gated by per-connection permission, not catalog-edit
-  // access; the detailed reason lives on the credentials tab. When several
-  // connections have failed, prefer one the caller can re-authenticate so the
-  // marker stays actionable regardless of row order.
-  const canReauthenticate = useCanReauthenticate();
-  const oauthFailedServers = alertingEnabled
-    ? (mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [])
-    : [];
-  const oauthFailedServer =
-    oauthFailedServers.find((s) => canReauthenticate(s)) ??
-    oauthFailedServers[0];
-  const oauthReauthIndicator = oauthFailedServer ? (
+  // The re-auth marker follows the shared issue rule: it shows only when a
+  // connection the viewer's own calls resolve to lost its sign-in, never for a
+  // colleague's connection an admin merely sees. It is a click target when the
+  // viewer may re-authenticate that connection; the detailed reason lives on
+  // the credentials tab.
+  const viewerReauthIssue = issues?.find(
+    (issue) => issue.kind === "needs-reauth" && issue.onViewerConnection,
+  );
+  const oauthReauthIndicator = viewerReauthIssue ? (
     <OAuthReauthIndicator
       onActivate={
-        canReauthenticate(oauthFailedServer)
+        viewerReauthIssue.audience === "you"
           ? () => goToItemPage("credentials")
           : undefined
       }

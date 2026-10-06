@@ -69,6 +69,12 @@ export interface McpServerIssue {
    * own mutes, so nobody ever reads a colleague's note here.
    */
   mutedReason: string | null;
+  /**
+   * Set on needs-reauth issues: true when the broken connection is one the
+   * viewer's own tool calls resolve to. False means it is somebody else's
+   * connection the viewer only sees because they may manage it.
+   */
+  onViewerConnection?: boolean;
 }
 
 type AlertMuteForIssues =
@@ -76,7 +82,11 @@ type AlertMuteForIssues =
 
 export type CatalogItemForIssues = Pick<
   archestraApiTypes.GetInternalMcpCatalogResponses["200"][number],
-  "id" | "serverType" | "multitenant" | "alertMutes"
+  | "id"
+  | "serverType"
+  | "multitenant"
+  | "alertMutes"
+  | "dynamicConnectionMcpServerId"
 >;
 
 export type InstalledServerForIssues = Pick<
@@ -84,6 +94,9 @@ export type InstalledServerForIssues = Pick<
   | "id"
   | "catalogId"
   | "ownerId"
+  | "scope"
+  | "teamId"
+  | "canUseCredential"
   | "localInstallationStatus"
   | "localInstallationError"
   | "oauthRefreshError"
@@ -97,6 +110,7 @@ export type InstalledServerForIssues = Pick<
 /** What the viewer may do — resolved by the caller from session + permissions. */
 export interface IssueViewer {
   userId: string | null;
+  /** May re-authenticate this connection (owner, team manager or admin). */
   canReauthenticate: (server: InstalledServerForIssues) => boolean;
   /** mcpServerInstallation:admin — may act on any install, not just their own. */
   canManageInstalls: boolean;
@@ -285,6 +299,30 @@ const INSTALL_OWNER_OR_ADMIN_ACTS =
   "Whoever installed this connection, or an MCP installations admin, can fix it.";
 
 /**
+ * The neutral notice for an installations manager when only other people's
+ * connections lost their sign-in: a count, not "sign in again", because the
+ * viewer's own calls do not go through those connections. Null when the
+ * issues are not exactly that case, so callers fall back to
+ * `describeMcpServerIssue`.
+ */
+export function describeOtherConnectionsReauth(
+  issues: McpServerIssue[],
+): string | null {
+  const others = issues.filter(
+    (issue) =>
+      issue.kind === "needs-reauth" &&
+      issue.audience === "others" &&
+      !issue.muted &&
+      issue.onViewerConnection === false,
+  );
+  if (others.length === 0 || others.length !== issues.length) return null;
+  const count = others.length;
+  return count === 1
+    ? "1 other connection needs re-authentication. Its owner has to sign in to the provider again; the connections list marks it."
+    : `${count} other connections need re-authentication. Their owners have to sign in to the provider again; the connections list marks them.`;
+}
+
+/**
  * A runtime / install error for a surface that already names the server: the
  * "Deployment mcp-<name>-<hash> failed: " prefix and the kubelet's
  * "container=… pod=…(uid)" identifiers only push the cause off screen, so
@@ -442,12 +480,23 @@ function computeItemIssues({
   }
 
   // OAuth refresh failures are per connection: each has to be
-  // re-authenticated by whoever owns it, so no dedup.
+  // re-authenticated by whoever owns it, so no dedup. Only the connection the
+  // viewer's own calls resolve to is theirs to fix; anybody else's is shown
+  // only to someone who may manage it, and never as "sign in again".
+  const viewerConnections = viewerConnectionIds({
+    item,
+    servers,
+    userId: viewer.userId,
+  });
   for (const s of servers) {
     if (!s.oauthRefreshError) continue;
+    const onViewerConnection = viewerConnections.has(s.id);
+    const canReauthenticate = viewer.canReauthenticate(s);
+    if (!onViewerConnection && !canReauthenticate) continue;
     push({
       kind: "needs-reauth",
-      audience: viewer.canReauthenticate(s) ? "you" : "others",
+      audience: onViewerConnection && canReauthenticate ? "you" : "others",
+      onViewerConnection,
       serverId: s.id,
       detail:
         s.oauthRefreshErrorDescription ?? s.oauthRefreshErrorMessage ?? null,
@@ -457,6 +506,38 @@ function computeItemIssues({
   }
 
   return issues.sort((a, b) => compareKinds(a.kind, b.kind));
+}
+
+/**
+ * The connections the viewer's tool calls resolve to, mirroring the backend's
+ * runtime resolution: a catalog-pinned connection serves every caller;
+ * otherwise the viewer's own personal connection, then a team connection
+ * they can use, then an org-wide one. Every connection on the winning tier
+ * counts, since the backend's pick among several team connections is not
+ * visible here.
+ */
+function viewerConnectionIds({
+  item,
+  servers,
+  userId,
+}: {
+  item: CatalogItemForIssues;
+  servers: InstalledServerForIssues[];
+  userId: string | null;
+}): Set<string> {
+  const pinned = item.dynamicConnectionMcpServerId
+    ? servers.find((s) => s.id === item.dynamicConnectionMcpServerId)
+    : undefined;
+  if (pinned) return new Set([pinned.id]);
+  const tiers = [
+    servers.filter(
+      (s) => !!userId && s.ownerId === userId && !s.teamId && s.scope !== "org",
+    ),
+    servers.filter((s) => !!s.teamId && s.canUseCredential),
+    servers.filter((s) => s.scope === "org"),
+  ];
+  const winning = tiers.find((tier) => tier.length > 0) ?? [];
+  return new Set(winning.map((s) => s.id));
 }
 
 function formatRuntimeDetail(entry: McpDeploymentStatusEntry): string {

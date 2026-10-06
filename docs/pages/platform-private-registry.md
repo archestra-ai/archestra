@@ -119,6 +119,8 @@ Each registry card shows how many agents and gateways can reach the server. Hove
 
 A server is flagged only when it cannot operate: its pod failed to start, it stopped running, or its stored credential was rejected. Pending installs, image approvals, and configuration changes that leave the running server untouched are never flagged.
 
+A rejected credential asks you to sign in again only when your own tool calls use that connection. Installation admins see other members' rejected connections as a count instead.
+
 The registry's **Action required** sort puts flagged servers first. The sidebar count opens a table-only attention view for the servers you can fix. Each row shows the issue and the connection owner or required admin role. Use the **Issue** filter to narrow the table to failed starts, stopped servers, or rejected credentials. Issue-specific remediation stays visible in the Actions column; a row leaves only when its health signal clears. **Re-authenticate** opens a compact credential-repair form for the affected connection directly on the server details page. **Manage credentials** remains the broader view for listing, adding, and revoking connections.
 
 Every alert can be dismissed from your queue without hiding the problem from other viewers. You can optionally add a reason; the **Dismissed** view shows it in the **Dismiss reason** column and lets you restore the alert. Select several servers to dismiss their alerts or remove their affected connections together. Bulk removal requires every selected row to identify connections you are allowed to remove and always asks for confirmation. A dismissal is pinned to one failure episode and expires automatically when the underlying failure changes.

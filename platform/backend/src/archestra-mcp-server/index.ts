@@ -882,10 +882,10 @@ function zodValidationErrorResult(params: {
   if (skeleton) {
     const requiredNote =
       skeleton.required.length > 0
-        ? `; required: ${skeleton.required.map((key) => JSON.stringify(key)).join(", ")}`
-        : "";
+        ? `required: ${skeleton.required.map((key) => JSON.stringify(key)).join(", ")}`
+        : "none is required";
     lines.push(
-      `The tool's parameters are shaped like ${skeleton.skeleton} (replace each <…> with a real value${requiredNote}).`,
+      `The tool's parameters are shaped like ${skeleton.skeleton} (send only the parameters you need; ${requiredNote}).`,
     );
   }
   return {

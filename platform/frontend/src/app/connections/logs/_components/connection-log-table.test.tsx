@@ -38,6 +38,8 @@ function event(overrides: Partial<ConnectionEvent>): ConnectionEvent {
     userName: "Ada Lovelace",
     userEmail: "ada@example.com",
     clientId: "claude-code",
+    agentName: "Claude Code",
+    via: "setup",
     platform: "macos",
     deviceName: "work-laptop",
     mcpGateway: null,

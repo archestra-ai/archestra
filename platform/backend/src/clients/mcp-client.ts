@@ -296,6 +296,8 @@ export type TokenAuthContext = {
   rawToken?: string;
   /** True if authenticated via browser session (MCP proxy route) */
   isSessionAuth?: boolean;
+  /** OAuth client the caller signed in with, for OAuth tokens */
+  oauthClientId?: string;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
   passthroughHeaders?: Record<string, string>;
   /** Durable execution that issued this gateway request, when provided. */
@@ -322,6 +324,7 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
 type ToolCallAuthInfo = {
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
+  oauthClientId?: string;
   executedAs?: McpExecutedAs;
   runId?: string;
 };
@@ -619,6 +622,7 @@ class McpClient {
         ? {
             userId: tokenAuth.userId,
             authMethod: deriveAuthMethod(tokenAuth),
+            oauthClientId: tokenAuth.oauthClientId,
             executedAs: platformExecutedAs(tokenAuth.userId),
             runId: tokenAuth.runId,
           }
@@ -3770,6 +3774,7 @@ class McpClient {
           userId: authInfo?.userId ?? null,
           runId: authInfo?.runId ?? null,
           authMethod: authInfo?.authMethod ?? null,
+          oauthClientId: authInfo?.oauthClientId ?? null,
         },
         audit,
       );

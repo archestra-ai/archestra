@@ -148295,7 +148295,7 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, and each time one was disconnected.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
+        "description": "Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -148415,14 +148415,17 @@
                             "type": "string"
                           },
                           "clientId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "agentName": {
+                            "type": "string"
+                          },
+                          "via": {
                             "type": "string",
                             "enum": [
-                              "claude-code",
-                              "cursor",
-                              "codex",
-                              "claude-desktop",
-                              "copilot-cli",
-                              "opencode"
+                              "setup",
+                              "oauthSignIn"
                             ]
                           },
                           "platform": {
@@ -148497,6 +148500,8 @@
                           "userName",
                           "userEmail",
                           "clientId",
+                          "agentName",
+                          "via",
                           "platform",
                           "deviceName",
                           "mcpGateway",
@@ -148822,24 +148827,49 @@
                               "notConnected"
                             ]
                           },
-                          "setUpAgents": {
+                          "agents": {
                             "type": "array",
                             "items": {
-                              "type": "string",
-                              "enum": [
-                                "claude-code",
-                                "cursor",
-                                "codex",
-                                "claude-desktop",
-                                "copilot-cli",
-                                "opencode"
-                              ]
+                              "type": "object",
+                              "properties": {
+                                "clientId": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "setUpAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "signedInAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "gatewayLastSeenAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "llmLastSeenAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "clientId",
+                                "name",
+                                "setUpAt",
+                                "signedInAt",
+                                "gatewayLastSeenAt",
+                                "llmLastSeenAt"
+                              ],
+                              "additionalProperties": false
                             }
-                          },
-                          "lastSetUpAt": {
-                            "nullable": true,
-                            "type": "string",
-                            "format": "date-time"
                           },
                           "gatewayLastSeenAt": {
                             "nullable": true,
@@ -148850,12 +148880,6 @@
                             "nullable": true,
                             "type": "string",
                             "format": "date-time"
-                          },
-                          "llmAgents": {
-                            "type": "array",
-                            "items": {
-                              "type": "string"
-                            }
                           },
                           "skillLastUsedAt": {
                             "nullable": true,
@@ -148868,11 +148892,9 @@
                           "name",
                           "email",
                           "status",
-                          "setUpAgents",
-                          "lastSetUpAt",
+                          "agents",
                           "gatewayLastSeenAt",
                           "llmLastSeenAt",
-                          "llmAgents",
                           "skillLastUsedAt"
                         ],
                         "additionalProperties": false
@@ -312292,6 +312314,10 @@
                               "session"
                             ]
                           },
+                          "oauthClientId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -312317,6 +312343,7 @@
                           "userId",
                           "runId",
                           "authMethod",
+                          "oauthClientId",
                           "createdAt",
                           "userName",
                           "appName"
@@ -312744,6 +312771,10 @@
                         "session"
                       ]
                     },
+                    "oauthClientId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -312769,6 +312800,7 @@
                     "userId",
                     "runId",
                     "authMethod",
+                    "oauthClientId",
                     "createdAt",
                     "userName",
                     "appName"

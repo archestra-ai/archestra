@@ -3738,7 +3738,7 @@ export const getConfig = <ThrowOnError extends boolean = false>(options?: Option
 export const getConnectedClients = <ThrowOnError extends boolean = false>(options?: Options<GetConnectedClientsData, ThrowOnError>) => (options?.client ?? client).get<GetConnectedClientsResponses, GetConnectedClientsErrors, ThrowOnError>({ url: '/api/connected-clients', ...options });
 
 /**
- * Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, and each time one was disconnected.
+ * Log of the organization's agent connections, newest first: an event each time a member connected a coding client through the Connect page, with the machine and what the setup included, each time one was disconnected, and each agent's first OAuth sign-in to the gateway under the name it registered.
  *
  * Authentication:
  *

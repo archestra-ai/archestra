@@ -1,0 +1,1 @@
+ALTER TABLE "mcp_tool_calls" ADD COLUMN "oauth_client_id" text;

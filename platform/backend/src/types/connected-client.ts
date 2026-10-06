@@ -57,7 +57,18 @@ export const ConnectionEventSchema = z.object({
   userId: z.string(),
   userName: z.string(),
   userEmail: z.string(),
-  clientId: ConnectionSetupClientIdSchema,
+  /**
+   * Connect page client id when the agent is recognised; null for an agent
+   * set up by hand that signed in under a name of its own.
+   */
+  clientId: z.string().nullable(),
+  /** The Connect page label, or the name the agent registered with. */
+  agentName: z.string(),
+  /**
+   * How the event was recorded: a Connect page setup (or its disconnect), or
+   * an agent's first OAuth sign-in to the gateway.
+   */
+  via: z.enum(["setup", "oauthSignIn"]),
   /** Connect events only. */
   platform: z.union([ConnectionSetupPlatformSchema, z.null()]),
   /** Hostname the installer reported; null for disconnects and old installers. */
@@ -77,7 +88,8 @@ export type ConnectionEvent = z.infer<typeof ConnectionEventSchema>;
  * setup tickets: a ticket only proves the installer fetched its script.
  * - `active`: gateway or LLM proxy traffic in the active window
  * - `inactive`: traffic in the lookback window, none in the active window
- * - `setUp`: a redeemed setup, but no traffic in the lookback window
+ * - `setUp`: a redeemed setup or a gateway OAuth sign-in, but no traffic in
+ *   the lookback window
  * - `notConnected`: no setup and no traffic
  */
 export const AgentAdoptionStatusSchema = z.enum([
@@ -88,25 +100,44 @@ export const AgentAdoptionStatusSchema = z.enum([
 ]);
 export type AgentAdoptionStatus = z.infer<typeof AgentAdoptionStatusSchema>;
 
+/**
+ * One agent a member connected or used: set up from the Connect page, signed
+ * in to the gateway with OAuth, or seen on the gateway or the LLM proxy.
+ */
+export const AdoptionAgentSchema = z.object({
+  /**
+   * Connect page client id when the agent is recognised ("claude-code",
+   * "amp", ...; LLM proxy calls may carry any id the generic instructions
+   * sent), else null.
+   */
+  clientId: z.string().nullable(),
+  /** The Connect page label, or the name the agent registered or sent. */
+  name: z.string(),
+  /** Newest redeemed, not disconnected Connect page setup. */
+  setUpAt: z.date().nullable(),
+  /** First OAuth sign-in to the gateway. */
+  signedInAt: z.date().nullable(),
+  /** Newest gateway call from this agent in the lookback window. */
+  gatewayLastSeenAt: z.date().nullable(),
+  /** Newest LLM proxy call from this agent in the lookback window. */
+  llmLastSeenAt: z.date().nullable(),
+});
+export type AdoptionAgent = z.infer<typeof AdoptionAgentSchema>;
+
 /** One organization member's agent connections and traffic. */
 export const AgentAdoptionMemberSchema = z.object({
   userId: z.string(),
   name: z.string(),
   email: z.string(),
   status: AgentAdoptionStatusSchema,
-  /** Agents with a redeemed, not disconnected setup. */
-  setUpAgents: z.array(ConnectionSetupClientIdSchema),
-  /** Newest redeemed setup, any agent. */
-  lastSetUpAt: z.date().nullable(),
-  /** Newest MCP gateway call from a signed-in agent in the lookback window. */
+  agents: z.array(AdoptionAgentSchema),
+  /**
+   * Newest MCP gateway call from a signed-in agent in the lookback window,
+   * including calls from before the gateway recorded which agent made them.
+   */
   gatewayLastSeenAt: z.date().nullable(),
   /** Newest LLM proxy call in the lookback window. */
   llmLastSeenAt: z.date().nullable(),
-  /**
-   * Agents seen on the LLM proxy in the lookback window, as recorded
-   * `external_agent_id` values ("unknown" when the call carried none).
-   */
-  llmAgents: z.array(z.string()),
   /** Newest skill activation through the gateway in the lookback window. */
   skillLastUsedAt: z.date().nullable(),
 });

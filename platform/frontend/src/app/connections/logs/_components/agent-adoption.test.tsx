@@ -35,12 +35,26 @@ function member(overrides: Partial<AgentAdoptionMember>): AgentAdoptionMember {
     name: "Ada Lovelace",
     email: "ada@example.com",
     status: "notConnected",
-    setUpAgents: [],
-    lastSetUpAt: null,
+    agents: [],
     gatewayLastSeenAt: null,
     llmLastSeenAt: null,
-    llmAgents: [],
     skillLastUsedAt: null,
+    ...overrides,
+  };
+}
+
+const now = new Date().toISOString();
+
+function agent(
+  overrides: Partial<AgentAdoptionMember["agents"][number]>,
+): AgentAdoptionMember["agents"][number] {
+  return {
+    clientId: null,
+    name: "Agent",
+    setUpAt: null,
+    signedInAt: null,
+    gatewayLastSeenAt: null,
+    llmLastSeenAt: null,
     ...overrides,
   };
 }
@@ -55,16 +69,22 @@ const adoption: AgentAdoption = {
       name: "Grace Hopper",
       email: "grace@example.com",
       status: "active",
-      setUpAgents: ["claude-code"],
       gatewayLastSeenAt: new Date().toISOString(),
-      llmAgents: ["anthropic_claude_code", "some_other_agent"],
+      agents: [
+        agent({ clientId: "claude-code", name: "Claude Code", setUpAt: now }),
+        agent({ clientId: null, name: "Droid", gatewayLastSeenAt: now }),
+        agent({ clientId: null, name: "Unknown agent", llmLastSeenAt: now }),
+      ],
     }),
     member({
       userId: "u-alan",
       name: "Alan Turing",
       email: "alan@example.com",
       status: "setUp",
-      setUpAgents: ["codex", "claude-code"],
+      agents: [
+        agent({ clientId: "claude-code", name: "Claude Code", setUpAt: now }),
+        agent({ clientId: "codex", name: "Codex", setUpAt: now }),
+      ],
     }),
   ],
 };
@@ -104,11 +124,12 @@ describe("AgentAdoptionOverview", () => {
 });
 
 describe("agentChartData", () => {
-  it("counts members per agent, with Other and Not connected rows", () => {
+  it("counts members per agent by name, with a Not connected row", () => {
     expect(agentChartData(adoption)).toEqual([
       { id: "claude-code", label: "Claude Code", members: 2 },
       { id: "codex", label: "Codex", members: 1 },
-      { id: "other", label: "Other", members: 1 },
+      { id: "droid", label: "Droid", members: 1 },
+      { id: "name:unknown agent", label: "Unknown agent", members: 1 },
       { id: "none", label: "Not connected", members: 1 },
     ]);
   });

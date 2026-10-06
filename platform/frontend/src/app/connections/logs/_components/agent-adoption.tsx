@@ -1,18 +1,5 @@
 "use client";
 
-import {
-  CLAUDE_CODE_CLIENT_ID,
-  CLAUDE_DESKTOP_CLIENT_ID,
-  CODEX_CLIENT_ID,
-  COPILOT_CLI_CLIENT_ID,
-  CURSOR_CLIENT_ID,
-  OPENCODE_CLIENT_ID,
-} from "@archestra/shared";
-import {
-  INSTALLER_CLIENT_IDS,
-  INSTALLER_CLIENT_LABELS,
-  type InstallerClientId,
-} from "@archestra/shared/connection-setup";
 import { format, parseISO } from "date-fns";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -26,8 +13,6 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
-import { ClientIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS } from "@/app/connection/clients";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -78,6 +63,7 @@ import {
 } from "@/lib/connected-client.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { AgentIcon, agentLabel, connectClientFor } from "./agent-icon";
 
 /** Worst first: the page exists to surface who hasn't connected. */
 const STATUS_ORDER: AgentAdoptionStatus[] = [
@@ -116,18 +102,6 @@ const STATUS_META: Record<
   },
 };
 
-/** LLM proxy `external_agent_id` values the Connect page's agents send. */
-const LLM_AGENT_CLIENT: Record<string, InstallerClientId> = {
-  [CLAUDE_CODE_CLIENT_ID]: "claude-code",
-  [CLAUDE_DESKTOP_CLIENT_ID]: "claude-desktop",
-  [CODEX_CLIENT_ID]: "codex",
-  [COPILOT_CLI_CLIENT_ID]: "copilot-cli",
-  [CURSOR_CLIENT_ID]: "cursor",
-  [OPENCODE_CLIENT_ID]: "opencode",
-};
-
-const CLIENTS_BY_ID = new Map(CONNECT_CLIENTS.map((c) => [c.id, c]));
-const OTHER_AGENTS = "other";
 const NO_AGENT = "none";
 
 type StatusFilter = AgentAdoptionStatus | "all";
@@ -385,7 +359,7 @@ function AgentChart({ adoption }: { adoption: AgentAdoption }) {
       <CardHeader>
         <CardTitle>Members per agent</CardTitle>
         <CardDescription>
-          {`Agents set up from the Connect page or seen on the LLM proxy in the last ${adoption.lookbackDays} days. A member with two agents counts twice.`}
+          {`Agents set up from the Connect page, signed in to the gateway, or seen on the gateway or LLM proxy in the last ${adoption.lookbackDays} days. A member with two agents counts twice.`}
         </CardDescription>
       </CardHeader>
       <CardContent>
@@ -619,22 +593,21 @@ function MemberRow({
           <span className="text-xs text-muted-foreground">—</span>
         ) : (
           <div className="flex items-center -space-x-1">
-            {agents.slice(0, 4).map((id) => {
-              const client = CLIENTS_BY_ID.get(id);
-              return client ? (
-                <Tooltip key={id}>
-                  <TooltipTrigger asChild>
-                    <span className="rounded-[6px] ring-2 ring-card">
-                      <ClientIcon client={client} size={22} />
-                    </span>
-                  </TooltipTrigger>
-                  <TooltipContent>
-                    {INSTALLER_CLIENT_LABELS[id as InstallerClientId] ??
-                      client.label}
-                  </TooltipContent>
-                </Tooltip>
-              ) : null;
-            })}
+            {agents.slice(0, 4).map((agent) => (
+              <Tooltip key={agentKey(agent)}>
+                <TooltipTrigger asChild>
+                  <span className="rounded-[6px] ring-2 ring-card">
+                    <AgentIcon agent={agent} />
+                  </span>
+                </TooltipTrigger>
+                <TooltipContent className="flex flex-col gap-0.5">
+                  <span className="font-medium">{agentLabel(agent)}</span>
+                  {agentDetails(agent).map((line) => (
+                    <span key={line}>{line}</span>
+                  ))}
+                </TooltipContent>
+              </Tooltip>
+            ))}
             {agents.length > 4 ? (
               <span className="pl-2 text-xs text-muted-foreground">
                 +{agents.length - 4}
@@ -699,47 +672,88 @@ function AdoptionSkeleton() {
 
 // === helpers
 
-/** Connect page agents a member set up or was seen using, in page order. */
-function memberAgents(member: AgentAdoptionMember): string[] {
-  const ids = new Set<string>(member.setUpAgents);
-  for (const agent of member.llmAgents) {
-    const client = LLM_AGENT_CLIENT[agent];
-    if (client) ids.add(client);
-  }
-  return INSTALLER_CLIENT_IDS.filter((id) => ids.has(id));
+type Agent = AgentAdoptionMember["agents"][number];
+
+/** One entry per app, whichever way the agent was recognised. */
+function agentKey(agent: Agent): string {
+  return connectClientFor(agent)?.id ?? `name:${agent.name.toLowerCase()}`;
 }
 
 /**
- * Members per agent, counting a member once per agent they set up or whose
- * LLM proxy calls came from it. Calls from agents the Connect page doesn't set
- * up are one "Other" row, and members who haven't connected are the last row.
- * Agents nobody uses are left out.
+ * The member's agents, one per app: an app can arrive under several entries,
+ * such as one Amp sign-in per Amp install.
+ */
+function memberAgents(member: AgentAdoptionMember): Agent[] {
+  const byKey = new Map<string, Agent>();
+  const newest = (a: string | null, b: string | null) =>
+    !a ? b : !b ? a : a > b ? a : b;
+  const oldest = (a: string | null, b: string | null) =>
+    !a ? b : !b ? a : a < b ? a : b;
+  for (const agent of member.agents) {
+    const key = agentKey(agent);
+    const known = byKey.get(key);
+    byKey.set(
+      key,
+      known
+        ? {
+            ...known,
+            setUpAt: newest(known.setUpAt, agent.setUpAt),
+            signedInAt: oldest(known.signedInAt, agent.signedInAt),
+            gatewayLastSeenAt: newest(
+              known.gatewayLastSeenAt,
+              agent.gatewayLastSeenAt,
+            ),
+            llmLastSeenAt: newest(known.llmLastSeenAt, agent.llmLastSeenAt),
+          }
+        : { ...agent, clientId: connectClientFor(agent)?.id ?? agent.clientId },
+    );
+  }
+  return [...byKey.values()];
+}
+
+/** How the agent was connected and when it was last seen, one per line. */
+function agentDetails(agent: Agent): string[] {
+  const when = (at: string | null) =>
+    at ? formatRelativeTimeFromNow(at) : "none";
+  return [
+    agent.setUpAt ? `Set up ${formatRelativeTimeFromNow(agent.setUpAt)}` : null,
+    agent.signedInAt
+      ? `Signed in to the gateway ${formatRelativeTimeFromNow(agent.signedInAt)}`
+      : null,
+    `MCP gateway: ${when(agent.gatewayLastSeenAt)}`,
+    `LLM proxy: ${when(agent.llmLastSeenAt)}`,
+  ].filter((line): line is string => line !== null);
+}
+
+/**
+ * Members per agent, counting a member once per agent they set up, signed in
+ * or were seen using; members who haven't connected are the last row. Agents
+ * nobody uses are left out.
  */
 export function agentChartData(adoption: AgentAdoption) {
-  const counts = new Map<string, number>();
-  const bump = (id: string) => counts.set(id, (counts.get(id) ?? 0) + 1);
+  const rows = new Map<
+    string,
+    { id: string; label: string; members: number }
+  >();
+  let notConnected = 0;
   for (const member of adoption.members) {
-    const agents = memberAgents(member);
-    const other = member.llmAgents.some((a) => !LLM_AGENT_CLIENT[a]);
-    for (const id of agents) bump(id);
-    if (other) bump(OTHER_AGENTS);
-    if (member.status === "notConnected") bump(NO_AGENT);
+    if (member.status === "notConnected") notConnected += 1;
+    for (const agent of memberAgents(member)) {
+      const id = agentKey(agent);
+      const row = rows.get(id) ?? { id, label: agentLabel(agent), members: 0 };
+      row.members += 1;
+      rows.set(id, row);
+    }
   }
-  const rows = [...INSTALLER_CLIENT_IDS, OTHER_AGENTS]
-    .map((id) => ({
-      id,
-      label:
-        id === OTHER_AGENTS
-          ? "Other"
-          : INSTALLER_CLIENT_LABELS[id as InstallerClientId],
-      members: counts.get(id) ?? 0,
-    }))
-    .filter((row) => row.members > 0)
-    .sort((a, b) => b.members - a.members);
-  const none = counts.get(NO_AGENT) ?? 0;
-  return none > 0
-    ? [...rows, { id: NO_AGENT, label: "Not connected", members: none }]
-    : rows;
+  const sorted = [...rows.values()].sort(
+    (a, b) => b.members - a.members || a.label.localeCompare(b.label),
+  );
+  return notConnected > 0
+    ? [
+        ...sorted,
+        { id: NO_AGENT, label: "Not connected", members: notConnected },
+      ]
+    : sorted;
 }
 
 function formatDay(date: string): string {

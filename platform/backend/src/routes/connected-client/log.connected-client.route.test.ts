@@ -3,7 +3,7 @@ import {
   EDITOR_ROLE_NAME,
   MEMBER_ROLE_NAME,
 } from "@archestra/shared";
-import { withDbTransaction } from "@/database";
+import db, { schema, withDbTransaction } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { ConnectedClientModel, ConnectionSetupModel } from "@/models";
@@ -130,6 +130,54 @@ describe("GET /api/connected-clients/log", () => {
         (e: { action: string }) => e.action,
       ),
     ).toEqual(["disconnected"]);
+  });
+
+  test("logs an agent's first OAuth sign-in under its registered name", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada Lovelace" });
+    await makeMember(ada.id, organizationId);
+    const outsider = await makeUser({ name: "Outsider" });
+    await db.insert(schema.oauthClientsTable).values([
+      {
+        id: "droid-row",
+        clientId: "droid-client",
+        name: "Droid",
+        redirectUris: ["http://localhost:1/callback"],
+      },
+      {
+        id: "amp-row",
+        clientId: "amp-client",
+        name: "Amp MCP Client (archestra)",
+        redirectUris: ["http://localhost:41592/oauth/callback"],
+      },
+    ]);
+    await db.insert(schema.oauthConsentsTable).values([
+      { id: "c1", clientId: "droid-client", userId: ada.id, scopes: ["mcp"] },
+      { id: "c2", clientId: "amp-client", userId: ada.id, scopes: ["mcp"] },
+      // Not a member of this organization.
+      { id: "c3", clientId: "droid-client", userId: outsider.id, scopes: [] },
+    ]);
+
+    const { data } = await getLog();
+    expect(data).toHaveLength(2);
+    expect(data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          action: "connected",
+          via: "oauthSignIn",
+          userId: ada.id,
+          clientId: null,
+          agentName: "Droid",
+        }),
+        expect.objectContaining({
+          via: "oauthSignIn",
+          clientId: "amp",
+          agentName: "Amp",
+        }),
+      ]),
+    );
   });
 
   test("filters by user and by agent", async ({ makeUser, makeMember }) => {

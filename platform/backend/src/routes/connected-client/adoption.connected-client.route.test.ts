@@ -52,10 +52,16 @@ describe("GET /api/connected-clients/adoption", () => {
       members: {
         userId: string;
         status: string;
-        setUpAgents: string[];
+        agents: {
+          clientId: string | null;
+          name: string;
+          setUpAt: string | null;
+          signedInAt: string | null;
+          gatewayLastSeenAt: string | null;
+          llmLastSeenAt: string | null;
+        }[];
         gatewayLastSeenAt: string | null;
         llmLastSeenAt: string | null;
-        llmAgents: string[];
       }[];
     };
   };
@@ -75,7 +81,7 @@ describe("GET /api/connected-clients/adoption", () => {
     expect(body).toMatchObject({ activeDays: 7, lookbackDays: 30 });
     expect(body.members.find((m) => m.userId === ada.id)).toMatchObject({
       status: "notConnected",
-      setUpAgents: [],
+      agents: [],
       gatewayLastSeenAt: null,
       llmLastSeenAt: null,
     });
@@ -91,7 +97,14 @@ describe("GET /api/connected-clients/adoption", () => {
 
     expect(await memberById(ada.id)).toMatchObject({
       status: "setUp",
-      setUpAgents: ["codex"],
+      agents: [
+        expect.objectContaining({
+          clientId: "codex",
+          name: "Codex",
+          setUpAt: expect.any(String),
+          llmLastSeenAt: null,
+        }),
+      ],
     });
   });
 
@@ -143,7 +156,12 @@ describe("GET /api/connected-clients/adoption", () => {
 
     expect(await memberById(ada.id)).toMatchObject({
       status: "inactive",
-      llmAgents: ["openai_codex"],
+      agents: [
+        expect.objectContaining({
+          clientId: "codex",
+          llmLastSeenAt: expect.any(String),
+        }),
+      ],
     });
     expect(await memberById(bob.id)).toMatchObject({
       status: "notConnected",
@@ -255,6 +273,91 @@ describe("GET /api/connected-clients/adoption", () => {
     });
   });
 
+  test("agents are named by their OAuth client and the agent header", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await db.insert(schema.oauthClientsTable).values([
+      {
+        id: "droid-row",
+        clientId: "droid-client",
+        name: "Droid",
+        redirectUris: ["http://localhost:1/callback"],
+      },
+      {
+        id: "amp-row",
+        clientId: "amp-client",
+        name: "Amp MCP Client (archestra)",
+        redirectUris: ["http://localhost:41592/oauth/callback"],
+      },
+    ]);
+    await db.insert(schema.oauthConsentsTable).values({
+      id: "amp-consent",
+      clientId: "amp-client",
+      userId: ada.id,
+      scopes: ["mcp"],
+    });
+    await gatewayCall(ada.id, {
+      authMethod: "oauth",
+      daysAgo: 1,
+      oauthClientId: "droid-client",
+    });
+    // The generic instructions send the picked agent's id as the agent header.
+    await makeInteraction(gateway.id, {
+      userId: ada.id,
+      source: "api",
+      externalAgentId: "amp",
+    });
+
+    const member = await memberById(ada.id);
+    expect(member?.status).toBe("active");
+    expect(member?.agents).toEqual([
+      expect.objectContaining({
+        clientId: "amp",
+        name: "Amp",
+        signedInAt: expect.any(String),
+        gatewayLastSeenAt: null,
+        llmLastSeenAt: expect.any(String),
+      }),
+      expect.objectContaining({
+        clientId: null,
+        name: "Droid",
+        signedInAt: null,
+        gatewayLastSeenAt: expect.any(String),
+      }),
+    ]);
+  });
+
+  test("an OAuth sign-in without calls counts as set up", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await db.insert(schema.oauthClientsTable).values({
+      id: "kiro-row",
+      clientId: "kiro-client",
+      name: "Kiro",
+      redirectUris: ["http://localhost:2/callback"],
+    });
+    await db.insert(schema.oauthConsentsTable).values({
+      id: "kiro-consent",
+      clientId: "kiro-client",
+      userId: ada.id,
+      scopes: ["mcp"],
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "setUp",
+      agents: [
+        { clientId: null, name: "Kiro", signedInAt: expect.any(String) },
+      ],
+    });
+  });
+
   test("usage counts calls per day, for one member or everyone", async ({
     makeUser,
     makeMember,
@@ -321,6 +424,7 @@ describe("GET /api/connected-clients/adoption", () => {
       authMethod: "oauth" | "user_token";
       daysAgo: number;
       agentId?: string;
+      oauthClientId?: string;
     },
   ) {
     await db.insert(schema.mcpToolCallsTable).values({
@@ -329,6 +433,7 @@ describe("GET /api/connected-clients/adoption", () => {
       method: "tools/list",
       userId,
       authMethod: options.authMethod,
+      oauthClientId: options.oauthClientId ?? null,
       createdAt: new Date(Date.now() - options.daysAgo * DAY_MS),
     });
   }

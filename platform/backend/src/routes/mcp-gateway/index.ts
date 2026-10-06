@@ -189,6 +189,7 @@ async function logHandshake(params: {
       userId: tokenAuthContext?.userId ?? null,
       runId: runId ?? null,
       authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
+      oauthClientId: tokenAuthContext?.oauthClientId ?? null,
     });
     fastify.log.trace({ profileId, method }, "Saved handshake request");
   } catch (dbError) {
@@ -1199,6 +1200,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               isOrganizationToken: tokenAuth.isOrganizationToken,
               organizationId: tokenAuth.organizationId,
               ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+              ...(tokenAuth.oauthClientId && {
+                oauthClientId: tokenAuth.oauthClientId,
+              }),
             },
             runId: readHeader(request, RUN_ID_HEADER),
           }),
@@ -1224,6 +1228,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
+        ...(tokenAuth.oauthClientId && {
+          oauthClientId: tokenAuth.oauthClientId,
+        }),
         ...(runId && { runId }),
       };
 

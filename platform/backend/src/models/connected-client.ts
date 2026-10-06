@@ -1,4 +1,17 @@
-import type { CursorQuery } from "@archestra/shared";
+import {
+  CLAUDE_CLIENT_ID,
+  CLAUDE_CODE_CLIENT_ID,
+  CLAUDE_DESKTOP_CLIENT_ID,
+  CODEX_CLIENT_ID,
+  COPILOT_CLI_CLIENT_ID,
+  CURSOR_CLIENT_ID,
+  type CursorQuery,
+  OPENCODE_CLIENT_ID,
+} from "@archestra/shared";
+import {
+  INSTALLER_CLIENT_IDS,
+  INSTALLER_CLIENT_LABELS,
+} from "@archestra/shared/connection-setup";
 import { and, desc, eq, isNotNull, isNull, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import {
@@ -6,7 +19,9 @@ import {
   createCursorPaginatedResult,
   decodeCursor,
 } from "@/database/utils/pagination";
+import { connectClientForOAuthClient } from "@/services/connected-client-oauth";
 import type {
+  AdoptionAgent,
   AgentAdoption,
   AgentAdoptionMember,
   AgentAdoptionStatus,
@@ -131,7 +146,10 @@ class ConnectedClientModel {
           ${setups.mcpGatewayId} AS mcp_gateway_id,
           ${setups.llmProxyId} IS NOT NULL AS model_routing,
           ${setups.includeSkills} AS include_skills,
-          NULL::text AS actor_user_id
+          NULL::text AS actor_user_id,
+          NULL::text AS oauth_client_id,
+          NULL::text AS oauth_client_name,
+          NULL::text[] AS redirect_uris
         FROM ${setups}
         WHERE ${setups.organizationId} = ${organizationId}
           AND ${setups.consumedAt} IS NOT NULL
@@ -147,12 +165,38 @@ class ConnectedClientModel {
           NULL,
           false,
           false,
-          ${setups.revokedByUserId}
+          ${setups.revokedByUserId},
+          NULL,
+          NULL,
+          NULL
         FROM ${setups}
         WHERE ${setups.organizationId} = ${organizationId}
           AND ${setups.revokedAt} IS NOT NULL
         GROUP BY ${setups.userId}, ${setups.clientId}, ${setups.revokedAt},
           ${setups.revokedByUserId}
+        UNION ALL
+        -- Agents set up by hand show up when they first sign in to the
+        -- gateway with OAuth, under the name they registered.
+        SELECT
+          'o:' || k.id,
+          'connected',
+          date_trunc('milliseconds', k.created_at),
+          k.user_id,
+          NULL,
+          NULL,
+          NULL,
+          NULL,
+          false,
+          false,
+          NULL,
+          c.client_id,
+          c.name,
+          c.redirect_uris
+        FROM ${schema.oauthConsentsTable} k
+        JOIN ${schema.oauthClientsTable} c ON c.client_id = k.client_id
+        WHERE k.user_id IN (
+          SELECT ${schema.membersTable.userId} FROM ${schema.membersTable}
+          WHERE ${schema.membersTable.organizationId} = ${organizationId})
       )
       SELECT
         e.*,
@@ -178,7 +222,25 @@ class ConnectedClientModel {
         userId: row.user_id,
         userName: row.user_name,
         userEmail: row.user_email,
-        clientId: row.client_id,
+        ...(row.oauth_client_id
+          ? {
+              via: "oauthSignIn" as const,
+              ...renameIdentity(
+                oauthAgentIdentity({
+                  user_id: row.user_id,
+                  oauth_client_id: row.oauth_client_id,
+                  name: row.oauth_client_name,
+                  redirect_uris: row.redirect_uris,
+                }),
+              ),
+            }
+          : {
+              via: "setup" as const,
+              clientId: row.client_id,
+              agentName: row.client_id
+                ? INSTALLER_CLIENT_LABELS[row.client_id]
+                : "Unknown agent",
+            }),
         platform: row.platform,
         deviceName: row.device_name,
         mcpGateway:
@@ -238,7 +300,7 @@ class ConnectedClientModel {
       schema.externalMcpSkillUsageEventsTable,
     ];
 
-    const [members, setUp, gateway, llm, skills] = await Promise.all([
+    const [members, setUp, signIns, gateway, llm, skills] = await Promise.all([
       db.execute<{ user_id: string; name: string; email: string }>(sql`
         SELECT u.id AS user_id, u.name, u.email
         FROM ${schema.membersTable} m
@@ -258,16 +320,29 @@ class ConnectedClientModel {
           AND ${setups.revokedAt} IS NULL
         GROUP BY ${setups.userId}, ${setups.clientId}
       `),
-      db.execute<{ user_id: string; last_seen_at: Date | string }>(sql`
+      // Gateway sign-ins: every agent that signs in with OAuth consents once
+      // per client, under the name it registered.
+      db.execute<OAuthAgentRow & { signed_in_at: Date | string }>(sql`
+        SELECT k.user_id, c.client_id AS oauth_client_id, c.name,
+          c.redirect_uris, min(k.created_at) AS signed_in_at
+        FROM ${schema.oauthConsentsTable} k
+        JOIN ${schema.oauthClientsTable} c ON c.client_id = k.client_id
+        WHERE k.user_id IS NOT NULL
+        GROUP BY k.user_id, c.client_id, c.name, c.redirect_uris
+      `),
+      db.execute<OAuthAgentRow & { last_seen_at: Date | string }>(sql`
         SELECT ${toolCalls.userId} AS user_id,
-          max(${toolCalls.createdAt}) AS last_seen_at
+          ${toolCalls.oauthClientId} AS oauth_client_id, c.name,
+          c.redirect_uris, max(${toolCalls.createdAt}) AS last_seen_at
         FROM ${toolCalls}
+        LEFT JOIN ${schema.oauthClientsTable} c
+          ON c.client_id = ${toolCalls.oauthClientId}
         WHERE ${toolCalls.createdAt} >= ${sinceTs}
           AND ${toolCalls.authMethod} = 'oauth'
           AND ${toolCalls.runId} IS NULL
           AND ${toolCalls.userId} IS NOT NULL
           AND ${toolCalls.agentId} IN (${orgAgents})
-        GROUP BY ${toolCalls.userId}
+        GROUP BY 1, 2, 3, 4
       `),
       db.execute<{
         user_id: string;
@@ -308,35 +383,66 @@ class ConnectedClientModel {
         name: row.name,
         email: row.email,
         status: "notConnected",
-        setUpAgents: [],
-        lastSetUpAt: null,
+        agents: [],
         gatewayLastSeenAt: null,
         llmLastSeenAt: null,
-        llmAgents: [],
         skillLastUsedAt: null,
       });
     }
+    /** The member's entry for one agent, created on first sight. */
+    const agentOf = (
+      member: AgentAdoptionMember,
+      identity: { clientId: string | null; name: string },
+    ): AdoptionAgent => {
+      const key = identity.clientId ?? `name:${identity.name.toLowerCase()}`;
+      let agent = member.agents.find(
+        (a) => (a.clientId ?? `name:${a.name.toLowerCase()}`) === key,
+      );
+      if (!agent) {
+        agent = {
+          ...identity,
+          setUpAt: null,
+          signedInAt: null,
+          gatewayLastSeenAt: null,
+          llmLastSeenAt: null,
+        };
+        member.agents.push(agent);
+      }
+      return agent;
+    };
+
     for (const row of setUp.rows) {
       const member = byUser.get(row.user_id);
       if (!member) continue;
-      member.setUpAgents.push(row.client_id);
-      member.lastSetUpAt = latest(
-        member.lastSetUpAt,
-        toUtcDate(row.last_set_up_at),
+      agentOf(member, {
+        clientId: row.client_id,
+        name: INSTALLER_CLIENT_LABELS[row.client_id],
+      }).setUpAt = toUtcDate(row.last_set_up_at);
+    }
+    for (const row of signIns.rows) {
+      const member = byUser.get(row.user_id);
+      if (!member) continue;
+      agentOf(member, oauthAgentIdentity(row)).signedInAt = toUtcDate(
+        row.signed_in_at,
       );
     }
     for (const row of gateway.rows) {
       const member = byUser.get(row.user_id);
-      if (member) member.gatewayLastSeenAt = toUtcDate(row.last_seen_at);
+      if (!member) continue;
+      const lastSeen = toUtcDate(row.last_seen_at);
+      member.gatewayLastSeenAt = latest(member.gatewayLastSeenAt, lastSeen);
+      // Calls from before the gateway recorded the OAuth client name no agent.
+      if (!row.oauth_client_id) continue;
+      const agent = agentOf(member, oauthAgentIdentity(row));
+      agent.gatewayLastSeenAt = latest(agent.gatewayLastSeenAt, lastSeen);
     }
     for (const row of llm.rows) {
       const member = byUser.get(row.user_id);
       if (!member) continue;
-      member.llmLastSeenAt = latest(
-        member.llmLastSeenAt,
-        toUtcDate(row.last_seen_at),
-      );
-      member.llmAgents.push(row.agent || "unknown");
+      const lastSeen = toUtcDate(row.last_seen_at);
+      member.llmLastSeenAt = latest(member.llmLastSeenAt, lastSeen);
+      const agent = agentOf(member, llmAgentIdentity(row.agent));
+      agent.llmLastSeenAt = latest(agent.llmLastSeenAt, lastSeen);
     }
     for (const row of skills.rows) {
       const member = byUser.get(row.user_id);
@@ -344,8 +450,7 @@ class ConnectedClientModel {
     }
     for (const member of byUser.values()) {
       member.status = adoptionStatus(member, activeSince);
-      member.setUpAgents.sort();
-      member.llmAgents.sort();
+      member.agents.sort((a, b) => a.name.localeCompare(b.name));
     }
 
     return { activeDays, lookbackDays, members: [...byUser.values()] };
@@ -486,7 +591,76 @@ function adoptionStatus(
     null,
   );
   if (lastSeen) return lastSeen >= activeSince ? "active" : "inactive";
-  return member.setUpAgents.length > 0 ? "setUp" : "notConnected";
+  return member.agents.some((a) => a.setUpAt || a.signedInAt)
+    ? "setUp"
+    : "notConnected";
+}
+
+/** An OAuth client as the adoption queries read it. */
+interface OAuthAgentRow extends Record<string, unknown> {
+  user_id: string;
+  oauth_client_id: string | null;
+  name: string | null;
+  redirect_uris: string[] | null;
+}
+
+/**
+ * Which agent an OAuth client is: the Connect client it verifiably belongs to
+ * or whose name it carries, else whatever name it registered under.
+ */
+function oauthAgentIdentity(row: OAuthAgentRow): {
+  clientId: string | null;
+  name: string;
+} {
+  const connectClient = connectClientForOAuthClient({
+    clientId: row.oauth_client_id ?? "",
+    name: row.name,
+    redirectUris: row.redirect_uris ?? [],
+  });
+  if (connectClient) {
+    return {
+      clientId: connectClient,
+      name:
+        connectClient === "amp"
+          ? "Amp"
+          : INSTALLER_CLIENT_LABELS[connectClient],
+    };
+  }
+  const name = row.name?.trim() || "Unnamed agent";
+  const byLabel = INSTALLER_CLIENT_IDS.find(
+    (id) => INSTALLER_CLIENT_LABELS[id].toLowerCase() === name.toLowerCase(),
+  );
+  return byLabel
+    ? { clientId: byLabel, name: INSTALLER_CLIENT_LABELS[byLabel] }
+    : { clientId: null, name };
+}
+
+/** LLM proxy `external_agent_id` values the Connect page's agents send. */
+const LLM_AGENT_CLIENT: Record<string, ConnectionSetupClientId> = {
+  [CLAUDE_CODE_CLIENT_ID]: "claude-code",
+  [CLAUDE_DESKTOP_CLIENT_ID]: "claude-desktop",
+  [CODEX_CLIENT_ID]: "codex",
+  [COPILOT_CLI_CLIENT_ID]: "copilot-cli",
+  [CURSOR_CLIENT_ID]: "cursor",
+  [OPENCODE_CLIENT_ID]: "opencode",
+};
+
+/**
+ * Which agent an LLM proxy call came from, by its `external_agent_id`: a
+ * Connect client's id (the generic instructions send the picked agent's id,
+ * such as "amp"), a generic Claude client, or nothing at all.
+ */
+function llmAgentIdentity(agent: string | null): {
+  clientId: string | null;
+  name: string;
+} {
+  if (!agent) return { clientId: null, name: "Unknown agent" };
+  const installer = LLM_AGENT_CLIENT[agent];
+  if (installer) {
+    return { clientId: installer, name: INSTALLER_CLIENT_LABELS[installer] };
+  }
+  if (agent === CLAUDE_CLIENT_ID) return { clientId: null, name: "Claude" };
+  return { clientId: agent, name: agent };
 }
 
 /** A raw row of {@link ConnectedClientModel.listEvents}' query. */
@@ -497,7 +671,7 @@ interface ConnectionEventRow extends Record<string, unknown> {
   user_id: string;
   user_name: string;
   user_email: string;
-  client_id: ConnectionSetupClientId;
+  client_id: ConnectionSetupClientId | null;
   platform: ConnectionSetupPlatform | null;
   device_name: string | null;
   mcp_gateway_id: string | null;
@@ -507,6 +681,13 @@ interface ConnectionEventRow extends Record<string, unknown> {
   actor_user_id: string | null;
   actor_name: string | null;
   actor_email: string | null;
+  oauth_client_id: string | null;
+  oauth_client_name: string | null;
+  redirect_uris: string[] | null;
+}
+
+function renameIdentity(identity: { clientId: string | null; name: string }) {
+  return { clientId: identity.clientId, agentName: identity.name };
 }
 
 /**

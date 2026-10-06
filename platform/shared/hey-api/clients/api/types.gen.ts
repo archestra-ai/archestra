@@ -40912,7 +40912,9 @@ export type GetConnectedClientLogResponses = {
             userId: string;
             userName: string;
             userEmail: string;
-            clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
+            clientId: string | null;
+            agentName: string;
+            via: 'setup' | 'oauthSignIn';
             platform: 'macos' | 'linux' | 'windows' | null;
             deviceName: string | null;
             mcpGateway: {
@@ -41020,11 +41022,16 @@ export type GetAgentAdoptionResponses = {
             name: string;
             email: string;
             status: 'active' | 'inactive' | 'setUp' | 'notConnected';
-            setUpAgents: Array<'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode'>;
-            lastSetUpAt: string | null;
+            agents: Array<{
+                clientId: string | null;
+                name: string;
+                setUpAt: string | null;
+                signedInAt: string | null;
+                gatewayLastSeenAt: string | null;
+                llmLastSeenAt: string | null;
+            }>;
             gatewayLastSeenAt: string | null;
             llmLastSeenAt: string | null;
-            llmAgents: Array<string>;
             skillLastUsedAt: string | null;
         }>;
     };
@@ -80099,6 +80106,7 @@ export type GetMcpToolCallsResponses = {
             userId: string | null;
             runId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+            oauthClientId: string | null;
             createdAt: string;
             userName: string | null;
             appName: string | null;
@@ -80215,6 +80223,7 @@ export type GetMcpToolCallResponses = {
         userId: string | null;
         runId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+        oauthClientId: string | null;
         createdAt: string;
         userName: string | null;
         appName: string | null;

@@ -66,6 +66,12 @@ const mcpToolCallsTable = pgTable(
     authMethod: varchar("auth_method", {
       length: 50,
     }).$type<MCPGatewayAuthMethod>(),
+    /**
+     * OAuth client the caller signed in with (`oauth_client.client_id`), when
+     * `authMethod` is "oauth": which agent made the call. No FK, so the row
+     * keeps it after the client is deleted.
+     */
+    oauthClientId: text("oauth_client_id"),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

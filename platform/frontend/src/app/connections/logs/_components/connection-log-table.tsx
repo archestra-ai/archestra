@@ -9,8 +9,6 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { Plug, PlugZap, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
-import { ClientIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS } from "@/app/connection/clients";
 import {
   CollectionFilters,
   FilterBar,
@@ -31,6 +29,7 @@ import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDateTimeRangePicker } from "@/lib/hooks/use-date-time-range-picker";
 import { useMemberSearch } from "@/lib/member.query";
 import { formatDate, formatRelativeTimeFromNow } from "@/lib/utils/date-time";
+import { AgentIcon, agentLabel } from "./agent-icon";
 
 const ALL_VALUE = "all";
 const USER_FILTER_LIMIT = 100;
@@ -64,8 +63,6 @@ const PLATFORM_LABEL: Record<
   linux: "Linux",
   windows: "Windows",
 };
-
-const CLIENTS_BY_ID = new Map(CONNECT_CLIENTS.map((c) => [c.id, c]));
 
 function parseAction(value: string | null): ConnectionEventAction | undefined {
   return value === "connected" || value === "disconnected" ? value : undefined;
@@ -315,22 +312,16 @@ const columns: ColumnDef<ConnectionEvent>[] = [
     size: 200,
     minSize: 160,
     cell: ({ row }) => {
-      const { clientId, deviceName, platform } = row.original;
-      const client = CLIENTS_BY_ID.get(clientId);
+      const { clientId, agentName, deviceName, platform } = row.original;
+      const agent = { clientId, name: agentName };
       const machine = [deviceName, platform && PLATFORM_LABEL[platform]]
         .filter(Boolean)
         .join(" · ");
       return (
         <div className="flex min-w-0 items-center gap-2">
-          {client ? (
-            <ClientIcon client={client} size={22} />
-          ) : (
-            <span className="size-[22px] shrink-0 rounded-md bg-muted" />
-          )}
+          <AgentIcon agent={agent} />
           <div className="min-w-0">
-            <div className="truncate text-sm">
-              {INSTALLER_CLIENT_LABELS[clientId]}
-            </div>
+            <div className="truncate text-sm">{agentLabel(agent)}</div>
             {machine ? (
               <div className="truncate text-xs text-muted-foreground">
                 {machine}
@@ -347,8 +338,9 @@ const columns: ColumnDef<ConnectionEvent>[] = [
     size: 240,
     minSize: 160,
     cell: ({ row }) => {
-      const { mcpGateway, modelRouting, includeSkills } = row.original;
+      const { via, mcpGateway, modelRouting, includeSkills } = row.original;
       const parts = [
+        via === "oauthSignIn" && "Gateway sign-in",
         mcpGateway && `Tools: ${mcpGateway.name}`,
         modelRouting && "Model routing",
         includeSkills && "Skills",

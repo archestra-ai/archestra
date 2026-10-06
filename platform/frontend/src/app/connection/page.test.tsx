@@ -15,6 +15,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import {
@@ -37,6 +38,7 @@ vi.mock("next/navigation");
 vi.mock("@/lib/agent.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
+vi.mock("@/lib/guardrails-deployment.query");
 vi.mock("@/lib/plugins/plugin.query");
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/llm-proxy.query");
@@ -144,6 +146,65 @@ beforeEach(() => {
   vi.mocked(usePlugins).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof usePlugins>);
+  vi.mocked(useGuardrailsDeployment).mockReturnValue({
+    data: undefined,
+  } as ReturnType<typeof useGuardrailsDeployment>);
+});
+
+describe("ConnectPage guardrails chip", () => {
+  function setup(
+    clientId: string,
+    deployment: {
+      active: boolean;
+      unsupportedClientAction: "bypass" | "block";
+    },
+  ) {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useLlmProxy).mockReturnValue({
+      data: { id: "proxy-1" },
+    } as unknown as ReturnType<typeof useLlmProxy>);
+    vi.mocked(useGuardrailsDeployment).mockReturnValue({
+      data: { ...deployment, enabled: deployment.active, featureEnabled: true },
+    } as ReturnType<typeof useGuardrailsDeployment>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: [clientId],
+        connectionLlmProxyEnabled: true,
+      },
+    });
+    render(<ConnectionPage />);
+    return screen.getByRole("button", { name: /guardrails/ });
+  }
+
+  it("says the guardrails are off when the deployment is off", () => {
+    expect(
+      setup("claude-code", { active: false, unsupportedClientAction: "block" }),
+    ).toHaveTextContent("Off");
+  });
+
+  it("is active for an agent the guardrails support", () => {
+    expect(
+      setup("claude-code", { active: true, unsupportedClientAction: "block" }),
+    ).toHaveTextContent("Active");
+  });
+
+  it("says an unsupported agent passes through unchecked", () => {
+    expect(
+      setup("cursor", { active: true, unsupportedClientAction: "bypass" }),
+    ).toHaveTextContent("Passes through unchecked");
+  });
+
+  it("says an unsupported agent is blocked", () => {
+    expect(
+      setup("cursor", { active: true, unsupportedClientAction: "block" }),
+    ).toHaveTextContent("Blocks this agent");
+  });
 });
 
 describe("ConnectPage (no connect request)", () => {

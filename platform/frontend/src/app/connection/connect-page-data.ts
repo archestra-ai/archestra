@@ -2,7 +2,7 @@
 
 // Data for the Connect page. Real data where the app has it (gateway,
 // servers, tools, skills, apps, admin settings); clearly marked mocks where
-// the backend has nothing yet (context cost, guardrails status).
+// the backend has nothing yet (context cost).
 
 import type { SupportedProvider } from "@archestra/shared";
 import {
@@ -20,6 +20,7 @@ import {
   type ConnectedClient,
   useConnectedClients,
 } from "@/lib/connected-client.query";
+import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
@@ -117,8 +118,12 @@ export interface ConnectPageData {
   pluginsFor: (client: ConnectClient) => ConnectPlugin[];
   /** Setup parts this client can get; the rest never show as choices. */
   partsFor: (client: ConnectClient) => ConnectChoices;
-  /** MOCK: whether OpenAPPA guardrails watch connected agents. */
-  guardrails: { enabled: boolean; name: string };
+  /**
+   * OpenAPPA guardrails on the LLM proxy: off, or on with what happens to
+   * agents it doesn't support natively (pass through or blocked). null when
+   * this user can't read the setting.
+   */
+  guardrails: { name: string; state: "off" | "bypass" | "block" | null };
   /** Can open /settings/connection (admin). */
   canManage: boolean;
   /** Agents this user connected; empty while loading or on error. */
@@ -206,6 +211,8 @@ export function useConnectPageData(params?: {
   const { data: llmProxy } = useLlmProxy({ enabled: llmProxyEnabled });
   const proxyAvailable =
     llmProxyEnabled && canReadLlmProxy === true && !!llmProxy?.id;
+
+  const { data: guardrails } = useGuardrailsDeployment();
 
   const pluginsEnabled = org?.connectionPluginsEnabled === true;
   // Same eligibility and filter the setup uses to bundle plugins.
@@ -301,7 +308,14 @@ export function useConnectPageData(params?: {
     pluginsEnabled,
     pluginsFor,
     partsFor,
-    guardrails: { enabled: true, name: "OpenAPPA" },
+    guardrails: {
+      name: "OpenAPPA",
+      state: !guardrails
+        ? null
+        : guardrails.active
+          ? guardrails.unsupportedClientAction
+          : "off",
+    },
     canManage: canManage === true,
     connected: (connectedQuery.data ?? []).flatMap(
       ({ clientId, lastConnectedAt, deviceNames }) => {

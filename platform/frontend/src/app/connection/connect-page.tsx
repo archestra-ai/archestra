@@ -37,6 +37,7 @@ import {
   RotateCcw,
   Settings,
   ShieldCheck,
+  ShieldOff,
   SlidersHorizontal,
   SquareTerminal,
   Terminal,
@@ -250,6 +251,8 @@ export function ConnectPage() {
   if (data.loading || !client) return <LoadingState />;
 
   const parts = data.partsFor(client);
+  const routed = parts.proxy && choices.proxy;
+  const guard = guardrailsStatus(data, client, routed);
   const servers = choices.tools ? data.servers : [];
   const tools = servers.reduce((n, s) => n + s.toolCount, 0);
   const skillsOn = data.skillsEnabled && data.totalSkills > 0;
@@ -375,6 +378,7 @@ export function ConnectPage() {
             tools={tools}
             skills={skills}
             skillCount={skillCount}
+            routed={routed}
             onOpen={(d, server) => {
               setFocusServer(server ?? null);
               setDialog(d);
@@ -495,9 +499,9 @@ export function ConnectPage() {
         title={`Model requests go through ${data.appName}`}
       >
         <p>
-          {client.label} sends model requests through {data.appName} instead of
-          straight to the provider. You keep the same models; your org's limits,
-          logging and cost tracking apply.
+          {routed
+            ? `${client.label} sends model requests through ${data.appName} instead of straight to the provider. You keep the same models; your org's limits, logging and cost tracking apply.`
+            : `Model routing is turned off, so ${client.label} keeps sending model requests straight to its provider. Turn it on under Choose what to include.`}
         </p>
       </InfoDialog>
       <InfoDialog
@@ -505,11 +509,14 @@ export function ConnectPage() {
         onOpenChange={(v) => !v && setDialog(null)}
         title={`${data.guardrails.name} guardrails`}
       >
-        <p>
-          Before a risky tool call runs (deleting data, sending messages outside
-          the org), {data.guardrails.name} checks it against your org's rules
-          and can ask you to approve it first.
-        </p>
+        <div className="space-y-2">
+          <p>
+            Before a risky tool call runs (deleting data, sending messages
+            outside the org), {data.guardrails.name} checks it against your
+            org's rules and can ask you to approve it first.
+          </p>
+          {guard && <p>{guard.detail}</p>}
+        </div>
       </InfoDialog>
     </div>
   );
@@ -1344,6 +1351,62 @@ function ModeSwitch({
   );
 }
 
+// === Guardrails status ===
+
+/**
+ * Agents OpenAPPA follows natively (the Claude Code, Codex and OpenCode
+ * adapters in backend/src/proxy/plugins/appa-plugin-archestra/
+ * session-identity.ts). Others count as unsupported unless they send OpenAPPA
+ * session headers, which the agents on this page don't.
+ */
+const GUARDRAILS_NATIVE = new Set(["claude-code", "codex", "opencode"]);
+
+/**
+ * What the guardrails do for this agent, from the real deployment setting.
+ * Guardrails sit on the LLM proxy, so they only see an agent whose model
+ * requests go through it. null: the user can't read the setting.
+ */
+function guardrailsStatus(
+  data: ConnectPageData,
+  client: ConnectClient,
+  routed: boolean,
+): {
+  tone?: "ok" | "warn" | "block";
+  label: string;
+  detail: string;
+} | null {
+  const { state } = data.guardrails;
+  if (state === null) return null;
+  if (state === "off")
+    return {
+      label: "Off",
+      detail:
+        "Your admin hasn't turned the guardrails on, so nothing is checked yet.",
+    };
+  if (!routed)
+    return {
+      label: "Not applied",
+      detail: `Guardrails check model requests that go through ${data.appName}. With model routing off, ${client.label}'s requests aren't checked.`,
+    };
+  if (GUARDRAILS_NATIVE.has(client.id))
+    return {
+      tone: "ok",
+      label: "Active",
+      detail: `${client.label} is supported, so its requests are checked.`,
+    };
+  return state === "block"
+    ? {
+        tone: "block",
+        label: "Blocks this agent",
+        detail: `${client.label} isn't supported by the guardrails yet, and your org blocks unsupported agents, so its model requests will be rejected.`,
+      }
+    : {
+        tone: "warn",
+        label: "Passes through unchecked",
+        detail: `${client.label} isn't supported by the guardrails yet. Your org lets unsupported agents through, so its requests run without checks.`,
+      };
+}
+
 // === Profile card ===
 
 const SERVER_ROWS = 6;
@@ -1365,11 +1428,14 @@ function ProfileCard({
   tools,
   skills,
   skillCount,
+  routed,
   onOpen,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
   status: Status;
+  /** This agent's model requests go through the LLM proxy. */
+  routed: boolean;
   servers: ConnectServer[];
   tools: number;
   skills: ConnectPageSkill[];
@@ -1383,31 +1449,37 @@ function ProfileCard({
 
   // Small status chips under the lists. A future capability is one entry.
   const statusChips: StatusChip[] = [];
-  if (data.llmProxyEnabled)
+  if (data.partsFor(client).proxy)
     statusChips.push({
       id: "routing",
       icon: (
-        <ChipIcon>
+        <ChipIcon tone={routed ? "ok" : undefined}>
           <Cpu />
         </ChipIcon>
       ),
-      title: "Same models",
-      sub: `Requests go through ${data.appName}`,
+      title: "Model routing",
+      sub: routed ? `On, through ${data.appName}` : "Off for this agent",
       onOpen: () => onOpen("routing"),
     });
-  if (data.guardrails.enabled)
+  const guard = guardrailsStatus(data, client, routed);
+  if (guard)
     statusChips.push({
       id: "guardrails",
       icon: (
-        <ChipIcon tone="ok">
-          <ShieldCheck />
+        <ChipIcon tone={guard.tone}>
+          {guard.tone === "ok" ? <ShieldCheck /> : <ShieldOff />}
         </ChipIcon>
       ),
       title: `${data.guardrails.name} guardrails`,
       sub: (
-        <span className="inline-flex items-center gap-1 text-emerald-600 dark:text-emerald-400">
-          <Check className="size-3" strokeWidth={3} />
-          Active
+        <span
+          className={cn(
+            guard.tone === "ok" && "text-emerald-600 dark:text-emerald-400",
+            guard.tone === "warn" && "text-amber-600 dark:text-amber-400",
+            guard.tone === "block" && "text-destructive",
+          )}
+        >
+          {guard.label}
         </span>
       ),
       onOpen: () => onOpen("guardrails"),
@@ -1676,14 +1748,24 @@ function InfoTip({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
-function ChipIcon({ children, tone }: { children: ReactNode; tone?: "ok" }) {
+function ChipIcon({
+  children,
+  tone,
+}: {
+  children: ReactNode;
+  tone?: "ok" | "warn" | "block";
+}) {
   return (
     <span
       className={cn(
         "flex size-8 shrink-0 items-center justify-center rounded-lg border [&_svg]:size-4",
         tone === "ok"
           ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-          : "bg-muted/50 text-muted-foreground",
+          : tone === "warn"
+            ? "border-amber-500/30 bg-amber-500/10 text-amber-600 dark:text-amber-400"
+            : tone === "block"
+              ? "border-destructive/30 bg-destructive/10 text-destructive"
+              : "bg-muted/50 text-muted-foreground",
       )}
     >
       {children}

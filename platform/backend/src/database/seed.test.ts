@@ -61,6 +61,7 @@ describe("syncBuiltInAgents", () => {
     const organization = await makeOrganization();
     const user = await makeUser();
     await makeMember(user.id, organization.id);
+    config.skillsSandbox.enabled = true;
     config.openappa.enabled = false;
     await syncBuiltInAgents();
     await syncOpenAppaConfigAgentCapabilities();
@@ -249,6 +250,7 @@ describe("syncBuiltInAgents", () => {
     makeOrganization,
   }) => {
     config.openappa.enabled = true;
+    config.skillsSandbox.enabled = true;
     const organization = await makeOrganization();
     await syncBuiltInAgents();
     const existing = await AgentModel.getBuiltInAgent(
@@ -374,6 +376,7 @@ describe("syncBuiltInAgents", () => {
     makeOrganization,
   }) => {
     config.openappa.enabled = true;
+    config.skillsSandbox.enabled = true;
     const withGuide = await makeOrganization();
     const withoutGuide =
       guideState === "soft-deleted" ? await makeOrganization() : null;
@@ -423,6 +426,43 @@ describe("syncBuiltInAgents", () => {
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
+  });
+
+  test("gives the OpenAPPA agent the sandbox tools only while the sandbox is on", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    config.skillsSandbox.enabled = false;
+    const organization = await makeOrganization();
+    await syncBuiltInSkills();
+    await syncBuiltInAgents();
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+    const agentId =
+      (
+        await AgentModel.getBuiltInAgent(
+          BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+          organization.id,
+        )
+      )?.id ?? "";
+    const sandboxToolNames = (
+      ["run_command", "upload_file", "download_file"] as const
+    ).map((shortName) => archestraMcpBranding.getToolName(shortName));
+    expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
+      [],
+    );
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(20);
+
+    config.skillsSandbox.enabled = true;
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+    await syncOpenAppaConfigAgentCapabilities();
+
+    const sandboxToolIds =
+      await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
+    expect(sandboxToolIds).toHaveLength(3);
+    const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
+    expect(assigned).toHaveLength(23);
+    expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 
   test("leaves the OpenAPPA agent's tools alone while OpenAPPA is disabled", async ({

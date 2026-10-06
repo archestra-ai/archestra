@@ -356,12 +356,10 @@ describe("ConnectCommandPanel", () => {
       tokenStart: "tok",
       plugins: [],
     });
-    const onDownloaded = vi.fn();
     renderPanel({
       client: findClient("claude-desktop"),
       variant: "download",
       exclude: ["tools"],
-      onDownloaded,
     });
     const link = await screen.findByRole("link", {
       name: "Download installer",
@@ -379,8 +377,6 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.queryByRole("button", { name: "Customize setup" }),
     ).toBeNull();
-    await userEvent.click(link);
-    expect(onDownloaded).toHaveBeenCalled();
   });
 
   it("regenerates Desktop setup when the platform or API-key authentication changes", async () => {

@@ -1,27 +1,17 @@
 "use client";
 
-// Connect page pieces: picker, copy line, copy prompt, undo dialog,
-// disconnect and manage dialogs, helpers.
+// Connect page pieces: picker, dialogs, helpers.
 
-import {
-  isOAuthRecognisedClient,
-  startupGuardStem,
-} from "@archestra/shared/connection-setup";
 import {
   BookOpen,
   Check,
   ChevronDown,
-  Copy,
   Cpu,
-  HardDrive,
   Search,
-  Unplug,
   Wrench,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { Button } from "@/components/ui/button";
 import {
   Command,
   CommandEmpty,
@@ -34,7 +24,6 @@ import {
   DialogBody,
   DialogContent,
   DialogDescription,
-  DialogFooter,
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
@@ -47,19 +36,12 @@ import {
 import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
-import { copyToClipboard } from "@/lib/clipboard";
-import { useDisconnectConnectedClient } from "@/lib/connected-client.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import type { ConnectChoices } from "./connect-choices";
-import type {
-  ConnectPageData,
-  ConnectPageSkill,
-  ConnectServer,
-} from "./connect-page-data";
+import type { ConnectPageData, ConnectPageSkill } from "./connect-page-data";
 import { setupModeFor } from "./manual-setup";
-import { detectPlatform } from "./platform.utils";
 
 const MODAL_ROW_CAP = 200;
 
@@ -68,13 +50,11 @@ const MODAL_ROW_CAP = 200;
 export function AgentSearch({
   data,
   selectedId,
-  connectedIds,
   onPick,
   children,
 }: {
   data: ConnectPageData;
   selectedId: string;
-  connectedIds: Set<string>;
   onPick: (id: string) => void;
   children: ReactNode;
 }) {
@@ -128,12 +108,6 @@ export function AgentSearch({
               >
                 <ClientIcon client={c} size={22} />
                 <span className="min-w-0 flex-1 truncate">{c.label}</span>
-                {connectedIds.has(c.id) && (
-                  <span
-                    className="size-1.5 rounded-full bg-emerald-500"
-                    title="Connected"
-                  />
-                )}
                 {c.id === selectedId && <Check className="size-3.5" />}
               </CommandItem>
             ))}
@@ -141,390 +115,6 @@ export function AgentSearch({
         </Command>
       </PopoverContent>
     </Popover>
-  );
-}
-
-// === Copy line ===
-
-export function CopyLine({
-  text,
-  label,
-  primary,
-}: {
-  text: string;
-  label: string;
-  primary?: boolean;
-}) {
-  const [done, setDone] = useState(false);
-  return (
-    <div className="flex items-center gap-2 rounded-lg border bg-muted/40 p-1.5 pl-3">
-      <code className="min-w-0 flex-1 break-all font-mono text-xs">{text}</code>
-      <Button
-        size="sm"
-        variant={primary ? "default" : "outline"}
-        className="shrink-0"
-        onClick={async () => {
-          try {
-            await copyToClipboard(text);
-            setDone(true);
-            window.setTimeout(() => setDone(false), 1500);
-          } catch {
-            toast.error(
-              "Could not copy. Select the text and copy it manually.",
-            );
-          }
-        }}
-      >
-        {done ? <Check /> : <Copy />}
-        {done ? "Copied" : label}
-      </Button>
-    </div>
-  );
-}
-
-// === Copy prompt: the text gets the width, the copy is one icon ===
-
-function CopyPrompt({ text }: { text: string }) {
-  const [done, setDone] = useState(false);
-  return (
-    <div className="relative rounded-lg border bg-muted/40 py-2.5 pr-11 pl-3">
-      <code className="block font-mono text-xs leading-relaxed break-words whitespace-pre-wrap">
-        {text}
-      </code>
-      <Button
-        size="icon"
-        variant="ghost"
-        aria-label="Copy prompt"
-        title={done ? "Copied" : "Copy prompt"}
-        className="absolute top-1.5 right-1.5 size-7 text-muted-foreground hover:text-foreground"
-        onClick={async () => {
-          try {
-            await copyToClipboard(text);
-            setDone(true);
-            window.setTimeout(() => setDone(false), 1500);
-          } catch {
-            toast.error(
-              "Could not copy. Select the text and copy it manually.",
-            );
-          }
-        }}
-      >
-        {done ? <Check /> : <Copy />}
-      </Button>
-    </div>
-  );
-}
-
-// === Undo, before connecting: what connecting adds, and how it comes off ===
-
-export function UndoDialog({
-  data,
-  client,
-  children = "Disconnect anytime",
-}: {
-  data: ConnectPageData;
-  client: ConnectClient;
-  /** The trigger's label. */
-  children?: ReactNode;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <UnstyledButton
-        type="button"
-        onClick={() => setOpen(true)}
-        className="rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-      >
-        {children}
-      </UnstyledButton>
-      <Dialog open={open} onOpenChange={setOpen}>
-        <DialogContent className="max-w-lg">
-          <DialogHeader className="px-4">
-            <DialogTitle className="flex items-center gap-2.5">
-              <ClientIcon client={client} size={22} />
-              Disconnecting {client.label}
-            </DialogTitle>
-            <DialogDescription>
-              Once connected, you can always disconnect here, under Manage: one
-              prompt cleans up your computer, then you revoke access.
-            </DialogDescription>
-          </DialogHeader>
-          <DisconnectSteps
-            data={data}
-            client={client}
-            revoke={
-              <p className="text-muted-foreground">
-                Under Manage on this page, open Disconnect and press Revoke
-                access. <RevokeEffect client={client} />
-              </p>
-            }
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
-}
-
-/** Startup check file stem under ~/.archestra, for clients that install one. */
-/** What the setup added to this agent, and the prompt that removes it. */
-function DisconnectSteps({
-  data,
-  client,
-  revoke,
-}: {
-  data: ConnectPageData;
-  client: ConnectClient;
-  /** Step 2's body: how, or the button, to revoke access. */
-  revoke: ReactNode;
-}) {
-  const fp = data.footprintFor(client);
-  const manualOnly = setupModeFor(client) === "manual";
-  const guard = startupGuardStem(client.id);
-  const [windows, setWindows] = useState(false);
-  useEffect(() => setWindows(detectPlatform() === "windows"), []);
-  const local = [
-    ...(fp.skillsInstalled > 0
-      ? [`${fmt(fp.skillsInstalled)} ${plural(fp.skillsInstalled, "skill")}`]
-      : []),
-    ...fp.localChanges,
-  ];
-  const cleanup = (
-    <div className="space-y-3">
-      {local.length > 0 && (
-        <div className="space-y-2">
-          <div className="flex items-start gap-2.5 rounded-lg border px-3 py-2 text-xs [&_svg]:mt-0.5 [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
-            <HardDrive />
-            <div className="min-w-0">
-              <div className="font-medium text-foreground">
-                On your machine, in {nameOf(client)}
-              </div>
-              <ul className="mt-0.5 space-y-0.5 text-muted-foreground">
-                {local.map((l) => (
-                  <li key={l} className="truncate">
-                    {l}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </div>
-        </div>
-      )}
-      <div className="space-y-2">
-        <p className="text-muted-foreground">
-          {manualOnly
-            ? `In ${nameOf(client)}, delete the MCP Client Tool node you added.`
-            : `Paste this into ${nameOf(client)} to remove it:`}
-        </p>
-        {!manualOnly && <CopyPrompt text={data.disconnectPrompt(client)} />}
-      </div>
-      {!manualOnly && guard && (
-        <div className="space-y-2">
-          <p className="text-muted-foreground">
-            If {nameOf(client)}
-            {` won't run it, run this in a terminal yourself (${windows ? "Windows PowerShell" : "macOS or Linux"}):`}
-          </p>
-          <CopyPrompt
-            text={
-              windows
-                ? `$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "$HOME\\.archestra\\${guard}-startup-guard.ps1" } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION }`
-                : `ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/${guard}-startup-guard.sh`
-            }
-          />
-        </div>
-      )}
-    </div>
-  );
-  const steps = [
-    { title: "Clean up this computer", body: cleanup },
-    { title: "Revoke access", body: revoke },
-  ];
-  return (
-    <DialogBody className="text-sm">
-      <ol className="flex flex-col">
-        {steps.map((step, i) => (
-          <li
-            key={step.title}
-            className="relative grid grid-cols-[1.75rem_minmax(0,1fr)] gap-x-3 pb-6 last:pb-0"
-          >
-            {i < steps.length - 1 && (
-              <span
-                aria-hidden
-                className="absolute top-8 bottom-1 left-[0.875rem] w-px bg-border"
-              />
-            )}
-            <span className="grid size-7 place-items-center rounded-full border bg-background text-xs tabular-nums text-muted-foreground">
-              {i + 1}
-            </span>
-            <div className="min-w-0">
-              <h3 className="pt-1 font-medium">{step.title}</h3>
-              <div className="mt-2 min-w-0">{step.body}</div>
-            </div>
-          </li>
-        ))}
-      </ol>
-    </DialogBody>
-  );
-}
-
-// === Disconnect: clean up this computer, then revoke access ===
-
-/** What Revoke access does, in both disconnect dialogs. */
-function RevokeEffect({ client }: { client: ConnectClient }) {
-  // Only agents the gateway can tell apart by their OAuth client lose their
-  // sign-in; the rest keep it until it expires.
-  return isOAuthRecognisedClient(client.id) ? (
-    <span>
-      Revoke access removes {nameOf(client)} from this list, signs it out of the
-      gateway, and revokes the skill links it created. The cleanup prompt
-      removes access on the machine.
-    </span>
-  ) : (
-    <span>
-      Revoke access removes {nameOf(client)} from this list and revokes the
-      skill links it created. Other agents keep their gateway sign-in until it
-      expires; the cleanup prompt removes access on the machine.
-    </span>
-  );
-}
-
-export function DisconnectDialog({
-  data,
-  client,
-  onOpenChange,
-}: {
-  data: ConnectPageData;
-  client: ConnectClient | null;
-  onOpenChange: (v: boolean) => void;
-}) {
-  const record = client
-    ? data.connected.find((c) => c.clientId === client.id)
-    : undefined;
-  const disconnect = useDisconnectConnectedClient();
-  // The cleanup prompt ends by sending the user back here to revoke access.
-  // Revoking drops the agent from `data.connected`, which closes the dialog.
-  return (
-    <Dialog open={!!client && !!record} onOpenChange={onOpenChange}>
-      {client && record && (
-        <DialogContent className="max-w-lg">
-          <DialogHeader className="px-4">
-            <DialogTitle className="flex items-center gap-2.5">
-              <ClientIcon client={client} size={22} />
-              Disconnect {client.label}
-            </DialogTitle>
-            <DialogDescription>Two steps, in this order.</DialogDescription>
-          </DialogHeader>
-          <DisconnectSteps
-            data={data}
-            client={client}
-            revoke={
-              <div className="space-y-3">
-                <p className="text-muted-foreground">
-                  Once the cleanup is done, revoke access.{" "}
-                  <RevokeEffect client={client} />
-                </p>
-                {record.deviceNames.length > 1 && (
-                  <p className="text-muted-foreground">
-                    Connected on {record.deviceNames.join(", ")}. Revoking cuts
-                    all of them; run the cleanup prompt on each.
-                  </p>
-                )}
-                <Button
-                  variant="destructive"
-                  size="sm"
-                  disabled={disconnect.isPending}
-                  onClick={() => disconnect.mutate(record.clientId)}
-                >
-                  <Unplug />
-                  <span>Revoke access</span>
-                </Button>
-              </div>
-            }
-          />
-          <DialogFooter>
-            <Button variant="outline" onClick={() => onOpenChange(false)}>
-              Cancel
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      )}
-    </Dialog>
-  );
-}
-
-// === Manage: every connected agent, one row each ===
-
-export function ManageDialog({
-  open,
-  onOpenChange,
-  data,
-  onDisconnect,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  data: ConnectPageData;
-  onDisconnect: (client: ConnectClient) => void;
-}) {
-  return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-lg">
-        <DialogHeader className="px-4">
-          <DialogTitle>Connected agents</DialogTitle>
-          <DialogDescription>
-            Disconnecting one leaves the others as they are.
-          </DialogDescription>
-        </DialogHeader>
-        <DialogBody>
-          {data.connected.length === 0 ? (
-            <Empty>No agents connected yet.</Empty>
-          ) : (
-            <ul className="max-h-[60vh] divide-y overflow-y-auto rounded-lg border">
-              {data.connected.map((a) => (
-                <li
-                  key={a.clientId}
-                  className="flex items-center gap-3 py-2 pr-2 pl-3"
-                >
-                  <div className="flex min-w-0 flex-1 items-center gap-3">
-                    <ClientIcon client={a.client} size={26} />
-                    <span className="min-w-0">
-                      <span className="block truncate text-sm font-medium">
-                        {a.client.label}
-                      </span>
-                      <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
-                        <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
-                        <span
-                          className="truncate"
-                          title={a.deviceNames.join(", ") || undefined}
-                        >
-                          {a.deviceNames.length > 0
-                            ? `Connected · on ${a.deviceNames.join(", ")}`
-                            : "Connected"}
-                        </span>
-                      </span>
-                    </span>
-                  </div>
-                  <Button
-                    variant="destructive"
-                    size="sm"
-                    onClick={() => {
-                      onOpenChange(false);
-                      onDisconnect(a.client);
-                    }}
-                  >
-                    <Unplug />
-                    Disconnect
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </DialogBody>
-      </DialogContent>
-    </Dialog>
   );
 }
 
@@ -903,19 +493,6 @@ function Empty({ children }: { children: ReactNode }) {
 }
 
 // === Helpers ===
-
-/**
- * The first thing to try after connecting: one walkthrough of what the agent
- * got, rather than example tasks. null when nothing was included.
- */
-export function suggestFirstPrompt(
-  appName: string,
-  servers: ConnectServer[],
-  skills: ConnectPageSkill[],
-): string | null {
-  if (servers.length === 0 && skills.length === 0) return null;
-  return `Summarize the tools and skills you got from ${appName} and show me one thing you can do with them.`;
-}
 
 export function nameOf(client: ConnectClient) {
   return client.id === "generic" ? "your agent" : client.label;

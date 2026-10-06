@@ -1048,9 +1048,11 @@ test("a personal-only credential is listed but cannot be bound", async () => {
   await user.click(
     within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   );
-  expect(
-    await screen.findByRole("option", { name: "GH real (personal only)" }),
-  ).toHaveAttribute("aria-disabled", "true");
+  const personal = await screen.findByRole("option", { name: "GH real" });
+  expect(personal).toHaveAttribute("aria-disabled", "true");
+  expect(personal).toHaveTextContent(
+    "batteries need an organization credential",
+  );
   expect(
     screen.getByRole("option", { name: "GitHub token" }),
   ).not.toHaveAttribute("aria-disabled", "true");
@@ -1075,9 +1077,11 @@ test("a binding to a key the loaded credential list does not hold reads as missi
   const select = within(row).getByRole("combobox", {
     name: "APPA_PROVIDER_GITHUB_TOKEN",
   });
-  await waitFor(() =>
-    expect(select).toHaveTextContent("retired-token (no such credential)"),
-  );
+  await waitFor(() => expect(select).toHaveTextContent("retired-token"));
+  await userEvent.setup().click(select);
+  expect(
+    await screen.findByRole("option", { name: "retired-token" }),
+  ).toHaveTextContent("No credential has this key");
 });
 
 test("a reader who cannot load credentials sees the bound key without a verdict on it", async () => {
@@ -1102,7 +1106,9 @@ test("a reader who cannot load credentials sees the bound key without a verdict 
   });
   expect(select).toBeDisabled();
   await waitFor(() => expect(select).toHaveTextContent("github-token"));
-  expect(select).not.toHaveTextContent(/no such credential|not available/);
+  expect(select).not.toHaveTextContent(
+    /No credential has this key|not available/,
+  );
 });
 
 test("a reader who can read credentials but not bind sees the bound credential by name", async () => {
@@ -1198,7 +1204,9 @@ test("picking a key for a repository-owned policy shows the line to change inste
   });
   await waitFor(() => expect(select).toBeEnabled());
   expect(select).toHaveTextContent("org-github-app");
-  expect(select).not.toHaveTextContent(/no such credential|not available/);
+  expect(select).not.toHaveTextContent(
+    /No credential has this key|not available/,
+  );
   await user.click(select);
   await user.click(await screen.findByRole("option", { name: "GitHub token" }));
   const notice = await within(row).findByRole("status");

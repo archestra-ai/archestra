@@ -37,6 +37,10 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RuntimeCredentialIcon,
+  runtimeCredentialIconOf,
+} from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
 import {
   StandardDialog,
@@ -1207,11 +1211,18 @@ function CredentialRow({
         <SelectTrigger id={id} className="w-full">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent
+          position="popper"
+          className="w-[var(--radix-select-trigger-width)]"
+        >
           <SelectItem value={UNBOUND}>Not bound</SelectItem>
           {unlisted !== null && (
-            <SelectItem value={unlisted} disabled>
-              {listed ? `${unlisted} (no such credential)` : unlisted}
+            <SelectItem
+              value={unlisted}
+              disabled
+              description={listed ? "No credential has this key" : undefined}
+            >
+              <CredentialOptionLabel icon={null} name={unlisted} />
             </SelectItem>
           )}
           {options.map((entry) => (
@@ -1221,12 +1232,25 @@ function CredentialRow({
               // The helper runs for the whole organization, so a personal-only
               // credential cannot be bound; it is listed as such rather than hidden.
               disabled={!entry.allowOrganization}
+              description={
+                <span className="line-clamp-2 whitespace-normal">
+                  <span>
+                    {!entry.allowOrganization
+                      ? "Personal credential · batteries need an organization credential"
+                      : entry.organizationConfigured
+                        ? "Organization credential"
+                        : "Organization credential · no organization value yet"}
+                  </span>
+                  {entry.description && (
+                    <span>{` · ${entry.description}`}</span>
+                  )}
+                </span>
+              }
             >
-              {!entry.allowOrganization
-                ? `${entry.name} (personal only)`
-                : entry.organizationConfigured
-                  ? entry.name
-                  : `${entry.name} (no organization value)`}
+              <CredentialOptionLabel
+                icon={runtimeCredentialIconOf(entry)}
+                name={entry.name}
+              />
             </SelectItem>
           ))}
         </SelectContent>
@@ -1246,6 +1270,24 @@ function CredentialRow({
         </InlineNotice>
       )}
     </div>
+  );
+}
+
+/** A credential's icon and name, which the select's trigger shows as well. */
+function CredentialOptionLabel({
+  icon,
+  name,
+}: {
+  icon: string | null;
+  name: string;
+}) {
+  // One row of its own: Radix drops ItemText's class, so the open list would
+  // otherwise stack the block-level icon above the name.
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <RuntimeCredentialIcon icon={icon} className="size-4" size={16} />
+      <span className="truncate">{name}</span>
+    </span>
   );
 }
 

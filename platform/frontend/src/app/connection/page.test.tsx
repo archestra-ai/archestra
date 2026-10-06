@@ -277,7 +277,7 @@ describe("ConnectPage (no connect request)", () => {
     ).toBeVisible();
   });
 
-  it("shows model routing as on for an app with an installer, ready for other agents", () => {
+  it("shows model routing as on for an app with an installer, unverified for other agents", () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -299,7 +299,7 @@ describe("ConnectPage (no connect request)", () => {
       new URLSearchParams("clientId=amp") as ReturnType<typeof useSearchParams>,
     );
     render(<ConnectionPage />);
-    expect(screen.getByText("LLM proxy ready to use")).toBeVisible();
+    expect(screen.getByText("Not verified for this agent")).toBeVisible();
   });
 
   it("lets any agent leave model routing out", async () => {

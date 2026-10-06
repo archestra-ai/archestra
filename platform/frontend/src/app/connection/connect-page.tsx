@@ -1123,14 +1123,14 @@ function ProfileCard({
   // Small status chips under the lists. A future capability is one entry.
   const statusChips: StatusChip[] = [];
   // Shown for every agent while the LLM proxy is on. Apps with an installer
-  // are known to take it; others get it ready through the prompt.
+  // are known to take it; for others it's set up but not guaranteed.
   const proxyOn = data.partsFor(client).proxy;
-  const installer = setupModeFor(client) === "prompt";
+  const verified = setupModeFor(client) === "prompt";
   if (proxyOn)
     statusChips.push({
       id: "routing",
       icon: (
-        <ChipIcon tone={routed ? "ok" : undefined}>
+        <ChipIcon tone={!routed ? undefined : verified ? "ok" : "warn"}>
           <Cpu />
         </ChipIcon>
       ),
@@ -1138,18 +1138,21 @@ function ProfileCard({
         <span className="inline-flex items-center gap-1">
           Model routing
           <InfoTip label="What model routing does">
-            {installer
-              ? `${client.label} sends model requests through ${data.appName}'s LLM proxy instead of straight to the provider.`
-              : `${data.appName}'s LLM proxy is ready for ${client.label}'s model requests, if it lets you set a custom endpoint.`}{" "}
-            Same models; your org's limits, logging and cost tracking apply.
+            {!verified && routed
+              ? `Your admin turned on ${data.appName}'s LLM proxy, but it isn't verified with ${client.label}. It works only if ${client.label} lets you set a custom model endpoint, so there's no guarantee its requests go through it.`
+              : `${client.label} sends model requests through ${data.appName}'s LLM proxy instead of straight to the provider. Same models; your org's limits, logging and cost tracking apply.`}
           </InfoTip>
         </span>
       ),
-      sub: !routed
-        ? "Off"
-        : installer
-          ? "On, through the LLM proxy"
-          : "LLM proxy ready to use",
+      sub: !routed ? (
+        "Off"
+      ) : verified ? (
+        "On, through the LLM proxy"
+      ) : (
+        <span className="text-amber-600 dark:text-amber-400">
+          Not verified for this agent
+        </span>
+      ),
     });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)

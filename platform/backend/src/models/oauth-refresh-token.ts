@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import db, { schema } from "@/database";
+import db, { schema, type Transaction } from "@/database";
 
 class OAuthRefreshTokenModel {
   /**
@@ -82,6 +82,7 @@ class OAuthRefreshTokenModel {
     userId: string;
     referenceId?: string;
     sessionId?: string;
+    tx?: Transaction;
   }) {
     const conditions = [
       eq(schema.oauthRefreshTokensTable.clientId, params.clientId),
@@ -97,7 +98,7 @@ class OAuthRefreshTokenModel {
         eq(schema.oauthRefreshTokensTable.sessionId, params.sessionId),
       );
     }
-    return db
+    return (params.tx ?? db)
       .select({
         id: schema.oauthRefreshTokensTable.id,
       })
@@ -108,11 +109,11 @@ class OAuthRefreshTokenModel {
   /**
    * Delete refresh token rows by id. Returns the number of rows removed.
    */
-  static async deleteByIds(ids: string[]): Promise<number> {
+  static async deleteByIds(ids: string[], tx?: Transaction): Promise<number> {
     if (ids.length === 0) {
       return 0;
     }
-    const rows = await db
+    const rows = await (tx ?? db)
       .delete(schema.oauthRefreshTokensTable)
       .where(inArray(schema.oauthRefreshTokensTable.id, ids))
       .returning({ id: schema.oauthRefreshTokensTable.id });

@@ -6,6 +6,7 @@ import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
+import ConnectedClientModel from "@/models/connected-client";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
@@ -222,6 +223,30 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
+  },
+  // Disconnecting a client: the resource is the user whose client it was;
+  // the snapshot names the client.
+  "/api/connected-clients/:clientId": {
+    resourceType: "connectedClient",
+    action: "connectedClient.deleted",
+    resourceIdSource: "currentUser",
+    fetchById: (userId, organizationId, routeParams) =>
+      ConnectedClientModel.findForAudit({
+        organizationId,
+        userId,
+        clientId: String(routeParams?.clientId),
+      }),
+  },
+  "/api/connected-clients/users/:userId/:clientId": {
+    resourceType: "connectedClient",
+    action: "connectedClient.deleted",
+    resourceIdParam: "userId",
+    fetchById: (userId, organizationId, routeParams) =>
+      ConnectedClientModel.findForAudit({
+        organizationId,
+        userId,
+        clientId: String(routeParams?.clientId),
+      }),
   },
   // Sole audited child of the denylisted /api/connection-setups prefix.
   // Installer tickets stay unaudited; this window grant records no secrets.

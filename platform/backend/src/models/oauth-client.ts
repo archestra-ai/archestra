@@ -1,6 +1,6 @@
 import { OFFLINE_ACCESS_OAUTH_SCOPE } from "@archestra/shared";
-import { and, eq, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq, inArray, max, min, or, sql } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
 import type { CimdUpsertData } from "@/types";
 
 class OAuthClientModel {
@@ -14,6 +14,68 @@ class OAuthClientModel {
       .where(eq(schema.oauthClientsTable.clientId, clientId))
       .limit(1);
     return client ?? null;
+  }
+
+  /**
+   * OAuth clients the user holds a refresh token for, with when the first and
+   * latest of those tokens were issued.
+   */
+  static async listWithUserTokenTimes(params: { userId: string }) {
+    const refresh = schema.oauthRefreshTokensTable;
+    return db
+      .select({
+        clientId: schema.oauthClientsTable.clientId,
+        name: schema.oauthClientsTable.name,
+        redirectUris: schema.oauthClientsTable.redirectUris,
+        firstIssuedAt: min(refresh.createdAt),
+        lastIssuedAt: max(refresh.createdAt),
+      })
+      .from(refresh)
+      .innerJoin(
+        schema.oauthClientsTable,
+        eq(refresh.clientId, schema.oauthClientsTable.clientId),
+      )
+      .where(eq(refresh.userId, params.userId))
+      .groupBy(
+        schema.oauthClientsTable.clientId,
+        schema.oauthClientsTable.name,
+        schema.oauthClientsTable.redirectUris,
+      );
+  }
+
+  /** OAuth clients the user holds an access or refresh token for. */
+  static async listWithUserTokens(params: {
+    userId: string;
+    tx?: Transaction;
+  }) {
+    const conn = params.tx ?? db;
+    const access = schema.oauthAccessTokensTable;
+    const refresh = schema.oauthRefreshTokensTable;
+    return conn
+      .select({
+        clientId: schema.oauthClientsTable.clientId,
+        name: schema.oauthClientsTable.name,
+        redirectUris: schema.oauthClientsTable.redirectUris,
+      })
+      .from(schema.oauthClientsTable)
+      .where(
+        or(
+          inArray(
+            schema.oauthClientsTable.clientId,
+            conn
+              .select({ clientId: access.clientId })
+              .from(access)
+              .where(eq(access.userId, params.userId)),
+          ),
+          inArray(
+            schema.oauthClientsTable.clientId,
+            conn
+              .select({ clientId: refresh.clientId })
+              .from(refresh)
+              .where(eq(refresh.userId, params.userId)),
+          ),
+        ),
+      );
   }
 
   /**

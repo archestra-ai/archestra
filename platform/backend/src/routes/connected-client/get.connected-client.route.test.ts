@@ -1,0 +1,81 @@
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
+import { ConnectionSetupModel } from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { User } from "@/types";
+
+describe("GET /api/connected-clients", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let user: User;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember }) => {
+    organizationId = (await makeOrganization()).id;
+    user = await makeUser();
+    await makeMember(user.id, organizationId);
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = user;
+    });
+    const { default: routes } = await import("./connected-client.routes");
+    await app.register(routes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  test("lists only the caller's redeemed clients", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    await redeem(user.id, "claude-code");
+    const other = await makeUser();
+    await makeMember(other.id, organizationId);
+    await redeem(other.id, "codex");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/connected-clients",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      expect.objectContaining({ clientId: "claude-code", platform: "macos" }),
+    ]);
+  });
+
+  test("lists connected members for admins, paginated", async () => {
+    await redeem(user.id, "claude-code");
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/connected-clients/users?limit=10&offset=0",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = response.json();
+    expect(body.pagination.total).toBe(1);
+    expect(body.data[0]).toMatchObject({
+      userId: user.id,
+      clientIds: ["claude-code"],
+      gatewayCallCount: 0,
+    });
+  });
+
+  async function redeem(userId: string, clientId: "claude-code" | "codex") {
+    const { rawToken } = await ConnectionSetupModel.create({
+      organizationId,
+      userId,
+      clientId,
+      platform: "macos",
+      baseUrl: "http://localhost:9000/v1",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await ConnectionSetupModel.claimByToken({ rawToken });
+  }
+});

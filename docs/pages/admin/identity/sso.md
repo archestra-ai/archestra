@@ -10,7 +10,7 @@ lastUpdated: 2026-10-05
 
 Single Sign-On (SSO) lets users sign in to Archestra with the identity they already have at work — Microsoft, Okta, Google, GitHub, GitLab, or any OIDC/SAML provider — instead of managing yet another username and password.
 
-> **Enterprise feature** — see the [Licensing](/docs/get-started#licensing).
+> **Enterprise feature** — see [Pricing Model](/docs/get-started/pricing-model).
 
 ## How sign-in works
 

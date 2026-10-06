@@ -12,7 +12,7 @@ Team Sync adds and removes team memberships at SSO sign-in using the user's iden
 
 Sync creates direct membership in the mapped team. If that team is nested, the user also receives resource access inherited from its parent teams. Team roles and team administration are not inherited. See [Team Hierarchies](/docs/admin/access-control#team-hierarchies) for the complete access rules.
 
-> **Enterprise feature** — see the [Licensing](/docs/get-started#licensing).
+> **Enterprise feature** — see [Pricing Model](/docs/get-started/pricing-model).
 
 ## How Team Sync Works
 

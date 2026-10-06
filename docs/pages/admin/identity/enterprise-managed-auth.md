@@ -10,7 +10,7 @@ lastUpdated: 2026-10-05
 
 Enterprise-Managed Auth exchanges a user's identity-provider token for a downstream API token. MCP tools then call that API with the user's identity and permissions.
 
-> **Enterprise feature** — see the [Licensing](/docs/get-started#licensing).
+> **Enterprise feature** — see [Pricing Model](/docs/get-started/pricing-model).
 
 ## How Token Exchange Works
 

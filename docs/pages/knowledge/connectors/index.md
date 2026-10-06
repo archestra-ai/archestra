@@ -61,7 +61,7 @@ Permission sync copies each source's own access rules. A person then finds only 
 
 Turn on **Sync permissions from the source** on the connector's **General** tab. You need:
 
-- The Knowledge Enterprise feature. See [Licensing](/docs/get-started#licensing).
+- The Knowledge Enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
 - A source that supports it. See the [Sources](#sources) table.
 - [`knowledgeSource:create`](/docs/reference/permissions#knowledgeSource:create) to create the connector, or [`knowledgeSource:update`](/docs/reference/permissions#knowledgeSource:update) to change it.
 - The source's own setup. Each source page has an **Auto-Sync Permissions** section.

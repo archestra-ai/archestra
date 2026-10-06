@@ -1,5 +1,13 @@
 import type { PaginationQuery } from "@archestra/shared";
-import { and, count, desc, eq, getTableColumns, isNull } from "drizzle-orm";
+import {
+  and,
+  count,
+  desc,
+  eq,
+  getTableColumns,
+  isNull,
+  type SQL,
+} from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   createPaginatedResult,
@@ -7,8 +15,11 @@ import {
 } from "@/database/utils/pagination";
 import type { PublicFileLink } from "@/types/public-file-link";
 
-/** Link metadata without the frozen bytes (everything but the serve path). */
-type PublicFileLinkMetadata = Omit<PublicFileLink, "data">;
+/** Link metadata without the frozen bytes or where they are stored. */
+type PublicFileLinkMetadata = Omit<
+  PublicFileLink,
+  "data" | "storageProvider" | "objectKey"
+>;
 
 /** A link row joined with the names the admin list shows. */
 type PublicFileLinkWithNames = PublicFileLinkMetadata & {
@@ -27,8 +38,10 @@ class PublicFileLinkModel {
     filename: string;
     mimeType: string;
     sizeBytes: number;
-    /** The frozen copy the link serves, taken now. */
-    data: Buffer;
+    /** Where the frozen copy taken now lives: inline `data` or `objectKey`. */
+    storageProvider: PublicFileLink["storageProvider"];
+    data: Buffer | null;
+    objectKey: string | null;
   }): Promise<PublicFileLinkMetadata> {
     const [row] = await db
       .insert(schema.publicFileLinksTable)
@@ -54,13 +67,22 @@ class PublicFileLinkModel {
     return row ?? null;
   }
 
-  /** Every link in the organization, newest first, with creator and agent names. */
-  static async listForOrganization(params: {
+  /**
+   * Links in the organization, newest first, with creator and agent names —
+   * all of them, or only the ones `createdByUserId` asked for.
+   */
+  static async list(params: {
     organizationId: string;
+    createdByUserId?: string;
     pagination: PaginationQuery;
   }): Promise<PaginatedResult<PublicFileLinkWithNames>> {
     const table = schema.publicFileLinksTable;
-    const where = eq(table.organizationId, params.organizationId);
+    const where = and(
+      eq(table.organizationId, params.organizationId),
+      params.createdByUserId
+        ? eq(table.createdByUserId, params.createdByUserId)
+        : undefined,
+    ) as SQL;
     const [rows, [{ total }]] = await Promise.all([
       db
         .select({
@@ -102,24 +124,46 @@ class PublicFileLinkModel {
   }
 
   /**
-   * Revoke a link in the organization and drop its frozen bytes — a revoked
-   * link never serves again, so they would only take up storage. Idempotent:
-   * an already-revoked link keeps its original `revokedAt`. Returns false when
-   * no such link exists in the organization.
+   * Revoke a link in the organization (and, with `createdByUserId`, only if
+   * that user created it), dropping its inline bytes and external key — a
+   * revoked link never serves again. Idempotent: an already-revoked link keeps
+   * its original `revokedAt`. Returns null when no such link exists; otherwise
+   * the external object the caller must now remove, if this call revoked one.
    */
   static async revoke(params: {
     id: string;
     organizationId: string;
-  }): Promise<boolean> {
+    createdByUserId?: string;
+  }): Promise<{
+    removedObject: { provider: string; objectKey: string } | null;
+  } | null> {
     const table = schema.publicFileLinksTable;
     const existing = await PublicFileLinkModel.findById(params);
-    if (!existing) return false;
-    if (existing.revokedAt) return true;
-    await db
+    if (!existing) return null;
+    if (
+      params.createdByUserId &&
+      existing.createdByUserId !== params.createdByUserId
+    ) {
+      return null;
+    }
+    if (existing.revokedAt) return { removedObject: null };
+    // read the old location in the same statement that clears it, so two
+    // concurrent revokes never both claim the object.
+    const [revoked] = await db
       .update(table)
-      .set({ revokedAt: new Date(), data: null })
-      .where(and(eq(table.id, params.id), isNull(table.revokedAt)));
-    return true;
+      .set({ revokedAt: new Date(), data: null, objectKey: null })
+      .where(and(eq(table.id, params.id), isNull(table.revokedAt)))
+      .returning({ id: table.id });
+    if (!revoked) return { removedObject: null };
+    return {
+      removedObject:
+        existing.storageProvider !== "db" && existing.objectKey
+          ? {
+              provider: existing.storageProvider,
+              objectKey: existing.objectKey,
+            }
+          : null,
+    };
   }
 
   /** Audit snapshot. The token is a bearer credential, so it is left out. */
@@ -129,16 +173,19 @@ class PublicFileLinkModel {
   ): Promise<Record<string, unknown> | null> {
     const link = await PublicFileLinkModel.findById({ id, organizationId });
     if (!link) return null;
-    const { token: _token, ...safe } = link;
+    const { token: _token, objectKey: _objectKey, ...safe } = link;
     return safe;
   }
 
   private static async findById(params: {
     id: string;
     organizationId: string;
-  }): Promise<PublicFileLinkMetadata | null> {
+  }): Promise<Omit<PublicFileLink, "data"> | null> {
+    const { data: _data, ...columns } = getTableColumns(
+      schema.publicFileLinksTable,
+    );
     const [row] = await db
-      .select(metadataColumns())
+      .select(columns)
       .from(schema.publicFileLinksTable)
       .where(
         and(
@@ -155,10 +202,13 @@ export default PublicFileLinkModel;
 
 // === internal helpers ===
 
-/** Every column but `data`, so listings and snapshots never load the bytes. */
+/** Every column but the bytes and their location, for listings and snapshots. */
 function metadataColumns() {
-  const { data: _data, ...columns } = getTableColumns(
-    schema.publicFileLinksTable,
-  );
+  const {
+    data: _data,
+    storageProvider: _storageProvider,
+    objectKey: _objectKey,
+    ...columns
+  } = getTableColumns(schema.publicFileLinksTable);
   return columns;
 }

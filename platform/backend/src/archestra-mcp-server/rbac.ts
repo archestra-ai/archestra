@@ -1,8 +1,9 @@
-import type {
-  ArchestraToolShortName,
-  Permission,
-  ResourcePermissionAction,
-  ScopedResource,
+import {
+  type ArchestraToolShortName,
+  type Permission,
+  type ResourcePermissionAction,
+  type ScopedResource,
+  TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
 } from "@archestra/shared";
 import {
   allAvailableActions,
@@ -11,6 +12,7 @@ import {
 import type { RequestLookups } from "@/auth/request-lookups";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
+import OrganizationModel from "@/models/organization";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { archestraMcpBranding } from "./branding";
@@ -577,6 +579,7 @@ export async function filterToolNamesByPermission(
     }
   }
 
+  await dropToolsSwitchedOffByOrganization({ allowed, organizationId });
   return allowed;
 }
 
@@ -649,3 +652,23 @@ const SCOPED_RESOURCE_TOOLS: Partial<
   get_mcp_gateway: { resource: "mcpGateway", action: "read" },
   edit_mcp_gateway: { resource: "mcpGateway", action: "update" },
 };
+
+/**
+ * Tools an organization setting withdraws whatever the role allows, so a model
+ * never sees a tool it cannot use: `share_file_publicly` while public file
+ * sharing is off. The handler re-checks the switch, which covers a list cached
+ * from before an admin turned it off.
+ */
+async function dropToolsSwitchedOffByOrganization(params: {
+  allowed: Set<string>;
+  organizationId: string;
+}): Promise<void> {
+  const shareTool = [...params.allowed].find(
+    (name) =>
+      archestraMcpBranding.getToolShortName(name) ===
+      TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
+  );
+  if (!shareTool) return;
+  const organization = await OrganizationModel.getById(params.organizationId);
+  if (!organization?.allowPublicFileSharing) params.allowed.delete(shareTool);
+}

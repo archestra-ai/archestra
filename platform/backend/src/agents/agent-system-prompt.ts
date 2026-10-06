@@ -716,7 +716,7 @@ function buildFileHandlingInstruction(
       TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
     );
     paragraphs.push(
-      `When another tool or service needs a file as a URL it can fetch without logging in — a social media scheduler, for example — publish it with \`${shareFile}\` and pass on the URL it returns. That link is public to anyone who has it and stays live until an admin revokes it, so publish only what the user asked to make public.`,
+      `When another tool or service needs a file as a URL it can fetch without logging in — a social media scheduler, for example — publish it with \`${shareFile}\` and pass on the URL it returns. That link is public to anyone who has it and stays live until it is revoked, so publish only what the user asked to make public.`,
     );
   }
 

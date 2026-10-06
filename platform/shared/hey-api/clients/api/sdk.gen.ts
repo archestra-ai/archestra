@@ -9592,7 +9592,7 @@ export const unlinkProjectApp = <ThrowOnError extends boolean = false>(options: 
 export const linkProjectApp = <ThrowOnError extends boolean = false>(options: Options<LinkProjectAppData, ThrowOnError>) => (options.client ?? client).put<LinkProjectAppResponses, LinkProjectAppErrors, ThrowOnError>({ url: '/api/projects/{id}/apps/{appId}', ...options });
 
 /**
- * List the organization's public file links, newest first, revoked ones included.
+ * List public file links, newest first, revoked ones included. `scope=mine` (the default) lists the caller's own links; `scope=organization` lists every link in the organization and needs publicFileLink:admin.
  *
  * Authentication:
  *
@@ -9600,12 +9600,12 @@ export const linkProjectApp = <ThrowOnError extends boolean = false>(options: Op
  *
  * Authorization:
  *
- * `publicFileLink:read`: View every public file link in the organization
+ * `publicFileLink:read`: View the public file links you created
  */
 export const getPublicFileLinks = <ThrowOnError extends boolean = false>(options?: Options<GetPublicFileLinksData, ThrowOnError>) => (options?.client ?? client).get<GetPublicFileLinksResponses, GetPublicFileLinksErrors, ThrowOnError>({ url: '/api/public-file-links', ...options });
 
 /**
- * Revoke a public file link. The link stops serving immediately; revoking an already-revoked link is a no-op.
+ * Revoke a public file link you created, or any link in the organization with publicFileLink:admin. The link stops serving immediately; revoking an already-revoked link is a no-op.
  *
  * Authentication:
  *
@@ -9613,7 +9613,7 @@ export const getPublicFileLinks = <ThrowOnError extends boolean = false>(options
  *
  * Authorization:
  *
- * `publicFileLink:delete`: Revoke public file links
+ * `publicFileLink:delete`: Revoke the public file links you created
  */
 export const revokePublicFileLink = <ThrowOnError extends boolean = false>(options: Options<RevokePublicFileLinkData, ThrowOnError>) => (options.client ?? client).delete<RevokePublicFileLinkResponses, RevokePublicFileLinkErrors, ThrowOnError>({ url: '/api/public-file-links/{id}', ...options });
 

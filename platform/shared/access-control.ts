@@ -33,7 +33,7 @@ export const allAvailableActions: Record<Resource, Action[]> = {
   plugin: ["read", "create", "update", "delete"],
   app: ["read", "create"],
   scheduledTask: ["read", "create", "update", "delete"],
-  publicFileLink: ["read", "create", "delete"],
+  publicFileLink: ["read", "create", "delete", "admin"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -101,7 +101,8 @@ export const editorPermissions: Record<Resource, Action[]> = {
   app: ["read", "create"],
   scheduledTask: ["read", "create", "update", "delete"],
   // Publishing still needs the organization switch (allowPublicFileSharing).
-  publicFileLink: ["create"],
+  // read/delete cover the user's own links; admin lifts them org-wide.
+  publicFileLink: ["read", "create", "delete"],
 
   // LLM
   llmProxy: ["read", "update"],
@@ -163,8 +164,8 @@ export const memberPermissions: Record<Resource, Action[]> = {
   app: ["read", "create"],
   scheduledTask: ["read", "create", "update", "delete"],
   // Publishing still needs the organization switch (allowPublicFileSharing).
-  // Listing and revoking every link in the organization is admin oversight.
-  publicFileLink: ["create"],
+  // read/delete cover the user's own links; admin lifts them org-wide.
+  publicFileLink: ["read", "create", "delete"],
 
   // LLM
   llmProxy: ["read"],
@@ -376,10 +377,12 @@ export const permissionDescriptions: Record<string, string> = {
   "scheduledTask:create": "Create new scheduled tasks and trigger runs",
   "scheduledTask:update": "Modify scheduled task configuration",
   "scheduledTask:delete": "Delete scheduled tasks",
-  "publicFileLink:read": "View every public file link in the organization",
+  "publicFileLink:read": "View the public file links you created",
   "publicFileLink:create":
     "Let agents publish files as public links (when the organization allows it)",
-  "publicFileLink:delete": "Revoke public file links",
+  "publicFileLink:delete": "Revoke the public file links you created",
+  "publicFileLink:admin":
+    "View and revoke every public file link in your organization (also requires Read and Delete)",
 
   // MCP
   "mcpGateway:read": "Open MCP Gateways",
@@ -1837,7 +1840,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RevokeSkillShareLink]: {},
   [RouteId.RotateSkillShareLink]: {},
 
-  // Public file links - admin oversight of what agents published. The public
+  // Public file links - each user's own links; publicFileLink:admin (checked
+  // in the handlers) widens list and revoke to the organization. The public
   // serving route (GetPublicFile) stays outside this map: it is allowlisted in
   // the auth middleware (`PUBLIC_FILES_PREFIX`); the URL token authorizes it.
   [RouteId.GetPublicFileLinks]: { publicFileLink: ["read"] },

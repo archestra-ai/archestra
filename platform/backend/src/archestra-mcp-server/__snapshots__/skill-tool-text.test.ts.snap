@@ -714,7 +714,7 @@ exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 
 exports[`skill and sandbox tool text > archestra__share_file_publicly 1`] = `
 {
-  "description": "Publish a file as a PUBLIC link and return its URL — for handing an image, video, or PDF to an external service that needs a URL it can fetch without logging in, such as a social media scheduler. The link is PUBLIC: anyone on the internet who has it can open the file, and it stays live until an admin revokes it. Only share content the user explicitly asked to publish — never private or internal material. Pass \`path\` for a file in the sandbox (e.g. an attachment staged under /home/sandbox/attachments/) or \`fileId\` for an existing persistent file. Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared. Requires an organization admin to have enabled public file sharing.",
+  "description": "Publish a file as a PUBLIC link and return its URL — for handing an image, video, or PDF to an external service that needs a URL it can fetch without logging in, such as a social media scheduler. The link is PUBLIC: anyone on the internet who has it can open the file, and it stays live until it is revoked. Only share content the user explicitly asked to publish — never private or internal material. Pass \`path\` for a file in the sandbox (e.g. an attachment staged under /home/sandbox/attachments/) or \`fileId\` for an existing persistent file. Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared.",
   "inputSchema": {
     "$schema": "https://json-schema.org/draft/2020-12/schema",
     "additionalProperties": false,

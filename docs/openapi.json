@@ -379468,7 +379468,7 @@
         "tags": [
           "Public File Links"
         ],
-        "description": "List the organization's public file links, newest first, revoked ones included.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`publicFileLink:read`: View every public file link in the organization",
+        "description": "List public file links, newest first, revoked ones included. `scope=mine` (the default) lists the caller's own links; `scope=organization` lists every link in the organization and needs publicFileLink:admin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`publicFileLink:read`: View the public file links you created",
         "parameters": [
           {
             "schema": {
@@ -379490,6 +379490,19 @@
             },
             "in": "query",
             "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "mine",
+              "type": "string",
+              "enum": [
+                "mine",
+                "organization"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
             "required": false
           }
         ],
@@ -379914,7 +379927,7 @@
         "tags": [
           "Public File Links"
         ],
-        "description": "Revoke a public file link. The link stops serving immediately; revoking an already-revoked link is a no-op.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`publicFileLink:delete`: Revoke public file links",
+        "description": "Revoke a public file link you created, or any link in the organization with publicFileLink:admin. The link stops serving immediately; revoking an already-revoked link is a no-op.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`publicFileLink:delete`: Revoke the public file links you created",
         "parameters": [
           {
             "schema": {

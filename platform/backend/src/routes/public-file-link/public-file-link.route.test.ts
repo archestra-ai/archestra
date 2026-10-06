@@ -16,11 +16,12 @@ import publicFilesRoutes from "./public-files.routes";
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0x00]);
 
-describe("public file link admin routes", () => {
+describe("public file link routes", () => {
   let app: FastifyInstanceWithZod;
   let organizationId: string;
   let admin: User;
   let member: User;
+  let otherMember: User;
   let linkId: string;
   let publicPath: string;
 
@@ -29,8 +30,12 @@ describe("public file link admin routes", () => {
     organizationId = (await makeOrganization()).id;
     admin = await makeUser();
     member = await makeUser();
+    otherMember = await makeUser();
     await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
     await makeMember(member.id, organizationId, { role: MEMBER_ROLE_NAME });
+    await makeMember(otherMember.id, organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
     await OrganizationModel.patch(organizationId, {
       allowPublicFileSharing: true,
     });
@@ -78,11 +83,11 @@ describe("public file link admin routes", () => {
     } as unknown as Awaited<ReturnType<typeof betterAuth.api.getSession>>);
   }
 
-  test("an admin lists links with who shared them, through which agent, and the full URL", async () => {
+  test("an admin lists the organization's links with who shared them, through which agent, and the full URL", async () => {
     actAs(admin);
     const response = await app.inject({
       method: "GET",
-      url: "/api/public-file-links?limit=10&offset=0",
+      url: "/api/public-file-links?limit=10&offset=0&scope=organization",
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -100,22 +105,52 @@ describe("public file link admin routes", () => {
     ]);
   });
 
-  test("members can neither list nor revoke links", async () => {
-    actAs(member);
-    const list = await app.inject({
+  test("a member lists and revokes their own links, and only those", async () => {
+    actAs(otherMember);
+    const othersList = await app.inject({
       method: "GET",
       url: "/api/public-file-links",
     });
-    const revoke = await app.inject({
+    const othersRevoke = await app.inject({
       method: "DELETE",
       url: `/api/public-file-links/${linkId}`,
     });
-
-    expect(list.statusCode).toBe(403);
-    expect(revoke.statusCode).toBe(403);
+    const orgWide = await app.inject({
+      method: "GET",
+      url: "/api/public-file-links?scope=organization",
+    });
+    expect(othersList.json().data).toEqual([]);
+    expect(othersRevoke.statusCode).toBe(404);
+    expect(orgWide.statusCode).toBe(403);
     expect(
       (await app.inject({ method: "GET", url: publicPath })).statusCode,
     ).toBe(200);
+
+    actAs(member);
+    const ownList = await app.inject({
+      method: "GET",
+      url: "/api/public-file-links",
+    });
+    expect(ownList.json().data).toEqual([
+      expect.objectContaining({ id: linkId }),
+    ]);
+    const ownRevoke = await app.inject({
+      method: "DELETE",
+      url: `/api/public-file-links/${linkId}`,
+    });
+    expect(ownRevoke.statusCode, ownRevoke.body).toBe(200);
+    expect(
+      (await app.inject({ method: "GET", url: publicPath })).statusCode,
+    ).toBe(404);
+  });
+
+  test("an admin's own list leaves out other people's links", async () => {
+    actAs(admin);
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/public-file-links",
+    });
+    expect(response.json().data).toEqual([]);
   });
 
   test("revoking takes the link down and writes an audit record", async () => {
@@ -174,7 +209,9 @@ describe("public file link admin routes", () => {
       filename: "other.png",
       mimeType: "image/png",
       sizeBytes: PNG.byteLength,
+      storageProvider: "db",
       data: PNG,
+      objectKey: null,
     });
 
     actAs(admin);

@@ -1,7 +1,14 @@
-import { randomBytes } from "node:crypto";
+import { randomBytes, randomUUID } from "node:crypto";
 import config from "@/config";
+import logger from "@/logging";
 import { OrganizationModel, PublicFileLinkModel } from "@/models";
 import { PUBLIC_FILES_PREFIX } from "@/routes/route-paths";
+import {
+  deleteRowBytes,
+  FileBytesMissingError,
+  getObjectStore,
+  readRowBytes,
+} from "@/skills-sandbox/file-storage";
 import type { PublicFileLink } from "@/types/public-file-link";
 import {
   extensionForPublicFileMime,
@@ -18,8 +25,10 @@ import {
  *
  * The copy is what makes a link safe to post ahead of time: editing,
  * overwriting, or deleting the source file never changes or removes what the
- * link serves — only a revoke does. The route still re-checks on every request
- * that the link is live and the organization's switch is on.
+ * link serves — only a revoke does. It is kept in the deployment's file
+ * storage (Postgres, filesystem, or S3), like any other file. The route still
+ * re-checks on every request that the link is live and the organization's
+ * switch is on.
  */
 class PublicFileSharingService {
   /** Mint a public link for a file the caller has already been authorized to read. */
@@ -30,7 +39,7 @@ class PublicFileSharingService {
     conversationId: string | null;
     file: { id: string; filename: string; data: Buffer };
   }): Promise<
-    | { link: Omit<PublicFileLink, "data">; url: string }
+    | { link: PublicFileLinkMetadata; url: string }
     | { error: "disabled" | "too_large" | "unsupported_type"; message: string }
   > {
     if (!(await this.isEnabled(params.organizationId))) {
@@ -58,19 +67,67 @@ class PublicFileSharingService {
       };
     }
 
-    const link = await PublicFileLinkModel.create({
-      organizationId: params.organizationId,
-      token: randomBytes(TOKEN_BYTES).toString("base64url"),
-      fileId: file.id,
-      createdByUserId: params.userId,
-      agentId: params.agentId,
-      conversationId: params.conversationId,
-      filename: file.filename,
-      mimeType,
-      sizeBytes: file.data.byteLength,
-      data: file.data,
-    });
+    const store = getObjectStore();
+    const objectKey = store
+      ? (
+          await store.write({
+            scope: { kind: "publicLinks" },
+            name: randomUUID(),
+            data: file.data,
+          })
+        ).key
+      : null;
+
+    let link: PublicFileLinkMetadata;
+    try {
+      link = await PublicFileLinkModel.create({
+        organizationId: params.organizationId,
+        token: randomBytes(TOKEN_BYTES).toString("base64url"),
+        fileId: file.id,
+        createdByUserId: params.userId,
+        agentId: params.agentId,
+        conversationId: params.conversationId,
+        filename: file.filename,
+        mimeType,
+        sizeBytes: file.data.byteLength,
+        storageProvider: store ? config.fileStorage.provider : "db",
+        data: store ? null : file.data,
+        objectKey,
+      });
+    } catch (error) {
+      // no row points at the copy, so nothing would ever remove it.
+      if (objectKey) await store?.remove(objectKey).catch(() => {});
+      throw error;
+    }
     return { link, url: this.buildUrl(link) };
+  }
+
+  /**
+   * Revoke a link and remove its frozen copy. Without `canRevokeAny` only the
+   * caller's own links can be revoked; anyone else's is reported as not found.
+   */
+  async revoke(params: {
+    id: string;
+    organizationId: string;
+    userId: string;
+    canRevokeAny: boolean;
+  }): Promise<boolean> {
+    const result = await PublicFileLinkModel.revoke({
+      id: params.id,
+      organizationId: params.organizationId,
+      createdByUserId: params.canRevokeAny ? undefined : params.userId,
+    });
+    if (!result) return false;
+    if (result.removedObject) {
+      // the link is already dead; a leftover object is only wasted storage.
+      await deleteRowBytes(result.removedObject).catch((error: unknown) =>
+        logger.warn(
+          { err: error, linkId: params.id },
+          "[PublicFiles] could not remove a revoked link's copy",
+        ),
+      );
+    }
+    return true;
   }
 
   /**
@@ -83,13 +140,15 @@ class PublicFileSharingService {
     if (!TOKEN_RE.test(token)) return null;
     const link = await PublicFileLinkModel.findActiveByToken(token);
     if (!link) return null;
-    if (!link.data) return null;
     if (!(await this.isEnabled(link.organizationId))) return null;
 
-    // PGlite hands bytea back as Uint8Array; serve a Buffer either way.
-    const data = Buffer.isBuffer(link.data)
-      ? link.data
-      : Buffer.from(link.data as Uint8Array);
+    let data: Buffer;
+    try {
+      data = await readRowBytes(link);
+    } catch (error) {
+      if (error instanceof FileBytesMissingError) return null;
+      throw error;
+    }
     // Defense in depth: the copy was sniffed at share time, and is re-checked
     // so a row written any other way can never serve a disallowed type.
     const mimeType = sniffPublicFileMime(data);
@@ -115,7 +174,8 @@ class PublicFileSharingService {
     return `${config.publicFiles.baseUrl}${PUBLIC_FILES_PREFIX}/${link.token}/${encodeURIComponent(name)}`;
   }
 
-  private async isEnabled(organizationId: string): Promise<boolean> {
+  /** The organization switch: off means no sharing and no serving. */
+  async isEnabled(organizationId: string): Promise<boolean> {
     const organization = await OrganizationModel.getById(organizationId);
     return organization?.allowPublicFileSharing ?? false;
   }
@@ -124,6 +184,10 @@ class PublicFileSharingService {
 export const publicFileSharing = new PublicFileSharingService();
 
 // === internal ===
+
+type PublicFileLinkMetadata = Awaited<
+  ReturnType<typeof PublicFileLinkModel.create>
+>;
 
 /** 24 random bytes = 192 bits, 32 URL-safe base64 characters. */
 const TOKEN_BYTES = 24;

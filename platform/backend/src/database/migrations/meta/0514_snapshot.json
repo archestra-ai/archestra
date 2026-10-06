@@ -1,5 +1,5 @@
 {
-  "id": "35feb66a-4f61-40df-8794-4249e695235d",
+  "id": "9bfc60dd-c1ba-472a-895b-b3ad8abd167f",
   "prevId": "dce6d93a-2ff5-4589-9ecc-c59655d340ff",
   "version": "7",
   "dialect": "postgresql",
@@ -20171,9 +20171,22 @@
           "primaryKey": false,
           "notNull": true
         },
+        "storage_provider": {
+          "name": "storage_provider",
+          "type": "text",
+          "primaryKey": false,
+          "notNull": true,
+          "default": "'db'"
+        },
         "data": {
           "name": "data",
           "type": "bytea",
+          "primaryKey": false,
+          "notNull": false
+        },
+        "object_key": {
+          "name": "object_key",
+          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -20314,7 +20327,12 @@
       "compositePrimaryKeys": {},
       "uniqueConstraints": {},
       "policies": {},
-      "checkConstraints": {},
+      "checkConstraints": {
+        "public_file_links_storage_payload_chk": {
+          "name": "public_file_links_storage_payload_chk",
+          "value": "(\n        (\"public_file_links\".\"storage_provider\" = 'db' AND \"public_file_links\".\"object_key\" IS NULL)\n        OR (\"public_file_links\".\"storage_provider\" <> 'db' AND \"public_file_links\".\"data\" IS NULL)\n      )"
+        }
+      },
       "isRLSEnabled": false
     },
     "public.resource_permission_policies": {

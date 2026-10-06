@@ -1000,12 +1000,11 @@ const registry = defineArchestraTools([
       "image, video, or PDF to an external service that needs a URL it can " +
       "fetch without logging in, such as a social media scheduler. The link is " +
       "PUBLIC: anyone on the internet who has it can open the file, and it " +
-      "stays live until an admin revokes it. Only share content the user " +
+      "stays live until it is revoked. Only share content the user " +
       "explicitly asked to publish — never private or internal material. " +
       "Pass `path` for a file in the sandbox (e.g. an attachment staged under " +
       `${SKILL_SANDBOX_ATTACHMENTS_DIR}/) or \`fileId\` for an existing persistent file. ` +
-      "Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared. " +
-      "Requires an organization admin to have enabled public file sharing.",
+      "Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared.",
     schema: ShareFilePubliclySchema,
     outputSchema: ShareFilePubliclyOutputSchema,
     async handler({ args, context }) {
@@ -1090,7 +1089,7 @@ const registry = defineArchestraTools([
           mimeType: shared.link.mimeType,
           sizeBytes: shared.link.sizeBytes,
         },
-        `Published "${shared.link.filename}" at ${shared.url} — a PUBLIC link: anyone with it can open the file until an admin revokes it.`,
+        `Published "${shared.link.filename}" at ${shared.url} — a PUBLIC link: anyone with it can open the file until it is revoked. The user can revoke it in their personal settings.`,
       );
     },
   }),

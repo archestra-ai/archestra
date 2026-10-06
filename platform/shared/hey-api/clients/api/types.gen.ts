@@ -97983,6 +97983,7 @@ export type GetPublicFileLinksData = {
     query?: {
         limit?: number;
         offset?: number;
+        scope?: 'mine' | 'organization';
     };
     url: '/api/public-file-links';
 };

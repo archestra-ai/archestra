@@ -1,3 +1,6 @@
+import fs from "node:fs/promises";
+import os from "node:os";
+import path from "node:path";
 import {
   getArchestraToolFullName,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
@@ -11,6 +14,7 @@ import {
   PublicFileLinkModel,
 } from "@/models";
 import AuditLogModel from "@/models/audit-log";
+import { publicFileSharing } from "@/public-files/public-file-sharing";
 import { fileStore } from "@/skills-sandbox/file-store";
 import { skillSandboxRuntimeService } from "@/skills-sandbox/skill-sandbox-runtime-service";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
@@ -98,16 +102,21 @@ describe("share_file_publicly", () => {
       { ...context, userId: restricted.id },
     );
     expect(result.isError).toBe(true);
-    const { data } = await PublicFileLinkModel.listForOrganization({
+    const { data } = await PublicFileLinkModel.list({
       organizationId,
       pagination: { limit: 10, offset: 0 },
     });
     expect(data).toHaveLength(0);
   });
 
-  test("refuses with an admin-must-enable message while the org switch is off", async () => {
-    const file = await putFile("banner.png", PNG);
+  test("is hidden while the org switch is off, and refuses if called anyway", async () => {
+    const download = getArchestraToolFullName(TOOL_DOWNLOAD_FILE_SHORT_NAME);
+    const listed = () =>
+      filterToolNamesByPermission([SHARE, download], userId, organizationId);
+    expect([...(await listed())]).toEqual([download]);
 
+    // A tool list cached before an admin turned sharing off can still name it.
+    const file = await putFile("banner.png", PNG);
     const result = await executeArchestraTool(
       SHARE,
       { fileId: file.id },
@@ -116,7 +125,9 @@ describe("share_file_publicly", () => {
 
     expect(result.isError).toBe(true);
     expect(JSON.stringify(result.content)).toContain("admin must enable");
-    const { data } = await PublicFileLinkModel.listForOrganization({
+    await enableSharing();
+    expect([...(await listed())].sort()).toEqual([SHARE, download].sort());
+    const { data } = await PublicFileLinkModel.list({
       organizationId,
       pagination: { limit: 10, offset: 0 },
     });
@@ -162,7 +173,7 @@ describe("share_file_publicly", () => {
     expect(structured.url).toMatch(
       /^https:\/\/files\.example\.com\/public-files\/[A-Za-z0-9_-]{32}\/banner\.png$/,
     );
-    const { data } = await PublicFileLinkModel.listForOrganization({
+    const { data } = await PublicFileLinkModel.list({
       organizationId,
       pagination: { limit: 10, offset: 0 },
     });
@@ -263,5 +274,72 @@ describe("share_file_publicly", () => {
     expect((result.structuredContent as { filename: string }).filename).toBe(
       exportArtifact.mock.calls[1][0].filename,
     );
+  });
+
+  describe("with filesystem file storage", () => {
+    let root: string;
+    let savedProvider: typeof config.fileStorage.provider;
+    let savedRoot: string;
+
+    beforeEach(async () => {
+      root = await fs.mkdtemp(path.join(os.tmpdir(), "public-links-"));
+      savedProvider = config.fileStorage.provider;
+      savedRoot = config.fileStorage.filesystemRoot;
+      config.fileStorage.provider = "filesystem";
+      config.fileStorage.filesystemRoot = root;
+    });
+    afterEach(async () => {
+      config.fileStorage.provider = savedProvider;
+      config.fileStorage.filesystemRoot = savedRoot;
+      await fs.rm(root, { recursive: true, force: true });
+    });
+
+    test("keeps the frozen copy in file storage, outside anyone's files, and removes it on revoke", async () => {
+      await enableSharing();
+      const file = await putFile("banner.png", PNG);
+
+      const result = await executeArchestraTool(
+        SHARE,
+        { fileId: file.id },
+        context,
+      );
+      expect(result.isError, JSON.stringify(result.content)).toBe(false);
+      const { url, linkId } = result.structuredContent as {
+        url: string;
+        linkId: string;
+      };
+      const token = url.split("/")[4];
+
+      const copies = await fs.readdir(path.join(root, "_public-links"));
+      expect(copies).toHaveLength(1);
+      // The user's own folder holds only the source, never the copy.
+      const ownerFolders = (await fs.readdir(root)).filter(
+        (name) => name !== "_public-links",
+      );
+      expect(ownerFolders).toHaveLength(1);
+      expect(
+        await fs.readdir(path.join(root, ownerFolders[0], conversationId)),
+      ).toEqual(["banner.png"]);
+
+      // Deleting the source leaves the link serving the copy.
+      expect(
+        await fileStore.delete({ ref: file.id, organizationId, userId }),
+      ).toBe(true);
+      expect((await publicFileSharing.resolve(token))?.data).toEqual(PNG);
+
+      expect(
+        await publicFileSharing.revoke({
+          id: linkId,
+          organizationId,
+          userId,
+          canRevokeAny: false,
+        }),
+      ).toBe(true);
+      // the store drops the folder along with its last object.
+      expect(
+        await fs.readdir(path.join(root, "_public-links")).catch(() => []),
+      ).toEqual([]);
+      expect(await publicFileSharing.resolve(token)).toBeNull();
+    });
   });
 });

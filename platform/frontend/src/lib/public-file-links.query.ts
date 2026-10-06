@@ -13,7 +13,19 @@ const { getPublicFileLinks, revokePublicFileLink } = archestraApiSdk;
 export type PublicFileLink =
   archestraApiTypes.GetPublicFileLinksResponses["200"]["data"][number];
 
-export function usePublicFileLinks(params: { limit: number; offset: number }) {
+export type PublicFileLinkScope = NonNullable<
+  NonNullable<archestraApiTypes.GetPublicFileLinksData["query"]>["scope"]
+>;
+
+export function usePublicFileLinks({
+  enabled = true,
+  ...params
+}: {
+  scope: PublicFileLinkScope;
+  limit: number;
+  offset: number;
+  enabled?: boolean;
+}) {
   return useQuery({
     queryKey: ["public-file-links", params],
     queryFn: async () => {
@@ -22,6 +34,7 @@ export function usePublicFileLinks(params: { limit: number; offset: number }) {
       return data;
     },
     placeholderData: keepPreviousData,
+    enabled,
   });
 }
 

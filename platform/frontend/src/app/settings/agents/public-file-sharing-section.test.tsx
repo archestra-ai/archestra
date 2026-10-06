@@ -126,8 +126,9 @@ describe("PublicFileSharingSection", () => {
     ).toBeInTheDocument();
   });
 
-  it("lists shared files and revokes a live one", async () => {
+  it("lists everyone's shared files and revokes a live one", async () => {
     let revokedId: string | null = null;
+    let requestedScope: string | null = null;
     const page = () => ({
       data: [
         link({ revokedAt: revokedId ? "2026-10-02T00:00:00.000Z" : null }),
@@ -148,7 +149,10 @@ describe("PublicFileSharingSection", () => {
       },
     });
     server.use(
-      http.get(LINKS_URL, () => HttpResponse.json(page())),
+      http.get(LINKS_URL, ({ request }) => {
+        requestedScope = new URL(request.url).searchParams.get("scope");
+        return HttpResponse.json(page());
+      }),
       http.delete(`${LINKS_URL}/:id`, ({ params }) => {
         revokedId = String(params.id);
         return HttpResponse.json({ success: true });
@@ -159,6 +163,7 @@ describe("PublicFileSharingSection", () => {
     const live = (await screen.findByText("launch-banner.png")).closest("li");
     const revoked = screen.getByText("old-teaser.mp4").closest("li");
     if (!live || !revoked) throw new Error("rows missing");
+    expect(requestedScope).toBe("organization");
     expect(within(live).getByText(/Dana via Social Agent/)).toBeInTheDocument();
     // An already-revoked link has nothing left to revoke.
     expect(within(revoked).getByText("Revoked")).toBeInTheDocument();

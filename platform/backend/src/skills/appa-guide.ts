@@ -1,5 +1,12 @@
-import { APPA_GUIDE_CORE } from "./appa-guide.core.generated";
+import { readFileSync } from "node:fs";
 import type { BuiltInSkill } from "./built-in-skills";
+
+// A plain file rather than a text import so tsx-run scripts can load it too;
+// the build copies it next to the bundled chunks.
+const APPA_GUIDE_CORE = readFileSync(
+  new URL("./appa-guide.core.generated.md", import.meta.url),
+  "utf8",
+);
 
 export const APPA_GUIDE_SKILL: BuiltInSkill = {
   builtInSkillId: "appa-guide",

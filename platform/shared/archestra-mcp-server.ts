@@ -254,6 +254,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "get_guardrails_policy",
   "get_openappa_yell",
+  "list_openappa_consults",
   "list_guardrails_battery_fits",
   "inspect_guardrails_server",
   "validate_guardrails_policy",
@@ -474,6 +475,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   read_peer_message: "openappa",
   get_guardrails_policy: "openappa",
   get_openappa_yell: "openappa",
+  list_openappa_consults: "openappa",
   list_guardrails_battery_fits: "openappa",
   inspect_guardrails_server: "openappa",
   validate_guardrails_policy: "openappa",
@@ -867,6 +869,32 @@ export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
   return (REQUIRED_OPENAPPA_TOOL_SHORT_NAMES as readonly string[]).includes(
     shortName,
   );
+}
+
+/**
+ * Side-effect-free OpenAPPA policy tools every agent and gateway may list and
+ * run while OpenAPPA is enabled, without an assignment. Per-tool RBAC,
+ * exclusions and the delegated-run gate still apply; policy writes stay
+ * assignment-only.
+ */
+export const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES = [
+  "get_guardrails_policy",
+  "list_guardrails_battery_fits",
+  "inspect_guardrails_server",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "get_guardrails_policy_change_status",
+  "get_openappa_yell",
+] as const satisfies readonly ArchestraToolShortName[];
+
+const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
+  IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES,
+);
+
+export function isImplicitOpenAppaReadToolShortName(
+  shortName: string | null | undefined,
+): boolean {
+  return IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET.has(shortName ?? "");
 }
 
 /**

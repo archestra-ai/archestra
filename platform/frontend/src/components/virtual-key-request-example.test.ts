@@ -119,6 +119,46 @@ describe("buildCurlExample", () => {
     expect(example).toContain(`-H "X-Archestra-Virtual-Key: ${key}"`);
   });
 
+  it("has no Model Router request for a passthrough key", () => {
+    expect(
+      buildCurlExample({
+        connectionBaseUrl: base,
+        target: { kind: "model-router" },
+        keyType: "passthrough",
+        keyValue: key,
+        model: "openai:gpt-5.4",
+      }),
+    ).toBeNull();
+  });
+
+  it("posts a decisions request to Jev's single endpoint", () => {
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "provider", provider: "jev" },
+      keyType: "standard",
+      keyValue: key,
+      model: "jev-1.13.0",
+    });
+    expect(example).toContain(`curl "${base}/jev/decisions"`);
+    expect(example).toContain(`-H "Authorization: Bearer ${key}"`);
+    expect(example).toContain('"model": "jev-1.13.0"');
+    expect(example).toContain('"questions"');
+  });
+
+  it("sends an OAuth or IdP token as the bearer even where keys use another header", () => {
+    const example = buildCurlExample({
+      connectionBaseUrl: base,
+      target: { kind: "provider", provider: "anthropic" },
+      keyType: "token",
+      keyValue: "$ARCHESTRA_ACCESS_TOKEN",
+      model: "claude-opus-4-8",
+    });
+    expect(example).toContain(
+      '-H "Authorization: Bearer $ARCHESTRA_ACCESS_TOKEN"',
+    );
+    expect(example).not.toContain("x-api-key");
+  });
+
   it("has no example for providers whose wire format it does not cover", () => {
     expect(
       buildCurlExample({

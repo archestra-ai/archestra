@@ -457,6 +457,87 @@ class CacheManager {
     });
   }
 
+  /**
+   * Read several keys in one statement. Absent and expired entries are left
+   * out. Like {@link get}, a failed read is reported as misses.
+   */
+  async getMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
+    const entries = new Map<AllowedCacheKey, T>();
+    if (!this.keyv) {
+      logger.warn("CacheManager: Not started, returning no entries");
+      return entries;
+    }
+    if (keys.length === 0) return entries;
+    try {
+      const prefixed = keys.map((key) => sql`${`keyv:${key}`}`);
+      const result = await db.execute<{ key: string; value: string }>(sql`
+        SELECT key, value FROM keyv_cache
+        WHERE key IN (${sql.join(prefixed, sql`, `)})
+      `);
+      const now = Date.now();
+      for (const row of result.rows) {
+        const data = await this.keyv.deserializeData<T>(row.value);
+        if (data?.value === undefined) continue;
+        if (typeof data.expires === "number" && now > data.expires) continue;
+        entries.set(
+          row.key.slice("keyv:".length) as AllowedCacheKey,
+          data.value,
+        );
+      }
+    } catch (error) {
+      logger.error(
+        { error, keys },
+        "CacheManager: Error getting cache entries",
+      );
+      entries.clear();
+    }
+    return entries;
+  }
+
+  /**
+   * Count one event in each key's fixed window with a single atomic upsert,
+   * so concurrent writers never lose an increment. An entry whose window is
+   * still open keeps its end; an absent, ended or end-less entry starts a new
+   * window of `windowMs`. Entries are stored as
+   * `{ count, windowEndsAt }` and expire when their window ends.
+   */
+  async incrementFixedWindows(params: {
+    keys: AllowedCacheKey[];
+    windowMs: number;
+  }): Promise<void> {
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (params.keys.length === 0) return;
+    const now = Date.now();
+    const freshEnd = now + params.windowMs;
+    // Sorted so concurrent statements lock shared rows in the same order.
+    const rows = [...new Set(params.keys)]
+      .sort()
+      .map(
+        (key) =>
+          sql`(${`keyv:${key}`}, jsonb_build_object('value', jsonb_build_object('count', 1, 'windowEndsAt', ${freshEnd}::bigint), 'expires', ${freshEnd}::bigint)::text)`,
+      );
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES ${sql.join(rows, sql`, `)}
+      ON CONFLICT (key) DO UPDATE SET value = CASE
+        WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,windowEndsAt}') = 'number'
+          AND (keyv_cache.value::jsonb #>> '{value,windowEndsAt}')::numeric > ${now}
+          AND (
+            jsonb_typeof(keyv_cache.value::jsonb -> 'expires') IS DISTINCT FROM 'number'
+            OR (keyv_cache.value::jsonb ->> 'expires')::numeric >= ${now}
+          )
+        THEN jsonb_build_object(
+          'value', jsonb_build_object(
+            'count', COALESCE((keyv_cache.value::jsonb #>> '{value,count}')::numeric, 0) + 1,
+            'windowEndsAt', keyv_cache.value::jsonb #> '{value,windowEndsAt}'
+          ),
+          'expires', keyv_cache.value::jsonb #> '{value,windowEndsAt}'
+        )::text
+        ELSE EXCLUDED.value
+      END
+    `);
+  }
+
   /** Keyv expires entries on reads; sweep abandoned entries in this namespace too. */
   async deleteExpiredByPrefix(prefix: CacheKeyPrefix): Promise<void> {
     const pattern = `keyv:${prefix.replace(/[\\%_]/g, "\\$&")}-%`;

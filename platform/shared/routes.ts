@@ -865,6 +865,7 @@ export const RouteId = {
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",
+  GetOpenappaTrustAudience: "getOpenappaTrustAudience",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",
@@ -957,6 +958,8 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionHealth: "getConnectionHealth",
+  GetConnectedClients: "getConnectedClients",
+  DisconnectConnectedClient: "disconnectConnectedClient",
 
   // MCP App Routes
   GetApps: "getApps",

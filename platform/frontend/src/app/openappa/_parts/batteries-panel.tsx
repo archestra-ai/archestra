@@ -21,16 +21,6 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
-import {
-  siCloudflare,
-  siDatabricks,
-  siGithub,
-  siHuggingface,
-  siLinear,
-  siNotion,
-  siPagerduty,
-  siPosthog,
-} from "simple-icons";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   openRowOnPlainClick,
@@ -101,6 +91,7 @@ import {
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
+import { BatteryIcon, type CatalogEntry } from "./battery-icon";
 import {
   BATTERY_STATUS,
   BATTERY_STATUS_GROUPS,
@@ -200,7 +191,10 @@ export function BatteriesPanel() {
   const search = searchParams.get("search") ?? "";
   const sourceFilter = knownFilter(SOURCE_OPTIONS, searchParams.get("source"));
   const statusFilter = knownFilter(STATUS_OPTIONS, searchParams.get("status"));
-  const [editing, setEditing] = useState<string | null>(null);
+  // `?battery=<name>` opens that battery, so other pages can link to it.
+  const [editing, setEditing] = useState<string | null>(
+    searchParams.get("battery"),
+  );
   const [removing, setRemoving] = useState<string | null>(null);
   const [deletingPackage, setDeletingPackage] = useState<BatterySummary | null>(
     null,
@@ -307,7 +301,9 @@ export function BatteriesPanel() {
         <AgentNameCell
           name={row.original.name}
           description={row.original.summary?.description}
-          icon={<BatteryIcon row={row.original} catalog={catalog.data ?? []} />}
+          icon={
+            <RowBatteryIcon row={row.original} catalog={catalog.data ?? []} />
+          }
         />
       ),
     },
@@ -453,7 +449,11 @@ export function BatteriesPanel() {
           enforced={enforced}
           writable={writable}
           bindable={bindable}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            if (searchParams.has("battery"))
+              updateQueryParams({ battery: null });
+          }}
         />
       )}
       {removing && (
@@ -498,22 +498,9 @@ type BatteryTableRow = {
   included: PolicyBattery | null;
 };
 
-const BUNDLED_PROVIDER_ICONS: Record<string, { path: string; hex: string }> = {
-  cloudflare: siCloudflare,
-  databricks: siDatabricks,
-  github: siGithub,
-  huggingface: siHuggingface,
-  linear: siLinear,
-  notion: siNotion,
-  pagerduty: siPagerduty,
-  posthog: siPosthog,
-};
-
 const UNBOUND = "__unbound__";
 
 type BatteryCredential = PolicyBattery["credentials"][number];
-
-type CatalogEntry = { id: string; name: string; icon?: string | null };
 
 function HeldPullNotice({
   heldPull,
@@ -554,38 +541,24 @@ function HeldPullNotice({
   );
 }
 
-/** A row's mark: its catalog entry's icon, else the bundled provider's, else a battery. */
-function BatteryIcon({
+/** A row's mark, as the shared battery icon resolves it. */
+function RowBatteryIcon({
   row,
   catalog,
 }: {
   row: BatteryTableRow;
   catalog: CatalogEntry[];
 }) {
-  const match = catalog.find(
-    (entry) =>
-      row.summary?.installs.some((install) => install.catalogId === entry.id) ||
-      entry.name.toLowerCase() === row.name.toLowerCase(),
+  return (
+    <BatteryIcon
+      name={row.name}
+      bundled={row.summary?.source === "bundled"}
+      catalogIds={
+        row.summary?.installs.map((install) => install.catalogId) ?? []
+      }
+      catalog={catalog}
+    />
   );
-  const providerIcon = BUNDLED_PROVIDER_ICONS[row.name];
-  if (match?.icon)
-    return <McpCatalogIcon icon={match.icon} catalogId={match.id} size={20} />;
-  if (row.summary?.source === "bundled" && providerIcon)
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className="size-5 shrink-0"
-        fill={
-          providerIcon.hex === "000000" || providerIcon.hex === "181717"
-            ? "currentColor"
-            : `#${providerIcon.hex}`
-        }
-      >
-        <path d={providerIcon.path} />
-      </svg>
-    );
-  return <BatteryCharging className="size-5 shrink-0 text-muted-foreground" />;
 }
 
 function sourceLabel(row: BatteryTableRow) {
@@ -660,7 +633,7 @@ function BatteryDialog({
       size="medium"
       title={
         <span className="flex items-center gap-2.5">
-          <BatteryIcon row={row} catalog={catalog} />
+          <RowBatteryIcon row={row} catalog={catalog} />
           <span>{row.name}</span>
           {badge && (
             <Badge variant={badge.variant} className="font-normal">

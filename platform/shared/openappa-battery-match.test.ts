@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { matchBatteries } from "./battery-match";
+import { matchBatteries } from "./openappa-battery-match";
 
 const available = new Set(["github", "notion", "slack", "linear"]);
 
@@ -70,6 +70,25 @@ describe("matchBatteries", () => {
         available,
       ),
     ).toEqual([{ battery: "linear", evidence: "name" }]);
+  });
+
+  test("the monday Platform MCP server matches the monday battery", () => {
+    expect(
+      matchBatteries(
+        {
+          name: "Work management",
+          serverUrl: "https://mcp.monday.com/mcp",
+          localConfig: null,
+        },
+        new Set(["monday"]),
+      ),
+    ).toEqual([{ battery: "monday", evidence: "host" }]);
+    expect(
+      matchBatteries(
+        { name: "monday.com", serverUrl: null, localConfig: null },
+        new Set(["monday"]),
+      ),
+    ).toEqual([{ battery: "monday", evidence: "name" }]);
   });
 
   test("only available batteries and no false positives", () => {

@@ -452,7 +452,9 @@ describe("McpCatalogItemDetailPage overview", () => {
     const issue = within(
       screen.getByTestId("mcp-registry-attention-row-internal-tools"),
     );
-    expect(issue.getByText("Needs re-authentication")).toBeVisible();
+    expect(
+      issue.getByText(/The provider rejected the stored token/),
+    ).toBeVisible();
     expect(
       issue.getByRole("button", { name: "Dismiss alert for internal-tools" }),
     ).toBeVisible();
@@ -638,8 +640,10 @@ describe("McpCatalogItemDetailPage overview", () => {
     const issue = within(
       screen.getByTestId("mcp-registry-attention-row-internal-tools"),
     );
-    expect(issue.getByText("Needs re-authentication")).toBeInTheDocument();
-    expect(issue.queryByText("Failed to start")).toBeNull();
+    expect(
+      issue.getByText(/The provider rejected the stored token/),
+    ).toBeInTheDocument();
+    expect(issue.queryByText(/The server could not start/)).toBeNull();
   });
 
   it("does not claim a pod is running when no pod status has been reported", () => {

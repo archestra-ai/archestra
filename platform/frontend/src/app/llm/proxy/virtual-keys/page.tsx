@@ -59,7 +59,12 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useBulkRangeSelectionController } from "@/lib/bulk-range-selection-context";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -120,6 +125,7 @@ function VirtualKeysTable() {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canCreate } = useHasPermissions({ llmVirtualKey: ["create"] });
+  const { data: scopedGrants } = useScopedCapabilities();
 
   const query = useAllVirtualApiKeys({
     limit: pageSize,
@@ -151,7 +157,7 @@ function VirtualKeysTable() {
         {canCreate ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button>
+              <Button size="sm">
                 <Plus className="h-4 w-4" />
                 <span>Create Virtual Key</span>
                 <ChevronDown className="h-4 w-4" />
@@ -202,6 +208,14 @@ function VirtualKeysTable() {
     rangeSelection,
   });
   const selectedKeys = keys.filter((key) => rowSelection[key.id]);
+  const canDeleteSelected = selectedKeys.every((key) =>
+    holdsItemGrant({
+      grants: scopedGrants,
+      resource: "llmVirtualKey",
+      action: "delete",
+      id: key.id,
+    }),
+  );
   const hasActiveFilters = Boolean(
     searchFromUrl || keyTypeFilter || providerApiKeyIdFilter || labelsFilter,
   );
@@ -299,6 +313,7 @@ function VirtualKeysTable() {
       cell: ({ row }) => (
         <TableRowActions
           itemName={row.original.name}
+          permissionScope={row.original.id}
           actions={[
             {
               icon: <Pencil className="h-4 w-4" />,
@@ -383,7 +398,13 @@ function VirtualKeysTable() {
           busy={bulkDelete.isPending}
         >
           <PermissionButton
-            permissions={{ llmVirtualKey: ["delete"] }}
+            permissions={{}}
+            disabled={!canDeleteSelected}
+            tooltip={
+              canDeleteSelected
+                ? undefined
+                : "You can't delete every selected key"
+            }
             variant="destructive"
             size="sm"
             onClick={() => setBulkDeleteOpen(true)}
@@ -420,6 +441,7 @@ function VirtualKeysTable() {
                   actions={
                     <TableRowActions
                       itemName={key.name}
+                      permissionScope={key.id}
                       actions={[
                         {
                           icon: <Pencil className="h-4 w-4" />,

@@ -18,6 +18,7 @@ import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
 import {
   AgentModel,
+  AgentWorkspaceModel,
   LimitModel,
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
@@ -25,7 +26,9 @@ import {
   TeamTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
+import type { OpenAppaSession } from "@/openappa/service";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
+import { runtimeOpenAppaSession } from "@/services/agent-runtime/runtime-identity";
 import { archestraMarkWithText } from "@/services/archestra-mark";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { modelSyncService } from "@/services/model-sync";
@@ -78,6 +81,13 @@ export async function buildAgentRunLaunchSpec(params: {
   runMode: "interactive" | "one_shot";
   inputFiles?: AgentRunInput[];
   imagePullSecrets?: string[];
+  /** Persisted workspace. The mint re-reads this row; it is not a client header. */
+  workspaceId?: string;
+  /** Caller-scoped session for this workspace. parentId is a full session id. */
+  runtimeSession?: Pick<
+    OpenAppaSession,
+    "session_id" | "caller_id" | "parent_id"
+  >;
 }): Promise<{ spec: AgentRunLaunchSpec; virtualApiKeyId: string | null }> {
   const platformBaseUrl = config.agentRuntime.platformBaseUrl.replace(
     /\/+$/,
@@ -125,6 +135,40 @@ export async function buildAgentRunLaunchSpec(params: {
       404,
       "The Agent for this Agent Runtime run no longer exists",
     );
+  }
+  const boundWorkspace = params.workspaceId
+    ? await AgentWorkspaceModel.findById(params.workspaceId)
+    : null;
+  if (
+    params.workspaceId &&
+    (!boundWorkspace ||
+      boundWorkspace.organizationId !== params.organizationId ||
+      boundWorkspace.agentId !== params.agentId ||
+      boundWorkspace.actorKind !== params.actor.kind ||
+      boundWorkspace.actorId !== params.actor.id)
+  ) {
+    throw new ApiError(
+      409,
+      "The runtime workspace is not available for this actor",
+    );
+  }
+  if (params.runtimeSession && boundWorkspace) {
+    const expected = runtimeOpenAppaSession({
+      organizationId: boundWorkspace.organizationId,
+      workspaceId: boundWorkspace.id,
+      workloadName: boundWorkspace.workloadName,
+      actorKind: boundWorkspace.actorKind,
+      actorId: boundWorkspace.actorId,
+    });
+    if (
+      params.runtimeSession.caller_id !== expected.caller_id ||
+      params.runtimeSession.session_id !== expected.session_id
+    ) {
+      throw new ApiError(
+        409,
+        "The runtime session does not match the persisted workspace",
+      );
+    }
   }
   const skillPreview = await buildSkillDiscoveryPreview({
     agentId: params.agentId,
@@ -353,7 +397,9 @@ export async function buildAgentRunLaunchSpec(params: {
       poolScope: `${params.organizationId}:${params.runtime.environmentId ?? "default"}`,
       taskId: params.taskId,
       agentRuntimeId: params.runtime.agentId,
-      frozenName: constructStableRunName(agent.name, params.taskId),
+      frozenName:
+        boundWorkspace?.workloadName ??
+        constructStableRunName(agent.name, params.taskId),
       runtimeScope: params.runtimeScope,
       image: params.runtime.image,
       command: params.runtime.command ?? null,
@@ -429,6 +475,7 @@ const RESERVED_RUNTIME_ENV_KEYS = new Set([
   "ARCHESTRA_MCP_GATEWAY_TOKEN",
   "ARCHESTRA_MCP_GATEWAY_URL",
   "ARCHESTRA_VIRTUAL_KEY",
+  "ARCHESTRA_AGENT_RUNTIME_BINDING",
 ]);
 
 function claudeCodeCustomHeaders(params: {

@@ -64,7 +64,7 @@ export function SiteNotificationsSection({
   onDeleted,
 }: SiteNotificationsSectionProps) {
   const { data: canReadNotifications } = useHasPermissions({
-    siteNotification: ["read"],
+    organizationSettings: ["read"],
   });
   const { data: notification, isLoading } = useSiteNotification({
     enabled: canReadNotifications === true,
@@ -160,7 +160,7 @@ export function SiteNotificationsSection({
                   type="button"
                   variant="destructive"
                   size="sm"
-                  permissions={{ siteNotification: ["delete"] }}
+                  permissions={{ organizationSettings: ["update"] }}
                   onClick={handleDelete}
                   disabled={deleteMutation.isPending}
                 >

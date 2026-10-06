@@ -322,6 +322,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceIdParam: "taskId",
     action: "agentRun.updated",
   },
+  "/api/agent-runs/:taskId/openappa-review": {
+    resourceType: "agentRun",
+    resourceIdParam: "taskId",
+    action: "agentRun.reviewDecided",
+  },
   "/api/agent-runs/:taskId": {
     resourceType: "agentRun",
     resourceIdParam: "taskId",
@@ -1073,6 +1078,11 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "chatOpsBinding",
     fetchById: (id, orgId) =>
       ChatOpsChannelBindingModel.findByIdForAudit(id, orgId),
+  },
+  // The binding is the caller's own Telegram DM link, only known inside the
+  // handler — the unlink handler supplies the resource id and `before`.
+  "/api/chatops/telegram/link": {
+    resourceType: "chatOpsBinding",
   },
   "/api/chatops/config/ms-teams": {
     resourceType: "chatOpsConfig",

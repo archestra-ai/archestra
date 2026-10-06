@@ -61,7 +61,7 @@ export function AppaGithubSyncPanel() {
   const query = useAppaGithubSync();
   const update = useUpdateAppaGithubSync();
   const { data: canManage } = useHasPermissions({
-    openappaSettings: ["update"],
+    organizationSettings: ["update"],
   });
   const [editing, setEditing] = useState(false);
   const [creating, setCreating] = useState(false);
@@ -202,8 +202,7 @@ export function AppaGithubSyncPanel() {
                       {canManage && (
                         <Button
                           variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
+                          size="xs"
                           disabled={update.isPending}
                           onClick={() => update.mutate({ action: "sync" })}
                         >
@@ -249,8 +248,7 @@ export function AppaGithubSyncPanel() {
                     <div className="flex items-center gap-2">
                       <Button
                         variant="outline"
-                        size="sm"
-                        className="h-7 px-2 text-xs"
+                        size="xs"
                         onClick={() => setEditing(true)}
                       >
                         {connected ? "Edit source" : "Reconnect GitHub"}
@@ -258,8 +256,7 @@ export function AppaGithubSyncPanel() {
                       {connected && (
                         <Button
                           variant="outline"
-                          size="sm"
-                          className="h-7 px-2 text-xs"
+                          size="xs"
                           onClick={() => setDisconnecting(true)}
                         >
                           Stop syncing

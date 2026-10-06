@@ -78,8 +78,8 @@ import type { ArchestraContext } from "./types";
  *
  * RBAC (see `rbac.ts`, enforced in the dispatch path before the handler runs):
  * `run_command`, `upload_file`, and `download_file` are gated by
- * `sandbox:execute`; the file tools (`search_files`, `read_file`, `save_file`,
- * `edit_file`, `delete_file`) by `file:manage`. Skills become runnable here by
+ * `agent:read`; the file tools (`search_files`, `read_file`, `save_file`,
+ * `edit_file`, `delete_file`) by `agent:read` too. Skills become runnable here by
  * loading them (`load_skill`), which mounts them into the default sandbox; that
  * path is `skill:read`-gated.
  *
@@ -1979,7 +1979,7 @@ async function resolveEnvironmentTarget(
 }
 
 /**
- * Enforces the deployment flag + an authenticated user. `sandbox:execute` is
+ * Enforces the deployment flag + an authenticated user. `agent:read` is
  * enforced earlier in the dispatch path (see `rbac.ts`), so handlers don't
  * re-check it here.
  */

@@ -392,7 +392,7 @@ function SubagentPill({
             variant="outline"
             size="sm"
             className={cn(
-              "h-8 px-3 gap-1.5 text-xs max-w-[200px] rounded-r-none border-r-0",
+              "max-w-[200px] rounded-r-none border-r-0 text-xs",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -414,8 +414,8 @@ function SubagentPill({
         {!readOnly && (
           <Button
             variant="outline"
-            size="sm"
-            className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
+            size="icon-sm"
+            className="rounded-l-none text-muted-foreground hover:text-destructive"
             onClick={() => onToggle(agent.id)}
             aria-label={`Remove agent ${agent.name}`}
           >
@@ -443,8 +443,8 @@ function SubagentPill({
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => setOpen(false)}
             aria-label="Close"
           >
@@ -616,7 +616,7 @@ function OutboundAgentPill({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 max-w-[200px] gap-1.5 rounded-r-none border-r-0 px-3 text-xs"
+            className="max-w-[200px] rounded-r-none border-r-0 text-xs"
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
             <Globe className="h-3 w-3 shrink-0" />
@@ -630,8 +630,8 @@ function OutboundAgentPill({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+            size="icon-sm"
+            className="rounded-l-none text-muted-foreground hover:text-destructive"
             aria-label={`Remove ${target.name}`}
             onClick={onRemove}
           >
@@ -659,8 +659,8 @@ function OutboundAgentPill({
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 shrink-0 p-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => setOpen(false)}
             aria-label="Close"
           >
@@ -1058,7 +1058,7 @@ export function AgentForm({
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   });
   const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: supportsSubagents && !!canReadAgents,
@@ -1182,7 +1182,7 @@ export function AgentForm({
     knowledgeSource: ["read"],
   });
   const { data: canAccessKnowledgeSettings } = useHasPermissions({
-    knowledgeSettings: ["read"],
+    organizationSettings: ["read"],
   });
   const isKnowledgeConfigured = useIsKnowledgeBaseConfigured();
   const { data: canReadLlmProviderApiKeys } = useHasPermissions({
@@ -3461,7 +3461,7 @@ export function AgentForm({
                           }
                         }}
                       >
-                        <TabsList>
+                        <TabsList size="sm">
                           <TabsTrigger value="auto">All</TabsTrigger>
                           <TabsTrigger value="custom">Manual</TabsTrigger>
                         </TabsList>
@@ -3723,7 +3723,7 @@ export function AgentForm({
                           value={accessAllSubagents ? "auto" : "custom"}
                           onValueChange={handleSubagentModeChange}
                         >
-                          <TabsList>
+                          <TabsList size="sm">
                             <TabsTrigger value="auto">All</TabsTrigger>
                             <TabsTrigger value="custom">Manual</TabsTrigger>
                           </TabsList>
@@ -4112,8 +4112,8 @@ export function AgentForm({
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="icon"
-                                className="absolute top-2 right-2 h-6 w-6"
+                                size="icon-xs"
+                                className="absolute top-2 right-2"
                                 aria-label="Remove suggested prompt"
                                 onClick={() => {
                                   setSuggestedPrompts((prev) => {
@@ -4374,8 +4374,8 @@ export function AgentForm({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
+              size="xs"
+              className="shrink-0 self-center bg-background/80"
               disabled={environmentConflicts.isRemoving || isSaving}
               onClick={() => void handleRemoveEnvironmentConflicts()}
             >
@@ -4417,8 +4417,8 @@ export function AgentForm({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
+              size="xs"
+              className="shrink-0 self-center bg-background/80"
               onClick={() =>
                 agentToolsEditorRef.current?.removeIncompatibleTools()
               }

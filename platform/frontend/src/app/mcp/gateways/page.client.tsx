@@ -888,6 +888,7 @@ function McpGateways({
         <div className="flex items-center gap-2">
           <PermissionButton
             permissions={{ mcpGateway: ["create"] }}
+            size="sm"
             onClick={() => router.push(agentNewHref("mcp_gateway"))}
             data-testid={E2eTestId.CreateAgentButton}
           >

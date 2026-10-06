@@ -38,8 +38,9 @@ import { Input } from "@/components/ui/input";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Skeleton } from "@/components/ui/skeleton";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import {
   useAllChatOpsBindings,
   useApplyChatOpsBindingPlan,
@@ -136,9 +137,6 @@ export function AgentChatAppsEditor({
     (params?: { agentId: string }) => Promise<boolean>
   >(() => Promise.resolve(true));
   const { data: session } = useSession();
-  const { data: canCreateDm = false } = useHasPermissions({
-    agentTrigger: ["create"],
-  });
   const {
     data,
     isPending,
@@ -274,7 +272,6 @@ export function AgentChatAppsEditor({
     bindings,
     configuredDmProviders,
     currentUserId: session?.user?.id,
-    canCreateDm,
   });
   // "new" while the record has no id, so the wizard's own selection still has
   // a stable key to be compared against.
@@ -701,7 +698,8 @@ export function AgentChatAppsEditor({
                   )}
                   <PermissionButton
                     type="button"
-                    permissions={{ agentTrigger: ["update"] }}
+                    size="sm"
+                    permissions={{ organizationSettings: ["update"] }}
                     onClick={() => void requestSave()}
                     disabled={
                       readOnly || !isDirty || isSaving || !agentNamesReady
@@ -1033,7 +1031,7 @@ function AddChannelPicker({
                   "another agent")
                 : null;
             return (
-              <button
+              <UnstyledButton
                 key={option.id}
                 type="button"
                 className="flex w-full items-center gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60"
@@ -1060,7 +1058,7 @@ function AddChannelPicker({
                     </span>
                   )
                 )}
-              </button>
+              </UnstyledButton>
             );
           })}
           {available.length === 0 && (
@@ -1068,14 +1066,14 @@ function AddChannelPicker({
               {elsewhere.length > 0 && activeProvider ? (
                 <>
                   No {MESSAGING_CHANNEL_LABELS[activeProvider]} channels match.{" "}
-                  <button
+                  <UnstyledButton
                     type="button"
                     className="underline hover:text-foreground"
                     onClick={() => setProvider(elsewhere[0].provider)}
                   >
                     {elsewhere.length} in{" "}
                     {MESSAGING_CHANNEL_LABELS[elsewhere[0].provider]}
-                  </button>
+                  </UnstyledButton>
                 </>
               ) : blocked.length >
                 0 ? /* Something did match, so "no channels match" would be a lie —
@@ -1119,7 +1117,7 @@ function BlockedOptions({
   const [expanded, setExpanded] = useState(false);
   return (
     <div className="mt-1 border-t pt-1">
-      <button
+      <UnstyledButton
         type="button"
         aria-expanded={expanded}
         className="flex w-full items-start gap-2 rounded-sm px-2 py-2 text-left hover:bg-muted/60"
@@ -1138,7 +1136,7 @@ function BlockedOptions({
             expanded && "rotate-180",
           )}
         />
-      </button>
+      </UnstyledButton>
       {expanded && (
         <ul className="pb-1">
           {options.map((option) => (
@@ -1373,7 +1371,6 @@ function buildAssignmentOptions({
   bindings,
   configuredDmProviders,
   currentUserId,
-  canCreateDm,
   visibilityLocation,
 }: {
   subject: ChannelSubject;
@@ -1381,7 +1378,6 @@ function buildAssignmentOptions({
   bindings: Binding[];
   configuredDmProviders: ChatProvider[];
   currentUserId: string | undefined;
-  canCreateDm: boolean;
   /** Where this agent's permissions are edited, named as its host names it. */
   visibilityLocation: string;
 }): AssignmentOption[] {
@@ -1393,9 +1389,8 @@ function buildAssignmentOptions({
     workspaceName: null,
     assignedAgentId: null,
     assignedAgentName: null,
-    disabledReason: !canCreateDm
-      ? "You do not have permission to create a direct message assignment."
-      : subject.scope === "personal" && subject.authorId !== currentUserId
+    disabledReason:
+      subject.scope === "personal" && subject.authorId !== currentUserId
         ? "Only this personal agent's owner can assign a direct message."
         : null,
     virtualDm: true,

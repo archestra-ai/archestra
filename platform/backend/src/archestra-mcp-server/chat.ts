@@ -5,7 +5,6 @@ import {
 } from "@archestra/shared";
 import { z } from "zod";
 import logger from "@/logging";
-import { sessionCallerId } from "@/openappa/actor";
 import {
   CurrentTrajectorySchema,
   parseCurrentTrajectory,
@@ -14,8 +13,14 @@ import {
   getHitlAskUserArguments,
   hitlRulingFromLabels,
   recordHitlRuling,
+  reviewSessionFromTrajectory,
 } from "@/openappa/hitl-review";
+import { awaitRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import type { OpenAppaSession } from "@/openappa/service";
+import {
+  authenticatedRuntimeSpender,
+  parseWorkloadPrincipal,
+} from "@/services/agent-runtime/runtime-identity";
 import { archestraMcpBranding } from "./branding";
 import {
   catchError,
@@ -104,7 +109,7 @@ const AskUserSchema = z.object({
     .max(12)
     .optional()
     .describe(
-      "Exact offer IDs from the blocked ruling that this question asks the user to decide. Omit for ordinary questions.",
+      "Exact offer IDs from the blocked ruling that this question asks the user to decide: a review execute_remedy_plan requires, or a plan that would prevent what the user asked for. Say in the question what it would prevent. Omit for ordinary questions.",
     ),
 });
 
@@ -158,7 +163,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. Use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Do not use this for open questions. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
+    description: `Ask the user to pick from a short list of options. For Agent Runtime guardrail reviews, use this tool with the offer IDs: the authorized reviewer answers on the run page. Do not substitute a native question or a plain-text answer for that review. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Do not use this for open questions. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
     schema: AskUserExecutionSchema,
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
@@ -172,6 +177,40 @@ const registry = defineArchestraTools([
             offerIds: liveOffers,
           })
         : undefined;
+      if (session && liveOffers.length === 1) {
+        const ruling = await awaitRuntimeHitlReview({
+          session,
+          offerId: liveOffers[0],
+          userId: context.userId,
+          signal: context.abortSignal,
+        });
+        if (ruling !== "not-runtime") {
+          if (ruling === "no-reviewer") {
+            return errorResult(
+              "This runtime has no eligible human reviewer. Keep the call blocked; a native form or a plain-text answer cannot approve it.",
+            );
+          }
+          if (ruling === "review-unavailable") {
+            return errorResult(
+              "The staged runtime review expired or became unavailable, including after loss of shared cache state. Keep the call blocked. A fresh exact-offer review is required before proceeding; missing state is not approval.",
+            );
+          }
+          if (ruling === "unavailable" || ruling === "none") {
+            return errorResult(
+              "The runtime review was not approved. Keep the call blocked. A timeout or disconnection is not approval.",
+            );
+          }
+          return structuredSuccessResult(
+            {
+              action: "accept" as const,
+              selected: [ruling === "approve" ? "Approve" : "Deny"],
+            },
+            ruling === "approve"
+              ? "The authenticated run reviewer approved this offer. Retry execute_remedy_plan for the same offer before retrying the blocked call."
+              : "The authenticated run reviewer denied this offer. The original call remains blocked.",
+          );
+        }
+      }
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
       const effectiveArgs = hitlArgs ?? args;
@@ -260,11 +299,16 @@ const registry = defineArchestraTools([
         return errorResult("The HITL review returned an invalid choice.");
       }
       if (hitlArgs && hitlRuling && session) {
-        await recordHitlRuling({
+        const recorded = await recordHitlRuling({
           session,
           offerId: hitlArgs.remedy_offer_ids[0],
           ruling: hitlRuling,
         });
+        if (!recorded) {
+          return errorResult(
+            "This review is no longer pending. No ruling was recorded. Keep the call blocked and do not reopen the review automatically.",
+          );
+        }
       }
 
       return structuredSuccessResult(
@@ -327,14 +371,24 @@ function remedyReviewScope(
   if (!ids || ids.length === 0 || !context.organizationId) return undefined;
   const trajectory = parseCurrentTrajectory(args.trajectory);
   if (!trajectory) return undefined;
-  const callerId = sessionCallerId(trajectory.session_id);
+  const session = reviewSessionFromTrajectory({
+    organizationId: context.organizationId,
+    trajectory,
+    context,
+  });
+  const callerId = session.caller_id;
+  const spender = authenticatedRuntimeSpender({
+    userId: context.userId,
+    callerId: context.openappaSession?.caller_id,
+  });
+  if (
+    !spender ||
+    (parseWorkloadPrincipal(spender) && callerId !== spender) ||
+    (parseWorkloadPrincipal(callerId) && callerId !== spender)
+  )
+    return undefined;
   return {
-    session: {
-      organization_id: context.organizationId,
-      session_id: trajectory.session_id,
-      ...(callerId ? { caller_id: callerId } : {}),
-      ...(trajectory.parent_id ? { parent_id: trajectory.parent_id } : {}),
-    },
+    session,
     ids,
   };
 }

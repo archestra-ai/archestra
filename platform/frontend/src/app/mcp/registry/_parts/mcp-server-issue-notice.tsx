@@ -4,6 +4,7 @@ import { E2eTestId } from "@archestra/shared";
 import {
   Bell,
   BellOff,
+  CircleAlert,
   FileSearch,
   KeyRound,
   MoreHorizontal,
@@ -13,8 +14,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { type ReactNode, useId, useState } from "react";
-import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { type ReactNode, useState } from "react";
 import {
   type TableRowAction,
   TableRowActions,
@@ -26,6 +26,8 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { InlineNoticeDetails } from "@/components/ui/inline-notice-details";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { typeRole } from "@/lib/design/type-scale";
 import { useRestoreMcpServerAlerts } from "@/lib/mcp/mcp-server.query";
@@ -46,7 +48,6 @@ import {
 import { mcpServerAlertTarget } from "./mcp-server-alert-target";
 import { describeMcpIssueActionOwners } from "./mcp-server-attention-owner";
 import type { CatalogItem, InstalledServer } from "./mcp-server-card";
-import { McpServerIssueBadge } from "./mcp-server-issue-badge";
 import { humanizeOAuthErrorCode } from "./oauth-reauth-detail";
 import {
   UninstallServerDialog,
@@ -114,8 +115,6 @@ export function McpServerIssueNotice({
   onTargetsCompleted?: (targets: readonly DismissAlertTarget[]) => void;
 }) {
   const router = useRouter();
-  const [showDetail, setShowDetail] = useState(false);
-  const detailId = useId();
   const [dismissOpen, setDismissOpen] = useState(false);
   const [uninstallOpen, setUninstallOpen] = useState(false);
   const { data: session } = useSession();
@@ -123,9 +122,10 @@ export function McpServerIssueNotice({
     { mcpRegistry: ["update"] },
     "*",
   );
-  const { data: canEditCatalog } = useHasPermissions({
-    mcpRegistry: ["update"],
-  });
+  const { data: canEditCatalog } = useHasPermissions(
+    { mcpRegistry: ["update"] },
+    item.id,
+  );
   const restoreMutation = useRestoreMcpServerAlerts();
 
   const liveIssues = issues.filter((i) => !i.muted);
@@ -296,68 +296,6 @@ export function McpServerIssueNotice({
       ]
     : [];
 
-  const panelPrimaryAction = actions.primary ? (
-    <Button
-      size="sm"
-      data-testid={actions.primary.testId}
-      onClick={actions.primary.onClick}
-    >
-      {actions.primary.label}
-    </Button>
-  ) : facet === "others" ? null : (
-    <Button variant="outline" size="sm" asChild>
-      <Link href={detailHref()}>Open</Link>
-    </Button>
-  );
-
-  const queueActions = (
-    <>
-      {dismissTargets.length > 0 && (
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={`Dismiss alert for ${item.name}`}
-          onClick={() => setDismissOpen(true)}
-        >
-          <BellOff className="h-4 w-4" />
-          Dismiss
-        </Button>
-      )}
-      {restoreTargets.length > 0 && (
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={`Restore alert for ${item.name}`}
-          disabled={restoreMutation.isPending}
-          onClick={() =>
-            restoreMutation.mutate(
-              {
-                alerts: restoreTargets,
-              },
-              {
-                onSuccess: (result) => onTargetsCompleted?.(result.succeeded),
-              },
-            )
-          }
-        >
-          <Bell className="h-4 w-4" />
-          Restore
-        </Button>
-      )}
-    </>
-  );
-  const dismissOnlyAction = dismissTargets.length > 0 && (
-    <Button
-      variant="outline"
-      size="sm"
-      aria-label={`Dismiss alert for ${item.name}`}
-      onClick={() => setDismissOpen(true)}
-    >
-      <BellOff className="h-4 w-4" />
-      Dismiss
-    </Button>
-  );
-
   // Compact icon buttons fit the complete row action set. Keep applicable
   // remediation visible instead of forcing discovery through a kebab menu.
   const rowActions: TableRowAction[] = contextualizeRepeatedActions(
@@ -403,7 +341,7 @@ export function McpServerIssueNotice({
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             aria-label={`More actions for ${item.name}`}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -497,7 +435,7 @@ export function McpServerIssueNotice({
         <Button
           variant={action.variant ?? "outline"}
           size="sm"
-          className="flex-1 gap-1 px-2 text-xs"
+          className="flex-1"
           aria-label={action.label}
           data-testid={action.testId}
           onClick={action.onClick}
@@ -512,7 +450,7 @@ export function McpServerIssueNotice({
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 gap-1 px-2 text-xs"
+          className="flex-1"
           disabled={restoreMutation.isPending}
           onClick={() =>
             restoreMutation.mutate(
@@ -532,7 +470,7 @@ export function McpServerIssueNotice({
       <Button
         variant="outline"
         size="sm"
-        className="flex-1 gap-1 px-2 text-xs"
+        className="flex-1"
         onClick={() => router.push(detailHref())}
       >
         Open
@@ -540,40 +478,32 @@ export function McpServerIssueNotice({
     );
   }
 
+  // Failures are errors, a lapsed sign-in is a warning, and a row the viewer
+  // dismissed is only a note.
+  const noticeVariant = relevant.every((issue) => issue.muted)
+    ? "neutral"
+    : explained.some((issue) => issue.kind !== "needs-reauth")
+      ? "error"
+      : "warning";
+  const compactButton = "h-6 px-2 text-xs";
+
   return (
-    <div
-      className={cn("rounded-lg border bg-card", className)}
-      data-testid={`mcp-registry-attention-row-${item.name}`}
-    >
-      <div className="flex flex-col gap-3 px-4 py-3 sm:flex-row sm:items-start sm:gap-6">
-        <div className="min-w-0 flex-1">
-          <div className="flex min-w-0 flex-wrap items-center gap-2">
-            {!hideName && (
-              <>
-                <McpCatalogIcon
-                  icon={item.icon}
-                  catalogId={item.id}
-                  size={16}
-                />
-                <Link
-                  href={detailHref()}
-                  className={cn(
-                    typeRole({ role: "section-title" }),
-                    "truncate hover:underline",
-                  )}
-                >
-                  {item.name}
-                </Link>
-              </>
-            )}
-            {explained.map((issue) => (
-              <McpServerIssueBadge
-                key={issue.kind}
-                issue={issue}
-                showDetail={false}
-              />
-            ))}
-          </div>
+    <>
+      <InlineNotice
+        variant={noticeVariant}
+        className={className}
+        data-testid={`mcp-registry-attention-row-${item.name}`}
+      >
+        <CircleAlert aria-hidden />
+        <InlineNoticeText className="flex-1 space-y-0.5">
+          {!hideName && (
+            <Link
+              href={detailHref()}
+              className="font-medium underline-offset-2 hover:underline"
+            >
+              {item.name}
+            </Link>
+          )}
           {explained.map((issue) => {
             const guidance = describeMcpServerIssue(issue);
             const actionOwner = describeMcpIssueActionOwners({
@@ -586,68 +516,108 @@ export function McpServerIssueNotice({
               ? formatRelativeTimeFromNow(issue.since, { neverLabel: "" })
               : "";
             return (
-              <p
-                key={issue.kind}
-                className={cn(typeRole({ role: "body" }), "mt-1.5 max-w-prose")}
-              >
-                <span>{guidance.what}</span>
-                {since && <span> Failing since {since}.</span>}{" "}
-                {issue.audience === "you" && !issue.muted ? (
-                  <span className="text-muted-foreground">{guidance.fix}</span>
-                ) : (
-                  <span className="text-muted-foreground">
-                    {issue.muted
-                      ? dismissedSentence(issue.mutedReason)
-                      : actionOwner.sentence}
-                  </span>
-                )}
+              <p key={issue.kind}>
+                {guidance.what}
+                {since && ` Failing since ${since}.`}{" "}
+                {issue.audience === "you" && !issue.muted
+                  ? guidance.fix
+                  : issue.muted
+                    ? dismissedSentence(issue.mutedReason)
+                    : actionOwner.sentence}
               </p>
             );
           })}
-          {disclosedDetail && (
-            <p className={cn(typeRole({ role: "meta" }), "mt-1.5")}>
-              <button
-                type="button"
-                className="underline-offset-2 hover:underline"
-                aria-expanded={showDetail}
-                aria-controls={detailId}
-                onClick={() => setShowDetail((value) => !value)}
-              >
-                {showDetail ? "Hide details" : "Show details"}
-              </button>
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap items-center gap-2 sm:shrink-0 sm:justify-end sm:pt-0.5">
+        </InlineNoticeText>
+        <div
+          data-slot="inline-notice-action"
+          className="ml-auto flex flex-wrap items-center gap-1.5"
+        >
           {panelActions === "dismiss-only" ? (
-            dismissOnlyAction
+            dismissTargets.length > 0 && (
+              <Button
+                variant="outline"
+                size="sm"
+                className={compactButton}
+                aria-label={`Dismiss alert for ${item.name}`}
+                onClick={() => setDismissOpen(true)}
+              >
+                <BellOff className="size-3" />
+                Dismiss
+              </Button>
+            )
           ) : (
             <>
               {actions.secondary && (
                 <Button
                   variant="outline"
                   size="sm"
+                  className={compactButton}
                   data-testid={actions.secondary.testId}
                   onClick={actions.secondary.onClick}
                 >
                   {actions.secondary.label}
                 </Button>
               )}
-              {panelPrimaryAction}
-              {queueActions}
+              {actions.primary ? (
+                <Button
+                  size="sm"
+                  className={compactButton}
+                  data-testid={actions.primary.testId}
+                  onClick={actions.primary.onClick}
+                >
+                  {actions.primary.label}
+                </Button>
+              ) : facet === "others" ? null : (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={compactButton}
+                  asChild
+                >
+                  <Link href={detailHref()}>Open</Link>
+                </Button>
+              )}
+              {dismissTargets.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={compactButton}
+                  aria-label={`Dismiss alert for ${item.name}`}
+                  onClick={() => setDismissOpen(true)}
+                >
+                  <BellOff className="size-3" />
+                  Dismiss
+                </Button>
+              )}
+              {restoreTargets.length > 0 && (
+                <Button
+                  variant="outline"
+                  size="sm"
+                  className={compactButton}
+                  aria-label={`Restore alert for ${item.name}`}
+                  disabled={restoreMutation.isPending}
+                  onClick={() =>
+                    restoreMutation.mutate(
+                      { alerts: restoreTargets },
+                      {
+                        onSuccess: (result) =>
+                          onTargetsCompleted?.(result.succeeded),
+                      },
+                    )
+                  }
+                >
+                  <Bell className="size-3" />
+                  Restore
+                </Button>
+              )}
               {overflowMenu}
             </>
           )}
         </div>
-      </div>
-      {showDetail && disclosedDetail && (
-        <pre
-          id={detailId}
-          className="max-h-40 overflow-auto whitespace-pre-wrap break-words border-t bg-muted/40 px-4 py-2.5 font-mono text-xs text-muted-foreground"
-        >
-          {disclosedDetail}
-        </pre>
-      )}
+        {disclosedDetail && (
+          <InlineNoticeDetails>{disclosedDetail}</InlineNoticeDetails>
+        )}
+      </InlineNotice>
       <DismissAlertDialog
         open={dismissOpen}
         onClose={() => setDismissOpen(false)}
@@ -659,7 +629,7 @@ export function McpServerIssueNotice({
         onClose={() => setUninstallOpen(false)}
         installs={uninstallInstalls}
       />
-    </div>
+    </>
   );
 }
 

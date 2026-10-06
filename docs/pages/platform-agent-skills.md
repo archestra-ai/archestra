@@ -80,7 +80,7 @@ Paired with that you would upload `references/HEURISTICS.md` and `scripts/extrac
 
 Skills do not have to be written in the UI. The `create_skill` and `update_skill` tools let an agent author them during a conversation: describe the skill you want, the model drafts the `SKILL.md` and any bundled files, then persists it. The result is immediately in the catalog and usable as a slash command.
 
-A skill created from chat is **personal** to its author — sharing it with a team or the whole organization stays a deliberate action in the skill editor. `create_skill` needs `skill:create`; `update_skill` needs `skill:update` and only applies to skills the user is allowed to manage, keeping the skill's current scope. `update_skill` replaces a skill's entire bundled file set in one call — there is no per-file patch, so changing one resource file means re-sending all of them.
+A skill created from chat is **personal** to its author — sharing it with a team or the whole organization stays a deliberate action in the skill editor. `create_skill` needs `skill:create`; `update_skill` needs the `update` grant on that skill and keeps the skill's current scope. `update_skill` replaces a skill's entire bundled file set in one call — there is no per-file patch, so changing one resource file means re-sending all of them.
 
 ## Importing from GitHub
 

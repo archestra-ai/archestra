@@ -14,12 +14,17 @@ ARG NODE_IMAGE=node:24-bookworm-slim@sha256:3638d9a6fe4030bd716be989438248074489
 FROM ${NODE_IMAGE}
 
 RUN apt-get update \
-  && apt-get install -y --no-install-recommends tini libpcre2-8-0 \
+  && apt-get install -y --no-install-recommends tini libpcre2-8-0 perl-base \
   # CVE-2026-86145 and CVE-2026-103111: reject a repository snapshot that
   # predates the pcre2 fixes.
   && dpkg --compare-versions \
     "$(dpkg-query --show --showformat='${Version}' libpcre2-8-0)" \
     ge 10.42-1+deb12u2 \
+  # CVE-2026-8376, CVE-2026-42496, CVE-2026-13221, CVE-2026-12087,
+  # CVE-2026-57432, CVE-2026-48959, CVE-2026-42497, CVE-2026-48962: perl fixes.
+  && dpkg --compare-versions \
+    "$(dpkg-query --show --showformat='${Version}' perl-base)" \
+    ge 5.36.0-7+deb12u4 \
   && rm -rf /var/lib/apt/lists/*
 
 # The entrypoint is `node /app/server.mjs`, server.mjs imports nothing outside

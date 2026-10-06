@@ -27,6 +27,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import {
@@ -525,7 +526,7 @@ export function GenericAuthRow({
     <DropdownMenu>
       <TerminalCard className="relative">
         <div className="absolute right-2 top-2 flex items-center gap-1">
-          <button
+          <UnstyledButton
             type="button"
             onClick={handleToggleExpose}
             disabled={isLoading}
@@ -539,7 +540,7 @@ export function GenericAuthRow({
             ) : (
               <Eye className="size-3.5" strokeWidth={2} />
             )}
-          </button>
+          </UnstyledButton>
           <SecretCopyButton
             variant="terminal"
             getSecretText={canResolveToken ? getSecretText : null}
@@ -550,7 +551,7 @@ export function GenericAuthRow({
           {/* Switching tokens mid-fetch would copy the old token while the
               row already shows the new one, so lock the switcher too. */}
           <DropdownMenuTrigger asChild>
-            <button
+            <UnstyledButton
               type="button"
               disabled={isLoading || isCopying}
               aria-label="Switch token"
@@ -558,7 +559,7 @@ export function GenericAuthRow({
             >
               {selectedLabel}
               <ChevronDown className="size-3" strokeWidth={2} />
-            </button>
+            </UnstyledButton>
           </DropdownMenuTrigger>
         </div>
         <pre

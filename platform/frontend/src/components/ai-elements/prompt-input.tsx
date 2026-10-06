@@ -1090,9 +1090,9 @@ export const PromptInputTextarea = ({
         <Button
           type="button"
           variant="ghost"
-          size="icon-sm"
+          size="icon-xs"
           className={cn(
-            "absolute bottom-2 right-2 size-6 opacity-70 hover:opacity-100 bg-background",
+            "absolute bottom-2 right-2 opacity-70 hover:opacity-100 bg-background",
             "transition-opacity",
           )}
           onClick={toggleFullscreen}

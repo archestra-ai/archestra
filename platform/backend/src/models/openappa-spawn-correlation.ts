@@ -1,4 +1,4 @@
-import { and, eq, isNull, sql } from "drizzle-orm";
+import { and, eq, inArray, isNull, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 
 const operations = schema.openappaOperationsTable;
@@ -12,6 +12,74 @@ export type AllowedSpawnAlias = {
 };
 
 class OpenAppaSpawnCorrelationModel {
+  /** Durable single execution claim; the native released-call row is immutable. */
+  static async claimRuntimeDispatch(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    sessionId: string;
+    toolCallId: string;
+    spawn: boolean;
+  }): Promise<boolean> {
+    const result = await db.execute<{ operation_id: string }>(sql`
+      INSERT INTO ${operations} (organization_id, session_id, caller_id, root, operation_id, status, input, decision)
+      SELECT released.organization_id, released.session_id, released.caller_id, released.root,
+        ${`runtime-dispatch:${params.toolCallId}`}, 'complete',
+        ${JSON.stringify({ event: "runtime_dispatch", tool_call_id: params.toolCallId })}::jsonb,
+        '{"decision":"ack"}'::jsonb
+      FROM ${operations} AS released
+      WHERE released.organization_id = ${params.organizationId}
+        AND released.session_id = ${params.sessionId}
+        AND released.caller_id IS NOT DISTINCT FROM ${params.callerId ?? null}
+        AND released.operation_id = ${`call:${params.toolCallId}`}
+        AND released.status = 'complete'
+        AND released.decision->>'decision' = 'allow_call'
+        AND COALESCE(released.input->'semantic'->>'spawn', released.input->>'spawn', 'false') = ${String(params.spawn)}
+      ON CONFLICT DO NOTHING
+      RETURNING operation_id
+    `);
+    return result.rows.length === 1;
+  }
+
+  static async releasedCalls(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    sessionId: string;
+    toolCallIds: string[];
+  }): Promise<Map<string, { spawn: boolean; tool: string }>> {
+    if (params.toolCallIds.length === 0) return new Map();
+    const rows = await db
+      .select({
+        operationId: operations.operationId,
+        tool: sql<string>`COALESCE(${operations.input}->'semantic'->>'tool', ${operations.input}->'context'->>'tool', ${operations.input}->>'tool', '')`,
+        spawn: sql<string>`COALESCE(${operations.input}->'semantic'->>'spawn', ${operations.input}->>'spawn', 'false')`,
+      })
+      .from(operations)
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.sessionId),
+          params.callerId
+            ? eq(operations.callerId, params.callerId)
+            : isNull(operations.callerId),
+          inArray(
+            operations.operationId,
+            params.toolCallIds.map((id) => `call:${id}`),
+          ),
+          eq(operations.status, "complete"),
+          sql`${operations.decision}->>'decision' = 'allow_call'`,
+        ),
+      );
+    return new Map(
+      rows.map((row) => [
+        row.operationId.slice(5),
+        {
+          spawn: row.spawn === "true",
+          tool: row.tool,
+        },
+      ]),
+    );
+  }
+
   /**
    * Recovers only the signed spawn binding stored with a child's own event.
    * A parent's sole open call could belong to a different async child.

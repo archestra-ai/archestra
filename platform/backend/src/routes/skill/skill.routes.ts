@@ -505,7 +505,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (agentSkillView === "eligible") {
             publishedToOrganization = true;
             if (mcpGatewayEnvironment !== undefined) {
-              agentChecker.require(agent.agentType, "update");
+              agentChecker.require(agent.agentType, {
+                action: "update",
+                scope: agent.id,
+              });
               environmentId =
                 mcpGatewayEnvironment === "default"
                   ? null

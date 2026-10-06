@@ -89,7 +89,7 @@ describe("NewAgentPageServer", () => {
     });
     expect(serverHasPermissionsMock).toHaveBeenCalledWith({
       agent: ["read"],
-      agentSettings: ["update"],
+      organizationSettings: ["update"],
     });
   });
 

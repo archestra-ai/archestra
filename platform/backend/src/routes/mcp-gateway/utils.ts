@@ -1507,6 +1507,8 @@ export function extractPassthroughHeaders(
   }
   const extracted: Record<string, string> = {};
   for (const headerName of allowlist) {
+    // A runtime binding authenticates only to this platform, never to an MCP server.
+    if (headerName.toLowerCase() === "x-archestra-runtime-binding") continue;
     const value = requestHeaders[headerName.toLowerCase()];
     if (typeof value === "string") {
       extracted[headerName] = value;

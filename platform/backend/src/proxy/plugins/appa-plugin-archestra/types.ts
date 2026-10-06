@@ -38,6 +38,13 @@ export type AppaTrustedContext = {
    * Child lineage checks compare against these claims.
    */
   claims?: { sessionId?: string; parentId?: string };
+  /**
+   * Persisted workspace session (`caller|workload`), including its stored
+   * parent. Not a client header. Native child session ids do not equal it.
+   */
+  runtimeSessionId?: string;
+  /** Current task from the authenticated runtime credential, not a request header. */
+  runtimeTaskId?: string;
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
   /**

@@ -24,7 +24,10 @@ import { cn } from "@/lib/utils/tailwind";
  * palette moves.
  */
 const inlineNoticeVariants = cva(
-  "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5 text-xs [&>svg]:size-3.5 [&>svg]:shrink-0",
+  // With an `<InlineNoticeDetails>` inside, the strip becomes a three-column
+  // grid (icon, text, action) so the action can centre on the message and its
+  // toggle while the opened details take a row of their own.
+  "flex flex-wrap items-center gap-x-2 gap-y-1 rounded-md border px-2.5 py-1.5 text-xs [&>svg]:size-3.5 [&>svg]:shrink-0 has-[>[data-slot=inline-notice-details-toggle]]:grid has-[>[data-slot=inline-notice-details-toggle]]:grid-cols-[auto_minmax(0,1fr)_auto] has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:col-start-3 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-span-2 has-[>[data-slot=inline-notice-details-toggle]]:[&>[data-slot=inline-notice-action]]:row-start-1",
   {
     variants: {
       variant: {

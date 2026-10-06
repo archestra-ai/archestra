@@ -124,7 +124,7 @@ export default function EmailPage() {
 
               <div className="flex flex-wrap items-center gap-2">
                 <PermissionButton
-                  permissions={{ agentTrigger: ["update"] }}
+                  permissions={{ organizationSettings: ["update"] }}
                   variant="outline"
                   onClick={() => renewMutation.mutate()}
                   disabled={renewMutation.isPending}
@@ -135,7 +135,7 @@ export default function EmailPage() {
                   <span>Renew subscription</span>
                 </PermissionButton>
                 <PermissionButton
-                  permissions={{ agentTrigger: ["delete"] }}
+                  permissions={{ organizationSettings: ["update"] }}
                   variant="destructive"
                   onClick={() => deleteMutation.mutate()}
                   disabled={deleteMutation.isPending}

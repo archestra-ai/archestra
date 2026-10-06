@@ -133,14 +133,16 @@ Admins can view autoprovisioned users on the **Settings → Users** page — fro
 
 ## Attachments
 
-Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Anything that still cannot be provided is noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
+Messages sent to the bot can include file attachments (images, PDFs, documents, etc.). Attachments are automatically downloaded and passed to the agent for processing. Files posted earlier in the same thread are included too, so you can ask the agent about a photo shared a few messages up. Files the selected model can read — images, PDFs, and text documents such as CSV, TSV, JSON, XML, YAML, TOML, and Markdown — are included inline in the agent's context. When the agent has a code sandbox, other file types (for example a SQLite database or a ZIP archive) are placed into the sandbox so the agent can open them with its tools. Images are placed there as well, so the agent can pass a photo on to another tool — a social post draft, for example. Anything that still cannot be provided is noted by name so the agent can tell the user. A message that contains only a file (no text) is processed too.
+
+Downloads use the bot token and need the `files:read` scope, which the Slack app manifest already includes. Reinstall the app if it was created before that scope was added.
 
 **Limits:**
 - Max 20 attachments per message
 - Max 10 MB per individual file
 - Max 25 MB total across all attachments in a single message
 
-Files exceeding these limits are silently skipped.
+Files exceeding these limits are skipped, and the agent is told which files it did not receive.
 
 ## Troubleshooting
 

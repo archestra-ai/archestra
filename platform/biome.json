@@ -67,6 +67,14 @@
     },
     {
       "includes": [
+        "frontend/src/**/*.tsx",
+        "!frontend/src/components/ui/**",
+        "!**/*.test.tsx"
+      ],
+      "plugins": ["./biome-plugins/no-raw-button.grit"]
+    },
+    {
+      "includes": [
         "**/*.ts",
         "**/*.tsx",
         "!**/*.ee.ts",

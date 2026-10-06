@@ -7,6 +7,7 @@ import {
   getHitlReviewResult,
   recordHitlReviewResult,
   recordHitlRuling,
+  reviewSessionFromTrajectory,
   stageHitlReview,
 } from "./hitl-review";
 import type { OpenAppaSession } from "./service";
@@ -18,6 +19,37 @@ const session = (sessionId: string): OpenAppaSession => ({
   organization_id: "organization",
   caller_id: "user:user",
   session_id: sessionId,
+});
+
+test.each([
+  ["chat-root", undefined, "user:chat-user"],
+  ["foreign-root", undefined, undefined],
+  ["chat-root", "parent", undefined],
+  ["user:external|root", undefined, "user:external"],
+  ["virtual-key:key|root:child", "virtual-key:key|root", "virtual-key:key"],
+  [
+    "agent-workspace:44444444-4444-4444-8444-444444444444|runtime:child",
+    "agent-workspace:44444444-4444-4444-8444-444444444444|runtime",
+    "agent-workspace:44444444-4444-4444-8444-444444444444",
+  ],
+  ["agent-workspace:invalid|runtime", undefined, undefined],
+  ["raw-client|root", undefined, undefined],
+] as const)("recovers only the established review caller for %s", (sessionId, parentId, callerId) => {
+  expect(
+    reviewSessionFromTrajectory({
+      organizationId: "organization",
+      trajectory: {
+        session_id: sessionId,
+        ...(parentId ? { parent_id: parentId } : {}),
+      },
+      context: { userId: "chat-user", conversationId: "chat-root" },
+    }),
+  ).toEqual({
+    organization_id: "organization",
+    session_id: sessionId,
+    ...(parentId ? { parent_id: parentId } : {}),
+    ...(callerId ? { caller_id: callerId } : {}),
+  });
 });
 
 test("binds a ruling to one offer and consumes it once", async () => {
@@ -286,4 +318,97 @@ test("a denial wins when concurrent reviews record different rulings", async () 
   expect(await consumeHitlRuling({ session: active, offerId: "offer-1" })).toBe(
     "deny",
   );
+});
+
+test("native reviewers atomically claim one approval and a timeout cannot overwrite it", async () => {
+  const active = session("one-native-claim");
+  await stageHitlReview({
+    session: active,
+    review: { offerId: "native-claim", text: "Review this exact call." },
+  });
+  const recorded = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      recordHitlRuling({
+        session: active,
+        offerId: "native-claim",
+        ruling: "approve",
+      }),
+    ),
+  );
+  expect(recorded.filter(Boolean)).toHaveLength(1);
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: "native-claim",
+      ruling: "none",
+    }),
+  ).toBe(false);
+  expect(
+    await consumeHitlRuling({ session: active, offerId: "native-claim" }),
+  ).toBe("approve");
+  expect(
+    await consumeHitlRuling({ session: active, offerId: "native-claim" }),
+  ).toBeUndefined();
+});
+
+test("a later genuine denial revokes an approval that has not been spent", async () => {
+  const active = session("later-denial");
+  await stageHitlReview({
+    session: active,
+    review: { offerId: "revoked", text: "Review this exact call." },
+  });
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: "revoked",
+      ruling: "approve",
+    }),
+  ).toBe(true);
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: "revoked",
+      ruling: "deny",
+    }),
+  ).toBe(true);
+  expect(await consumeHitlRuling({ session: active, offerId: "revoked" })).toBe(
+    "deny",
+  );
+  expect(
+    await consumeHitlRuling({ session: active, offerId: "revoked" }),
+  ).toBeUndefined();
+});
+
+test("approved native review context remains readable without reopening its claim", async () => {
+  const active = session("native-continuation");
+  const review = {
+    offerId: "continuation",
+    text: "The exact reviewed QA action",
+    tool: "mcp/example/write",
+    arguments: '{"value":1}',
+  };
+  await stageHitlReview({ session: active, review });
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: review.offerId,
+      ruling: "approve",
+    }),
+  ).toBe(true);
+  expect(
+    await getHitlReview({ session: active, offerId: review.offerId }),
+  ).toEqual(review);
+  expect(
+    await recordHitlRuling({
+      session: active,
+      offerId: review.offerId,
+      ruling: "approve",
+    }),
+  ).toBe(false);
+  expect(
+    await consumeHitlRuling({ session: active, offerId: review.offerId }),
+  ).toBe("approve");
+  expect(
+    await getHitlReview({ session: active, offerId: review.offerId }),
+  ).toBeUndefined();
 });

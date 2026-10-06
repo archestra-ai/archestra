@@ -20,6 +20,9 @@ import { escapeLikePattern } from "@/utils/sql-search";
 import CreatedByModel, { lookupCreator } from "./created-by";
 import { OauthClientLabelModel } from "./entity-labels";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+} from "./resource-permission-subject";
 import UserModel from "./user";
 
 class LlmOauthClientModel {
@@ -37,7 +40,12 @@ class LlmOauthClientModel {
     const rows = await db
       .select()
       .from(schema.oauthClientsTable)
-      .where(listWhereClause(params))
+      .where(
+        listWhereClause({
+          ...params,
+          viewer: await resolveViewerPrincipal(params),
+        }),
+      )
       .orderBy(schema.oauthClientsTable.createdAt);
 
     return hydrateOauthClients(rows);
@@ -60,7 +68,11 @@ class LlmOauthClientModel {
     const labelFilteredIds = params.labels
       ? await OauthClientLabelModel.getIdsMatchingLabels(params.labels)
       : undefined;
-    const whereClause = listWhereClause({ ...params, labelFilteredIds });
+    const whereClause = listWhereClause({
+      ...params,
+      labelFilteredIds,
+      viewer: await resolveViewerPrincipal(params),
+    });
     const [rows, [{ total }]] = await Promise.all([
       db
         .select()
@@ -99,6 +111,7 @@ class LlmOauthClientModel {
     viewer?: { userId: string };
   }) {
     if (params.ids.length === 0) return [];
+    const viewer = await resolveViewerPrincipal(params);
 
     const rows = await db
       .select()
@@ -111,10 +124,9 @@ class LlmOauthClientModel {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          params.viewer
+          viewer
             ? ResourcePermissionPolicyModel.grantCondition({
-                organizationId: params.organizationId,
-                userId: params.viewer.userId,
+                ...viewer,
                 resource: "llmOauthClient",
                 scopeColumn: schema.oauthClientsTable.id,
                 action: "read",
@@ -442,7 +454,7 @@ function listWhereClause(params: {
   search?: string;
   providerApiKeyId?: string;
   grantType?: LlmOauthClientGrantType;
-  viewer?: { userId: string };
+  viewer: GrantPrincipal | null;
   /** Client ids matching a `?labels=` filter; omit when not filtering. */
   labelFilteredIds?: string[];
 }) {
@@ -471,8 +483,7 @@ function listWhereClause(params: {
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
     params.viewer
       ? ResourcePermissionPolicyModel.grantCondition({
-          organizationId: params.organizationId,
-          userId: params.viewer.userId,
+          ...params.viewer,
           resource: "llmOauthClient",
           scopeColumn: schema.oauthClientsTable.id,
           action: "read",
@@ -480,6 +491,18 @@ function listWhereClause(params: {
       : undefined,
     // SPDX-SnippetEnd
   );
+}
+
+function resolveViewerPrincipal(params: {
+  organizationId: string;
+  viewer?: { userId: string };
+}): Promise<GrantPrincipal | null> {
+  return params.viewer
+    ? ResourcePermissionSubjectModel.resolvePrincipal({
+        organizationId: params.organizationId,
+        userId: params.viewer.userId,
+      })
+    : Promise.resolve(null);
 }
 
 function createClientSecret() {

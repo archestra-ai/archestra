@@ -373,6 +373,26 @@ export const UpdateAgentRunSchema = createUpdateSchema(schema.agentRunsTable)
     "At least one field must be provided",
   );
 
+export const AgentRunOpenappaReviewSchema = z.object({
+  status: z.enum(["none", "pending", "no_reviewer"]),
+  canDecide: z.boolean(),
+  offerId: z.string().nullable(),
+  text: z.string().nullable(),
+  tool: z.string().nullable(),
+  arguments: z.string().nullable(),
+});
+
+export const DecideAgentRunOpenappaReviewSchema = z.object({
+  decision: z.enum(["approve", "deny"]),
+  offerId: z.string().min(1),
+});
+
+export const DecidedAgentRunOpenappaReviewSchema = z.object({
+  decision: z.enum(["approve", "deny"]),
+  offerId: z.string(),
+  steered: z.boolean(),
+});
+
 export const StartAgentRunResponseSchema = z.object({
   sessionId: z.string().uuid().optional(),
   taskId: z.string().uuid(),

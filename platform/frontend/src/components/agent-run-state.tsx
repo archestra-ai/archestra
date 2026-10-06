@@ -6,6 +6,7 @@ import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { LogConsole } from "@/components/log-console";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   GLYPH_CLASS,
   type RunStatusInput,
@@ -77,7 +78,7 @@ export function AgentRunState({
           "cursor-pointer hover:border-destructive/30 hover:bg-destructive/10",
         )}
       >
-        <button
+        <UnstyledButton
           type="button"
           aria-label={`View ${chipLabel.toLowerCase()} details`}
           onClick={() => setDetailsOpen(true)}
@@ -88,7 +89,7 @@ export function AgentRunState({
             Details
           </span>
           <ChevronRight className="size-2.5 text-muted-foreground/70" />
-        </button>
+        </UnstyledButton>
       </Badge>
       <StandardDialog
         open={detailsOpen}

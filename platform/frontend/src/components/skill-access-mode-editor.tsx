@@ -36,7 +36,7 @@ export function SkillAccessModeEditor({
             onModeChange(value === "all" ? "all" : "manual")
           }
         >
-          <TabsList>
+          <TabsList size="sm">
             <TabsTrigger value="all">All</TabsTrigger>
             <TabsTrigger value="manual">Manual</TabsTrigger>
           </TabsList>

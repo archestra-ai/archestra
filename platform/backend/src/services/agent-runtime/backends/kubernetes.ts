@@ -41,6 +41,10 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     );
   }
 
+  async assertReady(): Promise<void> {
+    await agentRuntimeManager.assertSandboxApiInstalled();
+  }
+
   async launch(spec: AgentRunLaunchSpec): Promise<void> {
     await agentRuntimeManager.launch(spec);
   }

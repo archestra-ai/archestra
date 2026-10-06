@@ -1,4 +1,3 @@
-import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 /**
  * Generic LLM Proxy Handler
  *
@@ -40,6 +39,7 @@ import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth"
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
+import { takeInternalCall } from "@/clients/internal-call";
 import { modelsDevClient } from "@/clients/models-dev-client";
 import config from "@/config";
 import {
@@ -159,6 +159,13 @@ import {
   type LlmProxyToolCallsContext,
 } from "@/proxy/plugins/registry";
 import {
+  RUNTIME_BINDING_HEADER,
+  resolveRuntimeIdentityByVirtualKeys,
+  resolveRuntimeSessionForWorkspace,
+  runtimeBindingAuthorizes,
+  runtimeSessionConflicts,
+} from "@/services/agent-runtime/runtime-identity";
+import {
   connectionProxySetupContext,
   verifyConnectionProxySetupContext,
 } from "@/services/connection-proxy-setup-context";
@@ -167,6 +174,7 @@ import {
   resolveConnectionSetupScope,
 } from "@/services/connection-setup-scope";
 import { enrichDiscoveredModel } from "@/services/discovered-model-enrichment";
+import { getGuardrailsDeployment } from "@/services/guardrails-deployment";
 import { assertSubscriptionCredentialForProvider } from "@/services/subscription-credential-guard";
 import {
   ApiError,
@@ -659,6 +667,7 @@ export async function handleLLMProxy<
   provider: LLMProvider<TRequest, TResponse, TMessages, TChunk, THeaders>,
 ): Promise<FastifyReply> {
   const streamTiming: StreamTiming = { requestReceivedAt: Date.now() };
+  const internalCall = takeInternalCall(request.headers);
   const headers = request.headers as unknown as THeaders;
   const agentId = (request.params as { agentId?: string }).agentId;
   const providerName = provider.provider;
@@ -1699,13 +1708,107 @@ export async function handleLLMProxy<
       const delegatedRun =
         isInternalRequest &&
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
+      const runtimeLookup =
+        (appaActive || appaObserving) &&
+        (virtualKeyId || passthroughVirtualKeyId)
+          ? await resolveRuntimeIdentityByVirtualKeys({
+              virtualKeyIds: [virtualKeyId, passthroughVirtualKeyId],
+              organizationId: resolvedAgent.organizationId,
+            })
+          : { status: "unbound" as const };
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        runtimeLookup.status === "conflict"
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA runtime credentials do not name one workspace",
+        );
+      }
+      const runtimeIdentity =
+        runtimeLookup.status === "bound" ? runtimeLookup.identity : null;
+      if (
+        runtimeIdentity?.actorKind === "user" &&
+        appaUserId &&
+        appaUserId !== runtimeIdentity.actorId
+      ) {
+        throw new ApiError(
+          401,
+          "OpenAPPA runtime credential does not match the authenticated user",
+        );
+      }
+      const presentedRuntimeSession = appaClaims.sessionId;
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        runtimeIdentity &&
+        runtimeSessionConflicts({
+          workloadName: runtimeIdentity.workloadName,
+          presentedSession: presentedRuntimeSession,
+        })
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA session does not match the authenticated runtime workspace",
+        );
+      }
+      const runtimeBindingMatches =
+        runtimeIdentity !== null &&
+        runtimeBindingAuthorizes({
+          token: firstHeaderValue(
+            headersForExtraction[RUNTIME_BINDING_HEADER.toLowerCase()],
+          ),
+          secret: config.openappa.offerSigningSecret,
+          identity: runtimeIdentity,
+        });
+      if (
+        appaActive &&
+        !connectionSetupBypass &&
+        runtimeIdentity &&
+        !runtimeBindingMatches
+      ) {
+        throw new ApiError(
+          400,
+          "OpenAPPA runtime binding does not match this run",
+        );
+      }
+      const runtimeSession =
+        runtimeIdentity && runtimeBindingMatches
+          ? (
+              await resolveRuntimeSessionForWorkspace({
+                organizationId: runtimeIdentity.organizationId,
+                workspaceId: runtimeIdentity.workspaceId,
+              })
+            )?.session
+          : undefined;
+      const runtimeSessionId = runtimeSession?.session_id;
+      const boundRuntimeIdentity =
+        runtimeIdentity &&
+        runtimeBindingMatches &&
+        !runtimeSessionConflicts({
+          workloadName: runtimeIdentity.workloadName,
+          presentedSession: presentedRuntimeSession,
+        })
+          ? runtimeIdentity
+          : null;
+      if (
+        (appaActive || appaObserving) &&
+        boundRuntimeIdentity &&
+        presentedRuntimeSession === undefined
+      ) {
+        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
+          boundRuntimeIdentity.workloadName;
+      }
       const callerId = appaUserId
         ? `user:${appaUserId}`
-        : authenticatedApp
-          ? `app:${authenticatedApp.id}`
-          : virtualKeyId
-            ? `virtual-key:${virtualKeyId}`
-            : undefined;
+        : boundRuntimeIdentity
+          ? boundRuntimeIdentity.principal
+          : authenticatedApp
+            ? `app:${authenticatedApp.id}`
+            : virtualKeyId
+              ? `virtual-key:${virtualKeyId}`
+              : undefined;
       // A platform request over loopback that brings no credential of its own.
       // Only such a request may name an unscoped session in the header.
       const platformLoopback =
@@ -1723,10 +1826,15 @@ export async function handleLLMProxy<
         !APPA_CLIENT_ADAPTERS.some((adapter) =>
           adapter.matches({ headers: headersForExtraction, requestBody: body }),
         );
-      if (unsupportedClient && unsupportedClientAction === "block") {
+      // The platform's own guardrail models bypass instead of being blocked.
+      if (
+        unsupportedClient &&
+        unsupportedClientAction === "block" &&
+        !(platformLoopback && internalCall)
+      ) {
         throw new ApiError(
           400,
-          "This client cannot use Guardrails. Send X-Appa-Session-ID to use guardrails, or ask an administrator to choose Bypass on the Guardrails Overview tab.",
+          "Guardrails do not recognize this client, so the proxy blocked the request. Add an X-Appa-Session-ID header to each request, or ask an administrator to allow unrecognized clients.",
         );
       }
       if (
@@ -1860,6 +1968,16 @@ export async function handleLLMProxy<
                       : undefined,
                   }),
             });
+        if (runtimeSession) {
+          if (openappaSession?.session_id !== runtimeSession.session_id) {
+            throw new ApiError(
+              400,
+              "The runtime request does not match its bound workspace",
+            );
+          }
+          // The launcher stored the authenticated parent before giving the pod data.
+          openappaSession = runtimeSession;
+        }
         if (!openappaSession && !connectionSetupBypass)
           throw new ApiError(
             400,
@@ -1941,6 +2059,9 @@ export async function handleLLMProxy<
               toolIdentity,
               request: lineageRequest(),
               claims: appaClaims,
+              ...(runtimeSessionId
+                ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+                : {}),
               ...(isInternalChat ? { chatSource: source } : {}),
             },
           }).session,
@@ -2006,6 +2127,9 @@ export async function handleLLMProxy<
           toolIdentity,
           request: appaRequest,
           claims: appaClaims,
+          ...(runtimeSessionId
+            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+            : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "active",
           ...(isInternalChat ? { chatSource: source } : {}),
@@ -2017,6 +2141,9 @@ export async function handleLLMProxy<
           toolIdentity,
           request: lineageRequest(),
           claims: appaClaims,
+          ...(runtimeSessionId
+            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
+            : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "inactive",
           ...(isInternalChat ? { chatSource: source } : {}),

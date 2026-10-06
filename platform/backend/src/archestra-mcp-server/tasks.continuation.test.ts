@@ -54,6 +54,7 @@ beforeEach(
     });
     vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+    vi.spyOn(backend, "assertReady").mockResolvedValue();
     const org = await makeOrganization();
     const user = await makeAdmin();
     userId = user.id;

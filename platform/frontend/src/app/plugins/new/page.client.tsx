@@ -16,6 +16,7 @@ import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { Separator } from "@/components/ui/separator";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
 import { WizardStepper } from "@/components/wizard-stepper";
 import { useFeature } from "@/lib/config/config.query";
@@ -240,7 +241,7 @@ function NewPluginWizard() {
                         return (
                           <li key={item.repo}>
                             {idx > 0 && <Separator />}
-                            <button
+                            <UnstyledButton
                               type="button"
                               onClick={() => importPopular(item.repo)}
                               className="group flex w-full items-center gap-3 px-4 py-3 text-left transition-colors hover:bg-muted/50 focus-visible:bg-muted/50 focus-visible:outline-none"
@@ -263,7 +264,7 @@ function NewPluginWizard() {
                                 </div>
                               </div>
                               <ArrowRight className="size-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-                            </button>
+                            </UnstyledButton>
                           </li>
                         );
                       })}

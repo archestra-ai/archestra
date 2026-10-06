@@ -3564,6 +3564,27 @@
       "when": 1791126427875,
       "tag": "0508_mcp-registry-configure-deployment-spec",
       "breakpoints": true
+    },
+    {
+      "idx": 509,
+      "version": "7",
+      "when": 1791132816653,
+      "tag": "0509_fold-rbac-settings-resources",
+      "breakpoints": true
+    },
+    {
+      "idx": 510,
+      "version": "7",
+      "when": 1791162080909,
+      "tag": "0510_remove-simple-view-role-resource",
+      "breakpoints": true
+    },
+    {
+      "idx": 511,
+      "version": "7",
+      "when": 1791216758274,
+      "tag": "0511_clammy_hydra",
+      "breakpoints": true
     }
   ]
 }

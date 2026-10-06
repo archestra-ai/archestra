@@ -32,6 +32,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useIdentityProviders } from "@/lib/auth/identity-provider-read.query";
 import config from "@/lib/config/config";
@@ -164,22 +165,22 @@ function ProxyEndpointCard({
         rows={rows}
         header={
           <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge px-3">
-            <button
+            <UnstyledButton
               type="button"
               onClick={onSelectRouter}
               className={endpointTabClass(routerSelected)}
             >
               Model Router
-            </button>
+            </UnstyledButton>
             {tabProviders.map((provider) => (
-              <button
+              <UnstyledButton
                 key={provider}
                 type="button"
                 onClick={() => onSelectProvider(provider)}
                 className={endpointTabClass(selectedProvider === provider)}
               >
                 {providerCatalog.label(provider)}
-              </button>
+              </UnstyledButton>
             ))}
             {rest.length > (selectedFromRest ? 1 : 0) && (
               <SearchableSelect

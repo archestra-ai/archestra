@@ -255,7 +255,7 @@ describe("GET /api/agent-catalog", () => {
     const role = await makeCustomRole(ctx.organizationId, {
       permission: {
         agent: ["read"],
-        agentSettings: ["update"],
+        organizationSettings: ["update"],
       },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: role.role });

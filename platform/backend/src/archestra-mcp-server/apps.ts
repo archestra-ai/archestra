@@ -1240,19 +1240,19 @@ const registry = defineArchestraTools([
       if (mode.kind === "replacementSource") {
         // Authorization is not inherited: this tool's own gate is app:update
         // (rbac.ts TOOL_PERMISSIONS), which says nothing about reading files.
-        // Reading one is file:manage, so check it here rather than let an
+        // Reading one is agent:read, so check it here rather than let an
         // app-authoring permission double as a file-read permission. The single
         // permission per tool in the central map cannot express a mode-dependent
         // second one, and per-file authorization lives in the handlers by design.
         const canReadFiles = await userHasPermission(
           auth.userId,
           auth.organizationId,
-          "file",
-          "manage",
+          "agent",
+          "read",
         );
         if (!canReadFiles) {
           return errorResult(
-            "You do not have permission to perform this action (requires file:manage to read replacementHtmlSource). Pass the document as replacementHtml instead.",
+            "You do not have permission to perform this action (requires agent:read to read replacementHtmlSource). Pass the document as replacementHtml instead.",
           );
         }
         const resolved = await resolveHtmlSource({

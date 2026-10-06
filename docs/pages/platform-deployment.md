@@ -2,7 +2,7 @@
 title: Deployment
 category: Archestra Platform
 order: 3
-lastUpdated: 2026-10-04
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -937,7 +937,7 @@ Agent Runtime requires Kubernetes configuration through `ARCHESTRA_ORCHESTRATOR_
 - The Helm chart's runtime permissions in each execution namespace.
 - Outbound access from runtime workloads to your image registry, DNS, and Archestra's API, proxy, and gateway.
 
-Install the tested controller version before enabling the feature:
+The quickstart Docker image installs the controller in its KinD cluster when `ARCHESTRA_AGENT_RUNTIME_ENABLED=true`. On other clusters, install the tested version before enabling the feature:
 
 ```sh
 kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox-with-extensions.yaml
@@ -1376,6 +1376,9 @@ These environment variables set the default base URL for each LLM provider. Per-
 - **`ARCHESTRA_OPENROUTER_BASE_URL`** - Override OpenRouter API base URL.
   - Default: `https://openrouter.ai/api/v1`
   - Use this to point to your own proxy, an OpenRouter-compatible API, or other custom endpoints
+
+- **`ARCHESTRA_JEV_BASE_URL`** - Full Jev decisions endpoint. See [Jev](/docs/platform-supported-llm-providers#jev).
+  - Default: `https://api.typesafe.ai/v1/systemone`
 
 - **`ARCHESTRA_VLLM_BASE_URL`** - Base URL for your OpenAI-compatible server (vLLM, llama.cpp, LM Studio, SGLang, TGI, LocalAI).
   - Required to enable the OpenAI-compatible provider
@@ -2136,25 +2139,29 @@ Automatic deletion of content-bearing records after a configurable number of day
 To learn more about enterprise licensing, see the [pricing model](/docs/platform-pricing-model).
 
 
-### OpenAPPA Tool Guardrails (experimental)
+### OpenAPPA Tool Guardrails (Experimental)
 
-- OpenAPPA has no flag of its own. It turns on with the `ARCHESTRA_BETA` master switch, which enables the OpenAPPA page, policy chat tools, and read-only policy details.
-- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: Optional HMAC key for history-based session stamps, delegation bindings, child-session recovery, and signed peer proofs. The variable retains its existing name. Remedy routing, native questions, session receipt codes, and child completion codes do not require it. Peer proofs are separate from remedy routing. Helm deployments generate and preserve the key across upgrades. Other deployments derive it from the session authentication secret. Set at least 32 characters to configure an explicit key. Every backend replica must use the same value. Without it, teammate inbox calls are not released, and recovery depends on available client metadata and stored session receipts.
+See [Guardrails](./platform-ai-tool-guardrails) for setup, client integration requirements, and policy operations.
+
+- `ARCHESTRA_BETA=true` exposes the experimental Guardrails feature, configuration tools, and read-only policy details. It does not turn on enforcement. The separate **Enforce the policy** switch defaults to off and controls the deployment.
+- `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET`: Optional HMAC key for history-based session stamps, delegation bindings, child-session recovery, and signed peer proofs. The variable retains its existing name. Current remedy routing, native questions, session receipt codes, and child completion codes do not require it. Helm deployments generate and preserve the key across upgrades. Other deployments derive it from the session authentication secret. Set at least 32 characters to configure an explicit key. Every backend replica must use the same value. Without it, teammate inbox calls are not released, and recovery requires available trusted client metadata. Ambiguous child identity fails closed rather than reverting to its parent. Short session marks are removed before provider dispatch and logging.
 - `ARCHESTRA_OPENAPPA_YELL_ENABLED`: defaults to `true`. Set `false` to disable reporting. With OpenAPPA and Guardrails v2 enabled, exposes agent feedback reporting. Reports and their compressed diagnostic archives are stored locally. When `ARCHESTRA_ANALYTICS` is enabled, reports are also forwarded to the shared OpenAPPA reporting service.
 - `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS`: defaults to `4`. Each backend process opens up to this many PostgreSQL connections for OpenAPPA. A guardrail check holds one connection until it finishes, including its calls to external authorities. Checks beyond the limit wait up to 30 seconds, then fail. Raise the value if your policies consult slow authorities.
 - `ARCHESTRA_LLM_PROXY_PLUGINS`: comma-separated plugin list, empty by default. Enabling OpenAPPA automatically registers its plugin. The list alone does not enable APPA.
 
 Delegation and child-session recovery use signed tokens where client metadata is insufficient. Replicas verify these tokens with the same key. Teammate inbox calls carry a separate signed peer proof. Returned child text is checked against the approved result stored by the runtime. Short started and finished codes are display markers, not authentication tokens. Session receipt codes are random identifiers resolved through stored records. The proxy removes transport metadata, including legacy routing fields and peer proofs, before provider dispatch and logging. This removal runs even while the enforcement switch is off.
 
-Policies are stored in PostgreSQL and changed through the configuration agent on the OpenAPPA Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
+Policies are stored in PostgreSQL and changed through the configuration agent on the Guardrails Overview tab. Container policy paths are no longer used. On upgrade, bring the existing policy into a configuration session or configure GitHub sync with the current policy file. Local revisions apply to new conversations; existing conversations keep their original policy. With GitHub sync, changes take effect after a pull request is merged and synced.
 
 Tool coverage counts custom rules, battery rules, and catch-all rules using an annotator other than `noop`. A `noop` catch-all adds no restrictions and counts as not covered. Tools without a matching rule also count as not covered. Coverage describes the policy; the enforcement switch controls whether checks run.
 
-The beta flag alone does not enable enforcement. The deployment-wide guardrail setting controls enforcement. Restart the backend after changing the feature flag.
+Restart the backend after changing `ARCHESTRA_BETA`. Changing the enforcement switch does not require a restart. Check both effective-policy health and enforcement before starting protected sessions.
 
 Reporting sends the agent’s message verbatim, plus filtered policy diagnostics. Reports identify Archestra and the hostname from `ARCHESTRA_FRONTEND_URL`. Agents can include their session’s policy decisions. Diagnostics exclude raw prompts, tool arguments, tool outputs, and session identifiers. Policy names remain visible. Messages must not contain secrets, personal data, or task content. Reporting does not change policies or grant tool permissions. The active policy must permit the `yell` tool, directly or through a matching wildcard. Restart the backend after changing the reporting flag.
 
-With OpenAPPA disabled, existing Tool Guardrails run unchanged. When enabled, OpenAPPA replaces proxy tool-call and tool-result checks. Errors fail closed. A blocked call returns as a `get_remedy_plans` notice tool call. The model inspects the ruling, selects a remedy with `execute_remedy_plan`, and retries. The client must declare both remedy tools. Calls that need human approval stay blocked. See the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md) for current limitations.
+With `ARCHESTRA_BETA` off, legacy Tool Guardrails remain in use. The flag disables legacy trusted-data classification even while OpenAPPA enforcement is off. Legacy invocation checks can still restrict calls. They do not provide equivalent protection during an unenforced interval.
+
+With enforcement on, OpenAPPA checks supported sessions' tool calls and results. Runtime failures do not authorize blocked actions. A blocked call returns as a `get_remedy_plans` notice tool call. The agent can select an offered remedy with `execute_remedy_plan`. Calls that require approval remain blocked until the required review succeeds. See [Protection Limits](./platform-ai-tool-guardrails#protection-limits) and the [integration guide](https://github.com/archestra-ai/archestra/blob/main/platform/archestra-rs/openappa-rs/README.md).
 
 Notice restoration supports Anthropic Messages, OpenAI Responses, and OpenAI Chat Completions. Bedrock InvokeModel uses Anthropic restoration. Other protocols evaluate calls and results, but notices stay in history.
 
@@ -2164,4 +2171,4 @@ The proxy attaches the provider tool call ID to the remedy call. Standard MCP cl
 
 External sessions are scoped to the authenticated credential. Remedy execution requires the proxy's current-run metadata, not a signed offer. There is no separate original-account comparison. Normal authentication and tool permissions still apply. Parent approval does not authorize a different child offer.
 
-Requests without a session header share a fallback session per credential and agent. Uncredentialed loopback traffic is trusted as platform internal traffic.
+The **Client coverage** tile on **Guardrails > Overview** controls unrecognized clients. **Allowed** sends their requests to the provider without OpenAPPA checks by default. **Blocked** returns HTTP 400. See [Session Headers](./platform-ai-tool-guardrails#session-headers) for custom integrations. Uncredentialed loopback traffic is trusted as platform internal traffic.

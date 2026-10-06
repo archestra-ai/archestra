@@ -13,6 +13,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useGithubAppConfigs } from "@/lib/github-app-config.query";
 import { useGithubPats } from "@/lib/github-pat.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
@@ -175,14 +176,14 @@ export function GithubSyncPanel({
           </>
         )}
         {" · "}Content is read-only here —{" "}
-        <button
+        <UnstyledButton
           type="button"
           className="cursor-pointer font-medium text-foreground underline underline-offset-2 hover:text-primary"
           onClick={() => setConfirmingDisconnect(true)}
           disabled={updateGithubSync.isPending}
         >
           stop syncing
-        </button>{" "}
+        </UnstyledButton>{" "}
         to edit it in {appName}.
       </p>
       <DeleteConfirmDialog

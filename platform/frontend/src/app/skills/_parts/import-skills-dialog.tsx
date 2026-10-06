@@ -383,8 +383,7 @@ export function ImportSkillsDialog({
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-7 w-7"
+                size="icon-xs"
                 onClick={backToDiscover}
                 aria-label="Go back"
               >
@@ -684,8 +683,8 @@ export function ImportSkillsDialog({
                           <Button
                             type="button"
                             variant="ghost"
-                            size="sm"
-                            className="h-7 gap-1.5 px-2 text-xs text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
+                            size="xs"
+                            className="text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 focus-visible:opacity-100"
                             onClick={() => setPreviewSkillPath(skill.skillPath)}
                             aria-label={`Preview ${skill.name}`}
                           >

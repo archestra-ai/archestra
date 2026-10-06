@@ -1,6 +1,5 @@
 import { isDeepStrictEqual } from "node:util";
 import {
-  BUILT_IN_AGENT_IDS,
   isBuiltInCatalogId,
   MCP_HUMAN_RULING_META_KEY,
   PROXY_STAMPED_TOOL_ARGUMENTS,
@@ -14,11 +13,9 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
-import AgentModel from "@/models/agent";
 import ConversationEnabledToolModel from "@/models/conversation-enabled-tool";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import ToolModel from "@/models/tool";
-import { sessionCallerId } from "@/openappa/actor";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   coverageVisibility,
@@ -34,6 +31,7 @@ import {
   getHitlReviewResult,
   type HitlReviewOutcome,
   recordHitlReviewResult,
+  reviewSessionFromTrajectory,
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { NoticeArguments, RemedyExecutionSchema } from "@/openappa/notice";
@@ -44,6 +42,7 @@ import {
   peerProofAuthorizes,
   verifyPeerProof,
 } from "@/openappa/peer-claims";
+import { bindRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
 import {
   chatOpenAppaSession,
   executeRemedyByOffer,
@@ -57,6 +56,11 @@ import {
   recallYellSession,
   YellArgumentsSchema,
 } from "@/openappa/yell-session";
+import {
+  authenticatedRuntimeSpender,
+  parseWorkloadPrincipal,
+  workloadSpenderMayUseOffer,
+} from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import {
   firstPolicyRefusal,
@@ -79,6 +83,7 @@ import {
   UpdateGuardrailsPolicySchema,
   ValidateGuardrailsPolicySchema,
 } from "@/types/guardrails-policy";
+import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
 import { defineArchestraTool, defineArchestraTools } from "./helpers";
@@ -324,17 +329,13 @@ const registry = defineArchestraTools([
       const { organizationId, userId } = context;
       if (!organizationId || !userId)
         throw new ApiError(401, "Organization and user context are required");
-      const agent = await AgentModel.findById(context.agent.id);
-      if (
-        !agent ||
-        agent.organizationId !== organizationId ||
-        (context.agentId !== undefined && context.agentId !== agent.id)
-      ) {
+      const caller = await resolveCallerScope(context);
+      if (!caller)
         throw new ApiError(
           403,
           "Valid agent context for this organization is required",
         );
-      }
+      const { agent, scope } = caller;
       if (
         !(await userHasPermission(
           userId,
@@ -380,9 +381,7 @@ const registry = defineArchestraTools([
         });
         // SPDX-SnippetEnd
       }
-      const organizationScope =
-        agent.agentType === "agent" &&
-        agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
+      const organizationScope = scope === "organization";
       const allowedIds = organizationScope
         ? null
         : await inspectableToolIds({ ...context, agentId: agent.id });
@@ -403,7 +402,7 @@ const registry = defineArchestraTools([
         catalogId: catalog.id,
       });
       return result({
-        scope: organizationScope ? "organization" : "agent",
+        scope,
         mcpServer: {
           id: catalog.id,
           name: catalog.name,
@@ -592,7 +591,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_REMEDY_PLANS_SHORT_NAME,
     title: "Read a blocked call's ruling and remedy plans",
     description:
-      "Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. The platform puts this call in the place of the blocked call. It runs nothing and changes nothing. When the ruling offers a plan that fits the user's request, apply that plan with execute_remedy_plan. Use the offer_id and plan from the ruling. execute_remedy_plan asks the user for approval when the policy requires it. After the plan is authorized, retry the original call. If the ruling offers no plan, explain the ruling to the user.",
+      "Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. The platform puts this call in the place of the blocked call. It runs nothing and changes nothing. A plan fits unless the narrower session could no longer do what the user asked for. Apply a fitting plan with execute_remedy_plan. Use the offer_id and plan from the ruling. execute_remedy_plan asks the user for approval when the policy requires it. After the plan is authorized, retry the original call. If the ruling offers no plan, explain the ruling to the user.",
     schema: NoticeArguments,
     async handler({ args }) {
       // The ruling the runtime already made, carried by the call itself. This
@@ -659,6 +658,22 @@ const registry = defineArchestraTools([
         trajectory: stamp,
         context,
       });
+      const spender = authenticatedRuntimeSpender({
+        userId: context.userId,
+        callerId: context.openappaSession?.caller_id,
+      });
+      if (
+        !spender ||
+        (parseWorkloadPrincipal(spender) &&
+          !workloadSpenderMayUseOffer({
+            spender,
+            ownerCallerId: reviewSession.caller_id,
+          })) ||
+        (parseWorkloadPrincipal(reviewSession.caller_id) &&
+          reviewSession.caller_id !== spender)
+      ) {
+        return unknownOfferResult();
+      }
       const callId = execution?.call_id ?? context.currentToolCallId;
       if (callId) {
         const previousOutcome = await getHitlReviewResult({
@@ -715,6 +730,22 @@ const registry = defineArchestraTools([
                 remedyArguments: unstampedRemedyArguments(args),
               },
             });
+            try {
+              await bindRuntimeHitlReview({
+                session: reviewSession,
+                review: {
+                  offerId: remedy.offer_id,
+                  text: review.text,
+                  ...(review.tool ? { tool: review.tool } : {}),
+                  ...(review.arguments ? { arguments: review.arguments } : {}),
+                },
+              });
+            } catch (error) {
+              logger.warn(
+                { error, offerId: remedy.offer_id },
+                "Could not index the runtime OpenAPPA review",
+              );
+            }
             return nativeReviewRequiredResult(remedy.offer_id);
           } else if (context.elicitation) {
             // Archestra Chat keeps its inline approval card.
@@ -766,7 +797,7 @@ const registry = defineArchestraTools([
 
       const byOffer = await executeRemedyByOffer({
         organizationId: context.organizationId,
-        ...(context.userId ? { callerId: `user:${context.userId}` } : {}),
+        ...(spender ? { callerId: spender } : {}),
         sessionId: stamp.session_id,
         ...(stamp.parent_id ? { parentId: stamp.parent_id } : {}),
         toolCallId: callId,
@@ -874,31 +905,6 @@ function unstampedRemedyArguments(
   return Object.fromEntries(
     Object.entries(args).filter(([key]) => !stamped.has(key)),
   );
-}
-
-function reviewSessionFromTrajectory(params: {
-  organizationId: string;
-  trajectory: { session_id: string; parent_id?: string };
-  context: Pick<ArchestraContext, "conversationId" | "userId">;
-}): OpenAppaSession {
-  // External roots carry their caller in the session prefix. Chat roots are
-  // unprefixed conversation UUIDs; recover their caller only from the matching
-  // server-owned Chat context, never an unrelated session header or argument.
-  const callerId =
-    sessionCallerId(params.trajectory.session_id) ??
-    (params.context.userId &&
-    params.context.conversationId === params.trajectory.session_id &&
-    !params.trajectory.parent_id
-      ? `user:${params.context.userId}`
-      : undefined);
-  return {
-    organization_id: params.organizationId,
-    session_id: params.trajectory.session_id,
-    ...(callerId ? { caller_id: callerId } : {}),
-    ...(params.trajectory.parent_id
-      ? { parent_id: params.trajectory.parent_id }
-      : {}),
-  };
 }
 
 /**
@@ -1079,13 +1085,17 @@ function peerExecution(params: {
     params.proof,
     config.openappa.offerSigningSecret,
   );
+  const callerId = authenticatedRuntimeSpender({
+    userId: context.userId,
+    callerId: context.openappaSession?.caller_id,
+  });
   if (
     !proof ||
-    !context.userId ||
+    !callerId ||
     !peerProofAuthorizes({
       proof,
       organizationId: context.organizationId,
-      callerId: `user:${context.userId}`,
+      callerId,
       action: params.action,
       messageId: params.messageId,
     })

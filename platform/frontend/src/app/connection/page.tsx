@@ -88,7 +88,7 @@ export default function ConnectionPage() {
         !isApproval && (
           <Button
             variant="outline"
-            size="icon"
+            size="icon-sm"
             className="md:w-auto md:px-3"
             asChild
           >

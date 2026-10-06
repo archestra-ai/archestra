@@ -324,6 +324,7 @@ describe("external A2A agent routed pages", () => {
       expect(createdBody).toEqual({
         source: { type: "well_known", url: remoteAgent.discoveryUrl },
         auth: expectedAuth,
+        name: "Fixture Agent",
         scope: "personal",
         teams: [],
         users: [],
@@ -380,6 +381,128 @@ describe("external A2A agent routed pages", () => {
       },
       auth: { type: "none" },
     });
+  });
+
+  it("previews the checked Agent Card and fills empty details from it", async () => {
+    const user = userEvent.setup();
+    let createdBody: unknown;
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json(
+          inspectionFor({
+            name: "Fixture Agent",
+            description: "A deterministic external agent",
+            agentCard: {
+              name: "Fixture Agent",
+              version: "2.1.0",
+              provider: { organization: "Example Org", url: "https://x.test" },
+              skills: [
+                {
+                  id: "refunds",
+                  name: "Refunds",
+                  description: "Issues refunds for orders",
+                },
+                { id: "invoices", name: "Invoices" },
+              ],
+            },
+          }),
+        ),
+      ),
+      http.post(REGISTRY_URL, async ({ request }) => {
+        createdBody = await request.json();
+        return HttpResponse.json(remoteAgent);
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.click(screen.getByLabelText("Agent base URL"));
+    await user.paste(remoteAgent.discoveryUrl);
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+
+    const preview = await screen.findByRole("status", {
+      name: "Agent Card found",
+    });
+    expect(preview).toHaveTextContent("Version 2.1.0");
+    expect(preview).toHaveTextContent("by Example Org");
+    expect(preview).toHaveTextContent("A deterministic external agent");
+    expect(preview).toHaveTextContent("RefundsIssues refunds for orders");
+    expect(preview).toHaveTextContent("Invoices");
+    expect(screen.getByLabelText("Display name (optional)")).toHaveValue(
+      "Fixture Agent",
+    );
+    expect(screen.getByLabelText("Description (optional)")).toHaveValue(
+      "A deterministic external agent",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+    await waitFor(() =>
+      expect(createdBody).toMatchObject({
+        name: "Fixture Agent",
+        description: "A deterministic external agent",
+      }),
+    );
+  });
+
+  it("refreshes Agent Card details on recheck without overwriting user edits", async () => {
+    const user = userEvent.setup();
+    const cards: Record<string, { name: string; description: string | null }> =
+      {
+        "https://first.example.com": {
+          name: "First Agent",
+          description: "First description",
+        },
+        "https://second.example.com": {
+          name: "Second Agent",
+          description: "Second description",
+        },
+        "https://third.example.com": {
+          name: "Third Agent",
+          description: null,
+        },
+      };
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, async ({ request }) => {
+        const body = (await request.json()) as { source: { url: string } };
+        const card = cards[body.source.url];
+        return HttpResponse.json(
+          inspectionFor({ ...card, agentCard: { name: card.name } }),
+        );
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    const baseUrlInput = screen.getByLabelText("Agent base URL");
+    const nameInput = screen.getByLabelText("Display name (optional)");
+    const descriptionInput = screen.getByLabelText("Description (optional)");
+    const checkCard = async (url: string, expectedName: string) => {
+      await user.clear(baseUrlInput);
+      await user.click(baseUrlInput);
+      await user.paste(url);
+      await user.click(
+        screen.getByRole("button", { name: "Check Agent Card" }),
+      );
+      expect(
+        await screen.findByRole("status", { name: "Agent Card found" }),
+      ).toHaveTextContent(expectedName);
+    };
+
+    // A name typed before checking is never replaced.
+    await user.type(nameInput, "My Agent");
+    await checkCard("https://first.example.com", "First Agent");
+    expect(nameInput).toHaveValue("My Agent");
+    expect(descriptionInput).toHaveValue("First description");
+
+    // An untouched pre-filled description follows the newly checked card.
+    await checkCard("https://second.example.com", "Second Agent");
+    expect(nameInput).toHaveValue("My Agent");
+    expect(descriptionInput).toHaveValue("Second description");
+
+    // Clearing the name lets the card fill it; an edited description stays.
+    await user.clear(nameInput);
+    await user.type(descriptionInput, " (edited)");
+    await checkCard("https://third.example.com", "Third Agent");
+    expect(nameInput).toHaveValue("Third Agent");
+    expect(descriptionInput).toHaveValue("Second description (edited)");
   });
 
   it("requires a selected user or team for explicit access choices", async () => {
@@ -794,7 +917,7 @@ describe("external A2A agent routed pages", () => {
       (permissions) =>
         ({
           data:
-            !!permissions.agentSettings?.includes("update") ||
+            !!permissions.organizationSettings?.includes("update") ||
             !!permissions.team?.includes("read"),
           isPending: false,
         }) as ReturnType<typeof useHasPermissions>,
@@ -882,6 +1005,20 @@ describe("external A2A agent routed pages", () => {
     expect(screen.queryByLabelText("Agent base URL")).toBeNull();
   });
 });
+
+function inspectionFor(card: {
+  name: string;
+  description: string | null;
+  agentCard: Record<string, unknown>;
+}) {
+  return {
+    ...card,
+    cardHash: remoteAgent.cardHash,
+    selectedInterface: remoteAgent.connection.selectedInterface,
+    supportedAuthTypes: ["none"],
+    selectedSecurityRequirement: null,
+  };
+}
 
 function renderPage(children: React.ReactNode) {
   const queryClient = new QueryClient({

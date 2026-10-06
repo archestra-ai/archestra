@@ -2781,6 +2781,12 @@ const config = {
       baseUrl:
         process.env.ARCHESTRA_VOYAGE_BASE_URL || "https://api.voyageai.com/v1",
     },
+    jev: {
+      // The full decisions endpoint the proxy posts to, not an API root.
+      baseUrl:
+        process.env.ARCHESTRA_JEV_BASE_URL ||
+        "https://api.typesafe.ai/v1/systemone",
+    },
     cerebras: {
       baseUrl:
         process.env.ARCHESTRA_CEREBRAS_BASE_URL || "https://api.cerebras.ai/v1",

@@ -11,6 +11,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
@@ -291,7 +292,7 @@ export function PluginInstallDialog({
                   only {plugins.length === 1 ? "this plugin" : "these plugins"}{" "}
                   and leaves proxy and MCP configuration unchanged.
                 </span>
-                <button
+                <UnstyledButton
                   type="button"
                   onClick={generate}
                   disabled={!pluginsOnConnectEnabled || setupPending}
@@ -299,7 +300,7 @@ export function PluginInstallDialog({
                 >
                   <RotateCcw className="size-3" />
                   Regenerate
-                </button>
+                </UnstyledButton>
               </div>
             </div>
           </WizardStep>

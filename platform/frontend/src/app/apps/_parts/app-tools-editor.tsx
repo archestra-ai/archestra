@@ -80,7 +80,10 @@ export function AppToolsEditor({
   const { data: app } = useApp(environmentId === undefined ? appId : null);
   const { data: assigned, isPending } = useAppTools(appId);
   const { data: catalogs = [] } = useInternalMcpCatalog();
-  const { data: hasUpdatePermission } = useHasPermissions({ app: ["update"] });
+  const { data: hasUpdatePermission } = useHasPermissions(
+    { app: ["update"] },
+    appId,
+  );
   const canEdit = hasUpdatePermission === true && !readOnly;
   const assignTool = useAssignToolToApp();
   const unassignTool = useUnassignToolFromApp();
@@ -435,8 +438,8 @@ function OrphanedAssignedTools({
             </div>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-destructive"
               aria-label={`Remove ${tool.name}`}
               onClick={() => onRemove(tool.id)}
             >

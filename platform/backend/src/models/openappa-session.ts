@@ -26,6 +26,49 @@ const table = schema.openappaSessionsTable;
  * attach a new session to an existing history.
  */
 class OpenAppaSessionModel {
+  static async hasAncestor(params: {
+    organizationId: string;
+    callerId: string;
+    sessionId: string;
+    ancestorSessionId: string;
+  }): Promise<boolean> {
+    const result = await db.execute<{ present: boolean }>(sql`
+      WITH RECURSIVE lineage AS (
+        SELECT session_id, parent_id, ARRAY[session_id]::text[] AS visited
+        FROM ${table}
+        WHERE organization_id = ${params.organizationId}
+          AND caller_id = ${params.callerId} AND session_id = ${params.sessionId}
+        UNION ALL
+        SELECT s.session_id, s.parent_id, lineage.visited || s.session_id
+        FROM ${table} AS s JOIN lineage ON s.session_id = lineage.parent_id
+        WHERE s.organization_id = ${params.organizationId}
+          AND s.caller_id = ${params.callerId}
+          AND NOT s.session_id = ANY(lineage.visited)
+          AND cardinality(lineage.visited) < 64
+      )
+      SELECT EXISTS(SELECT 1 FROM lineage WHERE session_id = ${params.ancestorSessionId}) AS present
+    `);
+    return result.rows[0]?.present === true;
+  }
+
+  /** Stored parent of a session row. Null before the first event or when unbound. */
+  static async parentId(params: {
+    organizationId: string;
+    sessionId: string;
+  }): Promise<string | null> {
+    const [row] = await db
+      .select({ parentId: table.parentId })
+      .from(table)
+      .where(
+        and(
+          eq(table.actor, openappaActor(params.sessionId)),
+          eq(table.organizationId, params.organizationId),
+        ),
+      )
+      .limit(1);
+    return row?.parentId ?? null;
+  }
+
   /** Returns a caller-scoped session record, or null before its first event. */
   static async find(params: { organizationId: string; sessionId: string }) {
     const [row] = await db

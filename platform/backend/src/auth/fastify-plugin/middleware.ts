@@ -30,6 +30,7 @@ import {
   MFILES_VAF_ADD_ON_PACKAGE_PATH,
   MFILES_VAF_ADD_ON_SCRIPT_PATH,
   OAUTH_CALLBACK_PATH,
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
   OPENAPPA_HELPERS_PREFIX,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
@@ -226,6 +227,8 @@ export class Authnz {
       // Battery helper bridge: the runtime presents the per-process bridge
       // bearer over loopback; the route checks both before doing anything.
       (method === "POST" && url.startsWith(`${OPENAPPA_HELPERS_PREFIX}/`)) ||
+      // The runtime's archestra annotator: same bearer, same loopback check.
+      (method === "POST" && url === OPENAPPA_ARCHESTRA_ANNOTATOR_PATH) ||
       // Allow fetching public config for login and invitation UI
       (isGetOrHead && url === PUBLIC_CONFIG_PATH) ||
       // Explicit even though the /api/auth prefix check below already covers

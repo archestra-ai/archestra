@@ -64,7 +64,6 @@ describe("auth permissions", () => {
 
       // Admin should have all resource permissions from allAvailableActions
       for (const [resource, actions] of Object.entries(allAvailableActions)) {
-        if (resource === "simpleView") continue; // admin has empty simpleView
         expect(permissions[resource]).toBeDefined();
         for (const action of actions) {
           expect(permissions[resource]).toContain(action);
@@ -89,7 +88,6 @@ describe("auth permissions", () => {
       // Verify that for every resource/action pair in allAvailableActions,
       // the admin's permissions include it (mirrors the e2e has-permission check).
       for (const [resource, actions] of Object.entries(allAvailableActions)) {
-        if (resource === "simpleView") continue;
         for (const action of actions) {
           expect(
             permissions[resource],

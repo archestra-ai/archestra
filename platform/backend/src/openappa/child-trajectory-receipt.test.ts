@@ -35,6 +35,7 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
     expect(stripped.text).toBe("compacted history");
     expect(stripped.receipts).toHaveLength(1);
     expect(stripped.receipts[0]).toMatchObject(BINDING);
+    expect(stripped.receipts[0]?.runtimeSessionId).toBeUndefined();
     expect(
       verifyChildTrajectoryReceipt({
         receipt: stripped.receipts[0],
@@ -44,6 +45,36 @@ describe("OpenAPPA stateless child trajectory receipts", () => {
         childNativeId: BINDING.childNativeId,
       }),
     ).toBe(true);
+  });
+
+  test("signs a runtime workspace anchor without changing a v2 receipt", () => {
+    const runtimeSessionId = "user:alice|workspace";
+    const footer = mintChildTrajectoryReceipt({
+      ...BINDING,
+      runtimeSessionId,
+    });
+    const stripped = stripChildTrajectoryReceipts(footer ?? "");
+    expect(stripped.receipts[0]?.runtimeSessionId).toBe(runtimeSessionId);
+    expect(
+      verifyChildTrajectoryReceipt({
+        receipt: stripped.receipts[0],
+        organizationId: BINDING.organizationId,
+        callerId: BINDING.callerId,
+        spawnerNativeId: BINDING.spawnerNativeId,
+        childNativeId: BINDING.childNativeId,
+      }),
+    ).toBe(true);
+    expect(
+      verifyChildTrajectoryReceipt({
+        receipt: {
+          ...stripped.receipts[0],
+          runtimeSessionId: "user:alice|other",
+        },
+        organizationId: BINDING.organizationId,
+        callerId: BINDING.callerId,
+        spawnerNativeId: BINDING.spawnerNativeId,
+      }),
+    ).toBe(false);
   });
 
   test("removes CRLF separators without leaving a carriage return", () => {

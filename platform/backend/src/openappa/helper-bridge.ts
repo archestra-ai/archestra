@@ -1,4 +1,3 @@
-import { timingSafeEqual } from "node:crypto";
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import config from "@/config";
 import { daggerEnvironmentRuntimeManager } from "@/k8s/dagger-environment-runtime/manager";
@@ -43,15 +42,6 @@ export type HelperConsultOutcome =
 class OpenAppaHelperBridge {
   /** Consults in flight, a raced-out run included until it settles. */
   private inFlight = 0;
-
-  presentsBridgeToken(authorization: string | undefined): boolean {
-    const expected = Buffer.from(`Bearer ${openappaDeclarations.bridgeToken}`);
-    const presented = Buffer.from(authorization ?? "");
-    return (
-      presented.length === expected.length &&
-      timingSafeEqual(presented, expected)
-    );
-  }
 
   async consult(params: {
     installId: string;

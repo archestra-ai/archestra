@@ -1,7 +1,7 @@
 "use client";
 
 import { AlertTriangle, BookPlus, FileText, Paperclip } from "lucide-react";
-import { useState } from "react";
+import { memo, useState } from "react";
 import { Message, MessageContent } from "@/components/ai-elements/message";
 import {
   AttachmentImage,
@@ -20,6 +20,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   getAttachmentFallbackLabel,
   isCsvAttachment,
@@ -58,7 +59,8 @@ interface EditableUserMessageProps {
   canSaveToKnowledge?: boolean;
   /** Skill the user invoked via slash command for this message, if any. */
   skill?: { name: string; href?: string };
-  onStartEdit: (partKey: string, messageId: string) => void;
+  /** Omit for a read-only transcript: hides edit and regenerate. */
+  onStartEdit?: (partKey: string, messageId: string) => void;
   onCancelEdit: () => void;
   onSave: (
     messageId: string,
@@ -67,7 +69,10 @@ interface EditableUserMessageProps {
   ) => Promise<void>;
 }
 
-export function EditableUserMessage({
+// Memoized so a streamed chunk, which re-renders the whole transcript, skips
+// every user bubble. Callers pass stable callbacks and attachment arrays (see
+// ChatMessages) so the memo holds.
+export const EditableUserMessage = memo(function EditableUserMessage({
   messageId,
   partIndex,
   partKey,
@@ -92,7 +97,7 @@ export function EditableUserMessage({
   const { setIsSaving } = editor;
 
   const handleStartEdit = () => {
-    onStartEdit(partKey, messageId);
+    onStartEdit?.(partKey, messageId);
   };
 
   const handleRegenerateClick = async () => {
@@ -225,8 +230,8 @@ export function EditableUserMessage({
             <div className="absolute right-full top-1/2 -translate-y-1/2 pr-2">
               <MessageActions
                 textToCopy={text}
-                onEditClick={handleStartEdit}
-                onRegenerateClick={handleRegenerateClick}
+                onEditClick={onStartEdit && handleStartEdit}
+                onRegenerateClick={onStartEdit && handleRegenerateClick}
                 isRegenerateConfirming={isRegenerateConfirming}
                 editDisabled={editDisabled}
                 className={cn(
@@ -245,7 +250,7 @@ export function EditableUserMessage({
       </div>
     </Message>
   );
-}
+});
 
 /**
  * "Save to knowledge" on an attachment chip in the message stream.
@@ -272,14 +277,14 @@ function SaveAttachmentButton({ attachment }: { attachment: FileAttachment }) {
     <>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             onClick={() => setSaving(true)}
             className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-muted-foreground opacity-0 transition-opacity hover:bg-muted hover:text-foreground focus-visible:opacity-100 group-hover/attachment:opacity-100"
           >
             <BookPlus className="h-3.5 w-3.5" />
             <span className="sr-only">Save {name} to knowledge</span>
-          </button>
+          </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent>Save to knowledge</TooltipContent>
       </Tooltip>

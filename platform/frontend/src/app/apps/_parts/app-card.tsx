@@ -31,6 +31,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import {
   type PinAppTarget,
@@ -190,6 +191,7 @@ function OwnedAppCard({
       icon: <Settings className="h-4 w-4" />,
       label: "Settings",
       permissions: { app: ["update"] },
+      permissionScope: app.id,
       disabled: !!settingsDisabledReason,
       disabledTooltip: settingsDisabledReason,
       onClick: () => onOpenSettings?.(app),
@@ -213,6 +215,7 @@ function OwnedAppCard({
       icon: <History className="h-4 w-4" />,
       label: "Version history",
       permissions: { app: ["update"] },
+      permissionScope: app.id,
       disabled: !!settingsDisabledReason,
       disabledTooltip: settingsDisabledReason,
       onClick: () => setHistoryOpen(true),
@@ -237,6 +240,7 @@ function OwnedAppCard({
       label: "Delete",
       variant: "destructive",
       permissions: { app: ["delete"] },
+      permissionScope: app.id,
       disabled: !!deleteDisabledReason,
       disabledTooltip: deleteDisabledReason,
       onClick: () => setDeleteOpen(true),
@@ -249,7 +253,7 @@ function OwnedAppCard({
         icon={<AppTypeIcon owned icon={app.icon} />}
         title={
           <span className="flex min-w-0 items-center gap-1.5">
-            <button
+            <UnstyledButton
               type="button"
               className="truncate text-left"
               disabled={isOpening}
@@ -257,7 +261,7 @@ function OwnedAppCard({
               onClick={() => void handleOpen()}
             >
               {app.name}
-            </button>
+            </UnstyledButton>
             <LabelTags labels={app.labels} />
           </span>
         }
@@ -418,7 +422,7 @@ function ExternalAppCard({
       icon={<AppTypeIcon owned={false} icon={app.icon} />}
       title={
         <span className="flex min-w-0 items-center gap-1.5">
-          <button
+          <UnstyledButton
             type="button"
             className="truncate text-left"
             disabled={isOpening}
@@ -426,7 +430,7 @@ function ExternalAppCard({
             onClick={() => void handleOpen()}
           >
             {app.name}
-          </button>
+          </UnstyledButton>
           <LabelTags labels={app.labels} />
         </span>
       }

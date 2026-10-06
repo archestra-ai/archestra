@@ -225,7 +225,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const { data: canCreateAgent } = useHasPermissions({ agent: ["create"] });
   const { data: canManageExternalAgents } = useHasPermissions({
     agent: ["read"],
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
 
   // Get pagination/filter params from URL
@@ -578,13 +578,15 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     (canManageExternalAgents
       ? (catalogResponse?.totals.externalAgents ?? 0)
       : 0);
-  const bulkVisibilityPermissions = { agentSettings: ["update" as const] };
+  const bulkVisibilityPermissions = {
+    organizationSettings: ["update" as const],
+  };
   const showBulkVisibility =
     selectedExternalAgents.length > 0 && selectedRegularAgents.length === 0;
   const bulkDeletePermissions = {
     ...(selectedRegularAgents.length > 0 ? { agent: ["delete" as const] } : {}),
     ...(selectedExternalAgents.length > 0
-      ? { agentSettings: ["update" as const] }
+      ? { organizationSettings: ["update" as const] }
       : {}),
   };
   const bulkBusy =
@@ -1120,6 +1122,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
         <div className="flex items-center gap-2">
           {(canCreateAgent || canManageExternalAgents) && (
             <Button
+              size="sm"
               onClick={() => router.push(agentNewHref("agent"))}
               data-testid={E2eTestId.CreateAgentButton}
             >

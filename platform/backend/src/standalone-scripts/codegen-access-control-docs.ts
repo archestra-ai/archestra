@@ -279,10 +279,9 @@ Chat access is controlled separately from optional chat UI controls:
 
 - \`chat:read\` allows access to chat itself
 - \`agent:read\` is also required because chat is agent-backed and a user must be able to access at least one agent/profile context to start or use chat
-- \`chatAgentPicker:enable\` controls whether the agent picker is visible
-- \`chatProviderSettings:enable\` controls whether model and API key selectors are visible
+- \`chat:full-view\` shows the full chat: the agent picker, the model and API key selectors, and expandable tool calls. Without it, chat shows a simpler view
 
-The selector visibility permissions are UI toggles. They should be treated independently from core chat access and should not be assumed to grant access to provider credentials or model catalogs on their own.
+\`chat:full-view\` is a UI toggle. It is independent of core chat access and does not grant access to provider credentials or model catalogs on its own.
 
 ### MCP Registry And Installation Records
 
@@ -351,7 +350,9 @@ Permissions in Archestra are defined using a \`resource:action\` format, where:
 - **Resource**: The type of object or feature being accessed (e.g., \`agent\`, \`mcpGateway\`, \`llmProxy\`)
 - **Action**: The operation being performed (\`create\`, \`read\`, \`update\`, \`delete\`, \`admin\`)
 
-For example, \`agent:create\` allows creating agents, \`mcpGateway:update\` allows updating MCP gateways, and \`llmProxy:read\` allows viewing the LLM Proxy.
+For example, \`agent:create\` allows creating agents, \`mcpServerInstallation:create\` allows installing MCP servers, and \`llmProxy:read\` allows viewing the LLM Proxy.
+
+Agents, MCP gateways, the MCP registry, skills, apps, models, keys, OAuth clients and service accounts also have per-item grants. For these, a role decides who can open the section and create new items; who can see, edit, delete or share them is granted under Permissions, either on a single item or, for all items of a kind, from the list page's ⋯ menu (see [Scoped Resources](#scoped-resources)).
 
 ## Log Visibility
 

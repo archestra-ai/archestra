@@ -44,6 +44,7 @@ import {
 } from "@/components/ui/form";
 import { Input } from "@/components/ui/input";
 import { SecretInput, SecretTextarea } from "@/components/ui/secret-input";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useEnterpriseFeature, useFeature } from "@/lib/config/config.query";
 import { useDefaultEnvironmentSeed } from "@/lib/hooks/use-default-environment-seed";
@@ -353,8 +354,7 @@ export function CreateConnectorDialog({
               {onBack && (
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="h-7 w-7"
+                  size="icon-xs"
                   onClick={handleBackToChooser}
                   aria-label="Go back"
                 >
@@ -379,7 +379,7 @@ export function CreateConnectorDialog({
             <div className="grid grid-cols-2 gap-3 pt-4">
               {filteredConnectorOptions.length ? (
                 filteredConnectorOptions.map((option) => (
-                  <button
+                  <UnstyledButton
                     key={option.type}
                     type="button"
                     onClick={() => handleSelectType(option.type)}
@@ -399,7 +399,7 @@ export function CreateConnectorDialog({
                         {option.description}
                       </div>
                     </div>
-                  </button>
+                  </UnstyledButton>
                 ))
               ) : (
                 <div className="col-span-2 flex flex-col items-center gap-2 rounded-lg border border-muted/50 p-5 text-center text-sm text-muted-foreground">

@@ -65,6 +65,12 @@ const fetchUsageExtractors: Record<SupportedProvider, UsageExtractor> = {
   // Embeddings-only provider: no chat traffic passes through this path, and
   // the KB embedder reports its own token usage.
   voyage: null,
+  // Decisions usage names its counts like the Responses API, with no cache or
+  // reasoning breakdown; TypeSafe's own endpoint may omit usage entirely.
+  jev: (usage: { input_tokens?: number; output_tokens?: number }) => ({
+    input: usage.input_tokens,
+    output: usage.output_tokens,
+  }),
   openai: getChatOrResponsesUsage,
   archestra: getOpenAIUsage,
   cerebras: getOpenAIUsage,

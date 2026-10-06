@@ -5,14 +5,18 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ASK_USER_FULL_NAME,
 } from "@archestra/shared";
+import { vi } from "vitest";
 import { scopedSessionId, sessionCallerId } from "@/openappa/actor";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
+  clearHitlReview,
   consumeHitlRuling,
   recordHitlRuling,
   stageHitlReview,
 } from "@/openappa/hitl-review";
+import * as runtimeReview from "@/openappa/runtime-hitl-review";
 import type { OpenAppaSession } from "@/openappa/service";
+import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import { beforeEach, describe, expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import type { Agent } from "@/types";
@@ -29,7 +33,7 @@ describe("chat tool execution", () => {
   let testAgent: Agent;
   let mockContext: ArchestraContext;
   // The Chat conversation the ask_user calls below run in, which is also the
-  // OpenAPPA session the proxy signs their remedy offers for.
+  // OpenAPPA session the proxy stamps on their remedy calls.
   let sessionId: string;
 
   beforeEach(async ({ makeAgent, makeUser, makeOrganization, makeMember }) => {
@@ -447,6 +451,91 @@ describe("chat tool execution", () => {
     expect(await consumeHitlRuling({ session, offerId })).toBe("approve");
   });
 
+  for (const [outcome, message] of [
+    ["no-reviewer", "no eligible human reviewer"],
+    ["review-unavailable", "fresh exact-offer review"],
+  ] as const) {
+    test(`runtime review ${outcome} is an error, not an approval or native form`, async () => {
+      const offerId = `runtime-${outcome}`;
+      const session = reviewSession({
+        sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+      });
+      await stageHitlReview({
+        session,
+        review: { offerId, text: "Exact action", tool: "mcp/example/write" },
+      });
+      const nativeForm = vi.fn();
+      const wait = vi
+        .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+        .mockResolvedValue(outcome);
+      try {
+        const result = await executeArchestraTool(
+          TOOL_ASK_USER_FULL_NAME,
+          {
+            question: "Approve?",
+            options: [{ label: "Approve" }, { label: "Deny" }],
+            remedy_offer_ids: [offerId],
+            trajectory: trajectory(),
+          },
+          { ...mockContext, elicitation: { elicit: nativeForm } },
+        );
+        expect(result.isError).toBe(true);
+        expect(JSON.stringify(result.content)).toContain(message);
+        expect(result.structuredContent).toBeUndefined();
+        expect(nativeForm).not.toHaveBeenCalled();
+        expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+      } finally {
+        wait.mockRestore();
+      }
+    });
+  }
+
+  test("a runtime review waits on the platform instead of an auto-declining native form", async () => {
+    const offerId = "runtime-review";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    await stageHitlReview({
+      session,
+      review: {
+        offerId,
+        text: "Exact runtime action",
+        tool: "mcp/example/write",
+        arguments: '{"value":1}',
+      },
+    });
+    const nativeForm = vi.fn(async () => ({
+      status: "answered" as const,
+      result: { action: "decline" as const },
+    }));
+    const wait = vi
+      .spyOn(runtimeReview, "awaitRuntimeHitlReview")
+      .mockResolvedValue("approve");
+    try {
+      const answer = await executeArchestraTool(
+        TOOL_ASK_USER_FULL_NAME,
+        {
+          question: "Approve?",
+          options: [{ label: "Approve" }, { label: "Deny" }],
+          remedy_offer_ids: [offerId],
+          trajectory: trajectory(),
+        },
+        { ...mockContext, elicitation: { elicit: nativeForm } },
+      );
+      expect(answer.structuredContent).toEqual({
+        action: "accept",
+        selected: ["Approve"],
+      });
+      expect(nativeForm).not.toHaveBeenCalled();
+      expect(wait).toHaveBeenCalledWith(
+        expect.objectContaining({ offerId, userId: mockContext.userId }),
+      );
+      expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+    } finally {
+      wait.mockRestore();
+    }
+  });
+
   test.each([
     "missing",
     "parent",
@@ -614,6 +703,62 @@ describe("chat tool execution", () => {
   });
 
   test.each([
+    "matching root",
+    "foreign conversation",
+    "child",
+  ] as const)("ask_user recovers an unprefixed Chat caller only for a %s", async (caseName) => {
+    const offerId = "chat-caller-review";
+    const parentId = caseName === "child" ? "parent-session" : undefined;
+    const session = reviewSession({
+      sessionId,
+      callerId: `user:${mockContext.userId}`,
+      parentId,
+    });
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Exact Chat review." },
+    });
+    const requests: string[] = [];
+    mockContext = {
+      ...mockContext,
+      conversationId:
+        caseName === "foreign conversation" ? "other-conversation" : sessionId,
+      elicitation: {
+        elicit: async ({ message }) => {
+          requests.push(message);
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: {
+                choice: caseName === "matching root" ? "Approve" : "Yes",
+              },
+            },
+          };
+        },
+      },
+    };
+    await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Ordinary question?",
+        options: [{ label: "Yes" }, { label: "No" }],
+        remedy_offer_ids: [offerId],
+        trajectory: trajectory({ sessionId, parentId }),
+      },
+      mockContext,
+    );
+    expect(requests).toEqual([
+      caseName === "matching root"
+        ? "Exact Chat review."
+        : "Ordinary question?",
+    ]);
+    expect(await consumeHitlRuling({ session, offerId })).toBe(
+      caseName === "matching root" ? "approve" : undefined,
+    );
+  });
+
+  test.each([
     "missing",
     "malformed",
   ])("a %s trajectory does not consume a pending review", async (stamp) => {
@@ -721,6 +866,45 @@ describe("chat tool execution", () => {
     expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
   });
 
+  test("a late form answer cannot approve a review whose stage was cleared", async () => {
+    const offerId = "late-answer";
+    const session = reviewSession({
+      sessionId: scopedSessionId(`user:${mockContext.userId}`, sessionId),
+    });
+    await stageHitlReview({
+      session,
+      review: { offerId, text: "Review this exact call." },
+    });
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => {
+          await clearHitlReview({ session, offerId });
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: { choice: "Approve" },
+            },
+          };
+        },
+      },
+    };
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Approve?",
+        options: [{ label: "Approve" }, { label: "Deny" }],
+        remedy_offer_ids: [offerId],
+        trajectory: trajectory(),
+      },
+      mockContext,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("No ruling was recorded");
+    expect(await consumeHitlRuling({ session, offerId })).toBeUndefined();
+  });
+
   test("parallel decisions keep accepted and declined offers separate", async () => {
     mockContext = {
       ...mockContext,
@@ -784,6 +968,115 @@ describe("chat tool execution", () => {
     const text = (result.content[0] as any).text as string;
     expect(text).toContain("The user picked: Accept for this session.");
     expect(text).not.toContain("Live remedy offers");
+  });
+
+  test("ask_user keeps a workload trajectory only for that workspace principal", async () => {
+    const workspaceId = "44444444-4444-4444-8444-444444444444";
+    const principal = workloadPrincipal(workspaceId);
+    const session = `${principal}|workspace-a`;
+    mockContext = {
+      agent: mockContext.agent,
+      organizationId: mockContext.organizationId,
+      openappaSession: {
+        organization_id: mockContext.organizationId as string,
+        caller_id: principal,
+        session_id: session,
+      },
+      elicitation: acceptingElicitation,
+    };
+
+    const accepted = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offer_ids: ["offer-owned"],
+        trajectory: trajectory({ sessionId: session }),
+      },
+      mockContext,
+    );
+    expect((accepted.content[0] as any).text).toContain("offer-owned");
+
+    const dropped = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offer_ids: ["offer-sibling"],
+        trajectory: trajectory({
+          sessionId: scopedSessionId(
+            workloadPrincipal("55555555-5555-4555-8555-555555555555"),
+            "workspace-b",
+          ),
+        }),
+      },
+      mockContext,
+    );
+    expect((dropped.content[0] as any).text).not.toContain("offer-sibling");
+  });
+
+  test("ask_user ignores legacy offer routing and uses the current trajectory", async () => {
+    mockContext = { ...mockContext, elicitation: acceptingElicitation };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offer_ids: ["offer-live"],
+        trajectory: trajectory(),
+        remedy_offers: [
+          { offer_id: "offer-replayed", session_id: "another-conversation" },
+        ],
+      },
+      mockContext,
+    );
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("Live remedy offers: offer-live.");
+    expect(text).not.toContain("offer-replayed");
+  });
+
+  test("ask_user uses the stamped gateway trajectory rather than Chat history offers", async () => {
+    const gatewaySession = `user:${mockContext.userId}|client-session`;
+    mockContext = {
+      ...mockContext,
+      sessionId: undefined,
+      openappaSession: {
+        organization_id: mockContext.organizationId as string,
+        caller_id: `user:${mockContext.userId}`,
+        session_id: gatewaySession,
+      },
+      elicitation: acceptingElicitation,
+    };
+
+    const result = await executeArchestraTool(
+      `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}ask_user`,
+      {
+        question: "Accept this change for the rest of this session?",
+        options: [
+          { label: "Accept for this session" },
+          { label: "Do not accept" },
+        ],
+        remedy_offer_ids: ["offer-gateway"],
+        trajectory: trajectory({ sessionId: gatewaySession }),
+        remedy_offers: [{ offer_id: "offer-chat" }],
+      },
+      mockContext,
+    );
+
+    const text = (result.content[0] as any).text as string;
+    expect(text).toContain("Live remedy offers: offer-gateway.");
+    expect(text).not.toContain("offer-chat");
   });
 
   test.each([

@@ -18,7 +18,7 @@ import {
 /**
  * Whether the code execution sandbox is genuinely usable for a given agent:
  *   1. the feature is enabled on this deployment,
- *   2. the caller holds `sandbox:execute`, and
+ *   2. the caller holds `agent:read`, and
  *   3. the agent can actually invoke the sandbox tools — either they are
  *      assigned to it, or it has `accessAllTools` on (which lets a real user
  *      discover and run them dynamically, see `dynamicAccessContext`).
@@ -42,8 +42,8 @@ export async function isSkillSandboxAvailableForAgent(params: {
   const allowed = await userHasPermission(
     params.userId,
     params.organizationId,
-    "sandbox",
-    "execute",
+    "agent",
+    "read",
   );
   if (!allowed) return false;
 

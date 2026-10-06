@@ -56,6 +56,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { LOCAL_MCP_DISABLED_MESSAGE } from "@/consts";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -747,7 +748,7 @@ export function McpServerCard({
                 <TooltipProvider>
                   <Tooltip>
                     <TooltipTrigger asChild>
-                      <button
+                      <UnstyledButton
                         type="button"
                         aria-label={`Installed organization-wide, manage credentials for ${item.name}`}
                         onClick={() => goToItemPage("credentials")}
@@ -757,7 +758,7 @@ export function McpServerCard({
                             <Globe className="h-3 w-3" />
                           </AvatarFallback>
                         </Avatar>
-                      </button>
+                      </UnstyledButton>
                     </TooltipTrigger>
                     <TooltipContent>
                       Installed organization-wide. Manage credentials to review.
@@ -813,7 +814,7 @@ export function McpServerCard({
               <TooltipProvider>
                 <Tooltip>
                   <TooltipTrigger asChild>
-                    <button
+                    <UnstyledButton
                       type="button"
                       aria-label={`Manage credentials for ${item.name}`}
                       onClick={() => goToItemPage("credentials")}
@@ -824,7 +825,7 @@ export function McpServerCard({
                           <Plus className="h-3 w-3" />
                         </AvatarFallback>
                       </Avatar>
-                    </button>
+                    </UnstyledButton>
                   </TooltipTrigger>
                   <TooltipContent>Manage credentials</TooltipContent>
                 </Tooltip>
@@ -934,6 +935,7 @@ export function McpServerCard({
                 ? { mcpRegistry: ["update"] }
                 : { mcpServerInstallation: ["create"] }
             }
+            permissionScope={showAdminCatalogReinstall ? item.id : undefined}
             onClick={triggerCombinedReinstall}
             disabled={reinstallCatalogMutation.isPending || showApprovalPanel}
             size="sm"

@@ -174,6 +174,7 @@ export default function AppsPage() {
         <div className="flex items-center gap-2">
           <PermissionButton
             permissions={{ app: ["create"] }}
+            size="sm"
             onClick={() => setCreateOpen(true)}
           >
             <Plus className="h-4 w-4" />
@@ -364,6 +365,12 @@ export function AppSection({
   const selectedOwnedApps = selected.filter(
     (app): app is OwnedApp => app.source === "owned",
   );
+  // Like every other bulk action: only offered when it can succeed for all.
+  const canDeleteSelected =
+    selectedOwnedApps.length > 0 &&
+    selectedOwnedApps.every(
+      (app) => computeAppAccess(app, accessContext).canDeleteApp,
+    );
   const selectedApps = selectedOwnedApps.map((app) => ({
     id: app.id,
     name: app.name,
@@ -384,7 +391,13 @@ export function AppSection({
         selectAllMatching={selectAllMatching}
       >
         <PermissionButton
-          permissions={{ app: ["delete"] }}
+          permissions={{}}
+          disabled={!canDeleteSelected}
+          tooltip={
+            canDeleteSelected
+              ? undefined
+              : "You do not have permission to delete every selected app"
+          }
           variant="destructive"
           size="sm"
           onClick={() => setBulkDeleteOpen(true)}

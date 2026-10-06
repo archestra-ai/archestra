@@ -4,6 +4,8 @@ import {
   AGENTS,
   ENVIRONMENTS,
   KNOWLEDGE_BASES,
+  KNOWLEDGE_DIRECTORIES,
+  KNOWLEDGE_FILES,
   LIMITS,
   MCP_GATEWAYS,
   PLUGINS,
@@ -11,8 +13,10 @@ import {
   REMOTE_MCP_SERVERS,
   SKILLS,
   TEAMS,
+  PROVIDER_KEYS,
 } from "./dataset";
 import { SEED_STATE_FILE, STATE_DIR } from "./env";
+import { textPdf } from "./pdf";
 
 type Named = { id: string; name: string };
 type Listed = Named[] | { data: Named[] } | Record<string, unknown>;
@@ -99,6 +103,18 @@ export async function seedDemoData(api: ArchestraApi): Promise<SeedState> {
     await own(`/api/internal_mcp_catalog/${created.id}`);
   }
 
+  const existingProviderKeys = items(await api.get<Listed>("/api/llm-provider-api-keys"));
+  for (const providerKey of PROVIDER_KEYS) {
+    const created =
+      existingProviderKeys.find((key) => key.name === providerKey.name) ??
+      (await api.tryPost<Named>("/api/llm-provider-api-keys", providerKey));
+    if (created) {
+      record("providerKeys", providerKey.name, created.id);
+    } else {
+      console.warn(`Skipped provider key "${providerKey.name}": the provider rejected the fake key.`);
+    }
+  }
+
   for (const knowledgeBase of KNOWLEDGE_BASES) {
     const created = await api.ensureNamed({
       name: knowledgeBase.name,
@@ -174,6 +190,73 @@ export async function seedDemoData(api: ArchestraApi): Promise<SeedState> {
   fs.mkdirSync(STATE_DIR, { recursive: true });
   fs.writeFileSync(SEED_STATE_FILE, `${JSON.stringify(state, null, 2)}\n`);
   return state;
+}
+
+/**
+ * Uploads the Knowledge Files and indexes them into their Knowledge Bases.
+ * Runs after the database seed, because indexing needs the embedding model it
+ * sets. A file that already exists is left as it is.
+ */
+export async function seedKnowledgeFiles(api: ArchestraApi, state: SeedState): Promise<void> {
+  const directories: Record<string, string> = {};
+  for (const name of KNOWLEDGE_DIRECTORIES) {
+    const created = await api.ensureNamed({
+      name,
+      list: async () => items(await api.get<Listed>("/api/knowledge-directories")),
+      create: () => api.post<Named>("/api/knowledge-directories", { name }),
+    });
+    directories[name] = created.id;
+  }
+
+  type Stored = { id: string; filename: string; knowledgeBases?: { id: string }[] };
+  const stored = async () => items(await api.get<Listed>("/api/knowledge-files?limit=100")) as unknown as Stored[];
+  const existing = new Set((await stored()).map((file) => file.filename));
+  for (const file of KNOWLEDGE_FILES) {
+    if (existing.has(file.filename)) continue;
+    const pdf = file.filename.endsWith(".pdf");
+    const mimeType = pdf ? "application/pdf" : file.filename.endsWith(".csv") ? "text/csv" : "text/markdown";
+    const bytes = pdf ? textPdf(file.text) : Buffer.from(file.text);
+    const upload = {
+      filename: file.filename,
+      mimeType,
+      content: bytes.toString("base64"),
+      directoryId: file.directory ? directories[file.directory] : null,
+    };
+    // The server's PDF parser sometimes rejects a valid file, so retry it.
+    let created: { id: string } | null = null;
+    for (let attempt = 0; attempt < 8 && !created; attempt++) {
+      created = await api.tryPost<{ id: string }>("/api/knowledge-files", upload);
+    }
+    if (!created) throw new Error(`Could not upload ${file.filename}`);
+  }
+
+  // Index every file that is not yet in its Knowledge Base, new or left by an
+  // earlier run. Indexing parses each PDF again, so retry what the parser rejects.
+  for (let attempt = 0; attempt < 8; attempt++) {
+    const byName = new Map((await storedEverywhere()).map((file) => [file.filename, file]));
+    const toIndex: Record<string, string[]> = {};
+    for (const file of KNOWLEDGE_FILES) {
+      const row = byName.get(file.filename);
+      const baseId = file.knowledgeBase && state.knowledgeBases[file.knowledgeBase];
+      if (!row || !baseId || row.knowledgeBases?.some((base) => base.id === baseId)) continue;
+      (toIndex[baseId] ??= []).push(row.id);
+    }
+    if (Object.keys(toIndex).length === 0) return;
+    for (const [knowledgeBaseId, fileIds] of Object.entries(toIndex)) {
+      await api.post("/api/knowledge-files/index", { fileIds, knowledgeBaseId });
+    }
+  }
+  console.warn("Some Knowledge Files could not be indexed.");
+
+  // The listing shows one directory at a time, so read each directory too.
+  async function storedEverywhere(): Promise<Stored[]> {
+    const lists = await Promise.all(
+      Object.values(directories).map(
+        async (id) => items(await api.get<Listed>(`/api/knowledge-files?limit=100&directoryId=${id}`)) as unknown as Stored[],
+      ),
+    );
+    return [...(await stored()), ...lists.flat()];
+  }
 }
 
 export function readSeedState(): SeedState {

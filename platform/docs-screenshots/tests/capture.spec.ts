@@ -6,6 +6,9 @@ import { readSeedState } from "../src/seed";
 
 const THEMES: Theme[] = ["light", "dark"];
 const DOCS_SCREENSHOT_COOKIE = "archestra_docs_screenshot";
+// A step such as creating a key raises a toast that can cover the shot. A
+// development build also shows the Next.js issues badge.
+const HIDE_TOASTS = "[data-sonner-toaster], nextjs-portal { display: none !important; }";
 
 const selected = SHOTS.filter(
   (shot) =>
@@ -35,9 +38,14 @@ for (const shot of selected) {
 
       const target = shot.target?.(page);
       if (target) await expect(target).toBeVisible();
+      const options = {
+        animations: "disabled",
+        caret: "hide",
+        style: HIDE_TOASTS,
+      } as const;
       const png = target
-        ? await target.screenshot({ animations: "disabled", caret: "hide" })
-        : await page.screenshot({ animations: "disabled", caret: "hide" });
+        ? await target.screenshot(options)
+        : await page.screenshot(options);
 
       const result = await writeIfChanged({
         png,

@@ -50,6 +50,21 @@ export const SHOTS: Shot[] = [
     route: () => "/mcp/gateways",
   },
   {
+    asset: "automated_screenshots/knowledge_knowledge-bases",
+    route: () => "/knowledge/knowledge-bases",
+    viewport: { width: 1440, height: 760 },
+  },
+  {
+    asset: "automated_screenshots/knowledge_connectors",
+    route: () => "/knowledge/connectors",
+    viewport: { width: 1440, height: 800 },
+  },
+  {
+    asset: "automated_screenshots/knowledge_files",
+    route: () => "/knowledge/files",
+    viewport: { width: 1440, height: 760 },
+  },
+  {
     asset: "automated_screenshots/knowledge_settings",
     route: () => "/settings/knowledge",
   },
@@ -127,6 +142,24 @@ export const SHOTS: Shot[] = [
     prepare: async (page) => {
       await page.getByText("Create standard virtual key").waitFor();
     },
+  },
+  {
+    // Creates a key on each run: the dialog shows connection details only after Create.
+    asset: "automated_screenshots/llm-proxy_model-router-key",
+    route: () => "/llm/proxy",
+    viewport: { width: 1440, height: 1000 },
+    prepare: async (page) => {
+      await page.getByText("Create standard virtual key").click();
+      await page.getByLabel("Name").fill("Support bot");
+      // Map the first two provider keys: the seeded ones in CI, local keys elsewhere.
+      for (let i = 0; i < 2; i++) {
+        await page.getByTestId("virtual-key-parent-key-select").click();
+        await page.getByRole("option").first().click();
+      }
+      await page.getByRole("button", { name: "Create" }).click();
+      await page.getByText("Copy your key").waitFor();
+    },
+    target: (page) => page.getByRole("dialog"),
   },
   {
     asset: "automated_screenshots/llm-proxy_my-usage",

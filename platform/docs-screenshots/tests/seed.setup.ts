@@ -7,8 +7,8 @@ import {
   PERSONA_AUTH_FILE,
 } from "../src/env";
 import { ensurePersona, PERSONA } from "../src/persona";
-import { seedDatabaseRows } from "../src/db-seed";
-import { seedDemoData } from "../src/seed";
+import { backdateKnowledgeFiles, seedDatabaseRows } from "../src/db-seed";
+import { seedDemoData, seedKnowledgeFiles } from "../src/seed";
 
 setup("seed the demo organization", async () => {
   const adminContext = await request.newContext({ baseURL: ARCHESTRA_URL });
@@ -31,6 +31,8 @@ setup("seed the demo organization", async () => {
   }
   const state = await seedDemoData(persona);
   await seedDatabaseRows(state);
+  await seedKnowledgeFiles(persona, state);
+  backdateKnowledgeFiles(state);
   await personaContext.storageState({ path: PERSONA_AUTH_FILE });
   await personaContext.dispose();
   await anonymous.dispose();

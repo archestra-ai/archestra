@@ -1,5 +1,15 @@
 import { execSync } from "node:child_process";
-import { AGENT_PLACEMENT, CHANNEL_BINDINGS, COLLEAGUES, USAGE } from "./dataset";
+import {
+  AGENT_PLACEMENT,
+  CHANNEL_BINDINGS,
+  COLLEAGUES,
+  KNOWLEDGE_BASE_AGENTS,
+  KNOWLEDGE_BASES,
+  KNOWLEDGE_CONNECTORS,
+  KNOWLEDGE_DIRECTORIES,
+  KNOWLEDGE_FILES,
+  USAGE,
+} from "./dataset";
 import type { SeedState } from "./seed";
 
 /**
@@ -40,6 +50,23 @@ ON CONFLICT DO NOTHING;`);
   seedColleagues(state);
   seedUsage(state);
   seedLimitUsage();
+  seedKnowledge(state);
+}
+
+/**
+ * Spreads the upload times of the seeded Knowledge Files over the last weeks,
+ * so the Files page does not show every file as added just now.
+ */
+export function backdateKnowledgeFiles(state: SeedState): void {
+  runSql(
+    [
+      `UPDATE kb_directories SET created_at = now() - interval '45 days' WHERE organization_id = ${sql(state.organization.id)} AND name IN (${KNOWLEDGE_DIRECTORIES.map(sql).join(", ")});`,
+      ...KNOWLEDGE_FILES.map(
+      (file, index) =>
+        `UPDATE kb_files SET created_at = now() - make_interval(hours => ${3 + index * 29}) WHERE organization_id = ${sql(state.organization.id)} AND filename = ${sql(file.filename)};`,
+      ),
+    ].join("\n"),
+  );
 }
 
 /**
@@ -112,6 +139,54 @@ CROSS JOIN LATERAL (SELECT
   (s.input_tokens * (0.4 + random() * 1.2))::int AS input_tokens,
   (s.output_tokens * (0.4 + random() * 1.2))::int AS output_tokens) AS t;
 UPDATE interactions SET baseline_model = model, baseline_cost = cost WHERE session_id LIKE '${USAGE_SESSION_PREFIX}%';`);
+}
+
+/**
+ * The embedding model, connectors, and indexed documents behind the Knowledge
+ * pages. The connectors point at fictional hosts, so their rows carry a
+ * finished sync and documents instead of a sync that would fail. A rerun
+ * replaces the documents.
+ */
+function seedKnowledge(state: SeedState): void {
+  const organizationId = sql(state.organization.id);
+  const persona = sql(state.users.persona);
+  // Knowledge pages show a placeholder until an embedding model is set. Set
+  // one only where none is, so an instance's own choice is never replaced.
+  const embedding = `UPDATE organization SET
+  embedding_chat_api_key_id = (SELECT id FROM chat_api_keys WHERE organization_id = ${organizationId} ORDER BY (provider = 'openai') DESC, created_at LIMIT 1),
+  embedding_model = 'text-embedding-3-small'
+WHERE id = ${organizationId} AND embedding_chat_api_key_id IS NULL;`;
+  const descriptions = KNOWLEDGE_BASES.map(
+    (base) =>
+      `UPDATE knowledge_bases SET description = ${sql(base.description)} WHERE id = ${sql(state.knowledgeBases[base.name])};`,
+  );
+  const connectors = KNOWLEDGE_CONNECTORS.map((connector) => {
+    const id = sql(connector.id);
+    const syncedAt = `now() - make_interval(mins => ${connector.syncedMinutesAgo})`;
+    return `INSERT INTO knowledge_base_connectors
+  (id, organization_id, name, description, connector_type, config, schedule, enabled, last_sync_at, last_sync_status, created_by, created_at)
+VALUES (${id}, ${organizationId}, ${sql(connector.name)}, ${sql(connector.description)}, ${sql(connector.config.type)}, ${sql(JSON.stringify(connector.config))}::jsonb,
+  ${sql(connector.schedule)}, true, ${syncedAt}, ${sql(connector.status)}, ${persona}, now() - interval '60 days')
+ON CONFLICT (id) DO UPDATE SET last_sync_at = EXCLUDED.last_sync_at, last_sync_status = EXCLUDED.last_sync_status, deleted_at = NULL;
+DELETE FROM tasks WHERE task_type = 'connector_sync' AND payload->>'connectorId' = ${id} AND status = 'pending';
+${connector.knowledgeBases
+  .map(
+    (base) =>
+      // The table has no unique key, so ON CONFLICT cannot keep a rerun from duplicating the row.
+      `INSERT INTO knowledge_base_connector_assignment (knowledge_base_id, connector_id) SELECT ${sql(state.knowledgeBases[base])}, ${id} WHERE NOT EXISTS (SELECT 1 FROM knowledge_base_connector_assignment WHERE knowledge_base_id = ${sql(state.knowledgeBases[base])} AND connector_id = ${id});`,
+  )
+  .join("\n")}
+DELETE FROM kb_documents WHERE connector_id = ${id};
+INSERT INTO kb_documents (organization_id, connector_id, source_id, title, content, content_hash, embedding_status, chunk_count, created_at, updated_at)
+SELECT ${organizationId}, ${id}, 'docs-' || n, ${sql(connector.name)} || ' document ' || n, 'Seeded document', encode(sha256(convert_to(${id} || n, 'UTF8')), 'hex'), 'completed', 4,
+  now() - make_interval(days => n % 300), ${syncedAt}
+FROM generate_series(1, ${connector.documents}) AS n;`;
+  });
+  const agents = KNOWLEDGE_BASE_AGENTS.map(
+    (link) =>
+      `INSERT INTO agent_knowledge_base (agent_id, knowledge_base_id) VALUES (${sql(state.agents[link.agent])}, ${sql(state.knowledgeBases[link.knowledgeBase])}) ON CONFLICT DO NOTHING;`,
+  );
+  runSql([embedding, ...descriptions, ...connectors, ...agents].join("\n"));
 }
 
 function placeAgents(state: SeedState): void {

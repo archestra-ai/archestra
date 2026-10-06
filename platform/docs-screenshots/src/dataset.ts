@@ -56,6 +56,16 @@ export const AGENTS = [
   },
 ] as const;
 
+/**
+ * Provider keys the persona owns, so key pickers have something to show. The
+ * values are fake. Archestra checks a new key with its provider, so these only
+ * save where providers point at a mock, as in the CI stack (WireMock).
+ */
+export const PROVIDER_KEYS = [
+  { name: "OpenAI production", provider: "openai", apiKey: "sk-docs-example-openai" },
+  { name: "Anthropic production", provider: "anthropic", apiKey: "sk-ant-api03-docs-example" },
+] as const;
+
 export const MCP_GATEWAYS = [{ name: "Engineering Gateway" }, { name: "Support Gateway" }] as const;
 
 export const REMOTE_MCP_SERVERS = [
@@ -81,9 +91,129 @@ export const REMOTE_MCP_SERVERS = [
 ] as const;
 
 export const KNOWLEDGE_BASES = [
-  { name: "Engineering Handbook" },
-  { name: "Support Runbooks" },
-  { name: "Security Policies" },
+  { name: "Engineering Handbook", description: "Architecture docs, runbooks, and decisions from Platform Engineering" },
+  { name: "Support Runbooks", description: "Help center articles, past tickets, and escalation guides" },
+  { name: "Security Policies", description: "Policies, the incident response plan, and vendor reviews" },
+] as const;
+
+/**
+ * Knowledge connectors on Knowledge → Connectors, with their last sync. The
+ * hosts are fictional, so a real sync would fail: `db-seed.ts` writes these
+ * rows straight to the database with a finished sync and `documents` indexed
+ * documents each, and no sync task is queued.
+ */
+export const KNOWLEDGE_CONNECTORS = [
+  {
+    id: "7a2d3b40-0000-4000-8000-000000000001",
+    name: "Engineering Confluence",
+    description: "ENG and PLATFORM spaces",
+    config: { type: "confluence", confluenceUrl: "https://acme.atlassian.net/wiki", isCloud: true, spaceKeys: ["ENG", "PLATFORM"] },
+    knowledgeBases: ["Engineering Handbook"],
+    documents: 1284,
+    status: "success",
+    syncedMinutesAgo: 38,
+    schedule: "0 */6 * * *",
+  },
+  {
+    id: "7a2d3b40-0000-4000-8000-000000000002",
+    name: "Platform Jira",
+    description: "PLAT and INFRA projects",
+    config: { type: "jira", jiraBaseUrl: "https://acme.atlassian.net", isCloud: true, projectKey: "PLAT,INFRA" },
+    knowledgeBases: ["Engineering Handbook"],
+    documents: 3912,
+    status: "success",
+    syncedMinutesAgo: 52,
+    schedule: "0 */6 * * *",
+  },
+  {
+    id: "7a2d3b40-0000-4000-8000-000000000003",
+    name: "Platform Repositories",
+    description: "READMEs, docs folders, and pull requests",
+    config: { type: "github", githubUrl: "https://api.github.com", owner: "acme", repos: ["platform", "deploy-tools", "infra"], includePullRequests: true, includeRepositoryFiles: true },
+    knowledgeBases: ["Engineering Handbook"],
+    documents: 642,
+    status: "running",
+    syncedMinutesAgo: 2,
+    schedule: "0 * * * *",
+  },
+  {
+    id: "7a2d3b40-0000-4000-8000-000000000004",
+    name: "Help Center",
+    description: "help.acme.example, crawled daily",
+    config: { type: "web_crawler", startUrl: "https://help.acme.example" },
+    knowledgeBases: ["Support Runbooks"],
+    documents: 218,
+    status: "success",
+    syncedMinutesAgo: 190,
+    schedule: "0 3 * * *",
+  },
+  {
+    id: "7a2d3b40-0000-4000-8000-000000000005",
+    name: "Support Jira",
+    description: "SUP project, last 12 months",
+    config: { type: "jira", jiraBaseUrl: "https://acme.atlassian.net", isCloud: true, projectKey: "SUP" },
+    knowledgeBases: ["Support Runbooks"],
+    documents: 5431,
+    status: "completed_with_errors",
+    syncedMinutesAgo: 75,
+    schedule: "0 */6 * * *",
+  },
+  {
+    id: "7a2d3b40-0000-4000-8000-000000000006",
+    name: "IT ServiceNow",
+    description: "Incidents and knowledge articles",
+    config: { type: "servicenow", instanceUrl: "https://acme.service-now.com", includeIncidents: true, includeKnowledgeArticles: true },
+    knowledgeBases: ["Support Runbooks", "Security Policies"],
+    documents: 2076,
+    status: "success",
+    syncedMinutesAgo: 110,
+    schedule: "0 */12 * * *",
+  },
+  {
+    id: "7a2d3b40-0000-4000-8000-000000000007",
+    name: "Security Notion",
+    description: "Policies and the incident playbook",
+    config: { type: "notion", pageIds: ["security-policies", "incident-playbook"] },
+    knowledgeBases: ["Security Policies"],
+    documents: 187,
+    status: "success",
+    syncedMinutesAgo: 240,
+    schedule: "0 2 * * *",
+  },
+] as const;
+
+/** Agents that search each Knowledge Base, for its Agents count. */
+export const KNOWLEDGE_BASE_AGENTS = [
+  { knowledgeBase: "Engineering Handbook", agent: "Research Assistant" },
+  { knowledgeBase: "Engineering Handbook", agent: "Incident Responder" },
+  { knowledgeBase: "Engineering Handbook", agent: "Release Notes Writer" },
+  { knowledgeBase: "Support Runbooks", agent: "Support Triage" },
+  { knowledgeBase: "Security Policies", agent: "Research Assistant" },
+] as const;
+
+/**
+ * Uploaded files on Knowledge → Files. `directory` null is the top level;
+ * `knowledgeBase` null leaves the file stored but not indexed.
+ */
+export const KNOWLEDGE_DIRECTORIES = ["Vendor security reviews", "HR policies", "Sales enablement"] as const;
+
+export const KNOWLEDGE_FILES = [
+  { filename: "incident-response-plan.pdf", directory: null, knowledgeBase: "Security Policies", text: "Incident Response Plan. Declare an incident when customer data or availability is at risk. The incident commander owns the timeline." },
+  { filename: "acceptable-use-policy.pdf", directory: null, knowledgeBase: "Security Policies", text: "Acceptable Use Policy. Company devices are for company work. Report a lost device to IT within one hour." },
+  { filename: "data-retention-policy.md", directory: null, knowledgeBase: "Security Policies", text: "# Data Retention Policy\n\nCustomer data is deleted 30 days after an account closes. Audit logs are kept for one year." },
+  { filename: "on-call-handbook.md", directory: null, knowledgeBase: "Engineering Handbook", text: "# On-Call Handbook\n\nAcknowledge a page within five minutes. Hand over open incidents at the end of each shift." },
+  { filename: "refund-policy.md", directory: null, knowledgeBase: "Support Runbooks", text: "# Refund Policy\n\nAnnual plans get a prorated refund within 30 days. Monthly plans are not refunded." },
+  { filename: "pricing-2026.csv", directory: null, knowledgeBase: "Support Runbooks", text: "plan,monthly_usd,annual_usd\nStarter,29,290\nTeam,99,990\nBusiness,399,3990\n" },
+  { filename: "q3-board-update.pdf", directory: null, knowledgeBase: null, text: "Q3 Board Update. Revenue grew 18 percent over Q2. Net retention is 112 percent." },
+  { filename: "northwind-hosting-soc2-type2.pdf", directory: "Vendor security reviews", knowledgeBase: "Security Policies", text: "SOC 2 Type II report for Northwind Hosting. No exceptions were noted for the review period." },
+  { filename: "northwind-hosting-questionnaire.pdf", directory: "Vendor security reviews", knowledgeBase: "Security Policies", text: "Security questionnaire. Customer data is stored in eu-west-1 and us-east-1." },
+  { filename: "bluepeak-analytics-soc2-type2.pdf", directory: "Vendor security reviews", knowledgeBase: "Security Policies", text: "SOC 2 Type II report for Bluepeak Analytics. One exception in access reviews was noted." },
+  { filename: "bluepeak-analytics-dpa.pdf", directory: "Vendor security reviews", knowledgeBase: "Security Policies", text: "Data processing agreement with Bluepeak Analytics. Sub-processors are listed in Annex 3." },
+  { filename: "parental-leave-policy.pdf", directory: "HR policies", knowledgeBase: null, text: "Parental Leave Policy. All employees get 16 weeks of paid leave." },
+  { filename: "travel-and-expenses.pdf", directory: "HR policies", knowledgeBase: null, text: "Travel and Expenses. Book economy for flights under six hours." },
+  { filename: "remote-work-policy.md", directory: "HR policies", knowledgeBase: null, text: "# Remote Work Policy\n\nEmployees can work from any country where the company has an entity." },
+  { filename: "competitive-battlecard.md", directory: "Sales enablement", knowledgeBase: "Support Runbooks", text: "# Competitive Battlecard\n\nLead with single sign-on and audit logs in every plan." },
+  { filename: "security-faq-for-prospects.md", directory: "Sales enablement", knowledgeBase: "Support Runbooks", text: "# Security FAQ\n\nWe encrypt data at rest with AES-256 and in transit with TLS 1.2 or later." },
 ] as const;
 
 export const PROJECTS = [

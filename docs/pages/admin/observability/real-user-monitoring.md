@@ -7,7 +7,7 @@ lastUpdated: 2026-10-05
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Real User Monitoring (RUM) exports how people use the Archestra web UI: sessions, time spent, pages visited, features used, and page performance. Events go to your own OTLP collector as log records. Build adoption dashboards from them in Grafana, Splunk Observability, or any backend that reads OTLP logs. RUM is an [Enterprise feature](/docs/get-started#licensing).
+Real User Monitoring (RUM) exports how people use the Archestra web UI: sessions, time spent, pages visited, features used, and page performance. Events go to your own OTLP collector as log records. Build adoption dashboards from them in Grafana, Splunk Observability, or any backend that reads OTLP logs. RUM is an [Enterprise feature](/docs/get-started/pricing-model).
 
 ![RUM events counted by event name in Grafana Explore, backed by Loki](/docs/automated_screenshots/platform-observability_rum-events-explore.webp)
 

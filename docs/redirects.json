@@ -141,7 +141,7 @@
     {"source": "/docs/llm-proxy/model-router/client-credentials", "destination": "/docs/llm-proxy/authentication#call-as-the-app", "permanent": true},
     {"source": "/docs/llm-proxy/model-router/user-oauth", "destination": "/docs/llm-proxy/authentication#call-for-a-person", "permanent": true},
     {"source": "/docs/get-started/connect/setup-and-recovery", "destination": "/docs/get-started/connect", "permanent": true},
-    {"source": "/docs/get-started/pricing", "destination": "/docs/get-started#licensing", "permanent": true},
+    {"source": "/docs/get-started/pricing", "destination": "/docs/get-started/pricing-model", "permanent": true},
     {"source": "/docs/agents/skills/managing", "destination": "/docs/agents/skills", "permanent": true},
     {"source": "/docs/mcp/servers/managing", "destination": "/docs/mcp/servers#know-when-a-server-breaks", "permanent": true},
     {"source": "/docs/mcp/gateway/skills", "destination": "/docs/mcp/gateway#publish-skills", "permanent": true},

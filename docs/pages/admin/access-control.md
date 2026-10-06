@@ -41,7 +41,7 @@ Look up every role action in the [permission reference](/docs/reference/permissi
 
 A resource grant names a recipient and the actions they can perform. Recipients can be users, teams, service accounts, roles, or **Everyone in the organization**. A service account's access is independent of its creator; disabling the account prevents it from using its grants.
 
-Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started#licensing). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants; adding or expanding them requires entitlement.
+Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started/pricing-model). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants; adding or expanding them requires entitlement.
 
 To share a resource:
 

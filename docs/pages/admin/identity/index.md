@@ -14,7 +14,7 @@ An identity provider (IdP) manages user accounts: Okta, Microsoft Entra ID, Goog
 
 One provider can do both jobs, or only one. Turn off **Use for Single Sign-On** on a provider that should only supply tokens for tools.
 
-Identity providers are an enterprise feature. See [Licensing](/docs/get-started#licensing).
+Identity providers are an enterprise feature. See [Pricing Model](/docs/get-started/pricing-model).
 
 ![The Identity Providers settings page with a card for each supported provider](/docs/automated_screenshots/platform-identity-providers_sso-providers-overview.webp)
 

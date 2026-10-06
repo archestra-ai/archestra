@@ -88,7 +88,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`** - Activates the enterprise license.
   - Default: `false`
   - Values: `true`, `false`
-  - See [Licensing](/docs/get-started#licensing) for what it unlocks.
+  - See [Pricing Model](/docs/get-started/pricing-model) for what it unlocks.
 
 - **`ARCHESTRA_ENTERPRISE_LICENSE_KNOWLEDGE_BASE_ACTIVATED`** - Activates the enterprise Knowledge Base features, such as team-scoped connectors.
   - Default: `false`
@@ -1368,7 +1368,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_ENDPOINT`** - OTLP/HTTP endpoint that receives [Real User Monitoring](/docs/admin/observability#real-user-monitoring) events from the web UI. Setting it turns RUM on.
   - Default: unset (RUM off)
-  - Requires an [Enterprise license](/docs/get-started#licensing). The backend does not start when this is set without one.
+  - Requires an [Enterprise license](/docs/get-started/pricing-model). The backend does not start when this is set without one.
 
 - **`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME`** - Username for basic authentication to the RUM endpoint.
   - Default: unset. Used only together with [`ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD`](/docs/reference/configuration#ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD).
@@ -1408,7 +1408,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
 
 ## Data Retention
 
-Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/docs/get-started#licensing). Each value is a whole number of days; any other value turns that window off.
+Retention is an Enterprise feature: the backend does not start when a window is set without an [Enterprise license](/docs/get-started/pricing-model). Each value is a whole number of days; any other value turns that window off.
 
 - **`ARCHESTRA_LLM_LOGS_RETENTION_DAYS`** - Days to keep LLM proxy logs and Guardrails consult records.
   - Default: `0` (keep forever)

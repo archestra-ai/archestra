@@ -878,7 +878,9 @@ export default class ResourcePermissionPolicyModel {
         and(
           eq(table.organizationId, params.organizationId),
           eq(table.resource, params.resource),
-          inArray(table.scope, [...params.scopes, "*"]),
+          // Bind the scopes as one array so large lists cannot exhaust the
+          // PostgreSQL protocol's parameter limit.
+          sql`${table.scope} = ANY(${sql.param([...params.scopes, "*"])}::text[])`,
         ),
       );
   }

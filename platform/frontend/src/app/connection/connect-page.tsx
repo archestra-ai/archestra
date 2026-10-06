@@ -1121,7 +1121,7 @@ function ProfileCard({
       {/* Capability blocks: they stack in once on page load and stay put when
           another agent is picked (only the header animates per pick). */}
       <div className="mt-2.5">
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-3">
           <li
             className="connect-chip relative"
             style={{ animationDelay: "140ms" }}
@@ -1248,7 +1248,7 @@ function ProfileCard({
               className="connect-chip relative"
               style={{ animationDelay: "360ms" }}
             >
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
                 {statusChips.map((c) => {
                   const body = (
                     <>

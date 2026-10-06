@@ -20,7 +20,7 @@ The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, 
 
 A rule can use the name a client sends or the canonical ID \`<family>/<namespace>/<tool>\`. Names are case-sensitive; match the name Archestra evaluates, not another client's spelling.
 
-- MCP tools: \`<catalog>__<tool>\`, canonical \`mcp/<catalog>/<tool>\`.
+- MCP tools: \`<catalog>__<tool>\`, canonical \`mcp/<catalog>/<tool>\`. Archestra splits a name at its last \`__\`; when the catalog or tool name contains another \`__\`, the name is evaluated as \`host/archestra/<full name>\` instead. Write rules with the exact name from the inventory rather than a derived canonical ID.
 - Platform tools: \`archestra__<name>\`, canonical \`mcp/archestra/<name>\`. \`archestra__execute_remedy_plan\` is \`appa/execute_remedy_plan\`.
 - A name without \`__\` is a native client tool, canonical \`host/archestra/<name>\`. Native tools never appear in an MCP inventory. Claude Code sends \`Bash\`, \`Read\`, \`Write\`, \`Edit\`, \`Grep\`, \`Task\`, and \`Agent\`; OpenCode's spawn tool is lowercase \`task\`; Codex sends \`exec_command\` and \`spawn_agent\`. OpenAPPA's own Claude Code install names them \`host/claude-code/<Name>\`; Archestra does not, so such a rule matches nothing here.
 - \`archestra__run_command\` runs a command in the Archestra chat sandbox. It is not a client's shell: a rule on it does not govern Claude Code's \`Bash\`, and the reverse.

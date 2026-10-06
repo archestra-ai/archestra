@@ -483,18 +483,17 @@ export function fmt(n: number) {
   return n.toLocaleString("en-US");
 }
 
-/** A token estimate, rounded so it doesn't read as exact: "about 3.2k tokens". */
+/** A token estimate, rounded so it doesn't read as exact: "~3.2K tokens". */
 export function approxTokens(n: number) {
-  if (n < 1000)
-    return `about ${fmt(Math.max(100, Math.round(n / 100) * 100))} tokens`;
+  if (n < 1000) return `~${Math.max(100, Math.round(n / 100) * 100)} tokens`;
   const k = n / 1000;
-  return `about ${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}k tokens`;
+  return `~${k < 10 ? k.toFixed(1).replace(/\.0$/, "") : fmt(Math.round(k))}K tokens`;
 }
 
 /** One server's share of the context: its tokens, or that it loads when used. */
 function serverCost(data: ConnectPageData, key: string) {
   if (!data.toolTokens) return "";
-  if (data.progressive) return " · loads when used";
+  if (data.progressive) return " · on demand";
   const tokens = data.toolTokens.byServer[key];
   return tokens ? ` · ${approxTokens(tokens)}` : "";
 }

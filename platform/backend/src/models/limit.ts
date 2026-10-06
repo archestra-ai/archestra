@@ -1,7 +1,6 @@
 import { and, eq, inArray, lt, or, type SQL, sql } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
-import { retryOnceOnDeadlock } from "@/database/deadlock";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import type {
@@ -14,6 +13,7 @@ import type {
   Model,
   UpdateLimit,
 } from "@/types";
+import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";
 import { LimitLabelModel } from "./entity-labels";

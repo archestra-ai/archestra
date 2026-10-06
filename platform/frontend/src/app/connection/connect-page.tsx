@@ -1388,8 +1388,8 @@ function ToolLoadingNote({
             : `All ${fmt(tools)} ${plural(tools, "tool")} load at session start.`}
         </span>{" "}
         {progressive
-          ? "Your agent starts with a few search tools and pulls in the rest when a task needs them, so more servers don't fill its context."
-          : "Every tool takes up some of your agent's context, so more servers leave it less room."}
+          ? "Your agent pulls each one in only when a task needs it."
+          : "Each one takes up some of your agent's context."}
       </span>
     </p>
   );

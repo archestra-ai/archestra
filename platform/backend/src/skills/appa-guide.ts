@@ -60,6 +60,11 @@ The policy-writing rules at the end of this skill apply on every host and name o
 | Find a blocked call | The ruling in this conversation, or the yell the operator names (\`archestra__get_openappa_yell\`) |
 | Tuning options | Archestra ships none; work out each stricter or looser request from the source and sink questions |
 
+Two Archestra approval rules replace the shared ones:
+
+- An **Approve** answer to \`archestra__ask_user\` is the operator's approval of the proposal it presented. Ask it in the same turn as the proposal and continue in the same response, as in **Ask for approval**. Only a plain-text proposal without a question tool waits for a later message.
+- Call \`archestra__execute_remedy_plan\` with the offered \`offer_id\` without asking first. The call requests the review itself when the policy requires one, or returns the review to ask with \`archestra__ask_user\`.
+
 ## First policy: a small, usable start
 
 When the user asks to set up a starting policy, first read the policy. If its revision is 0 and delivery is local, follow this section instead of the full initial tool sync below. The approval, preservation, and truthful reporting rules still apply. Existing policies and GitHub-managed policies keep the full adjust workflow.

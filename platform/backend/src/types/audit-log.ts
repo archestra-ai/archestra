@@ -211,6 +211,8 @@ export const AuditEventNameSchema = z.enum([
   "skillShareLink.created",
   "skillShareLink.rotated",
   "skillShareLink.revoked",
+  "publicFileLink.created",
+  "publicFileLink.revoked",
   "team.created",
   "team.updated",
   "team.deleted",

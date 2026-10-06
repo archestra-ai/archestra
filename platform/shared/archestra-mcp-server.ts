@@ -207,6 +207,8 @@ export const TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME =
 export const TOOL_TRANSFER_CREDENTIAL_SHORT_NAME = "transfer_credential";
 export const TOOL_DOWNLOAD_FILE_SHORT_NAME = "download_file";
 export const TOOL_UPLOAD_FILE_SHORT_NAME = "upload_file";
+// publish a persistent file as a public, login-free link (org switch, off by default)
+export const TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME = "share_file_publicly";
 // persistent files: produced by agents, scoped to a conversation (or a project)
 export const TOOL_SEARCH_FILES_SHORT_NAME = "search_files";
 export const TOOL_READ_FILE_SHORT_NAME = "read_file";
@@ -382,6 +384,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_READ_FILE_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
@@ -618,6 +621,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   transfer_credential: "tasks",
   download_file: "skill_sandbox",
   upload_file: "skill_sandbox",
+  share_file_publicly: "skill_sandbox",
 
   search_files: "files",
   read_file: "files",
@@ -966,6 +970,7 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_DOWNLOAD_FILE_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
+  TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**

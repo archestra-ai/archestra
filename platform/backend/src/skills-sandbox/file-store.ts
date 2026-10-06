@@ -187,6 +187,26 @@ class FileStore {
   }
 
   /**
+   * Bytes of a row-backed file for its public link, with NO user ACL: the
+   * caller (the public-files route) has already authorized the request by the
+   * link's token. Scoped to the link's organization. Returns null when the row
+   * is gone or its bytes are no longer in storage.
+   */
+  async getForPublicLink(params: {
+    fileId: string;
+    organizationId: string;
+  }): Promise<ResolvedFile | null> {
+    const file = await FileModel.findById(params.fileId);
+    if (!file || file.organizationId !== params.organizationId) return null;
+    try {
+      return await this.rowToResolved(file);
+    } catch (error) {
+      if (error instanceof FileBytesMissingError) return null;
+      throw error;
+    }
+  }
+
+  /**
    * Read-only bytes for a `project:admin` overseeing a foreign project: resolves
    * only PROJECT-scoped files/objects (never personal ones) in the org, WITHOUT
    * the owner/share check. The caller (artifact route) must have already

@@ -249,6 +249,9 @@ export const TOOL_PERMISSIONS: Record<
   run_command: { resource: "agent", action: "read" },
   download_file: { resource: "agent", action: "read" },
   upload_file: { resource: "agent", action: "read" },
+  // Publishing is additionally gated by the organization switch
+  // (allowPublicFileSharing, off by default), checked in the handler.
+  share_file_publicly: { resource: "agent", action: "read" },
 
   // Runs are an Agent capability, including when an Agent opts into
   // Agent Runtime. Per-run ownership stays in the handlers.

@@ -1824,6 +1824,12 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.RevokeSkillShareLink]: {},
   [RouteId.RotateSkillShareLink]: {},
 
+  // Public file links - admin oversight of what agents published. The public
+  // serving route (GetPublicFile) stays outside this map: it is allowlisted in
+  // the auth middleware (`PUBLIC_FILES_PREFIX`); the URL token authorizes it.
+  [RouteId.GetPublicFileLinks]: { organizationSettings: ["read"] },
+  [RouteId.RevokePublicFileLink]: { organizationSettings: ["update"] },
+
   // MCP App Routes - per-instance scope is enforced in the handlers
   [RouteId.GetApps]: {},
   [RouteId.GetExternalApp]: { app: ["read"] },

@@ -943,6 +943,12 @@ export const RouteId = {
   RevokeSkillShareLink: "revokeSkillShareLink",
   RotateSkillShareLink: "rotateSkillShareLink",
 
+  // Public File Link Routes
+  GetPublicFileLinks: "getPublicFileLinks",
+  RevokePublicFileLink: "revokePublicFileLink",
+  GetPublicFile: "getPublicFile",
+  GetPublicFileWithName: "getPublicFileWithName",
+
   // Connection Setup Routes
   GetClientConnectionInstaller: "getClientConnectionInstaller",
   StartClientConnection: "startClientConnection",

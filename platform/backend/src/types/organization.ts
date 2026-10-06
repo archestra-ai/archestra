@@ -446,6 +446,7 @@ export const UpdateSecuritySettingsSchema = z.object({
   defaultDiscoveredToolResultPolicy:
     TrustedData.TrustedDataPolicyActionSchema.optional(),
   allowChatFileUploads: z.boolean().optional(),
+  allowPublicFileSharing: z.boolean().optional(),
   appsHackathonRecorderEnabled: z.boolean().optional(),
   newAppsDisabledByDefault: z.boolean().optional(),
   newAppsLockedByDefault: z.boolean().optional(),

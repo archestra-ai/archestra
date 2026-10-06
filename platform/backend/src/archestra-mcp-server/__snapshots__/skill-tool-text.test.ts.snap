@@ -723,6 +723,47 @@ exports[`skill and sandbox tool text > archestra__search_files 1`] = `
 }
 `;
 
+exports[`skill and sandbox tool text > archestra__share_file_publicly 1`] = `
+{
+  "description": "Publish a file as a PUBLIC link and return its URL — for handing an image, video, or PDF to an external service that needs a URL it can fetch without logging in, such as a social media scheduler. The link is PUBLIC: anyone on the internet who has it can open the file, and it stays live until an admin revokes it. Only share content the user explicitly asked to publish — never private or internal material. Pass \`path\` for a file in the sandbox (e.g. an attachment staged under /home/sandbox/attachments/) or \`fileId\` for an existing persistent file. Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared. Requires an organization admin to have enabled public file sharing.",
+  "inputSchema": {
+    "$schema": "https://json-schema.org/draft/2020-12/schema",
+    "additionalProperties": false,
+    "description": "Publish a file as a public link that anyone on the internet can open without logging in.",
+    "properties": {
+      "fileId": {
+        "description": "Id of an existing persistent file (from download_file, save_file, or search_files) instead of \`path\`.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "path": {
+        "description": "Path of the file in the sandbox — absolute, or relative to the sandbox's working directory (e.g. a staged attachment under /home/sandbox/attachments/). It is first saved to the conversation's persistent files.",
+        "minLength": 1,
+        "type": "string",
+      },
+      "target": {
+        "additionalProperties": false,
+        "description": "Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass \`{ "fresh": true }\` for a new isolated sandbox, or \`{ "id": "<uuid>" }\` to target a specific one.",
+        "properties": {
+          "fresh": {
+            "description": "Set true for a brand-new isolated sandbox; its id is returned.",
+            "type": "boolean",
+          },
+          "id": {
+            "description": "An existing sandbox id (UUID) returned by an earlier call.",
+            "type": "string",
+          },
+        },
+        "type": "object",
+      },
+    },
+    "type": "object",
+  },
+  "name": "archestra__share_file_publicly",
+  "title": "Share File Publicly",
+}
+`;
+
 exports[`skill and sandbox tool text > archestra__update_skill 1`] = `
 {
   "description": "Update an existing Agent Skill from a SKILL.md manifest. Passing \`files\` replaces the skill's entire bundled file set; omit it to edit only the SKILL.md. The manifest's \`name\` may differ from the target to rename the skill. For a small change to a large skill, prefer edit_skill (targeted str_replace) over resending the whole manifest. You can only update skills you are allowed to manage; the skill keeps its current visibility scope.",

@@ -34,6 +34,7 @@ import {
   OPENAPPA_HELPERS_PREFIX,
   ORGANIZATION_APPEARANCE_SETTINGS_PATH,
   PUBLIC_CONFIG_PATH,
+  PUBLIC_FILES_PREFIX,
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
   SKILL_MARKETPLACE_STATIC_PATH,
@@ -148,7 +149,8 @@ export class Authnz {
       // trace to avoid leaking it
       const safeUrl =
         url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`) ||
-        url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)
+        url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`) ||
+        url.startsWith(`${PUBLIC_FILES_PREFIX}/`)
           ? undefined
           : url;
       logger.trace(
@@ -199,6 +201,9 @@ export class Authnz {
           url === "/api/client-connections/poll")) ||
       // Public connection-setup script endpoint: one-time token in URL, no session
       (isGetOrHead && url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) ||
+      // Public file links: the random token in the URL is the credential, and
+      // the route only reads. Any other method falls through to session auth.
+      (isGetOrHead && url.startsWith(`${PUBLIC_FILES_PREFIX}/`)) ||
       // Public Archestra VAF Add On install bootstrap and package proxy:
       // parameterless, credential-free, fetched by irm without a session
       (isGetOrHead && url === MFILES_VAF_ADD_ON_SCRIPT_PATH) ||

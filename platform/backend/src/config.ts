@@ -116,6 +116,41 @@ export function parseFrontendBaseUrl(rawValue: string | undefined): string {
 const frontendBaseUrl = parseFrontendBaseUrl(
   process.env.ARCHESTRA_FRONTEND_URL,
 );
+
+/**
+ * Parse `ARCHESTRA_PUBLIC_FILES_BASE_URL`: the origin public file links are
+ * built on (`<base>/public-files/<token>/<filename>`). Lets operators serve
+ * those links from a separate host that is the only thing exposed publicly.
+ * Unset, blank, or not an absolute http(s) URL falls back to the frontend URL
+ * (an invalid value also logs a warning). Trailing slashes are stripped;
+ * a path prefix is kept so the links work behind a path-routing proxy.
+ * @public — exported for testability
+ */
+export function parsePublicFilesBaseUrl(params: {
+  value: string | undefined;
+  fallback: string;
+}): string {
+  const trimmed = params.value?.trim();
+  if (!trimmed) return params.fallback;
+  let url: URL;
+  try {
+    url = new URL(trimmed);
+  } catch {
+    url = new URL("invalid:");
+  }
+  if (
+    (url.protocol !== "http:" && url.protocol !== "https:") ||
+    url.search ||
+    url.hash
+  ) {
+    logger.warn(
+      { value: trimmed },
+      "[config] ARCHESTRA_PUBLIC_FILES_BASE_URL must be an absolute http(s) URL without a query or fragment; falling back to the frontend URL",
+    );
+    return params.fallback;
+  }
+  return `${url.origin}${url.pathname}`.replace(/\/+$/, "");
+}
 const DEFAULT_POSTHOG_KEY = "phc_FFZO7LacnsvX2exKFWehLDAVaXLBfoBaJypdOuYoTk7";
 const DEFAULT_POSTHOG_HOST = "https://eu.i.posthog.com";
 
@@ -2320,8 +2355,8 @@ const config = {
     ),
     /**
      * When set, a dedicated Fastify listener additionally serves the
-     * publicly-exposable endpoints (currently the MS Teams incoming webhook)
-     * on this port. Same handlers as the main API port — just an alias, so a
+     * publicly-exposable endpoints (currently the MS Teams incoming webhook
+     * and public file links) on this port. Same handlers as the main API port — just an alias, so a
      * firewall can expose only these endpoints publicly without exposing the
      * whole API. The main API port keeps serving them either way.
      */
@@ -3311,6 +3346,13 @@ const config = {
       process.env.ARCHESTRA_KNOWLEDGE_FILES_MAX_FILES_PER_INDEX_REQUEST,
       500,
     ),
+  },
+  /** Public, login-free file links (`share_file_publicly`). */
+  publicFiles: {
+    baseUrl: parsePublicFilesBaseUrl({
+      value: process.env.ARCHESTRA_PUBLIC_FILES_BASE_URL,
+      fallback: frontendBaseUrl,
+    }),
   },
   skillsSandbox: {
     enabled: skillsSandboxEnabled,

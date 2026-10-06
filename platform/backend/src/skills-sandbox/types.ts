@@ -84,6 +84,8 @@ export interface ExportArtifactParams {
   projectId?: string | null;
   /** Replace an existing same-named persistent file in this scope in place, keeping its id. */
   overwrite?: boolean;
+  /** Persistent filename to store the export under; defaults to the path's basename. */
+  filename?: string;
   /**
    * The agent's environment isolation target. Artifact extraction replays the
    * recorded commands, so it must target the same engine the sandbox ran on.

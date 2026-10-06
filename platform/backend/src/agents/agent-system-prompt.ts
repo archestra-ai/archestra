@@ -21,6 +21,7 @@ import {
   TOOL_SCAFFOLD_APP_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
+  TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import type { Tool } from "ai";
@@ -707,6 +708,15 @@ function buildFileHandlingInstruction(
       : "";
     paragraphs.push(
       `When the user has an app open in this chat, its files are a separate per-user store the app reads directly. Exchange with it via \`${copyFile}\`: copy a chat file or attachment INTO the app (so the app can load it — e.g. "open this file in the app"), or copy a file the app produced OUT into this chat's files (so the user can download it, or you can read it here). A file the user attached copies straight from the attachment — \`from: {"type":"chat_attachment","filename":"<name as attached>"}\` — in one call; never stage it through the sandbox first. The copy keeps the source's filename, which is how the app finds it and how it tells the format: leave the name alone unless the user or the app asks for a specific one, and never rewrite the extension.${discover} Do this unprompted when the task clearly calls for it.`,
+    );
+  }
+
+  if (has(TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME)) {
+    const shareFile = archestraMcpBranding.getToolName(
+      TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
+    );
+    paragraphs.push(
+      `When another tool or service needs a file as a URL it can fetch without logging in — a social media scheduler, for example — publish it with \`${shareFile}\` and pass on the URL it returns. That link is public to anyone who has it and stays live until an admin revokes it, so publish only what the user asked to make public.`,
     );
   }
 

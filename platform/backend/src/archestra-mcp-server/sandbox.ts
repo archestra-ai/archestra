@@ -1,3 +1,4 @@
+import { randomBytes } from "node:crypto";
 import type { EnvironmentTarget } from "@archestra/sandbox-rs";
 import {
   MAX_PROJECT_UPLOAD_BYTES,
@@ -11,6 +12,7 @@ import {
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_SAVE_FILE_SHORT_NAME,
   TOOL_SEARCH_FILES_SHORT_NAME,
+  TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
   TOOL_UPLOAD_FILE_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -25,6 +27,7 @@ import {
   SkillSandboxConversationGoneError,
   SkillSandboxModel,
 } from "@/models";
+import { publicFileSharing } from "@/public-files/public-file-sharing";
 import { loadConversationAttachmentSource } from "@/services/conversation-attachment-source";
 import { projectService } from "@/services/project";
 import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-registry";
@@ -236,6 +239,46 @@ const DownloadFileOutputSchema = z.object({
   overwritten: z
     .boolean()
     .describe("True when an existing same-named file was replaced in place."),
+});
+
+const ShareFilePubliclySchema = z
+  .strictObject({
+    path: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Path of the file in the sandbox — absolute, or relative to the " +
+          `sandbox's working directory (e.g. a staged attachment under ${SKILL_SANDBOX_ATTACHMENTS_DIR}/). ` +
+          "It is first saved to the conversation's persistent files.",
+      ),
+    fileId: z
+      .string()
+      .min(1)
+      .optional()
+      .describe(
+        "Id of an existing persistent file (from download_file, save_file, or " +
+          "search_files) instead of `path`.",
+      ),
+    target: SandboxTargetSchema,
+  })
+  .refine((v) => (v.path != null) !== (v.fileId != null), {
+    message: "provide exactly one of `path` or `fileId`",
+  })
+  .describe(
+    "Publish a file as a public link that anyone on the internet can open " +
+      "without logging in.",
+  );
+
+const ShareFilePubliclyOutputSchema = z.object({
+  url: z
+    .string()
+    .describe("The public link. Anyone with it can fetch the file."),
+  linkId: z.string(),
+  fileId: z.string(),
+  filename: z.string(),
+  mimeType: z.string(),
+  sizeBytes: z.number(),
 });
 
 /**
@@ -978,6 +1021,108 @@ const registry = defineArchestraTools([
       } catch (error) {
         return handleRuntimeError(error, resolved.sandboxId, "upload_file");
       }
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
+    title: "Share File Publicly",
+    description:
+      "Publish a file as a PUBLIC link and return its URL — for handing an " +
+      "image, video, or PDF to an external service that needs a URL it can " +
+      "fetch without logging in, such as a social media scheduler. The link is " +
+      "PUBLIC: anyone on the internet who has it can open the file, and it " +
+      "stays live until an admin revokes it. Only share content the user " +
+      "explicitly asked to publish — never private or internal material. " +
+      "Pass `path` for a file in the sandbox (e.g. an attachment staged under " +
+      `${SKILL_SANDBOX_ATTACHMENTS_DIR}/) or \`fileId\` for an existing persistent file. ` +
+      "Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared. " +
+      "Requires an organization admin to have enabled public file sharing.",
+    schema: ShareFilePubliclySchema,
+    outputSchema: ShareFilePubliclyOutputSchema,
+    async handler({ args, context }) {
+      const guard = ensureUsable(context);
+      if ("error" in guard) return errorResult(guard.error);
+      if (context.appId) {
+        return errorResult("Apps can't share files publicly.");
+      }
+      const { organizationId, userId } = guard.userCtx;
+
+      let file: { id: string; filename: string; data: Buffer };
+      if (args.fileId) {
+        const loaded = await loadShareableFile({
+          fileId: args.fileId,
+          userCtx: guard.userCtx,
+          conversationId: context.conversationId,
+        });
+        if ("error" in loaded) return errorResult(loaded.error);
+        file = loaded;
+      } else {
+        const resolved = await resolveTarget({
+          target: args.target,
+          userCtx: guard.userCtx,
+          context,
+        });
+        if ("error" in resolved) return errorResult(resolved.error);
+        try {
+          const exported = await exportForSharing({
+            sandboxId: resolved.sandboxId,
+            path: args.path ?? "",
+            userCtx: guard.userCtx,
+            context,
+          });
+          const loaded = await fileStore.get({
+            ref: exported.artifactId,
+            organizationId,
+            userId,
+          });
+          if (!loaded?.id) {
+            return errorResult(
+              `The file at ${exported.path} was saved but could not be read back; try again.`,
+            );
+          }
+          file = {
+            id: loaded.id,
+            filename: loaded.filename,
+            data: loaded.data,
+          };
+        } catch (error) {
+          return handleRuntimeError(
+            error,
+            resolved.sandboxId,
+            TOOL_SHARE_FILE_PUBLICLY_SHORT_NAME,
+          );
+        }
+      }
+
+      const shared = await publicFileSharing.share({
+        organizationId,
+        userId,
+        agentId: context.agent.id,
+        conversationId: context.conversationId ?? null,
+        file,
+      });
+      if ("error" in shared) return errorResult(shared.message);
+
+      logger.info(
+        {
+          linkId: shared.link.id,
+          fileId: file.id,
+          mimeType: shared.link.mimeType,
+          sizeBytes: shared.link.sizeBytes,
+        },
+        "[Sandbox] file shared publicly",
+      );
+      return structuredSuccessResult(
+        {
+          url: shared.url,
+          linkId: shared.link.id,
+          fileId: file.id,
+          filename: shared.link.filename,
+          mimeType: shared.link.mimeType,
+          sizeBytes: shared.link.sizeBytes,
+        },
+        `Published "${shared.link.filename}" at ${shared.url} — a PUBLIC link: anyone with it can open the file until an admin revokes it.`,
+      );
     },
   }),
   defineArchestraTool({
@@ -2231,6 +2376,120 @@ function handleRuntimeError(
     `[Sandbox] ${tool} failed unexpectedly`,
   );
   return errorResult(`${tool} failed due to an internal error.`);
+}
+
+/**
+ * A persistent file `share_file_publicly` may publish by id: confined to the
+ * chat's own scope (the conversation, or its project) exactly like the other
+ * file tools, so content in one chat cannot steer the model into publishing a
+ * file from another. A headless run (no conversation) falls back to the
+ * caller's own files. Hand-placed objects without a row cannot be shared.
+ */
+async function loadShareableFile(params: {
+  fileId: string;
+  userCtx: UserContext;
+  conversationId: string | undefined;
+}): Promise<
+  { id: string; filename: string; data: Buffer } | { error: string }
+> {
+  const { fileId, userCtx, conversationId } = params;
+  if (!isUuid(fileId)) {
+    return { error: describeMyFileError("not_found", fileId) };
+  }
+  if (!conversationId) {
+    const resolved = await fileStore.get({
+      ref: fileId,
+      organizationId: userCtx.organizationId,
+      userId: userCtx.userId,
+    });
+    if (!resolved?.id) {
+      return { error: describeMyFileError("not_found", fileId) };
+    }
+    return {
+      id: resolved.id,
+      filename: resolved.filename,
+      data: resolved.data,
+    };
+  }
+
+  let scope: ProjectFileScope | null;
+  try {
+    scope = await resolveProjectFileScope({
+      conversationId,
+      userId: userCtx.userId,
+      organizationId: userCtx.organizationId,
+    });
+  } catch (error) {
+    if (error instanceof SkillSandboxError) return { error: error.message };
+    throw error;
+  }
+  const fileScope = resolveChatFileScope(scope, conversationId);
+  if (!fileScope) return { error: describeMyFileError("not_found", fileId) };
+  const resolved = await fileStore.resolveMyFileSource({
+    organizationId: userCtx.organizationId,
+    userId: userCtx.userId,
+    id: fileId,
+    scope: fileScope,
+  });
+  if ("error" in resolved) {
+    return { error: describeMyFileError(resolved.error, fileId) };
+  }
+  if (!resolved.fileId) {
+    return { error: describeMyFileError("not_found", fileId) };
+  }
+  return {
+    id: resolved.fileId,
+    filename: resolved.originalName,
+    data: resolved.data,
+  };
+}
+
+/**
+ * Save a sandbox file to persistent files for sharing. Staged attachments are
+ * routinely named alike ("image.png" from every chat platform), so a name
+ * already taken in this scope is not an error here: the export is retried once
+ * under a suffixed name rather than overwriting a file that may already back
+ * another public link.
+ */
+async function exportForSharing(params: {
+  sandboxId: SandboxId;
+  path: string;
+  userCtx: UserContext;
+  context: ArchestraContext;
+}) {
+  const { sandboxId, path, userCtx, context } = params;
+  const scope = await resolveProjectFileScope({
+    conversationId: context.conversationId,
+    userId: userCtx.userId,
+    organizationId: userCtx.organizationId,
+  });
+  const exportParams = {
+    sandboxId,
+    caller: { ...userCtx, agentId: context.agent.id },
+    path,
+    projectId: scope?.projectId ?? null,
+    overwrite: false,
+    environment: await resolveEnvironmentTarget(context),
+  };
+  try {
+    return await skillSandboxRuntimeService.exportArtifact(exportParams);
+  } catch (error) {
+    if (!(error instanceof FileNameExistsError)) throw error;
+    return skillSandboxRuntimeService.exportArtifact({
+      ...exportParams,
+      filename: suffixedFilename(path),
+    });
+  }
+}
+
+/** `dir/photo.jpg` → `photo-1a2b3c.jpg` (a short random suffix before the extension). */
+function suffixedFilename(path: string): string {
+  const basename = path.split("/").filter(Boolean).pop() || "file";
+  const suffix = randomBytes(3).toString("hex");
+  const dot = basename.lastIndexOf(".");
+  return dot > 0
+    ? `${basename.slice(0, dot)}-${suffix}${basename.slice(dot)}`
+    : `${basename}-${suffix}`;
 }
 
 // base64 alphabet plus padding and incidental whitespace.

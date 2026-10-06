@@ -34,6 +34,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import PublicFileLinkModel from "@/models/public-file-link";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
@@ -889,6 +890,14 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     resourceType: "skillShareLink",
     action: "skillShareLink.revoked",
     fetchById: (id, orgId) => SkillShareLinkModel.findByIdForAudit(id, orgId),
+  },
+
+  // Public file links (created by the share_file_publicly MCP tool; the
+  // snapshot leaves out the token, which is the link's whole credential)
+  "/api/public-file-links/:id": {
+    resourceType: "publicFileLink",
+    action: "publicFileLink.revoked",
+    fetchById: (id, orgId) => PublicFileLinkModel.findByIdForAudit(id, orgId),
   },
 
   // Plugins

@@ -230,7 +230,7 @@ export function ConnectPage() {
           {/* Left: headline, then the picker. Beside a taller card the tiles
               grow a little, so the column ends level with the card. */}
           <div className="min-w-0 @min-[66rem]:flex @min-[66rem]:flex-col">
-            <h1 className="max-w-[11em] text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @7xl:text-6xl">
+            <h1 className="max-w-[11em] text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @min-[66rem]:text-6xl @7xl:text-[4.25rem]">
               Connect your agent to {data.appName}
             </h1>
             <p className="mt-4 max-w-[34rem] text-sm leading-relaxed text-muted-foreground">
@@ -399,7 +399,7 @@ function AgentTiles({
         "mt-3 max-w-xl gap-2.5",
         row
           ? "flex min-h-[10.75rem] items-center justify-center [&>*]:w-36"
-          : "grid grid-cols-4 @min-[66rem]:max-h-[16rem] @min-[66rem]:flex-1 @min-[66rem]:auto-rows-fr",
+          : "grid grid-cols-4 @min-[66rem]:max-h-[13rem] @min-[66rem]:flex-1 @min-[66rem]:auto-rows-fr",
       )}
     >
       {data.featuredClients.map((c) => (

@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -422,11 +422,19 @@ describe("external A2A agent routed pages", () => {
     const preview = await screen.findByRole("status", {
       name: "Agent Card found",
     });
-    expect(preview).toHaveTextContent("Version 2.1.0");
-    expect(preview).toHaveTextContent("by Example Org");
-    expect(preview).toHaveTextContent("A deterministic external agent");
-    expect(preview).toHaveTextContent("RefundsIssues refunds for orders");
-    expect(preview).toHaveTextContent("Invoices");
+    expect(preview).toHaveTextContent(
+      "by Example Org · v2.1.0 · A2A 1.0 over JSONRPC",
+    );
+    // The description is shown once, in the prefilled field below.
+    expect(preview).not.toHaveTextContent("A deterministic external agent");
+    const skills = within(preview).getByRole("list", {
+      name: "What this agent can do",
+    });
+    expect(
+      within(skills)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["RefundsIssues refunds for orders", "Invoices"]);
     expect(screen.getByLabelText("Display name (optional)")).toHaveValue(
       "Fixture Agent",
     );
@@ -441,6 +449,47 @@ describe("external A2A agent routed pages", () => {
         description: "A deterministic external agent",
       }),
     );
+  });
+
+  it("leaves out Agent Card skills and versions that add no information", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json(
+          inspectionFor({
+            name: "QA Tools",
+            description: "Runs QA checks",
+            agentCard: {
+              name: "QA Tools",
+              version: "1791292336",
+              skills: [
+                { id: "qa", name: "qa tools", description: "Runs QA checks" },
+                { id: "lint", name: "Lint", description: "Runs QA checks" },
+              ],
+            },
+          }),
+        ),
+      ),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.click(screen.getByLabelText("Agent base URL"));
+    await user.paste(remoteAgent.discoveryUrl);
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+
+    const preview = await screen.findByRole("status", {
+      name: "Agent Card found",
+    });
+    expect(preview).not.toHaveTextContent("1791292336");
+    expect(preview).not.toHaveTextContent("Runs QA checks");
+    const skills = within(preview).getByRole("list", {
+      name: "What this agent can do",
+    });
+    expect(
+      within(skills)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Lint"]);
   });
 
   it("refreshes Agent Card details on recheck without overwriting user edits", async () => {

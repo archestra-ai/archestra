@@ -227,27 +227,18 @@ function BatteryLink({ battery }: { battery: string }) {
   const catalog = useInternalMcpCatalog();
   const summary = batteries.data?.find((each) => each.name === battery);
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <Link
-          href={`/openappa/batteries?${new URLSearchParams({ battery })}`}
-          aria-label={`Open the ${battery} battery`}
-          className="flex size-7 items-center justify-center rounded-md border bg-background transition-colors hover:bg-muted"
-        >
-          <BatteryIcon
-            name={battery}
-            bundled={summary?.source === "bundled"}
-            catalogIds={
-              summary?.installs.map((install) => install.catalogId) ?? []
-            }
-            catalog={catalog.data ?? []}
-            size={16}
-          />
-        </Link>
-      </TooltipTrigger>
-      <TooltipContent>
-        <span>Open the {battery} battery</span>
-      </TooltipContent>
-    </Tooltip>
+    <Link
+      href={`/openappa/batteries?${new URLSearchParams({ battery })}`}
+      aria-label={`Open the ${battery} battery`}
+      className="flex size-7 items-center justify-center rounded-md border bg-background transition-colors hover:bg-muted"
+    >
+      <BatteryIcon
+        name={battery}
+        bundled={summary?.source === "bundled"}
+        catalogIds={summary?.installs.map((install) => install.catalogId) ?? []}
+        catalog={catalog.data ?? []}
+        size={16}
+      />
+    </Link>
   );
 }

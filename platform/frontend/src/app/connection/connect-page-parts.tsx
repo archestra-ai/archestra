@@ -14,7 +14,6 @@ import {
   Copy,
   Cpu,
   HardDrive,
-  Puzzle,
   Search,
   Unplug,
   Wrench,
@@ -529,68 +528,35 @@ export function ManageDialog({
   );
 }
 
-// === Include dialog: what the setup adds, with the real switches ===
+// === Include dialog: the two parts a user can turn off ===
 
-type IncludeTab = "servers" | "skills" | "plugins";
-
+/**
+ * Tools are always included (connecting without them adds nothing), so the
+ * only switches are skills and model routing, when the agent supports them.
+ */
 export function IncludeDialog({
   open,
-  tab,
-  focus,
-  onTab,
   onOpenChange,
   data,
   client,
-  skills,
   choices,
   onChoice,
 }: {
   open: boolean;
-  tab: IncludeTab;
-  /** Server to open expanded (its tools), from a row on the profile card. */
-  focus: string | null;
-  onTab: (t: IncludeTab) => void;
   onOpenChange: (v: boolean) => void;
   data: ConnectPageData;
   client: ConnectClient;
-  skills: ConnectPageSkill[];
   choices: ConnectChoices;
   onChoice: (part: keyof ConnectChoices, value: boolean) => void;
 }) {
-  const [q, setQ] = useState("");
-  const [expanded, setExpanded] = useState<string | null>(null);
-  useEffect(() => {
-    if (open) {
-      setExpanded(focus);
-      setQ("");
-    }
-  }, [open, focus]);
   const parts = data.partsFor(client);
-  const plugins = data.pluginsFor(client);
   const generic = setupModeFor(client) !== "prompt";
-  const needle = q.toLowerCase();
-  const serverMatch = data.servers.filter((s) =>
-    s.name.toLowerCase().includes(needle),
-  );
-  const skillMatch = skills.filter((s) =>
-    `${s.name} ${s.description}`.toLowerCase().includes(needle),
-  );
-  const pluginMatch = plugins.filter((p) =>
-    `${p.name} ${p.description ?? ""}`.toLowerCase().includes(needle),
-  );
   const switches: {
     part: keyof ConnectChoices;
     icon: ReactNode;
     label: string;
     detail: string;
   }[] = [];
-  if (parts.tools)
-    switches.push({
-      part: "tools",
-      icon: <Wrench />,
-      label: "Tools",
-      detail: `${fmt(data.totalTools)} ${plural(data.totalTools, "tool")} from ${fmt(data.servers.length)} MCP ${plural(data.servers.length, "server")}`,
-    });
   if (parts.skills)
     switches.push({
       part: "skills",
@@ -605,20 +571,114 @@ export function IncludeDialog({
       label: "Model routing",
       detail: `Model requests go through ${data.appName}. Same models.`,
     });
-  if (parts.plugins)
-    switches.push({
-      part: "plugins",
-      icon: <Puzzle />,
-      label: "Plugins",
-      detail: `${fmt(plugins.length)} ${plural(plugins.length, "plugin")} for ${client.label}`,
-    });
-  const tabs: [IncludeTab, string, string][] = [
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-md">
+        <DialogHeader className="px-4">
+          <DialogTitle>Choose what to include</DialogTitle>
+          <DialogDescription>
+            {generic
+              ? "Your agent asks before changing anything."
+              : "You confirm it again in the browser before anything changes."}
+          </DialogDescription>
+        </DialogHeader>
+        <DialogBody>
+          <ul className="divide-y rounded-lg border">
+            <li className="flex items-center gap-3 px-3 py-2.5 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground">
+              <Wrench />
+              <span className="min-w-0 flex-1">
+                <span className="block text-sm font-medium">Tools</span>
+                <span className="block truncate text-xs text-muted-foreground">
+                  {fmt(data.totalTools)} {plural(data.totalTools, "tool")} from{" "}
+                  {fmt(data.servers.length)} MCP{" "}
+                  {plural(data.servers.length, "server")}
+                </span>
+              </span>
+              <span className="text-xs text-muted-foreground">Always on</span>
+            </li>
+            {switches.map((sw) => (
+              <li
+                key={sw.part}
+                className="flex items-center gap-3 px-3 py-2.5 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground"
+              >
+                {sw.icon}
+                <label
+                  htmlFor={`include-${sw.part}`}
+                  className="min-w-0 flex-1 cursor-pointer"
+                >
+                  <span className="block text-sm font-medium">{sw.label}</span>
+                  <span className="block truncate text-xs text-muted-foreground">
+                    {sw.detail}
+                  </span>
+                </label>
+                <Switch
+                  id={`include-${sw.part}`}
+                  checked={choices[sw.part]}
+                  onCheckedChange={(v) => onChoice(sw.part, v)}
+                  aria-label={`Include ${sw.label.toLowerCase()}`}
+                />
+              </li>
+            ))}
+          </ul>
+        </DialogBody>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+// === Browse dialog: "See all", read-only lists ===
+
+type BrowseTab = "servers" | "skills" | "plugins";
+
+export function BrowseDialog({
+  open,
+  tab,
+  focus,
+  onTab,
+  onOpenChange,
+  data,
+  client,
+  skills,
+  choices,
+}: {
+  open: boolean;
+  tab: BrowseTab;
+  /** Server to open expanded (its tools), from a row on the profile card. */
+  focus: string | null;
+  onTab: (t: BrowseTab) => void;
+  onOpenChange: (v: boolean) => void;
+  data: ConnectPageData;
+  client: ConnectClient;
+  skills: ConnectPageSkill[];
+  choices: ConnectChoices;
+}) {
+  const [q, setQ] = useState("");
+  const [expanded, setExpanded] = useState<string | null>(null);
+  useEffect(() => {
+    if (open) {
+      setExpanded(focus);
+      setQ("");
+    }
+  }, [open, focus]);
+  const parts = data.partsFor(client);
+  const plugins = data.pluginsFor(client);
+  const needle = q.toLowerCase();
+  const serverMatch = data.servers.filter((s) =>
+    s.name.toLowerCase().includes(needle),
+  );
+  const skillMatch = skills.filter((s) =>
+    `${s.name} ${s.description}`.toLowerCase().includes(needle),
+  );
+  const pluginMatch = plugins.filter((p) =>
+    `${p.name} ${p.description ?? ""}`.toLowerCase().includes(needle),
+  );
+  const tabs: [BrowseTab, string, string][] = [
     ["servers", "MCP servers", fmt(data.servers.length)],
     ["skills", "Skills", data.skillsEnabled ? fmt(data.totalSkills) : "off"],
     ...(parts.plugins
       ? [
           ["plugins", "Plugins", fmt(plugins.length)] as [
-            IncludeTab,
+            BrowseTab,
             string,
             string,
           ],
@@ -630,46 +690,14 @@ export function IncludeDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-2xl">
         <DialogHeader className="px-4">
-          <DialogTitle>What your agent connects to</DialogTitle>
-          <DialogDescription>
-            {generic
-              ? "Turn off what you don't need. Your agent asks before changing anything."
-              : "Turn off what you don't need. You confirm it again in the browser before anything changes."}
+          <DialogTitle>What {client.label} gets</DialogTitle>
+          <DialogDescription className="sr-only">
+            The MCP servers, skills and plugins this setup adds.
           </DialogDescription>
         </DialogHeader>
         <DialogBody className="space-y-4">
-          {switches.length > 0 && (
-            <ul className="divide-y rounded-lg border">
-              {switches.map((sw) => (
-                <li
-                  key={sw.part}
-                  className="flex items-center gap-3 px-3 py-2.5 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground"
-                >
-                  {sw.icon}
-                  <label
-                    htmlFor={`include-${sw.part}`}
-                    className="min-w-0 flex-1 cursor-pointer"
-                  >
-                    <span className="block text-sm font-medium">
-                      {sw.label}
-                    </span>
-                    <span className="block truncate text-xs text-muted-foreground">
-                      {sw.detail}
-                    </span>
-                  </label>
-                  <Switch
-                    id={`include-${sw.part}`}
-                    checked={choices[sw.part]}
-                    onCheckedChange={(v) => onChoice(sw.part, v)}
-                    aria-label={`Include ${sw.label.toLowerCase()}`}
-                  />
-                </li>
-              ))}
-            </ul>
-          )}
-
           <div className="flex flex-wrap items-center gap-2">
-            <Tabs value={tab} onValueChange={(v) => onTab(v as IncludeTab)}>
+            <Tabs value={tab} onValueChange={(v) => onTab(v as BrowseTab)}>
               <TabsList>
                 {tabs.map(([value, label, count]) => (
                   <TabsTrigger key={value} value={value}>
@@ -693,17 +721,11 @@ export function IncludeDialog({
           </div>
 
           {tab === "servers" ? (
-            <div className={cn("space-y-3", off("tools") && "opacity-50")}>
-              {off("tools") ? (
+            <div className="space-y-3">
+              {data.allServers && (
                 <p className="text-xs text-muted-foreground">
-                  Tools are left out. Turn them on above to include these.
+                  New servers your org adds join automatically.
                 </p>
-              ) : (
-                data.allServers && (
-                  <p className="text-xs text-muted-foreground">
-                    New servers your org adds join automatically.
-                  </p>
-                )
               )}
               <ul className="divide-y rounded-lg border">
                 {serverMatch.slice(0, MODAL_ROW_CAP).map((s) => {
@@ -786,7 +808,8 @@ export function IncludeDialog({
               <div className={cn("space-y-3", off("skills") && "opacity-50")}>
                 {off("skills") && (
                   <p className="text-xs text-muted-foreground">
-                    Skills are left out. Turn them on above to include these.
+                    Skills are turned off. Turn them on under Choose what to
+                    include.
                   </p>
                 )}
                 <ul className="divide-y rounded-lg border">
@@ -823,7 +846,7 @@ export function IncludeDialog({
               </div>
             )
           ) : (
-            <div className={cn("space-y-3", off("plugins") && "opacity-50")}>
+            <div className="space-y-3">
               <ul className="divide-y rounded-lg border">
                 {pluginMatch.map((p) => (
                   <li key={p.id} className="px-3 py-2">

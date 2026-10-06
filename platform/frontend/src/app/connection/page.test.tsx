@@ -194,16 +194,17 @@ describe("ConnectPage (no connect request)", () => {
   it("carries what the user left out in the installer prompt", () => {
     window.localStorage.clear();
     saveConnectChoices("cursor", {
-      tools: true,
+      tools: false,
       skills: false,
       proxy: true,
       plugins: false,
     });
     mockOrganization({ data: { connectionShownClientIds: ["cursor"] } });
     render(<ConnectionPage />);
+    // Tools and plugins are always included, whatever was saved.
     expect(
       screen.getByText(
-        /connect\.md\?client=cursor&exclude=skills,plugins and connect Cursor\./,
+        /connect\.md\?client=cursor&exclude=skills and connect Cursor\./,
       ),
     ).toBeVisible();
   });

@@ -92,6 +92,7 @@ import {
 } from "./connect-page-data";
 import {
   AgentSearch,
+  BrowseDialog,
   CopyLine,
   DisconnectDialog,
   fmt,
@@ -116,6 +117,7 @@ const ConnectCommandPanel = dynamic(
 );
 
 type DialogKind =
+  | "include"
   | "servers"
   | "skills"
   | "plugins"
@@ -235,7 +237,14 @@ export function ConnectPage() {
     data.clients[0];
   const clientId = client?.id;
   useEffect(() => {
-    if (clientId) setChoices(readConnectChoices(clientId));
+    // Tools and plugins are always included; only skills and model routing
+    // can be turned off.
+    if (clientId)
+      setChoices({
+        ...readConnectChoices(clientId),
+        tools: true,
+        plugins: true,
+      });
   }, [clientId]);
 
   if (data.loading || !client) return <LoadingState />;
@@ -392,10 +401,7 @@ export function ConnectPage() {
               ? "Choose what to include"
               : `Leaving out ${leftOut.join(", ")}`
           }
-          onInclude={() => {
-            setFocusServer(null);
-            setDialog("servers");
-          }}
+          onInclude={() => setDialog("include")}
           onManual={(v) => {
             setManualChosen(v);
             // Only manual setup is bookmarkable; Script is a view of Prompt.
@@ -442,6 +448,14 @@ export function ConnectPage() {
       />
 
       <IncludeDialog
+        open={dialog === "include"}
+        onOpenChange={(v) => !v && setDialog(null)}
+        data={data}
+        client={client}
+        choices={choices}
+        onChoice={setChoice}
+      />
+      <BrowseDialog
         open={
           dialog === "servers" || dialog === "skills" || dialog === "plugins"
         }
@@ -453,7 +467,6 @@ export function ConnectPage() {
         client={client}
         skills={skillsSorted}
         choices={choices}
-        onChoice={setChoice}
       />
       <InfoDialog
         open={dialog === "cursor"}

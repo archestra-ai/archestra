@@ -64,8 +64,17 @@ describe("MS Teams webhook route registration", () => {
 
 describe("MS Teams webhook Bot Framework rejections", () => {
   beforeEach(() => {
-    // The webhook's rate limiter reads and writes through the cache manager.
-    cacheManager.start();
+    // The webhook's rate limiter reads and writes through the cache manager,
+    // which is backed by an external Postgres store. Keep it in memory so the
+    // test does not depend on a reachable database.
+    const store = new Map<string, unknown>();
+    vi.spyOn(cacheManager, "get").mockImplementation(async (key) =>
+      store.get(key),
+    );
+    vi.spyOn(cacheManager, "set").mockImplementation(async (key, value) => {
+      store.set(key, value);
+      return value;
+    });
   });
 
   afterEach(() => {

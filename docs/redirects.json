@@ -59,7 +59,7 @@
     {"source": "/docs/platform-connection-reference", "destination": "/docs/get-started/connect", "permanent": true},
     {"source": "/docs/reference/connection-setup", "destination": "/docs/get-started/connect", "permanent": true},
     {"source": "/docs/platform-migrate-from-claude-openclaw-hermes", "destination": "/docs/get-started/migrate", "permanent": true},
-    {"source": "/docs/platform-pricing-model", "destination": "/docs/get-started#licensing", "permanent": true},
+    {"source": "/docs/platform-pricing-model", "destination": "/docs/get-started/pricing-model", "permanent": true},
     {"source": "/docs/platform-chat", "destination": "/docs/chat", "permanent": true},
     {"source": "/docs/platform-projects", "destination": "/docs/chat/projects", "permanent": true},
     {"source": "/docs/platform-apps", "destination": "/docs/chat/apps", "permanent": true},

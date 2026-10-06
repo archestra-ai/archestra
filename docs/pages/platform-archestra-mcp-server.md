@@ -115,7 +115,7 @@ Required RBAC permission: `openappaDiagnostics:read`
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `sessionId` | `string` | No | The session to read. Omit it for the current session. Another caller's session needs openappaDiagnostics:admin. |
+| `sessionId` | `string` | Yes | The session to read, such as the sessionId of a yell. |
 | `outcome` | `"answered" \| "unregistered" \| "unreachable" \| "dismissed" \| "non_success" \| "timeout" \| "transport" \| "malformed" \| "oversized" \| "unsupported_version" \| "module_error" \| "module_panicked"` | No | Only consults with this outcome, such as non_success. |
 | `externalName` | `string` | No | Only consults of this external, such as github.repository-visibility. |
 | `role` | `"authority" \| "sanitizer" \| "annotator" \| "audience_source" \| "input" \| "context_provider"` | No | Only consults of externals in this role, such as annotator. |

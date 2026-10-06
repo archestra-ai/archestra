@@ -11,7 +11,7 @@ import { type ArchestraContext, executeArchestraTool } from ".";
 
 const toolName = getArchestraToolFullName("list_openappa_consults");
 const originalEnabled = config.openappa.enabled;
-const SESSION = "conversation-1";
+const SESSION = "reported-session";
 const HELPER_ERROR =
   "github repository annotator: GET /repos/acme/policy failed: 404";
 
@@ -49,7 +49,6 @@ describe("list_openappa_consults", () => {
           ...agentContext,
           organizationId,
           userId: user.id,
-          conversationId: SESSION,
         };
       };
     },
@@ -58,7 +57,7 @@ describe("list_openappa_consults", () => {
     config.openappa.enabled = originalEnabled;
   });
 
-  test("returns the helper's own error for the caller's current session, without the request or answer", async () => {
+  test("returns the helper's own error for the caller's session, without the request or answer", async () => {
     const context = await callerWith({ openappaDiagnostics: ["read"] });
     const callerId = `user:${context.userId}`;
     await seedConsult({
@@ -76,6 +75,7 @@ describe("list_openappa_consults", () => {
     const body = await list(context);
 
     expect(body.sessionId).toBe(SESSION);
+    expect(body.ownSessionsOnly).toBe(true);
     expect(body.hasMore).toBe(false);
     expect(body.consults).toEqual([
       expect.objectContaining({
@@ -123,10 +123,12 @@ describe("list_openappa_consults", () => {
       openappaDiagnostics: ["read", "admin"],
     });
 
-    expect(
-      (await list(reader, { sessionId: "their-chat" })).consults,
-    ).toHaveLength(0);
-    expect((await list(admin, { sessionId: "their-chat" })).consults).toEqual([
+    const refused = await list(reader, { sessionId: "their-chat" });
+    const granted = await list(admin, { sessionId: "their-chat" });
+
+    expect(refused).toMatchObject({ consults: [], ownSessionsOnly: true });
+    expect(granted.ownSessionsOnly).toBe(false);
+    expect(granted.consults).toEqual([
       expect.objectContaining({ diagnostics: HELPER_ERROR }),
     ]);
   });
@@ -178,12 +180,22 @@ describe("list_openappa_consults", () => {
     expect(consult.rawResponseTruncated).toBe(true);
   });
 
-  test("asks for sessionId when the call runs outside a session", async () => {
-    const { conversationId: _, ...headless } = await callerWith({
-      openappaDiagnostics: ["read"],
+  test("does not fall back to the session the call runs in", async () => {
+    const context = await callerWith({ openappaDiagnostics: ["read"] });
+    await seedConsult({
+      organizationId,
+      callerId: `user:${context.userId}`,
+      sessionId: "current-chat",
+      diagnostics: HELPER_ERROR,
     });
 
-    expect(await failure(headless)).toMatch(/Pass sessionId/);
+    const refusal = await failure(
+      { ...context, conversationId: "current-chat" },
+      {},
+    );
+
+    expect(refusal).toMatch(/sessionId/);
+    expect(refusal).not.toContain(HELPER_ERROR);
   });
 
   test("does not exist while OpenAPPA is disabled", async () => {
@@ -224,10 +236,15 @@ async function list(
   args: Record<string, unknown> = {},
 ): Promise<{
   sessionId: string;
+  ownSessionsOnly: boolean;
   hasMore: boolean;
   consults: ConsultSummary[];
 }> {
-  const outcome = await executeArchestraTool(toolName, args, context);
+  const outcome = await executeArchestraTool(
+    toolName,
+    { sessionId: SESSION, ...args },
+    context,
+  );
   expect(outcome.isError ?? false).toBe(false);
   const [first] = outcome.content;
   if (first?.type !== "text") throw new Error("expected a text result");
@@ -235,10 +252,13 @@ async function list(
 }
 
 /** The refusal text, whether admission returned it or the call threw it. */
-async function failure(context: ArchestraContext): Promise<string> {
+async function failure(
+  context: ArchestraContext,
+  args: Record<string, unknown> = { sessionId: SESSION },
+): Promise<string> {
   let outcome: unknown;
   try {
-    outcome = await executeArchestraTool(toolName, {}, context);
+    outcome = await executeArchestraTool(toolName, args, context);
   } catch (error) {
     return error instanceof Error ? error.message : JSON.stringify(error);
   }

@@ -2,29 +2,22 @@
 title: Archestra Docs
 description: What Archestra is and how its parts fit together
 order: 0
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Archestra is an open-source AI platform. It gives agents tools from MCP servers and context from your documents and connected data. It governs every model and tool call they make.
+Archestra connects your agents to tools from MCP servers and context from your enterprise documents, then governs every model and tool call they make.
 
-New here? [Get started](/docs/get-started): run Archestra and connect your first agent.
-
-## For Users
-
-- **[Chat](/docs/chat) and [everywhere else](/docs/agents/triggers-and-channels):** You work with agents in Chat and Projects. They also answer in Slack and Microsoft Teams, reply to email, and run from your own code over A2A.
-- **[Agents and skills](/docs/agents):** You build an agent once, with its own tools, knowledge, and [skills](/docs/agents/skills), and use it everywhere. A coding agent can get its own container with [Agent Runtime](/docs/agents/runtime).
-- **[Connected clients](/docs/get-started/connect):** Your coding agents and your own apps use Archestra's tools, models, and shared skills.
-
-## For Administrators
-
-- **[Guardrails](/docs/agents/guardrails):** Archestra checks each tool call against your policy before it runs. It blocks the calls your policy does not allow, such as sending private data out after reading an untrusted web page.
-- **[Logs and auditing](/docs/admin/logs):** Archestra logs every model request, tool call, and admin change across Chat and connected clients.
-- **[Cost control](/docs/llm-proxy/costs-and-limits):** You see what every model call costs and set spending limits.
-- **Model providers:** The [LLM Proxy](/docs/llm-proxy) and [Model Router](/docs/llm-proxy/model-router) sit between clients and providers. You can switch or mix providers without changing clients.
-- **[Access control](/docs/admin/access-control):** Your access rules apply the same way in Chat, messaging apps, and connected clients.
-- **[Self-hosting](/docs/admin/deployment):** Archestra runs in Docker or on Kubernetes in your environment.
-- **[Licensing](/docs/get-started#licensing):** Open core. Enterprise features are free for companies with fewer than 30 users.
+New here? Follow the **[Get Started guide](/docs/get-started)** to run Archestra locally and connect your first agent.
 
 :::architecture-diagram:::
+
+## Core Capabilities
+
+- **[Agents and Skills](/docs/agents):** Build autonomous agents with custom tools, knowledge, and [skills](/docs/agents/skills). Run them in [Chat](/docs/chat), messaging apps like [Slack and Microsoft Teams](/docs/agents/triggers-and-channels), or your own code over A2A.
+- **[MCP Gateway & Servers](/docs/mcp):** Expose tools to any MCP-compatible client through a unified, secure [gateway](/docs/mcp/gateway), and run sandboxed or self-hosted [MCP servers](/docs/mcp/servers).
+- **[LLM Proxy & Router](/docs/llm-proxy):** Centralize model access across OpenAI, Anthropic, Gemini, Bedrock, and Azure with [virtual keys](/docs/llm-proxy/authentication), [cost tracking](/docs/llm-proxy/costs-and-limits), and automatic [failover](/docs/llm-proxy/model-router).
+- **[Knowledge (RAG)](/docs/knowledge):** Give agents cited answers from connected enterprise sources like Confluence, Google Drive, and SharePoint with automatic source permission sync.
+- **[Governance & Guardrails](/docs/agents/guardrails):** Enforce input/output policies, dual-LLM security checks, and audit logging on every tool and model call.
+

@@ -2,7 +2,7 @@
 title: Connect Your Agents
 description: Connect your AI client to Archestra's tools, models, and shared skills
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -13,12 +13,12 @@ Connect your AI client once, and Archestra governs everything it does. It gets A
 - **Model requests** go through the [LLM Proxy](/docs/llm-proxy).
 - **Shared [skills](/docs/agents/skills)** install in the client.
 
-Open **Connect** in the Archestra sidebar and choose how to connect:
+Open **Connect** in the Archestra sidebar (`http://localhost:3000/connect`) and choose how to connect:
 
 - **Coding agents:** [Claude Code](/docs/integrations/claude-code), Codex, Cursor, Copilot CLI, and OpenCode set themselves up after you approve the connection in your browser.
 - **[Claude Desktop](/docs/integrations/claude-desktop#setup):** a downloadable installer sets up Desktop.
 - **[n8n](/docs/integrations/n8n):** you enter the gateway URL and model settings in your workflow.
-- **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL, the proxy base URL, a key, and a Git URL for the shared skills.
+- **Any Client:** any tool that supports MCP or an OpenAI-compatible API. Copy the gateway URL (`http://localhost:9000/v1/mcp/<agentId>`), the proxy base URL, a key, and a Git URL for the shared skills.
 
 To leave out the proxy or the skills, click **Customize setup** before you approve.
 
@@ -48,7 +48,30 @@ For Claude Code, Codex, Cursor, Copilot CLI, and OpenCode:
 3. Check that the code in the browser matches the code in the terminal. Tick **This code matches the code in my terminal** and click **Approve connection**.
 4. Keep the installer running until it reports that setup finished.
 
+> [!NOTE] Shell Startup Verification
+> The setup script adds a lightweight verification check to your shell profile (`.zshrc` / `.bashrc`) so your CLI client verifies its Archestra connection when launching. You can disable this anytime by setting `ARCHESTRA_<CLIENT>_GUARD=0` (e.g. `ARCHESTRA_CLAUDE_GUARD=0`).
+
 ![The browser approval page with a code to match against the terminal](/docs/automated_screenshots/platform-connection_browser-approval.webp)
+
+### Manual Setup (MCP JSON)
+
+If you prefer configuring your client manually rather than running the setup prompt, add the Archestra MCP Gateway directly to your client's MCP configuration file (such as `~/.claude.json`, `.cursor/mcp.json`, or Claude Desktop config):
+
+```json
+{
+  "mcpServers": {
+    "archestra": {
+      "url": "http://localhost:9000/v1/mcp/<agentId>",
+      "headers": {
+        "Authorization": "Bearer <archestra_token>"
+      }
+    }
+  }
+}
+```
+
+Find your gateway URL and token under **Connect → Any Client** in the Archestra console.
+
 
 ## Finish Setup in Your Client
 

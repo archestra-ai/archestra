@@ -2,18 +2,29 @@
 title: See It Work
 description: Send your first message in Chat and from a connected client, then find both in the logs
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Send one request through Archestra, then find it in the logs. Every model call and tool call shows up there, from Chat and from connected clients.
 
+## Verify from the Terminal
+
+Before opening your browser or client, you can verify that the Archestra services are running:
+
+```bash
+curl -s http://localhost:9000/health
+```
+
+A response containing `"status":"ok"` confirms the backend API and gateway are active.
+
 ## In Chat
 
-1. Open **Chat** in the Archestra sidebar.
-2. Archestra needs a model provider before you can chat. Click **Sign in with ChatGPT**, another subscription, or **Add API Key**, and follow the dialog.
-3. Send a message, such as "What tools can you use?".
+1. Open **Chat** (`http://localhost:3000/chat`) in the Archestra sidebar.
+2. Connect a model provider: click **Sign in with ChatGPT**, another subscription, or **Add API Key** (such as Anthropic, OpenAI, or Gemini) and follow the dialog.
+3. Send a message, such as *"What tools can you use?"*, to verify the built-in MCP tools respond.
+
 
 ## From Your Client
 

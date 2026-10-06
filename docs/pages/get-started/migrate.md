@@ -2,7 +2,7 @@
 title: Migrate Your Agents
 description: Turn a Claude Code project into a shared Archestra agent, with its skills, MCP servers, and hooks
 order: 4
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -49,7 +49,8 @@ You need a coding agent that runs skills and Python 3.10 or newer.
    into http://localhost:9000. Show me the migration plan before applying it.
    ```
 
-   Use your own Archestra API URL if it is not local.
+   Use your own Archestra API URL if it is not local (such as `https://archestra.example.com`). If your deployment requires authentication, create an API key under **Account → API Keys** and provide it when prompted.
+
 
 3. Review the plan. Choose the agents, skills, and MCP servers to create, and who can see each one: you, a team, or the organization.
 4. Approve. The skill creates what you approved and writes a report. It also turns on the organization's skill tools and adds sandbox tools to migrated agents.

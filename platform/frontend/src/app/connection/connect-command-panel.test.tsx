@@ -84,6 +84,7 @@ const { availableKeysMock, createKeyMock, modelsByProviderMock } = vi.hoisted(
 );
 
 vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModels: () => ({ data: [] }),
   useLlmModelsByProvider: () => ({
     modelsByProvider: modelsByProviderMock(),
   }),
@@ -167,7 +168,19 @@ function renderPanelProps(
 function renderPanel(
   overrides: Partial<Parameters<typeof ConnectCommandPanel>[0]> = {},
 ) {
-  return render(<ConnectCommandPanel {...renderPanelProps(overrides)} />);
+  return render(<ConnectCommandPanel {...renderPanelProps(overrides)} />, {
+    wrapper: queryWrapper(),
+  });
+}
+
+/** The panel reads the approval request through React Query; rerenders keep the wrapper. */
+function queryWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
 // Radix Select scrolls the focused option; jsdom has no layout engine.
@@ -305,11 +318,7 @@ describe("ConnectCommandPanel", () => {
           (entry) => entry.label === label,
         );
         if (!selectedClient) throw new Error(`Missing client: ${label}`);
-        await user.click(
-          screen.getByRole("button", {
-            name: new RegExp(`${label} logo ${label}`),
-          }),
-        );
+        await pickApp(user, label);
         expect(
           screen.getByRole("heading", { name: `Connect ${label}` }),
         ).toBeVisible();
@@ -325,11 +334,7 @@ describe("ConnectCommandPanel", () => {
         ).toBeVisible();
       }
       expect(createSetupMock).not.toHaveBeenCalled();
-      await user.click(
-        screen.getByRole("button", {
-          name: /Claude Desktop logo Claude Desktop/,
-        }),
-      );
+      await pickApp(user, "Claude Desktop");
       expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
       expect(
         screen.getByRole("heading", { name: "Install the connection" }),
@@ -343,9 +348,7 @@ describe("ConnectCommandPanel", () => {
         ),
       );
       expect(screen.queryByText(/requires the Claude Code CLI/)).toBeNull();
-      await user.click(
-        screen.getByRole("button", { name: /Claude Code logo Claude Code/ }),
-      );
+      await pickApp(user, "Claude Code");
       expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
       expect(
         screen.getByRole("heading", { name: "Review the setup" }),
@@ -623,7 +626,9 @@ describe("ConnectCommandPanel", () => {
 
   it("regenerates the setup as proxy and skills availability changes without losing the gateway", async () => {
     const props = renderPanelProps();
-    const { rerender } = render(<ConnectCommandPanel {...props} />);
+    const { rerender } = render(<ConnectCommandPanel {...props} />, {
+      wrapper: queryWrapper(),
+    });
     await screen.findByText(COMMAND);
 
     for (const [proxyEnabled, skillsEnabled] of [
@@ -1773,3 +1778,14 @@ describe("ConnectCommandPanel", () => {
     });
   });
 });
+
+/** Opens the app dropdown and picks `label`. */
+async function pickApp(
+  user: ReturnType<typeof userEvent.setup>,
+  label: string,
+) {
+  await user.click(screen.getByRole("button", { name: "Choose your app" }));
+  await user.click(
+    screen.getByRole("button", { name: new RegExp(`^${label} logo ${label}`) }),
+  );
+}

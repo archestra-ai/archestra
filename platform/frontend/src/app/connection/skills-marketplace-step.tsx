@@ -42,7 +42,7 @@ import {
 import { useFetchUserTokenValue } from "@/lib/user-token.query";
 import { handleApiError, throwOnApiError } from "@/lib/utils/api";
 import { cn } from "@/lib/utils/tailwind";
-import type { ConnectClient } from "./clients";
+import { type ConnectClient, usesGenericInstructions } from "./clients";
 import {
   computeSkillMarketplaceExpiresAt,
   SKILL_MARKETPLACE_CLIENTS,
@@ -766,7 +766,7 @@ function isClientSupported(client: ConnectClient | null): boolean {
     client.id === "copilot-cli" ||
     client.id === "cursor" ||
     client.id === "opencode" ||
-    client.id === "generic"
+    usesGenericInstructions(client)
   );
 }
 
@@ -774,7 +774,7 @@ function pickClientsFor(client: ConnectClient): SkillMarketplaceClient[] {
   // "Any client" → user explicitly picked something other than the listed
   // ones, so showing Claude / Codex / Cursor install snippets is just noise.
   // Callers fall back to a generic clone-path guide instead.
-  if (client.id === "generic") return [];
+  if (usesGenericInstructions(client)) return [];
   return SKILL_MARKETPLACE_CLIENTS.filter((c) => c.id === client.id);
 }
 

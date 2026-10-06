@@ -50,6 +50,7 @@ import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useClientConnection } from "@/lib/client-connection.query";
 import { useConfig } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
@@ -206,6 +207,11 @@ export function ConnectCommandPanel({
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
+  // The gateway and the LLM Proxy join the setup unless the prompt flow's
+  // review step switched them off (only the approval page can be told that).
+  const [includeGateway, setIncludeGateway] = useState(true);
+  const [includeProxy, setIncludeProxy] = useState(true);
+  const activeLlmProxyId = includeProxy ? llmProxyId : null;
   const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
   const setupStep = showSetupSummary ? 3 : 2;
   const requestedPlatform = searchParams.get("platform");
@@ -285,6 +291,25 @@ export function ConnectCommandPanel({
         : toPlatformOption(detectPlatform()),
     );
   }, [requestedPlatform]);
+  // Parts the copied prompt left out. The deployment won't approve a setup
+  // that includes one, so they start off here and stay off.
+  const { data: connection } = useClientConnection(connectRequest ?? "");
+  const excludeKey = (connection?.exclude ?? []).join(",");
+  const excluded = useMemo(
+    () => new Set(excludeKey.split(",").filter(Boolean)),
+    [excludeKey],
+  );
+  useEffect(() => {
+    if (excluded.has("tools")) setIncludeGateway(false);
+    if (excluded.has("proxy")) setIncludeProxy(false);
+    if (excluded.has("skills")) setSelectedSkillIds(new Set());
+    if (excluded.has("plugins")) {
+      setPluginSelections((current) =>
+        new Map(current).set(client.id, new Set()),
+      );
+    }
+    if (excluded.size > 0) setCustomizing(true);
+  }, [excluded, client.id]);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -331,7 +356,9 @@ export function ConnectCommandPanel({
   const providerIsPerUser =
     !!provider && providerRequiresPerUserCredential(provider);
   const needsPerUserConnect =
-    !!llmProxyId && providerIsPerUser && !configuredProviders.has(provider);
+    !!activeLlmProxyId &&
+    providerIsPerUser &&
+    !configuredProviders.has(provider);
 
   // Clients that persist a model during setup surface it as a reviewable
   // choice instead of hard-wiring a default. null = the provider's default;
@@ -369,12 +396,14 @@ export function ConnectCommandPanel({
   const openCodeProviderPassthrough =
     client.id === "opencode" && effectiveProxyAuth === "provider-key";
 
-  const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
+  const gateway = includeGateway
+    ? (mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null)
+    : null;
   // The LLM Proxy may be available without a usable provider (e.g. virtual-key
   // mode with no configured providers); keep it for the row/editor, but it
   // only joins the command when a provider is also resolved.
-  const hasProxy = llmProxyId !== null;
-  const proxyActive = !!(llmProxyId && provider);
+  const hasProxy = activeLlmProxyId !== null;
+  const proxyActive = !!(activeLlmProxyId && provider);
   // Virtual-key auth was chosen, but nothing can back it: the client routes only
   // providers with no configured key (and none are per-user), so no virtual key
   // can be minted. Emitting the script anyway would silently drop the inference
@@ -497,7 +526,7 @@ export function ConnectCommandPanel({
     platform: setupPlatform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
-    proxyId: proxyActive ? llmProxyId : null,
+    proxyId: proxyActive ? activeLlmProxyId : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
     model: proxyActive ? effectiveModel : null,
@@ -837,6 +866,7 @@ export function ConnectCommandPanel({
       >
         <Checkbox
           id="connect-include-skills"
+          disabled={excluded.has("skills")}
           // All or nothing: the shared marketplace URL has no per-skill knob,
           // so "all" (null) and "none" (empty set) are the only honest states.
           checked={selectedSkills.length > 0}
@@ -862,6 +892,7 @@ export function ConnectCommandPanel({
         >
           <Checkbox
             id="connect-include-plugins"
+            disabled={excluded.has("plugins")}
             checked={
               selectedPlugins.length === compatiblePlugins.length
                 ? true
@@ -889,6 +920,7 @@ export function ConnectCommandPanel({
               >
                 <Checkbox
                   id={`connect-plugin-${plugin.id}`}
+                  disabled={excluded.has("plugins")}
                   checked={
                     selectedPluginIds === null ||
                     selectedPluginIds.has(plugin.id)
@@ -1170,7 +1202,33 @@ export function ConnectCommandPanel({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
+              {excluded.size > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Your prompt left some parts out. They stay off for this
+                  connection.
+                </p>
+              )}
+              {connectRequest && mcpGatewayId && mcpGateways !== null && (
+                <IncludeCheckbox
+                  id="connect-include-gateway"
+                  disabled={excluded.has("tools")}
+                  checked={includeGateway}
+                  onCheckedChange={setIncludeGateway}
+                >
+                  Connect the MCP gateway
+                </IncludeCheckbox>
+              )}
               {gatewayEditor}
+              {connectRequest && llmProxyId && (
+                <IncludeCheckbox
+                  id="connect-include-proxy"
+                  disabled={excluded.has("proxy")}
+                  checked={includeProxy}
+                  onCheckedChange={setIncludeProxy}
+                >
+                  Route model requests through the LLM Proxy
+                </IncludeCheckbox>
+              )}
               {proxyEditor}
               {proxyActive && modelEditor}
               {skillsEligible && skillsEditor}
@@ -1633,6 +1691,33 @@ function EditorField({
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>
+  );
+}
+
+/** Same shape as the skills and plugins include checkboxes. */
+function IncludeCheckbox({
+  id,
+  disabled,
+  checked,
+  onCheckedChange,
+  children,
+}: {
+  id: string;
+  disabled?: boolean;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm font-medium" htmlFor={id}>
+      <Checkbox
+        id={id}
+        disabled={disabled}
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+      />
+      {children}
+    </label>
   );
 }
 

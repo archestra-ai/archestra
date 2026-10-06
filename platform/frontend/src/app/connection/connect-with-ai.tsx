@@ -2,6 +2,7 @@
 
 import {
   buildConnectionPrompt,
+  CONNECT_SETUP_PARTS,
   hasNativeSetupSession,
 } from "@archestra/shared/connection-setup";
 import { Check, Copy, TriangleAlert } from "lucide-react";
@@ -10,12 +11,23 @@ import { toast } from "sonner";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import type { ConnectClient } from "./clients";
+import { ALL_INCLUDED, type ConnectChoices } from "./connect-choices";
+import { DisconnectDialog } from "./disconnect-panel";
 
-export function ConnectWithAi({ client }: { client: ConnectClient }) {
+export function ConnectWithAi({
+  client,
+  choices = ALL_INCLUDED,
+}: {
+  client: ConnectClient;
+  /** The review step's switches; whatever is off goes into the prompt. */
+  choices?: ConnectChoices;
+}) {
+  const [disconnectOpen, setDisconnectOpen] = useState(false);
   const appName = useAppName();
   const [origin, setOrigin] = useState("");
   const [copied, setCopied] = useState(false);
@@ -36,6 +48,7 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
     origin,
     clientId: client.id,
     label: client.label,
+    exclude: CONNECT_SETUP_PARTS.filter((part) => !choices[part]),
   });
 
   return (
@@ -122,8 +135,21 @@ export function ConnectWithAi({ client }: { client: ConnectClient }) {
           </Button>
         </div>
         <p className="text-xs text-muted-foreground">
-          Requires Node.js 18+ and terminal access in {client.label}.
+          Requires Node.js 18+ and terminal access in {client.label}. You can{" "}
+          <UnstyledButton
+            type="button"
+            onClick={() => setDisconnectOpen(true)}
+            className="underline underline-offset-2 hover:text-foreground"
+          >
+            disconnect
+          </UnstyledButton>{" "}
+          any time.
         </p>
+        <DisconnectDialog
+          client={client}
+          open={disconnectOpen}
+          onOpenChange={setDisconnectOpen}
+        />
       </div>
     </div>
   );

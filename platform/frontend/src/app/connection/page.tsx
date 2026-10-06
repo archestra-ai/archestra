@@ -15,10 +15,18 @@ import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
 import { CONNECT_CLIENTS } from "./clients";
+import { ConnectPage } from "./connect-page";
 import { ConnectionFlow } from "./connection-flow";
 import { getConnectableProviders } from "./connection-flow.utils";
 
 export default function ConnectionPage() {
+  const searchParams = useSearchParams();
+  // The browser approval for a connect request keeps the review flow below.
+  if (searchParams.get("connectRequest")) return <ConnectionApprovalPage />;
+  return <ConnectPage />;
+}
+
+function ConnectionApprovalPage() {
   const appName = useAppName();
   const searchParams = useSearchParams();
   const { data: canReadConnectionSettings } = useHasPermissions({

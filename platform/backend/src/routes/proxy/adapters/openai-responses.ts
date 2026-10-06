@@ -923,7 +923,13 @@ class OpenAiResponsesStreamAdapter
     }
     // Record starts after freezing the pre-hosted snapshot so the first hosted
     // item cannot displace text already forwarded from an unfinished message.
-    if (chunk.type === "response.output_item.added") {
+    // Only messages are tracked here: tool-call items keep accumulating input
+    // through captureToolCallChunk, and their incomplete `added` snapshot would
+    // displace the accumulated call in toProviderResponse.
+    if (
+      chunk.type === "response.output_item.added" &&
+      chunk.item.type === "message"
+    ) {
       this.outputItemsByIndex.set(chunk.output_index, chunk.item);
     }
     if (this.hosted) {

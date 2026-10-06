@@ -1,10 +1,9 @@
 "use client";
 
-import { ArrowDownRight, Info } from "lucide-react";
+import { Info } from "lucide-react";
 import Link from "next/link";
-import { Fragment, type ReactNode } from "react";
+import type { ReactNode } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Badge } from "@/components/ui/badge";
 import {
   Card,
   CardContent,
@@ -56,7 +55,7 @@ export function TrustAudienceCard() {
               Trust
             </Term>
             <dd>
-              <TrustSteps levels={view.data.trust} />
+              <TrustScale levels={view.data.trust} />
             </dd>
             <Term
               className="pt-3"
@@ -114,46 +113,38 @@ function Term({
 }
 
 /**
- * Trust levels from most trusted to least, stepping down as reads lower a
- * session's trust; it never steps back up.
+ * The trust chain as a scale, most trusted first: each segment is colored by
+ * its rank, from green at the top to red at the lowest.
  */
-function TrustSteps({ levels }: { levels: string[] }) {
-  const steps = [...levels].reverse();
+function TrustScale({ levels }: { levels: string[] }) {
+  const ranks = [...levels].reverse();
   return (
-    <div className="flex flex-wrap items-center gap-1.5">
-      {steps.map((name, index) => (
-        <Fragment key={name}>
-          {index > 0 && (
-            <ArrowDownRight
-              aria-hidden="true"
-              className="size-3.5 text-muted-foreground"
-            />
-          )}
-          <Badge
-            variant="outline"
-            className={cn(
-              "font-mono font-normal",
-              index === 0
-                ? TRUST_TONES.top
-                : index === steps.length - 1
-                  ? TRUST_TONES.bottom
-                  : TRUST_TONES.middle,
-            )}
-          >
-            {name}
-          </Badge>
-        </Fragment>
+    <div
+      className="grid max-w-lg gap-x-1 gap-y-1.5"
+      style={{ gridTemplateColumns: `repeat(${ranks.length}, minmax(0, 1fr))` }}
+    >
+      {ranks.map((name, index) => (
+        <span
+          key={name}
+          aria-hidden="true"
+          className="h-1.5 rounded-full"
+          style={{ backgroundColor: rankColor(index, ranks.length) }}
+        />
+      ))}
+      {ranks.map((name) => (
+        <span key={name} className="truncate font-mono text-xs">
+          {name}
+        </span>
       ))}
     </div>
   );
 }
 
-const TRUST_TONES = {
-  top: "border-emerald-600/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
-  middle:
-    "border-amber-600/40 bg-amber-500/10 text-amber-800 dark:text-amber-300",
-  bottom: "border-red-600/40 bg-red-500/10 text-red-800 dark:text-red-300",
-};
+/** Green for the most trusted rank, red for the least, evenly between. */
+function rankColor(index: number, count: number): string {
+  const towardRed = count === 1 ? 0 : Math.round((index / (count - 1)) * 100);
+  return `color-mix(in oklch, var(--color-red-500) ${towardRed}%, var(--color-emerald-500))`;
+}
 
 /** Who the runtime counts in a level it has no sources for. */
 const UNMAPPED_MEMBERS: Record<string, string> = {

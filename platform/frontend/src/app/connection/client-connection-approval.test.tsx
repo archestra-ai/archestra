@@ -41,6 +41,7 @@ beforeEach(() => {
       HttpResponse.json({
         clientId: "cursor",
         platform: "linux",
+        deviceName: "work-laptop",
         userCode: "ABCD-1234",
         expiresAt: "2099-01-01T00:00:00Z",
       }),
@@ -94,6 +95,7 @@ function show(
 test("approval requires matching the terminal code, then submits the reviewed setup", async () => {
   show();
   await screen.findByText("ABCD-1234");
+  expect(screen.getByText("work-laptop")).toBeVisible();
   const approve = screen.getByRole("button", { name: "Approve connection" });
   expect(approve).toBeDisabled();
   fireEvent.click(screen.getByRole("checkbox"));

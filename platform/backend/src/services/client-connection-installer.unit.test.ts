@@ -6,7 +6,7 @@ import * as fileSystem from "node:fs/promises";
 import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { createServer as createSecureServer } from "node:https";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
@@ -26,6 +26,7 @@ let interval: number;
 let startedAt: number;
 let firstPollDelay: number;
 let starts: number;
+let startBody: Record<string, unknown>;
 let clockPath: string;
 
 beforeEach(async () => {
@@ -54,10 +55,16 @@ globalThis.setTimeout = (callback, timeout, ...args) => {
   startedAt = 0;
   firstPollDelay = 0;
   starts = 0;
-  server = createServer((req, res) => {
+  server = createServer(async (req, res) => {
     if (req.url === "/api/client-connections") {
       starts++;
       startedAt = Date.now();
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk;
+      });
+      await once(req, "end");
+      startBody = JSON.parse(raw);
       res.setHeader("Content-Type", "application/json");
       res.end(
         JSON.stringify({
@@ -155,6 +162,10 @@ test("downloads and executes the approved script without logging polling credent
   expect(downloads).toBe(1);
   expect(result.output).toContain("ABCD-1234");
   expect(result.output).not.toContain("A".repeat(43));
+  expect(startBody).toMatchObject({
+    clientId: "cursor",
+    deviceName: hostname().trim().slice(0, 64),
+  });
 });
 
 function installerPlatform() {
@@ -307,7 +318,8 @@ test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File
         if (name === "node:crypto") return { createHash };
         if (name === "node:fs/promises") return fileSystem;
         if (name === "node:path") return { join };
-        if (name === "node:os") return { tmpdir: () => directory };
+        if (name === "node:os")
+          return { hostname: () => "test-host", tmpdir: () => directory };
         if (name === "node:child_process")
           return {
             spawn,
@@ -379,7 +391,8 @@ test.each([
         if (name === "node:crypto") return { createHash };
         if (name === "node:fs/promises") return fileSystem;
         if (name === "node:path") return { join };
-        if (name === "node:os") return { tmpdir: () => directory };
+        if (name === "node:os")
+          return { hostname: () => "test-host", tmpdir: () => directory };
         if (name === "node:child_process")
           return {
             spawnSync,

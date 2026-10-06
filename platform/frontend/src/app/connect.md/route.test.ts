@@ -278,6 +278,30 @@ describe("Connect agent instructions", () => {
     expect(instructions).toContain("or quoting the test response");
   });
 
+  it("passes the parts the prompt left out to the installer", async () => {
+    const response = GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=claude-code&exclude=proxy,skills,bogus",
+      ),
+    );
+    const instructions = await response.text();
+
+    expect(instructions).toContain(
+      "--client claude-code --exclude skills,proxy\n",
+    );
+    expect(instructions).toContain(
+      "--client claude-code --exclude skills,proxy }",
+    );
+    expect(instructions).toContain(
+      "The user chose to leave out shared skills, routing model requests through the LLM Proxy.",
+    );
+
+    const unfiltered = await GET(
+      new Request("http://localhost:3000/connect.md?client=claude-code"),
+    ).text();
+    expect(unfiltered).not.toContain("--exclude");
+  });
+
   it("focuses Claude Desktop on its host installer", async () => {
     const response = GET(
       new Request("http://localhost:3000/connect.md?client=claude-desktop"),

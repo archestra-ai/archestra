@@ -177,8 +177,6 @@ interface ConnectCommandPanelProps {
    * page's band. The full review flow is what the approval page shows.
    */
   variant?: "full" | "download";
-  /** The installer was downloaded (download variant). */
-  onDownloaded?: () => void;
 }
 
 /**
@@ -205,7 +203,6 @@ export function ConnectCommandPanel({
   pluginsEnabled = true,
   exclude,
   variant = "full",
-  onDownloaded,
 }: ConnectCommandPanelProps) {
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
@@ -967,7 +964,6 @@ export function ConnectCommandPanel({
         pending={hasRunnableAnything && !result && !failed}
         failed={failed}
         onRetry={() => runGeneration(inputsKey)}
-        onDownloaded={onDownloaded}
         proxyActive={proxyActive}
         gate={
           !hasRunnableAnything
@@ -1544,7 +1540,6 @@ function DesktopDownload({
   pending,
   failed,
   onRetry,
-  onDownloaded,
   proxyActive,
   gate,
 }: {
@@ -1553,7 +1548,6 @@ function DesktopDownload({
   pending: boolean;
   failed: boolean;
   onRetry: () => void;
-  onDownloaded?: () => void;
   proxyActive: boolean;
   /** Why no installer can be made here; null when one can. */
   gate: string | null;
@@ -1583,12 +1577,7 @@ function DesktopDownload({
           </Button>
         </div>
       ) : installerUrl ? (
-        <Button
-          asChild
-          size="lg"
-          className="h-12 rounded-xl px-6 text-base"
-          onClick={onDownloaded}
-        >
+        <Button asChild size="lg" className="h-12 rounded-xl px-6 text-base">
           <a href={installerUrl} download>
             <Download />
             <span>Download installer</span>

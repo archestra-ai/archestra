@@ -408,7 +408,7 @@ test("hidden docs links keep the branded client coverage explanation", async () 
   await screen.findByRole("combobox", { name: /should be:/ });
 
   expect(container).toHaveTextContent(
-    "Guardrails work with natively supported clients like Workspace chat, Claude Code, Codex, and more, and with any client that correctly sends OpenAPPA session headers.",
+    "Guardrails follow Workspace chat, Claude Code, Codex, and more, plus any client that sends OpenAPPA session headers.",
   );
   expect(screen.queryByRole("link")).not.toBeInTheDocument();
 });

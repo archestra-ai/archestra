@@ -38271,6 +38271,15 @@ export type PostApiWebhooksChatopsMsTeamsErrors = {
     /**
      * Default Response
      */
+    401: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
     429: {
         error: {
             message: string;

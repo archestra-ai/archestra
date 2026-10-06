@@ -42,30 +42,6 @@ vi.mock("@/components/owner-select-field", async () => {
     ),
   };
 });
-vi.mock("@/components/proxy-auth-provider-key-fields", () => ({
-  ProviderKeyAccessFields: ({
-    onProviderApiKeyIdsChange,
-  }: {
-    onProviderApiKeyIdsChange: (
-      value: Array<{ provider: string; providerApiKeyId: string }>,
-    ) => void;
-  }) => (
-    <section>
-      <h3>Provider Keys</h3>
-      <button
-        type="button"
-        onClick={() =>
-          onProviderApiKeyIdsChange([
-            { provider: "openai", providerApiKeyId: "provider-key-1" },
-          ])
-        }
-      >
-        Map provider key
-      </button>
-    </section>
-  ),
-}));
-
 const mutateAsync = vi.fn();
 
 beforeEach(() => {
@@ -124,7 +100,7 @@ describe("CreateVirtualKeyDialog", () => {
     renderDialog("passthrough");
 
     expect(
-      screen.getByRole("heading", { name: "Create Passthrough Virtual Key" }),
+      screen.getByRole("heading", { name: "New passthrough key" }),
     ).toBeInTheDocument();
     expect(
       screen.getByPlaceholderText("My passthrough key"),
@@ -135,7 +111,7 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.queryByText("Passthrough")).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Name"), "My passthrough key");
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
       data: {
@@ -153,25 +129,19 @@ describe("CreateVirtualKeyDialog", () => {
     renderDialog("standard");
 
     expect(
-      screen.getByRole("heading", { name: "Create Standard Virtual Key" }),
+      screen.getByRole("heading", { name: "New virtual key" }),
     ).toBeInTheDocument();
-    expect(screen.getByPlaceholderText("My virtual key")).toBeInTheDocument();
-    expect(screen.getByLabelText("Name")).toHaveValue(
-      "Self Admin's virtual key (2)",
-    );
-    expect(
-      screen
-        .getByLabelText("Name")
-        .compareDocumentPosition(screen.getByText("Provider Keys")) &
-        Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy();
+    // A review, not a form: every value is shown, and nothing needs typing.
+    expect(screen.getByText("Self Admin's virtual key (2)")).toBeVisible();
+    expect(screen.getByText("OpenAI · Main OpenAI")).toBeVisible();
+    expect(screen.getByText("Never")).toBeVisible();
+    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
     // Sharing is set from the saved key's Permissions tab, not on create.
     expect(
       screen.queryByRole("button", { name: "Permissions" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: "Map provider key" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
       data: {
@@ -187,17 +157,17 @@ describe("CreateVirtualKeyDialog", () => {
     });
   });
 
-  it("keeps labels under Advanced and saves the in-progress label", async () => {
+  it("adds labels from their own row and saves the in-progress label", async () => {
     const user = userEvent.setup();
     renderDialog("passthrough");
 
     expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
 
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
     await user.type(screen.getByLabelText("Name"), "Regional key");
+    await user.click(screen.getByRole("button", { name: "Add Labels" }));
     await user.type(screen.getByLabelText("Label key"), "region");
     await user.type(screen.getByLabelText("Label value"), "eu");
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
       data: {
@@ -219,8 +189,7 @@ describe("CreateVirtualKeyDialog", () => {
       ]),
     );
     renderDialog("standard");
-    await user.click(screen.getByRole("button", { name: "Map provider key" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     expect(within(dialog).getByText("Copy your key")).toBeVisible();
@@ -272,8 +241,7 @@ describe("CreateVirtualKeyDialog", () => {
       ]),
     );
     renderDialog("standard");
-    await user.click(screen.getByRole("button", { name: "Map provider key" }));
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     await user.click(within(dialog).getByText("Native provider API"));
@@ -288,7 +256,7 @@ describe("CreateVirtualKeyDialog", () => {
     mutateAsync.mockResolvedValue(createdKey("passthrough", []));
     renderDialog("passthrough");
     await user.type(screen.getByLabelText("Name"), "Laptop");
-    await user.click(screen.getByRole("button", { name: "Create" }));
+    await user.click(screen.getByRole("button", { name: "Create key" }));
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     expect(
@@ -308,16 +276,16 @@ describe("CreateVirtualKeyDialog", () => {
       ],
     });
 
-    expect(screen.getByLabelText("Name")).toHaveValue(
-      "Self Admin's virtual key (2)",
-    );
+    expect(screen.getByText("Self Admin's virtual key (2)")).toBeVisible();
 
-    await user.click(screen.getByRole("button", { name: "Advanced" }));
+    await user.click(screen.getByRole("button", { name: "Change Owner" }));
     await user.click(screen.getByRole("button", { name: "Choose Bob" }));
-
-    expect(screen.getByLabelText("Name")).toHaveValue(
-      "Bob Brown's virtual key (2)",
+    await user.click(
+      screen.getByRole("button", { name: "Done editing Owner" }),
     );
+
+    expect(screen.getByText("Bob Brown's virtual key (2)")).toBeVisible();
+    expect(screen.getByText("Bob Brown")).toBeVisible();
   });
 });
 
@@ -358,7 +326,18 @@ function renderDialog(
         open
         onOpenChange={vi.fn()}
         keyType={keyType}
-        parentableKeys={[]}
+        parentableKeys={[
+          {
+            id: "provider-key-1",
+            name: "Main OpenAI",
+            provider: "openai",
+          } as never,
+        ]}
+        initialProviderApiKeys={
+          keyType === "standard"
+            ? [{ provider: "openai", providerApiKeyId: "provider-key-1" }]
+            : undefined
+        }
         connectionBaseUrl="https://proxy.example.com"
         defaultExpirationSeconds={null}
         isVirtualKeyAdmin={options.isVirtualKeyAdmin ?? false}

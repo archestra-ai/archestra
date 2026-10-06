@@ -304,7 +304,11 @@ export default defineConfig((options: UserConfig) => {
     ],
 
     // Copy SQL migrations and other assets that need to exist at runtime
-    copy: ["src/database/migrations", "src/static"],
+    copy: [
+      "src/database/migrations",
+      "src/static",
+      "src/skills/appa-guide.core.generated.md",
+    ],
 
     // Only clean if NOT in watch mode, to avoid race conditions during rebuilds where
     // the output directory is deleted while the server process is trying to restart.

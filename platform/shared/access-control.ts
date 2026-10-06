@@ -494,7 +494,7 @@ export const requiredEndpointPermissionsMap: Partial<
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
   [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
-  [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["update"] },
+  [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },
   // Inspecting or mutating arbitrary outbound destinations can configure
   // credential-bearing egress, so those operations remain settings-manager

@@ -552,7 +552,7 @@ describe("guardrails policy authoring", () => {
     ).rejects.toMatchObject({ code: -32601 });
   });
 
-  test("a member can read but cannot save or validate policies through either API", async ({
+  test("a member can read and validate but cannot save policies through either API", async ({
     makeUser,
     makeMember,
     makeSession,
@@ -585,7 +585,7 @@ describe("guardrails policy authoring", () => {
           payload: { content },
         })
       ).statusCode,
-    ).toBe(403);
+    ).toBe(200);
     const denied = await executeArchestraTool(
       "archestra__update_guardrails_policy",
       { content, expectedRevision: 0 },

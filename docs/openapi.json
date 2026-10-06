@@ -168190,10 +168190,10 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "openappaPolicy:update"
+            "openappaPolicy:read"
           ]
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage"
       }
     },
     "/health": {

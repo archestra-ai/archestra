@@ -51,6 +51,7 @@ import type {
   InteractionAuthMethod,
   InteractionSummary,
   InteractionVirtualKey,
+  LimitEntityType,
   SessionSummary,
   SessionUnattributedReason,
   SortingQuery,
@@ -1245,7 +1246,6 @@ class InteractionModel {
         return;
       }
 
-      // Get agent's teams to update team and organization limits
       // If profileId is null (agent was deleted), we can't update usage - skip silently
       if (!interaction.profileId) {
         logger.info(
@@ -1253,139 +1253,41 @@ class InteractionModel {
         );
         return;
       }
-      const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
+      const teamIds = await AgentTeamModel.getTeamsForAgent(
         interaction.profileId,
       );
-
-      const updatePromises: Promise<void>[] = [];
-
-      if (agentTeamIds.length === 0) {
+      if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
-        );
-
-        // Even if agent has no teams, update organization limits for its own org.
-        try {
-          const organizationId = await AgentModel.findOrganizationId(
-            interaction.profileId,
-          );
-
-          if (organizationId) {
-            updatePromises.push(
-              LimitModel.updateTokenLimitUsage(
-                "organization",
-                organizationId,
-                model,
-                inputTokens,
-                outputTokens,
-              ),
-            );
-          }
-        } catch (error) {
-          logger.error(
-            { error },
-            "Failed to find organization for agent with no teams",
-          );
-        }
-      } else {
-        // Get team details to access organizationId
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
-
-        // Update organization-level token cost limits (from first team's organization)
-        if (teams.length > 0 && teams[0].organizationId) {
-          updatePromises.push(
-            LimitModel.updateTokenLimitUsage(
-              "organization",
-              teams[0].organizationId,
-              model,
-              inputTokens,
-              outputTokens,
-            ),
-          );
-        }
-
-        // Update team-level token cost limits
-        for (const team of teams) {
-          updatePromises.push(
-            LimitModel.updateTokenLimitUsage(
-              "team",
-              team.id,
-              model,
-              inputTokens,
-              outputTokens,
-            ),
-          );
-        }
-      }
-
-      // Update profile-level token cost limits (if any exist)
-      updatePromises.push(
-        LimitModel.updateTokenLimitUsage(
-          "agent",
-          interaction.profileId,
-          model,
-          inputTokens,
-          outputTokens,
-        ),
-      );
-
-      if (interaction.userId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "user",
-            interaction.userId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
-
-      if (interaction.virtualKeyId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "virtual_key",
-            interaction.virtualKeyId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
         );
       }
 
       // A passthrough virtual key accrues usage independently from the standard
       // virtual key (distinct limit entities), so record against both when present.
-      if (interaction.passthroughVirtualKeyId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "virtual_key",
-            interaction.passthroughVirtualKeyId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
+      const entityRefs: Array<{
+        entityType: LimitEntityType;
+        entityId: string | null | undefined;
+      }> = [
+        { entityType: "user", entityId: interaction.userId },
+        { entityType: "virtual_key", entityId: interaction.virtualKeyId },
+        {
+          entityType: "virtual_key",
+          entityId: interaction.passthroughVirtualKeyId,
+        },
+        { entityType: "environment", entityId: interaction.environmentId },
+      ];
+      const entities = entityRefs.flatMap(({ entityType, entityId }) =>
+        entityId ? [{ entityType, entityId }] : [],
+      );
 
-      // Update environment-level token cost limits using the environment
-      // snapshotted on the interaction at creation time.
-      if (interaction.environmentId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "environment",
-            interaction.environmentId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
-
-      // Execute all updates in parallel
-      await Promise.all(updatePromises);
+      await LimitModel.recordInteractionTokenUsage({
+        agentId: interaction.profileId,
+        teamIds,
+        entities,
+        model,
+        inputTokens,
+        outputTokens,
+      });
     } catch (error) {
       logger.error({ error }, "Error updating usage limits after interaction");
       // Don't throw - usage tracking should not break interaction creation

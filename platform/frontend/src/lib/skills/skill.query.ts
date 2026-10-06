@@ -12,6 +12,7 @@ import {
 import { toast } from "sonner";
 import { trackEvent } from "@/lib/analytics";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
+import { useDeferredEnabled } from "@/lib/hooks/use-deferred-enabled";
 import { composeManifest } from "@/lib/skills/manifest-compose";
 import {
   getApiErrorInternalCode,
@@ -862,4 +863,105 @@ const BULK_FAILURE_NAMES_SHOWN = 3;
  */
 function isSkillVersionConflict(error: unknown): boolean {
   return getApiErrorInternalCode(error) === "skill_version_conflict";
+}
+
+// === The whole skill set, for the Connect page and its setup
+
+/**
+ * The slice of a skill the connection flow needs to list, attribute, and share
+ * it. Derived from the API response so the fields can't drift from it.
+ */
+export type ConnectSkill = Pick<
+  archestraApiTypes.GetSkillsResponses["200"]["data"][number],
+  | "id"
+  | "name"
+  | "description"
+  | "scope"
+  | "usageCount"
+  | "authorId"
+  | "authorName"
+  | "teams"
+  | "users"
+>;
+
+/**
+ * Query over the org's full skill set, for the connect-command step's
+ * per-skill picker. Callers that prepare an artifact containing an explicit
+ * skill snapshot can opt into a loud error, rather than silently producing an
+ * artifact without the selected skills.
+ *
+ * `forAgentId` narrows the set to skills visible from a supported skill agent's
+ * environment. LLM proxies do not expose skills and must not be passed here.
+ */
+export function useAllSkills(params?: {
+  enabled?: boolean;
+  forAgentId?: string | null;
+  /** Surface a catalog failure to the caller instead of returning an empty list. */
+  throwOnError?: boolean;
+  /**
+   * Hold the fetch back until the page has settled.
+   *
+   * This walks the whole skill catalogue a page at a time, and every row
+   * carries the skill's full `content`, so it is the heaviest thing the
+   * connection page asks for by a wide margin — and it feeds the review step,
+   * which nobody reads before the step above it. Deferring keeps it out of the
+   * burst that renders the part of the page people act on first.
+   */
+  deferMs?: number;
+}) {
+  const forAgentId = params?.forAgentId ?? null;
+  const enabled = useDeferredEnabled(
+    params?.enabled ?? true,
+    params?.deferMs ?? 0,
+  );
+
+  return useQuery({
+    queryKey: [
+      "skills",
+      "connect-all",
+      forAgentId,
+      { throwOnError: params?.throwOnError ?? false },
+    ],
+    queryFn: () => fetchAllSkills(forAgentId, params?.throwOnError ?? false),
+    enabled,
+  });
+}
+
+/** Fetch every skill page by page. */
+export async function fetchAllSkills(
+  forAgentId: string | null = null,
+  throwOnError = false,
+): Promise<ConnectSkill[]> {
+  const skills: ConnectSkill[] = [];
+  const limit = 100;
+  let offset = 0;
+  while (true) {
+    const { data, error } = await getSkills({
+      query: { limit, offset, forAgentId: forAgentId ?? undefined },
+    });
+    if (error) {
+      if (throwOnError) {
+        throwOnApiError(error, { toastOnError: false });
+      }
+      handleApiError(error);
+      return [];
+    }
+    if (!data) break;
+    for (const skill of data.data) {
+      skills.push({
+        id: skill.id,
+        name: skill.name,
+        description: skill.description,
+        scope: skill.scope,
+        usageCount: skill.usageCount,
+        authorId: skill.authorId,
+        authorName: skill.authorName,
+        teams: skill.teams,
+        users: skill.users,
+      });
+    }
+    if (data.data.length < limit) break;
+    offset += limit;
+  }
+  return skills;
 }

@@ -1,3 +1,4 @@
+import { OAUTH_RECOGNISED_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -8,10 +9,70 @@ import {
 import {
   ApiError,
   type ConnectedClientId,
+  type ConnectedClientRecord,
   ConnectionSetupClientIdSchema,
 } from "@/types";
-import { isOAuthClientForConnectClient } from "./connected-client-oauth";
 import { dropRevokedSkillShareLinkRepo } from "./skill-share-link";
+
+/**
+ * The user's connected clients, most recently connected first: redeemed
+ * setups, plus agents the gateway can tell apart by their OAuth client while
+ * the user holds an unexpired token for one, set up by hand or not. Merged
+ * with a setup entry, the earliest connect is kept as the first and the
+ * latest as the last.
+ */
+export async function listConnectedClients(params: {
+  organizationId: string;
+  userId: string;
+}): Promise<ConnectedClientRecord[]> {
+  const [redeemed, oauthClients] = await Promise.all([
+    ConnectedClientModel.listRedeemedForUser(params),
+    OAuthClientModel.listWithUserTokens({
+      userId: params.userId,
+      activeOnly: true,
+    }),
+  ]);
+  const byClient = new Map(redeemed.map((c) => [c.clientId, c]));
+  for (const clientId of OAUTH_RECOGNISED_CLIENT_IDS) {
+    const matches = oauthClients.filter((c) =>
+      isOAuthClientForConnectClient(clientId, c),
+    );
+    if (matches.length === 0) continue;
+    const first = Math.min(...matches.map((c) => c.firstIssuedAt.getTime()));
+    const last = Math.max(...matches.map((c) => c.lastIssuedAt.getTime()));
+    const client = byClient.get(clientId);
+    if (client) {
+      if (first < client.connectedAt.getTime())
+        client.connectedAt = new Date(first);
+      if (last > client.lastConnectedAt.getTime())
+        client.lastConnectedAt = new Date(last);
+      continue;
+    }
+    byClient.set(clientId, {
+      clientId,
+      platform: null,
+      mcpGatewayId: null,
+      llmProxyId: null,
+      connectedAt: new Date(first),
+      lastConnectedAt: new Date(last),
+      deviceNames: [],
+    });
+  }
+  return [...byClient.values()].sort(
+    (a, b) => b.lastConnectedAt.getTime() - a.lastConnectedAt.getTime(),
+  );
+}
+
+/** Audit snapshot of one user's connected client; null when not connected. */
+export async function findConnectedClientForAudit(params: {
+  organizationId: string;
+  userId: string;
+  clientId: string;
+}): Promise<Record<string, unknown> | null> {
+  const clients = await listConnectedClients(params);
+  const client = clients.find((c) => c.clientId === params.clientId);
+  return client ? { userId: params.userId, ...client } : null;
+}
 
 /**
  * Disconnect one of a user's connected clients on the server side: mark its
@@ -99,4 +160,44 @@ export async function disconnectClient(params: {
     "disconnectClient: connected client disconnected",
   );
   return disconnected;
+}
+
+// === OAuth client matching
+
+/** Claude Code's CIMD client_id: every install shares this one OAuth client. */
+const CLAUDE_CODE_OAUTH_CLIENT_ID =
+  "https://claude.ai/oauth/claude-code-client-metadata";
+
+const AMP_CLIENT_NAME = /^Amp MCP Client \(.*\)$/;
+const AMP_REDIRECT_URI = "http://localhost:41592/oauth/callback";
+
+/**
+ * Whether an OAuth client (the gateway's `oauth_client` row) belongs to a
+ * Connect client, so disconnecting it can revoke the user's gateway grant.
+ * Only clients with a stable, verified identity match; everything else
+ * returns false and keeps its grant.
+ *
+ * @public - exported for testability
+ */
+export function isOAuthClientForConnectClient(
+  clientId: ConnectedClientId,
+  oauthClient: {
+    clientId: string;
+    name: string | null;
+    redirectUris: string[];
+  },
+): boolean {
+  switch (clientId) {
+    case "claude-code":
+      return oauthClient.clientId === CLAUDE_CODE_OAUTH_CLIENT_ID;
+    case "amp":
+      // Amp registers per install via DCR as "Amp MCP Client (<server name>)"
+      // with this fixed loopback redirect (captured from amp 0.0.1791201662).
+      return (
+        AMP_CLIENT_NAME.test(oauthClient.name ?? "") &&
+        oauthClient.redirectUris.includes(AMP_REDIRECT_URI)
+      );
+    default:
+      return false;
+  }
 }

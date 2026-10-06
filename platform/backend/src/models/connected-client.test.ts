@@ -20,7 +20,7 @@ describe("ConnectedClientModel", () => {
     await redeem(user.id, "codex", "macos");
     await setup(user.id, "cursor");
 
-    const clients = await ConnectedClientModel.listForUser({
+    const clients = await ConnectedClientModel.listRedeemedForUser({
       organizationId,
       userId: user.id,
     });
@@ -50,7 +50,7 @@ describe("ConnectedClientModel", () => {
     await redeem(user.id, "claude-code", "macos", "work-laptop");
     await redeem(user.id, "codex", "macos");
 
-    const clients = await ConnectedClientModel.listForUser({
+    const clients = await ConnectedClientModel.listRedeemedForUser({
       organizationId,
       userId: user.id,
     });

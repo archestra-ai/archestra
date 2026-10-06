@@ -3,7 +3,10 @@
 // Connect page pieces: picker, copy line, copy prompt, undo dialog,
 // disconnect and manage dialogs, helpers.
 
-import { startupGuardStem } from "@archestra/shared/connection-setup";
+import {
+  isOAuthRecognisedClient,
+  startupGuardStem,
+} from "@archestra/shared/connection-setup";
 import {
   BookOpen,
   Check,
@@ -17,8 +20,7 @@ import {
   Wrench,
 } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
-import { ClientIcon } from "@/app/connection/client-icon";
-import type { ConnectClient } from "@/app/connection/clients";
+import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,6 +51,8 @@ import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useDisconnectConnectedClient } from "@/lib/connected-client.query";
 import { cn } from "@/lib/utils/tailwind";
+import { ClientIcon } from "./client-icon";
+import type { ConnectClient } from "./clients";
 import type { ConnectChoices } from "./connect-choices";
 import type {
   ConnectPageData,
@@ -87,9 +91,9 @@ export function AgentSearch({
       (c) =>
         !featuredIds.has(c.id) &&
         c.id !== "generic" &&
-        `${labelOf(c)} ${c.sub}`.toLowerCase().includes(needle),
+        `${c.label} ${c.sub}`.toLowerCase().includes(needle),
     )
-    .sort((a, b) => labelOf(a).localeCompare(labelOf(b)));
+    .sort((a, b) => a.label.localeCompare(b.label));
   const generic = data.clients.find((c) => c.id === "generic");
   const shown = generic ? [...agents, generic] : agents;
   const choose = (id: string) => {
@@ -124,7 +128,7 @@ export function AgentSearch({
                 className="gap-2"
               >
                 <ClientIcon client={c} size={22} />
-                <span className="min-w-0 flex-1 truncate">{labelOf(c)}</span>
+                <span className="min-w-0 flex-1 truncate">{c.label}</span>
                 {connectedIds.has(c.id) && (
                   <span
                     className="size-1.5 rounded-full bg-emerald-500"
@@ -165,7 +169,11 @@ export function CopyLine({
             await copyToClipboard(text);
             setDone(true);
             window.setTimeout(() => setDone(false), 1500);
-          } catch {}
+          } catch {
+            toast.error(
+              "Could not copy. Select the text and copy it manually.",
+            );
+          }
         }}
       >
         {done ? <Check /> : <Copy />}
@@ -195,7 +203,11 @@ function CopyPrompt({ text }: { text: string }) {
             await copyToClipboard(text);
             setDone(true);
             window.setTimeout(() => setDone(false), 1500);
-          } catch {}
+          } catch {
+            toast.error(
+              "Could not copy. Select the text and copy it manually.",
+            );
+          }
         }}
       >
         {done ? <Check /> : <Copy />}
@@ -231,7 +243,7 @@ export function UndoDialog({
           <DialogHeader className="px-4">
             <DialogTitle className="flex items-center gap-2.5">
               <ClientIcon client={client} size={22} />
-              Disconnecting {labelOf(client)}
+              Disconnecting {client.label}
             </DialogTitle>
             <DialogDescription>
               Once connected, you can always disconnect here, under Manage: one
@@ -244,7 +256,7 @@ export function UndoDialog({
             revoke={
               <p className="text-muted-foreground">
                 Under Manage on this page, open Disconnect and press Revoke
-                access. <RevokeEffect data={data} client={client} />
+                access. <RevokeEffect client={client} />
               </p>
             }
           />
@@ -363,18 +375,20 @@ function DisconnectSteps({
 // === Disconnect: clean up this computer, then revoke access ===
 
 /** What Revoke access does, in both disconnect dialogs. */
-function RevokeEffect({
-  data,
-  client,
-}: {
-  data: ConnectPageData;
-  client: ConnectClient;
-}) {
-  return (
+function RevokeEffect({ client }: { client: ConnectClient }) {
+  // Only agents the gateway can tell apart by their OAuth client lose their
+  // sign-in; the rest keep it until it expires.
+  return isOAuthRecognisedClient(client.id) ? (
     <span>
       Revoke access removes {nameOf(client)} from this list, signs it out of the
-      gateway where {data.appName} can tell it apart, and revokes the skill
-      links it created. The cleanup prompt removes access on the machine.
+      gateway, and revokes the skill links it created. The cleanup prompt
+      removes access on the machine.
+    </span>
+  ) : (
+    <span>
+      Revoke access removes {nameOf(client)} from this list and revokes the
+      skill links it created. Other agents keep their gateway sign-in until it
+      expires; the cleanup prompt removes access on the machine.
     </span>
   );
 }
@@ -401,7 +415,7 @@ export function DisconnectDialog({
           <DialogHeader className="px-4">
             <DialogTitle className="flex items-center gap-2.5">
               <ClientIcon client={client} size={22} />
-              Disconnect {labelOf(client)}
+              Disconnect {client.label}
             </DialogTitle>
             <DialogDescription>Two steps, in this order.</DialogDescription>
           </DialogHeader>
@@ -412,7 +426,7 @@ export function DisconnectDialog({
               <div className="space-y-3">
                 <p className="text-muted-foreground">
                   Once the cleanup is done, revoke access.{" "}
-                  <RevokeEffect data={data} client={client} />
+                  <RevokeEffect client={client} />
                 </p>
                 {record.deviceNames.length > 1 && (
                   <p className="text-muted-foreground">
@@ -479,7 +493,7 @@ export function ManageDialog({
                     <ClientIcon client={a.client} size={26} />
                     <span className="min-w-0">
                       <span className="block truncate text-sm font-medium">
-                        {labelOf(a.client)}
+                        {a.client.label}
                       </span>
                       <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
                         <span className="size-1.5 shrink-0 rounded-full bg-emerald-500" />
@@ -596,7 +610,7 @@ export function IncludeDialog({
       part: "plugins",
       icon: <Puzzle />,
       label: "Plugins",
-      detail: `${fmt(plugins.length)} ${plural(plugins.length, "plugin")} for ${labelOf(client)}`,
+      detail: `${fmt(plugins.length)} ${plural(plugins.length, "plugin")} for ${client.label}`,
     });
   const tabs: [IncludeTab, string, string][] = [
     ["servers", "MCP servers", fmt(data.servers.length)],
@@ -878,10 +892,6 @@ export function suggestFirstPrompt(
 ): string | null {
   if (servers.length === 0 && skills.length === 0) return null;
   return `Summarize the tools and skills you got from ${appName} and show me one thing you can do with them.`;
-}
-
-export function labelOf(client: ConnectClient) {
-  return client.id === "generic" ? "Generic client" : client.label;
 }
 
 export function nameOf(client: ConnectClient) {

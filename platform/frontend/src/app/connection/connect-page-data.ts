@@ -4,19 +4,17 @@
 // servers, tools, skills, apps, admin settings); clearly marked mocks where
 // the backend has nothing yet (context cost, guardrails status).
 
-import { archestraApiSdk, type SupportedProvider } from "@archestra/shared";
+import type { SupportedProvider } from "@archestra/shared";
 import {
   buildConnectionPrompt,
   CONNECT_SETUP_PARTS,
   INSTALLER_CLIENT_FOOTPRINT,
   INSTALLER_CLIENT_IDS,
 } from "@archestra/shared/connection-setup";
-import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
-import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
+import { useDefaultMcpGateway } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
 import { useConfig } from "@/lib/config/config.query";
 import {
   type ConnectedClient,
@@ -24,25 +22,22 @@ import {
 } from "@/lib/connected-client.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
-import {
-  groupCatalogTools,
-  useAllCatalogTools,
-  useInternalMcpCatalog,
-} from "@/lib/mcp/internal-mcp-catalog.query";
 import { useOrganization } from "@/lib/organization.query";
-import { usePlugins } from "@/lib/plugins/plugin.query";
+import { isDeliverablePlugin, usePlugins } from "@/lib/plugins/plugin.query";
+import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
 import {
   CONNECT_CLIENTS,
   type ConnectClient,
   usesGenericInstructions,
+  visibleClients,
 } from "./clients";
 import type { ConnectChoices } from "./connect-choices";
 import {
   type ConnectionBaseUrl,
   getConnectableProviders,
-  resolveAdminDefaultBaseUrl,
-  resolveCandidateBaseUrls,
+  useConnectionBaseUrl,
 } from "./connection-flow.utils";
+import { useGatewayServers } from "./use-gateway-servers";
 
 export interface ConnectServer {
   key: string;
@@ -54,13 +49,7 @@ export interface ConnectServer {
   tools: { name: string; description: string | null }[];
 }
 
-export interface ConnectPageSkill {
-  id: string;
-  name: string;
-  description: string;
-  scope: "personal" | "team" | "org";
-  usageCount: number;
-}
+export type ConnectPageSkill = ConnectSkill;
 
 /** An agent this user connected (a redeemed setup), newest first. */
 export interface ConnectedAgent {
@@ -134,8 +123,6 @@ export interface ConnectPageData {
   canManage: boolean;
   /** Agents this user connected; empty while loading or on error. */
   connected: ConnectedAgent[];
-  /** Re-reads the connected agents, e.g. while waiting for an approval. */
-  refetchConnected: () => void;
   /** What connecting this client would create / disconnecting would remove. */
   footprintFor: (client: ConnectClient) => ConnectFootprint;
   /**
@@ -170,7 +157,10 @@ const LOCAL_CHANGES: Record<string, string[]> = {
   n8n: ["The MCP Client Tool node you added in n8n"],
 };
 
-export function useConnectPageData(): ConnectPageData {
+export function useConnectPageData(params?: {
+  /** Re-read the connected agents every few seconds, e.g. while one connects. */
+  pollConnected?: boolean;
+}): ConnectPageData {
   // A fresh read: these settings decide what a setup may include.
   const orgQuery = useOrganization(true, { fresh: true });
   const { data: org, isPending: orgPending } = orgQuery;
@@ -198,18 +188,18 @@ export function useConnectPageData(): ConnectPageData {
 
   const { data: defaultGateway } = useDefaultMcpGateway();
   const gatewayId = org?.connectionDefaultMcpGatewayId ?? defaultGateway?.id;
-  const { data: profile, isPending: profilePending } = useProfile(gatewayId);
-  const { data: catalog } = useInternalMcpCatalog();
-  const accessAll = profile?.accessAllTools ?? false;
-  const { data: catalogTools } = useAllCatalogTools({ enabled: accessAll });
+  const {
+    gateway: profile,
+    profileQuery: { isPending: profilePending },
+    accessAll,
+    servers: gatewayServers,
+  } = useGatewayServers(gatewayId, { withTools: true });
   const { data: canManage } = useHasPermissions({
     organizationSettings: ["read"],
   });
   const skillsEnabled = org?.connectionSkillsEnabled === true;
-  const { data: skillList } = useQuery({
-    queryKey: ["connect-page", "skills"],
+  const { data: skillList } = useAllSkills({
     enabled: skillsEnabled && canReadSkills === true,
-    queryFn: fetchAllSkills,
   });
 
   const llmProxyEnabled = org?.connectionLlmProxyEnabled === true;
@@ -226,84 +216,33 @@ export function useConnectPageData(): ConnectPageData {
   );
   const pluginsFor = (client: ConnectClient): ConnectPlugin[] =>
     (allPlugins ?? [])
-      .filter(
-        (p) =>
-          p.clientType === client.id &&
-          p.enabled &&
-          p.approvedContentHash === p.contentHash,
-      )
+      .filter((p) => isDeliverablePlugin(p, client.id))
       .map((p) => ({
         id: p.id,
         name: p.displayName,
         description: p.description,
       }));
 
-  const baseUrls = useMemo(
-    () =>
-      resolveCandidateBaseUrls({
-        externalProxyUrls: config.api.externalProxyUrls,
-        internalProxyUrl: config.api.internalProxyUrl,
-        metadata: org?.connectionBaseUrls ?? null,
-      }),
-    [org?.connectionBaseUrls],
+  const { baseUrls, baseUrl, selectBaseUrl } = useConnectionBaseUrl(
+    org?.connectionBaseUrls,
   );
-  const adminBaseUrl = resolveAdminDefaultBaseUrl(
-    org?.connectionBaseUrls ?? null,
-  );
-  const [pickedBaseUrl, setPickedBaseUrl] = useState<string | null>(null);
-  const baseUrl =
-    (pickedBaseUrl && baseUrls.includes(pickedBaseUrl) && pickedBaseUrl) ||
-    (adminBaseUrl && baseUrls.includes(adminBaseUrl) && adminBaseUrl) ||
-    baseUrls[0];
 
-  const clients = useMemo(() => {
-    const shown = org?.connectionShownClientIds;
-    if (!shown) return CONNECT_CLIENTS;
-    const set = new Set(shown);
-    return CONNECT_CLIENTS.filter((c) => c.id === "generic" || set.has(c.id));
-  }, [org?.connectionShownClientIds]);
+  const clients = useMemo(
+    () => visibleClients(org?.connectionShownClientIds),
+    [org?.connectionShownClientIds],
+  );
   const featuredClients = INSTALLER_CLIENT_IDS.map((id) =>
     clients.find((c) => c.id === id),
   ).filter((c): c is ConnectClient => !!c);
 
-  const servers = useMemo<ConnectServer[]>(() => {
-    const byId = new Map((catalog ?? []).map((c) => [c.id, c]));
-    if (accessAll) {
-      const toolsByCatalog = groupCatalogTools(catalogTools);
-      return (catalog ?? [])
-        .map((c) => ({
-          key: c.id,
-          catalogId: c.id,
-          name: c.name,
-          icon: c.icon,
-          toolCount: c.toolCount,
-          tools: (toolsByCatalog.get(c.id) ?? []).map((t) => ({
-            name: shortToolName(t.name),
-            description: null,
-          })),
-        }))
-        .sort((a, b) => b.toolCount - a.toolCount);
-    }
-    const groups = new Map<string | null, ConnectServer["tools"]>();
-    for (const t of profile?.tools ?? []) {
-      const list = groups.get(t.catalogId) ?? [];
-      list.push({ name: shortToolName(t.name), description: t.description });
-      groups.set(t.catalogId, list);
-    }
-    return [...groups.entries()]
-      .map(([catalogId, tools]) => {
-        const item = catalogId ? byId.get(catalogId) : undefined;
-        return {
-          key: catalogId ?? "other",
-          catalogId,
-          name: item?.name ?? "Other",
-          icon: item?.icon ?? null,
-          toolCount: tools.length,
-          tools,
-        };
-      })
-      .sort((a, b) => b.toolCount - a.toolCount);
-  }, [accessAll, profile?.tools, catalog, catalogTools]);
+  const servers = useMemo<ConnectServer[]>(
+    () =>
+      gatewayServers.map(({ catalogName, description: _, ...server }) => ({
+        ...server,
+        name: catalogName ?? "Other",
+      })),
+    [gatewayServers],
+  );
   const totalTools = servers.reduce((n, s) => n + s.toolCount, 0);
   const progressive = profile?.toolExposureMode === "search_and_run_only";
 
@@ -322,7 +261,9 @@ export function useConnectPageData(): ConnectPageData {
   });
 
   // A failed read just shows nothing connected.
-  const connectedQuery = useConnectedClients();
+  const connectedQuery = useConnectedClients({
+    refetchInterval: params?.pollConnected ? 4000 : false,
+  });
   const appName = useAppName();
 
   const [origin, setOrigin] = useState("");
@@ -346,7 +287,7 @@ export function useConnectPageData(): ConnectPageData {
     baseUrls,
     baseUrlMetadata: org?.connectionBaseUrls ?? null,
     baseUrl,
-    selectBaseUrl: setPickedBaseUrl,
+    selectBaseUrl,
     servers,
     totalTools,
     allServers: accessAll,
@@ -370,7 +311,6 @@ export function useConnectPageData(): ConnectPageData {
           : [];
       },
     ),
-    refetchConnected: () => void connectedQuery.refetch(),
     footprintFor: (client) => footprint(client),
     connectPrompt: (client, choices) => {
       const parts = partsFor(client);
@@ -413,30 +353,4 @@ export function useConnectPageData(): ConnectPageData {
       return `Read ${origin}/disconnect.md?${decodeURIComponent(params.toString())} and disconnect ${client.label} from ${appName}.`;
     },
   };
-}
-
-/** Every skill, a page at a time: the card and lists show the real total. */
-async function fetchAllSkills(): Promise<ConnectPageSkill[]> {
-  const skills: ConnectPageSkill[] = [];
-  const limit = 100;
-  for (let offset = 0; ; offset += limit) {
-    const { data } = await archestraApiSdk.getSkills({
-      query: { limit, offset },
-    });
-    for (const s of data?.data ?? []) {
-      skills.push({
-        id: s.id,
-        name: s.name,
-        description: s.description,
-        scope: s.scope,
-        usageCount: s.usageCount,
-      });
-    }
-    if (!data || data.data.length < limit) return skills;
-  }
-}
-
-function shortToolName(name: string) {
-  const i = name.indexOf("__");
-  return i === -1 ? name : name.slice(i + 2);
 }

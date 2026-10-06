@@ -1,5 +1,5 @@
 import { OFFLINE_ACCESS_OAUTH_SCOPE } from "@archestra/shared";
-import { and, eq, sql } from "drizzle-orm";
+import { and, eq, gt, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import type { CimdUpsertData } from "@/types";
 
@@ -23,6 +23,8 @@ class OAuthClientModel {
    */
   static async listWithUserTokens(params: {
     userId: string;
+    /** Only tokens that have not expired, for listing; revoking reads all. */
+    activeOnly?: boolean;
     tx?: Transaction;
   }) {
     const conn = params.tx ?? db;
@@ -32,12 +34,22 @@ class OAuthClientModel {
     const issued = conn
       .select({ clientId: access.clientId, createdAt: access.createdAt })
       .from(access)
-      .where(eq(access.userId, params.userId))
+      .where(
+        and(
+          eq(access.userId, params.userId),
+          params.activeOnly ? gt(access.expiresAt, new Date()) : undefined,
+        ),
+      )
       .unionAll(
         conn
           .select({ clientId: refresh.clientId, createdAt: refresh.createdAt })
           .from(refresh)
-          .where(eq(refresh.userId, params.userId)),
+          .where(
+            and(
+              eq(refresh.userId, params.userId),
+              params.activeOnly ? gt(refresh.expiresAt, new Date()) : undefined,
+            ),
+          ),
       )
       .as("issued");
     return conn

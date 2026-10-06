@@ -66,7 +66,12 @@ import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
-import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
+import {
+  isDeliverablePlugin,
+  type PluginListItem,
+  usePlugins,
+} from "@/lib/plugins/plugin.query";
+import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
@@ -88,9 +93,7 @@ import { ConnectionPlatformToggle } from "./platform-select";
 import { SetupCommandLine } from "./setup-command-line";
 import { SetupSummaryRow } from "./setup-summary-row";
 import {
-  type ConnectSkill,
   SkillsMarketplaceStep,
-  useAllSkills,
   useSkillsMarketplaceVisible,
 } from "./skills-marketplace-step";
 import { TerminalBlock } from "./terminal-block";
@@ -262,11 +265,8 @@ export function ConnectCommandPanel({
     usePlugins(pluginsQueryEnabled);
   const plugins = useMemo(
     () =>
-      (allPlugins ?? []).filter(
-        (plugin) =>
-          plugin.clientType === client.id &&
-          plugin.enabled &&
-          plugin.approvedContentHash === plugin.contentHash,
+      (allPlugins ?? []).filter((plugin) =>
+        isDeliverablePlugin(plugin, client.id),
       ),
     [allPlugins, client.id],
   );

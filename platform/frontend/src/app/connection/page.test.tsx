@@ -282,6 +282,15 @@ describe("ConnectPage (no connect request)", () => {
     expect(refetchOrganizationMock).toHaveBeenCalledTimes(1);
   });
 
+  it("holds the connect band while settings are re-read, but not the picker", () => {
+    mockOrganization({ data: {}, isFetching: true });
+    render(<ConnectionPage />);
+    const band = screen.getByRole("region", { name: "Connect" });
+    expect(band).toHaveAttribute("inert");
+    const tile = screen.getByRole("button", { name: /Cursor/ });
+    expect(tile.closest("[inert]")).toBeNull();
+  });
+
   it("waits for the organization settings before offering agents", () => {
     mockOrganization({ data: undefined, isPending: true });
     render(<ConnectionPage />);

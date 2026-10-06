@@ -77,7 +77,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "plugin.syncTriggered": "Plugin sync check triggered",
   // Connector
   "clientConnection.updated": "Client Connection Reviewed",
-  "connectedClient.deleted": "Connected client disconnected",
+  "connectedClient.disconnected": "Connected client disconnected",
   "connectionPromptSession.created": "Connection prompt session created",
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",

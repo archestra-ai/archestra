@@ -5,12 +5,12 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
-  ConnectedClientModel,
   ConnectionSetupModel,
   OAuthAccessTokenModel,
   OAuthRefreshTokenModel,
   SkillShareLinkModel,
 } from "@/models";
+import { listConnectedClients } from "@/services/connected-client";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -93,7 +93,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ success: true });
-    const remaining = await ConnectedClientModel.listForUser({
+    const remaining = await listConnectedClients({
       organizationId,
       userId: user.id,
     });
@@ -121,7 +121,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
         .from(schema.auditLogsTable)
         .where(
           and(
-            eq(schema.auditLogsTable.action, "connectedClient.deleted"),
+            eq(schema.auditLogsTable.action, "connectedClient.disconnected"),
             eq(schema.auditLogsTable.resourceId, user.id),
           ),
         );
@@ -140,7 +140,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     await token(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
 
     expect(
-      await ConnectedClientModel.listForUser({
+      await listConnectedClients({
         organizationId,
         userId: user.id,
       }),
@@ -155,11 +155,36 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     expect(response.statusCode).toBe(200);
     expect(response.json()).toEqual({ success: true });
     expect(
-      await ConnectedClientModel.listForUser({
+      await listConnectedClients({
         organizationId,
         userId: user.id,
       }),
     ).toEqual([]);
+  });
+
+  test("an expired sign-in is not listed, but revoking still clears it and its consent", async ({
+    makeOAuthClient,
+  }) => {
+    await makeOAuthClient({ clientId: CLAUDE_CODE_OAUTH_CLIENT_ID });
+    await OAuthRefreshTokenModel.create({
+      tokenHash: crypto.randomUUID(),
+      clientId: CLAUDE_CODE_OAUTH_CLIENT_ID,
+      userId: user.id,
+      scopes: ["mcp"],
+      expiresAt: new Date(Date.now() - 60_000),
+    });
+    const consentId = await consent(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
+
+    expect(
+      await listConnectedClients({ organizationId, userId: user.id }),
+    ).toEqual([]);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/claude-code",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(await consentExists(consentId)).toBe(false);
   });
 
   test("a client connected again after a revoke is listed again, once", async () => {
@@ -167,7 +192,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     await app.inject({ method: "DELETE", url: "/api/connected-clients/codex" });
     await redeem(user.id, "codex");
 
-    const listed = await ConnectedClientModel.listForUser({
+    const listed = await listConnectedClients({
       organizationId,
       userId: user.id,
     });
@@ -190,7 +215,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     const refresh = await token(user.id, amp.clientId);
     const kept = await token(user.id, lookalike.clientId);
 
-    const listed = await ConnectedClientModel.listForUser({
+    const listed = await listConnectedClients({
       organizationId,
       userId: user.id,
     });
@@ -208,7 +233,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     expect(await OAuthRefreshTokenModel.getById(refresh.id)).toBeNull();
     expect(await OAuthRefreshTokenModel.getById(kept.id)).not.toBeNull();
     expect(
-      await ConnectedClientModel.listForUser({
+      await listConnectedClients({
         organizationId,
         userId: user.id,
       }),

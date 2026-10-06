@@ -3,19 +3,10 @@
 // The manual setup blocks (endpoint, MCP gateway, LLM proxy, skills) for
 // apps that cannot run the connect prompt, such as n8n.
 
-import { type ReactNode, useMemo, useState } from "react";
-import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
-import { useLlmProxy } from "@/lib/llm-proxy.query";
-import { useOrganization } from "@/lib/organization.query";
+import type { ReactNode } from "react";
 import type { ConnectClient } from "./clients";
 import { isInstallerClientId, usesGenericInstructions } from "./clients";
-import {
-  getConnectableProviders,
-  resolveAdminDefaultBaseUrl,
-  resolveCandidateBaseUrls,
-} from "./connection-flow.utils";
+import type { ConnectPageData } from "./connect-page-data";
 import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
@@ -46,75 +37,36 @@ export interface ManualStep {
 }
 
 /**
- * The manual setup as titled blocks, so a variant can lay them out its own way.
- * The Connect page passes its gateway and endpoint so both views agree.
+ * The manual setup as titled blocks, from what the Connect page already
+ * read, so both agree on the gateway, endpoint and parts.
  */
 export function useManualSteps(
   client: ConnectClient | null,
-  selection: {
-    gatewayId?: string;
-    baseUrl?: string;
-    onBaseUrlChange?: (url: string) => void;
-  } = {},
+  data: ConnectPageData,
 ): ManualStep[] {
-  const { data: org } = useOrganization(true);
-  const { data: defaultGateway } = useDefaultMcpGateway();
-  const gatewayId =
-    selection.gatewayId ??
-    org?.connectionDefaultMcpGatewayId ??
-    defaultGateway?.id;
-  const { data: gateway } = useProfile(gatewayId);
-  const llmProxyEnabled = org?.connectionLlmProxyEnabled === true;
-  const { data: llmProxy } = useLlmProxy({ enabled: llmProxyEnabled });
-  const { data: canReadMcpGateway } = useHasPermissions({
-    mcpGateway: ["read"],
-  });
-  const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
-  const skillsVisible =
-    org?.connectionSkillsEnabled === true && marketplaceVisible;
-
-  const candidateBaseUrls = useMemo(
-    () =>
-      resolveCandidateBaseUrls({
-        externalProxyUrls: config.api.externalProxyUrls,
-        internalProxyUrl: config.api.internalProxyUrl,
-        metadata: org?.connectionBaseUrls ?? null,
-      }),
-    [org?.connectionBaseUrls],
-  );
-  const adminDefault = resolveAdminDefaultBaseUrl(
-    org?.connectionBaseUrls ?? null,
-  );
-  const [userBaseUrl, setUserBaseUrl] = useState<string | null>(null);
-  const baseUrl =
-    (selection.baseUrl &&
-      candidateBaseUrls.includes(selection.baseUrl) &&
-      selection.baseUrl) ||
-    (userBaseUrl && candidateBaseUrls.includes(userBaseUrl) && userBaseUrl) ||
-    (adminDefault &&
-      candidateBaseUrls.includes(adminDefault) &&
-      adminDefault) ||
-    candidateBaseUrls[0];
+  const skillsVisible = data.skillsEnabled && marketplaceVisible;
+  const gateway = data.gateway;
+  const baseUrl = data.baseUrl;
 
   if (!client) return [];
   const steps: ManualStep[] = [];
-  if (candidateBaseUrls.length > 1) {
+  if (data.baseUrls.length > 1) {
     steps.push({
       key: "endpoint",
       title: "Select an endpoint",
       content: (
         <ConnectionUrlStep
           bare
-          candidateUrls={candidateBaseUrls}
-          metadata={org?.connectionBaseUrls ?? null}
+          candidateUrls={data.baseUrls}
+          metadata={data.baseUrlMetadata}
           value={baseUrl}
-          onChange={selection.onBaseUrlChange ?? setUserBaseUrl}
+          onChange={data.selectBaseUrl}
         />
       ),
     });
   }
-  if (canReadMcpGateway && gateway) {
+  if (data.partsFor(client).tools && gateway) {
     steps.push({
       key: "mcp",
       title: "Connect the MCP gateway",
@@ -130,15 +82,15 @@ export function useManualSteps(
       ),
     });
   }
-  if (llmProxyEnabled && canReadLlmProxy && llmProxy?.id) {
+  if (data.llmProxyId) {
     steps.push({
       key: "proxy",
       title: "Route model requests through the LLM proxy",
       content: (
         <ProxyClientInstructions
           client={client}
-          profileId={llmProxy.id}
-          shownProviders={org ? getConnectableProviders(org) : null}
+          profileId={data.llmProxyId}
+          shownProviders={data.shownProviders}
           baseUrl={baseUrl}
         />
       ),

@@ -1,15 +1,10 @@
 import { and, desc, eq, isNotNull, isNull } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
-import {
-  isOAuthClientForConnectClient,
-  OAUTH_RECOGNISED_CLIENT_IDS,
-} from "@/services/connected-client-oauth";
 import type {
   ConnectedClientId,
   ConnectedClientRecord,
   ConnectionSetupClientId,
 } from "@/types";
-import OAuthClientModel from "./oauth-client";
 
 const setups = schema.connectionSetupsTable;
 
@@ -20,8 +15,11 @@ const setups = schema.connectionSetupsTable;
  * never purged, so they double as the history.
  */
 class ConnectedClientModel {
-  /** The user's connected clients, most recently connected first. */
-  static async listForUser(params: {
+  /**
+   * The user's redeemed, not revoked setups, one entry per client. Gateway
+   * sign-ins are merged in by services/connected-client.ts.
+   */
+  static async listRedeemedForUser(params: {
     organizationId: string;
     userId: string;
   }): Promise<ConnectedClientRecord[]> {
@@ -66,52 +64,7 @@ class ConnectedClientModel {
       }
     }
 
-    // Agents the gateway can tell apart by their OAuth client count as
-    // connected while the user holds a token for one, set up by hand or not.
-    // These are the same rows a disconnect revokes. Merged with a setup entry,
-    // the earliest connect is kept as the first and the latest as the last.
-    const oauthClients = await OAuthClientModel.listWithUserTokens({
-      userId: params.userId,
-    });
-    for (const clientId of OAUTH_RECOGNISED_CLIENT_IDS) {
-      const matches = oauthClients.filter((c) =>
-        isOAuthClientForConnectClient(clientId, c),
-      );
-      if (matches.length === 0) continue;
-      const first = Math.min(...matches.map((c) => c.firstIssuedAt.getTime()));
-      const last = Math.max(...matches.map((c) => c.lastIssuedAt.getTime()));
-      const client = byClient.get(clientId);
-      if (client) {
-        if (first < client.connectedAt.getTime())
-          client.connectedAt = new Date(first);
-        if (last > client.lastConnectedAt.getTime())
-          client.lastConnectedAt = new Date(last);
-        continue;
-      }
-      byClient.set(clientId, {
-        clientId,
-        platform: null,
-        mcpGatewayId: null,
-        llmProxyId: null,
-        connectedAt: new Date(first),
-        lastConnectedAt: new Date(last),
-        deviceNames: [],
-      });
-    }
-    return [...byClient.values()].sort(
-      (a, b) => b.lastConnectedAt.getTime() - a.lastConnectedAt.getTime(),
-    );
-  }
-
-  /** Audit snapshot of one user's connected client; null when not connected. */
-  static async findForAudit(params: {
-    organizationId: string;
-    userId: string;
-    clientId: string;
-  }): Promise<Record<string, unknown> | null> {
-    const clients = await ConnectedClientModel.listForUser(params);
-    const client = clients.find((c) => c.clientId === params.clientId);
-    return client ? { userId: params.userId, ...client } : null;
+    return [...byClient.values()];
   }
 
   /**

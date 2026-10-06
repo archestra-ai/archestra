@@ -10,7 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 vi.mock("next/navigation");
 
@@ -47,16 +47,22 @@ vi.mock("@/lib/connection-setup.query", () => ({
   }),
 }));
 
-vi.mock("./skills-marketplace-step", () => ({
+vi.mock("@/lib/skills/skill.query", () => ({
   useAllSkills: (params?: { enabled?: boolean; forAgentId?: string | null }) =>
     allSkillsMock(params),
+}));
+
+vi.mock("./skills-marketplace-step", () => ({
   // The marketplace step has its own test file; here it only matters whether
   // the panel renders it as a step.
   useSkillsMarketplaceVisible: () => skillsMarketplaceVisibleMock(),
   SkillsMarketplaceStep: () => <div data-testid="skills-marketplace-step" />,
 }));
 
-vi.mock("@/lib/plugins/plugin.query", () => ({
+vi.mock("@/lib/plugins/plugin.query", async (importOriginal) => ({
+  isDeliverablePlugin: (
+    await importOriginal<typeof import("@/lib/plugins/plugin.query")>()
+  ).isDeliverablePlugin,
   usePlugins: (enabled?: boolean) => pluginsMock(enabled),
 }));
 

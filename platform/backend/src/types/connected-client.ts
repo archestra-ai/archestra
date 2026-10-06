@@ -1,5 +1,5 @@
+import { OAUTH_ONLY_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { z } from "zod";
-import { OAUTH_ONLY_CLIENT_IDS } from "./connected-client-ids";
 import {
   ConnectionSetupClientIdSchema,
   type ConnectionSetupPlatform,

@@ -128,3 +128,19 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
  * itself; a backend test pins this value to that computation.
  */
 export const CLAUDE_DESKTOP_PROFILE_ID = "aa157426-f6a9-5ac5-8471-3b30b42bbe8f";
+
+/** Agents with no installer, recognised only from their gateway OAuth client. */
+export const OAUTH_ONLY_CLIENT_IDS = ["amp"] as const;
+
+/**
+ * Agents the gateway can tell apart by their OAuth client: they show as
+ * connected from a gateway sign-in, and revoking signs them out.
+ */
+export const OAUTH_RECOGNISED_CLIENT_IDS = [
+  "claude-code",
+  ...OAUTH_ONLY_CLIENT_IDS,
+] as const;
+
+export function isOAuthRecognisedClient(id: string): boolean {
+  return (OAUTH_RECOGNISED_CLIENT_IDS as readonly string[]).includes(id);
+}

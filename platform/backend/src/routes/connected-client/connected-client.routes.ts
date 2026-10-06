@@ -1,8 +1,10 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { ConnectedClientModel } from "@/models";
-import { disconnectClient } from "@/services/connected-client";
+import {
+  disconnectClient,
+  listConnectedClients,
+} from "@/services/connected-client";
 import {
   ConnectedClientIdSchema,
   ConnectedClientSchema,
@@ -23,7 +25,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       },
     },
     async ({ organizationId, user }) =>
-      ConnectedClientModel.listForUser({ organizationId, userId: user.id }),
+      listConnectedClients({ organizationId, userId: user.id }),
   );
 
   app.delete(

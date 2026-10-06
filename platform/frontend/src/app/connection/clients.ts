@@ -967,7 +967,7 @@ export COPILOT_MODEL="<model-name>"`,
   ),
   {
     id: "generic",
-    label: "Any Client",
+    label: "Generic client",
     sub: "Generic instructions",
     tileBg: "#f1f1fa",
     iconOverride: { bg: "#1e1b4b", fg: "#fff", glyph: "⌘" },
@@ -980,6 +980,18 @@ export COPILOT_MODEL="<model-name>"`,
  * Whether a client is set up from the generic instructions (a self-diagnosing
  * prompt, or the manual endpoints) rather than its own tailored steps.
  */
+/**
+ * The apps the admin offers on the Connect page: all when no list is set.
+ * "generic" (Generic client) is always offered.
+ */
+export function visibleClients(
+  shownIds: readonly string[] | null | undefined,
+): ConnectClient[] {
+  if (!shownIds) return CONNECT_CLIENTS;
+  const shown = new Set(shownIds);
+  return CONNECT_CLIENTS.filter((c) => c.id === "generic" || shown.has(c.id));
+}
+
 export function usesGenericInstructions(client: ConnectClient): boolean {
   return client.mcp.kind === "generic";
 }

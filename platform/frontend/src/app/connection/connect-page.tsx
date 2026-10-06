@@ -15,6 +15,7 @@
 // themselves when Manual is chosen.
 
 import {
+  CONNECTION_SETUP_WINDOW_MS,
   hasNativeSetupSession,
   type NativeSessionClientId,
 } from "@archestra/shared/connection-setup";
@@ -33,6 +34,7 @@ import {
   MessageSquareText,
   MoreHorizontal,
   Plus,
+  RotateCcw,
   Settings,
   ShieldCheck,
   SlidersHorizontal,
@@ -53,8 +55,6 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
-import { ClientIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS, type ConnectClient } from "@/app/connection/clients";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
@@ -75,6 +75,8 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
+import { ClientIcon } from "./client-icon";
+import type { ConnectClient } from "./clients";
 import {
   ALL_INCLUDED,
   type ConnectChoices,
@@ -95,7 +97,6 @@ import {
   fmt,
   IncludeDialog,
   InfoDialog,
-  labelOf,
   ManageDialog,
   nameOf,
   plural,
@@ -132,47 +133,58 @@ const PART_LABELS: [keyof ConnectChoices, string][] = [
 ];
 
 const MOTION_CSS = `
-@keyframes v8-pop {
+@keyframes connect-pop {
   0% { opacity: 0; transform: translateY(16px) scale(0.92); }
   55% { opacity: 1; transform: translateY(-5px) scale(1.025); }
   78% { transform: translateY(1.5px) scale(0.995); }
   100% { opacity: 1; transform: none; }
 }
-@keyframes v8-icon {
+@keyframes connect-icon {
   0% { opacity: 0.3; transform: scale(0.78) rotate(-8deg); }
   60% { opacity: 1; transform: scale(1.07) rotate(2deg); }
   100% { opacity: 1; transform: none; }
 }
-.v8-chip { animation: v8-pop 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
-.v8-icon { animation: v8-icon 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.connect-chip { animation: connect-pop 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
+.connect-icon { animation: connect-icon 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @media (prefers-reduced-motion: reduce) {
-  .v8-chip, .v8-icon { animation: none; }
+  .connect-chip, .connect-icon { animation: none; }
 }
 `;
 
 export function ConnectPage() {
   usePageTitle("Connect");
-  const data = useConnectPageData();
+  // The agent whose setup is running, and since when. While it runs the
+  // page re-reads the connected agents, so it turns green on its own, and
+  // stops once the setup window has passed.
+  const [waitingFor, setWaitingFor] = useState<{
+    clientId: string;
+    since: number;
+  } | null>(null);
+  const [timedOut, setTimedOut] = useState(false);
+  useEffect(() => {
+    setTimedOut(false);
+    if (!waitingFor) return;
+    const timer = window.setTimeout(
+      () => setTimedOut(true),
+      waitingFor.since + CONNECTION_SETUP_WINDOW_MS - Date.now(),
+    );
+    return () => window.clearTimeout(timer);
+  }, [waitingFor]);
+  const data = useConnectPageData({ pollConnected: !!waitingFor && !timedOut });
   // Links (connect.md, docs) can open the page on an app, and on its manual
   // setup with ?mode=manual. Picks and the Manual toggle are written back.
   const searchParams = useSearchParams();
   const updateUrlParams = useUpdateUrlParams();
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
-  const [manualChosen, setManualChosen] = useState(() => {
-    const linked = CONNECT_CLIENTS.find((c) => c.id === pickedId);
-    return (
-      searchParams.get("mode") === "manual" &&
-      !!linked &&
-      setupModeFor(linked) === "prompt-or-manual"
-    );
-  });
+  // null until the user toggles: then ?mode=manual decides, for the app the
+  // page actually lands on.
+  const [manualChosen, setManualChosen] = useState<boolean | null>(null);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focusServer, setFocusServer] = useState<string | null>(null);
   const [manageOpen, setManageOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState<ConnectClient | null>(
     null,
   );
-  const [waitingFor, setWaitingFor] = useState<string | null>(null);
   // Connecting an already connected agent again, e.g. on another machine:
   // the agent and its latest connect time when the user started.
   const [another, setAnother] = useState<{
@@ -187,28 +199,29 @@ export function ConnectPage() {
     () => new Set<string>(data.connected.map((c) => c.clientId)),
     [data.connected],
   );
+  // The tiles mark only agents the admin still shows; Manage lists them all.
+  const shownConnectedIds = useMemo(
+    () =>
+      new Set(
+        data.clients.filter((c) => connectedIds.has(c.id)).map((c) => c.id),
+      ),
+    [data.clients, connectedIds],
+  );
   const anotherConnectedAt = data.connected.find(
     (c) => c.clientId === another?.clientId,
   )?.lastConnectedAt;
+  const waitingId = waitingFor?.clientId;
   useEffect(() => {
-    if (!waitingFor || !connectedIds.has(waitingFor)) return;
+    if (!waitingId || !connectedIds.has(waitingId)) return;
     // A repeat connect is done once the agent's latest connect time moves.
     if (
-      another?.clientId === waitingFor &&
+      another?.clientId === waitingId &&
       String(anotherConnectedAt) === another.since
     )
       return;
     setWaitingFor(null);
     setAnother(null);
-  }, [waitingFor, connectedIds, another, anotherConnectedAt]);
-  // While a setup runs, check every few seconds so the page turns green on
-  // its own once the agent connects.
-  const { refetchConnected } = data;
-  useEffect(() => {
-    if (!waitingFor) return;
-    const timer = window.setInterval(refetchConnected, 4000);
-    return () => window.clearInterval(timer);
-  }, [waitingFor, refetchConnected]);
+  }, [waitingId, connectedIds, another, anotherConnectedAt]);
 
   const skillsSorted = useMemo(
     () => [...data.skills].sort((a, b) => b.usageCount - a.usageCount),
@@ -244,23 +257,26 @@ export function ConnectPage() {
   };
 
   const setup = setupModeFor(client);
+  const manualOn =
+    manualChosen ??
+    (searchParams.get("mode") === "manual" && setup === "prompt-or-manual");
   const status: Status =
     connectedIds.has(client.id) && another?.clientId !== client.id
       ? "connected"
-      : waitingFor === client.id
+      : waitingId === client.id
         ? "waiting"
         : "idle";
   const manual =
     status !== "connected" &&
-    (setup === "manual" || (setup === "prompt-or-manual" && manualChosen));
+    (setup === "manual" || (setup === "prompt-or-manual" && manualOn));
   // Apps with an installer can also run it straight from a terminal. Claude
   // Desktop keeps its own download flow.
   const scriptable = setup === "prompt" && client.id !== "claude-desktop";
-  const script = status !== "connected" && scriptable && manualChosen;
+  const script = status !== "connected" && scriptable && manualOn;
   // Claude Desktop installs from a downloaded installer by default; its
   // Prompt (for Cowork) is the alternative, so the toggle reads inverted.
   const download =
-    status !== "connected" && client.id === "claude-desktop" && !manualChosen;
+    status !== "connected" && client.id === "claude-desktop" && !manualOn;
   const step = currentStep(client, status, manual, script, download);
 
   const pick = (id: string) => {
@@ -336,7 +352,7 @@ export function ConnectPage() {
             <AgentTiles
               data={data}
               selected={client}
-              connectedIds={connectedIds}
+              connectedIds={shownConnectedIds}
               onPick={pick}
             />
           </div>
@@ -386,7 +402,17 @@ export function ConnectPage() {
             if (setup === "prompt-or-manual")
               updateUrlParams({ mode: v ? "manual" : null });
           }}
-          onCopied={() => setWaitingFor(client.id)}
+          // Other agents ask before changing anything and never show up as
+          // connected, so there is nothing to wait for.
+          onCopied={() => {
+            if (setup !== "prompt-or-manual")
+              setWaitingFor({ clientId: client.id, since: Date.now() });
+          }}
+          timedOut={status === "waiting" && timedOut}
+          onStartOver={() => {
+            setWaitingFor(null);
+            setAnother(null);
+          }}
           onCursorNote={() => setDialog("cursor")}
           onDisconnect={() => setDisconnecting(client)}
           onConnectAnother={
@@ -456,9 +482,9 @@ export function ConnectPage() {
         title={`Model requests go through ${data.appName}`}
       >
         <p>
-          {labelOf(client)} sends model requests through {data.appName} instead
-          of straight to the provider. You keep the same models; your org's
-          limits, logging and cost tracking apply.
+          {client.label} sends model requests through {data.appName} instead of
+          straight to the provider. You keep the same models; your org's limits,
+          logging and cost tracking apply.
         </p>
       </InfoDialog>
       <InfoDialog
@@ -570,12 +596,12 @@ function AgentTiles({
             }
             aria-label={
               otherPicked
-                ? `${labelOf(otherPicked)}, change agent`
+                ? `${otherPicked.label}, change agent`
                 : "Other agents"
             }
             icon={
               otherPicked ? (
-                <span key={otherPicked.id} className="v8-icon">
+                <span key={otherPicked.id} className="connect-icon">
                   <ClientIcon client={otherPicked} size={iconSize} />
                 </span>
               ) : (
@@ -590,7 +616,7 @@ function AgentTiles({
             // The chevron says this tile reopens the list, picked or not.
             label={
               <>
-                {otherPicked ? labelOf(otherPicked) : "Other agents"}
+                {otherPicked ? otherPicked.label : "Other agents"}
                 <ChevronDown className="ml-0.5 inline size-3 align-[-2px] opacity-60" />
               </>
             }
@@ -676,6 +702,8 @@ function ConnectArea({
   onInclude,
   onManual,
   onCopied,
+  timedOut,
+  onStartOver,
   onCursorNote,
   onDisconnect,
   onConnectAnother,
@@ -702,6 +730,9 @@ function ConnectArea({
   onInclude: () => void;
   onManual: (v: boolean) => void;
   onCopied: () => void;
+  /** The setup window passed without the agent connecting. */
+  timedOut: boolean;
+  onStartOver: () => void;
   onCursorNote: () => void;
   onDisconnect: () => void;
   /** Set while connected: start a new connection, e.g. on another machine. */
@@ -791,7 +822,7 @@ function ConnectArea({
             onClick={onDisconnect}
             className="md:ml-auto"
           >
-            Disconnect {labelOf(client)}
+            Disconnect {client.label}
           </MetaButton>
         </BandFooter>
       </Band>
@@ -860,6 +891,11 @@ function ConnectArea({
             <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
               {includeLabel}
             </MetaButton>
+            {status === "waiting" && (
+              <MetaButton icon={<RotateCcw />} onClick={onStartOver}>
+                Start over
+              </MetaButton>
+            )}
             <span className="md:ml-auto">
               {footprintSummary(client, footprint, skillCount)}
             </span>
@@ -881,7 +917,13 @@ function ConnectArea({
         <>
           {/* What happens next, right above the prompt it's about. */}
           <div className="mt-2 space-y-1 px-1 text-xs text-muted-foreground">
-            {script ? (
+            {timedOut ? (
+              <p className="text-foreground">
+                {script
+                  ? "Didn't connect. Start over and run it again."
+                  : "Didn't connect. Start over or try the Script option."}
+              </p>
+            ) : script ? (
               status === "waiting" ? (
                 <p className="text-foreground">
                   Run it, approve the browser page it opens, then follow the
@@ -897,9 +939,7 @@ function ConnectArea({
               )
             ) : status === "waiting" ? (
               <p className="text-foreground">
-                {generic
-                  ? `Paste it into ${nameOf(client)}, then say yes when it asks.`
-                  : `Paste it into ${nameOf(client)}, then approve the browser page it opens.`}{" "}
+                {`Paste it into ${nameOf(client)}, then approve the browser page it opens.`}{" "}
                 {disconnectNote}
               </p>
             ) : (
@@ -982,6 +1022,11 @@ function ConnectArea({
             <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
               {includeLabel}
             </MetaButton>
+            {status === "waiting" && (
+              <MetaButton icon={<RotateCcw />} onClick={onStartOver}>
+                Start over
+              </MetaButton>
+            )}
             {/* Other agents use the admin's default gateway and read the
                 endpoint from the prompt; apps with an installer pick both on
                 the approval page. */}
@@ -1189,11 +1234,7 @@ function ManualSteps({
   client: ConnectClient;
   data: ConnectPageData;
 }) {
-  const steps = useManualSteps(client, {
-    gatewayId: data.gateway?.id,
-    baseUrl: data.baseUrl,
-    onBaseUrlChange: data.selectBaseUrl,
-  });
+  const steps = useManualSteps(client, data);
   if (steps.length === 0)
     return (
       <p className="mt-4 rounded-2xl border border-dashed p-5 text-sm text-muted-foreground">
@@ -1361,16 +1402,16 @@ function ProfileCard({
 
   return (
     <aside
-      aria-label={`What ${labelOf(client)} gets`}
+      aria-label={`What ${client.label} gets`}
       className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm lg:mt-2"
     >
       <div className="flex items-center gap-3.5">
-        <div key={`icon-${client.id}`} className="v8-icon">
+        <div key={`icon-${client.id}`} className="connect-icon">
           <ClientIcon client={client} size={44} />
         </div>
         <div className="min-w-0 flex-1">
           <div className="truncate text-xl font-semibold tracking-tight">
-            {labelOf(client)}
+            {client.label}
           </div>
           <StatusLine status={status} />
         </div>
@@ -1385,7 +1426,10 @@ function ProfileCard({
           another agent is picked (only the header animates per pick). */}
       <div className="mt-2.5">
         <ul className="flex flex-col gap-2">
-          <li className="v8-chip relative" style={{ animationDelay: "140ms" }}>
+          <li
+            className="connect-chip relative"
+            style={{ animationDelay: "140ms" }}
+          >
             {data.servers.length === 0 ? (
               <ListBlock
                 icon={<Wrench />}
@@ -1448,7 +1492,7 @@ function ProfileCard({
 
           {skillsOn && (
             <li
-              className="v8-chip relative"
+              className="connect-chip relative"
               style={{ animationDelay: "250ms" }}
             >
               <ListBlock
@@ -1485,7 +1529,7 @@ function ProfileCard({
 
           {statusChips.length > 0 && (
             <li
-              className="v8-chip relative"
+              className="connect-chip relative"
               style={{ animationDelay: "360ms" }}
             >
               <div className="grid gap-2 sm:grid-cols-2">

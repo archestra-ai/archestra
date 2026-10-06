@@ -10,10 +10,16 @@ export const connectedClientKeys = {
   mine: ["connected-clients"] as const,
 };
 
-/** The signed-in user's connected coding clients, most recent first. */
-export function useConnectedClients() {
+/**
+ * The signed-in user's connected coding clients, most recent first. Pass a
+ * refetch interval to watch for a client that is connecting right now.
+ */
+export function useConnectedClients(params?: {
+  refetchInterval?: number | false;
+}) {
   return useQuery({
     queryKey: connectedClientKeys.mine,
+    refetchInterval: params?.refetchInterval ?? false,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getConnectedClients();
       throwOnApiError(error);

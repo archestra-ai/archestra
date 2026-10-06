@@ -6,7 +6,6 @@ import ApiKeyModel from "@/models/api-key";
 import AppModel from "@/models/app";
 import ChatOpsChannelBindingModel from "@/models/chatops-channel-binding";
 import chatOpsConfigModel from "@/models/chatops-config";
-import ConnectedClientModel from "@/models/connected-client";
 import EnvironmentModel from "@/models/environment";
 import EnvironmentDefaultUserLimitModel from "@/models/environment-default-user-limit";
 import EnvironmentResourceDefaultModel from "@/models/environment-resource-default";
@@ -48,6 +47,7 @@ import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
+import { findConnectedClientForAudit } from "@/services/connected-client";
 import { type AuditEventName, AuditEventNameSchema } from "@/types/audit-log";
 
 export type AuditResourceIdSource =
@@ -228,10 +228,10 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   // the snapshot names the client.
   "/api/connected-clients/:clientId": {
     resourceType: "connectedClient",
-    action: "connectedClient.deleted",
+    action: "connectedClient.disconnected",
     resourceIdSource: "currentUser",
     fetchById: (userId, organizationId, routeParams) =>
-      ConnectedClientModel.findForAudit({
+      findConnectedClientForAudit({
         organizationId,
         userId,
         clientId: String(routeParams?.clientId),

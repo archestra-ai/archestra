@@ -1,5 +1,6 @@
 import { expect, test, vi } from "vitest";
 import { type AllowedCacheKey, cacheManager } from "@/cache-manager";
+import logger from "@/logging";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import {
   consumeHitlRuling,
@@ -13,6 +14,8 @@ import {
   stageHitlReview,
 } from "./hitl-review";
 import type { OpenAppaSession } from "./service";
+
+vi.mock("@/logging");
 
 // The real cache, stored in this file's test database.
 setupTestCacheManager();
@@ -52,6 +55,30 @@ test.each([
     ...(parentId ? { parent_id: parentId } : {}),
     ...(callerId ? { caller_id: callerId } : {}),
   });
+});
+
+test("warns when no review caller can be recovered, and only then", () => {
+  vi.mocked(logger.warn).mockClear();
+  reviewSessionFromTrajectory({
+    organizationId: "organization",
+    trajectory: { session_id: "foreign-root" },
+    context: { userId: "chat-user", conversationId: "chat-root" },
+  });
+  expect(vi.mocked(logger.warn)).toHaveBeenCalledWith(
+    expect.objectContaining({
+      organizationId: "organization",
+      sessionId: "foreign-root",
+    }),
+    expect.stringContaining("no resolvable caller"),
+  );
+
+  vi.mocked(logger.warn).mockClear();
+  reviewSessionFromTrajectory({
+    organizationId: "organization",
+    trajectory: { session_id: "chat-root" },
+    context: { userId: "chat-user", conversationId: "chat-root" },
+  });
+  expect(vi.mocked(logger.warn)).not.toHaveBeenCalled();
 });
 
 test("binds a ruling to one offer and consumes it once", async () => {

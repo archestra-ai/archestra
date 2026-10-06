@@ -523,10 +523,14 @@ function childThreadId(
   parentNativeId: string | undefined,
 ): string | undefined {
   const turn = parseJsonHeader(context.headers, "x-codex-turn-metadata");
+  // A thread or session id names the requester's own trajectory: without a
+  // parent thread placing it under a spawn it is the root's id, never a child
+  // identity. Only an explicit agent claim stands alone.
   const child =
     stringField(turn?.agent_id) ??
-    stringField(turn?.thread_id) ??
-    stringField(turn?.session_id);
+    (parentNativeId
+      ? (stringField(turn?.thread_id) ?? stringField(turn?.session_id))
+      : undefined);
   if (child && child !== parentNativeId) return child;
   const body = asRecord(context.requestBody);
   const metadata = asRecord(body?.client_metadata) ?? asRecord(body?.metadata);
@@ -534,8 +538,9 @@ function childThreadId(
   const fromMetadata =
     stringField(metadata?.agent_id) ??
     stringField(metadata?.child_thread_id) ??
-    stringField(metadata?.thread_id) ??
-    nested?.threadId;
+    (parentNativeId
+      ? (stringField(metadata?.thread_id) ?? nested?.threadId)
+      : undefined);
   // The body metadata fallback is a compat path a client fully controls, so a
   // present malformed claim is rejected rather than bound as a child id.
   return fromMetadata && fromMetadata !== parentNativeId

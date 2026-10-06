@@ -3415,10 +3415,16 @@ async function handleStreaming<
           >[0],
         ),
       );
+      // Construct from a safe subset of inert envelope fields only: a blind
+      // spread of the observed provider response could carry executable-
+      // capable fields (tool_calls, function_call items) into the recorded
+      // failure.
       failedStreamResponse = {
-        ...observed,
         id: streamAdapter.state.responseId || `proxy_resp_${Date.now()}`,
         object: "response",
+        ...(observed?.created_at !== undefined
+          ? { created_at: observed.created_at }
+          : {}),
         model: streamAdapter.state.model || actualModel,
         status: "incomplete",
         incomplete_details: null,

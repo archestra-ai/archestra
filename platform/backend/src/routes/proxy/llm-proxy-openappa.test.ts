@@ -13152,6 +13152,28 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         });
         expect(recorded[0]).toMatchObject({ inputTokens: 3, outputTokens: 2 });
       }
+      // The recorded failure is built from an inert field subset only: no
+      // executable-capable field from the observed stream (tool calls,
+      // function_call items) survives into interaction history.
+      const persisted = JSON.stringify(recorded[0].response);
+      expect(persisted).not.toContain("call_eof");
+      expect(persisted).not.toContain("custom_eof");
+      expect(persisted).not.toContain("apply_patch");
+      expect(
+        Object.keys(recorded[0].response as Record<string, unknown>).sort(),
+      ).toEqual(
+        [
+          "created_at",
+          "error",
+          "id",
+          "incomplete_details",
+          "model",
+          "object",
+          "output",
+          "status",
+          "usage",
+        ].sort(),
+      );
       const reader = await makeUser();
       await makeMember(reader.id, agent.organizationId, { role: "admin" });
       const { createFastifyInstance } = await import("@/fastify-instance");

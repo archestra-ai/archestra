@@ -57,6 +57,21 @@ export function reviewSessionFromTrajectory(params: {
     !params.trajectory.parent_id
       ? `user:${params.context.userId}`
       : undefined);
+  if (!callerId) {
+    // An unscoped session hashes caller "" into every review key, so two
+    // callers with the same trajectory would share one cache scope. Callers
+    // that require a caller-bearing session must refuse such a session; the
+    // recovery fallbacks above stay intact for paths that legitimately allow
+    // an unscoped review session.
+    logger.warn(
+      {
+        organizationId: params.organizationId,
+        sessionId: params.trajectory.session_id,
+        parentId: params.trajectory.parent_id,
+      },
+      "OpenAPPA review session has no resolvable caller and shares the unscoped cache scope",
+    );
+  }
   return {
     organization_id: params.organizationId,
     session_id: params.trajectory.session_id,

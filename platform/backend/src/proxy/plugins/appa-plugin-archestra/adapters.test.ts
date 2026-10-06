@@ -1319,6 +1319,121 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     ).toBeUndefined();
   });
 
+  test("binds a Codex metadata thread child under the metadata parent", () => {
+    expect(
+      codex.bindChildTrajectory({
+        headers: {},
+        requestBody: {
+          client_metadata: {
+            parent_thread_id: "thread-parent",
+            thread_id: "thread-child",
+          },
+        },
+      }),
+    ).toEqual({
+      sessionId: "thread-parent:thread-child",
+      parentId: "thread-parent",
+      lineage: {
+        source: "native",
+        nativeParentId: "thread-parent",
+        childNativeId: "thread-child",
+      },
+    });
+    expect(
+      codex.bindChildTrajectory({
+        headers: {},
+        requestBody: {
+          client_metadata: {
+            parent_thread_id: "thread-parent",
+            "x-codex-turn-metadata": JSON.stringify({
+              thread_id: "thread-child",
+            }),
+          },
+        },
+      }),
+    ).toMatchObject({
+      sessionId: "thread-parent:thread-child",
+      parentId: "thread-parent",
+    });
+  });
+
+  test("a Codex root's own thread id is not a child identity without a parent", () => {
+    expect(
+      codex.bindChildTrajectory({
+        headers: {
+          "user-agent": "codex_cli_rs/0.99.0",
+          "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
+        },
+        requestBody: {},
+      }),
+    ).toBeUndefined();
+    expect(
+      codex.bindChildTrajectory({
+        headers: {},
+        requestBody: { client_metadata: { thread_id: "codex-root" } },
+      }),
+    ).toBeUndefined();
+    expect(
+      codex.bindChildTrajectory({
+        headers: {},
+        requestBody: {
+          client_metadata: {
+            "x-codex-turn-metadata": JSON.stringify({ thread_id: "t0" }),
+          },
+        },
+      }),
+    ).toBeUndefined();
+  });
+
+  test("a Codex root's own thread id does not trip a birth receipt's parent guard", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    // A birth receipt minted before the child had a native id: the root's own
+    // thread id must not stand in as the child and hit the parent-reuse guard;
+    // the receipt alone recovers the child.
+    const footer = mintChildTrajectoryReceipt({
+      organizationId: "org",
+      callerId: "user:user",
+      parentId: "t0",
+      childId: "t0:spawn-call",
+      spawnerNativeId: "t0",
+      spawnCallId: "spawn-call",
+    });
+    if (!footer) throw new Error("expected signed carrier");
+    const root = delegated({
+      headers: { "user-agent": "codex_cli_rs/0.99.0" },
+      interactionType: "openai:responses",
+      body: {
+        client_metadata: { thread_id: "t0" },
+        input: [
+          {
+            type: "message",
+            role: "assistant",
+            content: [{ type: "output_text", text: `${footer}\n\nok` }],
+          },
+          {
+            type: "message",
+            role: "user",
+            content: [
+              {
+                type: "input_text",
+                text: "Summary of the conversation so far.",
+              },
+            ],
+          },
+        ],
+      },
+    });
+    expect(codex.bindChildTrajectory(root)).toEqual({
+      sessionId: "t0:spawn-call",
+      parentId: "t0",
+      lineage: {
+        source: "receipt",
+        nativeParentId: "t0",
+        spawnCallId: "spawn-call",
+      },
+    });
+  });
+
   test("does not open a Codex guardian auto-review as an unprepared child", () => {
     const context = {
       headers: {

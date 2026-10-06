@@ -4573,7 +4573,7 @@ export const updateGuardrailsPolicy = <ThrowOnError extends boolean = false>(opt
  *
  * Authorization:
  *
- * `openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries
+ * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
 export const validateGuardrailsPolicy = <ThrowOnError extends boolean = false>(options: Options<ValidateGuardrailsPolicyData, ThrowOnError>) => (options.client ?? client).post<ValidateGuardrailsPolicyResponses, ValidateGuardrailsPolicyErrors, ThrowOnError>({
     url: '/api/guardrails-policy/validate',

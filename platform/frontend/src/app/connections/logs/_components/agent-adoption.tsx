@@ -170,13 +170,7 @@ function SummaryTiles({ adoption }: { adoption: AgentAdoption }) {
   const window = `in the last ${adoption.lookbackDays} days`;
 
   return (
-    <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-      <SummaryTile
-        label="Not connected"
-        value={notConnected}
-        total={total}
-        description="No agent set up and no calls from one"
-      />
+    <div className="grid gap-4 sm:grid-cols-3">
       <SummaryTile
         label="Connected"
         value={total - notConnected}
@@ -656,8 +650,8 @@ function LastSeenCell({
 function AdoptionSkeleton() {
   return (
     <div className="flex flex-col gap-6">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        {[0, 1, 2, 3].map((i) => (
+      <div className="grid gap-4 sm:grid-cols-3">
+        {[0, 1, 2].map((i) => (
           <Skeleton key={i} className="h-[106px] w-full rounded-xl" />
         ))}
       </div>

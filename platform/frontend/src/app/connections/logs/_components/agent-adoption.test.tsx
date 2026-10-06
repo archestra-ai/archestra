@@ -103,14 +103,9 @@ describe("AgentAdoptionOverview", () => {
     });
   });
 
-  it("leads with who hasn't connected and lists only them", () => {
+  it("lists only members who haven't connected at first", () => {
     render(<AgentAdoptionOverview />);
 
-    expect(
-      screen.getByText("Not connected", {
-        selector: "[data-slot=card-description]",
-      }),
-    ).toBeInTheDocument();
     const rows = screen.getAllByRole("row").slice(1);
     expect(rows).toHaveLength(1);
     expect(within(rows[0]).getByText("Ada Lovelace")).toBeInTheDocument();

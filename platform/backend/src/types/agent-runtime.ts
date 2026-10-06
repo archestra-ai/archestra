@@ -6,6 +6,7 @@ import {
 } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
+import { ReviewOriginSchema } from "@/openappa/review-origin";
 import { A2ATaskStateSchema } from "./a2a-task";
 
 /**
@@ -66,11 +67,19 @@ export const AgentRuntimeResourcesSchema = z.object({
 export type AgentRuntimeResources = z.infer<typeof AgentRuntimeResourcesSchema>;
 
 /** Where a detached run delivers its terminal result. */
+const ProducingSessionSchema = z.object({
+  organizationId: z.string().min(1),
+  sessionId: z.string().min(1),
+  callerId: z.string().min(1).optional(),
+  parentId: z.string().min(1).optional(),
+});
 export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
   z.object({
     type: z.literal("chatops"),
     bindingId: z.string().uuid(),
     threadId: z.string().min(1),
+    appaSession: ProducingSessionSchema.optional(),
+    deliveryOrigin: ReviewOriginSchema.options[0].optional(),
   }),
   z.object({
     type: z.literal("email"),
@@ -79,6 +88,11 @@ export const AgentRunCompletionTargetSchema = z.discriminatedUnion("type", [
     fromAddress: z.string().email(),
     toAddress: z.string().email(),
     subject: z.string().nullable(),
+    /**
+     * Producing runtime session. The completion watcher authorizes egress
+     * with this identity. Absent while v2 is active, the result is not sent.
+     */
+    appaSession: ProducingSessionSchema.optional(),
   }),
 ]);
 export type AgentRunCompletionTarget = z.infer<

@@ -16,6 +16,8 @@ export interface ArchestraContext {
     toolCallId: string;
     spawn: boolean;
   };
+  /** Set by the gateway host, not request arguments or client headers. */
+  gatewayRequest?: true;
   /** A verified, short-lived connection setup session; authentication and RBAC still apply. */
   connectionSetupBypass?: boolean;
   agent: {
@@ -38,6 +40,11 @@ export interface ArchestraContext {
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  /** Host-verified transport projection, never populated from tool arguments. */
+  chatOpsOrigin?: Extract<
+    import("@/openappa/review-origin").ReviewOrigin,
+    { type: "chatops" }
+  >;
   userId?: string;
   /** The ID of the current internal agent (for agent delegation tool lookup) */
   agentId?: string;
@@ -64,6 +71,11 @@ export interface ArchestraContext {
   tokenAuth?: TokenAuthContext;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
+  /**
+   * This run's OpenAPPA session. Distinct from the logging session when the
+   * run is a nested in-process child. Remedy offers must name this id.
+   */
+  appaSessionId?: string;
   /**
    * Delegation chain of agent IDs (colon-separated).
    * Used to track the path of delegated agent calls.

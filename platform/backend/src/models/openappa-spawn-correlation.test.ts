@@ -4,6 +4,113 @@ import { expect, test } from "@/test";
 import OpenAppaSessionModel from "./openappa-session";
 import OpenAppaSpawnCorrelationModel from "./openappa-spawn-correlation";
 
+test("recognizes only completed caller-bound released fork bindings in a batch", async ({
+  makeOrganization,
+}) => {
+  const { id: organizationId } = await makeOrganization();
+  const otherOrganization = await makeOrganization();
+  const scope = {
+    organizationId,
+    callerId: "user:test",
+    parentSessionId: "parent",
+    toolCallIds: [
+      "fork",
+      "ordinary",
+      "denied",
+      "empty",
+      "invalid",
+      "pending",
+      "other-caller",
+      "other-parent",
+      "other-org",
+    ],
+  };
+  const base = {
+    organizationId,
+    callerId: scope.callerId,
+    sessionId: scope.parentSessionId,
+    root: openappaActor(scope.parentSessionId),
+    status: "complete",
+    input: {
+      semantic: {
+        event: "tool_call",
+        spawn: true,
+        tool: "agent__worker",
+        arguments: { message: "bounded request" },
+      },
+    },
+    decision: { decision: "allow_call", spawn_binding: "retained-fork" },
+  };
+  await db.insert(schema.openappaOperationsTable).values([
+    { ...base, operationId: "call:fork" },
+    {
+      ...base,
+      operationId: "call:ordinary",
+      decision: { decision: "allow_call" },
+    },
+    {
+      ...base,
+      operationId: "call:denied",
+      decision: { decision: "deny_call", spawn_binding: "unreleased" },
+    },
+    {
+      ...base,
+      operationId: "call:empty",
+      decision: { decision: "allow_call", spawn_binding: "" },
+    },
+    {
+      ...base,
+      operationId: "call:invalid",
+      decision: { decision: "allow_call", spawn_binding: true },
+    },
+    { ...base, operationId: "call:pending", status: "pending", decision: null },
+    { ...base, operationId: "call:other-caller", callerId: "user:other" },
+    { ...base, operationId: "call:other-parent", sessionId: "other-parent" },
+    {
+      ...base,
+      operationId: "call:other-org",
+      organizationId: otherOrganization.id,
+    },
+  ]);
+  expect(
+    await OpenAppaSpawnCorrelationModel.releasedSpawnCallIds(scope),
+  ).toEqual(new Set(["fork"]));
+  expect(
+    await OpenAppaSpawnCorrelationModel.releasedSpawnCall({
+      ...scope,
+      toolCallId: "fork",
+    }),
+  ).toEqual({
+    tool: "agent__worker",
+    arguments: { message: "bounded request" },
+  });
+  expect(
+    await OpenAppaSpawnCorrelationModel.releasedSpawnCall({
+      ...scope,
+      toolCallId: "ordinary",
+    }),
+  ).toBeNull();
+  expect(
+    await OpenAppaSpawnCorrelationModel.releasedSpawnCall({
+      ...scope,
+      toolCallId: "fork",
+      callerId: "user:other",
+    }),
+  ).toBeNull();
+  expect(
+    await OpenAppaSpawnCorrelationModel.releasedSpawnCallIds({
+      ...scope,
+      callerId: undefined,
+    }),
+  ).toEqual(new Set());
+  expect(
+    await OpenAppaSpawnCorrelationModel.releasedSpawnCallIds({
+      ...scope,
+      toolCallIds: [],
+    }),
+  ).toEqual(new Set());
+});
+
 test("recovers the child's recorded spawn, not another open sibling spawn", async ({
   makeOrganization,
 }) => {

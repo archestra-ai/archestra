@@ -291,11 +291,14 @@ describe("skill delegation (agent-designated skills)", () => {
       const params = mockExecuteA2AMessage.mock.calls[0][0];
       expect(params.agentId).toBe(target.id);
       expect(params.userId).toBe(context.userId);
-      // the subagent receives the rendered activation block plus the caller's task
-      expect(params.message).toContain(
+      // Activation stays off the user message so a delegation marker still
+      // closes the caller's task. The subagent receives both.
+      expect(params.instructionPrefix).toContain(
         '<skill_content name="deep-research" version="1">',
       );
-      expect(params.message).toContain("Research thoroughly. Cite sources.");
+      expect(params.instructionPrefix).toContain(
+        "Research thoroughly. Cite sources.",
+      );
       expect(params.message).toContain("find prior art for widgets");
       expect(params.parentDelegationChain).toBe(context.agentId);
     });

@@ -27,6 +27,7 @@ import { childSessionId, clientSessionId } from "@/openappa/actor";
 import {
   type AppaChildReturnCompletion,
   childReturnMarkersConfigured,
+  collectAndStripChildReturns,
   mintChildReturnMarker,
 } from "@/openappa/child-return";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
@@ -120,6 +121,7 @@ import {
   appendPeerMessageMarker,
   escapeRelayMarkup,
 } from "./adapters/claude-code-relay";
+import { isInProcessDelegationTool } from "./adapters/in-process-executor";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
 import {
@@ -154,6 +156,8 @@ type AppaPluginBinding = {
   completedHandbackReturn: string | undefined;
   /** True on internal loopback Chat requests. */
   chat: boolean;
+  /** agent__/skill__ tools this request will run in the foreground executor. */
+  foregroundSpawns?: ReadonlySet<string>;
   compaction: boolean;
   requestHeaders: IncomingHttpHeaders;
   /** A verified user-question result needs trusted workflow continuation. */
@@ -301,9 +305,52 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       childResultUpdates[result.id] = content;
       return { ...result, content };
     });
+    const foregroundResults = results.filter((result) =>
+      isInProcessDelegationTool(result.name),
+    );
+    const releasedForegroundSpawns =
+      await OpenAppaSpawnCorrelationModel.releasedSpawnCallIds({
+        organizationId: binding.session.organization_id,
+        callerId: binding.session.caller_id,
+        parentSessionId: binding.session.session_id,
+        toolCallIds: foregroundResults.map((result) =>
+          withoutTrajectoryStamp(result.id),
+        ),
+      });
+    const foregroundCompletions = foregroundResults.flatMap((result) => {
+      if (
+        result.isError ||
+        !releasedForegroundSpawns.has(withoutTrajectoryStamp(result.id)) ||
+        binding.request.restoredNoticeCallIds?.has(result.id)
+      ) {
+        return [];
+      }
+      const carrier = {
+        messages: [
+          { role: "tool", tool_call_id: result.id, content: result.content },
+        ],
+      };
+      const collected = collectAndStripChildReturns(carrier, {
+        foregroundSpawnCallIds: releasedForegroundSpawns,
+      });
+      return collected.completions.length > 0
+        ? collected.completions
+        : [
+            {
+              value:
+                typeof result.content === "string"
+                  ? result.content
+                  : JSON.stringify(result.content),
+              envelopeId: result.id,
+              assistantOrigin: false,
+            },
+          ];
+    });
     const childReturns = await approveChildReturnCarriers({
       binding,
       results,
+      releasedForegroundSpawns,
+      foregroundCompletions,
     });
     Object.assign(childResultUpdates, childReturns.updates);
     await admitRelayReports({
@@ -392,6 +439,11 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }) || isIssuedQuestionAnswer(binding, answer),
       classifySpawnResult: (answer) => {
         if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
+          return answer.isError ? "failed" : "pending";
+        }
+        if (isInProcessDelegationTool(answer.name)) {
+          if (!releasedForegroundSpawns.has(withoutTrajectoryStamp(answer.id)))
+            return undefined;
           return answer.isError ? "failed" : "pending";
         }
         if (!binding.adapter?.isSpawnTool(answer.name, answer.namespace))
@@ -591,11 +643,22 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     }
     // Restore before host validation; finalization may only append the child
     // receipt, never change the arguments the other policies already checked.
+    const foregroundSpawns = context.toolCalls.some((call) =>
+      isInProcessDelegationTool(call.name),
+    )
+      ? await foregroundExecutorSpawnNames({
+          toolNames: context.toolCalls.map((call) => call.name),
+          agentId: getTrustedContext(context.resources)?.profileId,
+          organizationId: binding.session.organization_id,
+          callerId: binding.session.caller_id,
+        })
+      : new Set<string>();
+    binding.foregroundSpawns = foregroundSpawns;
+    const isSpawn = inProcessSpawnPredicate(binding, foregroundSpawns);
     let incomingToolCalls = restoreAuthorizedSpawnRetry({
       calls: context.toolCalls,
       requestBody: binding.requestBody,
-      isSpawn: (name, namespace) =>
-        binding.adapter?.isSpawnTool(name, namespace) === true,
+      isSpawn,
     });
     let changed = incomingToolCalls !== context.toolCalls;
     if (binding.nativeHitlRulings.length > 0) {
@@ -873,9 +936,19 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       calls,
       resolution: this.resolution(binding),
     });
+    const isSpawn = inProcessSpawnPredicate(
+      binding,
+      binding.foregroundSpawns ?? new Set(),
+    );
     const evaluateOptions = {
       spawnCallIds: new Set(
-        [...runtimeCalls].filter(([, call]) => call.spawn).map(([id]) => id),
+        calls
+          .filter(
+            (call) =>
+              runtimeCalls.get(call.id)?.spawn ??
+              isSpawn(call.name, call.namespace),
+          )
+          .map((call) => call.id),
       ),
       ...this.resolution(binding),
       isUserQuestion: (name: string, namespace?: string) => {
@@ -891,12 +964,12 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         }
         return isUserQuestionCall(binding, name);
       },
-      isSpawn: (name: string, namespace?: string) =>
-        binding.adapter?.isSpawnTool(name, namespace) === true,
+      isSpawn,
       lineage: binding.child?.lineage,
       supportsDelegation:
         [...runtimeCalls.values()].some((call) => call.spawn) ||
-        (binding.adapter !== undefined && !binding.chat),
+        (binding.adapter !== undefined && !binding.chat) ||
+        calls.some((call) => isSpawn(call.name, call.namespace)),
       ...(binding.request.tools
         ? {
             control: binding.request.tools.control,
@@ -1083,14 +1156,18 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         // The runtime ruled on the call as the model wrote it; the marker is
         // platform text added after, for the child the call will start.
         const delegated =
-          mint && binding.adapter
+          mint && binding.adapter && isSpawn(call.name, call.namespace)
             ? withDelegationMarker({ call, adapter: binding.adapter, mint })
             : undefined;
+        const unmarkedInProcess =
+          isInProcessDelegationTool(call.name) &&
+          isSpawn(call.name, call.namespace);
         if (
-          binding.session.parent_id &&
-          binding.adapter &&
-          isChildSpawnCall(binding.adapter, call) &&
-          !delegated
+          !delegated &&
+          (unmarkedInProcess ||
+            (binding.session.parent_id &&
+              binding.adapter &&
+              isChildSpawnCall(binding.adapter, call)))
         ) {
           // An unmarked nested child would fall back to its native parent and
           // lose the governed lineage. Nothing from this evaluated batch may
@@ -1691,17 +1768,34 @@ function runtimeLaunchHandle(content: unknown): string {
 async function approveChildReturnCarriers(params: {
   binding: AppaPluginBinding;
   results: LlmProxyToolResultsContext["toolResults"];
+  releasedForegroundSpawns: ReadonlySet<string>;
+  foregroundCompletions: AppaChildReturnCompletion[];
 }): Promise<{
   updates: Record<string, string>;
   /** Results of children that ran while enforcement was off, with no crossing. */
   ignored: Set<string>;
 }> {
-  const completions = params.binding.request.childReturns?.completions ?? [];
+  const completions = [
+    ...(params.binding.request.childReturns?.completions ?? []),
+    ...params.foregroundCompletions.filter(
+      (completion) =>
+        !params.binding.request.childReturns?.completions.some(
+          (existing) =>
+            existing.envelopeId === completion.envelopeId &&
+            existing.value === completion.value &&
+            existing.childNativeId === completion.childNativeId,
+        ),
+    ),
+  ];
   const adapter = params.binding.adapter;
   const completionResults = params.results.filter(
     (result) =>
       params.binding.request.restoredNoticeCallIds?.has(result.id) !== true &&
-      adapter?.isChildCompletionResult?.(result) === true,
+      (adapter?.isChildCompletionResult?.(result) === true ||
+        (!result.isError &&
+          params.releasedForegroundSpawns.has(
+            withoutTrajectoryStamp(result.id),
+          ))),
   );
   const ignored = new Set<string>();
   if (completions.length === 0 && completionResults.length === 0) {
@@ -1754,7 +1848,12 @@ async function approveChildReturnCarriers(params: {
     : { reason: UNRECORDED_CHILD_RETURN };
   const directSpawnResults = new Set(
     params.results
-      .filter((result) => adapter?.isSpawnTool(result.name, result.namespace))
+      .filter(
+        (result) =>
+          params.releasedForegroundSpawns.has(
+            withoutTrajectoryStamp(result.id),
+          ) || adapter?.isSpawnTool(result.name, result.namespace),
+      )
       .map((result) => withoutTrajectoryStamp(result.id)),
   );
   // One wait result can contain several children. Every completed leaf
@@ -1931,7 +2030,8 @@ async function approveChildReturnCarriers(params: {
     updates[result.id] =
       verified.length === 1 &&
       ignoredHere.length === 0 &&
-      adapter?.isSpawnTool(result.name, result.namespace)
+      (params.releasedForegroundSpawns.has(envelopeId) ||
+        adapter?.isSpawnTool(result.name, result.namespace))
         ? verified[0].value
         : JSON.stringify({
             status: Object.fromEntries([
@@ -3100,6 +3200,54 @@ function isCompactionOnlyResponse(value: unknown): boolean {
           item && typeof item === "object" && item.type === "compaction",
       ))
   );
+}
+
+function inProcessSpawnPredicate(
+  binding: AppaPluginBinding,
+  foregroundSpawns: ReadonlySet<string>,
+): (name: string, namespace?: string) => boolean {
+  return (name, namespace) =>
+    isInProcessDelegationTool(name)
+      ? foregroundSpawns.has(name)
+      : binding.adapter?.isSpawnTool(name, namespace) === true;
+}
+
+async function foregroundExecutorSpawnNames(params: {
+  toolNames: readonly string[];
+  agentId: string | undefined;
+  organizationId: string;
+  callerId: string | undefined;
+}): Promise<Set<string>> {
+  const names = new Set<string>();
+  if (!params.agentId) return names;
+  const userId = params.callerId?.startsWith("user:")
+    ? params.callerId.slice("user:".length)
+    : undefined;
+  let willRunInForegroundExecutor:
+    | ((params: {
+        toolName: string;
+        agentId: string;
+        organizationId: string;
+        userId?: string;
+      }) => Promise<boolean>)
+    | undefined;
+  for (const toolName of params.toolNames) {
+    if (!isInProcessDelegationTool(toolName) || names.has(toolName)) continue;
+    willRunInForegroundExecutor ??= (
+      await import("@/archestra-mcp-server/delegation")
+    ).willRunInForegroundExecutor;
+    if (
+      await willRunInForegroundExecutor({
+        toolName,
+        agentId: params.agentId,
+        organizationId: params.organizationId,
+        userId,
+      })
+    ) {
+      names.add(toolName);
+    }
+  }
+  return names;
 }
 
 function getTrustedContext(

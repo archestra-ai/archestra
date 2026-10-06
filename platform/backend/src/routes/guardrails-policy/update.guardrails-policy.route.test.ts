@@ -224,7 +224,10 @@ describe("guardrails policy authoring", () => {
       draft,
       context,
     );
-    expect(preview.structuredContent).toMatchObject({
+    expect(
+      preview.structuredContent,
+      JSON.stringify(preview.structuredContent?.errors),
+    ).toMatchObject({
       valid: true,
       before: draft.content,
       after: draft.content,

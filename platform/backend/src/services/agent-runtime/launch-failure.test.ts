@@ -7,6 +7,7 @@ import {
   AgentWorkspaceModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import { afterEach, expect, test, vi } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -95,6 +96,14 @@ test.for([
     agentId: agent.id,
   });
   if (mode !== "initial") {
+    const retainedKey = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      name: "retained launch failure fixture",
+      scope: "personal",
+      authorId: user.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+      providerApiKeys: [{ provider: key.provider, providerApiKeyId: key.id }],
+    });
     const previous = await AgentRunModel.create({
       organizationId: org.id,
       agentId: agent.id,
@@ -104,8 +113,9 @@ test.for([
       backend: "kubernetes",
       runtimeScope: backend.resolveRuntimeScope({}),
       workloadName: `failure-${task.id}`,
+      virtualApiKeyId: retainedKey.virtualKey.id,
     });
-    await AgentRunModel.close({ id: previous.id });
+    await AgentRunModel.close({ id: previous.id, logs: "Complete prior turn" });
     await AgentWorkspaceModel.create({
       organizationId: org.id,
       agentId: agent.id,
@@ -127,6 +137,11 @@ test.for([
   );
   vi.spyOn(backend, "teardown").mockResolvedValue();
   const release = vi.spyOn(backend, "releaseRun").mockResolvedValue();
+  for (const method of ["streamOutput", "snapshotOutput"] as const) {
+    vi.spyOn(backend, method).mockImplementation(async ({ destination }) => {
+      destination.end("Complete prior turn");
+    });
+  }
   const stop = vi.spyOn(backend, "stopRun").mockImplementation(async (run) => {
     expect(
       (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))
@@ -162,6 +177,22 @@ test.for([
   );
   expect(Boolean(run.endedAt)).toBe(mode !== "stop-failure");
   expect(stop).toHaveBeenCalledTimes(mode === "initial" ? 0 : 1);
-  expect(release).toHaveBeenCalledTimes(mode === "continuation" ? 1 : 0);
+  expect(release).toHaveBeenCalledTimes(
+    mode === "initial" ? 0 : mode === "continuation" ? 2 : 1,
+  );
+  if (mode !== "initial")
+    expect(release).toHaveBeenCalledWith(
+      expect.objectContaining({ taskId: previousTask.id }),
+      expect.objectContaining({ retainWorkspaceKey: true }),
+    );
+  if (mode === "continuation")
+    expect(release).toHaveBeenCalledWith(
+      expect.objectContaining({
+        id: run.id,
+        taskId: run.taskId,
+        virtualApiKeyId: run.virtualApiKeyId,
+      }),
+      { retainWorkspaceKey: true },
+    );
   if (mode === "stop-failure") expect(workspace?.activeTaskId).toBe(task.id);
 });

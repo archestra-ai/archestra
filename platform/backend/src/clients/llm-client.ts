@@ -74,6 +74,13 @@ import config from "@/config";
 import { ENCRYPTED_CHAT_KEY_HEADER } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
+import { childSessionId, openappaCallerId } from "@/openappa/actor";
+import {
+  collectDelegationMarkers,
+  isDelegationMarkerLine,
+  mintDelegationMarker,
+  verifyDelegatedPrompt,
+} from "@/openappa/delegation";
 import {
   APPA_PARENT_HEADER,
   APPA_SESSION_HEADER,
@@ -193,7 +200,17 @@ export function createLLMModel(params: {
   userId?: string;
   externalAgentId?: string;
   sessionId?: string;
+  /**
+   * OpenAPPA session claim. Defaults to `sessionId`. A nested in-process child
+   * keeps the logging session as `sessionId` and sends its own child session
+   * here. The claim is not spawn proof.
+   */
+  appaSessionId?: string;
   appaParentId?: string;
+  /**
+   * Standalone signed marker for repair requests, stripped before the provider.
+   */
+  delegationProof?: string;
   source?: InteractionSource;
   baseUrl: string | null;
   contextIsTrusted?: boolean;
@@ -230,6 +247,8 @@ export function createLLMModel(params: {
     userId,
     externalAgentId,
     sessionId,
+    appaSessionId,
+    delegationProof,
     source,
     baseUrl,
     contextIsTrusted,
@@ -253,7 +272,10 @@ export function createLLMModel(params: {
   }
   if (sessionId) {
     clientHeaders[SESSION_ID_HEADER] = sessionId;
-    if (openappaEnabled()) clientHeaders[APPA_SESSION_HEADER] = sessionId;
+  }
+  const appaSession = appaSessionId ?? sessionId;
+  if (openappaEnabled() && appaSession) {
+    clientHeaders[APPA_SESSION_HEADER] = appaSession;
   }
   if (openappaEnabled() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
@@ -319,7 +341,8 @@ export function createLLMModel(params: {
     modelName,
     baseURL,
     headers,
-    fetch: createTracedFetch(),
+    fetch: withDelegationProof(createTracedFetch(), delegationProof),
+    preserveAdmittedText: Boolean(delegationProof),
     supportedEndpoints,
   });
 }
@@ -354,6 +377,10 @@ export async function createLLMModelForAgent(params: {
    * executed agent is the advisor built-in.
    */
   delegationBillingEnvironmentId?: string | null;
+  /** See createLLMModel. Logging sessionId stays separate from this claim. */
+  appaSessionId?: string;
+  appaParentId?: string;
+  delegationProof?: string;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -475,6 +502,9 @@ export async function createLLMModelForAgent(params: {
     userId,
     externalAgentId,
     sessionId,
+    appaSessionId: params.appaSessionId,
+    appaParentId: params.appaParentId,
+    delegationProof: continuationDelegationProof(params),
     source,
     baseUrl,
     contextIsTrusted,
@@ -517,6 +547,7 @@ type ProviderModelConfig = {
     modelName: string;
     baseURL: string | undefined;
     headers?: Record<string, string>;
+    preserveAdmittedText?: boolean;
     fetch?: typeof globalThis.fetch;
     /**
      * True when baseURL is the provider's own host (createDirectLLMModel)
@@ -743,7 +774,15 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
     // the bare host, so direct calls append it; through the LLM proxy both
     // surfaces hang off the agent-id prefix and the SDK's own
     // `/responses` / `/chat/completions` suffix is the whole path.
-    createModel: ({ apiKey, modelName, baseURL, headers, fetch, direct }) =>
+    createModel: ({
+      apiKey,
+      modelName,
+      baseURL,
+      headers,
+      fetch,
+      direct,
+      preserveAdmittedText,
+    }) =>
       requiresPerplexityAgentApi(modelName)
         ? createOpenAI({
             apiKey,
@@ -762,12 +801,14 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
           // here: Perplexity does not accept reasoning back. The Agent API branch
           // above needs none of this — that surface has no inline <think>
           // convention.
-          wrapLanguageModel({
-            model: createOpenAI({ apiKey, baseURL, headers, fetch }).chat(
-              modelName,
-            ),
-            middleware: extractReasoningMiddleware({ tagName: "think" }),
-          }),
+          preserveAdmittedText
+          ? createOpenAI({ apiKey, baseURL, headers, fetch }).chat(modelName)
+          : wrapLanguageModel({
+              model: createOpenAI({ apiKey, baseURL, headers, fetch }).chat(
+                modelName,
+              ),
+              middleware: extractReasoningMiddleware({ tagName: "think" }),
+            }),
     defaultBaseUrl: config.llm.perplexity.baseUrl,
     apiKeyRequiredMessage:
       "Perplexity API key is required. Please configure PERPLEXITY_API_KEY.",
@@ -1167,6 +1208,124 @@ function createTracedFetch(): typeof globalThis.fetch {
       dispatcher,
     } as RequestInit);
   };
+}
+
+const DELEGATION_MARKER = "[appa] delegated trajectory ";
+
+function continuationDelegationProof(params: {
+  organizationId: string;
+  userId: string;
+  delegationProof?: string;
+  appaParentId?: string;
+  appaSessionId?: string;
+}): string | undefined {
+  if (!params.delegationProof) return undefined;
+  const callerId = openappaCallerId({
+    userId: params.userId === "system" ? undefined : params.userId,
+  });
+  const markers = collectDelegationMarkers({
+    family: "anthropic:messages",
+    body: { messages: [{ role: "user", content: params.delegationProof }] },
+  });
+  const marker = markers[0];
+  if (
+    markers.length !== 1 ||
+    !marker?.spawnCallId ||
+    marker.parentId !== params.appaParentId ||
+    childSessionId(marker.parentId, marker.spawnCallId) !==
+      params.appaSessionId ||
+    !verifyDelegatedPrompt({
+      marker,
+      organizationId: params.organizationId,
+      callerId,
+      spawnerNativeId: marker.parentId,
+    })
+  ) {
+    throw new ApiError(
+      400,
+      "OpenAPPA cannot repair a delegated run without its verified spawn proof",
+    );
+  }
+  // Rebind the same authorized lineage, not the full task text. A marker signed
+  // for the original prompt cannot simply be lifted into a marker-only repair.
+  const proof = mintDelegationMarker({
+    organizationId: params.organizationId,
+    callerId,
+    parentId: marker.parentId,
+    spawnerNativeId: marker.parentId,
+    spawnCallId: marker.spawnCallId,
+    runtimeSessionId: marker.runtimeSessionId,
+    prompt: "",
+  });
+  if (!proof)
+    throw new ApiError(503, "OpenAPPA delegation signing is unavailable");
+  return proof;
+}
+
+function withDelegationProof(
+  fetchImpl: typeof globalThis.fetch,
+  proof: string | undefined,
+): typeof globalThis.fetch {
+  if (!proof) return fetchImpl;
+  if (!isDelegationMarkerLine(proof)) {
+    throw new ApiError(
+      400,
+      "OpenAPPA repair proof must be a standalone signed marker",
+    );
+  }
+  return (input, init) => {
+    if (
+      typeof init?.body !== "string" ||
+      init.body.includes(DELEGATION_MARKER)
+    ) {
+      return fetchImpl(input, init);
+    }
+    let body: unknown;
+    try {
+      body = JSON.parse(init.body);
+    } catch {
+      return fetchImpl(input, init);
+    }
+    return fetchImpl(input, {
+      ...init,
+      body: JSON.stringify(injectDelegationProof(body, proof)),
+    });
+  };
+}
+
+function injectDelegationProof(body: unknown, proof: string): unknown {
+  if (!body || typeof body !== "object" || Array.isArray(body)) return body;
+  const record = body as Record<string, unknown>;
+  const key = Array.isArray(record.messages)
+    ? "messages"
+    : Array.isArray(record.input)
+      ? "input"
+      : undefined;
+  if (key) {
+    const messages = [...(record[key] as unknown[])];
+    const index = messages.findLastIndex(
+      (message) =>
+        message &&
+        typeof message === "object" &&
+        (message as Record<string, unknown>).role === "user",
+    );
+    if (index < 0)
+      throw new ApiError(400, "OpenAPPA repair needs an existing user turn");
+    const message = messages[index] as Record<string, unknown>;
+    const content = message.content;
+    messages[index] = {
+      ...message,
+      content:
+        typeof content === "string"
+          ? `${content}\n\n${proof}`
+          : [
+              ...(Array.isArray(content) ? content : []),
+              { type: key === "input" ? "input_text" : "text", text: proof },
+            ],
+    };
+    return { ...record, [key]: messages };
+  }
+  return body;
 }
 
 /**

@@ -32,10 +32,11 @@ export async function watchTaskCompletion(params: {
         try {
           await traceCompletionDelivery({
             taskId: params.taskId,
-            target: params.target,
+            target: execution?.completionTarget ?? params.target,
             callback: () =>
               deliver({
-                target: params.target,
+                target: execution?.completionTarget ?? params.target,
+                taskId: params.taskId,
                 agentName: params.agentName,
                 text: notification,
               }),
@@ -87,6 +88,7 @@ async function artifactText(taskId: string): Promise<string> {
 }
 
 async function deliver(params: {
+  taskId: string;
   target: AgentRunCompletionTarget;
   agentName: string;
   text: string;
@@ -98,7 +100,26 @@ async function deliver(params: {
       threadId: params.target.threadId,
       agentName: params.agentName,
       text: params.text,
+      deliveryId: `task:${params.taskId}:completion`,
+      ...(params.target.deliveryOrigin
+        ? { deliveryOrigin: params.target.deliveryOrigin }
+        : {}),
+      ...(params.target.appaSession
+        ? { guardrailsSession: params.target.appaSession }
+        : {}),
     });
+    return;
+  }
+
+  const { authorizeEmailReply, backgroundSessionRequired } = await import(
+    "@/openappa/native-transport"
+  );
+  const producing = params.target.appaSession;
+  if ((await backgroundSessionRequired()) && !producing) {
+    logger.warn(
+      { providerId: params.target.providerId },
+      "Email completion has no producing session; not sending the result",
+    );
     return;
   }
 
@@ -109,11 +130,52 @@ async function deliver(params: {
       `Email provider ${params.target.providerId} is not configured`,
     );
   }
-  await provider.sendReply({
-    originalEmail: toIncomingEmail(params.target),
-    body: params.text,
-    agentName: params.agentName,
+  const originalEmail = toIncomingEmail(params.target);
+  if (!producing) {
+    await provider.sendReply({
+      originalEmail,
+      body: params.text,
+      agentName: params.agentName,
+    });
+    return;
+  }
+  const egress = await authorizeEmailReply({
+    session: {
+      organizationId: producing.organizationId,
+      sessionId: producing.sessionId,
+      ...(producing.callerId ? { callerId: producing.callerId } : {}),
+    },
+    messageId: params.target.originalMessageId,
+    mailbox: params.target.toAddress,
+    threadId: params.target.originalMessageId,
+    content: params.text,
+    resolveRecipients: () => {
+      if (!provider.getReplyRecipients) {
+        throw new Error("Reply recipients are not available");
+      }
+      return provider.getReplyRecipients(originalEmail);
+    },
   });
+  if (egress.decision === "already_delivered") return;
+  if (egress.decision === "refused") {
+    logger.warn(
+      { messageId: params.target.originalMessageId },
+      "Email completion reply was refused",
+    );
+    return;
+  }
+  try {
+    await provider.sendReply({
+      originalEmail,
+      body: params.text,
+      agentName: params.agentName,
+      ...(egress.recipients ? { recipientAddresses: egress.recipients } : {}),
+    });
+  } catch (error) {
+    if (egress.decision === "allowed") await egress.complete("failure");
+    throw error;
+  }
+  if (egress.decision === "allowed") await egress.complete("success");
 }
 
 async function traceCompletionDelivery(params: {

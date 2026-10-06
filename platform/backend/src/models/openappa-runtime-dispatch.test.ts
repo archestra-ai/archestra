@@ -50,6 +50,26 @@ test("a released runtime call has one durable execution claimant across concurre
       (row) => row.operationId === `runtime-dispatch:${claim.toolCallId}`,
     ),
   ).toHaveLength(1);
+  const gatewayClaims = await Promise.all(
+    Array.from({ length: 8 }, () =>
+      OpenAppaSpawnCorrelationModel.claimRuntimeDispatch({
+        ...claim,
+        dispatch: "gateway",
+      }),
+    ),
+  );
+  expect(gatewayClaims.filter(Boolean)).toHaveLength(1);
+  expect(
+    await OpenAppaSpawnCorrelationModel.claimRuntimeDispatch({
+      ...claim,
+      dispatch: "gateway",
+    }),
+  ).toBe(false);
+  expect(
+    (await db.select().from(schema.openappaOperationsTable)).filter(
+      (row) => row.operationId === `gateway-dispatch:${claim.toolCallId}`,
+    ),
+  ).toHaveLength(1);
 });
 
 test("a missing, pending, or denied authorization cannot reserve a runtime dispatch", async ({

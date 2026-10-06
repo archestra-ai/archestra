@@ -22,6 +22,7 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import { isExecuteRemedyPlanTool } from "@/openappa/chatops-review";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import {
   resolveAgentRuntime,
@@ -29,6 +30,7 @@ import {
   runTaskInAgentRuntime,
 } from "@/services/agent-runtime/pod-run";
 import { preflightAgentRuntimeLaunch } from "@/services/agent-runtime/preflight";
+import type { RuntimeEmailTurn } from "@/services/agent-runtime/runtime-email-ingress";
 import type {
   A2AContext,
   A2AMessage,
@@ -159,14 +161,22 @@ interface A2AManagerConfig {
  * ChatOps run was traced as `a2a` because nothing reads that key.
  */
 export interface A2ASystemParams {
+  /** Authenticated host source; never accepted from A2A message arguments. */
+  openappaParentSession?: import("@/openappa/service").OpenAppaSession;
   /** New A2A task, retained runtime workspace: terminal tasks remain immutable. */
   resumeFromTaskId?: string;
   sessionId?: string;
   /** Project assigned by an interactive Chat execution launcher. */
   projectId?: string;
   source?: InteractionSource;
+  reviewOrigin?: import("@/openappa/review-origin").ReviewOrigin;
   routeCategory?: RouteCategory;
   completionTarget?: AgentRunCompletionTarget;
+  /**
+   * Server-built email room for a runtime turn. Not a client header.
+   * Admission uses the proxy session, not this object's identity.
+   */
+  runtimeEmailTurn?: RuntimeEmailTurn;
   /**
    * Interactive is reserved for a person opening the execution terminal in
    * Chat. Every other durable task is one-shot so delegation surfaces can
@@ -647,6 +657,10 @@ export class A2AManager {
             if (runtime && runOpts.taskId) {
               return runTaskInAgentRuntime({
                 resumeFromTaskId,
+                runtimeEmailTurn: systemParams?.runtimeEmailTurn,
+                emailAttachments: systemParams?.runtimeEmailTurn
+                  ? currentTurnAttachments
+                  : undefined,
                 runtime,
                 // Each task is a turn; continuations share the retained
                 // Sandbox identity and adoption never repeats a started turn.
@@ -656,6 +670,7 @@ export class A2AManager {
                 organizationId: actor.organizationId,
                 projectId: systemParams?.projectId,
                 completionTarget: systemParams?.completionTarget,
+                openappaParentSession: systemParams?.openappaParentSession,
                 task: executedTurnText,
                 modelId: agent.modelId,
                 llmApiKeyId: agent.llmApiKeyId,
@@ -664,6 +679,26 @@ export class A2AManager {
                 runtimeCrossing: systemParams?.runtimeCrossing,
                 onTextDelta: runOpts.onTextDelta,
                 abortSignal: runOpts.abortSignal,
+              });
+            }
+            if (systemParams?.openappaParentSession && sessionId) {
+              const { inheritTaskSession } = await import(
+                "@/openappa/task-provenance"
+              );
+              await inheritTaskSession({
+                parent: systemParams.openappaParentSession,
+                session: {
+                  organization_id: actor.organizationId,
+                  session_id: sessionId,
+                  ...(actor.kind === "user"
+                    ? { caller_id: `user:${actor.id}` }
+                    : {}),
+                },
+                occurrenceId: runOpts.taskId ?? sessionId,
+                input: JSON.stringify({
+                  message: executedTurnText,
+                  attachments: currentTurnAttachments,
+                }),
               });
             }
             return executeA2AMessage({
@@ -679,6 +714,7 @@ export class A2AManager {
               actorTeamId: actor.kind === "team" ? actor.id : undefined,
               sessionId,
               source: systemParams?.source,
+              reviewOrigin: systemParams?.reviewOrigin,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
               blockOnApprovalRequired: false, // No need to block. We check approval flow availability below
               originalUiMessages: contextUiMessages,
@@ -1356,6 +1392,9 @@ export class A2AManager {
       const result = await A2ATaskModel.applyApprovalDecisionsAndMaybeResume({
         taskId: task.id,
         lastMessageId: lastMessage.id,
+        preserveResolvedApprovals: task.approvalRequests.some((request) =>
+          isExecuteRemedyPlanTool(request.toolName),
+        ),
         approvalDecisions: approvalDecisions.map((d) => ({
           approvalId: d.approvalId,
           approved: d.approved,

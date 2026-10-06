@@ -111,7 +111,13 @@ export interface ChatToolContext {
   openedAppId?: string;
   chatOpsBindingId?: string;
   chatOpsThreadId?: string;
+  chatOpsOrigin?: Extract<
+    import("@/openappa/review-origin").ReviewOrigin,
+    { type: "chatops" }
+  >;
   sessionId?: string;
+  /** This run's OpenAPPA session. See ArchestraContext.appaSessionId. */
+  appaSessionId?: string;
   delegationChain?: string;
   scheduleTriggerRunId?: string;
   abortSignal?: AbortSignal;
@@ -278,6 +284,7 @@ export function buildMcpGatewayTool(params: {
                 agentId: ctx.agentId,
                 organizationId: ctx.organizationId,
                 sessionId: ctx.sessionId,
+                appaSessionId: ctx.appaSessionId,
                 scheduleTriggerRunId: ctx.scheduleTriggerRunId,
                 abortSignal: ctx.abortSignal,
                 elicitation: ctx.elicitation,
@@ -465,7 +472,9 @@ export function buildAgentDelegationTool(params: {
     isolationKey: ctx.scopeKey,
     chatOpsBindingId: ctx.chatOpsBindingId,
     chatOpsThreadId: ctx.chatOpsThreadId,
+    chatOpsOrigin: ctx.chatOpsOrigin,
     sessionId: ctx.sessionId,
+    appaSessionId: ctx.appaSessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
     delegationChain: ctx.delegationChain,
     abortSignal: ctx.abortSignal,

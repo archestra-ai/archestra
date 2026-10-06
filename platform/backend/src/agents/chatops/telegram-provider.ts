@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { z } from "zod";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -8,6 +9,7 @@ import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
   ChatOpsEventHandler,
+  ChatOpsGuardrailsContext,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
@@ -194,6 +196,7 @@ class TelegramProvider implements ChatOpsProvider {
       senderName: formatUserName(message.from),
       text,
       rawText,
+      ...(isReplyToBot && parentText ? { includesQuotedHistory: true } : {}),
       timestamp: new Date(message.date * 1000),
       isThreadReply: false,
       metadata: {
@@ -369,6 +372,53 @@ class TelegramProvider implements ChatOpsProvider {
 
   identityVerificationFailureText(): string {
     return "This Telegram account isn't linked to a user account yet. Send me /start in a direct message and I'll reply with a sign-in link to connect it.";
+  }
+
+  async getGuardrailsContext(
+    message: IncomingChatMessage,
+    options?: { purpose: "ingress" | "egress" },
+  ): Promise<ChatOpsGuardrailsContext | null> {
+    if (this.botId === null) return null;
+    try {
+      const chat = await this.callApi<TelegramChat>("getChat", {
+        chat_id: message.channelId,
+      });
+      if (String(chat.id) !== message.channelId) return null;
+      const context: ChatOpsGuardrailsContext = {
+        roomId: JSON.stringify([
+          "telegram",
+          String(this.botId),
+          message.channelId,
+        ]),
+        trust: "suspicious",
+        readers: null,
+      };
+      if (chat.type === "private") {
+        if (
+          options?.purpose !== "egress" &&
+          message.senderId !== message.channelId
+        )
+          return null;
+        const email = z
+          .email()
+          .safeParse(await this.getUserEmail(message.channelId));
+        if (email.success) {
+          context.readers = [email.data.trim().toLowerCase()];
+          context.trust = "trusted";
+        }
+      } else if (chat.type !== "group" && chat.type !== "supergroup") {
+        return null;
+      }
+      // Telegram has no complete group-member listing. Admins or the sender
+      // alone must never be presented as the full group audience.
+      return context;
+    } catch (error) {
+      logger.warn(
+        { errorType: error instanceof Error ? error.name : "Unknown" },
+        "[TelegramProvider] Guardrails room verification failed",
+      );
+      return null;
+    }
   }
 
   async getChannelName(channelId: string): Promise<string | null> {

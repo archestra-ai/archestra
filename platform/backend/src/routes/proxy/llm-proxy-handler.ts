@@ -83,7 +83,7 @@ import {
   EVENT_GENAI_CONTENT_COMPLETION,
   type SpanTeamInfo,
 } from "@/observability/tracing";
-import { scopedSessionId } from "@/openappa/actor";
+import { openappaCallerId, scopedSessionId } from "@/openappa/actor";
 import {
   type CollectedChildReturns,
   collectAndStripChildReturns,
@@ -135,6 +135,7 @@ import {
   stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
 } from "@/openappa/wire";
+import { requireDelegatedChildSession } from "@/proxy/plugins/appa-plugin-archestra/adapters/in-process-executor";
 import {
   asRecord,
   parseJsonHeader,
@@ -1275,6 +1276,35 @@ export async function handleLLMProxy<
     featureEnabled: appaFeatureEnabled,
     unsupportedClientAction,
   } = await getGuardrailsDeployment();
+  const credentialVirtualKeyId = virtualKeyId ?? passthroughVirtualKeyId;
+  if (credentialVirtualKeyId) {
+    const { assertRuntimeCredentialLease } = await import(
+      "@/services/agent-runtime/credential-lease"
+    );
+    for (const keyId of new Set(
+      [virtualKeyId, passthroughVirtualKeyId].filter(
+        (id): id is string => !!id,
+      ),
+    )) {
+      await assertRuntimeCredentialLease({
+        organizationId: resolvedAgent.organizationId,
+        virtualApiKeyId: keyId,
+        agentId: resolvedAgent.id,
+        callerId: openappaCallerId({
+          userId: authenticatedUserId,
+          appId: authenticatedApp?.id,
+          virtualApiKeyId: credentialVirtualKeyId,
+        }),
+        sessionId: firstHeaderValue(
+          headersForExtraction[APPA_SESSION_HEADER.toLowerCase()],
+        ),
+        parentId: firstHeaderValue(
+          headersForExtraction[APPA_PARENT_HEADER.toLowerCase()],
+        ),
+        enforceSession: appaActive,
+      });
+    }
+  }
   // Enforcement is off, but OpenAPPA records what it must know when enforcement
   // turns on: the sessions that start now, and the calls governed sessions make.
   // The records hold ids only, so they cover encrypted chats too.
@@ -1676,7 +1706,7 @@ export async function handleLLMProxy<
         !isInternalRequest &&
         !authenticatedUserId &&
         !authenticatedApp &&
-        !virtualKeyId
+        !credentialVirtualKeyId
       ) {
         throw new ApiError(
           401,
@@ -1693,13 +1723,14 @@ export async function handleLLMProxy<
       const appaUserId =
         authenticatedUserId ??
         (isInternalRequest &&
-        (isInternalChat || (!authenticatedApp && !virtualKeyId))
+        (isInternalChat || (!authenticatedApp && !credentialVirtualKeyId))
           ? userId
           : undefined);
-      // Delegated A2A runs share the parent's logging session, but have no
-      // APPA child-return lifecycle. Keep their events out of that trajectory;
-      // the existing guardrails still evaluate the child independently.
-      // Only the trusted internal executor's agent chain selects this path.
+      // A loopback chain longer than one agent is an in-process child. It is
+      // governed only when a verified spawn marker (or child-trajectory
+      // receipt) names the parent and call. Headers are claims. External
+      // chains stay unauthenticated-rejected above and are not this path.
+      // Nonguarded mode still skips: enforcement off must not start a child.
       const delegatedRun =
         isInternalRequest &&
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
@@ -1795,27 +1826,44 @@ export async function handleLLMProxy<
         headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
           boundRuntimeIdentity.workloadName;
       }
-      const callerId = appaUserId
-        ? `user:${appaUserId}`
-        : boundRuntimeIdentity
+      const callerId =
+        !appaUserId && boundRuntimeIdentity
           ? boundRuntimeIdentity.principal
-          : authenticatedApp
-            ? `app:${authenticatedApp.id}`
-            : virtualKeyId
-              ? `virtual-key:${virtualKeyId}`
-              : undefined;
+          : openappaCallerId({
+              userId: appaUserId,
+              appId: authenticatedApp?.id,
+              virtualApiKeyId: credentialVirtualKeyId,
+            });
+      const governDelegatedRun =
+        appaActive && delegatedRun && !connectionSetupBypass;
+      if (governDelegatedRun) {
+        const bound = requireDelegatedChildSession({
+          organizationId: resolvedAgent.organizationId,
+          callerId,
+          markers: delegationMarkers ?? [],
+          receipts: childTrajectoryReceipts ?? [],
+          claimedSessionId: appaClaims.sessionId,
+          claimedParentId: appaClaims.parentId,
+        });
+        headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] =
+          bound.sessionId;
+        headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] = bound.parentId;
+        appaClaims.sessionId = bound.sessionId;
+        appaClaims.parentId = bound.parentId;
+      }
+      const skipDelegatedTrajectory = delegatedRun && !governDelegatedRun;
       // A platform request over loopback that brings no credential of its own.
       // Only such a request may name an unscoped session in the header.
       const platformLoopback =
         isInternalRequest &&
         !authenticatedUserId &&
         !authenticatedApp &&
-        !virtualKeyId;
+        !credentialVirtualKeyId;
       const unsupportedClient =
         appaActive &&
         !connectionSetupBypass &&
         !isInternalChat &&
-        !delegatedRun &&
+        !skipDelegatedTrajectory &&
         headersForExtraction[APPA_SESSION_HEADER.toLowerCase()] === undefined &&
         headersForExtraction[APPA_PARENT_HEADER.toLowerCase()] === undefined &&
         !APPA_CLIENT_ADAPTERS.some((adapter) =>
@@ -1835,7 +1883,7 @@ export async function handleLLMProxy<
       if (
         appaActive &&
         !connectionSetupBypass &&
-        !delegatedRun &&
+        !skipDelegatedTrajectory &&
         !unsupportedClient
       ) {
         appaCallerId = callerId;
@@ -1996,7 +2044,7 @@ export async function handleLLMProxy<
         }
       } else if (
         appaObserving &&
-        !delegatedRun &&
+        !skipDelegatedTrajectory &&
         (isInternalRequest ||
           authenticatedUserId ||
           authenticatedApp ||
@@ -2081,14 +2129,23 @@ export async function handleLLMProxy<
             "OpenAPPA Chat session requires the conversation's user",
           );
         if (isInternalChat && appaUserId) {
-          const conversationAgentId = await ConversationModel.getAgentIdForUser(
-            openappaSession.session_id,
-            appaUserId,
-            resolvedAgent.organizationId,
-          );
+          // A nested child session is not a conversation id. Ownership is
+          // checked against the logging conversation; the child agent is not
+          // the conversation's agent.
+          const chatConversationId = openappaSession.parent_id
+            ? sessionId
+            : openappaSession.session_id;
+          const conversationAgentId = chatConversationId
+            ? await ConversationModel.getAgentIdForUser(
+                chatConversationId,
+                appaUserId,
+                resolvedAgent.organizationId,
+              )
+            : null;
           if (
             !conversationAgentId ||
-            (source !== "chat:compaction" &&
+            (!openappaSession.parent_id &&
+              source !== "chat:compaction" &&
               conversationAgentId !== resolvedAgent.id)
           ) {
             throw new ApiError(
@@ -2118,6 +2175,8 @@ export async function handleLLMProxy<
         });
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: openappaSession,
+          inProcessExecutor:
+            isInternalRequest && platformLoopback && !isInternalChat,
           profileId: resolvedAgent.id,
           toolIdentity,
           request: appaRequest,
@@ -2132,6 +2191,8 @@ export async function handleLLMProxy<
       } else if (observedSession) {
         pluginContext.resources.set(APPA_PLUGIN_TRUSTED_CONTEXT, {
           session: observedSession,
+          inProcessExecutor:
+            isInternalRequest && platformLoopback && !isInternalChat,
           profileId: resolvedAgent.id,
           toolIdentity,
           request: lineageRequest(),

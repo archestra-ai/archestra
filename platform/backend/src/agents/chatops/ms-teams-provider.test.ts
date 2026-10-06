@@ -1,5 +1,10 @@
+import { TeamsInfo, type TurnContext } from "botbuilder";
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
-import type { ChatThreadMessageFile, ThreadFileOutcome } from "@/types";
+import type {
+  ChatThreadMessageFile,
+  IncomingChatMessage,
+  ThreadFileOutcome,
+} from "@/types";
 import MSTeamsProvider from "./ms-teams-provider";
 
 /**
@@ -57,6 +62,143 @@ function createProvider(): MSTeamsProvider {
   (provider as any).adapter = {};
   return provider;
 }
+
+describe("MSTeamsProvider.getGuardrailsContext", () => {
+  const message: IncomingChatMessage = {
+    messageId: "message-1",
+    channelId: "19:channel@thread.tacv2",
+    workspaceId: "00000000-0000-4000-8000-000000000002",
+    senderId: "sender-1",
+    senderName: "Alice",
+    text: "Question",
+    rawText: "Question",
+    isThreadReply: false,
+    timestamp: new Date("2026-01-01T00:00:00Z"),
+    metadata: { tenantId: "tenant-1", conversationType: "channel" },
+  };
+
+  function setup() {
+    const provider = createProvider();
+    const members = { get: vi.fn(), withUrl: vi.fn().mockReturnThis() };
+    const user = { get: vi.fn() };
+    const channel = { allMembers: members };
+    const graphClient = {
+      teams: {
+        byTeamId: vi.fn().mockReturnValue({
+          channels: { byChannelId: vi.fn().mockReturnValue(channel) },
+        }),
+      },
+      chats: { byChatId: vi.fn().mockReturnValue({ members }) },
+      users: { byUserId: vi.fn().mockReturnValue(user) },
+    };
+    Object.assign(provider, { graphClient });
+    return { provider, members, graphClient, user };
+  }
+
+  test("includes paginated indirect shared-channel members", async () => {
+    const { provider, members } = setup();
+    members.get
+      .mockResolvedValueOnce({
+        value: [{ email: "Alice@Example.com", tenantId: "tenant-1" }],
+        odataNextLink: "https://graph.microsoft.com/v1.0/next-page",
+      })
+      .mockResolvedValueOnce({
+        value: [{ email: "guest@example.net", tenantId: "external-tenant" }],
+      });
+    expect(await provider.getGuardrailsContext(message)).toMatchObject({
+      trust: "suspicious",
+      readers: ["alice@example.com", "guest@example.net"],
+    });
+  });
+
+  test("does not treat an incomplete directory response as a smaller audience", async () => {
+    const { provider, members } = setup();
+    members.get.mockResolvedValue({
+      value: [{ email: "alice@example.com", tenantId: "tenant-1" }, {}],
+    });
+    expect((await provider.getGuardrailsContext(message))?.readers).toBeNull();
+  });
+
+  test("resolves a real Bot Framework personal ID from its authenticated AAD sender, not Graph chats", async () => {
+    const { provider, graphClient, user } = setup();
+    const aadObjectId = "00000000-0000-4000-8000-000000000003";
+    user.get.mockResolvedValue({
+      id: aadObjectId,
+      mail: "Alice@Example.com",
+      userType: "Member",
+    });
+    expect(
+      await provider.getGuardrailsContext({
+        ...message,
+        channelId: "a:stable-dm",
+        senderId: aadObjectId,
+        metadata: {
+          tenantId: "tenant-1",
+          conversationType: "personal",
+          senderAadObjectId: aadObjectId,
+        },
+      }),
+    ).toMatchObject({ trust: "trusted", readers: ["alice@example.com"] });
+    expect(graphClient.teams.byTeamId).not.toHaveBeenCalled();
+    expect(graphClient.chats.byChatId).not.toHaveBeenCalled();
+    expect(graphClient.users.byUserId).toHaveBeenCalledWith(aadObjectId);
+  });
+
+  test.each([
+    "guest",
+    "missing-aad",
+    "different-user",
+    "invalid-mail",
+  ] as const)("personal conversations do not invent trusted readers for %s facts", async (invalid) => {
+    const { provider, user, graphClient } = setup();
+    const aadObjectId = "00000000-0000-4000-8000-000000000003";
+    user.get.mockResolvedValue({
+      id: invalid === "different-user" ? "other-id" : aadObjectId,
+      mail: invalid === "invalid-mail" ? "not-an-email" : "guest@example.net",
+      userType: "Guest",
+    });
+    const result = await provider.getGuardrailsContext({
+      ...message,
+      channelId: "a:stable-dm",
+      senderId: aadObjectId,
+      metadata: {
+        tenantId: "tenant-1",
+        conversationType: "personal",
+        ...(invalid !== "missing-aad"
+          ? { senderAadObjectId: aadObjectId }
+          : {}),
+      },
+    });
+    expect(result).toMatchObject({
+      trust: "suspicious",
+      readers: invalid === "guest" ? ["guest@example.net"] : null,
+    });
+    expect(graphClient.chats.byChatId).not.toHaveBeenCalled();
+  });
+
+  test("does not trust a guest provisioned in the local tenant", async () => {
+    const { provider, members } = setup();
+    members.get.mockResolvedValue({
+      value: [
+        { email: "guest@example.net", tenantId: "tenant-1", roles: ["guest"] },
+      ],
+    });
+    expect(await provider.getGuardrailsContext(message)).toMatchObject({
+      trust: "suspicious",
+      readers: ["guest@example.net"],
+    });
+  });
+
+  test("does not send credentials to a foreign pagination origin", async () => {
+    const { provider, members } = setup();
+    members.get.mockResolvedValue({
+      value: [{ email: "alice@example.com", tenantId: "tenant-1" }],
+      odataNextLink: "https://outside.example/next-page",
+    });
+    expect((await provider.getGuardrailsContext(message))?.readers).toBeNull();
+    expect(members.withUrl).not.toHaveBeenCalled();
+  });
+});
 
 describe("MSTeamsProvider.wasBotMentioned", () => {
   test("true when the bot is @mentioned", () => {
@@ -216,6 +358,212 @@ describe("MSTeamsProvider.parseMuteReaction", () => {
         }),
       ),
     ).toBeNull();
+  });
+});
+
+describe("MSTeamsProvider thread continuity", () => {
+  const CHANNEL = "19:abc@thread.tacv2";
+  const OTHER_CHANNEL = "19:other@thread.tacv2";
+  const ROOT = "1700000000001";
+
+  test("a channel opener without replyToId or messageid uses activity.id, and replies reuse it", async () => {
+    const provider = createProvider();
+    const root = await provider.parseWebhookNotification(
+      makeActivity({
+        id: ROOT,
+        conversation: { id: CHANNEL, conversationType: "channel" },
+        channelData: {
+          team: { id: "19:general@thread.tacv2", aadGroupId: "team-uuid" },
+          channel: { id: CHANNEL },
+          tenant: { id: "tenant-1" },
+        },
+      }),
+      {},
+    );
+    const viaReplyTo = await provider.parseWebhookNotification(
+      makeActivity({
+        id: "1700000000002",
+        replyToId: ROOT,
+        conversation: {
+          id: `${CHANNEL};messageid=${ROOT}`,
+          conversationType: "channel",
+        },
+      }),
+      {},
+    );
+    const viaMessageId = await provider.parseWebhookNotification(
+      makeActivity({
+        id: "1700000000003",
+        conversation: {
+          id: `${CHANNEL};messageid=${ROOT}`,
+          conversationType: "channel",
+        },
+      }),
+      {},
+    );
+
+    expect(root?.threadId).toBe(ROOT);
+    expect(root?.isThreadReply).toBe(false);
+    expect(viaReplyTo?.threadId).toBe(root?.threadId);
+    expect(viaReplyTo?.channelId).toBe(root?.channelId);
+    expect(viaReplyTo?.isThreadReply).toBe(true);
+    expect(viaMessageId?.threadId).toBe(ROOT);
+    expect(viaMessageId?.channelId).toBe(CHANNEL);
+  });
+
+  test("the same root id in another channel is still that id (session scoping is not done here)", async () => {
+    const provider = createProvider();
+    const other = await provider.parseWebhookNotification(
+      makeActivity({
+        id: ROOT,
+        conversation: { id: OTHER_CHANNEL, conversationType: "channel" },
+        channelData: {
+          team: { id: "19:general@thread.tacv2", aadGroupId: "team-uuid" },
+          channel: { id: OTHER_CHANNEL },
+          tenant: { id: "tenant-1" },
+        },
+      }),
+      {},
+    );
+
+    expect(other?.threadId).toBe(ROOT);
+    expect(other?.channelId).toBe(OTHER_CHANNEL);
+  });
+
+  test("a channel opener with no activity id does not invent a thread id", async () => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeActivity({ id: undefined }),
+      {},
+    );
+
+    expect(result?.threadId).toBeUndefined();
+    expect(result?.messageId.startsWith("teams-")).toBe(true);
+  });
+
+  test("personal messages keep one conversation and do not thread on activity.id", async () => {
+    const provider = createProvider();
+    const conversation = { id: "a:stable-dm", conversationType: "personal" };
+    const channelData = { tenant: { id: "tenant-1" } };
+    const first = await provider.parseWebhookNotification(
+      makeActivity({
+        id: "dm-msg-1",
+        conversation,
+        channelData,
+        entities: [],
+      }),
+      {},
+    );
+    const second = await provider.parseWebhookNotification(
+      makeActivity({
+        id: "dm-msg-2",
+        replyToId: "dm-msg-1",
+        conversation,
+        channelData,
+        entities: [],
+      }),
+      {},
+    );
+
+    expect(first?.threadId).toBeUndefined();
+    expect(second?.threadId).toBeUndefined();
+    expect(first?.channelId).toBe("a:stable-dm");
+    expect(second?.channelId).toBe(first?.channelId);
+  });
+
+  test("group-chat messages do not thread on activity.id", async () => {
+    const provider = createProvider();
+    const result = await provider.parseWebhookNotification(
+      makeActivity({
+        id: "group-msg-1",
+        replyToId: "prior-group-message",
+        conversation: {
+          id: "19:meeting_abc@thread.v2",
+          conversationType: "groupChat",
+        },
+        channelData: { tenant: { id: "tenant-1" } },
+        entities: [],
+      }),
+      {},
+    );
+
+    expect(result?.threadId).toBeUndefined();
+    expect(result?.channelId).toBe("19:meeting_abc@thread.v2");
+  });
+
+  test.each([
+    "personal",
+    "channel",
+    "stored-thread",
+  ])("approval invokes keep the original %s session key instead of adopting the card ID", async (mode) => {
+    const provider = createProvider();
+    const channelId = mode === "personal" ? "a:stable-dm" : CHANNEL;
+    const storedThread = mode === "stored-thread" ? ROOT : undefined;
+    const activity = makeActivity({
+      type: "invoke",
+      id: "card-invoke",
+      replyToId: "approval-card-id",
+      conversation: {
+        id: `${channelId};messageid=${ROOT}`,
+        conversationType: mode === "personal" ? "personal" : "channel",
+      },
+      value: {
+        action: "approvalDecision",
+        approvalId: "approval",
+        approved: true,
+        taskId: "task",
+        channelId,
+        threadId: storedThread,
+        messageId: "original-message",
+        originalSenderEmail: "alice@example.com",
+      },
+    });
+    const updateActivity = vi
+      .fn()
+      .mockResolvedValue({ id: "approval-card-id" });
+    const context = { activity, updateActivity } as unknown as TurnContext;
+    const member = vi.spyOn(TeamsInfo, "getMember").mockResolvedValue({
+      id: "user-1",
+      name: "Alice",
+      email: "alice@example.com",
+    });
+    Reflect.set(provider, "adapter", {
+      process: async (
+        _request: unknown,
+        _response: unknown,
+        callback: (context: TurnContext) => Promise<void>,
+      ) => callback(context),
+    });
+    const decision = vi.fn().mockResolvedValue(undefined);
+    provider.setEventHandler({
+      handleIncomingMessage: vi.fn(),
+      handleInteractiveApprovalDecision: decision,
+      handleInteractiveSelection: vi.fn(),
+      getAccessibleChatopsAgents: vi.fn().mockResolvedValue([]),
+    });
+    try {
+      await provider.processActivity(
+        { body: activity, headers: {} },
+        { status: () => ({ send: () => {} }), send: () => {} },
+        async () => {
+          throw new Error("approval must not become an ordinary turn");
+        },
+      );
+      expect(decision).toHaveBeenCalledWith(
+        provider,
+        expect.objectContaining({
+          channelId,
+          threadTs: storedThread,
+          originalMessage: expect.objectContaining({
+            threadId: storedThread,
+            messageId: "original-message",
+          }),
+        }),
+        expect.any(Function),
+      );
+    } finally {
+      member.mockRestore();
+    }
   });
 });
 

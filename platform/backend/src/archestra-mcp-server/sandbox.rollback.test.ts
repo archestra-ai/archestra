@@ -221,6 +221,12 @@ describe("sandbox tools (runtime enabled)", () => {
       expect(sandboxes).toHaveLength(1);
       expect(sandboxes[0].isDefault).toBe(true);
       expect(sandboxes[0].defaultCwd).toBe("/home/sandbox");
+      const organization = await OrganizationModel.getById(organizationId);
+      if (!organization) throw new Error("Expected sandbox organization");
+      const environment =
+        daggerEnvironmentRuntimeManager.organizationDefaultTarget(organization);
+      if (!environment)
+        throw new Error("Expected organization's default sandbox engine");
       // ...and the command was delegated to it.
       expect(runSpy).toHaveBeenCalledWith({
         sandboxId: sandboxes[0].id,
@@ -228,7 +234,7 @@ describe("sandbox tools (runtime enabled)", () => {
         command: "echo hi",
         cwd: undefined,
         timeoutSeconds: undefined,
-        environment: undefined,
+        environment,
       });
     });
 

@@ -252,7 +252,7 @@ describe("processIncomingEmail", () => {
       organizationId: org.id,
       userId: "system",
       source: "email",
-      sessionId: undefined,
+      sessionId: buildEmailSessionId(undefined, email.messageId),
       attachments: undefined,
     });
   });
@@ -936,7 +936,10 @@ describe("processIncomingEmail with sendReply option", () => {
             },
           ],
           systemParams: expect.objectContaining({
-            sessionId: buildEmailSessionId(email.conversationId),
+            sessionId: buildEmailSessionId(
+              email.conversationId,
+              email.messageId,
+            ),
             source: "email",
             completionTarget: {
               type: "email",
@@ -1169,10 +1172,11 @@ describe("processIncomingEmail with conversation history", () => {
     await processIncomingEmail(email, mockProvider, { sendReply: false });
 
     // Verify getConversationHistory was called
-    expect(mockGetConversationHistory).toHaveBeenCalledWith(
-      "conv-123",
-      email.messageId,
-    );
+    expect(mockGetConversationHistory).toHaveBeenCalledWith({
+      conversationId: "conv-123",
+      currentMessageId: email.messageId,
+      requesterAddress: email.fromAddress,
+    });
 
     // Verify the message sent to the agent includes conversation history
     expect(vi.mocked(executeA2AMessage)).toHaveBeenCalled();
@@ -2205,12 +2209,10 @@ describe("processIncomingEmail security modes", () => {
 });
 
 describe("buildEmailSessionId", () => {
-  test("returns undefined for undefined input", () => {
+  test("returns undefined when both conversation and message ids are blank", () => {
     expect(buildEmailSessionId(undefined)).toBeUndefined();
-  });
-
-  test("returns undefined for empty string", () => {
     expect(buildEmailSessionId("")).toBeUndefined();
+    expect(buildEmailSessionId(undefined, "")).toBeUndefined();
   });
 
   test("returns a short prefixed hash for a conversation ID", () => {
@@ -2237,5 +2239,24 @@ describe("buildEmailSessionId", () => {
     expect(result?.length).toBeLessThan(128);
     // email- (6) + 16 hex chars = 22 chars total
     expect(result?.length).toBe(22);
+  });
+
+  test("keeps the conversation hash when a message id is also present", () => {
+    const conversationId = "AAQkADJlZTk5ODQ4LThiNDEt";
+    expect(buildEmailSessionId(conversationId, "msg-1")).toBe(
+      buildEmailSessionId(conversationId),
+    );
+  });
+
+  test("uses the message id when the conversation id is missing", () => {
+    const messageId = "AAMkAGI2TG93N2Y5LWQ1Y2It";
+    const fromMissing = buildEmailSessionId(undefined, messageId);
+    const fromEmpty = buildEmailSessionId("", messageId);
+
+    expect(fromMissing).toMatch(/^email-[0-9a-f]{16}$/);
+    expect(fromEmpty).toBe(fromMissing);
+    expect(buildEmailSessionId(undefined, messageId)).toBe(fromMissing);
+    expect(fromMissing).not.toBe(buildEmailSessionId(undefined, "other-msg"));
+    expect(fromMissing).not.toBe(buildEmailSessionId(messageId));
   });
 });

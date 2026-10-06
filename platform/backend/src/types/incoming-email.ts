@@ -157,6 +157,8 @@ export interface EmailReplyOptions {
   htmlBody?: string;
   /** The name of the agent sending the reply (for display in email client) */
   agentName?: string;
+  /** Exact recipients admitted by guardrails; never fall back to implicit routing. */
+  recipientAddresses?: string[];
 }
 
 /**
@@ -266,16 +268,18 @@ export interface AgentIncomingEmailProvider {
    */
   sendReply(options: EmailReplyOptions): Promise<string>;
 
+  /** Resolve the provider's actual reply recipients, including Reply-To overrides. */
+  getReplyRecipients?(originalEmail: IncomingEmail): Promise<string[]>;
+
   /**
-   * Get conversation history for an email thread
-   * @param conversationId - The conversation ID from the email
-   * @param currentMessageId - The current message ID to exclude from history
-   * @returns Array of previous messages in the conversation, oldest first
+   * Get thread messages whose envelopes identify the requester as a reader.
+   * A conversation ID alone does not grant access to mailbox-wide history.
    */
-  getConversationHistory(
-    conversationId: string,
-    currentMessageId: string,
-  ): Promise<ConversationMessage[]>;
+  getConversationHistory(params: {
+    conversationId: string;
+    currentMessageId: string;
+    requesterAddress: string;
+  }): Promise<ConversationMessage[]>;
 
   /**
    * Get attachments for an email message

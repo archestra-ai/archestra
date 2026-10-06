@@ -55,7 +55,8 @@ import {
   toolEntries as credentialToolEntries,
   tools as credentialTools,
 } from "./credentials";
-import { delegationToolArgsSchema, handleDelegation } from "./delegation";
+import { handleDelegation } from "./delegation";
+import { delegationToolArgsSchema } from "./delegation-tool-args";
 import { isArchestraToolAvailableToAgent } from "./dynamic-tools";
 import {
   type ArchestraRuntimeToolEntry,
@@ -399,10 +400,22 @@ export async function executeArchestraTool(
   ) {
     throw { code: -32601, message: "Guardrails v2 is disabled" };
   }
+  // Policy editors and yell key off the logging session, so a nested child
+  // still cannot see them. Remedy and peer tools route by a signed session id.
+  // A child may call those only after this run has its own OpenAPPA session;
+  // the offer check refuses a proof that names any other session.
+  const openappaShortName = archestraMcpBranding.getToolShortName(toolName);
+  const signedChildRemedies =
+    Boolean(context.appaSessionId) &&
+    (openappaShortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
+      openappaShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
+      openappaShortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      openappaShortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME);
   if (
     (!openappaEnabled() ||
-      isAppaDelegatedRun(context.agent.id, context.delegationChain)) &&
-    isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
+      (isAppaDelegatedRun(context.agent.id, context.delegationChain) &&
+        !signedChildRemedies)) &&
+    isOpenappaTool(openappaShortName)
   ) {
     throw {
       code: -32601,

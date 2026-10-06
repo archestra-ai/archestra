@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { TimeInMs } from "@archestra/shared";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import logger from "@/logging";
+import A2ATaskApprovalRequestModel from "@/models/a2a/task-approval-request";
 import type { OpenAppaSession } from "./service";
 
 type HitlRuling = "approve" | "deny" | "none";
@@ -109,6 +110,8 @@ export async function recordHitlRuling(params: {
   session: OpenAppaSession;
   offerId: string;
   ruling: HitlRuling;
+  /** Host-verified row, never taken from model arguments or a native answer. */
+  durableApproval?: { id: string; taskId: string };
 }): Promise<boolean> {
   const pending = await cacheManager.getAndDelete<PendingHitlReview>(
     reviewKey(params.session, params.offerId),
@@ -125,7 +128,13 @@ export async function recordHitlRuling(params: {
   }
   await cacheManager.set(
     rulingKey(params.session, params.offerId, params.ruling),
-    { offerId: params.offerId, ruling: params.ruling },
+    {
+      offerId: params.offerId,
+      ruling: params.ruling,
+      ...(params.durableApproval
+        ? { durableApproval: params.durableApproval }
+        : {}),
+    },
     HITL_REVIEW_TTL_MS,
   );
   if (params.ruling !== "approve") {
@@ -156,6 +165,7 @@ export async function consumeHitlRuling(params: {
       await cacheManager.getAndDeleteMany<{
         offerId?: unknown;
         ruling?: unknown;
+        durableApproval?: { id: string; taskId: string };
       }>(keys)
     ).map((entry) => [entry.key, entry.value]),
   );
@@ -179,6 +189,15 @@ export async function consumeHitlRuling(params: {
       stagePresenceKey(params.session, params.offerId),
       { throwOnError: true },
     );
+  const approval = entries.get(
+    rulingKey(params.session, params.offerId, selected),
+  )?.durableApproval;
+  if (approval && (selected === "approve" || selected === "deny")) {
+    await A2ATaskApprovalRequestModel.deleteConsumedDecision({
+      ...approval,
+      approved: selected === "approve",
+    });
+  }
   return selected;
 }
 

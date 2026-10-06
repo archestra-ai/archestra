@@ -66,13 +66,20 @@ export const TOOL_DENIAL_INSTRUCTION =
  */
 export function buildAppaRemedyInstruction(params: {
   canAskUser: boolean;
+  /**
+   * In-process ChatOps or private email can park a selected plan for a person.
+   * This is not a question UI and it is not permission to approve.
+   */
+  durableRemedyReview?: boolean;
 }): string {
   const executeRemedyPlan = archestraMcpBranding.getToolName(
     TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   );
   const userDecision = params.canAskUser
     ? `When a ruling offers a plan that fits the user's request, apply that plan with ${executeRemedyPlan}. Use the plan's offer id and plan. ${executeRemedyPlan} asks the user for approval when the policy requires it, so a separate confirmation question is not necessary. After the plan is authorized, retry the original call or use the admitted output. If the plan is denied or dismissed, tell the user briefly that the action stays blocked, and stop that action. Do not offer the same plan again, ask the same question again, or invite the user to reconsider.`
-    : "Without user input, describe the available plans and stop. Do not choose or execute a plan.";
+    : params.durableRemedyReview
+      ? `When a ruling offers a plan that fits the request, submit that selected plan with ${executeRemedyPlan} using the plan's offer id and plan. Submitting the plan requests a review by the person who must decide. It does not approve the action, and you cannot approve it yourself. If the result says a review is required, stop and wait. Do not claim the action ran.`
+      : "Without user input, describe the available plans and stop. Do not choose or execute a plan.";
   return `The organization's guardrails policy can block a tool call. The call then returns a ruling as its result. The ruling explains the block and can offer remedy plans, each with an offer id. In your questions and replies, describe the block and each plan in the ruling's own words, and do not guess who the readers are or how access would change. A ruling is a policy decision, not a user decision, so the rule above about unapproved tools does not apply to it. ${userDecision} If the ruling offers no plan, explain the block to the user.`;
 }
 
@@ -191,6 +198,11 @@ export async function buildAgentSystemPrompt(params: {
    * answer it there, so their prompt never steers the model toward it.
    */
   canAskUser?: boolean;
+  /**
+   * Set only when this run installed the durable review sink. It lets the
+   * model submit a selected plan. It does not add a question tool.
+   */
+  durableRemedyReview?: boolean;
 }): Promise<string | undefined> {
   const {
     agent,
@@ -204,6 +216,7 @@ export async function buildAgentSystemPrompt(params: {
     openedApp,
     projectFileNames,
     canAskUser = false,
+    durableRemedyReview = false,
   } = params;
 
   const renderedPrompt = await renderAgentPrompt({
@@ -268,7 +281,10 @@ export async function buildAgentSystemPrompt(params: {
   // Only while OpenAPPA is enforcing: with it off there are no rulings to act
   // on and the instruction would describe tools the session cannot see.
   const appaRemedyInstruction = (await isGuardrailsV2Active())
-    ? buildAppaRemedyInstruction({ canAskUser: askUserAvailable })
+    ? buildAppaRemedyInstruction({
+        canAskUser: askUserAvailable,
+        durableRemedyReview: durableRemedyReview && !askUserAvailable,
+      })
     : null;
 
   const openedAppPrompt = openedApp

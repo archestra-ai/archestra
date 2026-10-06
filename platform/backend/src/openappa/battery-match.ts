@@ -72,10 +72,22 @@ const BATTERY_MATCH_RULES: BatteryMatchRule[] = [
     names: ["github"],
   },
   {
+    // Official Gmail MCP only. A name match is that connector's display
+    // name, not every Gmail-shaped server, and not the unofficial mcp/gmail
+    // image (that server can send; this package has no send rule).
+    battery: "gmail",
+    hosts: ["gmailmcp.googleapis.com"],
+    images: [],
+    names: ["gmail"],
+  },
+  {
+    // The pinned google-workspace package governs Drive tools only. A generic
+    // "google workspace" name still matches that package; it does not cover
+    // Gmail or Calendar. Calendar has no battery.
     battery: "google-workspace",
     hosts: [],
     images: [],
-    names: ["google workspace", "gmail", "google drive", "google calendar"],
+    names: ["google workspace", "google drive"],
   },
   { battery: "grain", hosts: ["grain.com"], images: [], names: ["grain"] },
   {

@@ -9,6 +9,7 @@ import {
   isNotNull,
   isNull,
   lt,
+  ne,
   or,
   type SQL,
   sql,
@@ -88,8 +89,8 @@ class AgentRunModel {
   }
 
   /**
-   * The run a live virtual key was minted for. Two rows for one key is not a
-   * binding: the caller must fail closed rather than pick a workspace.
+   * The workspace a key was issued for. Retained turns may share a key only
+   * when every persisted association agrees; never select another workspace.
    */
   static async findByVirtualApiKeyId(
     virtualApiKeyId: string,
@@ -98,9 +99,88 @@ class AgentRunModel {
       .select()
       .from(schema.agentRunsTable)
       .where(eq(schema.agentRunsTable.virtualApiKeyId, virtualApiKeyId))
-      .limit(2);
-    if (rows.length === 1) return rows[0];
-    return rows.length === 0 ? null : "ambiguous";
+      .orderBy(
+        desc(schema.agentRunsTable.startedAt),
+        desc(schema.agentRunsTable.id),
+      );
+    if (rows.length === 0) return null;
+    const first = rows[0];
+    return rows.every(
+      (row) =>
+        row.organizationId === first.organizationId &&
+        row.workloadName === first.workloadName &&
+        row.agentId === first.agentId &&
+        row.actorKind === first.actorKind &&
+        row.actorId === first.actorId &&
+        row.backend === first.backend &&
+        row.runtimeScope === first.runtimeScope,
+    )
+      ? first
+      : "ambiguous";
+  }
+
+  static async findById(id: string): Promise<AgentRunRecord | null> {
+    const [run] = await db
+      .select()
+      .from(schema.agentRunsTable)
+      .where(eq(schema.agentRunsTable.id, id))
+      .limit(1);
+    return run ?? null;
+  }
+
+  /** A credential's issued workspace, including retained turns; not a client claim. */
+  static async findRuntimeCredentialLease(params: {
+    organizationId: string;
+    virtualApiKeyId: string;
+  }) {
+    const [lease] = await db
+      .select({
+        key: getTableColumns(schema.virtualApiKeysTable),
+        run: getTableColumns(schema.agentRunsTable),
+        workspace: getTableColumns(schema.agentWorkspacesTable),
+      })
+      .from(schema.virtualApiKeysTable)
+      .leftJoin(
+        schema.agentRunsTable,
+        and(
+          eq(
+            schema.agentRunsTable.virtualApiKeyId,
+            schema.virtualApiKeysTable.id,
+          ),
+          eq(
+            schema.agentRunsTable.organizationId,
+            schema.virtualApiKeysTable.organizationId,
+          ),
+        ),
+      )
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        and(
+          eq(
+            schema.agentWorkspacesTable.organizationId,
+            schema.agentRunsTable.organizationId,
+          ),
+          eq(
+            schema.agentWorkspacesTable.workloadName,
+            schema.agentRunsTable.workloadName,
+          ),
+        ),
+      )
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.organizationId, params.organizationId),
+          eq(schema.virtualApiKeysTable.id, params.virtualApiKeyId),
+        ),
+      )
+      .orderBy(
+        desc(
+          sql`CASE WHEN ${schema.agentWorkspacesTable.activeTaskId} = ${schema.agentRunsTable.taskId} THEN 1 ELSE 0 END`,
+        ),
+        desc(schema.agentRunsTable.startedAt),
+        desc(schema.agentRunsTable.id),
+      )
+      .limit(1);
+    return lease ?? null;
   }
 
   /** Resolve an owned session URL (or any of its task aliases) to its current turn. */
@@ -573,6 +653,24 @@ class AgentRunModel {
       )
       .returning({ id: schema.agentRunsTable.id });
     return closed.length > 0;
+  }
+
+  static async hasOtherOpenRunForVirtualKey(params: {
+    virtualApiKeyId: string;
+    exceptRunId: string;
+  }): Promise<boolean> {
+    const [row] = await db
+      .select({ id: schema.agentRunsTable.id })
+      .from(schema.agentRunsTable)
+      .where(
+        and(
+          eq(schema.agentRunsTable.virtualApiKeyId, params.virtualApiKeyId),
+          isNull(schema.agentRunsTable.endedAt),
+          ne(schema.agentRunsTable.id, params.exceptRunId),
+        ),
+      )
+      .limit(1);
+    return row !== undefined;
   }
 
   static async clearVirtualApiKey(id: string): Promise<void> {

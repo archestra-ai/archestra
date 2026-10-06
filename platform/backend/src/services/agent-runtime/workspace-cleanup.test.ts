@@ -329,6 +329,7 @@ test.for([
   expect(stop).toHaveBeenCalledTimes(state === "TASK_STATE_COMPLETED" ? 0 : 1);
   expect(release).toHaveBeenCalledWith(run, {
     retainInteractiveSession: state === "TASK_STATE_COMPLETED",
+    retainWorkspaceKey: false,
   });
   expect(
     (await AgentWorkspaceModel.findByWorkloadName(run.workloadName))?.state,

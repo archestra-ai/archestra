@@ -19,12 +19,13 @@ class OpenAppaSpawnCorrelationModel {
     sessionId: string;
     toolCallId: string;
     spawn: boolean;
+    dispatch?: "runtime" | "gateway";
   }): Promise<boolean> {
     const result = await db.execute<{ operation_id: string }>(sql`
       INSERT INTO ${operations} (organization_id, session_id, caller_id, root, operation_id, status, input, decision)
       SELECT released.organization_id, released.session_id, released.caller_id, released.root,
-        ${`runtime-dispatch:${params.toolCallId}`}, 'complete',
-        ${JSON.stringify({ event: "runtime_dispatch", tool_call_id: params.toolCallId })}::jsonb,
+        ${`${params.dispatch ?? "runtime"}-dispatch:${params.toolCallId}`}, 'complete',
+        ${JSON.stringify({ event: `${params.dispatch ?? "runtime"}_dispatch`, tool_call_id: params.toolCallId })}::jsonb,
         '{"decision":"ack"}'::jsonb
       FROM ${operations} AS released
       WHERE released.organization_id = ${params.organizationId}
@@ -72,12 +73,70 @@ class OpenAppaSpawnCorrelationModel {
     return new Map(
       rows.map((row) => [
         row.operationId.slice(5),
-        {
-          spawn: row.spawn === "true",
-          tool: row.tool,
-        },
+        { spawn: row.spawn === "true", tool: row.tool },
       ]),
     );
+  }
+
+  /** Canonical arguments of a fork actually released by the runtime. */
+  static async releasedSpawnCall(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    parentSessionId: string;
+    toolCallId: string;
+  }): Promise<{ tool: unknown; arguments: unknown } | null> {
+    const [row] = await db
+      .select({
+        tool: sql<unknown>`COALESCE(${operations.input}->'semantic'->'tool', ${operations.input}->'tool')`,
+        arguments: sql<unknown>`COALESCE(${operations.input}->'semantic'->'arguments', ${operations.input}->'arguments')`,
+      })
+      .from(operations)
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.parentSessionId),
+          eq(operations.operationId, `call:${params.toolCallId}`),
+          eq(operations.status, "complete"),
+          params.callerId
+            ? eq(operations.callerId, params.callerId)
+            : isNull(operations.callerId),
+          sql`${operations.decision}->>'decision' = 'allow_call'`,
+          sql`jsonb_typeof(${operations.decision}->'spawn_binding') = 'string'`,
+          sql`length(${operations.decision}->>'spawn_binding') > 0`,
+        ),
+      );
+    return row ?? null;
+  }
+
+  /** Released forks, not tool names or client-declared completion status. */
+  static async releasedSpawnCallIds(params: {
+    organizationId: string;
+    callerId: string | undefined;
+    parentSessionId: string;
+    toolCallIds: readonly string[];
+  }): Promise<Set<string>> {
+    if (params.toolCallIds.length === 0) return new Set();
+    const rows = await db
+      .select({ operationId: operations.operationId })
+      .from(operations)
+      .where(
+        and(
+          eq(operations.organizationId, params.organizationId),
+          eq(operations.sessionId, params.parentSessionId),
+          inArray(
+            operations.operationId,
+            params.toolCallIds.map((id) => `call:${id}`),
+          ),
+          eq(operations.status, "complete"),
+          params.callerId
+            ? eq(operations.callerId, params.callerId)
+            : isNull(operations.callerId),
+          sql`${operations.decision}->>'decision' = 'allow_call'`,
+          sql`jsonb_typeof(${operations.decision}->'spawn_binding') = 'string'`,
+          sql`length(${operations.decision}->>'spawn_binding') > 0`,
+        ),
+      );
+    return new Set(rows.map((row) => row.operationId.slice("call:".length)));
   }
 
   /**

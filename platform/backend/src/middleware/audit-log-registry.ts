@@ -1,4 +1,6 @@
 import config from "@/config";
+import A2ATaskModel from "@/models/a2a/task";
+import A2ATaskApprovalRequestModel from "@/models/a2a/task-approval-request";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentModel from "@/models/agent";
 import AgentToolModel from "@/models/agent-tool";
@@ -29,6 +31,7 @@ import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaReviewContinuationModel from "@/models/openappa-review-continuation";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
@@ -145,6 +148,33 @@ export function deriveAction(
  * @public — consumed by audit-log-snapshot.test.ts to verify registry invariants
  */
 export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
+  "/api/openappa-reviews/:taskId": {
+    resourceType: "openappaReview",
+    action: "openappaReview.updated",
+    onlyWhenChanged: true,
+    resourceIdParam: "taskId",
+    fetchById: async (id, organizationId) => {
+      const task = await A2ATaskModel.findById(id);
+      const agent = task?.agentId
+        ? await AgentModel.findById(task.agentId)
+        : null;
+      if (!task || !agent || agent.organizationId !== organizationId)
+        return null;
+      const decisions = await A2ATaskApprovalRequestModel.findByTaskId(id);
+      const submissions =
+        await OpenAppaReviewContinuationModel.auditSubmissions(id);
+      return {
+        id,
+        state: task.state,
+        submissions,
+        decisions: decisions.map(({ approvalId, approved, resolved }) => ({
+          approvalId,
+          approved,
+          resolved,
+        })),
+      };
+    },
+  },
   "/api/openappa/yells/:id": {
     resourceType: "openappaYell",
     action: "openappaYell.updated",

@@ -493,6 +493,10 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
+  // Any authenticated user may open the page. The handler binds the signed
+  // offer to that user; a missing permission entry would 403 before that check.
+  [RouteId.GetOpenappaReview]: {},
+  [RouteId.SubmitOpenappaReview]: {},
   [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["update"] },
   [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },

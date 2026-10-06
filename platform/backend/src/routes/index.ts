@@ -61,6 +61,7 @@ export { default as openappaCoverageRoutes } from "./openappa-coverage/openappa-
 export { default as openappaExternalConsultsRoutes } from "./openappa-external-consults/openappa-external-consults.routes";
 export { default as openappaGithubSyncRoutes } from "./openappa-github-sync/openappa-github-sync.routes";
 export { default as openappaHelpersRoutes } from "./openappa-helpers/openappa-helpers.routes";
+export { default as openappaReviewRoutes } from "./openappa-review/openappa-review.routes";
 export { default as openappaYellsRoutes } from "./openappa-yells/openappa-yells.routes";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";

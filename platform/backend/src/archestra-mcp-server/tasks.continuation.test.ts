@@ -16,10 +16,19 @@ import {
   AgentRunInputModel,
   AgentRunModel,
   AgentWorkspaceModel,
+  VirtualApiKeyModel,
 } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import { scopedSessionId } from "@/openappa/actor";
+import {
+  observeUnenforcedSession,
+  startedUnenforced,
+} from "@/openappa/unenforced";
 import { kubernetesAgentRuntimeBackendDriver as backend } from "@/services/agent-runtime/backends/kubernetes";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { runtimeProxySession } from "@/services/agent-runtime/proxy-session";
+import { guardRuntimeCrossing } from "@/services/agent-runtime/runtime-crossing";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import { beforeEach, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
@@ -54,6 +63,16 @@ beforeEach(
     });
     vi.spyOn(agentRuntimeManager, "isEnabled", "get").mockReturnValue(true);
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("Complete prior transcript");
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("Complete prior transcript");
+      },
+    );
     const org = await makeOrganization();
     const user = await makeAdmin();
     userId = user.id;
@@ -141,6 +160,10 @@ test("an interactive resume starts the saved runtime without a new user instruct
   });
   await expect.poll(() => continuation.mock.calls.length).toBe(1);
   const spec = continuation.mock.calls[0][0].spec;
+  expect(backend.releaseRun).toHaveBeenCalledWith(
+    expect.objectContaining({ id: previous.id }),
+    expect.objectContaining({ retainWorkspaceKey: true }),
+  );
   expect(spec.frozenName).toBe(previous.workloadName);
   expect((await AgentRunModel.findByTaskId(task.id))?.title).toBe(
     previous.title,
@@ -150,6 +173,31 @@ test("an interactive resume starts the saved runtime without a new user instruct
   await expect
     .poll(async () => (await A2ATaskModel.findById(task.id))?.state)
     .toBe("TASK_STATE_FAILED");
+});
+
+test("a revoked retained credential refuses continuation without minting a replacement caller", async () => {
+  await connect(runtime);
+  const previous = await retainedRun();
+  if (!previous.virtualApiKeyId)
+    throw new Error("Missing retained credential fixture");
+  await VirtualApiKeyModel.delete(previous.virtualApiKeyId);
+  const continuation = vi.spyOn(backend, "continueRun");
+  const launch = vi.spyOn(backend, "launch");
+  const task = await startDetachedAgentTask({
+    actor: { kind: "user", id: userId, organizationId: agent.organizationId },
+    agentId: agent.id,
+    message: "Continue the retained draft",
+    systemParams: { resumeFromTaskId: previous.taskId },
+  });
+  await expect
+    .poll(async () => (await A2ATaskModel.findById(task.id))?.state)
+    .toBe("TASK_STATE_FAILED");
+  expect((await A2ATaskModel.findById(task.id))?.statusReason).toContain(
+    "prior workspace credentials are unavailable",
+  );
+  expect(await AgentRunModel.findByTaskId(task.id)).toBeNull();
+  expect(continuation).not.toHaveBeenCalled();
+  expect(launch).not.toHaveBeenCalled();
 });
 
 test("a continuation reuses the account after an image change and reports a later startup failure to the original thread", async () => {
@@ -508,6 +556,13 @@ async function retainedRun() {
     agentId: agent.id,
     state: "TASK_STATE_COMPLETED",
   });
+  const key = await VirtualApiKeyModel.create({
+    organizationId: agent.organizationId,
+    name: `retained-${task.id}`,
+    keyType: "passthrough",
+    scope: "personal",
+    authorId: userId,
+  });
   const session = await AgentRunModel.create({
     organizationId: agent.organizationId,
     agentId: agent.id,
@@ -518,6 +573,7 @@ async function retainedRun() {
     workloadName: `retained-${task.id}`,
     backend: "kubernetes",
     runtimeScope: backend.resolveRuntimeScope({}),
+    virtualApiKeyId: key.virtualKey.id,
     completionTarget: {
       type: "chatops",
       bindingId: crypto.randomUUID(),
@@ -540,3 +596,98 @@ async function retainedRun() {
   });
   return session;
 }
+
+test("an off-started source can steer its retained task after activation without creating a governed replacement", async () => {
+  const wasEnabled = config.openappa.enabled;
+  onTestFinished(() => {
+    config.openappa.enabled = wasEnabled;
+  });
+  await connect(runtime);
+  const previous = await retainedRun();
+  const source = {
+    organization_id: agent.organizationId,
+    session_id: scopedSessionId(`user:${userId}`, "off-task-source"),
+    caller_id: `user:${userId}`,
+  };
+  const previousTask = await A2ATaskModel.findById(previous.taskId);
+  if (!previousTask) throw new Error("Expected prior task");
+  const activeTask = await A2ATaskModel.create({
+    contextId: previousTask.contextId,
+    agentId: agent.id,
+    state: "TASK_STATE_WORKING",
+  });
+  await AgentRunModel.create({
+    organizationId: agent.organizationId,
+    agentId: agent.id,
+    taskId: activeTask.id,
+    actorKind: "user",
+    actorId: userId,
+    actorUserId: userId,
+    workloadName: previous.workloadName,
+    backend: "kubernetes",
+    runtimeScope: previous.runtimeScope,
+    virtualApiKeyId: previous.virtualApiKeyId,
+  });
+  await AgentWorkspaceModel.claim({
+    id: previous.taskId,
+    organizationId: agent.organizationId,
+    actorKind: "user",
+    actorId: userId,
+    agentId: agent.id,
+    taskId: activeTask.id,
+  });
+  config.openappa.enabled = false;
+  await observeUnenforcedSession(source);
+  config.openappa.enabled = true;
+  await GuardrailsDeploymentModel.setEnabled(true);
+  expect(
+    (
+      await guardRuntimeCrossing({
+        ...context,
+        openappaSession: source,
+        userId: "other-user",
+      })
+    ).kind,
+  ).toBe("refused");
+  expect(
+    (
+      await guardRuntimeCrossing({
+        ...context,
+        openappaSession: { ...source, organization_id: "foreign-org" },
+      })
+    ).kind,
+  ).toBe("refused");
+  expect(
+    (
+      await guardRuntimeCrossing({
+        ...context,
+        openappaSession: { ...source, session_id: "never-observed" },
+      })
+    ).kind,
+  ).toBe("refused");
+  const steer = vi.spyOn(backend, "steer").mockResolvedValue(undefined);
+  const unscoped = { ...source, session_id: "unscoped-historical-room" };
+  await observeUnenforcedSession(unscoped);
+  expect(
+    (await guardRuntimeCrossing({ ...context, openappaSession: unscoped }))
+      .kind,
+  ).toBe("refused");
+  const result = await executeArchestraTool(
+    TOOL_STEER_RUN_FULL_NAME,
+    {
+      task_id: previous.taskId,
+      message: "Explicit follow-up to historical task",
+    },
+    { ...context, openappaSession: source },
+  );
+  expect(result.isError, JSON.stringify(result.content)).not.toBe(true);
+  expect(steer).toHaveBeenCalledOnce();
+  if (!previous.virtualApiKeyId) throw new Error("Expected retained key");
+  const producer = runtimeProxySession({
+    organizationId: agent.organizationId,
+    virtualApiKeyId: previous.virtualApiKeyId,
+    workspaceId: previous.workloadName,
+    actor: { kind: "user", id: userId, organizationId: agent.organizationId },
+  });
+  expect(await startedUnenforced(producer)).toBe(true);
+});

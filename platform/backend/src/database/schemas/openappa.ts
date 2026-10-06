@@ -315,3 +315,61 @@ export const openappaExternalConsultsTable = pgTable(
     index("openappa_external_consults_root_idx").on(table.root),
   ],
 );
+
+// One immutable reader snapshot. room_id is the snapshot identity (org + ref +
+// trust + readers), not the transport thread. A later membership change is a
+// new row. Unresolved readers stay null — never an empty list.
+export const openappaNativeRoomsTable = pgTable(
+  "openappa_native_rooms",
+  {
+    roomId: text("room_id").primaryKey(),
+    organizationId: text("organization_id").notNull(),
+    provider: text().notNull(),
+    workspaceId: text("workspace_id").notNull(),
+    channelId: text("channel_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    trust: text().notNull(),
+    readersStatus: text("readers_status").notNull(),
+    readers: jsonb().$type<string[] | null>(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    index("openappa_native_rooms_org_idx").on(table.organizationId),
+    check(
+      "openappa_native_rooms_trust",
+      sql`${table.trust} IN ('trusted', 'suspicious')`,
+    ),
+    check(
+      "openappa_native_rooms_readers",
+      sql`(${table.readersStatus} = 'unresolved' AND ${table.readers} IS NULL) OR (${table.readersStatus} = 'resolved' AND ${table.readers} IS NOT NULL)`,
+    ),
+  ],
+);
+
+// An exclusively claimed native egress. Replay of a delivered row is complete; a
+// different digest or snapshot under the same event id is a conflict.
+export const openappaNativeDeliveriesTable = pgTable(
+  "openappa_native_deliveries",
+  {
+    organizationId: text("organization_id").notNull(),
+    sessionId: text("session_id").notNull(),
+    eventId: text("event_id").notNull(),
+    roomId: text("room_id").notNull(),
+    contentDigest: text("content_digest").notNull(),
+    status: text().notNull(),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [
+    primaryKey({
+      columns: [table.organizationId, table.sessionId, table.eventId],
+    }),
+    check(
+      "openappa_native_deliveries_status",
+      sql`${table.status} IN ('pending', 'delivered', 'failed')`,
+    ),
+  ],
+);

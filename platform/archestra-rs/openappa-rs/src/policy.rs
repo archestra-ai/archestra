@@ -95,6 +95,16 @@ pub(crate) struct Composed {
 /// unresolved, which the runtime refuses naming the entry. The composed document is
 /// checked as an open checks it, so a composition that returns is also a validation.
 pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Composed, String> {
+    let native_url = std::env::var(NATIVE_HELPER_URL_ENV)
+        .unwrap_or_else(|_| NATIVE_HELPER_URL_DEFAULT.to_owned());
+    compose_with_native_url(root, batteries, &native_url)
+}
+
+pub(crate) fn compose_with_native_url(
+    root: &str,
+    batteries: &[ResolvedBattery],
+    native_url: &str,
+) -> Result<Composed, String> {
     let document: toml::Table =
         toml::from_str(root).map_err(|error| format!("root policy: {error}"))?;
     refuse_host_variables(&document)?;
@@ -126,12 +136,110 @@ pub(crate) fn compose(root: &str, batteries: &[ResolvedBattery]) -> Result<Compo
     let content = String::from_utf8(config.policy_file().bytes().to_vec())
         .map_err(|error| error.to_string())?;
     let credentials = config.credentials().clone();
-    Runtime::check_hosted(config, None, crate::adapter::adapter())
+    // Host contracts come after root and battery tools. A user's bare rule for
+    // the same name is already in `content` and matches first. A `*` noop does
+    // not match a name this fragment declares.
+    let low_rank = bottom_rank(&content)?;
+    let content = append_native_contracts(&content, &low_rank, native_url)?;
+    let checked =
+        Config::hosted_included_deferred(&content, defaults(), |_| Err(IncludeResolution::Unknown))
+            .map_err(|error| error.to_string())?;
+    let content = String::from_utf8(checked.policy_file().bytes().to_vec())
+        .map_err(|error| error.to_string())?;
+    Runtime::check_hosted(checked, None, crate::adapter::adapter())
         .map_err(|error| error.to_string())?;
     Ok(Composed {
         content,
         credentials,
     })
+}
+
+/// The loopback the host serves for native room consults. Production sets this
+/// before compose; tests and an unset process use the default API port.
+const NATIVE_HELPER_URL_ENV: &str = "APPA_ARCHESTRA_NATIVE_HELPER_URL";
+const NATIVE_HELPER_URL_DEFAULT: &str =
+    "http://127.0.0.1:9000/api/openappa/helpers/00000000-0000-4000-8000-0000000000aa";
+
+/// Append the native ingress and reply contracts. The fragment is the host's,
+/// so it may name the host bridge token. Root and battery authors still cannot.
+/// The root chain's lowest rank, without rewriting the chain. An omitted chain
+/// is the engine default, whose lowest rank is `suspicious`.
+fn bottom_rank(content: &str) -> Result<String, String> {
+    let document: toml::Table = toml::from_str(content).map_err(|error| error.to_string())?;
+    let declared = document
+        .get("policy")
+        .and_then(toml::Value::as_table)
+        .and_then(|policy| policy.get("trust_chain"))
+        .and_then(toml::Value::as_array);
+    let rank = match declared {
+        Some(ranks) => ranks
+            .first()
+            .and_then(toml::Value::as_str)
+            .ok_or_else(|| "trust_chain has no rank".to_owned())?
+            .to_owned(),
+        None => "suspicious".to_owned(),
+    };
+    if rank.is_empty()
+        || !rank.chars().all(|character| {
+            character.is_ascii_alphanumeric() || character == '_' || character == '-'
+        })
+    {
+        return Err(format!("native contracts cannot name trust rank {rank:?}"));
+    }
+    Ok(rank)
+}
+
+fn append_native_contracts(content: &str, low_rank: &str, base: &str) -> Result<String, String> {
+    if base.contains('\n') || base.contains('"') {
+        return Err("native helper URL is not a single quoted string".to_owned());
+    }
+    Ok(format!("{content}\n{}", native_fragment(base, low_rank)))
+}
+
+fn native_fragment(base: &str, low_rank: &str) -> String {
+    format!(
+        r#"[externals.audience.native]
+url = "{base}/native"
+token_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"
+selectors = [
+  {{ template = "room/<id>" }},
+]
+
+[externals.context.native-room]
+url = "{base}/native-room"
+token_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"
+
+[[policy.annotator]]
+name = "native.source-trust"
+ranks = ["{low_rank}"]
+audiences = ["@native:room/$room_id"]
+marks = []
+effects = ["native.admitted"]
+
+[externals.annotators."native.source-trust"]
+url = "{base}/native.source-trust"
+token_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"
+
+[[policy.annotator]]
+name = "native.reply-check"
+ranks = ["{low_rank}"]
+audiences = ["@native:room/$room_id"]
+marks = []
+effects = ["native.admitted", "native.reply"]
+
+[externals.annotators."native.reply-check"]
+url = "{base}/native.reply-check"
+token_env = "APPA_ARCHESTRA_BRIDGE_TOKEN"
+
+[[policy.tool]]
+name = "host/archestra/native_ingress"
+annotator = "native.source-trust"
+
+[[policy.tool]]
+name = "host/archestra/native_reply"
+annotator = "native.reply-check"
+"#
+    )
 }
 
 /// A battery's policy as the host serves it, and the credential variables it reads.
@@ -297,16 +405,32 @@ fn is_url_segment(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::deployments::HostCredentials;
     use appa_eventlog::Backend;
     use appa_runtime::hooks;
     use appa_runtime_api::{Actor, HookDecision, HookEvent, ProposedCall, TrajectoryId};
 
     const BRIDGE_TOKEN_ENV: &str = "APPA_ARCHESTRA_OPENAPPA_RS_TEST_BRIDGE_TOKEN";
 
-    /// A compilation no organization's values reach, as a composition's is.
+    /// Runtime test credentials are explicit; no test mutates process wiring.
     fn compile(content: &str) -> Result<Config, String> {
-        super::compile(content, |var| HostCredentials::default().lookup(var))
+        super::compile(content, |var| {
+            matches!(var, super::BRIDGE_TOKEN_ENV | BRIDGE_TOKEN_ENV)
+                .then(|| "bridge-token".to_owned())
+        })
+    }
+
+    #[test]
+    fn composition_defers_native_credentials_but_runtime_compilation_requires_them() {
+        let composed = compose("[policy]\nversion = 2\n", &[]).expect("structural composition");
+        let error = super::compile(&composed.content, |_| None).unwrap_err();
+        assert!(error.contains(super::BRIDGE_TOKEN_ENV), "{error}");
+        assert!(super::compile(&composed.content, |_| Some(String::new())).is_err());
+        let config = super::compile(&composed.content, |var| {
+            (var == super::BRIDGE_TOKEN_ENV).then(|| "explicit-test-token".to_owned())
+        })
+        .expect("host supplied the real credential");
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        open(config, store).expect("only a resolved configuration can serve");
     }
     const GITHUB_ENTRY: &str = "batteries/github/appa.toml";
     const LINEAR_ENTRY: &str = "batteries/linear@sha256-3f9c/appa.toml";
@@ -597,9 +721,6 @@ token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
 url = \"http://127.0.0.1:9000/api/openappa/helpers/install-1/github\"
 token_env = \"APPA_ARCHESTRA_BRIDGE_TOKEN\"
 ";
-        // SAFETY: the stored document names the bridge token; the host resolves
-        // it at compile time and does not rewrite the policy bytes.
-        unsafe { std::env::set_var("APPA_ARCHESTRA_BRIDGE_TOKEN", "bridge-token") };
         compile(stored).expect("stored bytes compile without being rewritten");
         let runtime = memory_runtime(stored);
         let opened = started(&runtime, "restored-cross-kind").await;
@@ -666,7 +787,9 @@ delta = {{}}
             [
                 "read",
                 "mcp/github/get_file_contents",
-                "mcp/linear/create_issue"
+                "mcp/linear/create_issue",
+                "host/archestra/native_ingress",
+                "host/archestra/native_reply",
             ]
         );
         assert_eq!(
@@ -712,15 +835,17 @@ delta = {{}}
         let composed = compose(&root, &[github_battery(), stale]).unwrap();
         assert_eq!(
             tool_names(&composed.content),
-            ["read", "mcp/github/get_file_contents"]
+            [
+                "read",
+                "mcp/github/get_file_contents",
+                "host/archestra/native_ingress",
+                "host/archestra/native_reply",
+            ]
         );
     }
 
     #[test]
     fn composition_binds_helpers_to_the_bridge_and_is_deterministic() {
-        // SAFETY: tests in this module that read the variable all set the same value,
-        // and nothing else in the process reads it.
-        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
         let battery = || ResolvedBattery {
             entry: GITHUB_ENTRY.into(),
             name: "github".into(),
@@ -781,8 +906,6 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
     /// The alias table is the root's own declaration now, not the host's insertion.
     #[test]
     fn a_helper_named_after_a_path_step_is_not_addressable() {
-        // SAFETY: as above.
-        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
         let root = format!(
             "include = [\"{GITHUB_ENTRY}\"]\n[server_aliases]\ngithub = [\"github_prod\"]\n[policy]\nversion = 2\n"
         );
@@ -873,8 +996,6 @@ token_env = "APPA_PROVIDER_GITHUB_TOKEN"
     /// while a helper's own credential stays the sandbox's.
     #[test]
     fn the_jev_battery_composes_with_the_key_its_profile_names() {
-        // SAFETY: as above.
-        unsafe { std::env::set_var(BRIDGE_TOKEN_ENV, "bridge-token") };
         let jev = crate::batteries::bundled()
             .expect("bundled batteries validate")
             .iter()

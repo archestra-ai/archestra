@@ -98,11 +98,17 @@ export interface AgentRuntimeBackendDriver {
   /** Refresh renewable files without replaying the running command. */
   refreshCredentials?(session: AgentRunRecord): Promise<void>;
   /** Stop only this turn, keeping the workspace available for continuation. */
-  stopRun(session: AgentRunRecord): Promise<"suspended" | undefined>;
+  stopRun(
+    session: AgentRunRecord,
+    options?: { retainWorkspaceKey?: boolean },
+  ): Promise<"suspended" | undefined>;
   /** Revoke turn-scoped access; a successful live CLI may retain it until workspace cleanup. */
   releaseRun(
     session: AgentRunRecord,
-    options?: { retainInteractiveSession?: boolean },
+    options?: {
+      retainInteractiveSession?: boolean;
+      retainWorkspaceKey?: boolean;
+    },
   ): Promise<void>;
   /** True only for the original, still-running interactive CLI. */
   hasRetainedTerminal(

@@ -20,6 +20,7 @@ import {
   AgentWorkspaceModel,
   ChatOpsChannelBindingModel,
 } from "@/models";
+import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { RouteCategory } from "@/observability/tracing";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
@@ -59,6 +60,48 @@ describe("run tools", () => {
       };
     },
   );
+
+  test.each([
+    "missing",
+    "wrong-caller",
+    "unstarted",
+  ] as const)("guarded detached work refuses a %s source before creating a task", async (invalid) => {
+    const previous = config.openappa.enabled;
+    config.openappa.enabled = true;
+    onTestFinished(() => {
+      config.openappa.enabled = previous;
+    });
+    await GuardrailsDeploymentModel.setEnabled(true);
+    const result = await executeArchestraTool(
+      TOOL_START_RUN_FULL_NAME,
+      {
+        agent_id: callingAgent.id,
+        message: "A task with private parent context",
+      },
+      {
+        ...context,
+        ...(invalid === "missing"
+          ? {}
+          : {
+              openappaSession: {
+                organization_id: organizationId,
+                session_id: "unstarted-root",
+                caller_id:
+                  invalid === "wrong-caller" ? "user:other" : `user:${actorId}`,
+              },
+            }),
+      },
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain("producing");
+    const tasks = await A2ATaskModel.listForActor({
+      actorKind: "user",
+      actorId,
+      agentId: callingAgent.id,
+      pageSize: 100,
+    });
+    expect(tasks.tasks).toHaveLength(0);
+  });
 
   test("does not start work on a team Agent the actor cannot access", async ({
     makeAgent,
@@ -718,6 +761,8 @@ describe("run tools", () => {
       filename: "demo.mp4",
       data: Buffer.from("not-really-a-video"),
       comment: "demo recording",
+      guardrailsSession: undefined,
+      deliveryId: expect.stringMatching(new RegExp(`^task:${task.id}:file:`)),
     });
     upload.mockRestore();
   });

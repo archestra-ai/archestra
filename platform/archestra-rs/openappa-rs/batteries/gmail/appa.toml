@@ -1,0 +1,96 @@
+# Official Gmail MCP connector at https://gmailmcp.googleapis.com/mcp/v1.
+# Thirteen tools, no send tool. Rules name those operations only.
+# A root catchall that allows undeclared tools is not narrowed here.
+#
+# `self` is the OpenAPPA session principal: the invoking platform member's
+# email. It is not the Gmail credential's mailbox. This package does not
+# inspect that credential, and it does not look up a mailbox owner or a
+# shared-mailbox ACL. The rules fit only when the credential and the session
+# principal are the same person, or a root audience policy names who may see
+# the mailbox.
+#
+# Inbound mail and mailbox echoes are untrusted. Mutations need trusted data
+# whose audience contains `self`. `create_draft` stores a draft; `to`, `cc`,
+# and `bcc` are not readers who already received it, and the effect is
+# `gmail.drafted`, not a send. Its result is suspicious: `replyToMessageId`
+# and an omitted subject or body can come back as mailbox text. `create_label`
+# takes no message, thread, or reply argument, so its result is treated as the
+# caller's own label name and does not lower trust. There is no audience
+# source and no `send_message` rule.
+
+[policy]
+version = 2
+
+# --- reads: session principal only, untrusted ---
+
+[[policy.tool]]
+name = "mcp/gmail/search_threads"
+delta = { trust = "suspicious", audience = ["self"] }
+
+[[policy.tool]]
+name = "mcp/gmail/get_thread"
+delta = { trust = "suspicious", audience = ["self"] }
+
+[[policy.tool]]
+name = "mcp/gmail/get_message"
+delta = { trust = "suspicious", audience = ["self"] }
+
+[[policy.tool]]
+name = "mcp/gmail/list_drafts"
+delta = { trust = "suspicious", audience = ["self"] }
+
+[[policy.tool]]
+name = "mcp/gmail/list_labels"
+delta = { trust = "suspicious", audience = ["self"] }
+
+# --- drafts: stored, not delivered; the result can echo mailbox text ---
+
+[[policy.tool]]
+name = "mcp/gmail/create_draft"
+delta = { trust = "suspicious", audience = ["self"] }
+requires = { trust = "trusted", audience = { contains = ["self"] } }
+effects = ["gmail.drafted"]
+
+# --- label edits: local to the mailbox; message echoes stay untrusted ---
+
+[[policy.tool]]
+name = "mcp/gmail/create_label"
+delta = { audience = ["self"] }
+requires = { trust = "trusted", audience = { contains = ["self"] } }
+effects = ["gmail.labeled"]
+
+[[policy.tool]]
+name = "mcp/gmail/label_message"
+delta = { trust = "suspicious", audience = ["self"] }
+requires = { trust = "trusted", audience = { contains = ["self"] } }
+effects = ["gmail.labeled"]
+
+[[policy.tool]]
+name = "mcp/gmail/label_thread"
+delta = { trust = "suspicious", audience = ["self"] }
+requires = { trust = "trusted", audience = { contains = ["self"] } }
+effects = ["gmail.labeled"]
+
+[[policy.tool]]
+name = "mcp/gmail/unlabel_message"
+delta = { trust = "suspicious", audience = ["self"] }
+requires = { trust = "trusted", audience = { contains = ["self"] } }
+effects = ["gmail.labeled"]
+
+[[policy.tool]]
+name = "mcp/gmail/unlabel_thread"
+delta = { trust = "suspicious", audience = ["self"] }
+requires = { trust = "trusted", audience = { contains = ["self"] } }
+effects = ["gmail.labeled"]
+
+[[policy.tool]]
+name = "mcp/gmail/apply_sensitive_message_label"
+delta = { trust = "suspicious", audience = ["self"] }
+requires = { trust = "trusted", audience = { contains = ["self"] } }
+effects = ["gmail.sensitive"]
+
+[[policy.tool]]
+name = "mcp/gmail/apply_sensitive_thread_label"
+delta = { trust = "suspicious", audience = ["self"] }
+requires = { trust = "trusted", audience = { contains = ["self"] } }
+effects = ["gmail.sensitive"]

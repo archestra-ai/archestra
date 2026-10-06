@@ -6,6 +6,7 @@ import {
   type GraphServiceClient,
 } from "@microsoft/msgraph-sdk";
 import type {
+  AadUserConversationMember,
   ChatMessage,
   ChatMessageAttachment,
 } from "@microsoft/msgraph-sdk/models";
@@ -22,6 +23,7 @@ import {
   TurnContext,
 } from "botbuilder";
 import { PasswordServiceClientCredentialFactory } from "botframework-connector";
+import { z } from "zod";
 
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { LRUCacheManager } from "@/cache-manager";
@@ -31,6 +33,7 @@ import type {
   AddApprovalRequestFormOptions,
   ChatOpsApprovalDecision,
   ChatOpsEventHandler,
+  ChatOpsGuardrailsContext,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
@@ -308,7 +311,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       messageId: activity.id || `teams-${Date.now()}`,
       channelId,
       workspaceId,
-      threadId: extractThreadId(activity),
+      threadId: extractParsedThreadId(activity),
       senderId: activity.from?.aadObjectId || activity.from?.id || "unknown",
       senderName: activity.from?.name || "Unknown User",
       text: cleanedText,
@@ -318,6 +321,7 @@ class MSTeamsProvider implements ChatOpsProvider {
       metadata: {
         tenantId:
           activity.channelData?.tenant?.id || activity.conversation?.tenantId,
+        senderAadObjectId: activity.from?.aadObjectId,
         serviceUrl: activity.serviceUrl,
         conversationReference: TurnContext.getConversationReference(
           activity as Parameters<
@@ -797,6 +801,103 @@ class MSTeamsProvider implements ChatOpsProvider {
     }
   }
 
+  async getGuardrailsContext(
+    message: IncomingChatMessage,
+    options?: { purpose: "ingress" | "egress" },
+  ): Promise<ChatOpsGuardrailsContext | null> {
+    const tenantId = message.metadata?.tenantId;
+    if (typeof tenantId !== "string" || !tenantId) return null;
+    const channelId = message.channelId.split(";messageid=")[0];
+    const context: ChatOpsGuardrailsContext = {
+      roomId: JSON.stringify(["ms-teams", tenantId, channelId]),
+      trust: "suspicious",
+      readers: null,
+    };
+    if (!this.graphClient) return context;
+
+    try {
+      if (message.metadata?.conversationType === "personal") {
+        // Bot Framework a: conversation IDs are not Graph chat IDs.
+        const aadObjectId = message.metadata.senderAadObjectId;
+        if (
+          typeof aadObjectId !== "string" ||
+          !isUuid(aadObjectId) ||
+          (options?.purpose !== "egress" && message.senderId !== aadObjectId)
+        )
+          return context;
+        const user = await this.graphClient.users.byUserId(aadObjectId).get();
+        const email = z
+          .email()
+          .safeParse((user?.mail ?? user?.userPrincipalName)?.toLowerCase());
+        if (
+          !email.success ||
+          user?.id?.toLowerCase() !== aadObjectId.toLowerCase()
+        )
+          return context;
+        context.readers = [email.data];
+        context.trust =
+          tenantId === this.config.tenantId && user.userType === "Member"
+            ? "trusted"
+            : "suspicious";
+        return context;
+      }
+      const isChannel = message.metadata?.conversationType === "channel";
+      const teamId = isChannel
+        ? message.workspaceId && isUuid(message.workspaceId)
+          ? message.workspaceId
+          : await this.lookupTeamIdFromChannel(channelId)
+        : null;
+      if (isChannel && !teamId) return context;
+      // allMembers includes indirect members of shared channels; members does not.
+      const builder =
+        isChannel && teamId
+          ? this.graphClient.teams
+              .byTeamId(teamId)
+              .channels.byChannelId(channelId).allMembers
+          : this.graphClient.chats.byChatId(channelId).members;
+      let page = await builder.get();
+      const nextLinks = new Set<string>();
+      const readers = new Set<string>();
+      let internal = tenantId === this.config.tenantId;
+      while (page) {
+        if (!page.value) return context;
+        for (const entry of page.value) {
+          const member = entry as AadUserConversationMember;
+          const email = z.email().safeParse(member.email?.toLowerCase());
+          if (!email.success) return context;
+          readers.add(email.data);
+          if (member.tenantId !== tenantId || member.roles?.includes("guest")) {
+            internal = false;
+          }
+        }
+        if (!page.odataNextLink) {
+          if (readers.size > 0) {
+            context.readers = [...readers];
+            context.trust = internal ? "trusted" : "suspicious";
+          }
+          return context;
+        }
+        const next = page.odataNextLink;
+        if (
+          new URL(next).origin !== "https://graph.microsoft.com" ||
+          nextLinks.has(next) ||
+          nextLinks.size >= 100
+        ) {
+          return context;
+        }
+        nextLinks.add(next);
+        page = await builder.withUrl(next).get();
+      }
+      return context;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId },
+        "[MSTeamsProvider] Could not resolve guardrails room readers",
+      );
+      return context;
+    }
+  }
+
   async getChannelName(_channelId: string): Promise<string | null> {
     // MS Teams channel names are resolved during discoverChannels via TurnContext
     return null;
@@ -1087,8 +1188,9 @@ class MSTeamsProvider implements ChatOpsProvider {
       payload.workspaceId !== undefined
         ? payload.workspaceId
         : teamData?.aadGroupId || teamData?.id || null;
-    const threadId =
-      payload.threadId || extractThreadId(context.activity) || undefined;
+    // A card without a stored thread came from an unthreaded turn. Its invoke
+    // replyToId identifies the card, not the original APPA trajectory.
+    const threadId = payload.threadId || undefined;
     const messageId =
       payload.messageId ||
       context.activity.replyToId ||
@@ -1111,6 +1213,11 @@ class MSTeamsProvider implements ChatOpsProvider {
       isThreadReply: Boolean(threadId),
       metadata: {
         turnContext: context,
+        tenantId:
+          context.activity.channelData?.tenant?.id ??
+          context.activity.conversation?.tenantId,
+        conversationType: context.activity.conversation?.conversationType,
+        senderAadObjectId: context.activity.from?.aadObjectId,
         conversationReference: TurnContext.getConversationReference(
           context.activity as Parameters<
             typeof TurnContext.getConversationReference
@@ -1830,6 +1937,10 @@ function needsBotAuth(contentUrl: string, serviceUrl: string): boolean {
  * Prefers replyToId, which on a normal message points at the thread root. For
  * REACTION activities replyToId instead points at the reacted message, so the
  * reaction path uses extractThreadIdFromConversationId directly instead.
+ *
+ * Does not invent a thread from activity.id. Approval-card invokes call this
+ * when the card stored no threadId; using the invoke activity id would point
+ * the resume at the card instead of the thread the original turn used.
  */
 function extractThreadId(activity: {
   conversation?: { id?: string };
@@ -1839,6 +1950,31 @@ function extractThreadId(activity: {
     return activity.replyToId;
   }
   return extractThreadIdFromConversationId(activity.conversation?.id);
+}
+
+/**
+ * Thread id for a parsed message. Channel roots have neither replyToId nor
+ * `;messageid=`; their activity.id is the root later replies cite. DMs and
+ * group chats keep the conversation id as the session key — each message has
+ * its own activity.id, so using it would open a new session per message.
+ */
+function extractParsedThreadId(activity: {
+  id?: string;
+  conversation?: { id?: string; conversationType?: string };
+  replyToId?: string;
+}): string | undefined {
+  if (
+    activity.conversation?.conversationType === "personal" ||
+    activity.conversation?.conversationType === "groupChat"
+  ) {
+    return undefined;
+  }
+  const threaded = extractThreadId(activity);
+  if (threaded) return threaded;
+  if (activity.conversation?.conversationType === "channel" && activity.id) {
+    return activity.id;
+  }
+  return undefined;
 }
 
 /** The `;messageid=<root>` thread id encoded in a Teams conversation id, if any. */

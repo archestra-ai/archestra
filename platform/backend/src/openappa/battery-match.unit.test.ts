@@ -95,6 +95,60 @@ describe("matchBatteries", () => {
     ).toEqual([]);
   });
 
+  test("gmail matches its own package and not the drive battery", () => {
+    const both = new Set(["gmail", "google-workspace"]);
+    expect(
+      matchBatteries(
+        {
+          name: "Gmail",
+          serverUrl: "https://gmailmcp.googleapis.com/mcp/v1",
+          localConfig: null,
+        },
+        both,
+      ),
+    ).toEqual([{ battery: "gmail", evidence: "host" }]);
+    expect(
+      matchBatteries(
+        { name: "Gmail", serverUrl: null, localConfig: null },
+        both,
+      ),
+    ).toEqual([{ battery: "gmail", evidence: "name" }]);
+    expect(
+      matchBatteries(
+        { name: "Google Drive", serverUrl: null, localConfig: null },
+        both,
+      ),
+    ).toEqual([{ battery: "google-workspace", evidence: "name" }]);
+    expect(
+      matchBatteries(
+        { name: "Google Workspace", serverUrl: null, localConfig: null },
+        both,
+      ),
+    ).toEqual([{ battery: "google-workspace", evidence: "name" }]);
+    expect(
+      matchBatteries(
+        { name: "Google Calendar", serverUrl: null, localConfig: null },
+        both,
+      ),
+    ).toEqual([]);
+    expect(
+      matchBatteries(
+        { name: "Gmail", serverUrl: null, localConfig: null },
+        new Set(["google-workspace"]),
+      ),
+    ).toEqual([]);
+    expect(
+      matchBatteries(
+        {
+          name: "Team mail",
+          serverUrl: null,
+          localConfig: { dockerImage: "mcp/gmail:latest" },
+        },
+        both,
+      ),
+    ).toEqual([]);
+  });
+
   test("a name fragment matches whole words only", () => {
     expect(
       matchBatteries(

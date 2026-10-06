@@ -1021,6 +1021,21 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "external consult dataset the native runtime appends",
   },
+  openappaNativeRoomsTable: {
+    audited: false,
+    reason:
+      "immutable transport audience snapshots used by guardrail decisions",
+  },
+  openappaNativeDeliveriesTable: {
+    audited: false,
+    reason:
+      "native transport delivery receipts recorded with guardrail operations",
+  },
+  openappaReviewContinuationsTable: {
+    audited: false,
+    reason:
+      "private operational review outbox; the submitted ruling is audited without result or routing contents",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

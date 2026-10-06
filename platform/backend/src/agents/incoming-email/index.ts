@@ -4,6 +4,7 @@ import { watchTaskCompletion } from "@/agents/task-completion-watcher";
 import config from "@/config";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
+import AgentRunModel from "@/models/agent-run";
 import AgentTeamModel from "@/models/agent-team";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import OrganizationModel from "@/models/organization";
@@ -11,6 +12,17 @@ import ProcessedEmailModel from "@/models/processed-email";
 import TeamModel from "@/models/team";
 import UserModel from "@/models/user";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import {
+  OPENAPPA_REVIEW_NOTICE,
+  persistForegroundEmailReview,
+} from "@/openappa/chatops-review";
+import {
+  admitEmailTurn,
+  authorizeEmailReply,
+  NATIVE_TRANSPORT_BLOCKED_NOTICE,
+  type TransportSession,
+} from "@/openappa/native-transport";
+import { emailReviewOrigin } from "@/openappa/review-origin";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -26,6 +38,7 @@ import {
   MAX_EMAIL_BODY_SIZE,
   PROCESSED_EMAIL_RETENTION_MS,
 } from "./constants";
+import { boundedEmailContext } from "./email-context";
 import { OutlookEmailProvider } from "./outlook-provider";
 
 export {
@@ -52,16 +65,25 @@ export async function tryMarkEmailAsProcessed(
  * Derive a short, deterministic session ID from an email conversation ID.
  * The raw Outlook conversation ID is too long (90+ chars) and exceeds
  * upstream label size limits (e.g., Vertex AI 128 UTF-8 char constraint).
- * Returns undefined when no conversation ID is available.
+ * A non-empty conversation ID is hashed as-is so existing threads keep their
+ * session. When it is absent, the provider message ID is the fallback so a
+ * redelivery of the same mail stays on one protected session instead of
+ * arriving with none. Returns undefined only when both are blank.
  * @public — exported for testability
  */
 export function buildEmailSessionId(
   conversationId: string | undefined,
+  messageId?: string,
 ): string | undefined {
-  if (!conversationId) return undefined;
+  const key = conversationId
+    ? conversationId
+    : messageId
+      ? `message:${messageId}`
+      : undefined;
+  if (!key) return undefined;
   const hash = crypto
     .createHash("sha256")
-    .update(conversationId)
+    .update(key)
     .digest("hex")
     .substring(0, 16);
   return `email-${hash}`;
@@ -697,10 +719,11 @@ export async function processIncomingEmail(
   let conversationContext = "";
   if (email.conversationId && provider.getConversationHistory) {
     try {
-      const history = await provider.getConversationHistory(
-        email.conversationId,
-        email.messageId,
-      );
+      const history = await provider.getConversationHistory({
+        conversationId: email.conversationId,
+        currentMessageId: email.messageId,
+        requesterAddress: email.fromAddress,
+      });
 
       if (history.length > 0) {
         logger.info(
@@ -743,7 +766,7 @@ ${formattedHistory}
 
   // Use email body as the message to invoke the agent
   // If body is empty, use the subject line
-  const currentMessage =
+  let currentMessage =
     email.body.trim() || email.subject || "No message content";
 
   // Combine conversation context with current message
@@ -753,14 +776,14 @@ ${formattedHistory}
 
   // Truncate message if it exceeds the maximum size to prevent excessive LLM context usage
   if (Buffer.byteLength(message, "utf8") > MAX_EMAIL_BODY_SIZE) {
-    // Truncate to MAX_EMAIL_BODY_SIZE bytes and add truncation notice
-    const encoder = new TextEncoder();
-    const decoder = new TextDecoder("utf8", { fatal: false });
-    const encoded = encoder.encode(message);
-    const truncated = decoder.decode(encoded.slice(0, MAX_EMAIL_BODY_SIZE));
-    message = `${truncated}\n\n[Message truncated - original size exceeded ${
-      MAX_EMAIL_BODY_SIZE / 1024
-    }KB limit]`;
+    const bounded = boundedEmailContext({
+      body: currentMessage,
+      history: conversationContext,
+      maxBytes: MAX_EMAIL_BODY_SIZE,
+    });
+    currentMessage = bounded.body;
+    conversationContext = bounded.history;
+    message = bounded.message;
     logger.warn(
       {
         messageId: email.messageId,
@@ -773,7 +796,7 @@ ${formattedHistory}
 
   // Transform email attachments to source-agnostic A2A format
   // Only include attachments that have content (contentBase64)
-  const a2aAttachments: A2AAttachment[] = (email.attachments ?? [])
+  let a2aAttachments: A2AAttachment[] = (email.attachments ?? [])
     .filter((a): a is typeof a & { contentBase64: string } => !!a.contentBase64)
     .map((a) => ({
       contentType: a.contentType,
@@ -798,6 +821,18 @@ ${formattedHistory}
   // and public messages run as the system actor even when the address happens
   // to match a user, so they cannot consume that user's personal credentials.
   const emailUser = userId === "system" ? null : senderUser;
+  const emailSessionId = buildEmailSessionId(
+    email.conversationId,
+    email.messageId,
+  );
+  const emailThreadId = email.conversationId?.trim() || email.messageId;
+  const emailTransportSession: TransportSession | null = emailSessionId
+    ? {
+        organizationId: organization,
+        sessionId: emailSessionId,
+        ...(emailUser ? { callerId: `user:${emailUser.id}` } : {}),
+      }
+    : null;
 
   const runtime = resolveAgentRuntime(agent);
   if (runtime) {
@@ -817,10 +852,25 @@ ${formattedHistory}
         agentId,
         message,
         attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
+        contextKey: buildEmailRuntimeContextKey({
+          providerId: provider.providerId,
+          mailbox: email.toAddress,
+          sender: email.fromAddress,
+          conversationId: email.conversationId,
+          messageId: email.messageId,
+        }),
         systemParams: {
-          sessionId: buildEmailSessionId(email.conversationId),
+          sessionId: buildEmailSessionId(email.conversationId, email.messageId),
           source: "email",
           routeCategory: RouteCategory.EMAIL,
+          runtimeEmailTurn: {
+            messageId: email.messageId,
+            mailbox: email.toAddress,
+            sourceSenderAddress: email.fromAddress,
+            // The watcher authorizes egress with the original message id as
+            // the room thread. Admission must use that same id.
+            threadId: email.messageId,
+          },
           completionTarget: shouldSendReply
             ? {
                 type: "email",
@@ -834,9 +884,14 @@ ${formattedHistory}
         },
       });
       if (shouldSendReply) {
+        const run = await AgentRunModel.findByTaskId(task.id);
+        const stored =
+          run?.completionTarget?.type === "email"
+            ? run.completionTarget
+            : undefined;
         void watchTaskCompletion({
           taskId: task.id,
-          target: {
+          target: stored ?? {
             type: "email",
             providerId: provider.providerId,
             originalMessageId: email.messageId,
@@ -855,6 +910,41 @@ ${formattedHistory}
     } catch (error) {
       await ProcessedEmailModel.deleteByMessageId(email.messageId);
       throw error;
+    }
+  }
+
+  if (emailTransportSession) {
+    const admitted = await admitEmailTurn({
+      session: emailTransportSession,
+      messageId: email.messageId,
+      mailbox: email.toAddress,
+      sourceSenderAddress: email.fromAddress,
+      threadId: emailThreadId,
+      body: currentMessage,
+      history: conversationContext ? [conversationContext] : [],
+      attachments: a2aAttachments,
+    });
+    if (admitted.decision === "refused") {
+      logger.warn(
+        { messageId: email.messageId, agentId },
+        "[IncomingEmail] Refused to show the message to the agent",
+      );
+      return undefined;
+    }
+    if (admitted.decision === "admitted") {
+      message = admitted.history.length
+        ? `${admitted.history.join("\n\n")}[Current message from user]: ${admitted.body}`
+        : admitted.body;
+      a2aAttachments = admitted.attachments;
+      if (Buffer.byteLength(message, "utf8") > MAX_EMAIL_BODY_SIZE) {
+        // A canonical replacement is not permission to exceed the host bound;
+        // never truncate already-admitted bytes into an unadmitted new value.
+        logger.warn(
+          { messageId: email.messageId, agentId },
+          "[IncomingEmail] Admitted email context exceeds the size bound",
+        );
+        return undefined;
+      }
     }
   }
 
@@ -892,8 +982,11 @@ ${formattedHistory}
           message,
           organizationId: organization,
           userId,
-          sessionId: buildEmailSessionId(email.conversationId),
+          sessionId: buildEmailSessionId(email.conversationId, email.messageId),
           source: "email",
+          ...(emailUser && config.openappa.enabled
+            ? { reviewOrigin: emailReviewOrigin(email) }
+            : {}),
           attachments: a2aAttachments.length > 0 ? a2aAttachments : undefined,
         });
       },
@@ -909,6 +1002,31 @@ ${formattedHistory}
       "[IncomingEmail] Agent run failed; released processed marker so a redelivery can retry",
     );
     throw error;
+  }
+
+  if (emailUser) {
+    const links = await persistForegroundEmailReview({
+      actor: {
+        kind: "user",
+        id: emailUser.id,
+        organizationId: organization,
+      },
+      agentId,
+      uiMessage: result.responseUiMessage,
+      originalTurn: { text: message, attachments: a2aAttachments },
+    });
+    if (links.length > 0) {
+      result = {
+        ...result,
+        text: [
+          result.text,
+          OPENAPPA_REVIEW_NOTICE,
+          ...links.map((link) => link.url),
+        ]
+          .filter((part) => part.trim().length > 0)
+          .join("\n"),
+      };
+    }
   }
 
   logger.info(
@@ -927,18 +1045,56 @@ ${formattedHistory}
       // Use the agent name for the email reply
       const replyAgentName = agent.name || getDefaultAgentEmailName();
 
-      const replyId = await provider.sendReply({
-        originalEmail: email,
-        body: result.text,
-        agentName: replyAgentName,
-      });
-
+      const egress = emailTransportSession
+        ? await authorizeEmailReply({
+            session: emailTransportSession,
+            messageId: email.messageId,
+            mailbox: email.toAddress,
+            threadId: emailThreadId,
+            content: result.text,
+            resolveRecipients: () => {
+              if (!provider.getReplyRecipients) {
+                throw new Error("Reply recipients are not available");
+              }
+              return provider.getReplyRecipients(email);
+            },
+          })
+        : { decision: "pass" as const };
+      if (egress.decision === "already_delivered") {
+        return result.text;
+      }
+      if (egress.decision === "refused") {
+        logger.warn(
+          { messageId: email.messageId, agentId },
+          "[IncomingEmail] Refused to send the agent reply",
+        );
+        // A Graph reply may quote source text; notify its author, not the
+        // disallowed Reply-To recipients.
+        await provider.sendReply({
+          originalEmail: email,
+          body: NATIVE_TRANSPORT_BLOCKED_NOTICE,
+          agentName: replyAgentName,
+          recipientAddresses: [email.fromAddress],
+        });
+        return result.text;
+      }
+      let replyId: string;
+      try {
+        replyId = await provider.sendReply({
+          originalEmail: email,
+          body: result.text,
+          agentName: replyAgentName,
+          ...(egress.recipients
+            ? { recipientAddresses: egress.recipients }
+            : {}),
+        });
+      } catch (error) {
+        if (egress.decision === "allowed") await egress.complete("failure");
+        throw error;
+      }
+      if (egress.decision === "allowed") await egress.complete("success");
       logger.info(
-        {
-          agentId,
-          originalMessageId: email.messageId,
-          replyId,
-        },
+        { agentId, originalMessageId: email.messageId, replyId },
         "[IncomingEmail] Sent email reply with agent response",
       );
     } catch (error) {
@@ -958,4 +1114,36 @@ ${formattedHistory}
 
   // No reply sent - return undefined explicitly for clarity
   return undefined;
+}
+
+/**
+ * External thread half of the runtime context key. Organization, actor, and
+ * agent are added by startDetached. Sender stays an address, never a user id,
+ * so public and internal mail keep the system actor and still do not merge.
+ */
+function buildEmailRuntimeContextKey(params: {
+  providerId: string;
+  mailbox: string;
+  sender: string;
+  conversationId: string | undefined;
+  messageId: string;
+}): string | undefined {
+  const providerId = params.providerId.trim();
+  const mailbox = normalizeEmailAddress(params.mailbox);
+  const sender = normalizeEmailAddress(params.sender);
+  const conversationId = params.conversationId?.trim();
+  const messageId = params.messageId.trim();
+  const thread = conversationId
+    ? `conversation:${conversationId}`
+    : messageId
+      ? `message:${messageId}`
+      : undefined;
+  if (!providerId || !mailbox || !sender || !thread) {
+    return undefined;
+  }
+  return JSON.stringify(["email", providerId, mailbox, thread, sender]);
+}
+
+function normalizeEmailAddress(value: string): string {
+  return value.trim().toLowerCase();
 }

@@ -224,6 +224,7 @@ export const AuditEventNameSchema = z.enum([
   "openappaBatteryInstall.deleted",
   "openappaBatteryPackage.updated",
   "openappaBatteryPackage.deleted",
+  "openappaReview.updated",
   "toolInvocationPolicy.created",
   "toolInvocationPolicy.updated",
   "toolInvocationPolicy.deleted",

@@ -20,6 +20,7 @@ import {
   AgentWorkspaceModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { openappaActor } from "@/openappa/actor";
@@ -70,6 +71,16 @@ describe("runtime crossing", () => {
     vi.spyOn(backend, "stageInputs").mockResolvedValue();
     vi.spyOn(backend, "launch").mockResolvedValue();
     vi.spyOn(backend, "continueRun").mockResolvedValue();
+    vi.spyOn(backend, "streamOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("Complete retained transcript");
+      },
+    );
+    vi.spyOn(backend, "snapshotOutput").mockImplementation(
+      async ({ destination }) => {
+        destination.end("Complete retained transcript");
+      },
+    );
     vi.spyOn(backend, "waitUntilRunning").mockRejectedValue(
       new Error("stop after start"),
     );
@@ -938,6 +949,13 @@ async function runnable(params: {
   let workspaceId = task.id;
   if (previousTask) {
     const scope = backend.resolveRuntimeScope({});
+    const key = await VirtualApiKeyModel.create({
+      organizationId: org.id,
+      authorId: user.id,
+      scope: "personal",
+      name: `retained-${previousTask.id}`,
+      keyType: "passthrough",
+    });
     const previous = await AgentRunModel.create({
       organizationId: org.id,
       agentId: agent.id,
@@ -948,6 +966,7 @@ async function runnable(params: {
       backend: "kubernetes",
       runtimeScope: scope,
       workloadName: `kept-${previousTask.id}`,
+      virtualApiKeyId: key.virtualKey.id,
     });
     await AgentRunModel.close({ id: previous.id });
     const workspace = await AgentWorkspaceModel.create({

@@ -23,6 +23,87 @@ import type { AgentRunCompletionTarget } from "@/types";
 import { watchTaskCompletion } from "./task-completion-watcher";
 
 describe("watchTaskCompletion", () => {
+  test("uses persisted producing sessions and distinct task occurrences for identical thread replies", async ({
+    makeAgent,
+    makeUser,
+  }) => {
+    const user = await makeUser();
+    const agent = await makeAgent();
+    const staleTarget = {
+      type: "chatops" as const,
+      bindingId: crypto.randomUUID(),
+      threadId: "same-thread",
+    };
+    const deliveries = [];
+    for (let occurrence = 0; occurrence < 2; occurrence++) {
+      const context = await A2AContextModel.create({
+        actorKind: "user",
+        actorId: user.id,
+      });
+      const task = await A2ATaskModel.createForRun({
+        contextId: context.id,
+        agentId: agent.id,
+      });
+      const appaSession = {
+        organizationId: agent.organizationId,
+        sessionId: `user:${user.id}|runtime-${task.id}`,
+        callerId: `user:${user.id}`,
+      };
+      await AgentRunModel.create({
+        organizationId: agent.organizationId,
+        taskId: task.id,
+        agentId: agent.id,
+        actorKind: "user",
+        actorId: user.id,
+        actorUserId: user.id,
+        workloadName: `runner-${task.id}`,
+        backend: "kubernetes",
+        runtimeScope: "archestra-dev",
+        completionTarget: { ...staleTarget, appaSession },
+      });
+      await A2ATaskModel.completeRun({
+        taskId: task.id,
+        agentMessage: {
+          id: crypto.randomUUID(),
+          contextId: context.id,
+          role: "ROLE_AGENT",
+          parts: [{ text: "Identical terminal output" }],
+          content: {
+            id: crypto.randomUUID(),
+            role: "assistant",
+            parts: [{ type: "text", text: "Identical terminal output" }],
+          },
+        },
+        artifact: {
+          id: crypto.randomUUID(),
+          name: "agent-response",
+          parts: [{ text: "Identical terminal output" }],
+        },
+        eventPayloads: [],
+      });
+      await watchTaskCompletion({
+        taskId: task.id,
+        target: staleTarget,
+        agentName: agent.name,
+      });
+      await watchTaskCompletion({
+        taskId: task.id,
+        target: staleTarget,
+        agentName: agent.name,
+      });
+      deliveries.push({
+        bindingId: staleTarget.bindingId,
+        threadId: staleTarget.threadId,
+        agentName: agent.name,
+        text: "Identical terminal output",
+        guardrailsSession: appaSession,
+        deliveryId: `task:${task.id}:completion`,
+      });
+    }
+    expect(notifyBindingThread.mock.calls.map(([params]) => params)).toEqual(
+      deliveries,
+    );
+  });
   test("delivers an image failure verbatim to its originating thread once", async ({
     makeAgent,
     makeUser,
@@ -88,6 +169,7 @@ describe("watchTaskCompletion", () => {
       threadId: target.threadId,
       agentName: agent.name,
       text: "Task failed. Authentication failed: your session has expired.\nReconnect your account and retry the task. (Runtime exit status 75.)",
+      deliveryId: `task:${task.id}:completion`,
     });
     expect(sendEmailReply).not.toHaveBeenCalled();
     expect(
@@ -181,6 +263,7 @@ describe("watchTaskCompletion", () => {
           threadId: target.threadId,
           agentName: agent.name,
           text: "The work is complete.",
+          deliveryId: `task:${task.id}:completion`,
         });
       } else {
         expect(sendEmailReply).toHaveBeenCalledTimes(1);

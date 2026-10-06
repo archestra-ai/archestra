@@ -26,7 +26,7 @@ import {
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
-import { openappaActor } from "@/openappa/actor";
+import { childSessionId, openappaActor } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
 import { mintDelegationMarker } from "@/openappa/delegation";
 import { stageHitlReview } from "@/openappa/hitl-review";
@@ -3745,6 +3745,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         name: "runtime-observing",
         scope: "org",
         authorId: null,
+        publishToOrganization: true,
         providerApiKeys: [
           { provider: providerKey.provider, providerApiKeyId: providerKey.id },
         ],
@@ -4246,6 +4247,186 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
     const start = events.find((event) => event.event === "session_start");
     expect(start?.caller_id).toBe(withUser ? `user:${userId}` : undefined);
+  });
+
+  describe("nested in-process A2A children", () => {
+    const secret = "nested-a2a-child-marker-secret-32b";
+    const parentSession = "chatops:slack:C1:thread-9";
+    const prompt = "Inspect the ledger and report the balance.";
+
+    const childRequest = (params: {
+      markerText: string;
+      spawnCallId: string;
+      claimedParent?: string;
+      claimedSession?: string;
+    }) => {
+      const parentAgentId = "11111111-1111-4111-8111-111111111111";
+      const session =
+        params.claimedSession ??
+        childSessionId(
+          params.claimedParent ?? parentSession,
+          params.spawnCallId,
+        );
+      return post(
+        payload(false, [
+          { role: "user", content: `${prompt}\n\n${params.markerText}` },
+        ]),
+        {
+          "x-archestra-source": "chatops:slack",
+          "x-archestra-agent-id": `${parentAgentId}:${agent.id}`,
+          "x-appa-session-id": session,
+          "x-appa-parent-id": params.claimedParent ?? parentSession,
+        },
+      );
+    };
+
+    const markerFor = (spawnCallId: string, caller = `user:${userId}`) =>
+      mintDelegationMarker({
+        organizationId: agent.organizationId,
+        callerId: caller,
+        parentId: parentSession,
+        spawnerNativeId: parentSession,
+        prompt,
+        spawnCallId,
+      });
+
+    beforeEach(() => {
+      config.openappa.offerSigningSecret = secret;
+    });
+
+    test("a nested denied tool call is not released", async () => {
+      block = true;
+      const spawnCallId = "toolu_nested_deny";
+      const marker = markerFor(spawnCallId);
+      expect(marker).toBeDefined();
+      const before = providerRequests.length;
+      const response = await childRequest({
+        markerText: marker ?? "",
+        spawnCallId,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).not.toContain('"name":"get_weather"');
+      expect(response.body).toContain("NATIVE REFUSAL");
+      expect(providerRequests.length).toBe(before + 1);
+      const toolCall = events.find((event) => event.event === "tool_call");
+      expect(toolCall).toMatchObject({
+        session_id: childSessionId(parentSession, spawnCallId),
+        parent_id: parentSession,
+        tool: "get_weather",
+      });
+    });
+
+    test("a foreign or malformed marker does not bind or skip", async () => {
+      const before = providerRequests.length;
+      const foreign = markerFor("toolu_foreign", "user:someone-else");
+      const foreignResponse = await childRequest({
+        markerText: foreign ?? "",
+        spawnCallId: "toolu_foreign",
+      });
+      expect(foreignResponse.statusCode).toBe(400);
+      expect(foreignResponse.body).toContain("verified spawn marker");
+      const malformed = await childRequest({
+        markerText:
+          "[appa] delegated trajectory appa2-bm90LWEtbWFya2Vy.0000000000000000000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa — child of chatops:slack:C1:thread-9.",
+        spawnCallId: "toolu_malformed",
+      });
+      expect(malformed.statusCode).toBe(400);
+      expect(providerRequests.length).toBe(before);
+      expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+    });
+
+    test("replaces child text and does not release the raw return", async () => {
+      options = { responseText: "SECRET-KOALA-0831", includeToolUse: false };
+      const prior = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw) as { event?: string; output?: string };
+        if (
+          event.event === "child_end" &&
+          event.output === "SECRET-KOALA-0831"
+        ) {
+          events.push(event);
+          return JSON.stringify({
+            decision: "child_return",
+            value: "redacted summary",
+          });
+        }
+        return prior?.(raw);
+      });
+      const spawnCallId = "toolu_nested_text";
+      const response = await childRequest({
+        markerText: markerFor(spawnCallId) ?? "",
+        spawnCallId,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(response.body).toContain("redacted summary");
+      expect(response.body).not.toContain("SECRET-KOALA-0831");
+    });
+
+    test("isolates parallel child sessions by the original call id", async () => {
+      block = true;
+      const first = "toolu_parallel_a";
+      const second = "toolu_parallel_b";
+      const a = await childRequest({
+        markerText: markerFor(first) ?? "",
+        spawnCallId: first,
+      });
+      const b = await childRequest({
+        markerText: markerFor(second) ?? "",
+        spawnCallId: second,
+      });
+      expect(a.statusCode, a.body).toBe(200);
+      expect(b.statusCode, b.body).toBe(200);
+      const sessions = events
+        .filter((event) => event.event === "tool_call")
+        .map((event) => event.session_id);
+      expect(sessions).toEqual([
+        childSessionId(parentSession, first),
+        childSessionId(parentSession, second),
+      ]);
+      expect(new Set(sessions).size).toBe(2);
+    });
+
+    test("a length-1 chain stays on the root session", async () => {
+      const response = await post(payload(false), {
+        "x-archestra-agent-id": agent.id,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const start = events.find((event) => event.event === "session_start");
+      expect(start?.session_id).toBe(sessionId);
+      expect(start?.parent_id).toBeUndefined();
+    });
+
+    test("nonguarded mode does not require a child marker", async () => {
+      await GuardrailsDeploymentModel.setEnabled(false);
+      const response = await post(payload(false), {
+        "x-archestra-agent-id": `11111111-1111-4111-8111-111111111111:${agent.id}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+      await GuardrailsDeploymentModel.setEnabled(true);
+    });
+
+    test("a refused child return does not leak the raw text", async () => {
+      options = { responseText: "SECRET-ABORT-0911", includeToolUse: false };
+      const prior = native.dispatchHook.getMockImplementation();
+      native.dispatchHook.mockImplementation(async (raw: string) => {
+        const event = JSON.parse(raw) as { event?: string; output?: string };
+        if (
+          event.event === "child_end" &&
+          event.output === "SECRET-ABORT-0911"
+        ) {
+          events.push(event);
+          return JSON.stringify({ decision: "refuse" });
+        }
+        return prior?.(raw);
+      });
+      const response = await childRequest({
+        markerText: markerFor("toolu_abort") ?? "",
+        spawnCallId: "toolu_abort",
+      });
+      expect(response.statusCode).not.toBe(200);
+      expect(response.body).not.toContain("SECRET-ABORT-0911");
+    });
   });
 
   test.each([

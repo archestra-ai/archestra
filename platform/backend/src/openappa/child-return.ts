@@ -63,12 +63,17 @@ export function collectAndStripChildReturns(
   options: {
     openCodeBackgroundReturns?: boolean;
     codexMailboxReturns?: boolean;
+    /** Actual released foreground forks, loaded by the host from its ledger. */
+    foregroundSpawnCallIds?: ReadonlySet<string>;
   } = {},
 ): CollectedChildReturns {
   const collected: CollectedChildReturns = {
     completions: [],
   };
   const nativeResultCallIds = collectNativeResultCallIds(body);
+  for (const id of options.foregroundSpawnCallIds ?? []) {
+    nativeResultCallIds.add(normalizeCallId(id) ?? id);
+  }
   if (options.codexMailboxReturns) {
     collectCodexMailboxReturns(body, collected);
   }

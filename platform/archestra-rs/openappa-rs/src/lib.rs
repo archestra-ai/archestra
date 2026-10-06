@@ -6,13 +6,15 @@ mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+#[cfg(test)]
+mod native_boundary;
 #[allow(dead_code)]
 mod peer;
 mod policy;
 
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
-    ProcessedResultKey, ProcessedResultRequest, ReceiptBinding, SessionScope,
+    ProcessedResultKey, ProcessedResultRequest, ReadError, ReceiptBinding, SessionScope,
     postgres::{LeasedPostgres, PostgresError},
 };
 use appa_runtime::{
@@ -237,6 +239,9 @@ struct Input {
     tool_call_id: Option<String>,
     #[serde(default)]
     tool: Option<String>,
+    /// Set only by native transport dispatch, never copied from a model call.
+    #[serde(default)]
+    native_boundary: bool,
     #[serde(default)]
     arguments: Option<Box<RawValue>>,
     /// The semantic input before a gateway strips transport-only execution
@@ -277,6 +282,14 @@ struct Input {
 /// Maximum byte length for precheck refusal text.
 /// Refusal text is recorded and replayed verbatim as the remedy result.
 const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;
+
+/// Bytes a session's pinned policy must contain before a native transport call
+/// is allowed to proceed. A retired wildcard must not noop-allow it.
+const NATIVE_CONTRACT: &[u8] = b"host/archestra/native_ingress";
+
+fn native_caller_matches(tool: Option<&str>, saved: Option<&str>, caller: Option<&str>) -> bool {
+    !matches!(tool, Some("native_ingress" | "native_reply")) || saved == caller
+}
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -964,6 +977,21 @@ fn validate(input: &Input) -> napi::Result<()> {
             return Err(error("invalid precheck refusal"));
         }
     }
+    let reserved_native_tool = matches!(
+        input.tool.as_deref(),
+        Some("native_ingress" | "native_reply")
+    );
+    if reserved_native_tool != input.native_boundary
+        || (input.native_boundary
+            && !matches!(
+                input.event,
+                HookEventKind::ToolCall | HookEventKind::ToolResult | HookEventKind::CancelCall
+            ))
+    {
+        return Err(error(
+            "native transport operations require host dispatch authority",
+        ));
+    }
     // Reject malformed host requests before writing an interrupted-operation
     // receipt. A typo is not evidence that an external consult may have run.
     match input.event {
@@ -1106,6 +1134,7 @@ pub async fn execute_remedy_by_offer(
     };
     let input = Input {
         yell_receiver: None,
+        native_boundary: false,
         organization_id: owner.organization_id,
         // Scopes receipt to the authenticated spender to prevent replay.
         caller_id: input.caller_id.clone(),
@@ -1838,7 +1867,7 @@ impl State {
             .with_client(move |client| {
                 Ok(client
                     .query_opt(
-                        "SELECT root, parent_id, forked_from FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                        "SELECT root, parent_id, forked_from, caller_id FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
                         &[&lookup.organization_id, &lookup.actor],
                     )?
                     .map(|row| {
@@ -1846,11 +1875,21 @@ impl State {
                             row.get::<_, String>(0),
                             row.get::<_, Option<String>>(1),
                             row.get::<_, Option<String>>(2),
+                            row.get::<_, Option<String>>(3),
                         )
                     }))
             })
             .map_err(error)?;
-        if let Some((saved_root, saved_parent, saved_fork)) = &existing {
+        if let Some((saved_root, saved_parent, saved_fork, saved_caller)) = &existing {
+            if !native_caller_matches(
+                input.tool.as_deref(),
+                saved_caller.as_deref(),
+                input.caller_id.as_deref(),
+            ) {
+                return Err(error(
+                    "native session belongs to another authenticated scope",
+                ));
+            }
             if *saved_root != root || *saved_parent != input.parent_id {
                 return Err(error("session identity changed"));
             }
@@ -2065,6 +2104,25 @@ impl State {
             .operation_id
             .clone()
             .ok_or_else(|| error("an operation id is required"))?;
+        if input.event == HookEventKind::ToolCall && input.native_boundary {
+            // A session opened before these contracts existed keeps that policy.
+            // A wildcard there would noop-allow. Refuse instead of opening it.
+            if existing.is_some() {
+                match self.store.log(&TrajectoryId::new(root.as_str())) {
+                    Ok(log)
+                        if !log
+                            .policy_file()
+                            .windows(NATIVE_CONTRACT.len())
+                            .any(|window| window == NATIVE_CONTRACT) =>
+                    {
+                        return Ok(json!({ "decision": "refuse", "detail": "legacy_policy" }));
+                    }
+                    Ok(_) => {}
+                    Err(ReadError::UnknownRoot { .. }) => {}
+                    Err(read) => return Err(error(read)),
+                }
+            }
+        }
         if input.event == HookEventKind::ToolCall {
             let call_id = operation
                 .strip_prefix("call:")
@@ -2177,12 +2235,50 @@ impl State {
                 | HookEventKind::Yell
                 | HookEventKind::ChildAddress => return Err(error("unsupported OpenAPPA event")),
             };
-            let outcome = hooks::handle_embedded_with_options(
+            let mut outcome = hooks::handle_embedded_with_options(
                 &self.runtime,
                 event,
                 presentation_options(&input),
             )
             .await;
+            // Ingress narrowing is the host recording source facts, not a model
+            // request. Accept a non-review offer and release the same call so the
+            // stored receipt is the allow, not a replayed deny. Egress offers stay
+            // unspent.
+            if input.native_boundary && input.tool.as_deref() == Some("native_ingress") {
+                let offer_id = match &outcome.decision {
+                    HookDecision::DenyCall { offers, review, .. }
+                        if review.is_empty() && !offers.is_empty() =>
+                    {
+                        Some(offers[0].id.clone())
+                    }
+                    _ => None,
+                };
+                if let Some(offer_id) = offer_id {
+                    let accepted = self
+                        .runtime
+                        .execute_remedy(&actor, appa_runtime::api::OfferId(offer_id))
+                        .await;
+                    if matches!(
+                        accepted,
+                        appa_runtime::api::RemedyOutcome::Authorized { .. }
+                    ) {
+                        outcome = hooks::handle_embedded_with_options(
+                            &self.runtime,
+                            HookEvent::ToolCall {
+                                actor: actor.clone(),
+                                call: proposed(&input)?,
+                                call_id: Some(operation.clone()),
+                                spawn: None,
+                                prompt: None,
+                                ruling: None,
+                            },
+                            presentation_options(&input),
+                        )
+                        .await;
+                    }
+                }
+            }
             wire(&outcome.decision)?
         };
         finish_operation(
@@ -3192,6 +3288,59 @@ mod typed_tests {
     };
     use appa_runtime_api::OfferedRemedy;
     use serde_json::Value;
+
+    #[test]
+    fn native_boundaries_cannot_change_the_session_principal() {
+        for tool in ["native_ingress", "native_reply"] {
+            assert!(super::native_caller_matches(
+                Some(tool),
+                Some("user:alice"),
+                Some("user:alice")
+            ));
+            assert!(super::native_caller_matches(Some(tool), None, None));
+            assert!(!super::native_caller_matches(
+                Some(tool),
+                Some("user:alice"),
+                Some("user:bob")
+            ));
+            assert!(!super::native_caller_matches(
+                Some(tool),
+                None,
+                Some("user:alice")
+            ));
+            assert!(!super::native_caller_matches(
+                Some(tool),
+                Some("user:alice"),
+                None
+            ));
+        }
+        // Other events retain their existing verified spender/lifecycle rules.
+        assert!(super::native_caller_matches(
+            None,
+            Some("user:alice"),
+            Some("user:bob")
+        ));
+    }
+
+    #[test]
+    fn client_native_names_and_argument_flags_cannot_claim_host_dispatch_authority() {
+        for tool in ["native_ingress", "native_reply"] {
+            let raw = serde_json::json!({
+                "organization_id": "org", "session_id": "session", "event": "tool_call",
+                "operation_id": "call:client", "tool": tool,
+                "arguments": { "native_boundary": true, "room_id": "known-room" }
+            });
+            let input: super::Input = serde_json::from_value(raw.clone()).unwrap();
+            assert!(super::validate(&input).is_err());
+            let mut host = raw;
+            host["native_boundary"] = serde_json::json!(true);
+            let input: super::Input = serde_json::from_value(host.clone()).unwrap();
+            super::validate(&input).expect("actual host native call");
+            host["tool"] = serde_json::json!("ordinary_tool");
+            let input: super::Input = serde_json::from_value(host).unwrap();
+            assert!(super::validate(&input).is_err());
+        }
+    }
 
     #[test]
     fn session_actor_preserves_existing_sha256_identifiers() {

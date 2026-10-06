@@ -46,6 +46,17 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, ModelModel } from "@/models";
+import { childSessionId } from "@/openappa/actor";
+import {
+  applyResumedChatOpsReviews,
+  parkDurableReviewPauses,
+  shouldInstallDurableReview,
+} from "@/openappa/chatops-review";
+import {
+  durableReviewPauses,
+  runWithDurableReview,
+  runWithoutDurableReview,
+} from "@/openappa/durable-review";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -121,6 +132,8 @@ export interface A2AExecuteParams {
   sessionId?: string;
   /** Interaction source for tracking request origin in logs */
   source?: InteractionSource;
+  /** Verified transport routing retained only for durable review continuation. */
+  reviewOrigin?: import("@/openappa/review-origin").ReviewOrigin;
   /**
    * Parent delegation chain (colon-separated agent IDs).
    * The current agentId will be appended to form the new chain.
@@ -184,13 +197,24 @@ export interface A2AExecuteParams {
    * `subagentToolStream`.
    */
   delegationToolCallId?: string;
+  /**
+   * OpenAPPA session of the run that spawned this one. Logging `sessionId`
+   * stays the root. Absent on a root run.
+   */
+  appaParentSessionId?: string;
+  /**
+   * Extra system instructions (skill activation) that must not be prepended to
+   * a marker-bearing user message. The marker has to close the text it signed.
+   */
+  instructionPrefix?: string;
 
   /**
    * When provided, invoked with each incremental text delta as the model
    * streams its answer, so a caller (A2A `SendStreamingMessage`) can forward
    * tokens to an SSE client. The buffered {@link A2AExecuteResult} is still
    * returned unchanged when the run completes, and its `text` is the
-   * authoritative, thinking-stripped answer — interim deltas are best-effort
+   * authoritative answer (thinking-stripped except for already-admitted child
+   * bytes). Interim deltas are best-effort
    * and may include raw model output (e.g. inline `<thinking>`). Deltas for a
    * turn that is silently retried by the recovery loop are not emitted (the
    * stream is only surfaced for the committed attempt).
@@ -238,7 +262,15 @@ export async function executeA2AMessage(
     scheduleTriggerRunId,
     subagentToolStream,
     delegationToolCallId,
+    appaParentSessionId,
+    instructionPrefix,
   } = params;
+  const childClaims = nestedAppaClaims({
+    loggingSessionId: sessionId,
+    parentDelegationChain,
+    delegationToolCallId,
+    appaParentSessionId,
+  });
 
   // Isolation key scoping per-run state (browser tabs, MCP client
   // cache, headless sandboxes). Chat delegation provides the conversation id;
@@ -335,6 +367,7 @@ export async function executeA2AMessage(
     subagentRunTracker.increment(isolationKey);
   }
 
+  let hostDurableReview = false;
   try {
     // One tracker per run, shared between the breaker (records each call) and the
     // stop condition below (terminates the run once repeats hit the ceiling).
@@ -350,7 +383,12 @@ export async function executeA2AMessage(
       organizationId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsOrigin:
+        params.reviewOrigin?.type === "chatops"
+          ? params.reviewOrigin
+          : undefined,
       sessionId,
+      appaSessionId: childClaims.ownAppaSessionId,
       delegationChain,
       conversationId: params.conversationId,
       isolationKey,
@@ -363,13 +401,22 @@ export async function executeA2AMessage(
       repeatTracker,
     });
 
-    const systemPrompt = await buildAgentSystemPrompt({
+    hostDurableReview = shouldInstallDurableReview({
+      source,
+      userId,
+      parentDelegationChain,
+    });
+    const builtSystemPrompt = await buildAgentSystemPrompt({
       agent,
       mcpTools,
       organizationId,
       userId,
       agentId: agent.id,
+      durableRemedyReview: hostDurableReview,
     });
+    const systemPrompt = instructionPrefix
+      ? `${instructionPrefix}\n\n${builtSystemPrompt}`
+      : builtSystemPrompt;
 
     logger.info(
       {
@@ -397,6 +444,9 @@ export async function executeA2AMessage(
         model: selectedModel,
         provider,
         sessionId,
+        appaSessionId: childClaims.appaSessionId,
+        appaParentId: childClaims.appaParentId,
+        delegationProof: childClaims.appaSessionId ? message : undefined,
         source,
         externalAgentId: delegationChain,
         agentLlmApiKeyId: agent.llmApiKeyId,
@@ -529,6 +579,7 @@ export async function executeA2AMessage(
       stopWhen: [
         stepCountIs(MAX_AGENT_STEPS),
         repeatCeilingStopCondition(repeatTracker),
+        ...(hostDurableReview ? [() => durableReviewPauses().length > 0] : []),
       ],
       // Feeds the repeat ceiling above the one call shape it cannot otherwise
       // see: a tool that is not in the tool list never reaches an execute
@@ -555,6 +606,9 @@ export async function executeA2AMessage(
               model: selectedModel,
               provider,
               sessionId,
+              appaSessionId: childClaims.appaSessionId,
+              appaParentId: childClaims.appaParentId,
+              delegationProof: childClaims.appaSessionId ? message : undefined,
               source: "a2a:tool_call_repair",
               externalAgentId: delegationChain,
               agentLlmApiKeyId: agent.llmApiKeyId,
@@ -650,198 +704,247 @@ export async function executeA2AMessage(
           ? { ...baseConfig, messages: [currentTurn] }
           : { ...baseConfig, prompt: currentTurnText };
 
-    let finalText: string;
-    let usage: Awaited<ReturnType<typeof streamText>["usage"]>;
-    let finishReason: Awaited<ReturnType<typeof streamText>["finishReason"]>;
+    let finalText = "";
+    let usage: Awaited<ReturnType<typeof streamText>["usage"]> | undefined;
+    let finishReason:
+      | Awaited<ReturnType<typeof streamText>["finishReason"]>
+      | undefined;
     let responseUiMessage: UIMessage | undefined;
     // Captures the committed attempt's stream-level error (e.g. API billing
     // errors) so a generic NoOutputGeneratedError can surface the real cause.
     let getCapturedStreamError: () => unknown = () => undefined;
-    try {
-      const runStream = await runAgentStream({
-        config: streamConfig,
-        promptCache: {
-          provider,
-          model: selectedModel,
-          anthropicNativeEndpoint,
-        },
-        recovery: {
-          logContext: { agentId: agent.id, sessionId },
-          ...(openAiReasoningSummaryKey !== null
-            ? {
-                onReasoningSummaryUnsupported: () =>
-                  markOpenAiReasoningSummaryUnsupported(
-                    openAiReasoningSummaryKey,
-                  ),
-              }
-            : {}),
-        },
-      });
-      const stream = runStream.result;
-      getCapturedStreamError = runStream.getCapturedStreamError;
-
-      const uiMessageStreamConsumption = consumeReadableStream({
-        stream: stream
-          .toUIMessageStream<UIMessage>({
-            originalMessages: params.originalUiMessages,
-            generateMessageId: () => crypto.randomUUID(),
-            onFinish: ({ responseMessage }) => {
-              responseUiMessage = responseMessage;
-            },
-            onError: (error) => {
-              // a nonexistent-tool call is recoverable: the SDK already feeds the
-              // tool-error back to the model and continues the loop, so return the
-              // recovery text as the part's errorText instead of killing the run
-              const unavailableToolError =
-                getUnavailableToolErrorDetails(error);
-              if (unavailableToolError) {
-                logger.info(
-                  { agentId: agent.id, unavailableToolError },
-                  "Returning unavailable tool error as tool-level error in A2A execution",
-                );
-                return formatUnavailableToolErrorDetails(unavailableToolError);
-              }
-              logger.error(
-                { agentId: agent.id, error },
-                "Error stream.toUIMessageStream when parsing A2A execution response",
-              );
-              throw error;
-            },
+    const resumed =
+      hostDurableReview && params.originalUiMessages
+        ? await applyResumedChatOpsReviews({
+            messages: params.originalUiMessages,
+            reviewerUserId: userId,
+            organizationId,
           })
-          .pipeThrough(
-            new TransformStream<UIMessageChunk, UIMessageChunk>({
-              async transform(chunk, controller) {
-                await params.onUiMessageChunk?.(chunk);
-                controller.enqueue(chunk);
-              },
-            }),
-          ),
-        onError: (error) => {
-          logger.error(
-            { agentId: agent.id, error },
-            "Error consuming UI message stream for A2A execution response",
-          );
-          throw error;
-        },
-      });
-
-      // Forward incremental text deltas to a streaming caller (A2A
-      // SendStreamingMessage). This is a separate buffered accessor over the
-      // same run — the AI SDK buffers each accessor independently, so draining
-      // `textStream` here does not steal events from the toUIMessageStream merge
-      // or the `.text`/`.usage`/`.finishReason` promises below. A failed forward
-      // (e.g. the SSE client disconnected) must not abort the buffered run, so
-      // each callback is guarded; the loop still drains the stream to
-      // completion.
-      const onTextDelta = params.onTextDelta;
-      const textDeltaConsumption = onTextDelta
-        ? (async () => {
-            for await (const delta of stream.textStream) {
-              try {
-                onTextDelta(delta);
-              } catch (error) {
-                logger.debug(
-                  { agentId: agent.id, error },
-                  "Failed to forward A2A text delta (non-fatal)",
-                );
-              }
-            }
-          })()
-        : Promise.resolve();
-
-      // Wait for the stream to complete and get the final text.
-      // When the underlying provider returns an error (e.g. 400 insufficient
-      // credits), the stream produces zero steps and the AI SDK throws
-      // NoOutputGeneratedError.  Re-throw with the real error message so callers
-      // (and ultimately end-users) see what actually went wrong.
-      [finalText, usage, finishReason] = await Promise.all([
-        stream.text,
-        stream.usage,
-        stream.finishReason,
-        uiMessageStreamConsumption,
-        textDeltaConsumption,
-      ]);
-
-      if (!responseUiMessage) {
-        // This should never happen
-        throw new Error(
-          "A2A execution failed: no response UIMessage generated",
-        );
-      }
-
-      // Strip inline `<thinking>...</thinking>` text from the model's output at
-      // this single A2A boundary, so every consumer (protocol reply, delegation
-      // tool result, email, scheduled-run persistence) shares the invariant.
-      // Text parts are stripped in place — an emptied part is kept (not removed)
-      // so a thinking-only turn never collapses to a zero-part assistant message,
-      // which some providers reject when the persisted history is replayed.
-      // Structured `reasoning` parts are left untouched: the A2A protocol reply
-      // excludes them (only text parts survive), and where they are surfaced
-      // (the scheduled-run chat view) they render via the chat's reasoning UI,
-      // exactly as interactive chat does — stripping them is out of scope here.
-      const hadTextBeforeStrip = finalText.trim() !== "";
-      finalText = stripThinkingBlocks(finalText);
-      for (const part of responseUiMessage.parts) {
-        if (part.type === "text") {
-          part.text = stripThinkingBlocks(part.text);
-        }
-      }
-
-      // Surface this run's tool calls on the caller's conversation, attributed
-      // to the delegation call that invoked this agent. Nested delegations'
-      // tool calls are emitted by their own runs (which share this bridge), so
-      // the whole chain surfaces. The delegation tool's result is unaffected —
-      // it stays the child's final text.
-      if (subagentToolStream && delegationToolCallId) {
-        emitSubagentToolCalls({
-          bridge: subagentToolStream,
-          parentToolCallId: delegationToolCallId,
-          message: responseUiMessage,
+        : { blockedApprovalIds: [] as string[] };
+    if (
+      resumed.blockedApprovalIds.length > 0 &&
+      "messages" in streamConfig &&
+      Array.isArray(streamConfig.messages)
+    ) {
+      streamConfig.messages = quarantineApprovalResponses(
+        streamConfig.messages,
+        resumed.blockedApprovalIds,
+      );
+    }
+    const consumeTurn = async () => {
+      try {
+        const runStream = await runAgentStream({
+          config: streamConfig,
+          promptCache: {
+            provider,
+            model: selectedModel,
+            anthropicNativeEndpoint,
+          },
+          recovery: {
+            logContext: { agentId: agent.id, sessionId },
+            ...(openAiReasoningSummaryKey !== null
+              ? {
+                  onReasoningSummaryUnsupported: () =>
+                    markOpenAiReasoningSummaryUnsupported(
+                      openAiReasoningSummaryKey,
+                    ),
+                }
+              : {}),
+          },
         });
-      }
+        const stream = runStream.result;
+        getCapturedStreamError = runStream.getCapturedStreamError;
 
-      // The repeat-call ceiling stops the loop on a tool-call step, so the model
-      // never took a turn to produce assistant text and `finalText` is empty.
-      // Headless callers read only `text`, so surface why the run ended.
-      if (
-        finalText.trim() === "" &&
-        repeatTracker.hasReachedTerminationCeiling()
-      ) {
-        finalText = REPEAT_CALL_TERMINATION_NOTICE;
-      } else if (hadTextBeforeStrip && finalText.trim() === "") {
-        // The whole textual answer was `<thinking>` and stripped to nothing.
-        // Substitute the notice in both the headless `text` and the message so
-        // the protocol reply / persistence (built from text parts) carries it.
-        finalText = THINKING_ONLY_NOTICE;
-        const firstTextPart = responseUiMessage.parts.find(
-          (p) => p.type === "text",
-        );
-        if (firstTextPart?.type === "text") {
-          firstTextPart.text = THINKING_ONLY_NOTICE;
-        } else {
-          responseUiMessage.parts.push({
-            type: "text",
-            text: THINKING_ONLY_NOTICE,
+        const uiMessageStreamConsumption = consumeReadableStream({
+          stream: stream
+            .toUIMessageStream<UIMessage>({
+              originalMessages: params.originalUiMessages,
+              generateMessageId: () => crypto.randomUUID(),
+              onFinish: ({ responseMessage }) => {
+                responseUiMessage = responseMessage;
+              },
+              onError: (error) => {
+                // a nonexistent-tool call is recoverable: the SDK already feeds the
+                // tool-error back to the model and continues the loop, so return the
+                // recovery text as the part's errorText instead of killing the run
+                const unavailableToolError =
+                  getUnavailableToolErrorDetails(error);
+                if (unavailableToolError) {
+                  logger.info(
+                    { agentId: agent.id, unavailableToolError },
+                    "Returning unavailable tool error as tool-level error in A2A execution",
+                  );
+                  return formatUnavailableToolErrorDetails(
+                    unavailableToolError,
+                  );
+                }
+                logger.error(
+                  { agentId: agent.id, error },
+                  "Error stream.toUIMessageStream when parsing A2A execution response",
+                );
+                throw error;
+              },
+            })
+            .pipeThrough(
+              new TransformStream<UIMessageChunk, UIMessageChunk>({
+                async transform(chunk, controller) {
+                  await params.onUiMessageChunk?.(chunk);
+                  controller.enqueue(chunk);
+                },
+              }),
+            ),
+          onError: (error) => {
+            logger.error(
+              { agentId: agent.id, error },
+              "Error consuming UI message stream for A2A execution response",
+            );
+            throw error;
+          },
+        });
+
+        // Forward incremental text deltas to a streaming caller (A2A
+        // SendStreamingMessage). This is a separate buffered accessor over the
+        // same run — the AI SDK buffers each accessor independently, so draining
+        // `textStream` here does not steal events from the toUIMessageStream merge
+        // or the `.text`/`.usage`/`.finishReason` promises below. A failed forward
+        // (e.g. the SSE client disconnected) must not abort the buffered run, so
+        // each callback is guarded; the loop still drains the stream to
+        // completion.
+        const onTextDelta = params.onTextDelta;
+        const textDeltaConsumption = onTextDelta
+          ? (async () => {
+              for await (const delta of stream.textStream) {
+                try {
+                  onTextDelta(delta);
+                } catch (error) {
+                  logger.debug(
+                    { agentId: agent.id, error },
+                    "Failed to forward A2A text delta (non-fatal)",
+                  );
+                }
+              }
+            })()
+          : Promise.resolve();
+
+        // Wait for the stream to complete and get the final text.
+        // When the underlying provider returns an error (e.g. 400 insufficient
+        // credits), the stream produces zero steps and the AI SDK throws
+        // NoOutputGeneratedError.  Re-throw with the real error message so callers
+        // (and ultimately end-users) see what actually went wrong.
+        [finalText, usage, finishReason] = await Promise.all([
+          stream.text,
+          stream.usage,
+          stream.finishReason,
+          uiMessageStreamConsumption,
+          textDeltaConsumption,
+        ]);
+
+        if (!responseUiMessage) {
+          // This should never happen
+          throw new Error(
+            "A2A execution failed: no response UIMessage generated",
+          );
+        }
+
+        // Ordinary responses are formatted here before transport admission.
+        // A governed child's value was admitted upstream: formatting it again
+        // would invalidate exact ChildEnd correlation at the parent boundary.
+        // Text parts are stripped in place — an emptied part is kept (not removed)
+        // so a thinking-only turn never collapses to a zero-part assistant message,
+        // which some providers reject when the persisted history is replayed.
+        // Structured `reasoning` parts are left untouched: the A2A protocol reply
+        // excludes them (only text parts survive), and where they are surfaced
+        // (the scheduled-run chat view) they render via the chat's reasoning UI,
+        // exactly as interactive chat does — stripping them is out of scope here.
+        const hadTextBeforeStrip = finalText.trim() !== "";
+        const admittedChild = Boolean(childClaims.appaSessionId);
+        if (!admittedChild) {
+          finalText = stripThinkingBlocks(finalText);
+          for (const part of responseUiMessage.parts) {
+            if (part.type === "text") {
+              part.text = stripThinkingBlocks(part.text);
+            }
+          }
+        }
+
+        // Surface this run's tool calls on the caller's conversation, attributed
+        // to the delegation call that invoked this agent. Nested delegations'
+        // tool calls are emitted by their own runs (which share this bridge), so
+        // the whole chain surfaces. The delegation tool's result is unaffected —
+        // it stays the child's final text.
+        if (subagentToolStream && delegationToolCallId) {
+          emitSubagentToolCalls({
+            bridge: subagentToolStream,
+            parentToolCallId: delegationToolCallId,
+            message: responseUiMessage,
           });
         }
-      }
-    } catch (streamError) {
-      const capturedStreamError = getCapturedStreamError();
-      if (
-        NoOutputGeneratedError.isInstance(streamError) &&
-        capturedStreamError !== undefined
-      ) {
-        if (capturedStreamError instanceof SubagentProviderError) {
-          throw capturedStreamError;
+
+        // The repeat-call ceiling stops the loop on a tool-call step, so the model
+        // never took a turn to produce assistant text and `finalText` is empty.
+        // Headless callers read only `text`, so surface why the run ended.
+        if (
+          !admittedChild &&
+          finalText.trim() === "" &&
+          repeatTracker.hasReachedTerminationCeiling()
+        ) {
+          finalText = REPEAT_CALL_TERMINATION_NOTICE;
+        } else if (
+          !admittedChild &&
+          hadTextBeforeStrip &&
+          finalText.trim() === ""
+        ) {
+          // The whole textual answer was `<thinking>` and stripped to nothing.
+          // Substitute the notice in both the headless `text` and the message so
+          // the protocol reply / persistence (built from text parts) carries it.
+          finalText = THINKING_ONLY_NOTICE;
+          const firstTextPart = responseUiMessage.parts.find(
+            (p) => p.type === "text",
+          );
+          if (firstTextPart?.type === "text") {
+            firstTextPart.text = THINKING_ONLY_NOTICE;
+          } else {
+            responseUiMessage.parts.push({
+              type: "text",
+              text: THINKING_ONLY_NOTICE,
+            });
+          }
         }
-        throw new ProviderError(
-          mapProviderError(capturedStreamError, provider),
-        );
+      } catch (streamError) {
+        const capturedStreamError = getCapturedStreamError();
+        if (
+          NoOutputGeneratedError.isInstance(streamError) &&
+          capturedStreamError !== undefined
+        ) {
+          if (capturedStreamError instanceof SubagentProviderError) {
+            throw capturedStreamError;
+          }
+          throw new ProviderError(
+            mapProviderError(capturedStreamError, provider),
+          );
+        }
+        if (streamError instanceof SubagentProviderError) {
+          throw streamError;
+        }
+        throw new ProviderError(mapProviderError(streamError, provider));
       }
-      if (streamError instanceof SubagentProviderError) {
-        throw streamError;
+
+      if (hostDurableReview && responseUiMessage) {
+        responseUiMessage = parkDurableReviewPauses({
+          message: responseUiMessage,
+          pauses: durableReviewPauses(),
+          origin: params.reviewOrigin,
+        });
       }
-      throw new ProviderError(mapProviderError(streamError, provider));
+    };
+    if (hostDurableReview) {
+      await runWithDurableReview(consumeTurn);
+    } else {
+      await runWithoutDurableReview(consumeTurn);
+    }
+
+    if (!responseUiMessage) {
+      throw new Error("Agent execution did not produce a response message");
     }
 
     logger.info(
@@ -1250,4 +1353,52 @@ async function cleanupBrowserTab(params: {
       );
     }
   }
+}
+
+function nestedAppaClaims(params: {
+  loggingSessionId?: string;
+  parentDelegationChain?: string;
+  delegationToolCallId?: string;
+  appaParentSessionId?: string;
+}): {
+  appaSessionId?: string;
+  appaParentId?: string;
+  ownAppaSessionId?: string;
+} {
+  const parent = params.appaParentSessionId ?? params.loggingSessionId;
+  if (
+    !parent ||
+    !params.parentDelegationChain ||
+    !params.delegationToolCallId
+  ) {
+    return { ownAppaSessionId: params.loggingSessionId };
+  }
+  const appaSessionId = childSessionId(parent, params.delegationToolCallId);
+  return {
+    appaSessionId,
+    appaParentId: parent,
+    ownAppaSessionId: appaSessionId,
+  };
+}
+
+function quarantineApprovalResponses(
+  messages: ModelMessage[],
+  approvalIds: readonly string[],
+): ModelMessage[] {
+  const blocked = new Set(approvalIds);
+  return messages.map((message) => {
+    if (message.role !== "tool") return message;
+    return {
+      ...message,
+      content: message.content.map((part) => {
+        if (
+          part.type === "tool-approval-response" &&
+          blocked.has(part.approvalId)
+        ) {
+          return { ...part, approved: false };
+        }
+        return part;
+      }),
+    };
+  });
 }

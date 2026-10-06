@@ -38,7 +38,7 @@ export const OfferJwsSchema = z.object({
 });
 
 export type OfferJws = z.infer<typeof OfferJwsSchema>;
-type OfferClaims = z.infer<typeof OfferClaimsSchema>;
+export type OfferClaims = z.infer<typeof OfferClaimsSchema>;
 
 /**
  * Drops the flattened JWS members from remedy call arguments. The proxy is

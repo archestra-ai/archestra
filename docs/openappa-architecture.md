@@ -2,9 +2,9 @@
 
 OpenAPPA evaluates tool calls and tool results at the LLM proxy. The proxy identifies sessions from client headers or an explicit `X-Appa-Session-ID`. External client sessions scope to the authenticated credential (`user:<id>`, `app:<id>`, or `virtual-key:<id>`). This prevents callers from guessing another user's session ID. Two MCP tools manage policy remedies: `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`.
 
-The runtime keys session state by session ID. Internal requests over loopback share session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback forms the platform trust boundary. Requests without a session ID fall back to a shared identity per credential and agent (`<caller-id>@<agent-id>`), which couples their histories and turn approvals.
+The runtime keys state by organization, caller, and session. Chat requests require an authenticated conversation owner. External requests require platform credentials. Internal executors use host-controlled session bindings. A source header, tool name, or claimed parent does not establish execution authority. Requests without a session ID can fall back to a shared identity per credential and agent (`<caller-id>@<agent-id>`). This fallback couples their histories and turn approvals.
 
-This guide explains Archestra's integration rather than OpenAPPA policy syntax. The source baseline is Archestra `3aa876d1`, with [OpenAPPA pinned at `c7c1e1ef`](https://github.com/archestra-ai/OpenAPPA/tree/c7c1e1ef36aa07604b421c48be266d7397557656). Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
+This guide explains Archestra's integration rather than OpenAPPA policy syntax. The source baseline is Archestra `d9b78ae3` plus the native message integration, with [OpenAPPA pinned at `85465feb`](https://github.com/archestra-ai/OpenAPPA/tree/85465feb8214f662dd21d40df2c01964e5b099fa). Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
 
 Protocol jump links: [call rewriting](#tool-calls-and-results), [remedy execution](#remedies), [user questions](#ask_user-and-native-elicitation), [session and child markers](#protected-session-markers), and [yell reporting](#yell-and-diagnostic-tools).
 
@@ -24,6 +24,12 @@ flowchart LR
   Host --> PolicyDB
   Native --> Bridge[Authenticated loopback helper bridge]
   Bridge --> Sandbox[Isolated helper sandbox]
+  Transport[Slack, Teams, Telegram, Outlook] <--> NativeHost[Host message admission and delivery]
+  NativeHost --> Host
+  NativeHost --> Rooms[(Immutable room facts and delivery receipts)]
+  Reviewer[Authenticated review page] --> Outbox[(Durable review continuations)]
+  Outbox --> Worker[Resume and delivery worker]
+  Worker --> NativeHost
 ```
 
 ## Startup configuration
@@ -59,6 +65,61 @@ Saving revision `1` through MCP local publication can auto-enable enforcement if
 
 `ask_user` has its own advertisement path. Policy authoring tools stay available to agent profiles while beta is on. The `yell` tool follows the reporting flag rather than the deployment switch, but still requires session and call correlation.
 
+## Native Message Boundaries
+
+Slack, Teams, Telegram, and Outlook use host-controlled read and send operations. `native_ingress` admits message text, history, and attachment bytes before execution. Email history includes only messages whose sender or recipients identify the requester as a reader. A shared conversation ID alone grants no access. `native_reply` checks the actual destination before delivery. `Prompt` and `TurnEnd` remain textless markers, not content checks.
+
+```text
+Authenticated transport event
+          |
+Verified room / sender facts --> native_ingress --> admitted input or replacement
+                                                    |
+                                      agent --> LLM proxy --> tools / child agents
+                                                    |
+Fresh destination facts ------> native_reply <------ answer / file / task result
+                                    |
+                          allow --> provider API
+                          refuse -> withhold data
+```
+
+The composer appends these `host/archestra` contracts to the effective policy. Explicit root rules can override them; the wildcard does not mask them. The native dispatcher requires host authority for these reserved operations. A client declaring `native_ingress` or `native_reply` cannot invoke them as transport operations. Provider facts become immutable audience snapshots in `openappa_native_rooms`. Unknown membership stays unknown, never an empty roster. A reply to the same unresolved room can pass by symbolic equality. A read or send needing unavailable membership evidence fails closed.
+
+The authenticated helper bridge resolves these snapshots in-process. Native annotations read the runtime's declared `trust_ranks`. Suspicious input takes the declared lower rank. Missing rank evidence fails closed rather than preserving trusted context. Composition validates structure without credentials; runtime execution requires the actual bridge bearer.
+
+Native delivery receipts bind the session, occurrence, destination snapshot, and payload digest. Separate task completions and file tool calls have separate occurrence IDs, even with identical content. An atomic `pending` claim grants one sender permission to post. Completion records `delivered` or `failed` before closing the runtime receipt. Failed, pending, or conflicting retries cannot post again. File bytes require admission; a filename or digest alone is not a data-flow decision.
+
+Teams channel roots use their activity ID so replies retain the same thread. Personal and group chats keep their conversation key, including quoted replies. Approval invokes use the card's stored original thread, not the card or invoke ID. Cards without a stored thread retain the unthreaded session key. Personal room facts use the authenticated AAD sender and tenant; a Bot Framework conversation ID is not a Graph chat ID. Background delivery carries the original conversation reference and checks its destination again.
+
+Email uses the conversation ID, with a message-ID fallback. Runtime email continues an actor-owned context and retained workspace. Its admission uses the stored runtime session and parent. A slow launch retains its durable task handle. A persisted pending launch blocks replacement until its runtime workspace becomes visible or the task settles. Native boundaries reject a different caller on an existing session. They do not reset labels to let another person continue the thread.
+
+OpenAPPA review is separate from legacy approval buttons. A real remedy review parks an `INPUT_REQUIRED` task with its signed offer and selected plan. Slack, Teams, and private email link to `/openappa-review`; private arguments are not posted in the room. The logged-in reviewer must match the offer's caller. Current membership and Agent access are checked before resume and delivery. A separate signature binds the offer to the original destination. Internal and public email do not gain approval authority from their From address.
+
+Submitting a ruling stores an `openappa_review_continuations` row and returns HTTP 202 before inference. Duplicate submissions by the same owner acknowledge the same ruling; conflicting rulings fail. The worker claims the row, resumes the original task, and stores its result before delivery. Parallel approvals resume inference only after the last pending decision. Approval rows remain until the verified continuation consumes their exact rulings.
+
+```text
+Reviewer -> Review API: signed owner-bound decision
+Review API -> Outbox: persist queued continuation
+Review API -> Reviewer: 202 submitted
+Worker -> Task: verify permission, offer, origin; apply decision atomically
+Task -> Worker: resumed result or remaining review
+Worker -> Outbox: persist result before send
+Worker -> Native boundary: verify current destination and claim delivery
+Native boundary -> Provider: post admitted content
+Worker -> Outbox: record delivered
+```
+
+Recovery requeues a decision only when the original approval is still unconsumed. A possibly executed turn with no confirmed result is not rerun. Delivery recovery trusts a confirmed native receipt. An unknown provider outcome is quarantined, not replayed. A known failure before sending retains the saved result for retry.
+
+Nested in-process `agent__` and `skill__` calls use signed child trajectories rather than bypassing APPA. Child calls are checked in their own sessions; `endChild` admits the return before the parent observes it. Foreground result handling distinguishes real released spawns from ordinary tool results using durable receipts. Gateway delegation separately acquires a checked spawn when no exact proxy release applies. Repair requests carry a verified marker for the same lineage without repeating the delegated task. Outbound A2A and coding-runtime tasks are not treated as local children.
+
+Background tasks inherit restrictions from their actual producer session before inputs are staged. Existing task sessions require retained admission evidence; they cannot be reset for changed input. Completion and file delivery retain that producer identity. Caller-supplied ChatOps metadata does not select a different parent or destination.
+
+A positive off-start record preserves historical task mode after activation. The source must belong to the authenticated caller. An unknown source is not an off-start record. Existing governed child state cannot be replaced. Gateway execution uses a durable single-execution claim; it does not hold a pooled database connection during child inference.
+
+Email command and history parts are UTF-8 bounded before admission. The current command takes precedence when history exceeds the bound. Canonical replacements exceeding the bound are refused. They are not truncated into unadmitted content after acceptance.
+
+Older governed snapshots without the native contracts refuse these operations. Off-started sessions remain unenforced; neither path silently resets security state. Telegram groups retain unresolved membership; linked private chats have a verified reader. Outlook is the only inbox provider. The separate Gmail battery covers the declared read, draft, and label tools, not sending or Gmail inbox triggers. Its `self` audience is the OpenAPPA session principal, not a discovered mailbox ACL.
+
 ## GitHub policy sync
 
 Open **OpenAPPA** (`/openappa`) and select **Connect GitHub**, or configure it under **Settings → OpenAPPA**. When APPA is on, organization administrators can pick an `owner/repository`, a branch or tag (blank uses default), and a repository-relative TOML path. Public repositories need no credential. Private repositories use an organization token or GitHub App, requiring `credential:read`.
@@ -77,7 +138,7 @@ An invalid download preserves the current revision. If composition fails on a ne
 
 ## Batteries
 
-A battery packages OpenAPPA policies for one tool provider. It contains a policy file that names canonical tool paths (such as `mcp/github/get_file_contents`), optional helper scripts for external checks, and required `APPA_PROVIDER_*` credentials. The native addon exposes bundled batteries from the pinned OpenAPPA commit and validates uploaded packages. The Archestra adapter translates wire tool names to canonical names and back ([`adapter.rs`](../platform/archestra-rs/openappa-rs/src/adapter.rs)).
+A battery packages OpenAPPA policies for one tool provider. It contains a policy file that names canonical tool paths (such as `mcp/github/get_file_contents`), optional helper scripts for external checks, and required `APPA_PROVIDER_*` credentials. The native addon exposes bundled batteries from the pinned OpenAPPA commit, plus host packages such as Gmail, and validates uploaded packages. Command externals are admitted through the authenticated helper bridge; URL externals are refused. The Archestra adapter translates wire tool names to canonical names and back ([`adapter.rs`](../platform/archestra-rs/openappa-rs/src/adapter.rs)).
 
 ### Declarations
 
@@ -140,7 +201,7 @@ The bridge rejects non-loopback calls and invalid tokens. It mounts battery file
 
 Helper concurrency is capped at `max(1, floor(sandbox maxConcurrent / 2))`. Error responses: 404 for missing helpers, 502 for script errors, 503 for capacity limits, 504 for timeouts. The runtime treats non-200 responses as no answer, failing closed. Because consults hold database connections, slow helpers can exhaust connection pools.
 
-The bundled Archestra audience battery runs in-process without sandbox overhead. Its `members`, `team/<team>`, and `user/<user>` selectors resolve directly against PostgreSQL.
+The bundled Archestra audience battery runs in-process without sandbox overhead. Its `members`, `team/<team>`, and `user/<user>` selectors resolve directly against PostgreSQL. Native room selectors use the same authenticated bridge and resolve immutable host snapshots without a sandbox.
 
 ### Packages and persistence
 
@@ -685,12 +746,17 @@ Protocol changes require comprehensive testing beyond basic tool execution. Exis
 | Session and child carriers | [`session-token.test.ts`](../platform/backend/src/openappa/session-token.test.ts), [`child-trajectory-receipt.test.ts`](../platform/backend/src/openappa/child-trajectory-receipt.test.ts), [`child-return.test.ts`](../platform/backend/src/openappa/child-return.test.ts): caller mismatch, compaction, ambiguous attribution, and substituted returns. |
 | Native client formats | [`adapter tests`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/): metadata conflicts, native question availability, launch acknowledgments versus completions, and transcript-path detection. |
 | Peer and yell transport | [`peer-claims.unit.test.ts`](../platform/backend/src/openappa/peer-claims.unit.test.ts), [`yell-receiver.test.ts`](../platform/backend/src/openappa/yell-receiver.test.ts), [`MCP handlers tests`](../platform/backend/src/archestra-mcp-server/openappa.test.ts), [`native peer tests`](../platform/archestra-rs/openappa-rs/peer.test.cjs). |
+| Native rooms and helper contract | [`native-message.test.ts`](../platform/backend/src/openappa/native-message.test.ts), [`native-transport.test.ts`](../platform/backend/src/openappa/native-transport.test.ts), [`native-engine.openappa-helpers.route.test.ts`](../platform/backend/src/routes/openappa-helpers/native-engine.openappa-helpers.route.test.ts): real Rust policy, HTTP bridge, stored room facts, trust taint, audience containment, and unavailable membership. The cross-language test requires `ARCHESTRA_TEST_RUST_HELPER_INTEGRATION=true` and Cargo. |
+| Durable review recovery | [`submit.openappa-review.route.test.ts`](../platform/backend/src/routes/openappa-review/submit.openappa-review.route.test.ts): asynchronous acknowledgement, parallel decisions, stale resume, saved result, revoked permissions, and ambiguous provider outcome. |
+| Runtime leases and continuation | [`credential-lease.test.ts`](../platform/backend/src/services/agent-runtime/credential-lease.test.ts), [`start-task.continuity.test.ts`](../platform/backend/src/services/agent-runtime/start-task.continuity.test.ts): ownership, membership, expiry, retained workspace, and slow-launch replacement refusal. |
 
 Host unit tests frequently mock native decisions. Native and PostgreSQL tests remain essential for validating receipt replay and ledger event behavior. Live qualification must verify streaming, compaction, child completion handback, and real user prompts.
 
 ## Agent Runtimes
 
 The launcher issues a turn-scoped `X-Archestra-Runtime-Binding` for the saved workspace, run, actor, and Agent. The proxy verifies it against the runtime's virtual key. The gateway verifies it against its authenticated token. Both restore the stored OpenAPPA parent relationship. User runs keep `user:<id>`; non-user runs use `agent-workspace:<workspace id>`, so key rotation does not reset their trajectory. Binding credentials stay in secret environment variables and are not forwarded to providers or MCP servers.
+
+Retained workspaces keep their exact virtual key while their scoped lease remains valid. This is independent of the guardrails feature flag. A confirmed stop ends the turn, not the retained workspace lease. Completion, failure, and cancellation clear one-shot process and Kubernetes secret material. Key reuse never renews its deadline. The lease expires no later than the workspace and cannot widen stored ownership or scope. The proxy checks both primary and supplementary keys against the current run, workspace, Agent, owner, and membership. Deleted, expired, reassigned, or ambiguous credentials fail before constructing a provider client. Workspace teardown revokes the retained key.
 
 The proxy treats runtime launches as spawns and signs a `runtime_proof` over the source session, call ID, target, arguments, and spawn status. Proofs expire after five minutes and allow at most thirty seconds of issuance-clock skew. Wrapped `run_tool` calls carry them in `tool_args`. The proxy plugin reports each proof attachment to the registry. The registry verifies the signed source and call identity and rejects changes to any approved argument besides the added proof. The gateway verifies the proof and released-call receipt before dispatch. The launcher binds the child before staging inputs or starting its process. Steering and writes address that registered child again to inherit the parent's current restrictions. Child-return contracts are injected before inference; contracts over 64 KiB are refused. Native child identity and signed workspace lineage support direct and nested CLI children without trusting the static workspace header as a child claim.
 

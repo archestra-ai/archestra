@@ -98,6 +98,8 @@ export type ThreadFileOutcome =
  * Represents an incoming chat message from a chatops provider
  */
 export interface IncomingChatMessage {
+  /** Set by the provider when it embeds a quoted bot message in the body. */
+  includesQuotedHistory?: boolean;
   /** Unique message ID from the provider */
   messageId: string;
   /** The channel where the message was sent */
@@ -126,6 +128,14 @@ export interface IncomingChatMessage {
   attachments?: A2AAttachment[];
   /** Files that were attached but could not be delivered to the model. */
   skippedAttachments?: SkippedAttachment[];
+}
+
+/** Provider-verified facts, never a reader list supplied by the model. */
+export interface ChatOpsGuardrailsContext {
+  roomId: string;
+  trust: "trusted" | "suspicious";
+  /** null means membership is unknown; it does not mean nobody can read. */
+  readers: string[] | null;
 }
 
 /**
@@ -358,6 +368,13 @@ export interface ChatOpsProvider {
    * @returns The message ID of the sent reply
    */
   sendReply(options: ChatReplyOptions): Promise<string>;
+
+  /** Resolve the real room and its readers before a guarded read or delivery. */
+  getGuardrailsContext?(
+    message: IncomingChatMessage,
+    /** Set by the transport host, not message metadata. */
+    options?: { purpose: "ingress" | "egress" },
+  ): Promise<ChatOpsGuardrailsContext | null>;
 
   /**
    * Upload a file into a channel thread so it renders natively (a playable

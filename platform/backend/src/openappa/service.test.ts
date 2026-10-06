@@ -1,18 +1,38 @@
 import { SEEDED_APP_RENDER_META_KEY } from "@archestra/shared";
 import { vi } from "vitest";
+import { ChatOpsManager } from "@/agents/chatops/chatops-manager";
+import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
+import TelegramProvider from "@/agents/chatops/telegram-provider";
 import {
   executeArchestraTool,
   getArchestraMcpTools,
 } from "@/archestra-mcp-server";
+import { runGuardedForegroundDelegation } from "@/archestra-mcp-server/guarded-delegation";
 import config from "@/config";
 import * as database from "@/database";
 import logger from "@/logging";
+import { ChatOpsChannelBindingModel } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import { AppaChatAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/chat";
 import { AppaCodexAdapter } from "@/proxy/plugins/appa-plugin-archestra/adapters/codex";
+import {
+  AppaInProcessExecutorAdapter,
+  requireDelegatedChildSession,
+} from "@/proxy/plugins/appa-plugin-archestra/adapters/in-process-executor";
+import { AppaPluginArchestra } from "@/proxy/plugins/appa-plugin-archestra/plugin";
+import {
+  APPA_PLUGIN_TRUSTED_CONTEXT,
+  type AppaTrustedContext,
+} from "@/proxy/plugins/appa-plugin-archestra/types";
+import type { LlmProxyRequestContext } from "@/proxy/plugins/registry";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { openappaActor } from "./actor";
+import { mintChildReturnMarker } from "./child-return";
+import { collectDelegationMarkers } from "./delegation";
 import { signOfferClaims, unsignedOfferClaims } from "./offer-claims";
+import { chatOpsReviewOrigin } from "./review-origin";
 import {
   addressRuntimeChild,
   admitPeerMessage,
@@ -33,6 +53,7 @@ import {
   sessionFromHeaders,
   startRuntimeChild,
 } from "./service";
+import { inheritTaskSession } from "./task-provenance";
 import { rememberYellSession } from "./yell-session";
 
 function signedRemedyArgs(offerId = "offer-1") {
@@ -46,6 +67,89 @@ function signedRemedyArgs(offerId = "offer-1") {
     "test-offer-signing-secret-32chars",
   );
   return { offer_id: offerId, ...jws };
+}
+
+function foregroundResultContext(kind: "chat" | "executor") {
+  const trusted: AppaTrustedContext = {
+    session: { ...session },
+    profileId: "profile",
+    inProcessExecutor: kind === "executor",
+    ...(kind === "chat" ? { chatSource: "chat" as const } : {}),
+    toolIdentity: {
+      canonicalize: (name) => name,
+      attestationOf: () => undefined,
+      looseRunToolDispatch: false,
+    },
+    request: {
+      tools: undefined,
+      session: {},
+      customTools: new Set(),
+      declaredTools: [],
+    },
+  };
+  const context: LlmProxyRequestContext = {
+    requestId: "foreground-results",
+    organizationId,
+    profileId: "profile",
+    provider: "anthropic",
+    interactionType: "anthropic:messages",
+    model: "model",
+    streaming: false,
+    headers: {},
+    requestBody: {},
+    resources: new Map([[APPA_PLUGIN_TRUSTED_CONTEXT, trusted]]),
+  };
+  return {
+    plugin: new AppaPluginArchestra([
+      kind === "chat"
+        ? new AppaChatAdapter()
+        : new AppaInProcessExecutorAdapter(),
+    ]),
+    context,
+  };
+}
+
+async function retainForegroundSpawn(id: string) {
+  await database.default
+    .insert(database.schema.openappaOperationsTable)
+    .values({
+      organizationId,
+      callerId: session.caller_id,
+      sessionId: session.session_id,
+      operationId: `call:${id}`,
+      root: openappaActor(session.session_id),
+      status: "complete",
+      input: { semantic: { event: "tool_call", spawn: true } },
+      decision: {
+        decision: "allow_call",
+        spawn_binding: "runtime-fork-binding",
+      },
+    });
+}
+
+function releaseGatewayCalls(parent: typeof session) {
+  native.dispatchHook.mockImplementation(async (raw: string) => {
+    const event = JSON.parse(raw);
+    if (event.event === "tool_call") {
+      await database.default
+        .insert(database.schema.openappaOperationsTable)
+        .values({
+          organizationId,
+          callerId: parent.caller_id,
+          sessionId: parent.session_id,
+          operationId: event.operation_id,
+          root: openappaActor(parent.session_id),
+          status: "complete",
+          input: { semantic: event },
+          decision: { decision: "allow_call", spawn_binding: "retained-fork" },
+        });
+    }
+    return JSON.stringify(
+      event.event === "tool_call"
+        ? { decision: "allow_call", spawn_binding: "retained-fork" }
+        : { decision: "ack" },
+    );
+  });
 }
 
 const native = vi.hoisted(() => ({
@@ -204,6 +308,36 @@ describe("APPA feature boundary", () => {
         child_native_id: "child",
       }),
     );
+  });
+
+  test("model tool names and arguments never acquire native transport dispatch authority", async () => {
+    native.dispatchHook.mockResolvedValue(
+      JSON.stringify({ decision: "allow_call" }),
+    );
+    await evaluateToolCalls(
+      session,
+      [
+        {
+          id: "spoof-ingress",
+          name: "native_ingress",
+          arguments: { native_boundary: true, room_id: "known-room" },
+        },
+        {
+          id: "spoof-reply",
+          name: "native_reply",
+          arguments: { native_boundary: true, room_id: "known-room" },
+        },
+      ],
+      { canonicalize: (name) => name },
+    );
+    const calls = native.dispatchHook.mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((event) => event.event === "tool_call");
+    expect(calls).toHaveLength(2);
+    for (const call of calls) {
+      expect(call).not.toHaveProperty("native_boundary");
+      expect(call.arguments).toHaveProperty("native_boundary", true);
+    }
   });
 
   test.each([
@@ -1719,6 +1853,841 @@ describe("APPA feature boundary", () => {
     ).rejects.toMatchObject({ statusCode: 409 });
   });
 
+  test.each([
+    "chat",
+    "executor",
+  ] as const)("%s governs successful non-spawn agent and skill results instead of skipping them", async (kind) => {
+    const { plugin, context } = foregroundResultContext(kind);
+    const results = [
+      {
+        id: "outbound",
+        name: "agent__remote",
+        content: "private remote bytes",
+        isError: false,
+      },
+      {
+        id: "runtime",
+        name: "agent__runtime",
+        content: "detached task started",
+        isError: false,
+      },
+      {
+        id: "skill",
+        name: "skill__lookup",
+        content: "unreleased skill bytes",
+        isError: false,
+      },
+    ];
+    await database.default
+      .insert(database.schema.openappaOperationsTable)
+      .values({
+        organizationId,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        operationId: "call:outbound",
+        root: openappaActor(session.session_id),
+        status: "complete",
+        input: { semantic: { event: "tool_call", spawn: false } },
+        decision: { decision: "allow_call" },
+      });
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: results,
+    });
+    expect(outcome?.toolResultUpdates).toEqual(
+      Object.fromEntries(
+        results.map((result) => [
+          result.id,
+          "APPA: withheld; remedy offer-123",
+        ]),
+      ),
+    );
+    expect(native.loadChildReturns).not.toHaveBeenCalled();
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter((event) => event.event === "tool_result")
+        .map((event) => event.tool_call_id),
+    ).toEqual(["outbound", "runtime", "skill"]);
+  });
+
+  test.each([
+    "chat",
+    "executor",
+  ] as const)("%s refuses a released foreground spawn that never crossed ChildEnd", async (kind) => {
+    const { plugin, context } = foregroundResultContext(kind);
+    await retainForegroundSpawn("spawn");
+    native.loadChildReturns.mockResolvedValue([]);
+    await plugin.onSessionInit(context);
+    await expect(
+      plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: "spawn",
+            name: "agent__worker",
+            content: "unchecked last-step text",
+            isError: false,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    "text",
+    "status",
+  ] as const)("delivers only the exact crossed foreground return from a %s carrier", async (format) => {
+    const { plugin, context } = foregroundResultContext("executor");
+    await retainForegroundSpawn("spawn");
+    const value = "admitted child bytes";
+    native.loadChildReturns.mockResolvedValue([
+      {
+        childSessionId: "conversation:spawn",
+        spawnCallId: "spawn",
+        value,
+      },
+    ]);
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    const marker = mintChildReturnMarker({
+      organizationId,
+      callerId: session.caller_id,
+      parentId: "conversation",
+      childId: "conversation:spawn",
+      spawnCallId: "spawn",
+      value,
+    });
+    const content =
+      format === "text"
+        ? `${value}\n\n${marker}`
+        : JSON.stringify({
+            status: { completed: value },
+            privateMetadata: "must not reach parent",
+          });
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: [
+        { id: "spawn", name: "agent__worker", content, isError: false },
+      ],
+    });
+    expect(outcome?.toolResultUpdates).toEqual({ spawn: value });
+    const events = native.dispatchHook.mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((event) => event.event === "tool_result");
+    expect(events).toEqual([
+      expect.objectContaining({
+        tool_call_id: "spawn",
+        spawned_id: "conversation:spawn",
+        output: value,
+      }),
+    ]);
+  });
+
+  test("does not authorize a substituted foreground return using a sibling crossing", async () => {
+    const { plugin, context } = foregroundResultContext("executor");
+    await retainForegroundSpawn("spawn");
+    native.loadChildReturns.mockResolvedValue([
+      {
+        childSessionId: "conversation:sibling",
+        spawnCallId: "sibling",
+        value: "same bytes",
+      },
+    ]);
+    await plugin.onSessionInit(context);
+    await expect(
+      plugin.onToolResults({
+        ...context,
+        toolResults: [
+          {
+            id: "spawn",
+            name: "skill__worker",
+            content: "same bytes",
+            isError: false,
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("governs a released foreground spawn failure rather than demanding a successful return", async () => {
+    const { plugin, context } = foregroundResultContext("executor");
+    await retainForegroundSpawn("spawn");
+    await plugin.onSessionInit(context);
+    const outcome = await plugin.onToolResults({
+      ...context,
+      toolResults: [
+        {
+          id: "spawn",
+          name: "agent__worker",
+          content: "provider failed",
+          isError: true,
+        },
+      ],
+    });
+    expect(outcome?.toolResultUpdates).toEqual({
+      spawn: "APPA: withheld; remedy offer-123",
+    });
+    expect(native.loadChildReturns).not.toHaveBeenCalled();
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toContainEqual(
+      expect.objectContaining({
+        event: "tool_result",
+        tool_call_id: "spawn",
+        outcome: "failure",
+      }),
+    );
+  });
+
+  test("a gateway delegation releases a fork and binds its loopback child to the exact authenticated parent", async () => {
+    const parent = { ...session, session_id: "user:alice|gateway-root" };
+    releaseGatewayCalls(parent);
+    const execute = vi.fn(
+      async (input: {
+        message: string;
+        parentSessionId?: string;
+        toolCallId?: string;
+        sessionId?: string;
+      }) => {
+        const childId = `${parent.session_id}:${input.toolCallId}`;
+        const bound = requireDelegatedChildSession({
+          organizationId,
+          callerId: parent.caller_id,
+          markers: collectDelegationMarkers({
+            family: "openai:chatCompletions",
+            body: { messages: [{ role: "user", content: input.message }] },
+          }),
+          receipts: [],
+          claimedParentId: input.parentSessionId,
+          claimedSessionId: childId,
+        });
+        expect(bound).toEqual({
+          sessionId: childId,
+          parentId: parent.session_id,
+        });
+        expect(input.sessionId).toBe(parent.session_id);
+        expect(
+          native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+        ).toContainEqual(
+          expect.objectContaining({
+            event: "tool_call",
+            session_id: parent.session_id,
+            spawn: true,
+          }),
+        );
+        native.loadChildReturns.mockResolvedValue([
+          {
+            childSessionId: childId,
+            spawnCallId: input.toolCallId,
+            value: "bounded return",
+          },
+        ]);
+        return { text: "bounded return" };
+      },
+    );
+    const result = await runGuardedForegroundDelegation({
+      context: {
+        agent: { id: "profile", name: "Parent" },
+        agentId: "profile",
+        organizationId,
+        userId: "alice",
+        openappaSession: parent,
+        currentToolCallId: "provider-call",
+      },
+      toolName: "agent__worker",
+      message: "bounded request",
+      execute,
+    });
+    expect(result).toMatchObject({
+      content: [{ type: "text", text: "bounded return" }],
+    });
+    expect(execute).toHaveBeenCalledTimes(1);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toContainEqual(
+      expect.objectContaining({
+        event: "tool_result",
+        spawned_id: `${parent.session_id}:gateway-child:provider-call`,
+        output: "bounded return",
+      }),
+    );
+  });
+
+  test("gateway delegation denial executes no child and carries only caller-bound remedy routing", async () => {
+    const execute = vi.fn();
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "deny_call",
+        feedback: "Declare a bounded child return",
+        offers: [{ offer_id: "child-offer" }],
+      }),
+    );
+    const result = await runGuardedForegroundDelegation({
+      context: {
+        agent: { id: "profile", name: "Parent" },
+        organizationId,
+        userId: "alice",
+        openappaSession: { ...session, session_id: "user:alice|gateway-root" },
+        currentToolCallId: "call",
+      },
+      toolName: "agent__worker",
+      message: "sensitive request",
+      execute,
+    });
+    expect(result.isError).toBe(true);
+    expect(result.content).toEqual([
+      { type: "text", text: "Error: Declare a bounded child return" },
+    ]);
+    expect(result.structuredContent?.offers).toHaveLength(1);
+    expect(JSON.stringify(result.structuredContent)).not.toContain(
+      "sensitive request",
+    );
+    expect(execute).not.toHaveBeenCalled();
+  });
+
+  test("gateway execution reuses only the exact previously released source fork", async () => {
+    const parent = { ...session, session_id: "user:alice|gateway-root" };
+    const toolCallId = "provider-call";
+    await database.default
+      .insert(database.schema.openappaOperationsTable)
+      .values({
+        organizationId,
+        callerId: parent.caller_id,
+        sessionId: parent.session_id,
+        root: openappaActor(parent.session_id),
+        operationId: `call:${toolCallId}`,
+        status: "complete",
+        input: {
+          semantic: {
+            tool: "agent__worker",
+            arguments: { message: "released request" },
+            spawn: true,
+          },
+        },
+        decision: { decision: "allow_call", spawn_binding: "retained-fork" },
+      });
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    native.loadChildReturns.mockResolvedValue([
+      {
+        childSessionId: `${parent.session_id}:${toolCallId}`,
+        spawnCallId: toolCallId,
+        value: "admitted return",
+      },
+    ]);
+    const execute = vi.fn(async () => ({ text: "admitted return" }));
+    const params = {
+      context: {
+        agent: { id: "profile", name: "Parent" },
+        organizationId,
+        userId: "alice",
+        openappaSession: parent,
+        currentToolCallId: toolCallId,
+      },
+      toolName: "agent__worker",
+      message: "released request",
+      execute,
+    };
+    await expect(runGuardedForegroundDelegation(params)).resolves.toMatchObject(
+      { content: [{ type: "text", text: "admitted return" }] },
+    );
+    expect(execute.mock.calls).toHaveLength(1);
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .some((event) => event.event === "tool_call"),
+    ).toBe(false);
+    await expect(
+      runGuardedForegroundDelegation({ ...params, message: "changed request" }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    await expect(
+      runGuardedForegroundDelegation({ ...params, toolName: "agent__other" }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(execute).toHaveBeenCalledTimes(1);
+  });
+
+  test("gateway delegated bytes without a ChildEnd are withheld even after a released fork", async () => {
+    releaseGatewayCalls(session);
+    native.loadChildReturns.mockResolvedValue([]);
+    await expect(
+      runGuardedForegroundDelegation({
+        context: {
+          agent: { id: "profile", name: "Parent" },
+          organizationId,
+          userId: "alice",
+          openappaSession: { ...session },
+        },
+        toolName: "agent__worker",
+        message: "bounded request",
+        execute: async () => ({ text: "unchecked result" }),
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .some((event) => event.event === "tool_result"),
+    ).toBe(false);
+  });
+
+  test("a gateway caller cannot use another owner's parent to start a child", async () => {
+    const execute = vi.fn();
+    await expect(
+      runGuardedForegroundDelegation({
+        context: {
+          agent: { id: "profile", name: "Parent" },
+          organizationId,
+          userId: "other",
+          openappaSession: { ...session },
+        },
+        toolName: "agent__worker",
+        message: "request",
+        execute,
+      }),
+    ).rejects.toMatchObject({ statusCode: 403 });
+    expect(execute).not.toHaveBeenCalled();
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("a detached task inherits its owned source before inference rather than starting a fresh unlabeled root", async () => {
+    await database.default
+      .insert(database.schema.openappaSessionsTable)
+      .values({
+        organizationId,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        root: openappaActor(session.session_id),
+        actor: openappaActor(session.session_id),
+        startDecision: { decision: "ack" },
+      });
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    await inheritTaskSession({
+      parent: session,
+      session: { ...session, session_id: "user:alice|runtime-workspace" },
+      occurrenceId: "task",
+      input: JSON.stringify({ message: "private task" }),
+    });
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      expect.objectContaining({
+        event: "session_start",
+        caller_id: session.caller_id,
+        session_id: "user:alice|runtime-workspace",
+        fork_of: session.session_id,
+      }),
+    ]);
+  });
+
+  test("native Telegram background delivery verifies the room, preserves the producer, and separates identical task occurrences", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "telegram-reader@example.com" });
+    await makeMember(user.id, organizationId);
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "telegram",
+      channelId: "555",
+      workspaceId: null,
+      isDm: true,
+      dmOwnerEmail: user.email,
+      agentId: null,
+    });
+    const provider = new TelegramProvider({
+      enabled: true,
+      botToken: "99:test-token",
+    });
+    Object.assign(provider, { botId: 99, botUsername: "test_bot" });
+    const sent: Record<string, unknown>[] = [];
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (url: string, options: RequestInit) => {
+        const args = JSON.parse(options.body as string);
+        if (url.endsWith("/getChat")) {
+          expect(args).toEqual({ chat_id: "555" });
+          return Response.json({
+            ok: true,
+            result: { id: 555, type: "private" },
+          });
+        }
+        if (url.endsWith("/sendMessage")) {
+          sent.push(args);
+          return Response.json({
+            ok: true,
+            result: { message_id: 900 + sent.length },
+          });
+        }
+        throw new Error("Unexpected Telegram API boundary");
+      }),
+    );
+    native.dispatchHook.mockImplementation(async (raw: string) =>
+      JSON.stringify(
+        JSON.parse(raw).event === "tool_call"
+          ? { decision: "allow_call" }
+          : { decision: "ack" },
+      ),
+    );
+    const manager = new ChatOpsManager();
+    Object.assign(manager, { telegramProvider: provider });
+    const params = {
+      bindingId: binding.id,
+      threadId: "555",
+      text: "Same governed task output",
+      guardrailsSession: {
+        organizationId,
+        sessionId: "runtime-producing-root",
+        callerId: `user:${user.id}`,
+      },
+    };
+    for (const deliveryId of [
+      "task:first:completion",
+      "task:second:completion",
+      "task:first:completion",
+    ]) {
+      await manager.notifyBindingThread({ ...params, deliveryId });
+    }
+    expect(sent).toHaveLength(2);
+    expect(
+      sent.every(
+        (request) => request.chat_id === "555" && request.text === params.text,
+      ),
+    ).toBe(true);
+    const approvals = native.dispatchHook.mock.calls
+      .map(([raw]) => JSON.parse(raw))
+      .filter((event) => event.event === "tool_call");
+    expect(approvals).toHaveLength(2);
+    expect(
+      approvals.every(
+        (event) =>
+          event.session_id === params.guardrailsSession.sessionId &&
+          event.caller_id === params.guardrailsSession.callerId &&
+          event.tool === "native_reply",
+      ),
+    ).toBe(true);
+    expect(approvals[0].operation_id).not.toBe(approvals[1].operation_id);
+  });
+
+  test("Teams private background replies use the verified original tenant/AAD/reference and refuse another destination", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const user = await makeUser({ email: "teams-reader@example.com" });
+    await makeMember(user.id, organizationId);
+    const binding = await ChatOpsChannelBindingModel.create({
+      organizationId,
+      provider: "ms-teams",
+      channelId: "a:stable-dm",
+      workspaceId: null,
+      isDm: true,
+      dmOwnerEmail: user.email,
+      agentId: null,
+    });
+    const aadObjectId = "00000000-0000-4000-8000-000000000003";
+    const reference = {
+      channelId: "msteams",
+      conversation: {
+        id: binding.channelId,
+        conversationType: "personal",
+        tenantId: "tenant-1",
+      },
+      serviceUrl: "https://smba.trafficmanager.net/amer/",
+      user: { id: "botframework-user", aadObjectId },
+      bot: { id: "bot-id" },
+    };
+    const origin = chatOpsReviewOrigin({
+      provider: "ms-teams",
+      message: {
+        messageId: "original-message",
+        channelId: binding.channelId,
+        workspaceId: null,
+        senderId: aadObjectId,
+        senderName: "Known sender",
+        text: "Not persisted",
+        rawText: "Not persisted",
+        timestamp: new Date(),
+        isThreadReply: false,
+        metadata: {
+          tenantId: "tenant-1",
+          conversationType: "personal",
+          senderAadObjectId: aadObjectId,
+          conversationReference: reference,
+          authHeader: "never persist",
+        },
+      },
+    });
+    if (!origin) throw new Error("Missing delivery origin");
+    expect(JSON.stringify(origin)).not.toContain("never persist");
+    const provider = new MSTeamsProvider({
+      enabled: true,
+      appId: "bot-app",
+      appSecret: "synthetic",
+      tenantId: "tenant-1",
+      graphTenantId: "tenant-1",
+      graphClientId: "bot-app",
+      graphClientSecret: "synthetic",
+    });
+    const sent: unknown[] = [];
+    Object.assign(provider, {
+      graphClient: {
+        users: {
+          byUserId: (id: string) => {
+            expect(id).toBe(aadObjectId);
+            return {
+              get: async () => ({ id, mail: user.email, userType: "Member" }),
+            };
+          },
+        },
+      },
+      adapter: {
+        continueConversationAsync: async (
+          appId: string,
+          actualReference: unknown,
+          handler: (context: unknown) => Promise<void>,
+        ) => {
+          expect(appId).toBe("bot-app");
+          expect(actualReference).toEqual(reference);
+          await handler({
+            sendActivity: async (text: unknown) => {
+              sent.push(text);
+              return { id: "reply-id" };
+            },
+          });
+        },
+      },
+    });
+    native.dispatchHook.mockImplementation(async (raw: string) =>
+      JSON.stringify(
+        JSON.parse(raw).event === "tool_call"
+          ? { decision: "allow_call" }
+          : { decision: "ack" },
+      ),
+    );
+    const manager = new ChatOpsManager();
+    Object.assign(manager, { msTeamsProvider: provider });
+    const params = {
+      bindingId: binding.id,
+      threadId: binding.channelId,
+      text: "Governed private reply",
+      deliveryId: "task:teams:completion",
+      deliveryOrigin: origin,
+      guardrailsSession: {
+        organizationId,
+        sessionId: "actual-teams-producer",
+        callerId: `user:${user.id}`,
+      },
+    };
+    await manager.notifyBindingThread(params);
+    await manager.notifyBindingThread(params);
+    expect(sent).toHaveLength(1);
+    expect(JSON.stringify(sent[0])).toContain(params.text);
+    await expect(
+      manager.notifyBindingThread({
+        ...params,
+        deliveryOrigin: {
+          ...origin,
+          message: { ...origin.message, channelId: "a:other-person" },
+        },
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(sent).toHaveLength(1);
+  });
+
+  test.each([
+    "missing-parent",
+    "wrong-caller",
+    "wrong-lineage",
+  ] as const)("a task refuses %s provenance before starting a producing session", async (invalid) => {
+    if (invalid !== "missing-parent") {
+      await database.default
+        .insert(database.schema.openappaSessionsTable)
+        .values({
+          organizationId,
+          callerId: session.caller_id,
+          sessionId: session.session_id,
+          root: openappaActor(session.session_id),
+          actor: openappaActor(session.session_id),
+          startDecision: { decision: "ack" },
+        });
+    }
+    await expect(
+      inheritTaskSession({
+        parent: {
+          ...session,
+          ...(invalid === "wrong-lineage"
+            ? { parent_id: "invented-parent" }
+            : {}),
+        },
+        session: {
+          ...session,
+          session_id: "runtime-session",
+          ...(invalid === "wrong-caller" ? { caller_id: "user:other" } : {}),
+        },
+        occurrenceId: "task",
+        input: "private task",
+      }),
+    ).rejects.toMatchObject({
+      statusCode: invalid === "wrong-caller" ? 403 : 409,
+    });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    "admitted",
+    "held",
+    "unverified",
+    "changed-bytes",
+  ] as const)("a retained task must admit its exact peer input (%s) without resetting its labels", async (outcome) => {
+    const producing = { ...session, session_id: "runtime-session" };
+    for (const identity of [session, producing]) {
+      await database.default
+        .insert(database.schema.openappaSessionsTable)
+        .values({
+          organizationId,
+          callerId: identity.caller_id,
+          sessionId: identity.session_id,
+          root: openappaActor(identity.session_id),
+          actor: openappaActor(identity.session_id),
+          startDecision: { decision: "ack" },
+        });
+    }
+    native.sendPeerMessage.mockResolvedValue(
+      JSON.stringify({ kind: "released", message_id: "canonical-message" }),
+    );
+    const input = JSON.stringify({ message: "private follow-up" });
+    native.admitPeerMessage.mockResolvedValue(
+      JSON.stringify(
+        outcome === "admitted" || outcome === "changed-bytes"
+          ? {
+              kind: "admitted",
+              message_id: "canonical-message",
+              value: outcome === "admitted" ? input : "other bytes",
+            }
+          : outcome === "held"
+            ? { kind: "held", notices: [] }
+            : { kind: "unverified" },
+      ),
+    );
+    const operation = inheritTaskSession({
+      parent: session,
+      session: producing,
+      occurrenceId: "next-task",
+      input,
+    });
+    if (outcome === "admitted")
+      await expect(operation).resolves.toBeUndefined();
+    else await expect(operation).rejects.toMatchObject({ statusCode: 409 });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+    expect(JSON.parse(native.sendPeerMessage.mock.calls[0][0])).toMatchObject({
+      operation_id: "task-input:next-task",
+      recipient_session_id: producing.session_id,
+      value: input,
+    });
+  });
+
+  test("a governed gateway call without a parent fails before creating a child", async () => {
+    const execute = vi.fn();
+    const result = await runGuardedForegroundDelegation({
+      context: {
+        agent: { id: "profile", name: "Parent" },
+        organizationId,
+        userId: "alice",
+        gatewayRequest: true,
+      },
+      toolName: "agent__worker",
+      message: "request",
+      execute,
+    });
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "authenticated parent session",
+    );
+    expect(execute).not.toHaveBeenCalled();
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test.each([
+    false,
+    true,
+  ])("gateway retry never restarts an existing child (crossed=%s)", async (crossed) => {
+    const parent = { ...session, session_id: "user:alice|gateway-root" };
+    const toolCallId = "gateway-child:call";
+    const childId = `${parent.session_id}:${toolCallId}`;
+    await database.default
+      .insert(database.schema.openappaOperationsTable)
+      .values({
+        organizationId,
+        callerId: parent.caller_id,
+        sessionId: parent.session_id,
+        root: openappaActor(parent.session_id),
+        operationId: `call:${toolCallId}`,
+        status: "complete",
+        input: {
+          semantic: {
+            tool: "agent__worker",
+            arguments: { message: "original request" },
+          },
+        },
+        decision: { decision: "allow_call", spawn_binding: "retained-fork" },
+      });
+    await database.default
+      .insert(database.schema.openappaSessionsTable)
+      .values({
+        organizationId,
+        callerId: parent.caller_id,
+        sessionId: childId,
+        parentId: parent.session_id,
+        root: openappaActor(parent.session_id),
+        actor: openappaActor(childId),
+        startDecision: { decision: "ack" },
+      });
+    native.loadChildReturns.mockResolvedValue(
+      crossed
+        ? [
+            {
+              childSessionId: childId,
+              spawnCallId: toolCallId,
+              value: "retained child return",
+            },
+          ]
+        : [],
+    );
+    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    const execute = vi.fn();
+    const params = {
+      context: {
+        agent: { id: "profile", name: "Parent" },
+        organizationId,
+        userId: "alice",
+        openappaSession: parent,
+        currentToolCallId: "call",
+      },
+      toolName: "agent__worker",
+      message: "original request",
+      execute,
+    };
+    if (crossed) {
+      await expect(
+        runGuardedForegroundDelegation(params),
+      ).resolves.toMatchObject({
+        content: [{ type: "text", text: "retained child return" }],
+      });
+    } else {
+      await expect(
+        runGuardedForegroundDelegation(params),
+      ).rejects.toMatchObject({ statusCode: 409 });
+    }
+    await expect(
+      runGuardedForegroundDelegation({
+        ...params,
+        message: "substituted request",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(execute).not.toHaveBeenCalled();
+  });
+
   test("submits the exact crossed child value as the parent SpawnResult", async () => {
     native.dispatchHook.mockResolvedValueOnce(
       JSON.stringify({ decision: "ack" }),
@@ -1757,6 +2726,49 @@ describe("APPA feature boundary", () => {
         value: "SUMMARY(24 characters): safe",
       }),
     ).rejects.toMatchObject({ statusCode: 503 });
+  });
+
+  test("accepts a repeated crossed return only from its retained exact receipt", async () => {
+    await database.default
+      .insert(database.schema.openappaProcessedResultsTable)
+      .values({
+        organizationId,
+        callerId: session.caller_id,
+        sessionId: session.session_id,
+        toolCallId: "spawn-call",
+        root: openappaActor(session.session_id),
+        status: "complete",
+        approvedOutput: "admitted return",
+        decision: { decision: "ack" },
+      });
+    const params = {
+      session,
+      toolCallId: "spawn-call",
+      childId: "conversation:child",
+      value: "admitted return",
+    };
+    await expect(approveSpawnReturn(params)).resolves.toBeUndefined();
+    await expect(
+      approveSpawnReturn({ ...params, value: "substituted return" }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(native.dispatchHook).not.toHaveBeenCalled();
+  });
+
+  test("does not treat human-readable closed-dispatch feedback as return authority", async () => {
+    native.dispatchHook.mockResolvedValueOnce(
+      JSON.stringify({
+        decision: "block",
+        reason: "no open dispatch",
+      }),
+    );
+    await expect(
+      approveSpawnReturn({
+        session,
+        toolCallId: "spawn-call",
+        childId: "conversation:child",
+        value: "unrecorded return",
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
   });
 
   test.each([

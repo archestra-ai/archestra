@@ -149,6 +149,11 @@ describe("internal MCP catalog routes", () => {
     makeTool,
   }) => {
     const wasEnabled = config.openappa.enabled;
+    const wasKubernetes = {
+      kubeconfig: config.orchestrator.kubernetes.kubeconfig,
+      loadKubeconfigFromCurrentCluster:
+        config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster,
+    };
     config.openappa.enabled = true;
     try {
       const catalog = await makeInternalMcpCatalog({
@@ -167,6 +172,9 @@ describe("internal MCP catalog routes", () => {
       });
       expect(await batteryStatus(organizationId, "cloudflare")).toBe("active");
 
+      // This fixture runs the DB-only rename, not the K8s startup adopt pass.
+      config.orchestrator.kubernetes.kubeconfig = "";
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
       const renamed = await app.inject({
         method: "PUT",
         url: `/api/internal_mcp_catalog/${catalog.id}`,
@@ -189,6 +197,7 @@ describe("internal MCP catalog routes", () => {
       expect(await batteryStatus(organizationId, "cloudflare")).toBe("active");
     } finally {
       config.openappa.enabled = wasEnabled;
+      Object.assign(config.orchestrator.kubernetes, wasKubernetes);
     }
   });
 
@@ -197,6 +206,11 @@ describe("internal MCP catalog routes", () => {
     makeTool,
   }) => {
     const wasEnabled = config.openappa.enabled;
+    const wasKubernetes = {
+      kubeconfig: config.orchestrator.kubernetes.kubeconfig,
+      loadKubeconfigFromCurrentCluster:
+        config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster,
+    };
     config.openappa.enabled = true;
     try {
       const catalog = await makeInternalMcpCatalog({
@@ -222,7 +236,8 @@ describe("internal MCP catalog routes", () => {
         githubPatId: null,
         githubAppConfigId: null,
       });
-
+      config.orchestrator.kubernetes.kubeconfig = "";
+      config.orchestrator.kubernetes.loadKubeconfigFromCurrentCluster = false;
       const renamed = await app.inject({
         method: "PUT",
         url: `/api/internal_mcp_catalog/${catalog.id}`,
@@ -237,6 +252,7 @@ describe("internal MCP catalog routes", () => {
       );
     } finally {
       config.openappa.enabled = wasEnabled;
+      Object.assign(config.orchestrator.kubernetes, wasKubernetes);
     }
   });
 

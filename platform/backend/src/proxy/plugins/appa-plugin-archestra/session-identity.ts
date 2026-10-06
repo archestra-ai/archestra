@@ -7,6 +7,7 @@ import {
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaInProcessExecutorAdapter } from "./adapters/in-process-executor";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import type {
   AppaChildTrajectory,
@@ -26,6 +27,9 @@ export const APPA_CLIENT_ADAPTERS: readonly AppaClientAdapter[] = Object.freeze(
     new AppaCodexAdapter(),
     new AppaOpenCodeAdapter(),
     new AppaChatAdapter(),
+    // After Chat, so a chatSource request is not stolen. Matches only once a
+    // trusted session exists and no earlier adapter claimed the request.
+    new AppaInProcessExecutorAdapter(),
   ],
 );
 

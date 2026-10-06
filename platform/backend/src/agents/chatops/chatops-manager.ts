@@ -26,6 +26,32 @@ import {
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
+import {
+  authorizeChatOpsReviewResume,
+  formatChatOpsReviewUrl,
+  isExecuteRemedyPlanTool,
+  OPENAPPA_REVIEW_NOTICE,
+} from "@/openappa/chatops-review";
+import {
+  admitChatOpsTurn,
+  authorizeChatOpsReply,
+  authorizeOutbound,
+  backgroundSessionRequired,
+  chatOpsRoomFacts,
+  completeAuthorizedSend,
+  egressEventId,
+  NATIVE_TRANSPORT_BLOCKED_NOTICE,
+  renderOutboundContent,
+  supportedNativeProvider,
+  type TransportSession,
+  transportGovernance,
+} from "@/openappa/native-transport";
+import {
+  chatOpsReviewOrigin,
+  type ReviewOrigin,
+  ReviewOriginSchema,
+  reviewChatMessage,
+} from "@/openappa/review-origin";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { getHiddenMessagingChannels } from "@/services/integration-overrides";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -38,6 +64,7 @@ import type {
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
+import { ApiError } from "@/types";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
@@ -136,6 +163,36 @@ export class ChatOpsManager {
     }
   }
 
+  async deliverReviewContinuation(params: {
+    origin: Extract<ReviewOrigin, { type: "chatops" }>;
+    session: TransportSession;
+    agentId: string;
+    reviewId: string;
+    result: A2AProtocolSendMessageResponse;
+    beforeSend?: (eventId?: string) => Promise<void>;
+  }): Promise<void> {
+    const provider = this.getChatOpsProvider(params.origin.provider);
+    const agent = await AgentModel.findById(params.agentId);
+    if (
+      !provider ||
+      !agent ||
+      agent.organizationId !== params.session.organizationId
+    ) {
+      throw new ApiError(409, "The original review destination is unavailable");
+    }
+    await this.replyByMessageExecutionResult({
+      agent,
+      provider,
+      message: reviewChatMessage(params.origin),
+      result: params.result,
+      sendReply: true,
+      transportSession: params.session,
+      deliveryId: params.reviewId,
+      beforeSend: params.beforeSend,
+      strictDelivery: true,
+    });
+  }
+
   /**
    * Offer only agents the resolved organization member can use. An unresolved
    * sender receives no resource names. A shared channel is never offered a
@@ -198,6 +255,10 @@ export class ChatOpsManager {
     filename: string;
     data: Buffer;
     comment?: string;
+    /** Session that produced the file. Required while guardrails v2 is active. */
+    guardrailsSession?: TransportSession;
+    deliveryId?: string;
+    deliveryOrigin?: Extract<ReviewOrigin, { type: "chatops" }>;
   }): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
@@ -219,13 +280,35 @@ export class ChatOpsManager {
         `The ${binding.provider} provider does not support file uploads`,
       );
     }
-    await provider.uploadFileToThread({
-      channelId: binding.channelId,
+    const fileContent = params.data.toString("base64");
+    const release = await this.authorizeBindingPayload({
+      binding,
+      provider,
       threadId: params.threadId,
-      filename: params.filename,
-      data: params.data,
-      comment: params.comment,
+      session: params.guardrailsSession,
+      eventScope: `file:${params.bindingId}:${params.threadId}:${params.deliveryId ?? params.filename}`,
+      content: [params.filename, params.comment, fileContent]
+        .filter(Boolean)
+        .join("\n"),
+      deliveryOrigin: params.deliveryOrigin,
     });
+    if (release === "withheld") {
+      throw new Error(NATIVE_TRANSPORT_BLOCKED_NOTICE);
+    }
+    if (release === "already_delivered") return;
+    try {
+      await provider.uploadFileToThread({
+        channelId: binding.channelId,
+        threadId: params.threadId,
+        filename: params.filename,
+        data: params.data,
+        comment: params.comment,
+      });
+      await release?.("success");
+    } catch (error) {
+      await release?.("failure");
+      throw error;
+    }
   }
 
   async notifyBindingThread(params: {
@@ -233,6 +316,10 @@ export class ChatOpsManager {
     threadId: string;
     text: string;
     agentName?: string;
+    /** Session that produced the text. Required while guardrails v2 is active. */
+    guardrailsSession?: TransportSession;
+    deliveryId?: string;
+    deliveryOrigin?: Extract<ReviewOrigin, { type: "chatops" }>;
   }): Promise<void> {
     const binding = await ChatOpsChannelBindingModel.findById(params.bindingId);
     if (!binding) {
@@ -257,26 +344,108 @@ export class ChatOpsManager {
       );
       return;
     }
-    await provider.sendReply({
-      // A synthesized reference, not a real incoming message: sendReply only
-      // routes on channelId/threadId, and this reply answers a thread rather
-      // than a specific message.
-      originalMessage: {
-        messageId: `notify-${params.bindingId}-${Date.now()}`,
-        channelId: binding.channelId,
-        workspaceId: null,
-        threadId: params.threadId,
-        senderId: "system",
-        senderName: "system",
-        text: "",
-        rawText: "",
-        timestamp: new Date(),
-        isThreadReply: true,
-      },
-      text: params.text,
-      replyInThread: true,
-      footer: params.agentName ? `🤖 ${params.agentName}` : undefined,
+    const originalMessage = backgroundChatMessage({
+      binding,
+      threadId: params.threadId,
+      deliveryOrigin: params.deliveryOrigin,
     });
+    const footer = params.agentName ? `🤖 ${params.agentName}` : undefined;
+    const content = renderOutboundContent({ text: params.text, footer });
+    const release = await this.authorizeBindingPayload({
+      binding,
+      provider,
+      threadId: params.threadId,
+      session: params.guardrailsSession,
+      eventScope: `notify:${params.bindingId}:${params.threadId}:${params.deliveryId ?? "notification"}`,
+      content,
+      deliveryOrigin: params.deliveryOrigin,
+    });
+    if (release === "already_delivered") return;
+    if (release === "withheld") {
+      await provider.sendReply({
+        originalMessage,
+        text: NATIVE_TRANSPORT_BLOCKED_NOTICE,
+        replyInThread: true,
+      });
+      return;
+    }
+    try {
+      await provider.sendReply({
+        originalMessage,
+        text: params.text,
+        replyInThread: true,
+        footer,
+      });
+      await release?.("success");
+    } catch (error) {
+      await release?.("failure");
+      throw error;
+    }
+  }
+
+  /**
+   * Authorize a background payload against host room facts. No session while
+   * v2 is active withholds the payload. Inactive sessions send as before and
+   * do not look up membership.
+   */
+  private async authorizeBindingPayload(params: {
+    binding: {
+      provider: ChatOpsProviderType;
+      channelId: string;
+      workspaceId: string | null;
+      organizationId: string;
+    };
+    provider: ChatOpsProvider;
+    threadId: string;
+    session: TransportSession | undefined;
+    eventScope: string;
+    content: string;
+    deliveryOrigin?: Extract<ReviewOrigin, { type: "chatops" }>;
+  }): Promise<
+    | "withheld"
+    | "already_delivered"
+    | ((outcome: "success" | "failure") => Promise<void>)
+    | undefined
+  > {
+    if (!(await backgroundSessionRequired())) return undefined;
+    if (!params.session) return "withheld";
+    if (!supportedNativeProvider(params.provider.providerId)) {
+      return "withheld";
+    }
+    const message = backgroundChatMessage(params);
+    let context: Awaited<
+      ReturnType<NonNullable<ChatOpsProvider["getGuardrailsContext"]>>
+    > = null;
+    try {
+      context =
+        (await params.provider.getGuardrailsContext?.(message, {
+          purpose: "egress",
+        })) ?? null;
+    } catch (error) {
+      logger.warn(
+        { error, bindingProvider: params.binding.provider },
+        "[ChatOps] Background room lookup failed",
+      );
+      return "withheld";
+    }
+    const facts = context
+      ? chatOpsRoomFacts({
+          provider: params.provider.providerId,
+          context,
+          threadId: params.threadId,
+        })
+      : null;
+    if (!facts) return "withheld";
+    const decision = await authorizeOutbound({
+      session: params.session,
+      eventId: egressEventId(params.eventScope, params.content),
+      facts,
+      content: params.content,
+    });
+    if (decision.decision === "pass") return undefined;
+    if (decision.decision === "already_delivered") return "already_delivered";
+    if (decision.decision === "refused") return "withheld";
+    return decision.complete;
   }
 
   async discoverChannels(params: {
@@ -839,11 +1008,12 @@ export class ChatOpsManager {
     }
 
     // Resolve inline agent mention
-    const { agentToUse, cleanedMessageText } =
-      await this.resolveInlineAgentMention({
-        messageText: message.text,
-        defaultAgent: agent,
-      });
+    const resolvedMention = await this.resolveInlineAgentMention({
+      messageText: message.text,
+      defaultAgent: agent,
+    });
+    const agentToUse = resolvedMention.agentToUse;
+    let cleanedMessageText = resolvedMention.cleanedMessageText;
 
     // Security: Validate user has access to the agent
     logger.debug(
@@ -874,9 +1044,50 @@ export class ChatOpsManager {
     // fetch: their history lives in the thread's persistent A2A context and
     // reaches the model as real prior turns instead of a text block.
     const serverSideSessions = provider.usesServerSideSessions === true;
-    const { contextMessages, historyAttachments } = serverSideSessions
+    const fetchedHistory = serverSideSessions
       ? { contextMessages: [], historyAttachments: [] }
       : await this.fetchThreadHistory(message, provider);
+    let contextMessages = fetchedHistory.contextMessages;
+    let historyAttachments = fetchedHistory.historyAttachments;
+    const transportSession: TransportSession = {
+      organizationId: agent.organizationId,
+      sessionId: buildChatOpsSessionId(
+        provider.providerId,
+        message.channelId,
+        message.threadId,
+      ),
+      callerId: `user:${authResult.userId}`,
+    };
+    const currentAttachments = message.attachments ?? [];
+    const admitted = await admitChatOpsTurn({
+      session: transportSession,
+      providerId: provider.providerId,
+      eventId: message.messageId,
+      threadId: message.threadId ?? message.channelId,
+      body: cleanedMessageText,
+      bodyContainsHistory: message.includesQuotedHistory === true,
+      history: contextMessages,
+      attachments: [...historyAttachments, ...currentAttachments],
+      resolveFacts: async () =>
+        (await provider.getGuardrailsContext?.(message)) ?? null,
+    });
+    if (admitted.decision === "refused") {
+      if (sendReply) {
+        await provider.sendReply({
+          originalMessage: message,
+          text: NATIVE_TRANSPORT_BLOCKED_NOTICE,
+          conversationReference: message.metadata?.conversationReference,
+        });
+      }
+      return { success: false, error: "NATIVE_TRANSPORT_REFUSED" };
+    }
+    let admittedAttachments: A2AAttachment[] | undefined;
+    if (admitted.decision === "admitted") {
+      cleanedMessageText = admitted.body;
+      contextMessages = admitted.history;
+      historyAttachments = [];
+      admittedAttachments = admitted.attachments;
+    }
 
     // Build the full message with context — use cleanedMessageText so
     // the "AgentName >" prefix is stripped from what the LLM sees
@@ -1027,7 +1238,7 @@ export class ChatOpsManager {
     );
 
     // Merge history attachments with current message attachments
-    const mergedAttachments = [
+    const mergedAttachments = admittedAttachments ?? [
       ...(historyAttachments || []),
       ...(message.attachments || []),
     ];
@@ -1046,6 +1257,7 @@ export class ChatOpsManager {
       ephemeralExecutionPrefix,
       sendReply,
       userId: authResult.userId,
+      transportSession,
     });
   }
 
@@ -1772,6 +1984,7 @@ export class ChatOpsManager {
     ephemeralExecutionPrefix?: string;
     sendReply: boolean;
     userId: string;
+    transportSession: TransportSession;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -1782,6 +1995,7 @@ export class ChatOpsManager {
       ephemeralExecutionPrefix,
       sendReply,
       userId,
+      transportSession,
     } = params;
 
     // Stamp the start time so a deliberate no-reply can report how long the
@@ -1915,6 +2129,7 @@ export class ChatOpsManager {
         provider,
         sendReply,
         result,
+        transportSession,
       });
     } catch (error) {
       // A mute that aborted the run mid-flight (e.g. during the retry leg above)
@@ -1935,6 +2150,7 @@ export class ChatOpsManager {
           message,
           error,
           agentName: agent.name,
+          transportSession,
           llmContext: {
             organizationId: binding.organizationId,
             userId,
@@ -2014,23 +2230,41 @@ export class ChatOpsManager {
     agentName?: string;
     /** When present, used to name the API key/model the failed run resolved to. */
     llmContext?: { organizationId: string; userId: string; agentId: string };
+    transportSession?: TransportSession;
   }): Promise<void> {
-    const { provider, message, error, agentName, llmContext } = params;
+    const {
+      provider,
+      message,
+      error,
+      agentName,
+      llmContext,
+      transportSession,
+    } = params;
+    const governed = transportSession
+      ? (await transportGovernance(transportSession)) === "governed"
+      : false;
 
     // Every reply — success or failure — leads with the agent footer; error
     // details, when present, trail after the agent name.
     const footer = (extra?: string): string | undefined =>
-      agentName ? buildAgentFooter(agentName, extra) : extra;
+      agentName
+        ? buildAgentFooter(agentName, governed ? undefined : extra)
+        : extra;
+    const send = (text: string, extra?: string) =>
+      this.sendGovernedReply({
+        provider,
+        message,
+        session: transportSession,
+        text,
+        footer: footer(extra),
+      });
 
     // A per-user provider the user hasn't linked yet → a friendly prompt
     // with a link to connect (chatops can't render the interactive flow).
     if (error instanceof LlmProviderAuthRequiredError) {
-      await provider.sendReply({
-        originalMessage: message,
-        text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
-        footer: footer(),
-        conversationReference: message.metadata?.conversationReference,
-      });
+      await send(
+        `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+      );
       return;
     }
 
@@ -2054,9 +2288,8 @@ export class ChatOpsManager {
             agentId: isSubagentError ? error.subagentId : llmContext.agentId,
           })
         : null;
-      await provider.sendReply({
-        originalMessage: message,
-        text: [
+      await send(
+        [
           "Sorry, I couldn't process your request — the LLM provider rejected the API key.",
           "",
           usedLlm ??
@@ -2064,20 +2297,84 @@ export class ChatOpsManager {
           "",
           `Update the key or configure a different one, then try again: ${config.frontendBaseUrl}/llm/model-providers`,
         ].join("\n"),
-        footer: footer(sourcedErrorDetail),
-        conversationReference: message.metadata?.conversationReference,
-      });
+        sourcedErrorDetail,
+      );
       return;
     }
 
-    await provider.sendReply({
-      originalMessage: message,
-      text: isSubagentError
+    await send(
+      isSubagentError
         ? "Sorry, a subagent encountered an error while processing your request."
         : "Sorry, I encountered an error processing your request.",
-      footer: footer(sourcedErrorDetail),
-      conversationReference: message.metadata?.conversationReference,
+      sourcedErrorDetail,
+    );
+  }
+
+  private async sendGovernedReply(params: {
+    provider: ChatOpsProvider;
+    message: IncomingChatMessage;
+    session?: TransportSession;
+    text: string;
+    footer?: string;
+    hint?: string;
+    deliveryId?: string;
+    beforeSend?: (eventId?: string) => Promise<void>;
+    strictDelivery?: boolean;
+  }): Promise<void> {
+    const conversationReference =
+      params.message.metadata?.conversationReference;
+    if (!params.session) {
+      await params.beforeSend?.();
+      await params.provider.sendReply({
+        originalMessage: params.message,
+        text: params.text,
+        footer: params.footer,
+        hint: params.hint,
+        conversationReference,
+      });
+      return;
+    }
+    const content = renderOutboundContent(params);
+    const decision = await authorizeChatOpsReply({
+      session: params.session,
+      providerId: params.provider.providerId,
+      messageId: params.deliveryId ?? params.message.messageId,
+      threadId: params.message.threadId ?? params.message.channelId,
+      content,
+      resolveFacts: async () =>
+        (await params.provider.getGuardrailsContext?.(params.message)) ?? null,
+      strictDelivery: params.strictDelivery,
     });
+    if (decision.decision === "refused") {
+      if (params.strictDelivery)
+        throw new ApiError(
+          403,
+          "Native review delivery was refused",
+          "native_delivery_denied",
+        );
+      await params.beforeSend?.();
+      await params.provider.sendReply({
+        originalMessage: params.message,
+        text: NATIVE_TRANSPORT_BLOCKED_NOTICE,
+        conversationReference,
+      });
+      return;
+    }
+    await params.beforeSend?.(
+      decision.decision === "allowed" ||
+        decision.decision === "already_delivered"
+        ? decision.eventId
+        : undefined,
+    );
+    await completeAuthorizedSend(decision, () =>
+      params.provider.sendReply({
+        originalMessage: params.message,
+        text: params.text,
+        footer: params.footer,
+        hint: params.hint,
+        conversationReference,
+      }),
+    );
   }
 
   /**
@@ -2146,12 +2443,24 @@ export class ChatOpsManager {
     sendReply: boolean;
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
+    transportSession?: TransportSession;
+    deliveryId?: string;
+    beforeSend?: (eventId?: string) => Promise<void>;
+    strictDelivery?: boolean;
   }): Promise<ChatOpsProcessingResult> {
-    const { agent, message, provider, sendReply, currentApprovalId, result } =
-      params;
+    const {
+      agent,
+      message,
+      provider,
+      sendReply,
+      currentApprovalId,
+      result,
+      transportSession,
+    } = params;
 
-    const approvalRequests =
-      extractApprovalRequestsFromSendMessageResult(result);
+    const approvalRequests = extractApprovalRequestsFromSendMessageResult(
+      result,
+    ).filter((request) => !request.resolved);
     if (approvalRequests.length > 0) {
       return await this.replyWithApprovalForm({
         agent,
@@ -2161,6 +2470,10 @@ export class ChatOpsManager {
         approvalRequests,
         currentApprovalId,
         result,
+        transportSession,
+        beforeSend: params.beforeSend,
+        strictDelivery: params.strictDelivery,
+        deliveryId: params.deliveryId,
       });
     }
 
@@ -2186,16 +2499,19 @@ export class ChatOpsManager {
     }
 
     if (sendReply && agentResponse) {
-      await provider.sendReply({
-        originalMessage: message,
+      const hint = (await this.shouldHintThreadMute(provider, message))
+        ? THREAD_MUTE_HINT
+        : undefined;
+      await this.sendGovernedReply({
+        provider,
+        message,
+        session: transportSession,
         text: agentResponse,
         footer: buildAgentFooter(agent.name),
-        // Teach the off switch once per channel thread: sticky auto-reply only
-        // applies in channels, so the hint rides the bot's first reply there.
-        ...((await this.shouldHintThreadMute(provider, message)) && {
-          hint: THREAD_MUTE_HINT,
-        }),
-        conversationReference: message.metadata?.conversationReference,
+        hint,
+        deliveryId: params.deliveryId,
+        beforeSend: params.beforeSend,
+        strictDelivery: params.strictDelivery,
       });
     } else if (
       sendReply &&
@@ -2210,6 +2526,7 @@ export class ChatOpsManager {
         typeof startedAt === "number"
           ? Math.max(1, Math.round((Date.now() - startedAt) / 1000))
           : null;
+      await params.beforeSend?.();
       await provider.sendReply({
         originalMessage: message,
         text: agentChoseSilence
@@ -2220,6 +2537,7 @@ export class ChatOpsManager {
         conversationReference: message.metadata?.conversationReference,
       });
     } else if (sendReply && !agentResponse) {
+      await params.beforeSend?.();
       // Nothing was (or will be) posted to the thread — clear the transient
       // "thinking" indicator so it doesn't spin forever (Slack only
       // auto-clears it when a message is posted).
@@ -2264,6 +2582,10 @@ export class ChatOpsManager {
     approvalRequests: A2AArchestraApprovalRequest[];
     currentApprovalId?: string; // if replying from an approval flow
     result: A2AProtocolSendMessageResponse;
+    transportSession?: TransportSession;
+    beforeSend?: (eventId?: string) => Promise<void>;
+    strictDelivery?: boolean;
+    deliveryId?: string;
   }): Promise<ChatOpsProcessingResult> {
     const {
       agent,
@@ -2308,32 +2630,110 @@ export class ChatOpsManager {
       (resultMessage?.parts || []).map((p) => p.text).join("\n"),
     );
 
+    if (
+      sendReply &&
+      approvalRequests.every((request) =>
+        isExecuteRemedyPlanTool(request.toolName),
+      )
+    ) {
+      // One fixed notice avoids a crash leaving a partially posted batch of links.
+      await this.sendGovernedReply({
+        provider,
+        message,
+        session: params.transportSession,
+        text: [
+          OPENAPPA_REVIEW_NOTICE,
+          ...approvalRequests.map((request) =>
+            formatChatOpsReviewUrl({
+              taskId: task.id,
+              approvalId: request.approvalId,
+            }),
+          ),
+        ].join("\n"),
+        footer: buildAgentFooter(agent.name),
+        beforeSend: params.beforeSend,
+        strictDelivery: params.strictDelivery,
+        deliveryId: params.deliveryId,
+      });
+      return {
+        success: true,
+        agentResponse: "",
+        interactionId: resultMessage.messageId,
+      };
+    }
+
     if (sendReply) {
-      await provider.sendReply({
-        originalMessage: message,
+      await this.sendGovernedReply({
+        provider,
+        message,
+        session: params.transportSession,
         text:
           agentResponse ||
           "Approval required before I can continue with this action.",
         footer: buildAgentFooter(agent.name),
-        conversationReference: message.metadata?.conversationReference,
+        beforeSend: params.beforeSend,
+        strictDelivery: params.strictDelivery,
+        deliveryId: params.deliveryId,
       });
 
       for (const approvalRequest of approvalRequests) {
+        if (isExecuteRemedyPlanTool(approvalRequest.toolName)) {
+          // Shared channels must not see ledger text or tool arguments.
+          // The authenticated page is the only place those are rendered.
+          await params.beforeSend?.();
+          await provider.sendReply({
+            originalMessage: message,
+            text: `${OPENAPPA_REVIEW_NOTICE}\n${formatChatOpsReviewUrl({
+              taskId: task.id,
+              approvalId: approvalRequest.approvalId,
+            })}`,
+            footer: buildAgentFooter(agent.name),
+            conversationReference: message.metadata?.conversationReference,
+          });
+          continue;
+        }
         // `run_tool` is a meta wrapper; show the user the underlying tool and
         // its arguments rather than the opaque wrapper name.
         const { toolName, toolInput } = resolveRunToolTarget({
           toolName: approvalRequest.toolName,
           args: approvalRequest.toolInput,
         });
-        await provider.addApprovalRequestForm({
-          approvalId: approvalRequest.approvalId,
-          taskId: task.id,
-          channelId: message.channelId,
-          threadId: message.threadId,
-          toolName,
-          toolArgs: toolInput,
-          originalMessage: message,
-        });
+        const authorization = params.transportSession
+          ? await authorizeChatOpsReply({
+              session: params.transportSession,
+              providerId: provider.providerId,
+              messageId: `${message.messageId}:approval:${approvalRequest.approvalId}`,
+              threadId: message.threadId ?? message.channelId,
+              content: JSON.stringify({ toolName, toolInput }),
+              resolveFacts: async () =>
+                (await provider.getGuardrailsContext?.(message)) ?? null,
+            })
+          : { decision: "pass" as const };
+        if (authorization.decision === "already_delivered") continue;
+        if (authorization.decision === "refused") {
+          await params.beforeSend?.();
+          await provider.sendReply({
+            originalMessage: message,
+            text: "This approval cannot be shown here. Ask the bot in a private conversation to review the action.",
+          });
+          continue;
+        }
+        await params.beforeSend?.(
+          authorization.decision === "allowed"
+            ? authorization.eventId
+            : undefined,
+        );
+        await completeAuthorizedSend(authorization, () =>
+          provider.addApprovalRequestForm({
+            approvalId: approvalRequest.approvalId,
+            taskId: task.id,
+            channelId: message.channelId,
+            threadId: message.threadId,
+            toolName,
+            toolArgs: toolInput,
+            originalMessage: message,
+          }),
+        );
       }
     }
 
@@ -2414,11 +2814,19 @@ export class ChatOpsManager {
     const systemParams: A2ASystemParams = {
       sessionId,
       source,
+      reviewOrigin: chatOpsReviewOrigin({
+        provider: provider.providerId,
+        message,
+      }),
       routeCategory: RouteCategory.CHATOPS,
       completionTarget: {
         type: "chatops",
         bindingId: binding.id,
         threadId: effectiveThreadId,
+        deliveryOrigin: chatOpsReviewOrigin({
+          provider: provider.providerId,
+          message,
+        }),
       },
       ephemeralExecutionPrefix,
     };
@@ -2558,6 +2966,25 @@ export class ChatOpsManager {
           .catch(() => {});
       }
 
+      const reviewGate = await authorizeChatOpsReviewResume({
+        taskId: decision.taskId,
+        approvalId: decision.approvalId,
+        reviewerUserId: user.id,
+        organizationId: binding.organizationId,
+        toolName: decision.toolName,
+      });
+      if (reviewGate.kind === "blocked") {
+        logger.warn(
+          {
+            taskId: decision.taskId,
+            approvalId: decision.approvalId,
+            reason: reviewGate.reason,
+          },
+          "OpenAPPA review decision blocked",
+        );
+        return;
+      }
+
       if (updateApprovalRequestCallback) {
         await updateApprovalRequestCallback();
       } else {
@@ -2594,18 +3021,33 @@ export class ChatOpsManager {
           ],
         }),
         systemParams: {
-          sessionId: buildChatOpsSessionId(
-            provider.providerId,
-            decision.channelId,
-            originalMessage.threadId,
-          ),
+          sessionId:
+            reviewGate.kind === "allowed"
+              ? reviewGate.sessionId
+              : buildChatOpsSessionId(
+                  provider.providerId,
+                  decision.channelId,
+                  originalMessage.threadId,
+                ),
           source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
+          reviewOrigin: chatOpsReviewOrigin({
+            provider: provider.providerId,
+            message: originalMessage,
+          }),
           // Resuming after an approval is still a ChatOps run; without this it
           // would fall back to the A2A route category like the initial send did.
           routeCategory: RouteCategory.CHATOPS,
         },
       });
 
+      const approvalSessionId =
+        reviewGate.kind === "allowed"
+          ? reviewGate.sessionId
+          : buildChatOpsSessionId(
+              provider.providerId,
+              decision.channelId,
+              originalMessage.threadId,
+            );
       await this.replyByMessageExecutionResult({
         agent,
         message: originalMessage,
@@ -2613,6 +3055,11 @@ export class ChatOpsManager {
         sendReply: true,
         currentApprovalId: decision.approvalId,
         result,
+        transportSession: {
+          organizationId: binding.organizationId,
+          sessionId: approvalSessionId,
+          callerId: `user:${user.id}`,
+        },
       });
     } catch (error) {
       logger.error(
@@ -2634,6 +3081,49 @@ export class ChatOpsManager {
 }
 
 export const chatOpsManager = new ChatOpsManager();
+
+function backgroundChatMessage(params: {
+  binding: {
+    provider: ChatOpsProviderType;
+    channelId: string;
+    workspaceId: string | null;
+  };
+  threadId: string;
+  deliveryOrigin?: Extract<ReviewOrigin, { type: "chatops" }>;
+}): IncomingChatMessage {
+  if (params.deliveryOrigin) {
+    const parsed = ReviewOriginSchema.options[0].safeParse(
+      params.deliveryOrigin,
+    );
+    if (
+      !parsed.success ||
+      parsed.data.provider !== params.binding.provider ||
+      parsed.data.message.channelId !== params.binding.channelId ||
+      (parsed.data.message.threadId ?? parsed.data.message.channelId) !==
+        params.threadId ||
+      (params.binding.provider === "slack" &&
+        parsed.data.message.workspaceId !== params.binding.workspaceId)
+    ) {
+      throw new ApiError(
+        409,
+        "The original delivery context does not match this channel thread",
+      );
+    }
+    return reviewChatMessage(parsed.data);
+  }
+  return {
+    messageId: `notify-${params.binding.channelId}`,
+    channelId: params.binding.channelId,
+    workspaceId: params.binding.workspaceId,
+    threadId: params.threadId,
+    senderId: "system",
+    senderName: "system",
+    text: "",
+    rawText: "",
+    timestamp: new Date(),
+    isThreadReply: true,
+  };
+}
 
 // =============================================================================
 // Internal Helpers

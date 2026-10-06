@@ -671,13 +671,16 @@ class AgentRuntimeManager {
 
   async releaseRun(
     session: AgentRunRecord,
-    options?: { retainInteractiveSession?: boolean },
+    options?: {
+      retainInteractiveSession?: boolean;
+      retainWorkspaceKey?: boolean;
+    },
   ): Promise<void> {
     const retainCredentials = Boolean(
       options?.retainInteractiveSession &&
         (await this.hasRetainedTerminal(session)),
     );
-    if (!retainCredentials) {
+    if (!retainCredentials && !options?.retainWorkspaceKey) {
       await this.revokeVirtualKey(session);
     }
     const clients = this.requireClients();
@@ -726,8 +729,11 @@ class AgentRuntimeManager {
       });
   }
 
-  async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
-    await this.revokeVirtualKey(session);
+  async stopRun(
+    session: AgentRunRecord,
+    options?: { retainWorkspaceKey?: boolean },
+  ): Promise<"suspended" | undefined> {
+    if (!options?.retainWorkspaceKey) await this.revokeVirtualKey(session);
     const pod = await this.findPod(session);
     if (pod?.status?.phase !== "Running" || !pod.metadata?.name) {
       await this.suspendWorkspace(session);
@@ -1235,6 +1241,8 @@ class AgentRuntimeManager {
   async deleteWorkspace(
     session: Pick<AgentRunRecord, "id" | "runtimeScope" | "workloadName">,
   ): Promise<void> {
+    const retainedRun = await AgentRunModel.findById(session.id);
+    if (retainedRun) await this.revokeVirtualKey(retainedRun);
     if (!this.isEnabled) return;
 
     const clients = this.requireClients();
@@ -1530,6 +1538,18 @@ class AgentRuntimeManager {
 
   private async revokeVirtualKey(session: AgentRunRecord): Promise<void> {
     if (!session.virtualApiKeyId) return;
+    // Continuation reuses this key so the proxy caller, and therefore the
+    // scoped OpenAPPA session, stays the same. Revoking it here would open
+    // the retained transcript under a new empty session.
+    if (
+      await AgentRunModel.hasOtherOpenRunForVirtualKey({
+        virtualApiKeyId: session.virtualApiKeyId,
+        exceptRunId: session.id,
+      })
+    ) {
+      await AgentRunModel.clearVirtualApiKey(session.id);
+      return;
+    }
     try {
       await VirtualApiKeyModel.delete(session.virtualApiKeyId);
     } catch (error) {

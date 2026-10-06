@@ -6,6 +6,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaYellModel from "@/models/openappa-yell";
+import ToolModel from "@/models/tool";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import {
@@ -2988,12 +2989,13 @@ function requestContext(params: {
   toolIdentity?: AppaTrustedContext["toolIdentity"];
   organizationId?: string;
   callerId?: string | null;
+  profileId?: string;
 }): LlmProxyRequestContext {
   const organizationId = params.organizationId ?? "organization";
   return {
     requestId: params.sessionId,
     organizationId,
-    profileId: "profile",
+    profileId: params.profileId ?? "profile",
     provider: "anthropic",
     interactionType: "anthropic:messages",
     model: "model",
@@ -3012,7 +3014,7 @@ function requestContext(params: {
             session_id: params.sessionId,
             parent_id: params.parentId,
           },
-          profileId: "profile",
+          profileId: params.profileId ?? "profile",
           toolIdentity: params.toolIdentity ?? identityStub(),
           request: {
             tools: undefined,
@@ -3051,11 +3053,20 @@ describe("AppaPluginArchestra", () => {
     test(`releases approved ${name} calls through the registry, wrapped=${wrapped}`, async ({
       makeOrganization,
       makeAgent,
+      makeUser,
+      makeMember,
+      makeAgentTool,
     }) => {
       config.openappa.offerSigningSecret = "plugin-runtime-proof-test-key";
       const organization = await makeOrganization();
+      const user = await makeUser();
+      await makeMember(user.id, organization.id, { role: "admin" });
+      const parent = await makeAgent({
+        organizationId: organization.id,
+        agentType: "agent",
+      });
       if (name === "agent__worker") {
-        await makeAgent({
+        const target = await makeAgent({
           organizationId: organization.id,
           name: "Worker",
           runtime: {
@@ -3072,10 +3083,14 @@ describe("AppaPluginArchestra", () => {
             idleTimeoutMinutes: 5,
           },
         });
+        const tool = await ToolModel.findOrCreateDelegationTool(target.id);
+        await makeAgentTool(parent.id, tool.id);
       }
       const context = requestContext({
         sessionId: "runtime-source",
         organizationId: organization.id,
+        callerId: `user:${user.id}`,
+        profileId: parent.id,
       });
       trustedOf(context).request.tools = stubRequestTools();
       const evaluate = vi
@@ -3117,7 +3132,7 @@ describe("AppaPluginArchestra", () => {
           verifyRuntimeToolProof({
             proof,
             organizationId: organization.id,
-            callerId: "user:user",
+            callerId: `user:${user.id}`,
             action: name === "archestra__get_run" ? "get_run" : name,
             arguments: original,
             secret: config.openappa.offerSigningSecret,

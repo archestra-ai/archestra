@@ -17,8 +17,9 @@ import {
 import { measureSkillContextTokens } from "@/skills/skill-context-tokens";
 import { resolveActivationVersion } from "@/skills/skill-version-resolution";
 import type { Skill } from "@/types";
-import { delegationToolArgsSchema } from "./delegation";
-import { errorResult, isAbortLikeError, successResult } from "./helpers";
+import { delegationToolArgsSchema } from "./delegation-tool-args";
+import { runGuardedForegroundDelegation } from "./guarded-delegation";
+import { errorResult, isAbortLikeError } from "./helpers";
 import type { ArchestraContext } from "./types";
 
 /**
@@ -203,10 +204,13 @@ export async function handleSkillDelegation(
       : null,
   });
 
-  const delegatedMessage =
+  // Keep a delegation marker closing the caller's message. Prepending the
+  // activation would change the signed prompt digest, so the child proxy
+  // could not bind. The activation still reaches the subagent as a system
+  // instruction.
+  const instructionPrefix =
     `${activationBlock}\n\n` +
-    "Follow the skill instructions above to complete this task:\n\n" +
-    message;
+    "Follow the skill instructions above to complete this task:";
 
   // The caller's ancestor path, which the executor checks for cycles.
   const parentDelegationChain = context.delegationChain || context.agentId;
@@ -243,25 +247,32 @@ export async function handleSkillDelegation(
       "Executing skill delegation tool",
     );
 
-    const result = await executeA2AMessage({
-      agentId: target.id,
-      message: delegatedMessage,
-      organizationId,
-      userId,
-      sessionId,
-      parentDelegationChain,
-      conversationId: context.conversationId,
-      isolationKey: context.isolationKey,
-      chatOpsBindingId: context.chatOpsBindingId,
-      chatOpsThreadId: context.chatOpsThreadId,
-      scheduleTriggerRunId: context.scheduleTriggerRunId,
-      abortSignal: context.abortSignal,
-      parentContextIsTrusted: context.contextIsTrusted,
-      subagentToolStream: context.subagentToolStream,
-      delegationToolCallId: context.currentToolCallId,
+    return await runGuardedForegroundDelegation({
+      context,
+      toolName,
+      message,
+      execute: (guarded) =>
+        executeA2AMessage({
+          agentId: target.id,
+          message: guarded.message,
+          reviewOrigin: context.chatOpsOrigin,
+          instructionPrefix,
+          appaParentSessionId: guarded.parentSessionId,
+          organizationId,
+          userId,
+          sessionId: guarded.sessionId,
+          parentDelegationChain,
+          conversationId: context.conversationId,
+          isolationKey: context.isolationKey,
+          chatOpsBindingId: context.chatOpsBindingId,
+          chatOpsThreadId: context.chatOpsThreadId,
+          scheduleTriggerRunId: context.scheduleTriggerRunId,
+          abortSignal: context.abortSignal,
+          parentContextIsTrusted: context.contextIsTrusted,
+          subagentToolStream: context.subagentToolStream,
+          delegationToolCallId: guarded.toolCallId,
+        }),
     });
-
-    return successResult(result.text);
   } catch (error) {
     if (isAbortLikeError(error)) {
       logger.info(

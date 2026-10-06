@@ -93,6 +93,7 @@ import { reportAbnormalPreviousTermination } from "@/observability/previous-term
 import { rumExporter } from "@/observability/rum/exporter.ee";
 import { createCachedOpenApiRouteHandler } from "@/openapi/cached-openapi-route";
 import { enrichOpenApiWithRbac } from "@/openapi/enrich-openapi-with-rbac";
+import { reviewContinuationWorker } from "@/openappa/review-continuation";
 import { declareOpenappaInstalls } from "@/openappa/service";
 import { initializeLlmProxyPlugins } from "@/proxy/plugins/registry";
 import { activeChatRunService } from "@/services/active-chat-run";
@@ -1079,6 +1080,7 @@ const startWebServer = async () => {
     // orphaned tasks get settled even on pods that never start a run.
     a2aTaskRunService.startMaintenance();
     agentRunReconciler.start();
+    reviewContinuationWorker.start();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -1257,6 +1259,7 @@ function registerWebServerShutdown(
     // point escapes the cleanup below.
     activeChatRunService.beginShutdown();
     agentRunReconciler.stop();
+    await reviewContinuationWorker.stop();
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

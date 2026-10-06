@@ -2,10 +2,12 @@ import {
   and,
   desc,
   eq,
+  gt,
   inArray,
   isNull,
   lt,
   notExists,
+  notInArray,
   or,
   sql,
 } from "drizzle-orm";
@@ -49,6 +51,49 @@ class ApprovalConflictError extends Error {
 }
 
 class A2ATaskModel {
+  /** A durable launch that a later turn must not replace with another workspace. */
+  static async findPendingRuntimeLaunch(params: {
+    contextId: string;
+    agentId: string;
+  }): Promise<A2ATask | null> {
+    const [task] = await db
+      .select()
+      .from(schema.a2aTasksTable)
+      .where(
+        and(
+          eq(schema.a2aTasksTable.contextId, params.contextId),
+          eq(schema.a2aTasksTable.agentId, params.agentId),
+          inArray(schema.a2aTasksTable.state, ACTIVE_RUN_STATES),
+          notExists(
+            db
+              .select({ id: schema.agentRunsTable.id })
+              .from(schema.agentRunsTable)
+              .innerJoin(
+                schema.agentWorkspacesTable,
+                and(
+                  eq(
+                    schema.agentWorkspacesTable.workloadName,
+                    schema.agentRunsTable.workloadName,
+                  ),
+                  eq(
+                    schema.agentWorkspacesTable.organizationId,
+                    schema.agentRunsTable.organizationId,
+                  ),
+                  notInArray(schema.agentWorkspacesTable.state, [
+                    "deleted",
+                    "deleting",
+                  ]),
+                  gt(schema.agentWorkspacesTable.expiresAt, new Date()),
+                ),
+              )
+              .where(eq(schema.agentRunsTable.taskId, schema.a2aTasksTable.id)),
+          ),
+        ),
+      )
+      .limit(1);
+    return task ?? null;
+  }
+
   static async create(data: InsertA2ATask): Promise<A2ATask> {
     const [task] = await db
       .insert(schema.a2aTasksTable)
@@ -333,6 +378,8 @@ class A2ATaskModel {
     taskId: string;
     lastMessageId: string;
     approvalDecisions: { approvalId: string; approved: boolean }[];
+    /** Keep the canonical decisions for a guardrail ruling after this commit. */
+    preserveResolvedApprovals?: boolean;
     /**
      * Pure transform applying the decisions to the approval UI message's
      * CURRENT content (read fresh inside the transaction — never the
@@ -435,11 +482,15 @@ class A2ATaskModel {
             `A2A task ${params.taskId} resume CAS failed under row lock`,
           );
         }
-        // The task is leaving the approval flow; the rows served their
-        // purpose (final values live on in the UI message).
-        await tx
-          .delete(schema.a2aTaskApprovalRequestsTable)
-          .where(eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId));
+        // Legacy approvals only need their UI values. Guardrail reviews must
+        // verify the recorded decision after the resume transaction commits.
+        if (!params.preserveResolvedApprovals) {
+          await tx
+            .delete(schema.a2aTaskApprovalRequestsTable)
+            .where(
+              eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId),
+            );
+        }
         await A2ATaskModel.appendEventInTx(
           tx,
           params.taskId,

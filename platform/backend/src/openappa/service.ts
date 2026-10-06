@@ -20,6 +20,7 @@ import config from "@/config";
 import { getDatabaseConnectionString } from "@/database";
 import logger from "@/logging";
 import MemberModel from "@/models/member";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
@@ -590,6 +591,35 @@ export async function addressRuntimeChild(params: {
   if (decision.decision !== "ack") {
     throw new ApiError(409, decisionMessage(decision));
   }
+}
+
+/** @public — native ChatOps and Outlook transports start a governed session */
+export async function startOpenappaSession(
+  session: OpenAppaSession,
+): Promise<void> {
+  await startSession({ session });
+}
+
+/** @public — native transport tool_call and tool_result dispatch */
+export async function dispatchOpenappaEvent(
+  session: OpenAppaSession,
+  event: Record<string, unknown>,
+): Promise<NativeDecision> {
+  return dispatch(session, event);
+}
+
+/**
+ * Deployment gating for a host-started transport call. A captured inactive
+ * activation is off. A captured active one is on. Otherwise read the switch.
+ * A failed read throws; it is not "off".
+ *
+ * @public — native ingress and egress
+ */
+export async function nativeGuardrailsActive(): Promise<boolean> {
+  const captured = capturedActivation.getStore();
+  if (captured === "inactive") return false;
+  if (captured === "active") return true;
+  return isGuardrailsV2Active();
 }
 
 function extractApprovedOutput(
@@ -1177,6 +1207,21 @@ export async function approveSpawnReturn(params: {
   childId: string;
   value: string;
 }): Promise<void> {
+  const retained = await OpenAppaSessionModel.retainedToolResult({
+    organizationId: params.session.organization_id,
+    sessionId: params.session.session_id,
+    callerId: params.session.caller_id,
+    toolCallId: params.toolCallId,
+  });
+  if (retained !== null) {
+    if (retained !== params.value) {
+      throw new ApiError(
+        409,
+        "OpenAPPA child return differs from the retained result",
+      );
+    }
+    return;
+  }
   const decision = await dispatch(params.session, {
     event: "tool_result",
     tool_call_id: params.toolCallId,
@@ -1185,15 +1230,7 @@ export async function approveSpawnReturn(params: {
     outcome: "success",
   });
   if (decision.decision === "block") {
-    const msg = decisionMessage(decision);
-    if (msg.includes("no open dispatch")) {
-      logger.info(
-        { toolCallId: params.toolCallId, childId: params.childId },
-        "OpenAPPA spawn dispatch already closed; child return matches the retained crossing",
-      );
-      return;
-    }
-    throw new ApiError(409, msg);
+    throw new ApiError(409, decisionMessage(decision));
   }
   if (decision.decision === "refuse") {
     throw openappaFailure(new Error("OpenAPPA refused the child spawn result"));

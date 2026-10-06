@@ -215,6 +215,126 @@ describe("OutlookEmailProvider", () => {
     });
   });
 
+  describe("guarded reply recipients", () => {
+    const originalEmail: IncomingEmail = {
+      messageId: "guarded-message",
+      toAddress: "agents+agent-abc123@example.com",
+      fromAddress: "sender@example.com",
+      subject: "Reply routing",
+      body: "Question",
+      receivedAt: new Date("2026-01-01T00:00:00Z"),
+    };
+
+    test.each([
+      {
+        message: { from: { emailAddress: { address: "sender@example.com" } } },
+        expected: ["sender@example.com"],
+      },
+      {
+        message: {
+          from: { emailAddress: { address: "sender@example.com" } },
+          replyTo: [
+            { emailAddress: { address: " Helpdesk@Example.net " } },
+            { emailAddress: { address: "archive@example.net" } },
+          ],
+        },
+        expected: ["helpdesk@example.net", "archive@example.net"],
+      },
+    ])("resolves actual Graph reply recipients: $expected", async ({
+      message,
+      expected,
+    }) => {
+      const graph = {
+        api: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(message),
+      };
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - substitute the external Graph client
+      provider.graphClient = graph;
+
+      await expect(provider.getReplyRecipients(originalEmail)).resolves.toEqual(
+        expected,
+      );
+      expect(graph.api).toHaveBeenCalledWith(
+        "/users/agents@example.com/messages/guarded-message",
+      );
+    });
+
+    test.each([
+      {},
+      { from: { emailAddress: { address: "not-an-address" } } },
+      {
+        from: { emailAddress: { address: "sender@example.com" } },
+        replyTo: [
+          { emailAddress: { address: "valid@example.com" } },
+          { emailAddress: {} },
+        ],
+      },
+    ])("does not shrink an unknown or malformed audience: %j", async (message) => {
+      const graph = {
+        api: vi.fn().mockReturnThis(),
+        select: vi.fn().mockReturnThis(),
+        get: vi.fn().mockResolvedValue(message),
+      };
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - substitute the external Graph client
+      provider.graphClient = graph;
+      await expect(
+        provider.getReplyRecipients(originalEmail),
+      ).rejects.toThrow();
+    });
+
+    test("keeps admitted recipients on the Send-As fallback", async () => {
+      const graph = {
+        api: vi.fn().mockReturnThis(),
+        post: vi
+          .fn()
+          .mockRejectedValueOnce(new Error("SendAs denied"))
+          .mockResolvedValueOnce({}),
+      };
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - substitute the external Graph client
+      provider.graphClient = graph;
+
+      await provider.sendReply({
+        originalEmail,
+        body: "Admitted reply",
+        recipientAddresses: ["helpdesk@example.net"],
+      });
+
+      expect(graph.post).toHaveBeenCalledTimes(2);
+      for (const [payload] of graph.post.mock.calls) {
+        expect(payload.message).toMatchObject({
+          toRecipients: [{ emailAddress: { address: "helpdesk@example.net" } }],
+          ccRecipients: [],
+          bccRecipients: [],
+        });
+      }
+    });
+
+    test.each([
+      { recipientAddresses: [] },
+      { recipientAddresses: ["invalid"] },
+      { recipientAddresses: ["valid@example.com", "invalid"] },
+    ])("does not fall back to implicit routing for invalid admitted recipients: %j", async ({
+      recipientAddresses,
+    }) => {
+      const graph = { api: vi.fn().mockReturnThis(), post: vi.fn() };
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - substitute the external Graph client
+      provider.graphClient = graph;
+      await expect(
+        provider.sendReply({
+          originalEmail,
+          body: "Reply",
+          recipientAddresses,
+        }),
+      ).rejects.toThrow();
+      expect(graph.post).not.toHaveBeenCalled();
+    });
+  });
+
   describe("sendReply", () => {
     const createMockGraphClient = () => ({
       api: vi.fn().mockReturnThis(),
@@ -488,6 +608,45 @@ describe("OutlookEmailProvider", () => {
       get: vi.fn(),
     });
 
+    test("a shared conversation does not reveal another participant's private reply", async () => {
+      const graph = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - substitute the Graph network boundary
+      provider.graphClient = graph;
+      graph.get.mockResolvedValue({
+        value: [
+          {
+            id: "visible-alpha",
+            from: { emailAddress: { address: "alpha@example.com" } },
+            toRecipients: [{ emailAddress: { address: "agents@example.com" } }],
+            body: { contentType: "text", content: "Alpha's visible message" },
+            receivedDateTime: "2026-01-01T00:00:00Z",
+          },
+          {
+            id: "private-beta",
+            from: { emailAddress: { address: "agents@example.com" } },
+            toRecipients: [{ emailAddress: { address: "beta@example.com" } }],
+            body: { contentType: "text", content: "Beta's private reply" },
+            receivedDateTime: "2026-01-01T00:01:00Z",
+          },
+          {
+            id: "current-alpha",
+            from: { emailAddress: { address: "alpha@example.com" } },
+            body: { contentType: "text", content: "Current request" },
+            receivedDateTime: "2026-01-01T00:02:00Z",
+          },
+        ],
+      });
+      const history = await provider.getConversationHistory({
+        conversationId: "shared",
+        currentMessageId: "current-alpha",
+        requesterAddress: "alpha@example.com",
+      });
+      expect(history.map((message) => message.body)).toEqual([
+        "Alpha's visible message",
+      ]);
+    });
+
     test("fetches conversation messages excluding current message", async () => {
       const mockGraphClient = createMockGraphClient();
       const provider = new OutlookEmailProvider(validConfig);
@@ -510,6 +669,7 @@ describe("OutlookEmailProvider", () => {
               emailAddress: { address: "agents@example.com", name: "Agent" },
             },
             body: { contentType: "text", content: "Agent response" },
+            toRecipients: [{ emailAddress: { address: "user@example.com" } }],
             receivedDateTime: "2024-01-15T10:05:00Z",
           },
           {
@@ -523,10 +683,11 @@ describe("OutlookEmailProvider", () => {
         ],
       });
 
-      const history = await provider.getConversationHistory(
-        "conv-123",
-        "current-msg",
-      );
+      const history = await provider.getConversationHistory({
+        conversationId: "conv-123",
+        currentMessageId: "current-msg",
+        requesterAddress: "user@example.com",
+      });
 
       expect(history).toHaveLength(2);
       expect(history[0]).toEqual({
@@ -547,6 +708,92 @@ describe("OutlookEmailProvider", () => {
       });
     });
 
+    test.each([
+      {
+        kind: "To",
+        envelope: {
+          toRecipients: [{ emailAddress: { address: " ALPHA@Example.COM " } }],
+        },
+        visible: true,
+      },
+      {
+        kind: "CC",
+        envelope: {
+          ccRecipients: [{ emailAddress: { address: "alpha@example.com" } }],
+        },
+        visible: true,
+      },
+      {
+        kind: "BCC",
+        envelope: {
+          bccRecipients: [{ emailAddress: { address: "alpha@example.com" } }],
+        },
+        visible: true,
+      },
+      {
+        kind: "delegated sender",
+        envelope: {
+          sender: { emailAddress: { address: "alpha@example.com" } },
+        },
+        visible: true,
+      },
+      { kind: "missing recipients", envelope: {}, visible: false },
+      {
+        kind: "other recipient",
+        envelope: {
+          toRecipients: [{ emailAddress: { address: "beta@example.com" } }],
+        },
+        visible: false,
+      },
+    ])("history visibility requires requester evidence: $kind", async ({
+      envelope,
+      visible,
+    }) => {
+      const graph = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - substitute the Graph network boundary
+      provider.graphClient = graph;
+      graph.get.mockResolvedValue({
+        value: [
+          {
+            id: "historical",
+            from: {
+              emailAddress: { address: "agents@example.com", name: null },
+            },
+            ...envelope,
+            body: { contentType: "text", content: "Message body" },
+            receivedDateTime: "2026-01-01T00:00:00Z",
+          },
+        ],
+      });
+      const history = await provider.getConversationHistory({
+        conversationId: "thread",
+        currentMessageId: "current",
+        requesterAddress: " ALPHA@EXAMPLE.COM ",
+      });
+      expect(history.map((message) => message.body)).toEqual(
+        visible ? ["Message body"] : [],
+      );
+      expect(graph.select).toHaveBeenCalledWith(
+        expect.stringContaining("ccRecipients"),
+      );
+    });
+
+    test("does not fetch mailbox history for an invalid requester", async () => {
+      const graph = createMockGraphClient();
+      const provider = new OutlookEmailProvider(validConfig);
+      // @ts-expect-error - substitute the Graph network boundary
+      provider.graphClient = graph;
+      await expect(
+        provider.getConversationHistory({
+          conversationId: "thread",
+          currentMessageId: "current",
+          requesterAddress: "unknown",
+        }),
+      ).resolves.toEqual([]);
+      expect(graph.get).not.toHaveBeenCalled();
+    });
+
     test("correctly identifies agent messages by mailbox address", async () => {
       const mockGraphClient = createMockGraphClient();
       const provider = new OutlookEmailProvider(validConfig);
@@ -558,16 +805,18 @@ describe("OutlookEmailProvider", () => {
           {
             id: "msg-1",
             from: { emailAddress: { address: "AGENTS@EXAMPLE.COM" } },
+            toRecipients: [{ emailAddress: { address: "user@example.com" } }],
             body: { contentType: "text", content: "From agent" },
             receivedDateTime: "2024-01-15T10:00:00Z",
           },
         ],
       });
 
-      const history = await provider.getConversationHistory(
-        "conv-123",
-        "current-msg",
-      );
+      const history = await provider.getConversationHistory({
+        conversationId: "conv-123",
+        currentMessageId: "current-msg",
+        requesterAddress: "user@example.com",
+      });
 
       expect(history[0].isAgentMessage).toBe(true);
     });
@@ -589,10 +838,11 @@ describe("OutlookEmailProvider", () => {
         ],
       });
 
-      const history = await provider.getConversationHistory(
-        "conv-123",
-        "current-msg",
-      );
+      const history = await provider.getConversationHistory({
+        conversationId: "conv-123",
+        currentMessageId: "current-msg",
+        requesterAddress: "user@example.com",
+      });
 
       expect(history[0].body).toBe("Hello world");
     });
@@ -605,10 +855,11 @@ describe("OutlookEmailProvider", () => {
 
       mockGraphClient.get.mockRejectedValueOnce(new Error("API Error"));
 
-      const history = await provider.getConversationHistory(
-        "conv-123",
-        "current-msg",
-      );
+      const history = await provider.getConversationHistory({
+        conversationId: "conv-123",
+        currentMessageId: "current-msg",
+        requesterAddress: "user@example.com",
+      });
 
       expect(history).toEqual([]);
     });
@@ -621,10 +872,11 @@ describe("OutlookEmailProvider", () => {
 
       mockGraphClient.get.mockResolvedValueOnce({ value: [] });
 
-      const history = await provider.getConversationHistory(
-        "conv-123",
-        "current-msg",
-      );
+      const history = await provider.getConversationHistory({
+        conversationId: "conv-123",
+        currentMessageId: "current-msg",
+        requesterAddress: "user@example.com",
+      });
 
       expect(history).toEqual([]);
     });
@@ -638,10 +890,11 @@ describe("OutlookEmailProvider", () => {
       mockGraphClient.get.mockResolvedValueOnce({ value: [] });
 
       // ConversationId with single quotes (can happen with certain email subjects)
-      await provider.getConversationHistory(
-        "AAQkADk='test'value",
-        "current-msg",
-      );
+      await provider.getConversationHistory({
+        conversationId: "AAQkADk='test'value",
+        currentMessageId: "current-msg",
+        requesterAddress: "user@example.com",
+      });
 
       // Single quotes should be escaped to '' for OData filter syntax
       expect(mockGraphClient.filter).toHaveBeenCalledWith(

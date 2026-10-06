@@ -10,6 +10,10 @@ import {
 import { vi } from "vitest";
 import config from "@/config";
 import {
+  durableReviewPauses,
+  runWithDurableReview,
+} from "@/openappa/durable-review";
+import {
   getHitlAskUserArguments,
   recordHitlRuling,
   stageHitlReview,
@@ -1087,6 +1091,41 @@ describe("OpenAPPA tool execution", () => {
       }),
     );
     expect(extractMcpHumanRuling(result)).toBeNull();
+  });
+
+  test("in-process host pauses only after execute_remedy_plan, without calling the engine", async () => {
+    vi.spyOn(openappaService, "loadOfferReview").mockResolvedValue({
+      offer_id: "offer-hitl",
+      text: "Approve this action?",
+      session_id: "session-1",
+      tool: "archestra__todo_write",
+      arguments: VALID_TODO,
+    });
+    const executeSpy = vi.spyOn(openappaService, "executeRemedyByOffer");
+    await runWithDurableReview(async () => {
+      const result = await executeArchestraTool(
+        toolFullName,
+        {
+          ...signedRemedyArgs(orgId, "offer-hitl"),
+          plan: "Review",
+        },
+        mockContext,
+      );
+      expect(result.structuredContent).toMatchObject({
+        outcome: "review_required",
+        offer_id: "offer-hitl",
+      });
+      expect(executeSpy).not.toHaveBeenCalled();
+      expect(durableReviewPauses()).toEqual([
+        expect.objectContaining({
+          offerId: "offer-hitl",
+          remedyArguments: expect.objectContaining({
+            offer_id: "offer-hitl",
+            plan: "Review",
+          }),
+        }),
+      ]);
+    });
   });
 
   test("mcp gateway stages the exact review before requesting native input", async () => {

@@ -27,8 +27,17 @@ import {
 import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
+import { createFastifyInstance } from "@/fastify-instance";
 import logger from "@/logging";
-import { ModelModel, VirtualApiKeyModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
+  MemberModel,
+  ModelModel,
+  VirtualApiKeyModel,
+} from "@/models";
 import { mintChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
@@ -38,11 +47,13 @@ import {
 } from "@/openappa/session-token";
 import { stampToolCallId } from "@/openappa/trajectory-stamp";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { setupTestCacheManager } from "@/test/cache-manager";
 import { createAnthropicTestClient } from "@/test/llm-provider-stubs";
 import { anthropicAdapterFactory } from "../adapters";
 import anthropicProxyRoutes from "./anthropic";
 
 vi.mock("@/logging");
+setupTestCacheManager();
 
 beforeEach(async () => {
   for (const modelId of [
@@ -79,6 +90,239 @@ describe("Anthropic request logging", () => {
 
   afterEach(() => {
     vi.restoreAllMocks();
+  });
+
+  test("an expired secondary runtime key cannot fall back to anonymous provider passthrough", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, organization.id);
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      agentType: "llm_proxy",
+    });
+    const key = await VirtualApiKeyModel.create({
+      organizationId: organization.id,
+      name: "Runtime lease",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: user.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    const app = createFastifyInstance();
+    try {
+      await app.register(anthropicProxyRoutes);
+      const request = {
+        method: "POST" as const,
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          authorization: "Bearer sk-ant-oat-synthetic-runtime-token",
+          "X-Archestra-Virtual-Key": key.value,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Runtime turn" }],
+          max_tokens: 128,
+        },
+      };
+      const valid = await app.inject(request);
+      expect(valid.statusCode).toBe(200);
+      const requestsBeforeExpiry = vi.mocked(
+        anthropicAdapterFactory.createClient,
+      ).mock.calls.length;
+      await VirtualApiKeyModel.capExpiry({
+        id: key.virtualKey.id,
+        organizationId: organization.id,
+        expectedScope: "personal",
+        expectedAuthorId: user.id,
+        expiresAt: new Date(0),
+      });
+      const expired = await app.inject(request);
+      expect(expired.statusCode, expired.body).toBe(401);
+      expect(expired.json().message ?? expired.json().error?.message).toContain(
+        "expired",
+      );
+      expect(
+        vi.mocked(anthropicAdapterFactory.createClient).mock.calls,
+      ).toHaveLength(requestsBeforeExpiry);
+    } finally {
+      await app.close();
+    }
+  });
+
+  test("an active runtime key cannot silently acquire another caller or Agent after launch", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const organization = await makeOrganization();
+    const user = await makeUser();
+    const replacement = await makeUser();
+    await makeMember(user.id, organization.id);
+    await makeMember(replacement.id, organization.id);
+    const agent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      agentType: "agent",
+    });
+    const otherAgent = await makeAgent({
+      organizationId: organization.id,
+      authorId: user.id,
+      agentType: "agent",
+    });
+    const expiresAt = new Date(Date.now() + 3600_000);
+    const key = await VirtualApiKeyModel.create({
+      organizationId: organization.id,
+      name: "Issued runtime actor",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: user.id,
+      expiresAt,
+    });
+    const context = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const task = await A2ATaskModel.createForRun({
+      contextId: context.id,
+      agentId: agent.id,
+    });
+    const workloadName = `runtime-${task.id}`;
+    const issuedRun = await AgentRunModel.create({
+      organizationId: organization.id,
+      agentId: agent.id,
+      taskId: task.id,
+      actorKind: "user",
+      actorId: user.id,
+      actorUserId: user.id,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "issued-scope",
+      virtualApiKeyId: key.virtualKey.id,
+    });
+    const issuedWorkspace = await AgentWorkspaceModel.create({
+      organizationId: organization.id,
+      agentId: agent.id,
+      workloadName,
+      actorKind: "user",
+      actorId: user.id,
+      backend: "kubernetes",
+      runtimeScope: "issued-scope",
+      lastTaskId: task.id,
+      state: "active",
+      activeTaskId: task.id,
+      expiresAt,
+    });
+    const app = createFastifyInstance();
+    try {
+      await app.register(anthropicProxyRoutes);
+      const request = {
+        method: "POST" as const,
+        url: `/v1/anthropic/${agent.id}/v1/messages`,
+        headers: {
+          authorization: "Bearer sk-ant-oat-synthetic-runtime-token",
+          "X-Archestra-Virtual-Key": key.value,
+          "X-Appa-Session-ID": workloadName,
+          "anthropic-version": "2023-06-01",
+        },
+        payload: {
+          model: "claude-opus-4-20250514",
+          messages: [{ role: "user", content: "Runtime turn" }],
+          max_tokens: 128,
+        },
+      };
+      const valid = await app.inject(request);
+      expect(valid.statusCode, valid.body).toBe(200);
+      const before = vi.mocked(anthropicAdapterFactory.createClient).mock.calls
+        .length;
+      await AgentRunModel.close({ id: issuedRun.id });
+      await AgentWorkspaceModel.release({
+        workloadName,
+        taskId: task.id,
+      });
+      const idle = await app.inject(request);
+      expect(idle.statusCode, idle.body).toBe(401);
+      expect(
+        await VirtualApiKeyModel.findById(key.virtualKey.id),
+      ).not.toBeNull();
+      expect(
+        vi.mocked(anthropicAdapterFactory.createClient).mock.calls,
+      ).toHaveLength(before);
+      const nextTask = await A2ATaskModel.createForRun({
+        contextId: context.id,
+        agentId: agent.id,
+      });
+      await AgentRunModel.create({
+        organizationId: organization.id,
+        agentId: agent.id,
+        taskId: nextTask.id,
+        actorKind: "user",
+        actorId: user.id,
+        actorUserId: user.id,
+        workloadName,
+        backend: "kubernetes",
+        runtimeScope: "issued-scope",
+        virtualApiKeyId: key.virtualKey.id,
+      });
+      await AgentWorkspaceModel.claim({
+        id: issuedWorkspace.id,
+        organizationId: organization.id,
+        actorKind: "user",
+        actorId: user.id,
+        agentId: agent.id,
+        taskId: nextTask.id,
+      });
+      const activeAgain = await app.inject(request);
+      expect(activeAgain.statusCode, activeAgain.body).toBe(200);
+      const afterActiveAgain = vi.mocked(anthropicAdapterFactory.createClient)
+        .mock.calls.length;
+      const wrongAgent = await app.inject({
+        ...request,
+        url: `/v1/anthropic/${otherAgent.id}/v1/messages`,
+      });
+      expect(wrongAgent.statusCode, wrongAgent.body).toBe(401);
+      await MemberModel.deleteByMemberOrUserId(user.id, organization.id);
+      const removedMember = await app.inject(request);
+      expect(removedMember.statusCode, removedMember.body).toBe(403);
+      await makeMember(user.id, organization.id);
+      await VirtualApiKeyModel.update({
+        id: key.virtualKey.id,
+        name: key.virtualKey.name,
+        scope: "personal",
+        authorId: replacement.id,
+        expiresAt,
+        teamIds: [],
+        providerApiKeys: [],
+      });
+      const changed = await app.inject(request);
+      expect(changed.statusCode, changed.body).toBe(401);
+      expect(changed.json().error?.message).toContain(
+        "differs from its issued lease",
+      );
+      await VirtualApiKeyModel.update({
+        id: key.virtualKey.id,
+        name: key.virtualKey.name,
+        scope: "personal",
+        authorId: null,
+        expiresAt,
+        teamIds: [],
+        providerApiKeys: [],
+      });
+      const missingOwner = await app.inject(request);
+      expect(missingOwner.statusCode, missingOwner.body).toBe(401);
+      expect(
+        vi.mocked(anthropicAdapterFactory.createClient).mock.calls,
+      ).toHaveLength(afterActiveAgain);
+    } finally {
+      await app.close();
+    }
   });
 
   test("summarizes default-agent headers without logging secret values", async () => {

@@ -19,6 +19,8 @@ export type AppaChildTrajectoryReceiptOutput = {
 };
 
 export type AppaTrustedContext = {
+  /** Set from authenticated socket context, never from client headers. */
+  inProcessExecutor?: boolean;
   /** Established by the proxy after authentication and session-root validation. */
   session: OpenAppaSession;
   profileId: string;

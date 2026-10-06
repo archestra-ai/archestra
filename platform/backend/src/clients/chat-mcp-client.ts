@@ -830,11 +830,13 @@ export async function getChatMcpTools({
   actorTeamId,
   chatOpsBindingId,
   chatOpsThreadId,
+  chatOpsOrigin,
   enabledToolIds,
   conversationId,
   isolationKey,
   openedAppId,
   sessionId,
+  appaSessionId,
   delegationChain,
   abortSignal,
   elicitation,
@@ -860,6 +862,10 @@ export async function getChatMcpTools({
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
   chatOpsThreadId?: string;
+  chatOpsOrigin?: Extract<
+    import("@/openappa/review-origin").ReviewOrigin,
+    { type: "chatops" }
+  >;
   enabledToolIds?: string[];
   /**
    * Id of a persisted `conversations` row — tools may persist it as a foreign
@@ -877,6 +883,8 @@ export async function getChatMcpTools({
   openedAppId?: string;
   /** Session ID for grouping related LLM requests in logs */
   sessionId?: string;
+  /** This run's OpenAPPA session, when it differs from the logging session. */
+  appaSessionId?: string;
   /** Delegation chain of agent IDs for tracking delegated agent calls */
   delegationChain?: string;
   /** Optional cancellation signal from parent stream execution */
@@ -1066,7 +1074,9 @@ export async function getChatMcpTools({
       openedAppId,
       chatOpsBindingId,
       chatOpsThreadId,
+      chatOpsOrigin,
       sessionId,
+      appaSessionId,
       delegationChain,
       scheduleTriggerRunId,
       abortSignal,

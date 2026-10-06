@@ -854,6 +854,8 @@ export const RouteId = {
   GetOpenAppaYells: "getOpenAppaYells",
   GetOpenAppaYellsSummary: "getOpenAppaYellsSummary",
   DownloadOpenAppaYell: "downloadOpenAppaYell",
+  GetOpenappaReview: "getOpenappaReview",
+  SubmitOpenappaReview: "submitOpenappaReview",
   GetOpenAppaYell: "getOpenAppaYell",
   UpdateOpenAppaYell: "updateOpenAppaYell",
   GetOpenappaExternalConsults: "getOpenappaExternalConsults",

@@ -1,5 +1,6 @@
 import {
   DEFAULT_APP_NAME,
+  type InteractionSource,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_DELETE_WORKSPACE_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
@@ -28,12 +29,20 @@ import {
   AgentRunModel,
   AgentTeamModel,
   AgentWorkspaceModel,
+  ChatOpsChannelBindingModel,
 } from "@/models";
+import OpenAppaSessionModel from "@/models/openappa-session";
 import { RouteCategory } from "@/observability/tracing";
+import { scopedSessionId } from "@/openappa/actor";
+import { backgroundSessionRequired } from "@/openappa/native-transport";
+import type { OpenAppaSession } from "@/openappa/service";
+import { inheritTaskSession } from "@/openappa/task-provenance";
+import { startedUnenforced } from "@/openappa/unenforced";
 import { AGENT_WORKSPACE_TRANSFER_PREFIX } from "@/routes/route-paths";
 import { resolveAgentRuntimeBackendDriver } from "@/services/agent-runtime/backends";
 import { preflightAgentRuntimeCredentials } from "@/services/agent-runtime/credentials";
 import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { runtimeProxySession } from "@/services/agent-runtime/proxy-session";
 import {
   admitRuntimeSteer,
   classifyRuntimeCaller,
@@ -60,6 +69,7 @@ import {
   AGENT_RUNTIME_CREDENTIALS_REQUIRED_CODE,
   AgentRunAttentionStateSchema,
   AgentWorkspaceStateSchema,
+  ApiError,
 } from "@/types";
 import { agentRunAttachmentsSchema } from "@/types/agent-run-attachments";
 import {
@@ -135,12 +145,25 @@ export async function startDelegatedTask(params: {
       }
     }
 
+    const provenance = await taskProvenance({ context, actor });
+    const producingSessionId =
+      provenance.parent && !runtime ? crypto.randomUUID() : undefined;
     const completionTarget =
       context.chatOpsBindingId && context.chatOpsThreadId
         ? {
             type: "chatops" as const,
             bindingId: context.chatOpsBindingId,
             threadId: context.chatOpsThreadId,
+            deliveryOrigin: context.chatOpsOrigin,
+            ...(producingSessionId
+              ? {
+                  appaSession: {
+                    organizationId: actor.organizationId,
+                    sessionId: producingSessionId,
+                    callerId: `user:${actor.id}`,
+                  },
+                }
+              : {}),
           }
         : undefined;
     const taskRow = await startDetachedAgentTask({
@@ -150,12 +173,18 @@ export async function startDelegatedTask(params: {
       attachments: params.attachments,
       systemParams: {
         sessionId:
-          context.sessionId || context.conversationId || context.isolationKey,
+          producingSessionId ??
+          context.sessionId ??
+          context.conversationId ??
+          context.isolationKey,
+        openappaParentSession: provenance.parent,
+        source: provenance.source,
         routeCategory: completionTarget
           ? RouteCategory.CHATOPS
           : RouteCategory.A2A,
         completionTarget,
         ...(crossing ? { runtimeCrossing: crossing } : {}),
+        reviewOrigin: completionTarget?.deliveryOrigin,
       },
     });
 
@@ -168,6 +197,10 @@ export async function startDelegatedTask(params: {
         bindingId: context.chatOpsBindingId,
         threadId: context.chatOpsThreadId,
         agentName: agent.name,
+        ...(completionTarget?.appaSession
+          ? { appaSession: completionTarget.appaSession }
+          : {}),
+        deliveryOrigin: completionTarget?.deliveryOrigin,
       }).catch((error) => {
         logger.warn(
           { error, taskId: taskRow.id },
@@ -191,6 +224,9 @@ export async function startDelegatedTask(params: {
     }
     const refused = crossingRefusal(error);
     if (refused) return errorResult(refused);
+    if (error instanceof ApiError && error.statusCode < 500) {
+      return errorResult(error.message);
+    }
     return catchError(error, "starting the run");
   }
 }
@@ -981,6 +1017,7 @@ const registry = defineArchestraTools([
             workspaceId: workspace.id,
           });
         }
+        const provenance = await taskProvenance({ context, actor });
         if (session.endedAt) {
           if (
             !workspace ||
@@ -1001,6 +1038,8 @@ const registry = defineArchestraTools([
               completionTarget: session.completionTarget ?? undefined,
               projectId: session.projectId ?? undefined,
               ...(crossing ? { runtimeCrossing: crossing } : {}),
+              openappaParentSession: provenance.parent,
+              source: provenance.source,
             },
           });
           if (session.completionTarget) {
@@ -1027,6 +1066,24 @@ const registry = defineArchestraTools([
           });
         }
 
+        if (provenance.parent) {
+          if (!session.virtualApiKeyId || !workspace) {
+            return errorResult(
+              "The retained workspace credential is unavailable; no input was delivered.",
+            );
+          }
+          await inheritTaskSession({
+            parent: provenance.parent,
+            session: runtimeProxySession({
+              organizationId: actor.organizationId,
+              virtualApiKeyId: session.virtualApiKeyId,
+              workspaceId: workspace.workloadName,
+              actor,
+            }),
+            occurrenceId: `steer:${session.taskId}:${context.currentToolCallId ?? crypto.randomUUID()}`,
+            input: JSON.stringify({ message: args.message }),
+          });
+        }
         await resolveAgentRuntimeBackendDriver(session.backend).steer({
           session,
           steerMode: runtime.steerMode,
@@ -1045,6 +1102,9 @@ const registry = defineArchestraTools([
         }
         const refused = crossingRefusal(error);
         if (refused) return errorResult(refused);
+        if (error instanceof ApiError && error.statusCode < 500) {
+          return errorResult(error.message);
+        }
         return catchError(error, "steering the run");
       }
     },
@@ -1189,6 +1249,11 @@ const registry = defineArchestraTools([
           filename: args.filename,
           data,
           comment: args.comment,
+          guardrailsSession: target.appaSession,
+          ...(target.deliveryOrigin
+            ? { deliveryOrigin: target.deliveryOrigin }
+            : {}),
+          deliveryId: `task:${task.row.id}:file:${context.currentToolCallId ?? crypto.randomUUID()}`,
         });
         return structuredSuccessResult(
           { success: true, task_id: task.row.id },
@@ -1215,6 +1280,103 @@ export const toolEntries = registry.toolEntries;
 export const tools = registry.tools;
 
 // === Internal helpers ===
+
+async function taskProvenance(params: {
+  context: ArchestraContext;
+  actor: A2AActor;
+}): Promise<{ parent?: OpenAppaSession; source?: InteractionSource }> {
+  if (!(await backgroundSessionRequired())) return {};
+  const { context, actor } = params;
+  const sessionId =
+    context.openappaSession?.session_id ??
+    context.appaSessionId ??
+    context.sessionId ??
+    context.conversationId ??
+    context.isolationKey;
+  const callerId = actor.kind === "user" ? `user:${actor.id}` : undefined;
+  if (
+    !sessionId ||
+    !callerId ||
+    (context.openappaSession &&
+      (context.openappaSession.organization_id !== actor.organizationId ||
+        context.openappaSession.caller_id !== callerId))
+  ) {
+    throw new ApiError(
+      409,
+      "The task requires its authenticated producing source session",
+    );
+  }
+  const stored = await OpenAppaSessionModel.familySession({
+    organizationId: actor.organizationId,
+    sessionId,
+    callerId,
+  });
+  const declaredParent: OpenAppaSession = {
+    organization_id: actor.organizationId,
+    session_id:
+      context.openappaSession?.session_id ??
+      (sessionId.startsWith(`${callerId}|`)
+        ? sessionId
+        : scopedSessionId(callerId, sessionId)),
+    caller_id: callerId,
+    ...(context.openappaSession?.parent_id
+      ? { parent_id: context.openappaSession.parent_id }
+      : {}),
+  };
+  const unmonitored = !stored && (await startedUnenforced(declaredParent));
+  if (
+    (!stored && !unmonitored) ||
+    (stored &&
+      context.openappaSession &&
+      (context.openappaSession.parent_id ?? null) !== stored.parentId)
+  ) {
+    throw new ApiError(409, "The producing task source is unavailable");
+  }
+  let source: InteractionSource | undefined;
+  if (context.chatOpsBindingId) {
+    const binding = await ChatOpsChannelBindingModel.findById(
+      context.chatOpsBindingId,
+    );
+    if (!binding || binding.organizationId !== actor.organizationId) {
+      throw new ApiError(
+        409,
+        "The task's messaging-channel binding is unavailable",
+      );
+    }
+    const origin = context.chatOpsOrigin;
+    if (binding.provider === "ms-teams" && !origin) {
+      throw new ApiError(
+        409,
+        "The original Teams delivery context is unavailable",
+      );
+    }
+    if (
+      origin &&
+      (origin.provider !== binding.provider ||
+        origin.message.channelId !== binding.channelId ||
+        (context.chatOpsThreadId &&
+          (origin.message.threadId ?? origin.message.channelId) !==
+            context.chatOpsThreadId))
+    ) {
+      throw new ApiError(
+        409,
+        "The original task destination does not match this channel thread",
+      );
+    }
+    source = `chatops:${binding.provider}`;
+  }
+  return {
+    parent: stored
+      ? {
+          organization_id: actor.organizationId,
+          session_id: stored.sessionId,
+          caller_id: callerId,
+          ...(stored.parentId ? { parent_id: stored.parentId } : {}),
+        }
+      : declaredParent,
+    source,
+  };
+}
 
 /**
  * The refusal as a prompt: the exact keys still needed, and a deep link into

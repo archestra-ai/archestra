@@ -11,6 +11,10 @@ import { skillRootPath } from "@/skills-sandbox/runtime-image";
 import { shellQuote } from "@/utils/shell-quote";
 import { archestraAudience } from "./archestra-audience";
 import { openappaDeclarations } from "./declarations";
+import {
+  answerNativeConsult,
+  NATIVE_HELPER_INSTALL_ID,
+} from "./native-consult";
 
 /**
  * The last line a helper wrote to stderr, safe as a header value. Untrusted:
@@ -99,6 +103,15 @@ class OpenAppaHelperBridge {
     externalName: string;
     request: string;
   }): Promise<HelperConsultOutcome> {
+    if (params.installId === NATIVE_HELPER_INSTALL_ID) {
+      const outcome = await answerNativeConsult({
+        externalName: params.externalName,
+        request: params.request,
+      });
+      return outcome.kind === "failed"
+        ? { kind: "failed", reason: "Native room facts could not be verified" }
+        : outcome;
+    }
     const install = await OpenAppaBatteryInstallModel.findById(
       params.installId,
     );

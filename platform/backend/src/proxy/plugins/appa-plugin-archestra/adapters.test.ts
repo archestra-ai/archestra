@@ -8,6 +8,7 @@ import { ApiError } from "@/types";
 import { AppaChatAdapter } from "./adapters/chat";
 import { AppaClaudeCodeAdapter } from "./adapters/claude-code";
 import { AppaCodexAdapter } from "./adapters/codex";
+import { AppaInProcessExecutorAdapter } from "./adapters/in-process-executor";
 import { AppaOpenCodeAdapter } from "./adapters/opencode";
 import { referencesChildTranscriptPath } from "./adapters/trajectory";
 import { appaTrajectory } from "./session-identity";
@@ -18,6 +19,21 @@ describe("APPA child trajectory adapters", () => {
   const codex = new AppaCodexAdapter();
   const openCode = new AppaOpenCodeAdapter();
   const chat = new AppaChatAdapter();
+
+  test("an external client cannot select the in-process adapter by claiming a ChatOps source", () => {
+    const executor = new AppaInProcessExecutorAdapter();
+    const context = delegated({
+      headers: { "x-archestra-source": "chatops:slack" },
+      interactionType: "anthropic:messages",
+      body: { messages: [] },
+    });
+    expect(executor.matches(context)).toBe(false);
+    if (!context.trustedContext) throw new Error("Trusted context missing");
+    context.trustedContext.inProcessExecutor = true;
+    expect(executor.matches(context)).toBe(true);
+    context.trustedContext.inProcessExecutor = false;
+    expect(executor.matches(context)).toBe(false);
+  });
 
   test("reads a Claude Code teammate launch only from its spawn call's own result", () => {
     const receipt =
@@ -533,8 +549,9 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
     ).toBeUndefined();
   });
 
-  test("keeps Chat child-incapable", () => {
+  test("keeps Chat child-incapable for coding-client spawn names", () => {
     expect(chat.isSpawnTool("task")).toBe(false);
+    expect(chat.isSpawnTool("agent__worker")).toBe(true);
     expect(
       chat.namesChildren({ rootId: "c", arguments: { task_id: "x" } }),
     ).toEqual([]);
@@ -544,6 +561,50 @@ Do NOT Read or tail this file via the shell tool — it is the full subagent JSO
         requestBody: {},
       }),
     ).toBeUndefined();
+  });
+
+  test("binds a Chat child from the spawn marker and refuses a header-only claim", () => {
+    config.openappa.offerSigningSecret = SECRET;
+    const context = delegated({
+      headers: {
+        "x-appa-parent-id": "parent-session",
+        "x-appa-session-id": "parent-session:toolu_chat",
+      },
+      interactionType: "anthropic:messages",
+      body: {
+        messages: [
+          {
+            role: "user",
+            content: opening({
+              parentId: "parent-session",
+              spawner: "parent-session",
+              spawnCallId: "toolu_chat",
+            }),
+          },
+        ],
+      },
+    });
+    if (context.trustedContext) {
+      context.trustedContext.claims = {
+        parentId: "parent-session",
+        sessionId: "parent-session:toolu_chat",
+      };
+    }
+    const bound = chat.bindChildTrajectory(context);
+    expect(bound).toMatchObject({
+      sessionId: "parent-session:toolu_chat",
+      parentId: "parent-session",
+      lineage: { source: "marker", spawnCallId: "toolu_chat" },
+    });
+    const headerOnly = delegated({
+      headers: { "x-appa-parent-id": "parent-session" },
+      interactionType: "anthropic:messages",
+      body: { messages: [{ role: "user", content: "no marker" }] },
+    });
+    if (headerOnly.trustedContext) {
+      headerOnly.trustedContext.claims = { parentId: "parent-session" };
+    }
+    expect(() => chat.bindChildTrajectory(headerOnly)).toThrow(ApiError);
   });
 
   test("Claude Code names_children matches minted child ids for documented files", () => {

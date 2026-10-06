@@ -399,8 +399,22 @@ class VirtualApiKeyModel {
   }
 
   /**
-   * Find a virtual key by ID.
+   * Read the token only from the specified organization's key.
    */
+  static async readToken(params: {
+    id: string;
+    organizationId: string;
+  }): Promise<string | null> {
+    const virtualKey = await VirtualApiKeyModel.findById(params.id);
+    if (!virtualKey || virtualKey.organizationId !== params.organizationId) {
+      return null;
+    }
+    const secret = await secretManager().getSecret(virtualKey.secretId);
+    const token = (secret?.secret as { token?: string } | undefined)?.token;
+    return token && token.length > 0 ? token : null;
+  }
+
+  /** Find a virtual key by ID. */
   static async findById(id: string): Promise<SelectVirtualApiKey | null> {
     const [result] = await db
       .select()
@@ -409,6 +423,33 @@ class VirtualApiKeyModel {
       .limit(1);
 
     return result ?? null;
+  }
+
+  /** Tighten a runtime lease without rewriting ownership or access grants. */
+  static async capExpiry(params: {
+    id: string;
+    organizationId: string;
+    expiresAt: Date;
+    expectedScope: ResourceVisibilityScope;
+    expectedAuthorId: string | null;
+  }): Promise<SelectVirtualApiKey | null> {
+    const [key] = await db
+      .update(schema.virtualApiKeysTable)
+      .set({
+        expiresAt: sql`LEAST(COALESCE(${schema.virtualApiKeysTable.expiresAt}, ${params.expiresAt.toISOString()}::timestamptz), ${params.expiresAt.toISOString()}::timestamptz)`,
+      })
+      .where(
+        and(
+          eq(schema.virtualApiKeysTable.id, params.id),
+          eq(schema.virtualApiKeysTable.organizationId, params.organizationId),
+          eq(schema.virtualApiKeysTable.scope, params.expectedScope),
+          params.expectedAuthorId
+            ? eq(schema.virtualApiKeysTable.authorId, params.expectedAuthorId)
+            : isNull(schema.virtualApiKeysTable.authorId),
+        ),
+      )
+      .returning();
+    return key ?? null;
   }
 
   /**

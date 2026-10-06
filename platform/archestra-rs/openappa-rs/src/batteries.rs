@@ -2,7 +2,7 @@
 //! OpenAPPA checkout, and the ones an organization uploads, both read through the
 //! same package validation the marketplace applies.
 use crate::policy::{policy_entries, routed_annotators};
-use appa_package::{Role, bundled_batteries, validate_package};
+use appa_package::{MANIFEST_FILE, Role, bundled_batteries, validate_package};
 use appa_runtime_api::CanonicalTool;
 use std::{path::Component, sync::OnceLock};
 
@@ -49,7 +49,7 @@ pub(crate) fn bundled() -> Result<&'static [BatteryInfo], String> {
 }
 
 fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
-    bundled_batteries()
+    let mut batteries = bundled_batteries()
         .iter()
         .filter(|battery| match battery.manifest() {
             Ok(package) => match &package.role {
@@ -77,7 +77,53 @@ fn load_bundled() -> Result<Vec<BatteryInfo>, String> {
                 )
             })
         })
-        .collect()
+        .collect::<Result<Vec<_>, _>>()?;
+    for package in host_packages() {
+        let info = inspect(&package.files)
+            .map_err(|error| format!("host battery {} does not validate: {error}", package.name))?;
+        if info.name != package.name {
+            return Err(format!(
+                "host battery {} validated as {}",
+                package.name, info.name
+            ));
+        }
+        if batteries.iter().any(|battery| battery.name == info.name) {
+            return Err(format!(
+                "host battery {} collides with a pinned marketplace battery",
+                info.name
+            ));
+        }
+        batteries.push(info);
+    }
+    batteries.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(batteries)
+}
+
+/// A package this host ships beside the pinned marketplace. It is not a raw
+/// policy string: [`inspect`] writes the files and runs `validate_package`.
+struct HostPackage {
+    name: &'static str,
+    files: Vec<BatteryFile>,
+}
+
+fn host_packages() -> Vec<HostPackage> {
+    vec![HostPackage {
+        name: "gmail",
+        files: gmail_files(),
+    }]
+}
+
+fn gmail_files() -> Vec<BatteryFile> {
+    vec![
+        BatteryFile {
+            path: MANIFEST_FILE.to_owned(),
+            text: include_str!("../batteries/gmail/appa-package.toml").to_owned(),
+        },
+        BatteryFile {
+            path: "appa.toml".to_owned(),
+            text: include_str!("../batteries/gmail/appa.toml").to_owned(),
+        },
+    ]
 }
 
 /// Validate a battery package from its files and read what the host needs from it.
@@ -413,5 +459,397 @@ mod tests {
         let mut remote = files();
         remote[1].text = "[policy]\nversion = 2\n[[policy.tool]]\nname = \"mcp/acme/list\"\ndelta = {}\n[externals.authorities.review]\nurl = \"https://attacker.example/review\"\n".to_owned();
         assert!(inspect(&remote).is_err());
+    }
+
+    #[test]
+    fn the_host_gmail_package_validates_and_is_not_the_drive_battery() {
+        assert!(
+            bundled_batteries()
+                .iter()
+                .all(|battery| battery.name != "gmail"),
+            "gmail must stay a host package; the pinned checkout does not ship it"
+        );
+        let gmail = inspect(&gmail_files()).expect("the host package validates");
+        assert_eq!(gmail.name, "gmail");
+        assert_eq!(gmail.namespaces, vec!["gmail".to_owned()]);
+        assert!(gmail.helpers.is_empty());
+        assert!(gmail.credentials.is_empty());
+        assert!(gmail.externals.is_empty());
+        let served = bundled().expect("bundled batteries validate");
+        assert!(served.iter().any(|battery| battery.name == "gmail"));
+        let drive = served
+            .iter()
+            .find(|battery| battery.name == "google-workspace")
+            .expect("the pinned drive battery is still served");
+        assert!(
+            !drive.policy.contains("search_threads"),
+            "the drive battery must not be treated as gmail coverage"
+        );
+        let document: toml::Table = toml::from_str(&gmail.policy).unwrap();
+        let names: Vec<&str> = policy_entries(&document, "tool")
+            .iter()
+            .map(|rule| rule.get("name").and_then(toml::Value::as_str).unwrap())
+            .collect();
+        assert_eq!(
+            names,
+            vec![
+                "mcp/gmail/search_threads",
+                "mcp/gmail/get_thread",
+                "mcp/gmail/get_message",
+                "mcp/gmail/list_drafts",
+                "mcp/gmail/list_labels",
+                "mcp/gmail/create_draft",
+                "mcp/gmail/create_label",
+                "mcp/gmail/label_message",
+                "mcp/gmail/label_thread",
+                "mcp/gmail/unlabel_message",
+                "mcp/gmail/unlabel_thread",
+                "mcp/gmail/apply_sensitive_message_label",
+                "mcp/gmail/apply_sensitive_thread_label",
+            ]
+        );
+        assert!(names.iter().all(|name| !name.contains('*')));
+        assert!(names.iter().all(|name| !name.contains("send")));
+        let policy_without_comments = gmail
+            .policy
+            .lines()
+            .filter(|line| !line.trim_start().starts_with('#'))
+            .collect::<Vec<_>>()
+            .join("\n");
+        assert!(!policy_without_comments.contains("$to"));
+        assert!(!policy_without_comments.contains("$cc"));
+        assert!(!policy_without_comments.contains("$bcc"));
+        let draft = policy_entries(&document, "tool")
+            .iter()
+            .find(|rule| {
+                rule.get("name").and_then(toml::Value::as_str) == Some("mcp/gmail/create_draft")
+            })
+            .unwrap();
+        assert_eq!(
+            draft.get("effects").and_then(toml::Value::as_array),
+            Some(&vec![toml::Value::String("gmail.drafted".to_owned())])
+        );
+        assert_eq!(
+            draft
+                .get("delta")
+                .and_then(toml::Value::as_table)
+                .and_then(|delta| delta.get("trust"))
+                .and_then(toml::Value::as_str),
+            Some("suspicious"),
+            "a draft result can echo mailbox text"
+        );
+        let created = policy_entries(&document, "tool")
+            .iter()
+            .find(|rule| {
+                rule.get("name").and_then(toml::Value::as_str) == Some("mcp/gmail/create_label")
+            })
+            .unwrap();
+        assert!(
+            created
+                .get("delta")
+                .and_then(toml::Value::as_table)
+                .is_some_and(|delta| delta.get("trust").is_none()),
+            "create_label has no message or reply argument to echo"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_gmail_read_narrows_and_an_unsafe_write_is_denied() {
+        use appa_eventlog::{Backend, LogStore};
+        use appa_runtime::api::{AuditEvent, AuditLabel, RemedyOutcome};
+        use appa_runtime::hooks;
+        use appa_runtime_api::{
+            Actor, HookDecision, HookEvent, OutcomeBody, ProposedCall, ToolOutcome, TrajectoryId,
+        };
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicU64, Ordering};
+
+        let gmail = bundled()
+            .expect("bundled batteries validate")
+            .iter()
+            .find(|battery| battery.name == "gmail")
+            .expect("the host gmail package is served")
+            .clone();
+        let composed = crate::policy::compose(
+            "include = [\"batteries/gmail/appa.toml\"]\n[server_aliases]\ngmail = [\"gmail_prod\"]\n[policy]\nversion = 2\n",
+            &[crate::policy::ResolvedBattery {
+                entry: "batteries/gmail/appa.toml".into(),
+                name: gmail.name,
+                policy: gmail.policy,
+                helpers: None,
+            }],
+        )
+        .expect("the gmail package composes without a catchall");
+        assert!(
+            !composed.content.contains("name = \"*\""),
+            "the composed document must not add a catchall"
+        );
+        let runtime = crate::policy::open(
+            crate::policy::compile(&composed.content, |var| {
+                (var == "APPA_ARCHESTRA_BRIDGE_TOKEN").then(|| "gmail-test-bridge-token".to_owned())
+            })
+            .unwrap(),
+            Arc::new(LogStore::open(Backend::Memory).unwrap()),
+        )
+        .unwrap();
+
+        fn proposed(tool: &str, arguments: serde_json::Value) -> (String, ProposedCall) {
+            static CALLS: AtomicU64 = AtomicU64::new(0);
+            let call_id = format!("call:{}", CALLS.fetch_add(1, Ordering::Relaxed));
+            let call = ProposedCall {
+                tool: (crate::adapter::adapter().identify_tool)(tool)
+                    .expect("test tool names are well formed")
+                    .canonical
+                    .as_str()
+                    .to_owned(),
+                arguments: serde_json::value::RawValue::from_string(arguments.to_string()).unwrap(),
+                cwd: None,
+            };
+            (call_id, call)
+        }
+        fn event(actor: &Actor, call_id: &str, call: ProposedCall) -> HookEvent {
+            HookEvent::ToolCall {
+                call_id: Some(call_id.to_owned()),
+                actor: actor.clone(),
+                call,
+                spawn: None,
+                prompt: None,
+                ruling: None,
+            }
+        }
+        async fn accept(
+            runtime: &appa_runtime::api::Runtime,
+            actor: &Actor,
+            decision: &HookDecision,
+        ) {
+            let HookDecision::DenyCall {
+                offers, feedback, ..
+            } = decision
+            else {
+                panic!("expected a deny that offers a narrowing, got {decision:?}");
+            };
+            let Some(offer) = offers.first() else {
+                panic!("deny carried no offer: {feedback}");
+            };
+            let result = runtime
+                .execute_remedy(actor, appa_runtime::api::OfferId(offer.id.clone()))
+                .await;
+            assert!(
+                !matches!(result, RemedyOutcome::Refused { .. }),
+                "{result:?}"
+            );
+        }
+        async fn admit(
+            runtime: &appa_runtime::api::Runtime,
+            actor: &Actor,
+            call_id: &str,
+            call: ProposedCall,
+        ) {
+            assert_eq!(
+                hooks::handle(
+                    runtime,
+                    HookEvent::ToolResult {
+                        actor: actor.clone(),
+                        call,
+                        call_id: Some(call_id.to_owned()),
+                        outcome: ToolOutcome::Success {
+                            body: OutcomeBody::Available("mailbox".into()),
+                        },
+                    },
+                )
+                .await,
+                HookDecision::Ack
+            );
+        }
+
+        async fn started(runtime: &appa_runtime::api::Runtime, root: &str) -> Actor {
+            let actor = Actor {
+                root: TrajectoryId(root.into()),
+                child: None,
+            };
+            assert_eq!(
+                hooks::handle(
+                    runtime,
+                    HookEvent::SessionStart {
+                        root: actor.root.clone(),
+                        principal: None,
+                        address: None,
+                        title: None,
+                    },
+                )
+                .await,
+                HookDecision::Ack
+            );
+            let opened = runtime.status(&actor.root).expect("the session opened");
+            assert_eq!(
+                opened.trust, "trusted",
+                "a fresh session is not already low-trust"
+            );
+            actor
+        }
+        fn admitted(runtime: &appa_runtime::api::Runtime, actor: &Actor) -> Vec<AuditLabel> {
+            runtime
+                .audit(&actor.root)
+                .unwrap()
+                .into_iter()
+                .filter_map(|entry| match entry.event {
+                    AuditEvent::Admitted { label } => Some(label),
+                    _ => None,
+                })
+                .collect()
+        }
+
+        let reader = started(&runtime, "gmail-read").await;
+        assert!(admitted(&runtime, &reader).is_empty());
+        let (read_id, read) = proposed(
+            "gmail_prod__get_message",
+            serde_json::json!({ "messageId": "m1", "messageFormat": "full" }),
+        );
+        let narrowing = hooks::handle(&runtime, event(&reader, &read_id, read)).await;
+        let HookDecision::DenyCall { feedback, .. } = &narrowing else {
+            panic!("a fresh trusted read must not run: {narrowing:?}");
+        };
+        assert!(
+            feedback.contains("session trust would fall: trusted -> suspicious"),
+            "the read itself must lower a fresh trusted session: {feedback}"
+        );
+        assert!(
+            feedback.contains("allowed readers would narrow: public -> a symbolic audience"),
+            "the read itself must narrow a fresh public session: {feedback}"
+        );
+        assert_eq!(
+            runtime
+                .status(&reader.root)
+                .expect("the denied read leaves the session")
+                .trust,
+            "trusted",
+            "the denied read must not apply its low label"
+        );
+        assert!(admitted(&runtime, &reader).is_empty());
+
+        let drafter = started(&runtime, "gmail-draft").await;
+        let (draft_id, draft) = proposed(
+            "gmail_prod__create_draft",
+            serde_json::json!({
+                "to": ["someone@example.com"],
+                "cc": ["other@example.com"],
+                "bcc": ["hidden@example.com"],
+                "subject": "not sent",
+                "body": "still a draft",
+                "replyToMessageId": "m1"
+            }),
+        );
+        let first = hooks::handle(&runtime, event(&drafter, &draft_id, draft.clone())).await;
+        let HookDecision::DenyCall {
+            feedback: draft_feedback,
+            ..
+        } = &first
+        else {
+            panic!("a fresh draft must not run as a send: {first:?}");
+        };
+        assert!(
+            draft_feedback.contains("session trust would fall: trusted -> suspicious"),
+            "a draft result is untrusted mailbox text: {draft_feedback}"
+        );
+        assert!(
+            draft_feedback.contains("allowed readers would narrow: public -> a symbolic audience"),
+            "a draft narrows to the session principal, not its recipients: {draft_feedback}"
+        );
+        assert!(
+            !draft_feedback.contains("example.com"),
+            "draft recipients are not required readers: {draft_feedback}"
+        );
+        assert_eq!(
+            runtime
+                .status(&drafter.root)
+                .expect("the denied draft leaves the session")
+                .trust,
+            "trusted"
+        );
+
+        let labeler = started(&runtime, "gmail-label").await;
+        let (label_id, label) = proposed(
+            "gmail_prod__create_label",
+            serde_json::json!({ "name": "caller-named" }),
+        );
+        let label_deny = hooks::handle(&runtime, event(&labeler, &label_id, label.clone())).await;
+        accept(&runtime, &labeler, &label_deny).await;
+        assert!(matches!(
+            hooks::handle(&runtime, event(&labeler, &label_id, label.clone())).await,
+            HookDecision::AllowCall { .. }
+        ));
+        admit(&runtime, &labeler, &label_id, label).await;
+        assert_eq!(
+            admitted(&runtime, &labeler),
+            vec![AuditLabel {
+                trust: "trusted".to_owned(),
+                audience: "self".to_owned(),
+            }],
+            "create_label echoes the caller's name and does not lower trust"
+        );
+        for tool in ["gmail_prod__create_draft", "gmail_prod__label_message"] {
+            let (call_id, call) = proposed(
+                tool,
+                serde_json::json!({
+                    "to": ["someone@example.com"],
+                    "replyToMessageId": "m1"
+                }),
+            );
+            let denied = hooks::handle(&runtime, event(&labeler, &call_id, call)).await;
+            let HookDecision::DenyCall { feedback, .. } = &denied else {
+                panic!("{tool} must not run after a trusted label: {denied:?}");
+            };
+            assert!(
+                feedback.contains("session trust would fall: trusted -> suspicious"),
+                "{tool} must treat its result as untrusted: {feedback}"
+            );
+            assert!(
+                !feedback.contains("example.com"),
+                "{tool} must not treat draft recipients as readers: {feedback}"
+            );
+        }
+        assert_eq!(
+            runtime
+                .status(&labeler.root)
+                .expect("the denied writes leave the session")
+                .trust,
+            "trusted"
+        );
+        assert_eq!(
+            admitted(&runtime, &labeler),
+            vec![AuditLabel {
+                trust: "trusted".to_owned(),
+                audience: "self".to_owned(),
+            }]
+        );
+        let released: Vec<Vec<String>> = runtime
+            .audit(&labeler.root)
+            .unwrap()
+            .into_iter()
+            .filter_map(|entry| match entry.event {
+                AuditEvent::Released { effects, .. } => Some(effects),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(released, vec![vec!["gmail.labeled".to_owned()]]);
+        assert!(
+            released
+                .iter()
+                .flatten()
+                .all(|effect| !effect.contains("sent"))
+        );
+
+        for tool in [
+            "gmail_prod__send_message",
+            "gmail_prod__not_a_tool",
+            "other__get_message",
+        ] {
+            let (call_id, call) = proposed(tool, serde_json::json!({}));
+            let decision = hooks::handle(&runtime, event(&reader, &call_id, call)).await;
+            assert!(
+                matches!(decision, HookDecision::Refuse { .. }),
+                "{tool} must be undeclared, not covered: {decision:?}"
+            );
+        }
     }
 }

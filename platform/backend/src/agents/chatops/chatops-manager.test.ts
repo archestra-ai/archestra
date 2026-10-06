@@ -27,7 +27,10 @@ import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
 import db, { schema } from "@/database";
 import {
+  A2AContextModel,
   A2AMessageModel,
+  A2ATaskApprovalRequestModel,
+  A2ATaskModel,
   AgentModel,
   AgentTeamModel,
   ChatOpsChannelBindingModel,
@@ -1830,9 +1833,27 @@ describe("ChatOpsManager security validation", () => {
 
     const mockProvider = createMockProvider();
     const manager = new ChatOpsManager();
+    const approvalContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const approvalTask = await A2ATaskModel.createForRun({
+      contextId: approvalContext.id,
+      agentId: agent.id,
+    });
+    await A2ATaskApprovalRequestModel.bulkCreateRaw([
+      {
+        taskId: approvalTask.id,
+        approvalId: "approval-1",
+        toolCallId: "legacy-call",
+        toolName: "some_tool",
+        resolved: false,
+        approved: false,
+      },
+    ]);
 
     const decision: ChatOpsApprovalDecision = {
-      taskId: "task-1",
+      taskId: approvalTask.id,
       approvalId: "approval-1",
       approved: true,
       toolName: "some_tool",
@@ -1892,9 +1913,27 @@ describe("ChatOpsManager security validation", () => {
 
     const mockProvider = createMockProvider();
     const manager = new ChatOpsManager();
+    const approvalContext = await A2AContextModel.create({
+      actorKind: "user",
+      actorId: user.id,
+    });
+    const approvalTask = await A2ATaskModel.createForRun({
+      contextId: approvalContext.id,
+      agentId: agent.id,
+    });
+    await A2ATaskApprovalRequestModel.bulkCreateRaw([
+      {
+        taskId: approvalTask.id,
+        approvalId: "approval-1",
+        toolCallId: "legacy-call",
+        toolName: "some_tool",
+        resolved: false,
+        approved: false,
+      },
+    ]);
 
     const decision: ChatOpsApprovalDecision = {
-      taskId: "task-1",
+      taskId: approvalTask.id,
       approvalId: "approval-1",
       approved: true,
       toolName: "some_tool",

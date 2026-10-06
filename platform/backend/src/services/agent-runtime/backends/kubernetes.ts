@@ -60,7 +60,10 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
 
   async releaseRun(
     session: AgentRunRecord,
-    options?: { retainInteractiveSession?: boolean },
+    options?: {
+      retainInteractiveSession?: boolean;
+      retainWorkspaceKey?: boolean;
+    },
   ): Promise<void> {
     await agentRuntimeManager.releaseRun(session, options);
   }
@@ -73,8 +76,11 @@ class KubernetesAgentRuntimeBackendDriver implements AgentRuntimeBackendDriver {
     await agentRuntimeManager.refreshCredentials(session);
   }
 
-  async stopRun(session: AgentRunRecord): Promise<"suspended" | undefined> {
-    return agentRuntimeManager.stopRun(session);
+  async stopRun(
+    session: AgentRunRecord,
+    options?: { retainWorkspaceKey?: boolean },
+  ): Promise<"suspended" | undefined> {
+    return agentRuntimeManager.stopRun(session, options);
   }
 
   getWorkspaceConnection(

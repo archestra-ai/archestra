@@ -12,6 +12,7 @@ import config from "@/config";
 import logger from "@/logging";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import { OpenappaCredentialError } from "@/openappa/failure";
+import { NATIVE_HELPER_INSTALL_ID } from "@/openappa/native-contract";
 import {
   OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
   OPENAPPA_HELPERS_PREFIX,
@@ -139,6 +140,9 @@ class OpenAppaDeclarations {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
     process.env[OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV] =
       `http://127.0.0.1:${config.api.port}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
+    process.env.APPA_ARCHESTRA_NATIVE_HELPER_URL = helperUrlBase(
+      NATIVE_HELPER_INSTALL_ID,
+    );
     return OPENAPPA_BRIDGE_TOKEN_ENV;
   }
 

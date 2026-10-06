@@ -17,6 +17,7 @@ import {
   VirtualApiKeyModel,
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { resolveModelRoute } from "@/routes/proxy/model-router-resolver";
 import { claudeCodeAccountManager } from "@/services/agent-runtime/claude-code-account";
 import { encodeOpenAiCodexCredential } from "@/services/openai-codex-credentials";
@@ -113,6 +114,162 @@ describe("buildAgentRunLaunchSpec", () => {
     } finally {
       config.openappa.enabled = previousOpenAppa;
     }
+  });
+
+  test("a retained team credential cannot outlive its revoked use grant", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+    makeTeam,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const team = await makeTeam(setup.agent.organizationId, setup.user.id);
+    const key = await VirtualApiKeyModel.create({
+      organizationId: setup.agent.organizationId,
+      name: "Retained team runtime",
+      keyType: "passthrough",
+      scope: "team",
+      authorId: null,
+      initialPermissionGrants: [
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ],
+    });
+    const policyParams = {
+      organizationId: setup.agent.organizationId,
+      resource: "llmVirtualKey" as const,
+      scope: key.virtualKey.id,
+    };
+    const policy = await ResourcePermissionPolicyModel.find(policyParams);
+    if (!policy) throw new Error("Missing team use grant");
+    await ResourcePermissionPolicyModel.replace({
+      ...policyParams,
+      revision: policy.revision,
+      grants: [],
+    });
+    await expect(
+      buildAgentRunLaunchSpec({
+        runtime: runtime(setup.agent, "openai_responses"),
+        taskId: crypto.randomUUID(),
+        runId: crypto.randomUUID(),
+        agentId: setup.agent.id,
+        actor: {
+          kind: "team",
+          id: team.id,
+          organizationId: setup.agent.organizationId,
+        },
+        organizationId: setup.agent.organizationId,
+        runtimeScope: "agent-tests",
+        effectiveNetworkPolicy: { source: "built_in", policy: null },
+        appName: "Archestra",
+        runMode: "one_shot",
+        reuseVirtualApiKeyId: key.virtualKey.id,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 403,
+      message: expect.stringContaining("no longer permitted"),
+    });
+    expect(
+      (await VirtualApiKeyModel.findById(key.virtualKey.id))?.expiresAt,
+    ).toBeNull();
+  });
+
+  test("runtime key reuse preserves the original workspace deadline and refuses expired or changed callers", async ({
+    makeOrganization,
+    makeAdmin,
+    makeMember,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeAgent,
+  }) => {
+    const setup = await makeConfiguredAgent({
+      provider: "openai",
+      makeOrganization,
+      makeAdmin,
+      makeMember,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeAgent,
+    });
+    const deadline = new Date(Date.now() + 3600_000);
+    const params = {
+      runtime: runtime(setup.agent, "openai_responses"),
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      agentId: setup.agent.id,
+      actor: {
+        kind: "user" as const,
+        id: setup.user.id,
+        organizationId: setup.agent.organizationId,
+      },
+      organizationId: setup.agent.organizationId,
+      runtimeScope: "agent-tests",
+      effectiveNetworkPolicy: { source: "built_in" as const, policy: null },
+      appName: "Archestra",
+      runMode: "one_shot" as const,
+      workspaceExpiresAt: deadline,
+    };
+    const first = await buildAgentRunLaunchSpec(params);
+    if (!first.virtualApiKeyId) throw new Error("Missing bounded runtime key");
+    expect(
+      (await VirtualApiKeyModel.findById(first.virtualApiKeyId))?.expiresAt,
+    ).toEqual(deadline);
+    const continuation = {
+      ...params,
+      taskId: crypto.randomUUID(),
+      runId: crypto.randomUUID(),
+      reuseVirtualApiKeyId: first.virtualApiKeyId,
+    };
+    const next = await buildAgentRunLaunchSpec({
+      ...continuation,
+      workspaceExpiresAt: new Date(Date.now() + 7200_000),
+    });
+    expect(next.virtualApiKeyId).toBe(first.virtualApiKeyId);
+    expect(next.spec.secretEnv.ARCHESTRA_VIRTUAL_KEY).toBe(
+      first.spec.secretEnv.ARCHESTRA_VIRTUAL_KEY,
+    );
+    expect(
+      (await VirtualApiKeyModel.findById(first.virtualApiKeyId))?.expiresAt,
+    ).toEqual(deadline);
+    await expect(
+      buildAgentRunLaunchSpec({
+        ...continuation,
+        actor: { ...params.actor, id: crypto.randomUUID() },
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("different actor"),
+    });
+    await expect(
+      buildAgentRunLaunchSpec({
+        ...continuation,
+        workspaceExpiresAt: new Date(0),
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("lease has expired"),
+    });
+    await VirtualApiKeyModel.capExpiry({
+      id: first.virtualApiKeyId,
+      organizationId: params.organizationId,
+      expiresAt: new Date(0),
+      expectedScope: "personal",
+      expectedAuthorId: setup.user.id,
+    });
+    await expect(buildAgentRunLaunchSpec(continuation)).rejects.toMatchObject({
+      statusCode: 409,
+      message: expect.stringContaining("expired or changed"),
+    });
   });
 
   test("routes the Agent's selected model through its scoped model router", async ({

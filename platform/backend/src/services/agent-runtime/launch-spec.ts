@@ -41,6 +41,7 @@ import type {
 import { AgentRuntimeCredentialsRequiredError, ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import type { AgentRunLaunchSpec } from "./backends";
+import { assertRuntimeKeyPermission } from "./credential-lease";
 import { resolveAgentRuntimeCredentials } from "./credentials";
 import { taskWithAgentRunInputs } from "./input-files";
 import {
@@ -88,7 +89,26 @@ export async function buildAgentRunLaunchSpec(params: {
     OpenAppaSession,
     "session_id" | "caller_id" | "parent_id"
   >;
+  /**
+   * Continuation of the same workspace. Reuse this key so the proxy caller
+   * does not change. A missing secret fails the resume; it does not mint a
+   * new caller for the retained transcript.
+   */
+  reuseVirtualApiKeyId?: string;
+  /** The original workspace deadline, never a renewed continuation TTL. */
+  workspaceExpiresAt?: Date;
 }): Promise<{ spec: AgentRunLaunchSpec; virtualApiKeyId: string | null }> {
+  const activeDeadlineSeconds =
+    (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) * 3600;
+  const expiresAt =
+    params.workspaceExpiresAt ??
+    new Date(Date.now() + activeDeadlineSeconds * 1000);
+  if (
+    !Number.isFinite(expiresAt.getTime()) ||
+    expiresAt.getTime() <= Date.now()
+  ) {
+    throw new ApiError(409, "The runtime workspace lease has expired");
+  }
   const platformBaseUrl = config.agentRuntime.platformBaseUrl.replace(
     /\/+$/,
     "",
@@ -101,6 +121,14 @@ export async function buildAgentRunLaunchSpec(params: {
       "Agent Runtime requires ARCHESTRA_AGENT_RUNTIME_PLATFORM_BASE_URL (or ARCHESTRA_INTERNAL_API_BASE_URL) so the run can reach the LLM proxy and MCP gateway",
     );
   }
+  const retainedKey = params.reuseVirtualApiKeyId
+    ? await reusedVirtualKey({
+        id: params.reuseVirtualApiKeyId,
+        organizationId: params.organizationId,
+        actor: params.actor,
+        expiresAt,
+      })
+    : undefined;
 
   const actorUserId = params.actor.kind === "user" ? params.actor.id : null;
   const credentials = await resolveAgentRuntimeCredentials({
@@ -214,24 +242,28 @@ export async function buildAgentRunLaunchSpec(params: {
   // Claude Code supplies its own OAuth token. A personal passthrough key
   // authenticates the actor to the proxy without storing that token as a
   // provider key, so subscription requests retain usage and run attribution.
-  const virtualKey = usesClaudeCodeSubscription
-    ? await VirtualApiKeyModel.create({
-        organizationId: params.organizationId,
-        name: `agent-run-${params.taskId.slice(0, 8)}`,
-        keyType: "passthrough",
-        ...virtualKeyVisibility(params.actor),
-      })
-    : await createProviderBackedVirtualKey({
-        organizationId: params.organizationId,
-        actor: params.actor,
-        taskId: params.taskId,
-        provider: llm.selectedProvider,
-        model: llm.selectedModel,
-        agentLlmApiKeyId: agent.llmApiKeyId,
-        requiredSubscriptionKind: isCodexRuntime ? "chatgpt" : null,
-      });
+  const virtualKey = retainedKey
+    ? retainedKey
+    : usesClaudeCodeSubscription
+      ? await VirtualApiKeyModel.create({
+          organizationId: params.organizationId,
+          name: `agent-run-${params.taskId.slice(0, 8)}`,
+          keyType: "passthrough",
+          expiresAt,
+          ...virtualKeyVisibility(params.actor),
+        })
+      : await createProviderBackedVirtualKey({
+          organizationId: params.organizationId,
+          actor: params.actor,
+          taskId: params.taskId,
+          provider: llm.selectedProvider,
+          model: llm.selectedModel,
+          agentLlmApiKeyId: agent.llmApiKeyId,
+          requiredSubscriptionKind: isCodexRuntime ? "chatgpt" : null,
+          expiresAt,
+        });
   const virtualKeyValue = virtualKey?.value ?? "";
-  if (params.runtime.maxCostUsd && virtualKey) {
+  if (params.runtime.maxCostUsd && virtualKey && !params.reuseVirtualApiKeyId) {
     try {
       await LimitModel.create({
         entityType: "virtual_key",
@@ -414,10 +446,7 @@ export async function buildAgentRunLaunchSpec(params: {
       ...(Object.keys(credentials.renewableCredentials).length
         ? { renewableCredentials: credentials.renewableCredentials }
         : {}),
-      activeDeadlineSeconds:
-        (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) *
-        60 *
-        60,
+      activeDeadlineSeconds,
       workspaceStorageSize: config.agentRuntime.workspaceStorageSize,
       workspaceStorageClass: config.agentRuntime.workspaceStorageClass,
       nodeSelector: config.agentRuntime.nodeSelector,
@@ -500,6 +529,7 @@ async function createProviderBackedVirtualKey(params: {
   model: string;
   agentLlmApiKeyId: string | null;
   requiredSubscriptionKind: SubscriptionCredentialKind | null;
+  expiresAt: Date;
 }): Promise<Awaited<ReturnType<typeof VirtualApiKeyModel.create>>> {
   const actorUserId = params.actor.kind === "user" ? params.actor.id : null;
   const requiredSubscription =
@@ -579,6 +609,7 @@ async function createProviderBackedVirtualKey(params: {
   return VirtualApiKeyModel.create({
     organizationId: params.organizationId,
     name: `agent-run-${params.taskId.slice(0, 8)}`,
+    expiresAt: params.expiresAt,
     // Personal scope is what attributes the session's LLM spend to the human
     // it acts as rather than to the organization at large.
     ...virtualKeyVisibility(params.actor),
@@ -614,14 +645,58 @@ async function resolveGatewayToken(params: {
   );
 }
 
-/**
- * Who the run's virtual key reaches, as creation grants. A user actor's key
- * is the user's own (the author gets full access from creation, and nothing
- * else reaches it), which is what attributes the session's LLM spend to that
- * person. A team actor's key reaches the team; an organization actor's key is
- * published to the organization. The retired `scope` column is written to
- * match, though nothing reads it.
- */
+async function reusedVirtualKey(params: {
+  id: string;
+  organizationId: string;
+  actor: A2AActor;
+  expiresAt: Date;
+}): Promise<{ virtualKey: { id: string }; value: string }> {
+  const key = await VirtualApiKeyModel.findById(params.id);
+  if (
+    !key ||
+    key.organizationId !== params.organizationId ||
+    (params.actor.kind === "user"
+      ? key.authorId !== params.actor.id
+      : key.authorId !== null)
+  ) {
+    throw new ApiError(
+      409,
+      "The retained runtime credential belongs to a different actor",
+    );
+  }
+  await assertRuntimeKeyPermission({
+    organizationId: params.organizationId,
+    virtualApiKeyId: key.id,
+    actor: params.actor,
+  });
+  const bounded = await VirtualApiKeyModel.capExpiry({
+    id: key.id,
+    organizationId: params.organizationId,
+    expiresAt: params.expiresAt,
+    expectedScope: key.scope,
+    expectedAuthorId: key.authorId,
+  });
+  if (
+    !bounded ||
+    !bounded.expiresAt ||
+    bounded.expiresAt.getTime() <= Date.now()
+  ) {
+    throw new ApiError(
+      409,
+      "The retained runtime credential has expired or changed",
+    );
+  }
+  const value = await VirtualApiKeyModel.readToken(params);
+  if (!value) {
+    throw new ApiError(
+      409,
+      "The prior workspace credentials are unavailable for this actor, Agent, or environment",
+    );
+  }
+  return { virtualKey: { id: params.id }, value };
+}
+
+/** Creation grants bind users to their own key, teams to the team, or publish to the organization. */
 function virtualKeyVisibility(actor: A2AActor): {
   scope: "personal" | "team" | "org";
   authorId: string | null;

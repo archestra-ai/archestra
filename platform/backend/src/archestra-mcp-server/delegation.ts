@@ -2,6 +2,7 @@ import {
   ADVISOR_DELEGATION_GUIDANCE,
   AGENT_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
+  isSkillTool,
   slugify,
 } from "@archestra/shared";
 import type { CallToolResult, Tool } from "@modelcontextprotocol/sdk/types.js";
@@ -28,6 +29,8 @@ import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
 import { SPAWN_TARGET_MISMATCH } from "@/services/agent-runtime/runtime-crossing";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type { Agent } from "@/types";
+import { delegationToolArgsSchema } from "./delegation-tool-args";
+import { runGuardedForegroundDelegation } from "./guarded-delegation";
 import {
   errorResult,
   isAbortLikeError,
@@ -36,13 +39,52 @@ import {
 } from "./helpers";
 import type { ArchestraContext } from "./types";
 
-export const delegationToolArgsSchema = z.object({
-  message: z.string().trim().min(1, "message is required."),
-  runtime_proof: z
-    .string()
-    .optional()
-    .describe("Source-session proof supplied by the proxy."),
-});
+/**
+ * True when this tool will run through the foreground in-process executor.
+ * Outbound remote A2A and runtime-backed tasks are not local children: minting
+ * a spawn for them would wait for an end that never returns through the proxy.
+ * An unresolved agent tool is not a spawn either — the execution path fails
+ * closed on its own, and a marker without a child would stick the parent.
+ */
+export async function willRunInForegroundExecutor(params: {
+  toolName: string;
+  agentId: string;
+  organizationId: string;
+  userId?: string;
+}): Promise<boolean> {
+  if (isSkillTool(params.toolName)) return true;
+  if (!params.toolName.startsWith(AGENT_TOOL_PREFIX)) return false;
+  const outbound = await A2aConnectionModel.findAssignedTargetByToolName({
+    agentId: params.agentId,
+    organizationId: params.organizationId,
+    toolName: params.toolName,
+    ...(params.userId ? { userId: params.userId } : {}),
+  });
+  if (outbound) return false;
+  const environmentId = await AgentModel.findEnvironmentId(params.agentId);
+  const targetAgentSlug = params.toolName.slice(AGENT_TOOL_PREFIX.length);
+  const accessAll = await AgentModel.getAccessAllSubagents(params.agentId);
+  const target =
+    accessAll && params.userId
+      ? await resolveAutoDelegationTarget({
+          agentId: params.agentId,
+          organizationId: params.organizationId,
+          userId: params.userId,
+          environmentId,
+          targetAgentSlug,
+        })
+      : await resolveExplicitDelegationTarget({
+          agentId: params.agentId,
+          organizationId: params.organizationId,
+          userId: params.userId,
+          environmentId,
+          targetAgentSlug,
+        });
+  if ("error" in target) return false;
+  const targetAgent = await AgentModel.findById(target.id);
+  if (!targetAgent || resolveAgentRuntime(targetAgent)) return false;
+  return true;
+}
 
 // The canonical delegation input schema, reused for Auto-mode synthesized
 // delegation tools so they are indistinguishable from explicit ones.
@@ -328,38 +370,44 @@ export async function handleDelegation(
       "Executing agent delegation tool",
     );
 
-    const result = await executeA2AMessage({
-      agentId: target.id,
+    return await runGuardedForegroundDelegation({
+      context,
+      toolName: `${AGENT_TOOL_PREFIX}${targetAgentSlug}`,
       message,
-      organizationId,
-      userId: userId || "system",
-      sessionId,
-      // Pass the current delegation chain so the child can extend it
-      parentDelegationChain,
-      // The advisor's row is env-less, so the executor needs the caller's
-      // environment to bill the consultation to it.
-      callerEnvironmentId: environmentId,
-      // Propagate the real conversation id (absent in headless executions) and
-      // the isolation scope separately: the child must never mistake an
-      // execution key for a persisted conversation.
-      conversationId: context.conversationId,
-      isolationKey: context.isolationKey,
-      chatOpsBindingId: context.chatOpsBindingId,
-      chatOpsThreadId: context.chatOpsThreadId,
-      scheduleTriggerRunId: context.scheduleTriggerRunId,
-      abortSignal: context.abortSignal,
-      // We only need to propagate whether the parent was already unsafe at the
-      // delegation boundary. The child re-evaluates its own tool results and
-      // records its own unsafe boundary instead of inheriting the parent's.
-      parentContextIsTrusted: context.contextIsTrusted,
-      // Surface the child's tool calls on the caller's conversation, attributed
-      // to this delegation call. The shared bridge is threaded into the child
-      // run so deeper descendants surface too.
-      subagentToolStream: context.subagentToolStream,
-      delegationToolCallId: context.currentToolCallId,
+      execute: (guarded) =>
+        executeA2AMessage({
+          agentId: target.id,
+          message: guarded.message,
+          reviewOrigin: context.chatOpsOrigin,
+          appaParentSessionId: guarded.parentSessionId,
+          organizationId,
+          userId: userId || "system",
+          sessionId: guarded.sessionId,
+          // Pass the current delegation chain so the child can extend it
+          parentDelegationChain,
+          // The advisor's row is env-less, so the executor needs the caller's
+          // environment to bill the consultation to it.
+          callerEnvironmentId: environmentId,
+          // Propagate the real conversation id (absent in headless executions) and
+          // the isolation scope separately: the child must never mistake an
+          // execution key for a persisted conversation.
+          conversationId: context.conversationId,
+          isolationKey: context.isolationKey,
+          chatOpsBindingId: context.chatOpsBindingId,
+          chatOpsThreadId: context.chatOpsThreadId,
+          scheduleTriggerRunId: context.scheduleTriggerRunId,
+          abortSignal: context.abortSignal,
+          // We only need to propagate whether the parent was already unsafe at the
+          // delegation boundary. The child re-evaluates its own tool results and
+          // records its own unsafe boundary instead of inheriting the parent's.
+          parentContextIsTrusted: context.contextIsTrusted,
+          // Surface the child's tool calls on the caller's conversation, attributed
+          // to this delegation call. The shared bridge is threaded into the child
+          // run so deeper descendants surface too.
+          subagentToolStream: context.subagentToolStream,
+          delegationToolCallId: guarded.toolCallId,
+        }),
     });
-
-    return successResult(result.text);
   } catch (error) {
     if (isAbortLikeError(error)) {
       logger.info(

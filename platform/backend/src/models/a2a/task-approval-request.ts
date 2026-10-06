@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import type { A2AArchestraApprovalRequest } from "@/agents/a2a/a2a-protocol";
 import db, { schema } from "@/database";
 import type {
@@ -37,6 +37,17 @@ class A2ATaskApprovalRequestModel {
       .insert(schema.a2aTaskApprovalRequestsTable)
       .values(reqs)
       .returning();
+  }
+
+  static async findByApprovalId(
+    approvalId: string,
+  ): Promise<A2ATaskApprovalRequest | null> {
+    const [req] = await db
+      .select()
+      .from(schema.a2aTaskApprovalRequestsTable)
+      .where(eq(schema.a2aTaskApprovalRequestsTable.approvalId, approvalId))
+      .limit(1);
+    return req ?? null;
   }
 
   static async findById(id: string): Promise<A2ATaskApprovalRequest | null> {
@@ -83,6 +94,24 @@ class A2ATaskApprovalRequestModel {
     await db
       .delete(schema.a2aTaskApprovalRequestsTable)
       .where(eq(schema.a2aTaskApprovalRequestsTable.id, id));
+  }
+
+  /** Retire only the canonical decision consumed by this verified resume. */
+  static async deleteConsumedDecision(params: {
+    id: string;
+    taskId: string;
+    approved: boolean;
+  }): Promise<void> {
+    await db
+      .delete(schema.a2aTaskApprovalRequestsTable)
+      .where(
+        and(
+          eq(schema.a2aTaskApprovalRequestsTable.id, params.id),
+          eq(schema.a2aTaskApprovalRequestsTable.taskId, params.taskId),
+          eq(schema.a2aTaskApprovalRequestsTable.resolved, true),
+          eq(schema.a2aTaskApprovalRequestsTable.approved, params.approved),
+        ),
+      );
   }
 }
 

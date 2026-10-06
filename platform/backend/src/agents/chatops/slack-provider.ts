@@ -8,6 +8,7 @@ import {
 } from "@archestra/shared";
 import { SocketModeClient } from "@slack/socket-mode";
 import { type Button, type ColorScheme, WebClient } from "@slack/web-api";
+import { z } from "zod";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import {
   type AllowedCacheKey,
@@ -27,6 +28,7 @@ import type {
   ChatOpsApprovalDecision,
   ChatOpsConnectionMode,
   ChatOpsEventHandler,
+  ChatOpsGuardrailsContext,
   ChatOpsProvider,
   ChatOpsProviderType,
   ChatReplyOptions,
@@ -945,6 +947,77 @@ class SlackProvider implements ChatOpsProvider {
       logger.warn(
         { error: errorMessage(error), userId },
         "[SlackProvider] Failed to get user name",
+      );
+      return null;
+    }
+  }
+
+  async getGuardrailsContext(
+    message: IncomingChatMessage,
+  ): Promise<ChatOpsGuardrailsContext | null> {
+    if (!this.client || !this.teamId) return null;
+    try {
+      const { channel } = await this.client.conversations.info({
+        channel: message.channelId,
+      });
+      if (!channel?.id || channel.id !== message.channelId) return null;
+      const context: ChatOpsGuardrailsContext = {
+        roomId: JSON.stringify(["slack", this.teamId, channel.id]),
+        trust: "suspicious",
+        readers: null,
+      };
+      let internal = channel.is_ext_shared !== true;
+
+      // Public-channel subscribers are not the full set of possible readers.
+      if (!channel.is_im && !channel.is_mpim && !channel.is_private) {
+        return context;
+      }
+
+      const members = new Set<string>();
+      const cursors = new Set<string>();
+      let cursor: string | undefined;
+      do {
+        const page = await this.client.conversations.members({
+          channel: channel.id,
+          limit: 200,
+          cursor,
+        });
+        if (!page.members) return context;
+        for (const member of page.members) members.add(member);
+        if (members.size > 200) return context;
+        cursor = page.response_metadata?.next_cursor || undefined;
+        if (cursor) {
+          if (cursors.has(cursor) || cursors.size >= 100) return context;
+          cursors.add(cursor);
+        }
+      } while (cursor);
+
+      const readers = new Set<string>();
+      for (const member of members) {
+        if (member === this.botUserId) continue;
+        const { user } = await this.client.users.info({ user: member });
+        if (
+          user?.is_stranger ||
+          user?.is_restricted ||
+          user?.is_ultra_restricted ||
+          user?.team_id !== this.teamId
+        ) {
+          internal = false;
+        }
+        const email = z.email().safeParse(user?.profile?.email?.toLowerCase());
+        // Other bots and guests without an email still count as readers.
+        if (!email.success) return context;
+        readers.add(email.data);
+      }
+      if (readers.size > 0) {
+        context.readers = [...readers];
+        context.trust = internal ? "trusted" : "suspicious";
+      }
+      return context;
+    } catch (error) {
+      logger.warn(
+        { error: errorMessage(error), channelId: message.channelId },
+        "[SlackProvider] Could not resolve guardrails room",
       );
       return null;
     }

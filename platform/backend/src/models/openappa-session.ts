@@ -237,6 +237,7 @@ class OpenAppaSessionModel {
   static async familySession(params: {
     organizationId: string;
     sessionId: string;
+    root?: string;
     callerId?: string;
   }): Promise<{
     sessionId: string;
@@ -254,6 +255,7 @@ class OpenAppaSessionModel {
         and(
           eq(table.organizationId, params.organizationId),
           eq(table.sessionId, params.sessionId),
+          params.root ? eq(table.root, params.root) : undefined,
           params.callerId
             ? eq(table.callerId, params.callerId)
             : isNull(table.callerId),

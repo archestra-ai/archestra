@@ -9,6 +9,18 @@ export function openappaActor(sessionId: string): string {
   return `archestra:${createHash("sha256").update(sessionId).digest("hex")}`;
 }
 
+/** Credential-proven user identity takes precedence over app or virtual key. */
+export function openappaCallerId(params: {
+  userId?: string | null;
+  appId?: string;
+  virtualApiKeyId?: string;
+}): string | undefined {
+  if (params.userId) return `user:${params.userId}`;
+  if (params.appId) return `app:${params.appId}`;
+  if (params.virtualApiKeyId) return `virtual-key:${params.virtualApiKeyId}`;
+  return undefined;
+}
+
 /** Builds a caller-scoped runtime session ID (`<caller>|<client id>`). */
 export function scopedSessionId(callerId: string, sessionId: string): string {
   return `${callerId}|${sessionId}`;

@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import { DEFAULT_APP_NAME, toPlaceholderTitle } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
-import type { A2AExecuteResult } from "@/agents/a2a-executor";
+import type { A2AAttachment, A2AExecuteResult } from "@/agents/a2a-executor";
 import config from "@/config";
 import { isK8sNotFoundError } from "@/k8s/shared";
 import logger from "@/logging";
@@ -13,12 +13,16 @@ import {
   AgentWorkspaceModel,
   EnvironmentModel,
   OrganizationModel,
+  VirtualApiKeyModel,
 } from "@/models";
 import {
   reportAgentRuntimeProvisioned,
   reportAgentRuntimeStarted,
   reportAgentRuntimeTerminated,
 } from "@/observability/metrics/agent-runtime";
+import { backgroundSessionRequired } from "@/openappa/native-transport";
+import type { OpenAppaSession } from "@/openappa/service";
+import { inheritTaskSession } from "@/openappa/task-provenance";
 import { resolveEffectiveNetworkPolicy } from "@/services/environments/network-policy";
 import type {
   Agent,
@@ -29,6 +33,7 @@ import type {
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
 import { resolveAgentRuntimeBackendDriver } from "./backends";
+import { persistAgentRunInputs, taskWithAgentRunInputs } from "./input-files";
 import { buildAgentRunLaunchSpec } from "./launch-spec";
 import { AgentRuntimeOutputCapture } from "./output-capture";
 import { constructStableRunName } from "./runtime-contract";
@@ -39,6 +44,11 @@ import {
   type RuntimeCrossing,
 } from "./runtime-crossing";
 import {
+  bindRuntimeEmailLaunch,
+  type RuntimeEmailTurn,
+} from "./runtime-email-ingress";
+import {
+  resolveRuntimeSessionForWorkspace,
   runtimeOpenAppaSession,
   stampRuntimeBinding,
 } from "./runtime-identity";
@@ -58,6 +68,7 @@ import { agentRunTranscriptStore } from "./transcript-store";
  * streamed text, and abort tears the run down.
  */
 async function startAgentRunSession(params: {
+  openappaParentSession?: OpenAppaSession;
   runtime: ResolvedAgentRuntime;
   taskId: string;
   agentId: string;
@@ -72,6 +83,8 @@ async function startAgentRunSession(params: {
   titleUserId?: string;
   resumeFromTaskId?: string;
   runtimeCrossing?: RuntimeCrossing;
+  runtimeEmailTurn?: RuntimeEmailTurn;
+  emailAttachments?: A2AAttachment[];
 }): Promise<AgentRunRecord> {
   const backend = resolveAgentRuntimeBackendDriver(params.runtime.backend);
 
@@ -131,6 +144,20 @@ async function startAgentRunSession(params: {
     task = promptWithContract(task, contract);
   }
 
+  if (workspace && !priorRun?.virtualApiKeyId) {
+    throw new ApiError(
+      409,
+      "The prior workspace credentials are unavailable for this actor, Agent, or environment",
+    );
+  }
+  const workspaceExpiresAt =
+    workspace?.expiresAt ??
+    new Date(
+      Date.now() +
+        (params.runtime.ttlHours ?? config.agentRuntime.defaultTtlHours) *
+          3600 *
+          1000,
+    );
   const { spec, virtualApiKeyId } = await buildAgentRunLaunchSpec({
     runtime: params.runtime,
     taskId: params.taskId,
@@ -156,6 +183,10 @@ async function startAgentRunSession(params: {
           }),
         }
       : {}),
+    reuseVirtualApiKeyId: workspace
+      ? (priorRun?.virtualApiKeyId ?? undefined)
+      : undefined,
+    workspaceExpiresAt,
   });
 
   if (workspace) {
@@ -169,13 +200,105 @@ async function startAgentRunSession(params: {
   }
   spec.env.ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID = spec.frozenName;
 
+  let taskText = task ?? null;
+  let launchInputs = inputFiles;
+  let completionTarget = params.completionTarget;
+  const producing = workspace
+    ? (
+        await resolveRuntimeSessionForWorkspace({
+          organizationId: params.organizationId,
+          workspaceId: workspace.id,
+        })
+      )?.session
+    : runtimeOpenAppaSession({
+        organizationId: params.organizationId,
+        workspaceId: params.taskId,
+        workloadName: spec.frozenName,
+        actorKind: params.actor.kind,
+        actorId: params.actor.id,
+        ...(params.runtimeCrossing
+          ? { parentId: params.runtimeCrossing.source.session_id }
+          : {}),
+      });
+  try {
+    if (params.openappaParentSession) {
+      if (!virtualApiKeyId || !producing) {
+        throw new ApiError(409, "The task has no producing runtime credential");
+      }
+      if (!params.runtimeCrossing)
+        await inheritTaskSession({
+          parent: params.openappaParentSession,
+          session: producing,
+          occurrenceId: params.taskId,
+          input: JSON.stringify({ task: params.task, inputFiles }),
+        });
+      if (completionTarget) {
+        completionTarget = {
+          ...completionTarget,
+          appaSession: {
+            organizationId: producing.organization_id,
+            sessionId: producing.session_id,
+            callerId: producing.caller_id,
+            ...(producing.parent_id ? { parentId: producing.parent_id } : {}),
+          },
+        };
+      }
+    }
+    if (params.runtimeEmailTurn) {
+      if (!virtualApiKeyId || !producing) {
+        throw new ApiError(
+          409,
+          "The email cannot be shown to this runtime session",
+        );
+      }
+      const bound = await bindRuntimeEmailLaunch({
+        session: producing,
+        turn: params.runtimeEmailTurn,
+        task: params.task ?? "",
+        attachments: params.emailAttachments ?? [],
+        stampSession: await backgroundSessionRequired(),
+      });
+      const persisted =
+        bound.attachments.length > 0
+          ? await persistAgentRunInputs({
+              taskId: params.taskId,
+              organizationId: params.organizationId,
+              uploadedByUserId:
+                params.actor.kind === "user" ? params.actor.id : null,
+              attachments: bound.attachments,
+            })
+          : [];
+      launchInputs = persisted;
+      taskText =
+        taskWithAgentRunInputs({
+          task: bound.task,
+          inputs: persisted,
+        }) ?? null;
+      if (taskText) {
+        spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_TASK = taskText;
+      } else {
+        delete spec.secretEnv.ARCHESTRA_AGENT_RUNTIME_TASK;
+      }
+      if (bound.appaSession && completionTarget?.type === "email") {
+        completionTarget = {
+          ...completionTarget,
+          appaSession: bound.appaSession,
+        };
+      }
+    }
+  } catch (error) {
+    if (virtualApiKeyId && !workspace) {
+      await VirtualApiKeyModel.delete(virtualApiKeyId);
+    }
+    throw error;
+  }
   // The row lands before the workload: it is what teardown reads to find the
   // objects, so a crash between the two must leave a record, not an orphan.
-  const resumeWithoutPrompt = Boolean(priorRun && !params.task?.trim());
+  const resumeWithoutPrompt = Boolean(priorRun && !taskText?.trim());
   const placeholderTitle =
     resumeWithoutPrompt && priorRun
       ? priorRun.title
-      : toPlaceholderTitle(params.task ?? "Run");
+      : toPlaceholderTitle(taskText ?? "Run");
   const session = await AgentRunModel.create({
     id: runId,
     organizationId: params.organizationId,
@@ -191,14 +314,14 @@ async function startAgentRunSession(params: {
     runtimeScope,
     activeDeadlineSeconds: spec.activeDeadlineSeconds,
     virtualApiKeyId,
-    completionTarget: params.completionTarget,
+    completionTarget,
   });
 
   if (!resumeWithoutPrompt) {
     trackBackgroundWork(
       generateAgentRunTitle({
         taskId: params.taskId,
-        prompt: params.task ?? "Run",
+        prompt: taskText ?? "Run",
         organizationId: params.organizationId,
         userId: params.titleUserId,
         modelId: params.modelId,
@@ -242,7 +365,10 @@ async function startAgentRunSession(params: {
       claimedWorkspace = true;
       const previous = await AgentRunModel.findByTaskId(workspace.lastTaskId);
       if (previous?.virtualApiKeyId)
-        await cleanupAgentRun(previous, { requireTranscript: true });
+        await cleanupAgentRun(previous, {
+          requireTranscript: true,
+          retainWorkspaceKey: previous.virtualApiKeyId === virtualApiKeyId,
+        });
       if (params.runtimeCrossing) {
         await admitRuntimeSteer({
           crossing: params.runtimeCrossing,
@@ -270,12 +396,7 @@ async function startAgentRunSession(params: {
         workloadName: spec.frozenName,
         activeTaskId: params.taskId,
         lastTaskId: params.taskId,
-        expiresAt: new Date(
-          Date.now() +
-            (spec.activeDeadlineSeconds ??
-              config.agentRuntime.defaultTtlHours * 3600) *
-              1000,
-        ),
+        expiresAt: workspaceExpiresAt,
       });
       await stampRuntimeBinding({
         spec,
@@ -284,17 +405,24 @@ async function startAgentRunSession(params: {
         taskId: params.taskId,
       });
       await backend.launch(spec);
-      await backend.stageInputs({ session, inputs: inputFiles });
+      await backend.stageInputs({ session, inputs: launchInputs });
     }
   } catch (error) {
     // A publication can succeed before its exec connection fails. Keep the
     // claim until stopping that possibly-running turn has been acknowledged.
     try {
       let suspended = false;
+      const retainWorkspaceKey = Boolean(
+        virtualApiKeyId && virtualApiKeyId === priorRun?.virtualApiKeyId,
+      );
       if (claimedWorkspace)
-        suspended = (await backend.stopRun(session)) === "suspended";
+        suspended =
+          (await backend.stopRun(session, { retainWorkspaceKey })) ===
+          "suspended";
       if (workspace) {
-        await backend.releaseRun(session);
+        await backend.releaseRun(session, {
+          retainWorkspaceKey,
+        });
         if (claimedWorkspace)
           await AgentWorkspaceModel.release({
             workloadName: session.workloadName,
@@ -361,6 +489,7 @@ export function resolveAgentRuntime(
  * the actor's injected credentials, and the minted virtual key.
  */
 export async function runTaskInAgentRuntime(params: {
+  openappaParentSession?: OpenAppaSession;
   runtime: ResolvedAgentRuntime;
   taskId: string;
   agentId: string;
@@ -375,6 +504,8 @@ export async function runTaskInAgentRuntime(params: {
   titleUserId?: string;
   resumeFromTaskId?: string;
   runtimeCrossing?: RuntimeCrossing;
+  runtimeEmailTurn?: RuntimeEmailTurn;
+  emailAttachments?: A2AAttachment[];
   onTextDelta?: (delta: string) => void;
   abortSignal?: AbortSignal;
 }): Promise<A2AExecuteResult> {
@@ -408,13 +539,16 @@ export async function resumeAgentRun(params: {
 /** Clean up a session whose task settled while no backend owned its run. */
 export async function cleanupAgentRun(
   session: AgentRunRecord,
-  options?: { requireTranscript?: boolean },
+  options?: { requireTranscript?: boolean; retainWorkspaceKey?: boolean },
 ): Promise<void> {
   const backend = resolveAgentRuntimeBackendDriver(session.backend);
   const workspace = await AgentWorkspaceModel.findByWorkloadName(
     session.workloadName,
   );
   const task = await A2ATaskModel.findById(session.taskId);
+  const retainWorkspaceKey = Boolean(
+    options?.retainWorkspaceKey || workspaceRetainsKey(workspace, session),
+  );
   // Stop first: the supervisor publishes the final transcript before acknowledging
   // cancellation. Never stop a newer turn that already claimed this workspace.
   let suspended = false;
@@ -424,7 +558,7 @@ export async function cleanupAgentRun(
       task?.state === "TASK_STATE_FAILED")
   ) {
     suspended =
-      (await backend.stopRun(session).catch((error) => {
+      (await backend.stopRun(session, { retainWorkspaceKey }).catch((error) => {
         if (!isK8sNotFoundError(error)) throw error;
         return undefined;
       })) === "suspended";
@@ -456,6 +590,8 @@ export async function cleanupAgentRun(
       !options?.requireTranscript &&
       task?.state === "TASK_STATE_COMPLETED" &&
       ["active", "idle"].includes(workspace?.state ?? ""),
+    // Continuations reuse this credential; retiring the prior turn must not revoke it.
+    retainWorkspaceKey,
   });
   await AgentWorkspaceModel.release({
     workloadName: session.workloadName,
@@ -563,15 +699,22 @@ async function followAgentRun(params: {
     );
     let cleanupSucceeded = true;
     let suspended = false;
+    const workspace = await AgentWorkspaceModel.findByWorkloadName(
+      session.workloadName,
+    );
+    const retainWorkspaceKey = workspaceRetainsKey(workspace, session);
     await (async () => {
       if (outcome !== "succeeded" || params.abortSignal?.aborted) {
-        suspended = (await backend.stopRun(session)) === "suspended";
+        suspended =
+          (await backend.stopRun(session, { retainWorkspaceKey })) ===
+          "suspended";
         await output.recoverSnapshot(
           AbortSignal.timeout(OUTPUT_SNAPSHOT_TIMEOUT_MS),
         );
       }
       await backend.releaseRun(session, {
         retainInteractiveSession: outcome === "succeeded",
+        retainWorkspaceKey,
       });
     })().catch((error) => {
       cleanupSucceeded = false;
@@ -581,12 +724,12 @@ async function followAgentRun(params: {
       );
     });
     await persistTranscript({ session, output });
-    const workspace = await AgentWorkspaceModel.findByWorkloadName(
+    const latestWorkspace = await AgentWorkspaceModel.findByWorkloadName(
       session.workloadName,
     );
     // Expiry owns strict final capture. Do not let this best-effort follower
     // close the run and make the reaper skip a failed transcript recovery.
-    if (workspace?.state === "deleting") cleanupSucceeded = false;
+    if (latestWorkspace?.state === "deleting") cleanupSucceeded = false;
     // Keep failed cleanup open so terminal reconciliation can retry it.
     if (cleanupSucceeded)
       await AgentRunModel.close({
@@ -638,6 +781,27 @@ async function persistTranscript(params: {
         "Could not retain the complete Agent run transcript",
       );
     });
+}
+
+/** Retention is a workspace lease property, not a guardrails feature flag. */
+function workspaceRetainsKey(
+  workspace: Awaited<ReturnType<typeof AgentWorkspaceModel.findByWorkloadName>>,
+  session: AgentRunRecord,
+): boolean {
+  return Boolean(
+    session.virtualApiKeyId &&
+      workspace &&
+      workspace.organizationId === session.organizationId &&
+      workspace.agentId === session.agentId &&
+      workspace.actorKind === session.actorKind &&
+      workspace.actorId === session.actorId &&
+      workspace.backend === session.backend &&
+      workspace.runtimeScope === session.runtimeScope &&
+      ["active", "idle", "suspending", "suspended", "resuming"].includes(
+        workspace.state,
+      ) &&
+      workspace.expiresAt.getTime() > Date.now(),
+  );
 }
 
 function delayMs(ms: number, signal?: AbortSignal): Promise<void> {

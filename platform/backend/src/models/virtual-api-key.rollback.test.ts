@@ -7,6 +7,7 @@ import { describe } from "vitest";
 import db, { schema } from "@/database";
 import { expect, test } from "@/test";
 import LimitModel from "./limit";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import VirtualApiKeyModel from "./virtual-api-key";
 
 describe("VirtualApiKeyModel", () => {
@@ -59,6 +60,109 @@ describe("VirtualApiKeyModel", () => {
 
     expect(virtualKey.expiresAt).toBeInstanceOf(Date);
     expect(virtualKey.expiresAt?.getTime()).toBe(futureDate.getTime());
+  });
+
+  test("capExpiry tightens legacy leases without extending deadlines or changing grants", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organization = await makeOrganization();
+    const otherOrganization = await makeOrganization();
+    const user = await makeUser();
+    const created = await VirtualApiKeyModel.create({
+      organizationId: organization.id,
+      name: "Retained runtime key",
+      keyType: "passthrough",
+      scope: "personal",
+      authorId: user.id,
+    });
+    const params = {
+      id: created.virtualKey.id,
+      organizationId: organization.id,
+      expectedScope: "personal" as const,
+      expectedAuthorId: user.id,
+    };
+    const policyParams = {
+      organizationId: organization.id,
+      resource: "llmVirtualKey" as const,
+      scope: params.id,
+    };
+    const grants = await ResourcePermissionPolicyModel.find(policyParams);
+    const firstDeadline = new Date(Date.now() + 3600_000);
+    expect(
+      (
+        await VirtualApiKeyModel.capExpiry({
+          ...params,
+          expiresAt: firstDeadline,
+        })
+      )?.expiresAt,
+    ).toEqual(firstDeadline);
+    expect(
+      (
+        await VirtualApiKeyModel.capExpiry({
+          ...params,
+          expiresAt: new Date(Date.now() + 7200_000),
+        })
+      )?.expiresAt,
+    ).toEqual(firstDeadline);
+    const tighter = new Date(Date.now() + 1800_000);
+    expect(
+      (await VirtualApiKeyModel.capExpiry({ ...params, expiresAt: tighter }))
+        ?.expiresAt,
+    ).toEqual(tighter);
+    expect(
+      await VirtualApiKeyModel.capExpiry({
+        ...params,
+        organizationId: otherOrganization.id,
+        expiresAt: new Date(0),
+      }),
+    ).toBeNull();
+    expect(
+      await VirtualApiKeyModel.capExpiry({
+        ...params,
+        expectedAuthorId: "changed-owner",
+        expiresAt: new Date(0),
+      }),
+    ).toBeNull();
+    expect(
+      await VirtualApiKeyModel.capExpiry({
+        ...params,
+        expectedScope: "org",
+        expiresAt: new Date(0),
+      }),
+    ).toBeNull();
+    expect(await VirtualApiKeyModel.findById(params.id)).toMatchObject({
+      expiresAt: tighter,
+      scope: "personal",
+      authorId: user.id,
+    });
+    expect(await ResourcePermissionPolicyModel.find(policyParams)).toEqual(
+      grants,
+    );
+  });
+
+  test("capExpiry cannot resurrect an expired credential", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const expired = new Date(Date.now() - 60_000);
+    const created = await VirtualApiKeyModel.create({
+      organizationId: organization.id,
+      name: "Expired runtime key",
+      keyType: "passthrough",
+      expiresAt: expired,
+    });
+    expect(
+      (
+        await VirtualApiKeyModel.capExpiry({
+          id: created.virtualKey.id,
+          organizationId: organization.id,
+          expectedAuthorId: null,
+          expectedScope: "org",
+          expiresAt: new Date(Date.now() + 3600_000),
+        })
+      )?.expiresAt,
+    ).toEqual(expired);
   });
 
   test("create: stores scope, author, and team assignments", async ({

@@ -149,6 +149,52 @@ export function getPoolStats(): {
 }
 
 /**
+ * Hold a session advisory lock on one pool client for `body`.
+ *
+ * Session advisory locks are per connection. A pooled `db.execute` can lock one
+ * session and unlock another, so the lock must stay on the client that took
+ * it. Tests replace `db` with PGlite and leave this pool unset; callers that
+ * also serialize in-process still cover that runtime.
+ */
+export async function withSessionAdvisoryLock<T>(
+  key: string,
+  body: () => Promise<T>,
+): Promise<T> {
+  if (!pool) {
+    return await body();
+  }
+  const client = await pool.connect();
+  let locked = false;
+  try {
+    const result = await client.query<{ locked: boolean }>(
+      "SELECT pg_try_advisory_lock(hashtextextended($1, 0)) AS locked",
+      [key],
+    );
+    locked = result.rows[0]?.locked === true;
+    if (!locked) {
+      throw new Error("Another operation owns this session advisory lock");
+    }
+    return await body();
+  } finally {
+    if (!locked) {
+      client.release();
+    } else {
+      try {
+        await client.query(
+          "SELECT pg_advisory_unlock(hashtextextended($1, 0))",
+          [key],
+        );
+        client.release();
+      } catch (error) {
+        client.release(
+          error instanceof Error ? error : new Error(String(error)),
+        );
+      }
+    }
+  }
+}
+
+/**
  * Default export to use a Proxy to defer access until after database initialization.
  */
 export default new Proxy({} as ReturnType<typeof getDb>, {

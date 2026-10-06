@@ -7,10 +7,12 @@ import type {
   ChangeNotificationCollection,
   Message,
 } from "@microsoft/microsoft-graph-types";
+import { z } from "zod";
 import logger from "@/logging";
 import IncomingEmailSubscriptionModel from "@/models/incoming-email-subscription";
 import type {
   AgentIncomingEmailProvider,
+  ConversationMessage,
   EmailAttachment,
   EmailProviderConfig,
   EmailReplyOptions,
@@ -624,6 +626,23 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     }
   }
 
+  async getReplyRecipients(originalEmail: IncomingEmail): Promise<string[]> {
+    const message: Message = await this.getGraphClient()
+      .api(
+        `/users/${this.config.mailboxAddress}/messages/${originalEmail.messageId}`,
+      )
+      .select("from,replyTo")
+      .get();
+    const recipients = message.replyTo?.length
+      ? message.replyTo
+      : [message.from];
+    return ReplyRecipientsSchema.parse(
+      recipients.map((recipient) =>
+        recipient?.emailAddress?.address?.trim().toLowerCase(),
+      ),
+    );
+  }
+
   /**
    * Send a reply to an incoming email
    * Uses Microsoft Graph API to send a reply that maintains the email thread
@@ -647,6 +666,18 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     const { originalEmail, body, htmlBody, agentName } = options;
     const client = this.getGraphClient();
     const displayName = agentName || getDefaultAgentEmailName();
+    // Bind both the Send-As attempt and its fallback to the admitted addresses.
+    // Graph's implicit /reply routing can instead use the original Reply-To.
+    const recipientOverrides =
+      options.recipientAddresses === undefined
+        ? {}
+        : {
+            toRecipients: ReplyRecipientsSchema.parse(
+              options.recipientAddresses,
+            ).map((address) => ({ emailAddress: { address } })),
+            ccRecipients: [],
+            bccRecipients: [],
+          };
 
     logger.info(
       {
@@ -679,6 +710,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         )
         .post({
           message: {
+            ...recipientOverrides,
             from: {
               emailAddress: {
                 address: agentEmailAddress,
@@ -746,6 +778,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
         )
         .post({
           message: {
+            ...recipientOverrides,
             replyTo: [
               {
                 emailAddress: {
@@ -777,25 +810,16 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
   }
 
   /**
-   * Get conversation history for an email thread
-   * Fetches all messages in the conversation except the current one
-   * @param conversationId - The conversation ID from the email
-   * @param currentMessageId - The current message ID to exclude from history
-   * @returns Array of previous messages in the conversation, oldest first
+   * Read only history that the current requester authored or received.
    */
   async getConversationHistory(
-    conversationId: string,
-    currentMessageId: string,
-  ): Promise<
-    Array<{
-      messageId: string;
-      fromAddress: string;
-      fromName?: string;
-      body: string;
-      receivedAt: Date;
-      isAgentMessage: boolean;
-    }>
-  > {
+    params: Parameters<AgentIncomingEmailProvider["getConversationHistory"]>[0],
+  ): Promise<ConversationMessage[]> {
+    const { conversationId, currentMessageId } = params;
+    const requester = z
+      .email()
+      .safeParse(params.requesterAddress.trim().toLowerCase());
+    if (!requester.success) return [];
     const client = this.getGraphClient();
 
     try {
@@ -809,28 +833,41 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
       const response = await client
         .api(`/users/${this.config.mailboxAddress}/messages`)
         .filter(`conversationId eq '${escapedConversationId}'`)
-        .select("id,from,body,receivedDateTime,sender")
-        .top(50) // Limit to last 50 messages to avoid excessive context
+        .select(
+          "id,from,sender,toRecipients,ccRecipients,bccRecipients,body,receivedDateTime",
+        )
+        .top(50) // Bound the result page; Graph does not order this query.
         .get();
 
-      const messages = response.value || [];
-      const history: Array<{
-        messageId: string;
-        fromAddress: string;
-        fromName?: string;
-        body: string;
-        receivedAt: Date;
-        isAgentMessage: boolean;
-      }> = [];
+      const messages: Message[] = response.value || [];
+      const history: ConversationMessage[] = [];
 
       for (const message of messages) {
         // Skip the current message
-        if (message.id === currentMessageId) {
+        if (!message.id || message.id === currentMessageId) {
           continue;
         }
 
+        const envelope = [
+          message.from,
+          message.sender,
+          ...(message.toRecipients ?? []),
+          ...(message.ccRecipients ?? []),
+          ...(message.bccRecipients ?? []),
+        ];
+        if (
+          !envelope.some(
+            (recipient) =>
+              recipient?.emailAddress?.address?.trim().toLowerCase() ===
+              requester.data,
+          )
+        )
+          continue;
+        const receivedAt = new Date(message.receivedDateTime ?? "");
+        if (!Number.isFinite(receivedAt.getTime())) continue;
+
         const fromAddress = message.from?.emailAddress?.address || "unknown";
-        const fromName = message.from?.emailAddress?.name;
+        const fromName = message.from?.emailAddress?.name ?? undefined;
 
         // Determine if this message was sent by the agent (from the mailbox)
         const isAgentMessage =
@@ -850,7 +887,7 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
           fromAddress,
           fromName,
           body,
-          receivedAt: new Date(message.receivedDateTime),
+          receivedAt,
           isAgentMessage,
         });
       }
@@ -1069,3 +1106,5 @@ export class OutlookEmailProvider implements AgentIncomingEmailProvider {
     this.subscriptionId = null;
   }
 }
+
+const ReplyRecipientsSchema = z.array(z.email()).min(1);

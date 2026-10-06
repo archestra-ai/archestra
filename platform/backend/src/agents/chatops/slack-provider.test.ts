@@ -34,6 +34,7 @@ import { CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import db, { schema } from "@/database";
 import { ChatOpsChannelBindingModel, UserModel } from "@/models";
+import type { IncomingChatMessage } from "@/types";
 import { markChannelThreadActive } from "./channel-activation";
 import { CHATOPS_ATTACHMENT_LIMITS } from "./constants";
 import SlackProvider from "./slack-provider";
@@ -95,6 +96,134 @@ function makeEventPayload(
 // =============================================================================
 // validateWebhookRequest
 // =============================================================================
+
+describe("SlackProvider.getGuardrailsContext", () => {
+  const message: IncomingChatMessage = {
+    messageId: "message-1",
+    channelId: "C12345",
+    workspaceId: "T12345",
+    senderId: "U_ALICE",
+    senderName: "Alice",
+    text: "Question",
+    rawText: "Question",
+    isThreadReply: false,
+    timestamp: new Date("2026-01-01T00:00:00Z"),
+  };
+
+  function setup(channel: Record<string, unknown>) {
+    const provider = createProvider();
+    const client = {
+      conversations: {
+        info: vi.fn().mockResolvedValue({ channel }),
+        members: vi.fn(),
+      },
+      users: { info: vi.fn() },
+    };
+    Object.assign(provider, { teamId: "T12345", client });
+    return { provider, client };
+  }
+
+  test("does not treat public-channel subscribers as the full audience", async () => {
+    const { provider, client } = setup({
+      id: message.channelId,
+      is_private: false,
+      is_ext_shared: false,
+    });
+    const result = await provider.getGuardrailsContext(message);
+    expect(result).toMatchObject({ trust: "suspicious", readers: null });
+    expect(client.conversations.members).not.toHaveBeenCalled();
+  });
+
+  test("includes all pages of private-channel members and detects external readers", async () => {
+    const { provider, client } = setup({
+      id: message.channelId,
+      is_private: true,
+      is_ext_shared: false,
+    });
+    client.conversations.members
+      .mockResolvedValueOnce({
+        members: ["UBOT123", "U_ALICE"],
+        response_metadata: { next_cursor: "page2" },
+      })
+      .mockResolvedValueOnce({ members: ["U_BOB"] });
+    client.users.info.mockImplementation(
+      async ({ user }: { user: string }) => ({
+        user: {
+          team_id: user === "U_BOB" ? "EXTERNAL" : "T12345",
+          profile: {
+            email: user === "U_ALICE" ? "Alice@Example.com" : "bob@example.net",
+          },
+        },
+      }),
+    );
+
+    expect(await provider.getGuardrailsContext(message)).toMatchObject({
+      trust: "suspicious",
+      readers: ["alice@example.com", "bob@example.net"],
+    });
+    expect(client.conversations.members).toHaveBeenLastCalledWith({
+      channel: message.channelId,
+      cursor: "page2",
+      limit: 200,
+    });
+  });
+
+  test("does not discard another bot or guest whose email cannot be resolved", async () => {
+    const { provider, client } = setup({
+      id: message.channelId,
+      is_private: true,
+      is_ext_shared: false,
+    });
+    client.conversations.members.mockResolvedValue({ members: ["OTHER_BOT"] });
+    client.users.info.mockResolvedValue({
+      user: { is_bot: true, is_stranger: true, profile: {} },
+    });
+    expect(await provider.getGuardrailsContext(message)).toMatchObject({
+      trust: "suspicious",
+      readers: null,
+    });
+  });
+
+  test.each([
+    { guest: false, trust: "trusted" },
+    { guest: true, trust: "suspicious" },
+  ])("requires a complete internal roster for trust: $guest", async ({
+    guest,
+    trust,
+  }) => {
+    const { provider, client } = setup({
+      id: message.channelId,
+      is_private: true,
+    });
+    client.conversations.members.mockResolvedValue({
+      members: ["UBOT123", "U_ALICE"],
+    });
+    client.users.info.mockResolvedValue({
+      user: {
+        team_id: "T12345",
+        is_restricted: guest,
+        profile: { email: "alice@example.com" },
+      },
+    });
+    expect(await provider.getGuardrailsContext(message)).toMatchObject({
+      trust,
+      readers: ["alice@example.com"],
+    });
+  });
+
+  test("does not use a partial roster when pagination repeats", async () => {
+    const { provider, client } = setup({
+      id: message.channelId,
+      is_private: true,
+    });
+    client.conversations.members.mockResolvedValue({
+      members: ["U_ALICE"],
+      response_metadata: { next_cursor: "same-page" },
+    });
+    expect((await provider.getGuardrailsContext(message))?.readers).toBeNull();
+    expect(client.users.info).not.toHaveBeenCalled();
+  });
+});
 
 describe("SlackProvider.validateWebhookRequest", () => {
   test("valid signature returns true", async () => {

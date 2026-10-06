@@ -1063,6 +1063,7 @@ export async function createAgentServer(params: {
             callback: async (span) => {
               const result = await executeArchestraTool(name, args, {
                 openappaSession: params.openappaSession,
+                gatewayRequest: true,
                 connectionSetupBypass,
                 currentToolCallId: params.currentToolCallId,
                 agent: { id: agent.id, name: agent.name },

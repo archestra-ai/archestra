@@ -21,6 +21,10 @@ import {
   openappaCoverageService,
 } from "@/openappa/coverage";
 import {
+  durableReviewActive,
+  noteDurableReview,
+} from "@/openappa/durable-review";
+import {
   clearHitlReview,
   consumeHitlRuling,
   stageHitlReview,
@@ -685,7 +689,9 @@ const registry = defineArchestraTools([
         !context.organizationId ||
         !claims ||
         claims.offer_id !== submittedSemantic.offer_id ||
-        claims.organization_id !== context.organizationId
+        claims.organization_id !== context.organizationId ||
+        (context.appaSessionId !== undefined &&
+          claims.session_id !== context.appaSessionId)
       ) {
         return unknownOfferResult();
       }
@@ -776,6 +782,34 @@ const registry = defineArchestraTools([
             ruling = parseHitlRuling(
               outcome.status === "answered" ? outcome.result : undefined,
             );
+          } else if (durableReviewActive()) {
+            // In-process ChatOps and private email have no live elicitation
+            // waiter. Stage only after this execute_remedy_plan attempt, then
+            // pause the host. Do not call the engine without a ruling.
+            const remedyArguments = unstampedRemedyArguments(args);
+            await stageHitlReview({
+              session: reviewSession,
+              review: {
+                offerId: remedy.offer_id,
+                text: review.text,
+                ...(review.tool ? { tool: review.tool } : {}),
+                ...(review.arguments ? { arguments: review.arguments } : {}),
+                remedyArguments,
+              },
+            });
+            noteDurableReview({
+              offerId: remedy.offer_id,
+              toolCallId: context.currentToolCallId,
+              toolName: execution?.tool_name,
+              jws: OfferJwsSchema.parse({
+                protected: protectedHeader,
+                payload,
+                signature,
+              }),
+              remedyArguments,
+              session: reviewSession,
+            });
+            return nativeReviewRequiredResult(remedy.offer_id);
           }
         }
       }
@@ -1078,6 +1112,8 @@ function peerExecution(params: {
   if (
     !proof ||
     !callerId ||
+    (context.appaSessionId !== undefined &&
+      proof.session_id !== context.appaSessionId) ||
     !peerProofAuthorizes({
       proof,
       organizationId: context.organizationId,

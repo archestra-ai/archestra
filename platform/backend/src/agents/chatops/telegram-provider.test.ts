@@ -217,6 +217,7 @@ describe("parseWebhookNotification", () => {
 
     expect(message?.text).toContain("Should I create the ticket?");
     expect(message?.text).toContain("yes do that");
+    expect(message?.includesQuotedHistory).toBe(true);
     expect(message?.metadata?.botMentioned).toBe(true);
   });
 
@@ -846,6 +847,96 @@ describe("getUserEmail", () => {
   test("returns null for unlinked users", async () => {
     const provider = makeProvider();
     expect(await provider.getUserEmail("12345")).toBeNull();
+  });
+});
+
+describe("getGuardrailsContext", () => {
+  test("a verified linked private chat identifies its sole human reader", async ({
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "telegram",
+      channelId: "555",
+      workspaceId: null,
+      isDm: true,
+      dmOwnerEmail: "Alice@Example.com",
+      agentId: null,
+    });
+    stubTelegramApi({
+      getChat: () => ({ ok: true, result: { id: 555, type: "private" } }),
+    });
+    const provider = makeProvider();
+    const message = await provider.parseWebhookNotification(dmUpdate());
+    if (!message) throw new Error("Message missing");
+    expect(await provider.getGuardrailsContext(message)).toEqual({
+      roomId: JSON.stringify(["telegram", String(BOT_ID), "555"]),
+      trust: "trusted",
+      readers: ["alice@example.com"],
+    });
+    const background = {
+      ...message,
+      senderId: "system",
+      metadata: { purpose: "egress" },
+    };
+    expect(await provider.getGuardrailsContext(background)).toBeNull();
+    expect(
+      await provider.getGuardrailsContext(background, { purpose: "egress" }),
+    ).toEqual({
+      roomId: JSON.stringify(["telegram", String(BOT_ID), "555"]),
+      trust: "trusted",
+      readers: ["alice@example.com"],
+    });
+  });
+
+  test("group membership remains unknown instead of being reduced to the sender", async () => {
+    stubTelegramApi({
+      getChat: () => ({ ok: true, result: { id: -100, type: "supergroup" } }),
+    });
+    const provider = makeProvider();
+    const message = await provider.parseWebhookNotification(
+      groupUpdate({
+        chat: { id: -100, type: "supergroup" },
+        text: "@archestra_bot hello",
+      }),
+    );
+    if (!message) throw new Error("Message missing");
+    expect(await provider.getGuardrailsContext(message)).toMatchObject({
+      trust: "suspicious",
+      readers: null,
+    });
+    expect(
+      await provider.getGuardrailsContext(
+        { ...message, senderId: "system" },
+        { purpose: "egress" },
+      ),
+    ).toMatchObject({
+      trust: "suspicious",
+      readers: null,
+    });
+  });
+
+  test("a private chat cannot be claimed by a different sender", async () => {
+    stubTelegramApi({
+      getChat: () => ({ ok: true, result: { id: 555, type: "private" } }),
+    });
+    const provider = makeProvider();
+    const message = await provider.parseWebhookNotification(dmUpdate());
+    if (!message) throw new Error("Message missing");
+    expect(
+      await provider.getGuardrailsContext({ ...message, senderId: "666" }),
+    ).toBeNull();
+  });
+
+  test("failed room verification does not fabricate an audience", async () => {
+    stubTelegramApi({
+      getChat: () => ({ ok: false, description: "Unavailable" }),
+    });
+    const provider = makeProvider();
+    const message = await provider.parseWebhookNotification(dmUpdate());
+    if (!message) throw new Error("Message missing");
+    expect(await provider.getGuardrailsContext(message)).toBeNull();
   });
 });
 

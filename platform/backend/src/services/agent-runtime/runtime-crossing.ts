@@ -6,6 +6,7 @@ import {
   returnRuntimeValue,
   startRuntimeChild,
 } from "@/openappa/service";
+import { startedUnenforced } from "@/openappa/unenforced";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import type { AgentRunActorKind } from "@/types";
 import { ApiError } from "@/types";
@@ -50,7 +51,10 @@ function crossingFromContext(
 }
 
 export async function guardRuntimeCrossing(
-  context: Pick<ArchestraContext, "openappaRuntimeCall">,
+  context: Pick<ArchestraContext, "openappaRuntimeCall"> &
+    Partial<
+      Pick<ArchestraContext, "openappaSession" | "organizationId" | "userId">
+    >,
 ): Promise<
   | { kind: "inactive" }
   | { kind: "proof"; crossing: RuntimeCrossing }
@@ -58,6 +62,19 @@ export async function guardRuntimeCrossing(
 > {
   if (!(await isGuardrailsV2Active())) return { kind: "inactive" };
   const crossing = crossingFromContext(context);
+  const source = crossing?.source ?? context.openappaSession;
+  if (
+    source &&
+    context.userId &&
+    source.organization_id === context.organizationId &&
+    source.caller_id === `user:${context.userId}` &&
+    source.session_id.startsWith(`${source.caller_id}|`) &&
+    (await startedUnenforced(source))
+  ) {
+    // A positively recorded historical session never gains retroactive native
+    // dispatch authority. Use its wire path; normal auth/resource checks remain.
+    return { kind: "inactive" };
+  }
   if (!crossing) {
     return {
       kind: "refused",

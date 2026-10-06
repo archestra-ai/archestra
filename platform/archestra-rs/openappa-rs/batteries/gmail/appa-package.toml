@@ -1,0 +1,13 @@
+schema = 1
+name = "gmail"
+description = "Rules for the official Gmail MCP connector: mailbox-private untrusted reads, trusted local mutations, and drafts that are not sends."
+
+[battery]
+policy = "appa.toml"
+hosts = ["claude-code"]
+namespaces = ["gmail"]
+benefit = "Reads are untrusted and limited to the OpenAPPA session principal. A draft is stored, not delivered."
+setup = [
+  "Connect the official Gmail MCP server at https://gmailmcp.googleapis.com/mcp/v1.",
+  "self is the invoking platform member, not the Gmail credential. This package does not inspect that credential or look up a mailbox owner or shared-mailbox ACL. Use it only when the credential and the session principal are the same person, or set an explicit root audience policy.",
+]

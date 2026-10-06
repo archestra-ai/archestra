@@ -102,7 +102,7 @@
     "@microsoft/msgraph-sdk-teams": "1.0.0-preview.80",
     "@microsoft/msgraph-sdk-users": "1.0.0-preview.80",
     "@modelcontextprotocol/ext-apps": "^1.1.1",
-    "@modelcontextprotocol/sdk": "^1.27.1",
+    "@modelcontextprotocol/sdk": "^1.31.0",
     "@ngrok/ngrok": "^1.7.0",
     "@notionhq/client": "^5.16.0",
     "@octokit/rest": "^22.0.1",

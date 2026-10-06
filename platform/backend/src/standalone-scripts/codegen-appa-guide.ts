@@ -11,12 +11,20 @@ const OPENAPPA_RS_MANIFEST = path.resolve(
   __dirname,
   "../../../archestra-rs/openappa-rs/Cargo.toml",
 );
-const OUTPUT_PATH = path.resolve(
-  __dirname,
-  "../skills/appa-guide.core.generated.md",
-);
+const SKILLS_DIR = path.resolve(__dirname, "../skills");
 const RUNTIME_PACKAGE = "appa";
-const CORE_PATH = "integrations/appa-guide/references/core.md";
+// OpenAPPA sources copied byte for byte; OpenAPPA's Archestra updater carries
+// the same pairs into its pin bumps.
+const UPSTREAM_COPIES = [
+  {
+    source: "integrations/appa-guide/references/core.md",
+    output: "appa-guide.core.generated.md",
+  },
+  {
+    source: "website/content/docs/contracts.md",
+    output: "appa-guide.contracts.generated.md",
+  },
+] as const;
 
 const CargoMetadataSchema = z.object({
   packages: z.array(
@@ -70,19 +78,22 @@ function findPinnedRuntime(): PinnedRuntime {
 
 function main() {
   const { rev, checkoutRoot } = findPinnedRuntime();
-  const corePath = path.join(checkoutRoot, CORE_PATH);
-  if (!fs.existsSync(corePath)) {
-    throw new Error(`OpenAPPA ${rev} has no ${CORE_PATH} at ${corePath}`);
+  for (const { source, output } of UPSTREAM_COPIES) {
+    const sourcePath = path.join(checkoutRoot, source);
+    if (!fs.existsSync(sourcePath)) {
+      throw new Error(`OpenAPPA ${rev} has no ${source} at ${sourcePath}`);
+    }
+    const outputPath = path.join(SKILLS_DIR, output);
+    fs.copyFileSync(sourcePath, outputPath);
+    logger.info(`${source} from OpenAPPA ${rev} copied to ${outputPath}`);
   }
-  fs.copyFileSync(corePath, OUTPUT_PATH);
-  logger.info(`APPA guide core from OpenAPPA ${rev} copied to ${OUTPUT_PATH}`);
 }
 
 if (import.meta.url === pathToFileURL(process.argv[1]).href) {
   try {
     main();
   } catch (error) {
-    logger.error({ error }, "Failed to generate the APPA guide core");
+    logger.error({ error }, "Failed to copy the APPA guide sources");
     process.exit(1);
   }
 }

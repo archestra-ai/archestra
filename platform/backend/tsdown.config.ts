@@ -308,6 +308,7 @@ export default defineConfig((options: UserConfig) => {
       "src/database/migrations",
       "src/static",
       "src/skills/appa-guide.core.generated.md",
+      "src/skills/appa-guide.contracts.generated.md",
     ],
 
     // Only clean if NOT in watch mode, to avoid race conditions during rebuilds where

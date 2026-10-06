@@ -1326,11 +1326,12 @@ function ProfileCard({
                         type="button"
                         onClick={() => onOpen("skills", s.id)}
                         title={s.description}
-                        className="-mx-1.5 flex h-6.5 min-w-0 items-center rounded-md px-1.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                        className="group/row -mx-1.5 flex h-6.5 min-w-0 items-center gap-2 rounded-md px-1.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       >
-                        <span className="min-w-0 truncate text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-foreground">
                           {s.name}
                         </span>
+                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover/row:text-foreground motion-safe:group-hover/row:translate-x-0.5" />
                       </UnstyledButton>
                     ))}
                   </span>

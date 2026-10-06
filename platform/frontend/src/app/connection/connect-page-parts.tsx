@@ -4,7 +4,6 @@
 
 import {
   ArrowLeft,
-  BookOpen,
   Check,
   ChevronDown,
   ChevronRight,
@@ -36,7 +35,6 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useSkill } from "@/lib/skills/skill.query";
@@ -141,7 +139,6 @@ export function BrowseDialog({
   client,
   skills,
   choices,
-  onChoice,
 }: {
   open: boolean;
   tab: BrowseTab;
@@ -156,7 +153,6 @@ export function BrowseDialog({
   client: ConnectClient;
   skills: ConnectPageSkill[];
   choices: ConnectChoices;
-  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
 }) {
   const [q, setQ] = useState("");
   const [expanded, setExpanded] = useState<string | null>(null);
@@ -327,27 +323,6 @@ export function BrowseDialog({
                   </Empty>
                 ) : (
                   <>
-                    {parts.skills && (
-                      <div className="flex items-center gap-3 rounded-lg border px-4 py-3 [&>svg]:size-4 [&>svg]:shrink-0 [&>svg]:text-muted-foreground">
-                        <BookOpen />
-                        <label
-                          htmlFor="include-skills"
-                          className="min-w-0 flex-1 cursor-pointer"
-                        >
-                          <span className="block text-sm font-semibold">
-                            Include skills
-                          </span>
-                          <span className="block text-xs text-muted-foreground">
-                            {client.label} loads one when a task needs it.
-                          </span>
-                        </label>
-                        <Switch
-                          id="include-skills"
-                          checked={choices.skills}
-                          onCheckedChange={(v) => onChoice("skills", v)}
-                        />
-                      </div>
-                    )}
                     <ul
                       className={cn(
                         "divide-y rounded-lg border",

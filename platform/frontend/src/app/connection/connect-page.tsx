@@ -34,6 +34,7 @@ import {
   Settings,
   ShieldCheck,
   ShieldOff,
+  SlidersHorizontal,
   SquareTerminal,
   Terminal,
   TriangleAlert,
@@ -52,7 +53,13 @@ import {
 import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -147,17 +154,19 @@ export function ConnectPage() {
     data.featuredClients[0] ??
     data.clients[0];
   const clientId = client?.id;
+  const routingOptional = client ? canChooseRouting(data, client) : false;
   useEffect(() => {
-    // Tools, model routing and plugins are always included; only skills
-    // can be turned off (in See all, Skills).
-    if (clientId)
-      setChoices({
-        ...readConnectChoices(clientId),
-        tools: true,
-        proxy: true,
-        plugins: true,
-      });
-  }, [clientId]);
+    // Tools and plugins are always included. Skills can be left out, and
+    // model routing too for apps with an installer (Choose what to include).
+    if (!clientId) return;
+    const saved = readConnectChoices(clientId);
+    setChoices({
+      ...saved,
+      tools: true,
+      proxy: routingOptional ? saved.proxy : true,
+      plugins: true,
+    });
+  }, [clientId, routingOptional]);
 
   if (data.loading || !client) return <LoadingState />;
 
@@ -250,6 +259,8 @@ export function ConnectPage() {
             skillCount={skillCount}
             skillsOff={parts.skills && !choices.skills}
             routed={routed}
+            choices={choices}
+            onChoice={setChoice}
             onOpen={(d, item) => {
               setFocus(item ?? null);
               setDialog(d);
@@ -293,7 +304,6 @@ export function ConnectPage() {
         client={client}
         skills={skillsSorted}
         choices={choices}
-        onChoice={setChoice}
       />
       <InfoDialog
         open={dialog === "cursor"}
@@ -997,6 +1007,95 @@ function guardrailsStatus(
 
 // === Profile card ===
 
+/**
+ * Only apps with an installer are known to take model routing, so only they
+ * show it and let the user leave it out; other agents work it out from the
+ * prompt, so the card makes no promise.
+ */
+function canChooseRouting(data: ConnectPageData, client: ConnectClient) {
+  return data.partsFor(client).proxy && setupModeFor(client) === "prompt";
+}
+
+/** The card's one place to leave parts out; the prompt carries the result. */
+function IncludeMenu({
+  skills,
+  routing,
+  choices,
+  onChoice,
+}: {
+  skills: boolean;
+  routing: boolean;
+  choices: ConnectChoices;
+  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
+}) {
+  const rows: {
+    id: string;
+    title: string;
+    sub: string;
+    part?: keyof ConnectChoices;
+  }[] = [
+    { id: "tools", title: "Tools", sub: "Always included" },
+    ...(skills
+      ? [
+          {
+            id: "skills",
+            title: "Skills",
+            sub: "Loaded when a task needs one",
+            part: "skills" as const,
+          },
+        ]
+      : []),
+    ...(routing
+      ? [
+          {
+            id: "proxy",
+            title: "Model routing",
+            sub: "Model requests go through the LLM proxy",
+            part: "proxy" as const,
+          },
+        ]
+      : []),
+  ];
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="sm"
+          className="-mr-2 shrink-0 text-muted-foreground"
+        >
+          <SlidersHorizontal />
+          Choose what to include
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-1.5">
+        {rows.map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center gap-3 rounded-md px-2.5 py-2"
+          >
+            <label
+              htmlFor={`include-${r.id}`}
+              className={cn("min-w-0 flex-1", r.part && "cursor-pointer")}
+            >
+              <span className="block text-sm font-semibold">{r.title}</span>
+              <span className="block text-xs text-muted-foreground">
+                {r.sub}
+              </span>
+            </label>
+            <Switch
+              id={`include-${r.id}`}
+              checked={r.part ? choices[r.part] : true}
+              disabled={!r.part}
+              onCheckedChange={(v) => r.part && onChoice(r.part, v)}
+            />
+          </div>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 const SERVER_ROWS = 6;
 const SKILL_ROWS = 6;
 
@@ -1016,14 +1115,18 @@ function ProfileCard({
   skillCount,
   skillsOff,
   routed,
+  choices,
+  onChoice,
   onOpen,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
   /** This agent's model requests go through the LLM proxy. */
   routed: boolean;
-  /** The user turned skills off (in See all, Skills). */
+  /** The user turned skills off (Choose what to include). */
   skillsOff: boolean;
+  choices: ConnectChoices;
+  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
   servers: ConnectServer[];
   tools: number;
   skills: ConnectPageSkill[];
@@ -1038,7 +1141,8 @@ function ProfileCard({
   const statusChips: StatusChip[] = [];
   // Only apps with an installer are known to take model routing; other
   // agents work it out from the prompt, so the card makes no promise.
-  if (data.partsFor(client).proxy && setupModeFor(client) === "prompt")
+  const routingOptional = canChooseRouting(data, client);
+  if (routingOptional)
     statusChips.push({
       id: "routing",
       icon: (
@@ -1056,7 +1160,7 @@ function ProfileCard({
           </InfoTip>
         </span>
       ),
-      sub: "On, through the LLM proxy",
+      sub: routed ? "On, through the LLM proxy" : "Off",
     });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)
@@ -1103,6 +1207,14 @@ function ProfileCard({
         <div className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
           {client.label}
         </div>
+        {(skillsOn || routingOptional) && (
+          <IncludeMenu
+            skills={skillsOn}
+            routing={routingOptional}
+            choices={choices}
+            onChoice={onChoice}
+          />
+        )}
       </div>
 
       {/* One short line; the lists below speak for themselves. */}
@@ -1199,7 +1311,7 @@ function ProfileCard({
                 }
                 sub={
                   skillsOff
-                    ? "turn them on under See all"
+                    ? "turn them on in Choose what to include"
                     : "loaded when a task needs one"
                 }
                 muted={skillsOff}

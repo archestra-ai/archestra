@@ -5,6 +5,7 @@ import {
   render as rtlRender,
   screen,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -299,6 +300,33 @@ describe("ConnectPage (no connect request)", () => {
     );
     render(<ConnectionPage />);
     expect(screen.queryByText("Model routing")).not.toBeInTheDocument();
+  });
+
+  it("lets an app with an installer leave model routing out", async () => {
+    window.localStorage.clear();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useLlmProxy).mockReturnValue({
+      data: { id: "proxy-1" },
+    } as unknown as ReturnType<typeof useLlmProxy>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["claude-code"],
+        connectionLlmProxyEnabled: true,
+      },
+    });
+    render(<ConnectionPage />);
+    await userEvent.click(
+      screen.getByRole("button", { name: /Choose what to include/ }),
+    );
+    await userEvent.click(
+      screen.getByRole("switch", { name: /Model routing/ }),
+    );
+    expect(screen.getByText("Off")).toBeVisible();
+    expect(
+      screen.getByText(/connect\.md\?client=claude-code&exclude=proxy/),
+    ).toBeVisible();
   });
 
   it("gives other agents the generic prompt with the gateway to set up", () => {

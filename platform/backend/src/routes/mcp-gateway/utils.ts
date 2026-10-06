@@ -63,6 +63,7 @@ import {
 import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
+import type { RequestLookups } from "@/auth/request-lookups";
 import { LRUCacheManager } from "@/cache-manager";
 import {
   type ArchestraElicitationOutcome,
@@ -303,6 +304,8 @@ export async function createAgentServer(params: {
   agentId: string;
   tokenAuth?: TokenAuthContext;
   runId?: string;
+  /** This request's lookups; only for a server that serves one request. */
+  lookups?: RequestLookups;
   /**
    * Answers the client supplied on an MRTR retry, keyed as they were issued.
    * Absent on a first attempt, which is what makes the gateway elicit.
@@ -346,7 +349,9 @@ export async function createAgentServer(params: {
   // Slim lookup: this runs on every stateless gateway request, and the tool
   // handlers below only read scalar agent config plus labels — never the
   // tools/teams/knowledge/connector hydration `findById` performs.
-  const agent = await AgentModel.findGatewayAgentById(agentId);
+  const agent = params.lookups
+    ? await params.lookups.gatewayAgent(agentId)
+    : await AgentModel.findGatewayAgentById(agentId);
   if (!agent) throw new Error(`Agent not found: ${agentId}`);
   const setupScope = params.connectionSetupContext
     ? await resolveConnectionSetupScope({
@@ -397,7 +402,11 @@ export async function createAgentServer(params: {
     // built-in is dropped here and never re-admitted below. Empty (no-op)
     // unless the agent's accessAllTools setting is on.
     const { tools: fetchedMcpTools, exclusionSets } =
-      await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+      await agentToolExclusionsService.getFilteredMcpToolsByAgent(
+        agentId,
+        undefined,
+        params.lookups && agent,
+      );
 
     // SEP-2243: a tool definition with an invalid x-mcp-header annotation must
     // be excluded from tools/list (with a warning), so one malformed upstream
@@ -449,6 +458,7 @@ export async function createAgentServer(params: {
         agentId,
         organizationId: agent.organizationId,
         userId: tokenAuth?.userId,
+        lookups: params.lookups,
       }),
       // Agent-designated skills surface as skill__<slug> delegation tools,
       // resolved per calling user with the same env/access symmetry.
@@ -456,6 +466,7 @@ export async function createAgentServer(params: {
         agentId,
         organizationId: agent.organizationId,
         userId: tokenAuth?.userId,
+        lookups: params.lookups,
       }),
     ]);
     const hasTaskStarter =
@@ -521,6 +532,7 @@ export async function createAgentServer(params: {
       candidateTools.map((t) => t.name),
       tokenAuth?.userId,
       tokenAuth?.organizationId,
+      params.lookups,
     );
     const exposureFiltered = filterExposedTools({
       toolExposureMode: agent.toolExposureMode ?? "full",
@@ -612,6 +624,7 @@ export async function createAgentServer(params: {
                 organizationId: tokenAuth.organizationId,
               }
             : undefined,
+          params.lookups,
         ),
         advertisesSearchTools
           ? buildSearchToolsDescription({
@@ -621,6 +634,7 @@ export async function createAgentServer(params: {
               userId: tokenAuth?.userId,
               organizationId: tokenAuth?.organizationId,
               prefetchedCatalogs: catalogsById,
+              lookups: params.lookups,
             })
           : null,
         permittedTools.some((tool) => tool.name === listSkillsName) &&
@@ -629,6 +643,7 @@ export async function createAgentServer(params: {
               agentId,
               organizationId: tokenAuth.organizationId,
               userId: tokenAuth.userId,
+              lookups: params.lookups,
             })
           : null,
       ]);
@@ -1585,8 +1600,9 @@ async function validateResolvedUserToken(params: {
   profileId: string;
   token: SelectUserToken;
   agentAccessContext?: AgentAccessContext | null;
+  lookups?: RequestLookups;
 }): Promise<TokenAuthResult | null> {
-  const { profileId, token, agentAccessContext } = params;
+  const { profileId, token, agentAccessContext, lookups } = params;
 
   // Check if user has MCP gateway admin permission (can access all gateways)
   const isGatewayAdmin = await ResourcePermissions.allows({
@@ -1595,6 +1611,7 @@ async function validateResolvedUserToken(params: {
     resource: "mcpGateway",
     scope: "*",
     action: "update",
+    lookups,
   });
 
   // Non-admin: user can access profile if it's teamless (org-wide) or shares a team
@@ -1605,6 +1622,7 @@ async function validateResolvedUserToken(params: {
       isAgentAdmin: isGatewayAdmin,
       agentAccessContext: agentAccessContext,
       action: "use",
+      lookups,
     }))
   ) {
     logger.warn(
@@ -1669,6 +1687,7 @@ async function validateOAuthTokenByHash(params: {
   profileId: string;
   oauthTokenHash: string;
   agentAccessContext?: AgentAccessContext | null;
+  lookups?: RequestLookups;
 }): Promise<TokenAuthResult | null> {
   try {
     const agent =
@@ -1757,6 +1776,7 @@ async function validateOAuthTokenByHash(params: {
       resource: "mcpGateway",
       scope: "*",
       action: "update",
+      lookups: params.lookups,
     });
 
     // Non-admin access has two additive sources:
@@ -1771,6 +1791,7 @@ async function validateOAuthTokenByHash(params: {
       isAgentAdmin: isGatewayAdmin,
       agentAccessContext: agent,
       action: "use",
+      lookups: params.lookups,
     });
     const hasClientGrant =
       hasRbacAccess || !accessToken.clientId
@@ -1952,6 +1973,7 @@ export async function resolveTokenOrganizationId(
 export async function authenticateMCPGatewayRequest(
   profileId: string,
   tokenValue: string,
+  lookups?: RequestLookups,
 ): Promise<GatewayAuthOutcome> {
   const tokenHashes = buildTokenHashes(profileId, tokenValue);
   const cachedResult = getCachedTokenAuthResult(tokenHashes.cacheKey);
@@ -2006,6 +2028,7 @@ export async function authenticateMCPGatewayRequest(
         profileId,
         token: resolvedToken.token,
         agentAccessContext: await getAgentAccessContext(),
+        lookups,
       });
       if (userTokenResult) {
         cacheTokenAuthResult(tokenHashes.cacheKey, userTokenResult);
@@ -2026,6 +2049,7 @@ export async function authenticateMCPGatewayRequest(
     profileId,
     oauthTokenHash: tokenHashes.oauthTokenHash,
     agentAccessContext: await getAgentAccessContext(),
+    lookups,
   });
   if (accessTokenResult) {
     // This cache is intentionally short-lived and process-local. Revocations
@@ -2627,9 +2651,16 @@ async function buildSearchToolsDescription(params: {
   prefetchedCatalogs?: Awaited<
     ReturnType<typeof InternalMcpCatalogModel.getByIds>
   >;
+  lookups?: RequestLookups;
 }) {
-  const { agentId, mcpTools, organizationId, prefetchedCatalogs, userId } =
-    params;
+  const {
+    agentId,
+    mcpTools,
+    organizationId,
+    prefetchedCatalogs,
+    userId,
+    lookups,
+  } = params;
   const searchTool = getArchestraMcpTools().find(
     (tool) =>
       archestraMcpBranding.getToolShortName(tool.name) ===
@@ -2643,6 +2674,7 @@ async function buildSearchToolsDescription(params: {
     userId,
     organizationId,
     toolNames: params.advertisedToolNames,
+    lookups,
   });
   const runtimeInstruction = params.advertisedToolNames.some(
     (name) =>
@@ -2667,6 +2699,7 @@ async function buildSearchToolsDescription(params: {
     agentId,
     userId,
     organizationId,
+    lookups,
   });
 
   const catalogIds = [

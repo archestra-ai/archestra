@@ -26,7 +26,9 @@ import AgentModel from "@/models/agent";
 import KbFileModel from "@/models/kb-file";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type PrincipalSource,
+} from "@/models/resource-permission-subject";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
@@ -107,7 +109,7 @@ export class ResourcePermissions {
   /** Load scoped capabilities once for a request that touches several targets. */
   static async resolveAll(
     params:
-      | { organizationId: string; userId: string }
+      | { organizationId: string; userId: string; lookups?: PrincipalSource }
       | { organizationId: string; subjects: PermissionSubject[] },
   ): Promise<ManagedScopedPermission[]> {
     const subjects =
@@ -443,14 +445,17 @@ export class ResourcePermissions {
    * its author.
    */
   static async allows(
-    params: PermissionContext & { action: ResourcePermissionAction },
+    params: PermissionContext & {
+      action: ResourcePermissionAction;
+      lookups?: PrincipalSource;
+    },
   ): Promise<boolean> {
     const grants = await ResourcePermissions.resolve(params);
     return hasScopedPermission({ grants, required: params });
   }
 
   static async resolve(
-    context: PermissionContext,
+    context: PermissionContext & { lookups?: PrincipalSource },
   ): Promise<ScopedPermission[]> {
     if (!ManagedResourceSchema.safeParse(context.resource).success) return [];
     const params = await ResourcePermissions.grantContext(context);
@@ -728,9 +733,13 @@ export class ResourcePermissions {
   private static async getSubjects(params: {
     userId: string;
     organizationId: string;
+    lookups?: PrincipalSource;
   }): Promise<PermissionSubject[]> {
     const { subjects } =
-      await ResourcePermissionSubjectModel.resolvePrincipal(params);
+      await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+        params.lookups,
+        { userId: params.userId, organizationId: params.organizationId },
+      );
     return subjects;
   }
 }

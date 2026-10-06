@@ -16,7 +16,25 @@ export type GrantPrincipal = {
   subjects: PermissionSubject[];
 };
 
+/** Resolves principals; a request passes one that resolves each caller once. */
+export type PrincipalSource = {
+  principal(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<GrantPrincipal>;
+};
+
 export default class ResourcePermissionSubjectModel {
+  /** {@link resolvePrincipal} through the request's source when it has one. */
+  static resolvePrincipalFrom(
+    source: PrincipalSource | undefined,
+    params: { userId: string; organizationId: string },
+  ): Promise<GrantPrincipal> {
+    return source
+      ? source.principal(params)
+      : ResourcePermissionSubjectModel.resolvePrincipal(params);
+  }
+
   /**
    * Every subject a grant can name to reach this caller: the organization,
    * the user or service account, its teams with their ancestors, and its roles
@@ -40,6 +58,7 @@ export default class ResourcePermissionSubjectModel {
   static async resolvePrincipals(params: {
     userId: string;
     organizationId?: string;
+    lookups?: PrincipalSource;
   }): Promise<GrantPrincipal[]> {
     const { userId } = params;
     const organizationIds = params.organizationId
@@ -60,7 +79,7 @@ export default class ResourcePermissionSubjectModel {
             .where(eq(schema.membersTable.userId, userId));
     const principals = await Promise.all(
       organizationIds.map(({ id }) =>
-        ResourcePermissionSubjectModel.resolvePrincipal({
+        ResourcePermissionSubjectModel.resolvePrincipalFrom(params.lookups, {
           userId,
           organizationId: id,
         }),

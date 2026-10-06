@@ -584,7 +584,7 @@ export default function StatisticsPage() {
             }
           }}
         >
-          <SelectTrigger className="w-[320px]">
+          <SelectTrigger size="sm" className="w-[320px]">
             <CalendarIcon className="mr-2 h-4 w-4" />
             <SelectValue>
               {timeframe.startsWith("custom:")
@@ -1276,6 +1276,7 @@ export default function StatisticsPage() {
                           subscriptionCost={String(user.subscriptionCost)}
                           baselineCost={String(user.billedCost)}
                           tooltip="hover"
+                          precision="cents"
                           className="flex-wrap"
                         />
                       </TableCell>

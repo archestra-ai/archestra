@@ -438,8 +438,8 @@ function OrphanedAssignedTools({
             </div>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-8 w-8 text-muted-foreground hover:text-destructive"
+              size="icon-sm"
+              className="text-muted-foreground hover:text-destructive"
               aria-label={`Remove ${tool.name}`}
               onClick={() => onRemove(tool.id)}
             >

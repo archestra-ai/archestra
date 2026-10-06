@@ -315,8 +315,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
                           <TooltipTrigger asChild>
                             <Button
                               variant="secondary"
-                              size="sm"
-                              className="h-9 w-9 p-0"
+                              size="icon"
                               aria-label="Add condition"
                               onClick={() => handleConditionAdd(policy)}
                             >
@@ -362,6 +361,7 @@ export function ToolResultPolicies({ tool }: { tool: ToolForPolicies }) {
         </PolicyCard>
       ))}
       <Button
+        size="sm"
         variant="outline"
         className="w-full"
         onClick={() =>

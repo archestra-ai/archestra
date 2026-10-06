@@ -61,6 +61,7 @@ export { default as openappaCoverageRoutes } from "./openappa-coverage/openappa-
 export { default as openappaExternalConsultsRoutes } from "./openappa-external-consults/openappa-external-consults.routes";
 export { default as openappaGithubSyncRoutes } from "./openappa-github-sync/openappa-github-sync.routes";
 export { default as openappaHelpersRoutes } from "./openappa-helpers/openappa-helpers.routes";
+export { default as openappaTrustAudienceRoutes } from "./openappa-trust-audience/openappa-trust-audience.routes";
 export { default as openappaYellsRoutes } from "./openappa-yells/openappa-yells.routes";
 export { default as organizationRoutes } from "./organization";
 export { default as organizationRoleRoutes } from "./organization-role";
@@ -77,6 +78,7 @@ export { default as deepseekProxyRoutes } from "./proxy/routes/deepseek";
 export { default as geminiProxyRoutes } from "./proxy/routes/gemini";
 export { default as githubCopilotProxyRoutes } from "./proxy/routes/github-copilot";
 export { default as groqProxyRoutes } from "./proxy/routes/groq";
+export { default as jevProxyRoutes } from "./proxy/routes/jev";
 export { default as kimiProxyRoutes } from "./proxy/routes/kimi";
 export { default as microsoft365CopilotProxyRoutes } from "./proxy/routes/microsoft-365-copilot";
 export { default as minimaxProxyRoutes } from "./proxy/routes/minimax";

@@ -1,4 +1,4 @@
-import { and, desc, eq, gte, lte, type SQL, sql } from "drizzle-orm";
+import { and, desc, eq, gte, inArray, lte, type SQL, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
 import {
   type CursorPaginatedResult,
@@ -57,6 +57,33 @@ class OpenappaExternalConsultModel {
       if (!page.pagination.nextCursor) return;
       cursor = page.pagination.nextCursor;
     }
+  }
+
+  /** The newest consult of each named external in one role, by name. */
+  static async findLatestByExternalName(params: {
+    organizationId: string;
+    role: ExternalConsultRole;
+    externalNames: string[];
+  }): Promise<Map<string, Pick<ExternalConsult, "outcome" | "createdAt">>> {
+    if (params.externalNames.length === 0) return new Map();
+    const rows = await db
+      .selectDistinctOn([table.externalName], {
+        externalName: table.externalName,
+        outcome: table.outcome,
+        createdAt: table.createdAt,
+      })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.role, params.role),
+          inArray(table.externalName, params.externalNames),
+        ),
+      )
+      .orderBy(table.externalName, desc(table.createdAt), desc(table.id));
+    return new Map(
+      rows.map(({ externalName, ...latest }) => [externalName, latest]),
+    );
   }
 
   // SPDX-SnippetBegin

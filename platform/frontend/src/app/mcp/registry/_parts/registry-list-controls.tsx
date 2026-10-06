@@ -18,6 +18,7 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   MCP_SERVER_ISSUE_KINDS,
   type McpServerAttentionFacet,
@@ -386,23 +387,23 @@ export function RegistryFilterChips({
               contrast minimum on some themes (WCAG 1.4.3). */}
           <span>{GROUP_LABELS[entry.group]}:</span>
           {entry.label}
-          <button
+          <UnstyledButton
             type="button"
             aria-label={`Remove ${entry.label} filter`}
             onClick={() => onRemove(entry.group, entry.value)}
             className="ml-0.5 rounded-full p-0.5 hover:bg-background/60"
           >
             <X className="h-3 w-3" />
-          </button>
+          </UnstyledButton>
         </Badge>
       ))}
-      <button
+      <UnstyledButton
         type="button"
         onClick={onClearAll}
         className="text-sm text-foreground underline-offset-2 hover:underline"
       >
         Clear all
-      </button>
+      </UnstyledButton>
     </div>
   );
 }

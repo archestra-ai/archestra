@@ -95,6 +95,7 @@ import {
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
+import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
@@ -529,6 +530,7 @@ function CatalogItemDetails({
           {showChatButton && (
             <Button
               variant="outline"
+              size="sm"
               disabled={isChatCreating}
               onClick={() => startChat(item)}
             >
@@ -537,7 +539,7 @@ function CatalogItemDetails({
             </Button>
           )}
           {canModify && effectiveTab !== "yaml" && (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href={mcpServerActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
                 {editAction.label}
@@ -549,7 +551,7 @@ function CatalogItemDetails({
             (canModify && !isPlaywright)) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon-sm">
                   <MoreHorizontal className="h-4 w-4" />
                   <span className="sr-only">More actions</span>
                 </Button>
@@ -674,7 +676,8 @@ function CatalogItemDetails({
                   }
                   description={
                     variant === "local"
-                      ? "Running instances of this server, for one person or shared with a team."
+                      ? getLocalInstallationCopy(item.multitenant === true)
+                          .section
                       : "The credentials this server is used with."
                   }
                 >

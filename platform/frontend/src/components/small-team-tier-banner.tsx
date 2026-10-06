@@ -8,6 +8,7 @@ import {
   HoverCardContent,
   HoverCardTrigger,
 } from "@/components/ui/hover-card";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useSmallTeamTier } from "@/lib/config/config.query";
 
 const SALES_EMAIL = "sales@archestra.ai";
@@ -82,13 +83,13 @@ export function SmallTeamTierBanner({
     return (
       <HoverCard openDelay={150}>
         <HoverCardTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             aria-label="Licensing for this feature"
             className="inline-flex text-muted-foreground/70 transition-colors hover:text-foreground"
           >
             <Info className="h-4 w-4" />
-          </button>
+          </UnstyledButton>
         </HoverCardTrigger>
         {/* Deliberately NOT pointer-events-none: the sales and pricing links
             inside have to stay clickable. */}

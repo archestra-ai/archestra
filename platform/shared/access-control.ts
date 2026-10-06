@@ -1530,8 +1530,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
   },
-  // Any authenticated user can link their own Telegram account
+  // Any authenticated user can link or unlink their own Telegram account
   [RouteId.LinkTelegramChatOpsAccount]: {},
+  [RouteId.UnlinkTelegramChatOpsAccount]: {},
   [RouteId.GenerateTelegramLinkCode]: {},
   [RouteId.ConnectNgrok]: {
     organizationSettings: ["update"],
@@ -1712,6 +1713,7 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaCoverageEntities]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageTools]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageSummary]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaTrustAudience]: { openappaPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },

@@ -199,6 +199,7 @@ function OauthClientsTable() {
       <div className="flex items-center gap-2">
         <PermissionButton
           permissions={{ llmOauthClient: ["create"] }}
+          size="sm"
           onClick={() => setCreateOpen(true)}
         >
           <Plus className="h-4 w-4" />

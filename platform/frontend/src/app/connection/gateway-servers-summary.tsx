@@ -5,6 +5,7 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useProfile } from "@/lib/agent.query";
 import { useCanManageGateway } from "@/lib/auth/use-can-manage-gateway";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
@@ -128,7 +129,7 @@ export function GatewayServersSummary({
   return (
     <div className="text-xs" data-testid="connect-gateway-servers">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <button
+        <UnstyledButton
           type="button"
           onClick={() => setExpanded((e) => !e)}
           aria-expanded={expanded}
@@ -141,7 +142,7 @@ export function GatewayServersSummary({
             )}
           />
           <span>{summaryLabel}</span>
-        </button>
+        </UnstyledButton>
         {accessAll && (
           <span className="text-muted-foreground/70">
             in your organization — new servers included automatically

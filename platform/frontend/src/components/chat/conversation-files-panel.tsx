@@ -26,6 +26,7 @@ import {
 import { SaveToKnowledgeDialog } from "@/components/chat/save-to-knowledge-dialog";
 import { SelectableFileList } from "@/components/chat/selectable-file-list";
 import { FileDropZone } from "@/components/files/file-drop-zone";
+import { Button } from "@/components/ui/button";
 import {
   useBulkDeleteConversationFiles,
   useConversation,
@@ -343,15 +344,17 @@ export function ConversationFilesPanel({
           ) : instructionsSelected ? (
             isProjectOwner &&
             !editing && (
-              <button
+              <Button
+                variant="ghost"
+                size="icon-sm"
                 type="button"
                 onClick={() => setEditing(true)}
                 title="Edit instructions"
-                className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                className="text-muted-foreground"
               >
                 <Pencil className="h-4 w-4" />
                 <span className="sr-only">Edit instructions</span>
-              </button>
+              </Button>
             )
           ) : (
             selected && (
@@ -368,34 +371,40 @@ export function ConversationFilesPanel({
                   </AttachmentLink>
                 )}
                 {selectedEditable && !editing && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     type="button"
                     onClick={() => setEditing(true)}
                     title={`Edit ${selected.name}`}
-                    className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="text-muted-foreground"
                   >
                     <Pencil className="h-4 w-4" />
                     <span className="sr-only">Edit {selected.name}</span>
-                  </button>
+                  </Button>
                 )}
                 {/* Attachments only: a chat attachment is the one kind of file
                     here that has no life outside this conversation. Generated
                     outputs and project files are already persisted elsewhere. */}
                 {selected.source === "attachment" && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     type="button"
                     onClick={() => setSavingToKnowledge([selected])}
                     title={`Save ${selected.name} to knowledge`}
-                    className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+                    className="text-muted-foreground"
                   >
                     <BookPlus className="h-4 w-4" />
                     <span className="sr-only">
                       Save {selected.name} to knowledge
                     </span>
-                  </button>
+                  </Button>
                 )}
                 {canManageFiles && (
-                  <button
+                  <Button
+                    variant="ghost"
+                    size="icon-sm"
                     type="button"
                     onClick={() =>
                       requestDelete([selected], (failedIds) => {
@@ -403,11 +412,11 @@ export function ConversationFilesPanel({
                       })
                     }
                     title={`Delete ${selected.name}`}
-                    className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-destructive"
+                    className="text-muted-foreground hover:text-destructive"
                   >
                     <Trash2 className="h-4 w-4" />
                     <span className="sr-only">Delete {selected.name}</span>
-                  </button>
+                  </Button>
                 )}
               </div>
             )
@@ -512,24 +521,28 @@ function ArtifactRowActions({
 
   return (
     <div className="flex shrink-0 items-center pr-1">
-      <button
+      <Button
+        variant="ghost"
+        size="icon-sm"
         type="button"
         onClick={handleCopy}
         title="Copy"
-        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="text-muted-foreground"
       >
         {copied ? <Check className="h-4 w-4" /> : <Copy className="h-4 w-4" />}
         <span className="sr-only">Copy artifact</span>
-      </button>
-      <button
+      </Button>
+      <Button
+        variant="ghost"
+        size="icon-sm"
         type="button"
         onClick={onDownloadPdf}
         title="Download as PDF"
-        className="flex h-8 w-8 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+        className="text-muted-foreground"
       >
         <Download className="h-4 w-4" />
         <span className="sr-only">Download artifact as PDF</span>
-      </button>
+      </Button>
     </div>
   );
 }

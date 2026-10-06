@@ -289,6 +289,8 @@ describe("Claude Code APPA permission installation", () => {
   const rules = [
     "get_remedy_plans",
     "execute_remedy_plan",
+    "list_peer_messages",
+    "read_peer_message",
     "yell",
     "ask_user",
   ].map((name) => `mcp__prod_gateway__archestra__${name}`);
@@ -296,7 +298,7 @@ describe("Claude Code APPA permission installation", () => {
   test("MCP-only setup adds exact helper rules, preserves restrictions, and is idempotent", async () => {
     const existing = {
       permissions: {
-        allow: ["Read", rules[3]],
+        allow: ["Read", rules.at(-1)],
         ask: [rules[1]],
         deny: ["Bash"],
       },
@@ -311,10 +313,10 @@ describe("Claude Code APPA permission installation", () => {
       ...existing,
       permissions: {
         ...existing.permissions,
-        allow: ["Read", rules[3], ...rules.slice(0, 3)],
+        allow: ["Read", rules.at(-1), ...rules.slice(0, -1)],
       },
     });
-    expect(result.ownership).toEqual({ prod_gateway: rules.slice(0, 3) });
+    expect(result.ownership).toEqual({ prod_gateway: rules.slice(0, -1) });
     expect(result.backup).toBe(result.original);
     expect(
       result.settings.permissions.allow.every(
@@ -343,6 +345,8 @@ describe("Claude Code APPA permission installation", () => {
     const desired = [
       "get_remedy_plans",
       "execute_remedy_plan",
+      "list_peer_messages",
+      "read_peer_message",
       "yell",
       "ask_user",
     ].map((name) => `mcp__company_gateway__company__${name}`);
@@ -380,6 +384,41 @@ describe("Claude Code APPA permission installation", () => {
     expect(result.failureMessage).toContain(result.settingsPath);
   });
 
+  test("stops before registering the gateway when python3 is missing", async () => {
+    const dir = await mkdtemp(path.join(tmpdir(), "archestra-no-python-"));
+    try {
+      const bin = path.join(dir, "bin");
+      await mkdir(bin);
+      const calls = path.join(dir, "claude-calls.log");
+      const claudeStub = path.join(bin, "claude");
+      await writeFile(claudeStub, `#!/bin/sh\necho "$*" >> '${calls}'\n`);
+      await chmod(claudeStub, 0o755);
+      const catShim = path.join(bin, "cat");
+      await writeFile(catShim, `#!/bin/sh\nexec /bin/cat "$@"\n`);
+      await chmod(catShim, 0o755);
+      const scriptPath = path.join(dir, "setup.sh");
+      await writeFile(
+        scriptPath,
+        renderSetupScript({
+          ...fullContext("claude-code", "linux"),
+          proxy: null,
+          skills: null,
+        }),
+      );
+
+      await expect(
+        execFileAsync("/bin/bash", [scriptPath], {
+          env: { HOME: dir, PATH: bin },
+        }),
+      ).rejects.toMatchObject({ code: 1 });
+      await expect(readFile(calls, "utf8")).rejects.toMatchObject({
+        code: "ENOENT",
+      });
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   test("skips helper rules for an unsafe gateway name and still registers MCP", () => {
     const script = renderSetupScript({
       ...fullContext("claude-code"),
@@ -415,6 +454,8 @@ describe("Claude Code APPA permission installation", () => {
     const rules = [
       "get_remedy_plans",
       "execute_remedy_plan",
+      "list_peer_messages",
+      "read_peer_message",
       "yell",
       "ask_user",
     ].map((name) => `mcp__prod_gateway__archestra__${name}`);

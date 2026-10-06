@@ -47,6 +47,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
@@ -763,14 +764,14 @@ export function ConnectCommandPanel({
               canCreateProviderKey ? (
                 <>
                   <span>{noVirtualKeyReason} </span>
-                  <button
+                  <UnstyledButton
                     type="button"
                     className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
                     onClick={() => setShowAddProviderKey(true)}
                     data-testid="connect-auth-add-provider-key"
                   >
                     Add {addKeyPhrase}
-                  </button>
+                  </UnstyledButton>
                   <span> or switch to your provider key.</span>
                 </>
               ) : (
@@ -1385,7 +1386,7 @@ export function ConnectCommandPanel({
                   </span>
                 )}
               </span>
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={() => runGeneration(inputsKey)}
                 disabled={isPending}
@@ -1394,7 +1395,7 @@ export function ConnectCommandPanel({
               >
                 <RotateCcw className="size-3" />
                 Regenerate
-              </button>
+              </UnstyledButton>
             </div>
           )}
         </div>

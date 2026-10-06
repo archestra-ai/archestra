@@ -1,6 +1,6 @@
 "use client";
 
-import { Check, ChevronDown, ExternalLink, X } from "lucide-react";
+import { Check, ChevronDown, ExternalLink, Plus, X } from "lucide-react";
 import { useMemo, useRef, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
@@ -327,7 +327,9 @@ function MultiAgentSelector({
           className={cn(
             "flex min-h-9 w-full flex-wrap items-center gap-1.5 rounded-md border border-input bg-background px-3 py-1.5 text-sm ring-offset-background focus-within:ring-2 focus-within:ring-ring focus-within:ring-offset-2",
             triggerLabel &&
-              "h-8 min-h-8 w-fit cursor-pointer justify-between py-1 text-xs shadow-xs hover:bg-accent hover:text-accent-foreground",
+              // Matches the dashed `sm` "+ Add" chips (AssignmentCombobox)
+              // that sit beside it in the same editors.
+              "h-8 min-h-8 w-fit cursor-pointer gap-1.5 border-dashed px-2.5 py-1 text-xs text-muted-foreground shadow-xs hover:bg-accent hover:text-accent-foreground",
             disabled && "cursor-not-allowed opacity-60",
             className,
           )}
@@ -344,8 +346,8 @@ function MultiAgentSelector({
         >
           {triggerLabel ? (
             <>
+              <Plus className="h-3.5 w-3.5 shrink-0" />
               <span>{triggerLabel}</span>
-              <ChevronDown className="h-3.5 w-3.5 shrink-0 opacity-50" />
             </>
           ) : disabled && disabledLabel ? (
             <span className="text-muted-foreground">{disabledLabel}</span>
@@ -469,7 +471,8 @@ function MultiAgentSelector({
             <Button
               asChild
               variant="ghost"
-              className="h-8 w-full justify-between px-2 text-sm font-normal"
+              size="sm"
+              className="w-full justify-between px-2 font-normal"
             >
               <a
                 href={createAction.href}

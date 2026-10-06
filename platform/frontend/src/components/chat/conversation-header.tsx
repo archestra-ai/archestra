@@ -221,8 +221,8 @@ export function ConversationHeader({
               <DropdownMenuTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="hidden md:inline-flex h-7 w-7 flex-shrink-0"
+                  size="icon-sm"
+                  className="hidden md:inline-flex flex-shrink-0"
                   title="Chat actions"
                 >
                   <MoreHorizontal className="h-4 w-4" />
@@ -306,12 +306,7 @@ export function ConversationHeader({
         <div className="flex md:hidden items-center gap-2 flex-shrink-0">
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-8 w-8"
-                title="More options"
-              >
+              <Button variant="ghost" size="icon-sm" title="More options">
                 <MoreVertical className="h-4 w-4" />
                 <span className="sr-only">More options</span>
               </Button>

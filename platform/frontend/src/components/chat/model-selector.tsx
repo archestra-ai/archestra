@@ -56,6 +56,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { resolveAutoSelectedModel } from "@/lib/chat/use-chat-preferences";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
@@ -287,7 +288,7 @@ function CopyModelIdButton({ modelId }: { modelId: string }) {
   );
 
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={handleClick}
       onMouseDown={(e) => e.stopPropagation()}
@@ -299,7 +300,7 @@ function CopyModelIdButton({ modelId }: { modelId: string }) {
       ) : (
         <CopyIcon className="size-2.5 text-muted-foreground" />
       )}
-    </button>
+    </UnstyledButton>
   );
 }
 
@@ -681,10 +682,7 @@ export const ModelSelector = memo(function ModelSelector({
               variant="outline"
               size="sm"
               disabled={disabled}
-              className={cn(
-                "h-8 px-3 gap-1.5 text-xs max-w-[280px] min-w-0",
-                showClear && "pr-7",
-              )}
+              className={cn("max-w-[280px] min-w-0", showClear && "pr-7")}
               data-testid={E2eTestId.ChatModelSelectorTrigger}
             >
               {selectedModelLogo && (
@@ -753,7 +751,7 @@ export const ModelSelector = memo(function ModelSelector({
         )}
       </ModelSelectorRoot>
       {showClear && (
-        <button
+        <UnstyledButton
           type="button"
           aria-label="Clear model"
           disabled={disabled}
@@ -761,7 +759,7 @@ export const ModelSelector = memo(function ModelSelector({
           onClick={onClear}
         >
           <XIcon className="size-3" />
-        </button>
+        </UnstyledButton>
       )}
     </div>
   );

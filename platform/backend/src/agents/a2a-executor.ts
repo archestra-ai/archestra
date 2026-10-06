@@ -966,7 +966,9 @@ export function emitSubagentToolCalls(params: {
  * Build the current user turn's AI SDK content from a text message and optional
  * attachments, mirroring the chat-side attachment policy
  * (`chatUploadRejectionReason`):
- *   - images: kept inline, minus the tiny-broken-image filter;
+ *   - images: kept inline, minus the tiny-broken-image filter, and — when a
+ *     sandbox is available and the image fits the artifact limit — also staged
+ *     into the sandbox so tools can use the bytes;
  *   - inlineable text ≤ {@link INLINE_TEXT_MAX_BYTES}: kept inline (decoded per
  *     provider by `prepareMessagesForProvider`);
  *   - other model-ingestible types (PDF, audio, video): kept inline at any size;
@@ -1009,7 +1011,7 @@ export async function buildUserContent(
   // Images are matched broadly by `image/*` and always kept (subject to the
   // tiny-broken-image filter), deliberately bypassing the mime classifier: a
   // model's readable set may omit a non-standard subtype (e.g. `image/jpg`) that
-  // the provider still renders, so images are never staged or rejected here.
+  // the provider still renders, so images are never rejected here.
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
@@ -1050,22 +1052,33 @@ export async function buildUserContent(
     }
   }
 
-  // Stage the sandbox-bound attachments. A creation/upload failure surfaces as a
-  // note (no silent drop) and the turn continues with whatever else survived.
+  // Images stay inline (the model sees them) but are also copied into the
+  // sandbox when one is usable, mirroring chat-UI auto-staging: an inline image
+  // gives the model no bytes to act on, so without a sandbox copy it cannot hand
+  // the picture to a tool (attach it to a post, upload it elsewhere, edit it).
+  const imagesToStage = sandboxAvailable
+    ? validImageAttachments.filter(
+        (a) => estimateAttachmentBytes(a) <= sandboxByteLimit,
+      )
+    : [];
+
+  // Stage the sandbox-bound attachments in one call (one sandbox resolution). A
+  // creation/upload failure of a sandbox-only file surfaces as a note (no silent
+  // drop) and the turn continues with whatever else survived; a failed image
+  // copy needs no note because the image itself is still inline.
   const stagedPointers: Array<{ name: string; path: string }> = [];
   const stageFailed: A2AAttachment[] = [];
-  if (toStage.length > 0) {
+  const stageBatch = [...toStage, ...imagesToStage];
+  if (stageBatch.length > 0) {
     const results = opts.stageAttachments
-      ? await opts.stageAttachments(toStage)
-      : toStage.map(() => ({ error: true as const }));
+      ? await opts.stageAttachments(stageBatch)
+      : stageBatch.map(() => ({ error: true as const }));
     results.forEach((result, i) => {
+      const att = stageBatch[i];
       if ("path" in result) {
-        stagedPointers.push({
-          name: toStage[i].name ?? "unnamed",
-          path: result.path,
-        });
-      } else {
-        stageFailed.push(toStage[i]);
+        stagedPointers.push({ name: att.name ?? "unnamed", path: result.path });
+      } else if (i < toStage.length) {
+        stageFailed.push(att);
       }
     });
   }

@@ -25,7 +25,6 @@ import {
 } from "@/lib/openappa-trust-audience.query";
 import { cn } from "@/lib/utils/tailwind";
 import { BatteryIcon } from "./battery-icon";
-import { policyLineHref, policyLineLabel } from "./policy-line-href";
 
 /** The Overview's trust chain, and its audiences nested by containment. */
 export function TrustAudienceCard() {
@@ -75,8 +74,6 @@ export function TrustAudienceCard() {
 // =============================================================================
 // Internal components
 // =============================================================================
-
-type SelectorRef = Extract<AudienceLevel, { kind: "mapped" }>["from"][number];
 
 function Term({
   hint,
@@ -145,16 +142,9 @@ function rankColor(index: number, count: number): string {
   return `color-mix(in oklch, var(--color-red-500) ${towardRed}%, var(--color-emerald-500))`;
 }
 
-/** Who the runtime counts in a level it has no sources for. */
-const UNMAPPED_MEMBERS: Record<string, string> = {
-  public: "Anyone",
-  internal: "Only the session's user",
-  self: "The session's user",
-};
-
 /**
- * `public` ⊇ `internal` ⊇ `self` as boxes inside boxes; each group sits inside
- * the level it is declared `within`.
+ * `public` ⊇ `internal` ⊇ `self` as surfaces stacked inside each other; each
+ * group sits inside the level it is declared `within`.
  */
 function AudienceNest({ audiences }: { audiences: AudienceLevel[] }) {
   const level = (name: string) => audiences.find((each) => each.name === name);
@@ -166,22 +156,31 @@ function AudienceNest({ audiences }: { audiences: AudienceLevel[] }) {
           each.name.startsWith("@") &&
           (each.within ?? "public") === name,
       )
-      .map((group) => <LevelBox key={group.name} level={group} />);
+      .map((group) => (
+        <LevelBox key={group.name} level={group} className={INNER_SURFACE} />
+      ));
   const publicLevel = level("public");
   const internal = level("internal");
   const self = level("self");
   if (!publicLevel || !internal || !self) return null;
 
   return (
-    <LevelBox level={publicLevel} className="bg-muted/40">
-      <LevelBox level={internal} className="bg-muted/30">
+    <LevelBox level={publicLevel} className="bg-muted/60">
+      <LevelBox
+        level={internal}
+        className="bg-muted/40 shadow-xs ring-1 ring-foreground/5"
+      >
         {groupsWithin("internal")}
-        <LevelBox level={self}>{groupsWithin("self")}</LevelBox>
+        <LevelBox level={self} className={INNER_SURFACE}>
+          {groupsWithin("self")}
+        </LevelBox>
       </LevelBox>
       {groupsWithin("public")}
     </LevelBox>
   );
 }
+
+const INNER_SURFACE = "bg-card shadow-xs ring-1 ring-foreground/5";
 
 function LevelBox({
   level,
@@ -189,42 +188,41 @@ function LevelBox({
   children,
 }: {
   level: AudienceLevel;
-  className?: string;
+  className: string;
   children?: ReactNode;
 }) {
-  const unsourced = level.kind !== "mapped" && level.name !== "public";
   const nested = Array.isArray(children)
     ? children.flat().some(Boolean)
     : Boolean(children);
+  const batteries =
+    level.kind === "mapped"
+      ? [
+          ...new Set(
+            level.from.flatMap((ref) =>
+              ref.declaredBy ? [ref.declaredBy.battery] : [],
+            ),
+          ),
+        ]
+      : [];
   return (
-    <div
-      className={cn(
-        "rounded-lg border bg-card p-3",
-        unsourced && "border-dashed",
-        className,
-      )}
-    >
-      <div className="flex min-h-7 flex-wrap items-center gap-x-3 gap-y-1.5">
-        <span className="w-20 shrink-0 font-mono font-medium">
-          {level.name}
-        </span>
-        {level.kind === "mapped" ? (
-          <>
-            <span className="flex min-w-0 flex-1 flex-wrap items-center gap-1.5">
-              {level.from.map((ref) => (
-                <SourceChip key={`${ref.source}:${ref.selector}`} refTo={ref} />
-              ))}
-            </span>
-            <Link
-              href={policyLineHref({ entry: null, line: level.mappingLine })}
-              className="font-mono text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline"
-            >
-              {policyLineLabel({ entry: null, line: level.mappingLine })}
-            </Link>
-          </>
-        ) : (
-          <span className="text-muted-foreground">
-            {UNMAPPED_MEMBERS[level.name]}
+    <div className={cn("rounded-lg p-3", className)}>
+      <div className="flex min-h-7 items-center gap-3">
+        <span className="font-mono font-medium">{level.name}</span>
+        {batteries.length > 0 && (
+          <span className="flex items-center gap-1">
+            {batteries.map((battery) => (
+              <BatteryLink
+                key={battery}
+                battery={battery}
+                selectors={
+                  level.kind === "mapped"
+                    ? level.from
+                        .filter((ref) => ref.declaredBy?.battery === battery)
+                        .map((ref) => ref.selector)
+                    : []
+                }
+              />
+            ))}
           </span>
         )}
       </div>
@@ -233,55 +231,41 @@ function LevelBox({
   );
 }
 
-/** A source: its battery's icon, which opens that battery, then its selector. */
-function SourceChip({ refTo }: { refTo: SelectorRef }) {
+/** A battery an audience reads members from, as its icon; it opens that battery. */
+function BatteryLink({
+  battery,
+  selectors,
+}: {
+  battery: string;
+  selectors: string[];
+}) {
   const batteries = useBatteries();
   const catalog = useInternalMcpCatalog();
-  const battery = refTo.declaredBy?.battery;
   const summary = batteries.data?.find((each) => each.name === battery);
   return (
-    <span className="inline-flex items-center gap-1 rounded-md border bg-background py-0.5 pr-1.5 pl-0.5 font-mono text-xs">
-      {battery && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Link
-              href={`/openappa/batteries?${new URLSearchParams({ battery })}`}
-              aria-label={`Open the ${battery} battery`}
-              className="rounded-sm p-0.5 hover:bg-muted"
-            >
-              <BatteryIcon
-                name={battery}
-                bundled={summary?.source === "bundled"}
-                catalogIds={
-                  summary?.installs.map((install) => install.catalogId) ?? []
-                }
-                catalog={catalog.data ?? []}
-                size={16}
-              />
-            </Link>
-          </TooltipTrigger>
-          <TooltipContent>
-            <span>Open the {battery} battery</span>
-          </TooltipContent>
-        </Tooltip>
-      )}
-      <Tooltip>
-        <TooltipTrigger asChild>
-          <Link
-            href={policyLineHref(refTo)}
-            className="underline-offset-4 hover:underline"
-          >
-            {refTo.source}:{refTo.selector}
-          </Link>
-        </TooltipTrigger>
-        <TooltipContent>
-          {battery ? (
-            <span>{policyLineLabel(refTo)}</span>
-          ) : (
-            <span>No included battery declares this source</span>
-          )}
-        </TooltipContent>
-      </Tooltip>
-    </span>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Link
+          href={`/openappa/batteries?${new URLSearchParams({ battery })}`}
+          aria-label={`Open the ${battery} battery`}
+          className="flex size-7 items-center justify-center rounded-md border bg-background transition-colors hover:bg-muted"
+        >
+          <BatteryIcon
+            name={battery}
+            bundled={summary?.source === "bundled"}
+            catalogIds={
+              summary?.installs.map((install) => install.catalogId) ?? []
+            }
+            catalog={catalog.data ?? []}
+            size={16}
+          />
+        </Link>
+      </TooltipTrigger>
+      <TooltipContent>
+        <span className="font-mono">
+          {selectors.map((selector) => `${battery}:${selector}`).join(", ")}
+        </span>
+      </TooltipContent>
+    </Tooltip>
   );
 }

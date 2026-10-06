@@ -198,6 +198,12 @@ const nextConfig: NextConfig = {
         source: "/skills/marketplace.git/:path*",
         destination: `${backendUrl}/skills/marketplace.git/:path*`,
       },
+      // Public file links shared by agents (share_file_publicly). Served by
+      // the backend without a session; the token in the path authorizes it.
+      {
+        source: "/public-files/:path*",
+        destination: `${backendUrl}/public-files/:path*`,
+      },
       {
         source: "/ws",
         destination: `${backendUrl}/ws`,

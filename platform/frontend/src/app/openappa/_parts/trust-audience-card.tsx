@@ -1,5 +1,6 @@
 "use client";
 
+import { ArrowDownRight, Info } from "lucide-react";
 import Link from "next/link";
 import { Fragment, type ReactNode } from "react";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -34,11 +35,11 @@ export function TrustAudienceCard() {
   return (
     <Card className="gap-5 py-5">
       <CardHeader className="px-5">
-        <CardTitle>Trust & audience</CardTitle>
+        <CardTitle>Security label</CardTitle>
         <CardDescription>
-          Trust is how much the agent can believe what it has read. Audience is
-          who may see it: reading something private limits where the agent can
-          send it.
+          Every agent session carries a security label: its audience and its
+          trust. The label only becomes more restrictive as the agent reads
+          data, so what the agent has read decides what it can do next.
         </CardDescription>
       </CardHeader>
       <CardContent className="px-5">
@@ -51,27 +52,18 @@ export function TrustAudienceCard() {
           <Skeleton className="h-52 w-full" />
         ) : (
           <dl className="grid grid-cols-[5rem_minmax(0,1fr)] gap-x-4 gap-y-5 text-sm">
-            <dt className="text-xs font-medium text-muted-foreground">Trust</dt>
-            <dd className="flex flex-wrap items-center gap-1.5">
-              {view.data.trust.map((name, index) => (
-                <Fragment key={name}>
-                  {index > 0 && (
-                    <span
-                      aria-hidden="true"
-                      className="text-xs text-muted-foreground"
-                    >
-                      →
-                    </span>
-                  )}
-                  <Badge variant="outline" className="font-mono font-normal">
-                    {name}
-                  </Badge>
-                </Fragment>
-              ))}
+            <Term hint="How much the agent can believe what it has read. Text written by an outsider, such as a web page, lowers it, and it never rises again in the session.">
+              Trust
+            </Term>
+            <dd>
+              <TrustSteps levels={view.data.trust} />
             </dd>
-            <dt className="pt-3 text-xs font-medium text-muted-foreground">
+            <Term
+              className="pt-3"
+              hint="Who may see what the agent has read. Reading something private limits where the agent can send it."
+            >
               Audience
-            </dt>
+            </Term>
             <dd>
               <AudienceNest audiences={view.data.audiences} />
             </dd>
@@ -87,6 +79,81 @@ export function TrustAudienceCard() {
 // =============================================================================
 
 type SelectorRef = Extract<AudienceLevel, { kind: "mapped" }>["from"][number];
+
+function Term({
+  hint,
+  className,
+  children,
+}: {
+  hint: string;
+  className?: string;
+  children: ReactNode;
+}) {
+  return (
+    <dt
+      className={cn(
+        "flex items-start gap-1 text-xs font-medium text-muted-foreground",
+        className,
+      )}
+    >
+      <span>{children}</span>
+      <Tooltip>
+        <TooltipTrigger asChild>
+          <button
+            type="button"
+            aria-label={`About ${String(children).toLowerCase()}`}
+            className="mt-px hover:text-foreground"
+          >
+            <Info className="size-3.5" />
+          </button>
+        </TooltipTrigger>
+        <TooltipContent className="max-w-xs">{hint}</TooltipContent>
+      </Tooltip>
+    </dt>
+  );
+}
+
+/**
+ * Trust levels from most trusted to least, stepping down as reads lower a
+ * session's trust; it never steps back up.
+ */
+function TrustSteps({ levels }: { levels: string[] }) {
+  const steps = [...levels].reverse();
+  return (
+    <div className="flex flex-wrap items-center gap-1.5">
+      {steps.map((name, index) => (
+        <Fragment key={name}>
+          {index > 0 && (
+            <ArrowDownRight
+              aria-hidden="true"
+              className="size-3.5 text-muted-foreground"
+            />
+          )}
+          <Badge
+            variant="outline"
+            className={cn(
+              "font-mono font-normal",
+              index === 0
+                ? TRUST_TONES.top
+                : index === steps.length - 1
+                  ? TRUST_TONES.bottom
+                  : TRUST_TONES.middle,
+            )}
+          >
+            {name}
+          </Badge>
+        </Fragment>
+      ))}
+    </div>
+  );
+}
+
+const TRUST_TONES = {
+  top: "border-emerald-600/40 bg-emerald-500/10 text-emerald-800 dark:text-emerald-300",
+  middle:
+    "border-amber-600/40 bg-amber-500/10 text-amber-800 dark:text-amber-300",
+  bottom: "border-red-600/40 bg-red-500/10 text-red-800 dark:text-red-300",
+};
 
 /** Who the runtime counts in a level it has no sources for. */
 const UNMAPPED_MEMBERS: Record<string, string> = {

@@ -79,6 +79,9 @@ jobs:
       - name: Check environment variable mentions link to their reference entry
         run: python3 .github/scripts/check-docs-env-var-links.py
 
+      - name: Check metric mentions link to the metrics reference
+        run: python3 .github/scripts/check-docs-metric-links.py
+
       - name: Run docs check regression tests
         run: python3 -m unittest discover -s .github/scripts -p 'test_docs_*.py'
 

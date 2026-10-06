@@ -38,6 +38,10 @@ Every RBAC permission a page mentions links to its row on the Permissions page: 
 
 Every environment variable a page mentions links to its exact entry on the Configuration page: [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA). The anchor is the variable's name verbatim; keep any `=value` inside the link text. Do not add a separate "See Configuration" pointer next to it — the link already goes there. Each entry on the Configuration page is a `- **`ARCHESTRA_X`** - …` bullet, which the site anchors by name; a new variable gets one there. CI enforces this with `.github/scripts/check-docs-env-var-links.py`; run it with `--fix` to add the links.
 
+Every observability metric a page mentions links to its row on the Metrics page: [`rag_quote_verification_total`](/docs/admin/observability/metrics#rag_quote_verification_total). Each metric row on that page starts its first cell with `<span id="metric_name"></span>` for each metric it lists; a new metric gets one. Code blocks and headings are exempt. CI enforces this with `.github/scripts/check-docs-metric-links.py`; run it with `--fix` to add the anchors and links.
+
+When you rename or remove a heading, keep its old anchor with `<span id="old-slug"></span>` only if the anchor is published (it exists on `origin/main`) or a link, redirect, or app `DocsPage` anchor still uses it. An anchor that exists only on your branch has no readers: rename it freely and delete it.
+
 ## Built-In MCP Tools
 
 When a page names a built-in Archestra MCP tool (`list_skills`, `run_command`, `whoami`, …), link every mention to the tool's entry in the generated reference: [`list_skills`](/docs/reference/archestra-mcp-server#list_skills). The anchor is the tool's short name verbatim, without any `archestra__` prefix. This includes repeat mentions and mentions in tables; only code blocks and headings stay plain, since links don't render there. Per-skill tools generated at runtime (`skill__<name>`) are not built-in tools and have no entry. CI enforces this with `.github/scripts/check-docs-mcp-tool-links.py`; run it with `--fix` to add the links.

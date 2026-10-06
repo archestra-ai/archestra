@@ -15,6 +15,7 @@ python3 .github/scripts/check-docs-navigation.py
 python3 .github/scripts/check-docs-links.py
 python3 .github/scripts/check-docs-mcp-tool-links.py   # add --fix to link unlinked tool mentions
 python3 .github/scripts/check-docs-env-var-links.py    # add --fix to link unlinked env var mentions
+python3 .github/scripts/check-docs-metric-links.py     # add --fix to anchor metric rows and link metric mentions
 python3 -m unittest discover -s .github/scripts -p 'test_docs_*.py'
 python3 .github/scripts/check-docs-image-policy.py
 ```

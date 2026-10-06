@@ -1,5 +1,6 @@
 ---
-title: Metrics
+title: Observability Metrics
+sidebarTitle: Metrics
 description: Scrape Archestra's Prometheus metrics and look up every metric name and label
 order: 1
 lastUpdated: 2026-10-05
@@ -83,19 +84,19 @@ Users, skills, apps, and client-supplied IDs are not metric labels. Use these so
 
 | Metric | Type | Extra Labels | Measures |
 | --- | --- | --- | --- |
-| `llm_request_duration_seconds` | Histogram | `status_code` | LLM request duration |
-| `llm_tokens_total` | Counter | `type` (`input`, `output`) | Tokens used. `input` excludes prompt-cache tokens. |
-| `llm_cache_tokens_total` | Counter | `cache_type` (`read`, `write`) | Prompt-cache tokens read from or written to the provider cache |
-| `llm_token_usage` | Histogram | | Input plus output tokens per request |
-| `llm_cost_total` | Counter | `billing_mode`, `auth_method` | Estimated list-price cost in USD. Needs [model pricing](/docs/llm-proxy/costs-and-limits#model-pricing). |
-| `llm_cache_cost_total` | Counter | | Cost in USD of prompt-cache reads and writes |
-| `llm_cache_savings_total` | Counter | | USD saved by cache reads at the discounted price |
-| `llm_time_to_first_token_seconds` | Histogram | | Streaming: from the upstream call to the provider's first chunk |
-| `llm_time_to_first_byte_seconds` | Histogram | | Streaming: from request receipt to the first byte sent to the client |
-| `llm_tokens_per_second` | Histogram | | Output token throughput |
-| `llm_blocked_tools_total` | Counter | | Tool calls blocked by [tool policies](/docs/agents/guardrails) |
-| `agent_runs_total` | Counter | `external_agent_id` | Unique runs, counted by the [`X-Archestra-Run-Id`](/docs/llm-proxy#custom-headers) header |
-| `llm_active_users` | Gauge | `window` (`24h`, `7d`) only | Distinct users with at least one LLM request in the window |
+| <span id="llm_request_duration_seconds"></span>`llm_request_duration_seconds` | Histogram | `status_code` | LLM request duration |
+| <span id="llm_tokens_total"></span>`llm_tokens_total` | Counter | `type` (`input`, `output`) | Tokens used. `input` excludes prompt-cache tokens. |
+| <span id="llm_cache_tokens_total"></span>`llm_cache_tokens_total` | Counter | `cache_type` (`read`, `write`) | Prompt-cache tokens read from or written to the provider cache |
+| <span id="llm_token_usage"></span>`llm_token_usage` | Histogram | | Input plus output tokens per request |
+| <span id="llm_cost_total"></span>`llm_cost_total` | Counter | `billing_mode`, `auth_method` | Estimated list-price cost in USD. Needs [model pricing](/docs/llm-proxy/costs-and-limits#model-pricing). |
+| <span id="llm_cache_cost_total"></span>`llm_cache_cost_total` | Counter | | Cost in USD of prompt-cache reads and writes |
+| <span id="llm_cache_savings_total"></span>`llm_cache_savings_total` | Counter | | USD saved by cache reads at the discounted price |
+| <span id="llm_time_to_first_token_seconds"></span>`llm_time_to_first_token_seconds` | Histogram | | Streaming: from the upstream call to the provider's first chunk |
+| <span id="llm_time_to_first_byte_seconds"></span>`llm_time_to_first_byte_seconds` | Histogram | | Streaming: from request receipt to the first byte sent to the client |
+| <span id="llm_tokens_per_second"></span>`llm_tokens_per_second` | Histogram | | Output token throughput |
+| <span id="llm_blocked_tools_total"></span>`llm_blocked_tools_total` | Counter | | Tool calls blocked by [tool policies](/docs/agents/guardrails) |
+| <span id="agent_runs_total"></span>`agent_runs_total` | Counter | `external_agent_id` | Unique runs, counted by the [`X-Archestra-Run-Id`](/docs/llm-proxy#custom-headers) header |
+| <span id="llm_active_users"></span>`llm_active_users` | Gauge | `window` (`24h`, `7d`) only | Distinct users with at least one LLM request in the window |
 
 `billing_mode` is `metered` for per-token billing and `subscription` for flat-rate subscription credentials. Billed spend is `sum(llm_cost_total{billing_mode="metered"})`. `auth_method` is `provider_key`, `virtual_key`, `passthrough_virtual_key`, `jwks`, `oauth_client_credentials`, `oauth_user`, `internal`, or `unknown`.
 
@@ -109,11 +110,11 @@ LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data po
 
 | Metric | Type | Measures |
 | --- | --- | --- |
-| `mcp_tool_calls_total` | Counter | Tool calls through the [MCP Gateway](/docs/mcp/gateway) |
-| `mcp_tool_call_duration_seconds` | Histogram | Tool call duration |
-| `mcp_request_size_bytes` | Histogram | Tool call argument size |
-| `mcp_response_size_bytes` | Histogram | Tool call result size |
-| `mcp_server_deployment_status` | Gauge | State of each self-hosted MCP server, by `server_name` and `state` |
+| <span id="mcp_tool_calls_total"></span>`mcp_tool_calls_total` | Counter | Tool calls through the [MCP Gateway](/docs/mcp/gateway) |
+| <span id="mcp_tool_call_duration_seconds"></span>`mcp_tool_call_duration_seconds` | Histogram | Tool call duration |
+| <span id="mcp_request_size_bytes"></span>`mcp_request_size_bytes` | Histogram | Tool call argument size |
+| <span id="mcp_response_size_bytes"></span>`mcp_response_size_bytes` | Histogram | Tool call result size |
+| <span id="mcp_server_deployment_status"></span>`mcp_server_deployment_status` | Gauge | State of each self-hosted MCP server, by `server_name` and `state` |
 
 `mcp_server_deployment_status` is `1` for the server's current `state`: `not_created`, `pending`, `running`, `failed`, `succeeded`, `hibernated`, or `waking`. `count(mcp_server_deployment_status{state="running"} == 1)` counts running servers.
 
@@ -121,14 +122,14 @@ LLM and MCP metrics carry trace exemplars, so a Grafana panel can link a data po
 
 | Metric | Type | Labels | Measures |
 | --- | --- | --- | --- |
-| `agent_runtime_runs_started_total` | Counter | | [Agent Runtime](/docs/agents/runtime) runs that reached a running backend |
-| `agent_runtime_runs_terminated_total` | Counter | `outcome` | Finished runs: `completed`, `failed`, `stopped_by_user`, `expired_ttl`, or `expired_idle` |
-| `agent_runtime_provision_duration_seconds` | Histogram | | Startup time, including scheduling and image pulls |
-| `agent_runtime_steers_total` | Counter | `steer_mode` | Steering messages delivered into running sessions |
-| `agent_runtime_completion_deliveries_total` | Counter | `interface`, `outcome` | Final replies delivered to `chatops` or `email` |
-| `agent_runtime_health_tasks` | Gauge | `agent_id`, `backend`, `condition` | Current task counts per condition |
-| `agent_runtime_health_age_seconds` | Gauge | `agent_id`, `backend`, `condition` | Age of the oldest task per condition |
-| `agent_runtime_health_collection_timestamp_seconds` | Gauge | | Time of the last health snapshot |
+| <span id="agent_runtime_runs_started_total"></span>`agent_runtime_runs_started_total` | Counter | | [Agent Runtime](/docs/agents/runtime) runs that reached a running backend |
+| <span id="agent_runtime_runs_terminated_total"></span>`agent_runtime_runs_terminated_total` | Counter | `outcome` | Finished runs: `completed`, `failed`, `stopped_by_user`, `expired_ttl`, or `expired_idle` |
+| <span id="agent_runtime_provision_duration_seconds"></span>`agent_runtime_provision_duration_seconds` | Histogram | | Startup time, including scheduling and image pulls |
+| <span id="agent_runtime_steers_total"></span>`agent_runtime_steers_total` | Counter | `steer_mode` | Steering messages delivered into running sessions |
+| <span id="agent_runtime_completion_deliveries_total"></span>`agent_runtime_completion_deliveries_total` | Counter | `interface`, `outcome` | Final replies delivered to `chatops` or `email` |
+| <span id="agent_runtime_health_tasks"></span>`agent_runtime_health_tasks` | Gauge | `agent_id`, `backend`, `condition` | Current task counts per condition |
+| <span id="agent_runtime_health_age_seconds"></span>`agent_runtime_health_age_seconds` | Gauge | `agent_id`, `backend`, `condition` | Age of the oldest task per condition |
+| <span id="agent_runtime_health_collection_timestamp_seconds"></span>`agent_runtime_health_collection_timestamp_seconds` | Gauge | | Time of the last health snapshot |
 
 `agent_runtime_health_tasks` conditions are `working`, `submitted`, `input_required`, `auth_required`, `failed_recent` (the last 15 minutes), and `completion_pending`. Conditions overlap: a task waiting for authentication also counts as `working`. `agent_runtime_health_age_seconds` conditions are `heartbeat`, `submitted`, and `completion_pending`.
 
@@ -148,40 +149,40 @@ Add a pending period (`for: 5m`) to skip transient spikes.
 
 | Metric | Labels | Measures |
 | --- | --- | --- |
-| `rag_connector_syncs_total`, `rag_connector_sync_duration_seconds` | `connector_type`, `status` | Connector syncs (`success`, `failed`, or `partial`) and their duration |
-| `rag_documents_processed_total`, `rag_documents_ingested_total`, `rag_chunks_created_total` | `connector_type` | Documents read, documents added or updated, and chunks created |
-| `rag_documents_without_text_total` | `connector_type` | Documents skipped because they have no extractable text |
-| `rag_ocr_pages_total` | `connector_type`, `outcome` | Scanned PDF pages sent to OCR |
-| `rag_embedding_batches_total`, `rag_embedding_documents_total` | `status` | Embedding batches and documents |
-| `rag_queries_total`, `rag_query_duration_seconds`, `rag_query_results_count` | `search_type` | Searches, their end-to-end duration, and results returned |
-| `rag_search_lane_timeout_total` | `lane` | Search lanes cut by the database statement timeout |
-| `rag_quote_verification_total` | `result` | Chat-answer quotes checked against their cited source |
-| `rag_permission_syncs_total` | `connector_type`, `status` | Permission sync passes |
+| <span id="rag_connector_syncs_total"></span>`rag_connector_syncs_total`, <span id="rag_connector_sync_duration_seconds"></span>`rag_connector_sync_duration_seconds` | `connector_type`, `status` | Connector syncs (`success`, `failed`, or `partial`) and their duration |
+| <span id="rag_documents_processed_total"></span>`rag_documents_processed_total`, <span id="rag_documents_ingested_total"></span>`rag_documents_ingested_total`, <span id="rag_chunks_created_total"></span>`rag_chunks_created_total` | `connector_type` | Documents read, documents added or updated, and chunks created |
+| <span id="rag_documents_without_text_total"></span>`rag_documents_without_text_total` | `connector_type` | Documents skipped because they have no extractable text |
+| <span id="rag_ocr_pages_total"></span>`rag_ocr_pages_total` | `connector_type`, `outcome` | Scanned PDF pages sent to OCR |
+| <span id="rag_embedding_batches_total"></span>`rag_embedding_batches_total`, <span id="rag_embedding_documents_total"></span>`rag_embedding_documents_total` | `status` | Embedding batches and documents |
+| <span id="rag_queries_total"></span>`rag_queries_total`, <span id="rag_query_duration_seconds"></span>`rag_query_duration_seconds`, <span id="rag_query_results_count"></span>`rag_query_results_count` | `search_type` | Searches, their end-to-end duration, and results returned |
+| <span id="rag_search_lane_timeout_total"></span>`rag_search_lane_timeout_total` | `lane` | Search lanes cut by the database statement timeout |
+| <span id="rag_quote_verification_total"></span>`rag_quote_verification_total` | `result` | Chat-answer quotes checked against their cited source |
+| <span id="rag_permission_syncs_total"></span>`rag_permission_syncs_total` | `connector_type`, `status` | Permission sync passes |
 | `rag_permission_sync_*` | `connector_type` | Permission sync gaps: group failures, dropped principals, ACL over-approximations, unreadable containers, restriction fallbacks, and skipped identity lookups |
-| `rag_access_token_truncations_total` | `kind` | Users whose group memberships exceeded the per-user cap at query time |
-| `rag_knowledge_query_unresolved_identity_total` | | Searches limited to organization-wide documents because the caller had no email |
+| <span id="rag_access_token_truncations_total"></span>`rag_access_token_truncations_total` | `kind` | Users whose group memberships exceeded the per-user cap at query time |
+| <span id="rag_knowledge_query_unresolved_identity_total"></span>`rag_knowledge_query_unresolved_identity_total` | | Searches limited to organization-wide documents because the caller had no email |
 
 ## Skill and Sandbox Metrics
 
 | Metric | Labels | Measures |
 | --- | --- | --- |
-| `skill_activations_total` | `activation_type` | [Skill](/docs/agents/skills) activations: `slash_command`, `chat_attachment`, [`load_skill`](/docs/reference/archestra-mcp-server#load_skill), or `delegation` |
-| `skill_context_tokens_total` | `activation_type` | Tokens that skill activations added to model context |
-| `sandbox_commands_total`, `sandbox_command_duration_seconds` | `status` | [Code Sandbox](/docs/agents#code-sandbox) commands: `ok`, `script_error`, `timeout`, or `runtime_error` |
-| `sandbox_runtime_errors_total` | `code` | Sandbox runtime errors. `engine_unreachable` means the sandbox engine is down. |
-| `sandbox_runtime_status` | `status` | `1` for the runtime's current status: `disabled`, `initializing`, `ready`, `error`, or `stopped` |
+| <span id="skill_activations_total"></span>`skill_activations_total` | `activation_type` | [Skill](/docs/agents/skills) activations: `slash_command`, `chat_attachment`, [`load_skill`](/docs/reference/archestra-mcp-server#load_skill), or `delegation` |
+| <span id="skill_context_tokens_total"></span>`skill_context_tokens_total` | `activation_type` | Tokens that skill activations added to model context |
+| <span id="sandbox_commands_total"></span>`sandbox_commands_total`, <span id="sandbox_command_duration_seconds"></span>`sandbox_command_duration_seconds` | `status` | [Code Sandbox](/docs/agents#code-sandbox) commands: `ok`, `script_error`, `timeout`, or `runtime_error` |
+| <span id="sandbox_runtime_errors_total"></span>`sandbox_runtime_errors_total` | `code` | Sandbox runtime errors. `engine_unreachable` means the sandbox engine is down. |
+| <span id="sandbox_runtime_status"></span>`sandbox_runtime_status` | `status` | `1` for the runtime's current status: `disabled`, `initializing`, `ready`, `error`, or `stopped` |
 
 ## Background Task Metrics
 
 | Metric | Labels | Measures |
 | --- | --- | --- |
-| `task_queue_tasks_enqueued_total`, `task_queue_tasks_completed_total` | `task_type` | Tasks queued and completed |
-| `task_queue_tasks_failed_total` | `task_type` | Failed attempts. The task may be retried. |
-| `task_queue_tasks_dead_total` | `task_type` | Tasks that ran out of retries |
-| `task_queue_task_duration_seconds` | `task_type` | Task duration |
-| `task_queue_active_tasks` | `task_type` | Tasks running now |
-| `task_queue_stuck_tasks_reset_total` | | Stuck tasks returned to the queue |
-| `schedule_trigger_runs_total` | `agent_name`, `status` | [Scheduled task](/docs/chat/projects#scheduled-tasks) runs: `success`, `failed`, or `cancelled` |
+| <span id="task_queue_tasks_enqueued_total"></span>`task_queue_tasks_enqueued_total`, <span id="task_queue_tasks_completed_total"></span>`task_queue_tasks_completed_total` | `task_type` | Tasks queued and completed |
+| <span id="task_queue_tasks_failed_total"></span>`task_queue_tasks_failed_total` | `task_type` | Failed attempts. The task may be retried. |
+| <span id="task_queue_tasks_dead_total"></span>`task_queue_tasks_dead_total` | `task_type` | Tasks that ran out of retries |
+| <span id="task_queue_task_duration_seconds"></span>`task_queue_task_duration_seconds` | `task_type` | Task duration |
+| <span id="task_queue_active_tasks"></span>`task_queue_active_tasks` | `task_type` | Tasks running now |
+| <span id="task_queue_stuck_tasks_reset_total"></span>`task_queue_stuck_tasks_reset_total` | | Stuck tasks returned to the queue |
+| <span id="schedule_trigger_runs_total"></span>`schedule_trigger_runs_total` | `agent_name`, `status` | [Scheduled task](/docs/chat/projects#scheduled-tasks) runs: `success`, `failed`, or `cancelled` |
 
 Common `task_type` values are `connector_sync`, `batch_embedding`, `permission_sync`, and `schedule_trigger_run_execute`.
 
@@ -189,12 +190,12 @@ Common `task_type` values are `connector_sync`, `batch_embedding`, `permission_s
 
 | Metric | Labels | Measures |
 | --- | --- | --- |
-| `http_request_duration_seconds`, `http_request_summary_seconds` | `method`, `route`, `status_code` | API request duration, as a histogram and as a summary with quantiles |
-| `database_pool_connections` | `state` | Database pool connections: `total`, `idle`, and `waiting` |
-| `database_pool_size_limit` | | Maximum pool size per process |
-| `audit_write_failures_total` | `source`, `resource_type` | Audit log rows that failed to save |
-| `file_storage_orphaned_objects_total` | `provider`, `scope` | Stored files left behind by a failed delete |
-| `chat_message_feedback_total` | `feedback` | Thumbs up, thumbs down, and cleared ratings on chat answers |
+| <span id="http_request_duration_seconds"></span>`http_request_duration_seconds`, <span id="http_request_summary_seconds"></span>`http_request_summary_seconds` | `method`, `route`, `status_code` | API request duration, as a histogram and as a summary with quantiles |
+| <span id="database_pool_connections"></span>`database_pool_connections` | `state` | Database pool connections: `total`, `idle`, and `waiting` |
+| <span id="database_pool_size_limit"></span>`database_pool_size_limit` | | Maximum pool size per process |
+| <span id="audit_write_failures_total"></span>`audit_write_failures_total` | `source`, `resource_type` | Audit log rows that failed to save |
+| <span id="file_storage_orphaned_objects_total"></span>`file_storage_orphaned_objects_total` | `provider`, `scope` | Stored files left behind by a failed delete |
+| <span id="chat_message_feedback_total"></span>`chat_message_feedback_total` | `feedback` | Thumbs up, thumbs down, and cleared ratings on chat answers |
 | `process_*`, `nodejs_*` | | Standard Node.js process metrics: CPU, memory, heap, event loop lag, and garbage collection |
 
 ## Example Queries

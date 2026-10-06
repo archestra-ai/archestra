@@ -314,6 +314,40 @@ describe("Connect agent instructions", () => {
     expect(instructions).not.toContain("opencode mcp auth");
   });
 
+  it("sets up only what the generic prompt did not leave out", async () => {
+    const response = GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&exclude=skills&base=https://edge.example/v1/",
+      ),
+    );
+    const instructions = await response.text();
+
+    expect(instructions).toContain(
+      "Gateway URL: https://edge.example/v1/mcp/team",
+    );
+    expect(instructions).toContain("### Model requests: LLM proxy");
+    expect(instructions).not.toContain("### Skills");
+    expect(instructions).toContain(
+      "http://localhost:3000/disconnect.md?client=generic&base=https://edge.example/v1 and follow it.",
+    );
+  });
+
+  it("ignores a base that is not an http(s) URL", async () => {
+    const response = GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&base=javascript:alert(1)",
+      ),
+    );
+    const instructions = await response.text();
+
+    expect(instructions).toContain(
+      "Gateway URL: http://localhost:3000/v1/mcp/team",
+    );
+    expect(instructions).toContain(
+      "disconnect.md?client=generic and follow it.",
+    );
+  });
+
   it("keeps the full instructions for an unknown client", async () => {
     const response = GET(
       new Request("http://localhost:3000/connect.md?client=unknown"),

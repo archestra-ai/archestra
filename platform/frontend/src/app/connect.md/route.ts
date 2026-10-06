@@ -1,8 +1,10 @@
 import {
   type ConnectSetupPart,
+  INSTALLER_CLIENT_IDS,
+  INSTALLER_CLIENT_LABELS,
   parseConnectExclude,
 } from "@archestra/shared/connection-setup";
-import { requestOrigin } from "@/lib/request-origin";
+import { deploymentTarget, requestOrigin } from "@/lib/request-origin";
 
 const opencodeRestartInstruction =
   "Do not stop or restart OpenCode from inside this conversation. Finish your reply and ask the user to save work, close OpenCode normally, then launch `opencode` in a new terminal.";
@@ -43,7 +45,7 @@ No preinstalled skill or platform credentials are needed to start.
 ## Requirements
 
 The terminal needs Node.js 18 or newer and access to this deployment.
-Supported clients: claude-code, claude-desktop, cursor, codex, copilot-cli, opencode.
+Supported clients: ${INSTALLER_CLIENT_IDS.join(", ")}.
 Supported operating systems: macOS, Linux, Windows.
 Ask which client to configure only if the current client is unknown.
 
@@ -244,11 +246,13 @@ The approval request expires after ten minutes. Denial or expiry requires a new 
  * URL the user picked (`base`).
  */
 function genericInstructions(origin: string, params: URLSearchParams): string {
-  const base = params.get("base") ?? `${origin}/v1`;
+  const { base } = deploymentTarget(origin, params.get("base"));
   const gateway = params.get("gateway");
-  const setup = new Set((params.get("setup") ?? "").split(","));
+  const exclude = new Set(parseConnectExclude(params.get("exclude")));
+  const disconnectParams = new URLSearchParams({ client: "generic" });
+  if (base !== `${origin}/v1`) disconnectParams.set("base", base);
   const parts: string[] = [];
-  if (setup.has("tools") && gateway) {
+  if (!exclude.has("tools") && gateway) {
     parts.push(`### Tools: MCP gateway
 
 Gateway URL: ${base}/mcp/${gateway}
@@ -259,7 +263,7 @@ an environment variable for the token in the config and ask the user to create a
 under Tools on ${origin}/connection?clientId=generic&mode=manual and set the variable
 themselves.`);
   }
-  if (setup.has("skills")) {
+  if (!exclude.has("skills")) {
     parts.push(`### Skills: shared skills marketplace
 
 Only if the app loads agent skills (folders with a SKILL.md) or a skills marketplace.
@@ -269,7 +273,7 @@ user sets up themselves: point them to Install shared skills on
 ${origin}/connection?clientId=generic&mode=manual. Then clone it and register the
 clone, or its skills folder, the way the app expects.`);
   }
-  if (setup.has("models")) {
+  if (!exclude.has("proxy")) {
     parts.push(`### Model requests: LLM proxy
 
 Only if the app lets you change its model provider's base URL. Keep the provider, model
@@ -308,7 +312,8 @@ ${parts.join("\n\n")}
 Reload or restart the app if it needs to. Confirm the gateway lists tools, and if the
 proxy was set up, send a short test prompt and confirm it still answers.
 Report what was set up, what was skipped and why, the config files you changed with
-their backups, and how to disconnect: remove what you added and restore the backups.
+their backups, and how to disconnect: read
+${origin}/disconnect.md?${decodeURIComponent(disconnectParams.toString())} and follow it.
 `
 }
 Never ask the user to paste passwords, session cookies, tokens or provider keys into
@@ -323,30 +328,30 @@ function focusedClientDetails(client: string): {
   switch (client) {
     case "claude-code":
       return {
-        label: "Claude Code",
+        label: INSTALLER_CLIENT_LABELS["claude-code"],
         finish:
           "Open a new Claude Code session so the gateway registers. In that new session, open /mcp, select the configured server, and authenticate. Verify that it lists tools. Follow the setup output for model proxy settings; send a short test prompt before reporting inference as working.",
       };
     case "cursor":
       return {
-        label: "Cursor",
+        label: INSTALLER_CLIENT_LABELS["cursor"],
         finish:
           "Reload Cursor. Open Customize > MCPs, authenticate the configured gateway, and verify it lists tools. Confirm installed shared skills under Customize > Skills. Cursor discovers nested skills in ~/.cursor/skills/. If runtime handoff User Rules were printed, ask the user to paste them under Customize > Rules > User Rules without replacing existing rules. If the model proxy was selected, find 'Cursor model settings (manual step)' in the installer output. Tell the user where to find the printed proxy URL and, for virtual-key setup, the printed virtual key; otherwise they need their own OpenAI API key. Do not quote a secret key in chat. Ask the user to enter these values under Settings > Models > API Keys, then enable Use OpenAI API Key and Override OpenAI Base URL. A Cursor subscription cannot authenticate the proxy. Send a test prompt and confirm the request appears in this deployment. Installation alone does not complete these native steps; state exactly which checks remain unverified.",
       };
     case "codex":
       return {
-        label: "Codex",
+        label: INSTALLER_CLIENT_LABELS["codex"],
         finish: CODEX_FINISH_INSTRUCTIONS,
       };
     case "copilot-cli":
       return {
-        label: "Copilot CLI",
+        label: INSTALLER_CLIENT_LABELS["copilot-cli"],
         finish:
           "Follow the setup output to restart Copilot CLI and complete native gateway OAuth. Verify that the gateway lists tools. If a model proxy was selected, send a short prompt and verify that inference reaches this deployment.",
       };
     case "opencode":
       return {
-        label: "OpenCode",
+        label: INSTALLER_CLIENT_LABELS["opencode"],
         finish: `Run opencode mcp list. If SERVER_NAME is connected, skip authentication. Otherwise run opencode mcp auth list; if authentication is missing or expired, run CI=true opencode mcp auth SERVER_NAME and keep the process running while the user completes native OAuth consent. Do not start a second auth process while one is pending. Run opencode mcp list again. ${opencodeRestartInstruction} Ask the user to verify gateway tools and any selected model proxy in that new session. State that the connection remains unverified until those checks pass.`,
       };
     default:

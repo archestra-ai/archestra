@@ -145597,10 +145597,10 @@
                     "type": "string",
                     "enum": [
                       "claude-code",
-                      "claude-desktop",
-                      "codex",
-                      "copilot-cli",
                       "cursor",
+                      "codex",
+                      "claude-desktop",
+                      "copilot-cli",
                       "opencode"
                     ]
                   },
@@ -146233,10 +146233,10 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
-                        "claude-desktop",
-                        "codex",
-                        "copilot-cli",
                         "cursor",
+                        "codex",
+                        "claude-desktop",
+                        "copilot-cli",
                         "opencode"
                       ]
                     },
@@ -146602,10 +146602,10 @@
                       "type": "string",
                       "enum": [
                         "claude-code",
-                        "claude-desktop",
-                        "codex",
-                        "copilot-cli",
                         "cursor",
+                        "codex",
+                        "claude-desktop",
+                        "copilot-cli",
                         "opencode"
                       ]
                     },
@@ -147991,10 +147991,10 @@
                         "type": "string",
                         "enum": [
                           "claude-code",
-                          "claude-desktop",
-                          "codex",
-                          "copilot-cli",
                           "cursor",
+                          "codex",
+                          "claude-desktop",
+                          "copilot-cli",
                           "opencode",
                           "amp"
                         ]
@@ -148270,10 +148270,10 @@
               "type": "string",
               "enum": [
                 "claude-code",
-                "claude-desktop",
-                "codex",
-                "copilot-cli",
                 "cursor",
+                "codex",
+                "claude-desktop",
+                "copilot-cli",
                 "opencode",
                 "amp"
               ]
@@ -148557,10 +148557,10 @@
                     "type": "string",
                     "enum": [
                       "claude-code",
-                      "claude-desktop",
-                      "codex",
-                      "copilot-cli",
                       "cursor",
+                      "codex",
+                      "claude-desktop",
+                      "copilot-cli",
                       "opencode"
                     ]
                   },
@@ -149147,10 +149147,10 @@
                     "type": "string",
                     "enum": [
                       "claude-code",
-                      "claude-desktop",
-                      "codex",
-                      "copilot-cli",
                       "cursor",
+                      "codex",
+                      "claude-desktop",
+                      "copilot-cli",
                       "opencode"
                     ]
                   },
@@ -149334,10 +149334,10 @@
                             "type": "string",
                             "enum": [
                               "claude-code",
-                              "claude-desktop",
-                              "codex",
-                              "copilot-cli",
                               "cursor",
+                              "codex",
+                              "claude-desktop",
+                              "copilot-cli",
                               "opencode"
                             ]
                           }

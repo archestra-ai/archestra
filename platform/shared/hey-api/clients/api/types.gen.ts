@@ -40029,7 +40029,7 @@ export type GetClientConnectionInstallerResponses = {
 
 export type StartClientConnectionData = {
     body: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
         exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         deviceName?: string;
@@ -40284,7 +40284,7 @@ export type GetClientConnectionResponses = {
      * Default Response
      */
     200: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
         exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
         deviceName: string | null;
@@ -40380,7 +40380,7 @@ export type DecideClientConnectionResponses = {
      */
     200: {
         status: 'approved' | 'denied';
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
     };
 };
@@ -40788,7 +40788,7 @@ export type GetConnectedClientsResponses = {
      * Default Response
      */
     200: Array<{
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'amp';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'amp';
         lastConnectedAt: string;
         deviceNames: Array<string>;
     }>;
@@ -40799,7 +40799,7 @@ export type GetConnectedClientsResponse = GetConnectedClientsResponses[keyof Get
 export type DisconnectConnectedClientData = {
     body?: never;
     path: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode' | 'amp';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'amp';
     };
     query?: never;
     url: '/api/connected-clients/{clientId}';
@@ -40883,7 +40883,7 @@ export type DisconnectConnectedClientResponse = DisconnectConnectedClientRespons
 
 export type BeginConnectionPromptSessionData = {
     body: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         origin: string;
     };
     path?: never;
@@ -41057,7 +41057,7 @@ export type GetConnectionHealthResponse = GetConnectionHealthResponses[keyof Get
 
 export type CreateConnectionSetupData = {
     body: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform?: 'macos' | 'linux' | 'windows';
         baseUrl: string;
         mcpGatewayId?: string;
@@ -41160,7 +41160,7 @@ export type CreateConnectionSetupResponses = {
             id: string;
             pluginSlug: string;
             displayName: string;
-            clientType: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+            clientType: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         }>;
     };
 };

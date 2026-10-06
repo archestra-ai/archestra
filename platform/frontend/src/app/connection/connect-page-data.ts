@@ -8,6 +8,8 @@ import { archestraApiSdk, type SupportedProvider } from "@archestra/shared";
 import {
   buildConnectionPrompt,
   CONNECT_SETUP_PARTS,
+  INSTALLER_CLIENT_FOOTPRINT,
+  INSTALLER_CLIENT_IDS,
 } from "@archestra/shared/connection-setup";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
@@ -159,39 +161,12 @@ export interface ConnectPageData {
   ) => string;
 }
 
-const FEATURED = [
-  "claude-code",
-  "cursor",
-  "codex",
-  "claude-desktop",
-  "copilot-cli",
-  "opencode",
-];
+/** What connect.md?client=generic can set up; it has no plugins. */
+const GENERIC_PARTS = ["tools", "skills", "proxy"] as const;
 
-/** What the setup script writes per client (services/connection-setup-script.ts). */
+/** What a setup leaves on the machine, per app (n8n has no installer). */
 const LOCAL_CHANGES: Record<string, string[]> = {
-  "claude-code": [
-    "MCP server entry (claude mcp add, user scope)",
-    "Archestra plugin and skills",
-    "~/.claude/settings.json (model routing)",
-    "Startup check in your shell profile",
-  ],
-  cursor: [
-    "~/.cursor/mcp.json",
-    "~/.cursor/skills/",
-    "Startup check in your shell profile",
-  ],
-  codex: ["~/.codex/config.toml", "Startup check in your shell profile"],
-  "copilot-cli": [
-    "~/.config/github-copilot/apps.json and hosts.json",
-    "Startup check in your shell profile",
-  ],
-  opencode: [
-    "opencode.json",
-    "~/.archestra state file",
-    "Startup check in your shell profile",
-  ],
-  "claude-desktop": ["A Claude Desktop profile for Archestra"],
+  ...INSTALLER_CLIENT_FOOTPRINT,
   n8n: ["The MCP Client Tool node you added in n8n"],
 };
 
@@ -287,7 +262,7 @@ export function useConnectPageData(): ConnectPageData {
     const set = new Set(shown);
     return CONNECT_CLIENTS.filter((c) => c.id === "generic" || set.has(c.id));
   }, [org?.connectionShownClientIds]);
-  const featuredClients = FEATURED.map((id) =>
+  const featuredClients = INSTALLER_CLIENT_IDS.map((id) =>
     clients.find((c) => c.id === id),
   ).filter((c): c is ConnectClient => !!c);
 
@@ -409,17 +384,12 @@ export function useConnectPageData(): ConnectPageData {
         });
       }
       // Other agents: connect.md?client=generic checks what the app supports
-      // and reads what to set up from these params.
-      const setup = [
-        on("tools") && "tools",
-        on("skills") && "skills",
-        on("proxy") && "models",
-      ].filter((part): part is string => !!part);
-      if (setup.length === 0) return null;
+      // and reads what to leave out from these params (no plugins there).
+      const exclude = GENERIC_PARTS.filter((part) => !on(part));
+      if (exclude.length === GENERIC_PARTS.length) return null;
       const params = new URLSearchParams({ client: "generic" });
-      if (gateway && setup.includes("tools"))
-        params.set("gateway", gateway.slug);
-      params.set("setup", setup.join(","));
+      if (gateway && on("tools")) params.set("gateway", gateway.slug);
+      if (exclude.length > 0) params.set("exclude", exclude.join(","));
       // connect.md falls back to this page's own origin.
       if (baseUrl !== `${origin}/v1`) params.set("base", baseUrl);
       return `Read ${origin}/connect.md?${decodeURIComponent(params.toString())} and connect ${client.label}.`;
@@ -434,12 +404,13 @@ export function useConnectPageData(): ConnectPageData {
     },
     disconnectPrompt: (client) => {
       // Same split as connectPrompt: apps with an installer get their own
-      // steps; other agents get the generic ones, pointed at the same base.
-      if (!usesGenericInstructions(client))
-        return `Read ${origin}/disconnect.md?client=${encodeURIComponent(client.id)} and disconnect ${client.label} from Archestra.`;
-      const params = new URLSearchParams({ client: "generic" });
+      // steps; other agents get the generic ones. Both point at the base the
+      // setup wrote, when it isn't this page's own.
+      const params = new URLSearchParams({
+        client: usesGenericInstructions(client) ? "generic" : client.id,
+      });
       if (baseUrl !== `${origin}/v1`) params.set("base", baseUrl);
-      return `Read ${origin}/disconnect.md?${decodeURIComponent(params.toString())} and disconnect ${client.label} from Archestra.`;
+      return `Read ${origin}/disconnect.md?${decodeURIComponent(params.toString())} and disconnect ${client.label} from ${appName}.`;
     },
   };
 }

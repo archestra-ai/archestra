@@ -1042,34 +1042,40 @@ function footprintSummary(
  * What to do once the installer finishes, short. The setup script prints the
  * full list (nextStepsFor in backend/src/services/connection-setup-script.ts).
  */
+/**
+ * The Script option's "When it finishes" list. Wording follows the setup
+ * script's own Next steps (nextStepsFor in
+ * backend/src/services/connection-setup-script.ts), shortened to the lines
+ * that apply to every setup; the full list prints at the end of the output.
+ */
 function scriptNextSteps(client: ConnectClient): string[] {
   switch (client.id) {
     case "claude-code":
       return [
-        "Open a new terminal and start claude.",
-        "Run /mcp, pick the gateway and sign in through the browser. Skills load on their own.",
+        "Open a new terminal (or source your shell profile) so the startup guard takes effect.",
+        "Start a new claude session, run /mcp there, select the gateway, and sign in via your browser. The shared skills load automatically.",
       ];
     case "cursor":
       return [
-        "Reload Cursor.",
-        "Open Customize > MCPs and sign in to the gateway.",
-        'If the output shows "Cursor model settings", enter them under Settings > Models > API Keys.',
+        "Open Cursor Customize → MCPs and authenticate the gateway; Cursor handles the OAuth flow.",
+        "Apply the Cursor model settings printed by the script (Settings → Models → OpenAI API Key).",
+        "Reload Cursor, then open Customize → Skills to confirm the shared skills are available.",
       ];
     case "codex":
       return [
+        'If registration printed "Successfully logged in.", do not repeat login. Otherwise run codex mcp login with the server name it prints.',
         "Open a new terminal and run codex.",
-        'If the output doesn\'t say "Successfully logged in.", run the codex mcp login command it prints.',
-        "For skills, run /plugins and install the plugin.",
+        'Run /plugins inside Codex and pick "Install Plugin" to install the included skills.',
       ];
     case "copilot-cli":
       return [
-        "Restart Copilot. It opens the browser to sign in to the gateway.",
-        "If the output prints export lines, add them to your shell profile.",
+        "Copilot opens your browser to complete OAuth when the gateway asks for it.",
+        "Paste the export lines the script prints into your shell profile.",
       ];
     case "opencode":
       return [
-        "Close OpenCode and start it again in a new terminal.",
-        "If the gateway isn't connected, run the opencode mcp auth command it prints.",
+        "Close OpenCode and launch opencode in a new terminal; the startup guard checks the connection on that launch.",
+        "If the gateway isn't connected, run the opencode mcp auth command the script prints.",
       ];
     default:
       return [`Restart ${nameOf(client)}.`];

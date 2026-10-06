@@ -226,7 +226,7 @@ describe("ConnectPage (no connect request)", () => {
     render(<ConnectionPage />);
     expect(
       screen.getByText(
-        /connect\.md\?client=generic&gateway=team&setup=tools(&base=[^ ]+)? and connect /,
+        /connect\.md\?client=generic&gateway=team&exclude=skills,proxy(&base=[^ ]+)? and connect /,
       ),
     ).toBeVisible();
   });

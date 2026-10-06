@@ -1,5 +1,17 @@
 import { ARCHESTRA_TOKEN_PREFIX } from "@archestra/shared";
-import { requestOrigin } from "@/lib/request-origin";
+import {
+  CLAUDE_DESKTOP_PROFILE_ID,
+  INSTALLER_CLIENT_IDS,
+  INSTALLER_CLIENT_LABELS,
+  type InstallerClientId,
+  isInstallerClientId,
+  startupGuardStem,
+} from "@archestra/shared/connection-setup";
+import {
+  type DeploymentTarget,
+  deploymentTarget,
+  requestOrigin,
+} from "@/lib/request-origin";
 
 /**
  * Agent instructions that undo what the connect setup installed in one client:
@@ -27,48 +39,12 @@ export function GET(request: Request) {
   });
 }
 
-/**
- * Where the client's config points. Setup writes URLs under the connection base
- * URL the user picked (`base`, e.g. https://host/v1), which can be another host
- * than this page; without it, assume this origin.
- */
-interface Target {
-  /** The connection page origin, for links. */
-  origin: string;
-  /** Connection base URL, e.g. https://host/v1. */
-  base: string;
-  /** Origin of the base URL: proxy, gateway and skills all live on it. */
-  host: string;
-}
-
-function deploymentTarget(origin: string, base: string | null): Target {
-  try {
-    const url = new URL(base ?? "");
-    if (url.protocol === "http:" || url.protocol === "https:") {
-      const path = url.pathname.replace(/\/+$/, "");
-      return { origin, base: `${url.origin}${path}`, host: url.origin };
-    }
-  } catch {
-    // fall through to this origin
-  }
-  return { origin, base: `${origin}/v1`, host: origin };
-}
-
-const CLIENT_IDS = [
-  "claude-code",
-  "claude-desktop",
-  "cursor",
-  "codex",
-  "copilot-cli",
-  "opencode",
-];
-
 function pickClientInstructions(origin: string): string {
   return `# Disconnect This Client
 
 Remove what the ${origin} connect setup added to the coding client running this
 conversation. Work out which client that is; ask only if it is unknown.
-Supported clients: ${CLIENT_IDS.join(", ")}.
+Supported clients: ${INSTALLER_CLIENT_IDS.join(", ")}.
 
 Then read ${origin}/disconnect.md?client=CLIENT_ID with CLIENT_ID replaced, and follow it.
 In Claude Desktop's Cowork or Code tab, the client ID is claude-desktop, not claude-code.
@@ -78,7 +54,7 @@ For any other app, read ${origin}/disconnect.md?client=generic.
 
 /** The plan → yes → back up → remove → verify flow every client shares. */
 function instructions(params: {
-  target: Target;
+  target: DeploymentTarget;
   label: string;
   inventory: string;
   remove: string;
@@ -126,19 +102,14 @@ this conversation, and never print a secret.
 }
 
 interface GuardClient {
-  label: string;
-  /** File stem under ~/.archestra, e.g. "claude" for claude-startup-guard.sh. */
-  guard: string;
   binary: string;
   inventory: string;
   manual: string;
   finish: string;
 }
 
-const GUARD_CLIENTS: Record<string, GuardClient> = {
+const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
   "claude-code": {
-    label: "Claude Code",
-    guard: "claude",
     binary: "claude",
     inventory: `- MCP: claude mcp list. The gateway is the server whose URL starts with {{BASE}}/mcp/.
 - Skills and plugins: the marketplace cloned from {{HOST}}/skills/ (claude plugin marketplace list,
@@ -159,8 +130,6 @@ const GUARD_CLIENTS: Record<string, GuardClient> = {
       "Tell the user to open a new terminal and start a new Claude Code session; the current one keeps the old configuration.",
   },
   codex: {
-    label: "Codex",
-    guard: "codex",
     binary: "codex",
     inventory: `- MCP: codex mcp list. The gateway is the server whose URL starts with {{BASE}}/mcp/.
 - Skills and plugins: the [marketplaces.MARKETPLACE] table in \${CODEX_HOME:-~/.codex}/config.toml
@@ -181,8 +150,6 @@ const GUARD_CLIENTS: Record<string, GuardClient> = {
       "Tell the user to start a new Codex session, and to run codex login if Codex was signed out.",
   },
   "copilot-cli": {
-    label: "Copilot CLI",
-    guard: "copilot",
     binary: "copilot",
     inventory: `- MCP: the mcpServers entry in ~/.copilot/mcp-config.json whose URL starts with {{BASE}}/mcp/.
 - Skills and plugins: the extraKnownMarketplaces entry in ~/.copilot/settings.json cloned
@@ -199,8 +166,6 @@ const GUARD_CLIENTS: Record<string, GuardClient> = {
       "Tell the user to open a new terminal so the removed environment variables are gone.",
   },
   opencode: {
-    label: "OpenCode",
-    guard: "opencode",
     binary: "opencode",
     inventory: `- Config: \${XDG_CONFIG_HOME:-~/.config}/opencode/opencode.json. The gateway is the mcp
   entry whose URL starts with {{BASE}}/mcp/. The proxy is a provider entry whose
@@ -219,23 +184,29 @@ const GUARD_CLIENTS: Record<string, GuardClient> = {
   },
 };
 
-function focusedInstructions(target: Target, client: string): string | null {
+function focusedInstructions(
+  target: DeploymentTarget,
+  client: string,
+): string | null {
+  if (!isInstallerClientId(client)) return null;
   const details = GUARD_CLIENTS[client];
-  if (!details) {
+  const guard = startupGuardStem(client);
+  if (!details || !guard) {
     return client === "cursor" ? cursorInstructions(target) : null;
   }
+  const label = INSTALLER_CLIENT_LABELS[client];
   const withOrigin = (text: string) =>
     text
       .replaceAll("{{BASE}}", target.base)
       .replaceAll("{{HOST}}", target.host);
-  const guardSh = `~/.archestra/${details.guard}-startup-guard.sh`;
-  const guardPs = `$HOME\\.archestra\\${details.guard}-startup-guard.ps1`;
+  const guardSh = `~/.archestra/${guard}-startup-guard.sh`;
+  const guardPs = `$HOME\\.archestra\\${guard}-startup-guard.ps1`;
   return instructions({
     target,
-    label: details.label,
+    label,
     inventory: `${withOrigin(details.inventory)}
 - Startup check: ${guardSh} (Windows: ${guardPs}) and the
-  "# >>> archestra ${details.guard} guard >>>" block in your shell profiles
+  "# >>> archestra ${guard} guard >>>" block in your shell profiles
   (~/.zshrc, ~/.bashrc, ~/.bash_profile, ~/.bash_login, ~/.profile; on Windows,
   profile.ps1 under Documents\\WindowsPowerShell and Documents\\PowerShell).
   It wraps \`${details.binary}\` and checks the connection before every launch.
@@ -259,19 +230,19 @@ then run it again. If a part the plan keeps would be removed, use the manual ste
 ### Otherwise, by hand
 
 ${withOrigin(details.manual)}
-- Delete the "# >>> archestra ${details.guard} guard >>>" through
-  "# <<< archestra ${details.guard} guard <<<" block from each shell profile, then delete
-  ~/.archestra/${details.guard}-startup-guard.* (the script, .skip, .prompt.md and
+- Delete the "# >>> archestra ${guard} guard >>>" through
+  "# <<< archestra ${guard} guard <<<" block from each shell profile, then delete
+  ~/.archestra/${guard}-startup-guard.* (the script, .skip, .prompt.md and
   .instructions files). Remove ~/.archestra only if it is then empty.`,
     finish: details.finish,
   });
 }
 
-function cursorInstructions(target: Target): string {
+function cursorInstructions(target: DeploymentTarget): string {
   const { base, host } = target;
   return instructions({
     target,
-    label: "Cursor",
+    label: INSTALLER_CLIENT_LABELS.cursor,
     inventory: `- MCP: the mcpServers entry in ~/.cursor/mcp.json whose URL starts with ${base}/mcp/.
 - Skills: a folder in ~/.cursor/skills/ that is a git clone of ${host}/skills/
   (check with git -C FOLDER remote get-url origin).
@@ -287,10 +258,10 @@ function cursorInstructions(target: Target): string {
   });
 }
 
-function claudeDesktopInstructions(target: Target): string {
+function claudeDesktopInstructions(target: DeploymentTarget): string {
   return instructions({
     target,
-    label: "Claude Desktop",
+    label: INSTALLER_CLIENT_LABELS["claude-desktop"],
     inventory: `This runs on the user's host computer. Cowork's code-execution terminal is a VM or
 cloud sandbox, so do not change anything there. If you have no permitted host-terminal
 access, give the user these steps instead.
@@ -314,10 +285,7 @@ Desktop folder: ~/Library/Application Support/Claude-3p on macOS,
   });
 }
 
-/** uuid5(NAMESPACE_URL, "archestra-desktop:managed"), as the Desktop installer names its profile. */
-const CLAUDE_DESKTOP_PROFILE_ID = "aa157426-f6a9-5ac5-8471-3b30b42bbe8f";
-
-function genericInstructions(target: Target): string {
+function genericInstructions(target: DeploymentTarget): string {
   const { base, host } = target;
   return instructions({
     target,

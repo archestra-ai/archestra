@@ -1,3 +1,8 @@
+import {
+  CONNECT_SETUP_PARTS,
+  INSTALLER_CLIENT_IDS,
+} from "@archestra/shared/connection-setup";
+
 /** Public bootstrap: secrets stay in process memory; only the approved script reaches disk. */
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
 const { spawn, spawnSync } = require('node:child_process');
@@ -10,7 +15,7 @@ async function main() {
   const args = process.argv.slice(2);
   const value = (flag) => { const i = args.indexOf(flag); return i < 0 ? undefined : args[i + 1]; };
   if (args.includes('--help')) {
-    console.log('Usage: node connect.cjs --url https://deployment.example --client claude-code|claude-desktop|cursor|codex|copilot-cli|opencode [--exclude tools,skills,proxy,plugins] [--no-open]');
+    console.log('Usage: node connect.cjs --url https://deployment.example --client ${INSTALLER_CLIENT_IDS.join("|")} [--exclude ${CONNECT_SETUP_PARTS.join(",")}] [--no-open]');
     return;
   }
   const origin = new URL(value('--url'));
@@ -21,9 +26,9 @@ async function main() {
   const clientId = value('--client');
   const setupToken = value('--setup-token');
   if (setupToken && (clientId !== 'claude-desktop' || !/^archestra_con_[A-Za-z0-9_-]{32,43}$/.test(setupToken))) throw new Error('Invalid Desktop setup ticket.');
-  if (!['claude-code', 'claude-desktop', 'cursor', 'codex', 'copilot-cli', 'opencode'].includes(clientId)) throw new Error('Choose --client claude-code, claude-desktop, cursor, codex, copilot-cli, or opencode.');
+  if (!${JSON.stringify(INSTALLER_CLIENT_IDS)}.includes(clientId)) throw new Error('Choose --client ${INSTALLER_CLIENT_IDS.slice(0, -1).join(", ")}, or ${INSTALLER_CLIENT_IDS.at(-1)}.');
   const exclude = (value('--exclude') ?? '').split(',').filter(Boolean);
-  if (exclude.some(part => !['tools', 'skills', 'proxy', 'plugins'].includes(part))) throw new Error('--exclude takes a comma-separated list of tools, skills, proxy, plugins.');
+  if (exclude.some(part => !${JSON.stringify(CONNECT_SETUP_PARTS)}.includes(part))) throw new Error('--exclude takes a comma-separated list of ${CONNECT_SETUP_PARTS.join(", ")}.');
   const platform = { darwin: 'macos', linux: 'linux', win32: 'windows' }[process.platform];
   if (!platform) throw new Error('Supported operating systems: macOS, Linux, Windows.');
   if (typeof fetch !== 'function') throw new Error('Node.js 18 or newer is required.');

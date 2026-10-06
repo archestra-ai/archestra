@@ -3,6 +3,7 @@
 // Connect page pieces: picker, copy line, copy prompt, undo dialog,
 // disconnect and manage dialogs, helpers.
 
+import { startupGuardStem } from "@archestra/shared/connection-setup";
 import {
   BookOpen,
   Check,
@@ -55,6 +56,7 @@ import type {
   ConnectServer,
 } from "./connect-page-data";
 import { setupModeFor } from "./manual-setup";
+import { detectPlatform } from "./platform.utils";
 
 const MODAL_ROW_CAP = 200;
 
@@ -258,13 +260,6 @@ export function UndoDialog({
 }
 
 /** Startup check file stem under ~/.archestra, for clients that install one. */
-const GUARD_STEMS: Partial<Record<string, string>> = {
-  "claude-code": "claude",
-  codex: "codex",
-  "copilot-cli": "copilot",
-  opencode: "opencode",
-};
-
 /** What the setup added to this agent, and the prompt that removes it. */
 function DisconnectSteps({
   data,
@@ -278,7 +273,9 @@ function DisconnectSteps({
 }) {
   const fp = data.footprintFor(client);
   const manualOnly = setupModeFor(client) === "manual";
-  const guard = GUARD_STEMS[client.id];
+  const guard = startupGuardStem(client.id);
+  const [windows, setWindows] = useState(false);
+  useEffect(() => setWindows(detectPlatform() === "windows"), []);
   const local = [
     ...(fp.skillsInstalled > 0
       ? [`${fmt(fp.skillsInstalled)} ${plural(fp.skillsInstalled, "skill")}`]
@@ -317,11 +314,15 @@ function DisconnectSteps({
       {!manualOnly && guard && (
         <div className="space-y-2">
           <p className="text-muted-foreground">
-            If {nameOf(client)} won't run it, run this in a terminal yourself
-            (macOS or Linux):
+            If {nameOf(client)} won't run it, run this in a terminal yourself (
+            {windows ? "Windows PowerShell" : "macOS or Linux"}):
           </p>
           <CopyPrompt
-            text={`ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/${guard}-startup-guard.sh`}
+            text={
+              windows
+                ? `$env:ARCHESTRA_GUARD_ACTION='disconnect'; try { & "$HOME\\.archestra\\${guard}-startup-guard.ps1" } finally { Remove-Item Env:ARCHESTRA_GUARD_ACTION }`
+                : `ARCHESTRA_GUARD_ACTION=disconnect bash ~/.archestra/${guard}-startup-guard.sh`
+            }
           />
         </div>
       )}

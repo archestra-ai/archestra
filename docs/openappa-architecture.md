@@ -336,6 +336,8 @@ A `review_required` result has not applied a remedy. For the declared control to
 
 The gateway retains a per-call record of server-issued review status separately from the expiring review and one-use ruling. Its scope includes organization, caller, session, parent, call ID, and offer ID. History uses that record after approval, cancellation, or expiry. It contains no ruling or review payload and cannot reopen a question or authorize a retry.
 
+These history facts expire after thirty days. The existing five-minute cache sweep removes unread expired records. Live reviews and rulings still expire after ten minutes.
+
 Chat distinguishes unanswered expiry, user cancellation, unavailable delivery, and invalid answers before native remedy execution. These outcomes grant no ruling. The proxy preserves only the exact same-scope, server-recorded status, never client-supplied instructions. An unanswered review is not reported as an unreachable authority. Chat root recovery requires an authenticated caller that matches the conversation owner and current `ChatRoot` identity.
 
 The stored status is `review_required`, `review_unanswered`, `review_cancelled`, `review_unavailable`, or `review_invalid`. Chat caller recovery requires the stamped root to equal the server-owned conversation ID, with no parent. Headers and foreign or child sessions cannot supply that caller.
@@ -356,7 +358,7 @@ Offer routing and native questions require no signatures. Session receipt codes 
 
 Signatures remain on history-based trajectory stamps, delegation bindings, and child recovery tokens where trusted client metadata is insufficient. Teammate inbox calls use a separate signed peer proof. A remedy field cannot authorize an inbox read. Gateway tool attestations still distinguish platform tools from external declarations.
 
-Legacy notice offers and JWS fields are stripped from provider history but never used for routing. An old in-flight remedy call without a trajectory must retry through the proxy. Pending native questions can consume their existing cache records during the ten-minute expiry window. New question IDs and cache keys use no HMAC.
+Legacy fields in resolved platform calls and call-bound transport envelopes are stripped from provider history. They never supply routing. Foreign tool arguments remain intact, including lookalike names and fields. An old in-flight remedy call without a trajectory must retry through the proxy. Pending native questions can consume their existing cache records during the ten-minute expiry window. New question IDs and cache keys use no HMAC.
 
 ### Child contracts and completion
 
@@ -370,7 +372,7 @@ Incomplete and failed Responses generations retain their original terminal statu
 
 Translated subscription failures skip successful lifecycle hooks, including `RootEnd` and `ChildEnd`. The failure lifecycle still releases request resources and records the interaction once.
 
-Claude's declared native `SubagentHandback` is the return boundary when available. Intermediate text stops do not close that child. Its dedicated progress-label request is also not a completion. Without handback, the checked final-text path remains. Finished-subagent display markers alone never prove that a result crossed.
+Claude's declared native `SubagentHandback` is the return boundary when available. Intermediate text stops do not close that child. Its dedicated progress-label request is also not a completion. An admitted task with that same prefix still requires checked completion. Without handback, the checked final-text path remains. Finished-subagent display markers alone never prove that a result crossed.
 
 Split-pane Claude teammates report their own conversation id and a separate `parent_session_id` in native metadata. The adapter uses that parent for child binding, while keeping the child's own conversation id for later spawns. In-process teammates share the lead's conversation. Native parent metadata does not bypass prepared-spawn or return-contract validation and is removed before provider forwarding.
 

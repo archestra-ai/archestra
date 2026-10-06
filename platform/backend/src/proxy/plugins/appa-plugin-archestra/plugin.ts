@@ -1291,7 +1291,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
           !tool.namespace &&
           binding.adapter?.isChildHandbackTool?.(tool.name) === true,
       ) ||
-        isClaudeProgressLabelRequest(binding.requestBody))
+        isClaudeProgressLabelRequest(
+          binding.requestBody,
+          binding.child?.lineage?.spawnPromptDigest,
+        ))
     ) {
       // With a native handback, intermediate text does not cross to the parent.
       // Claude's progress-label side call also does not finish its active child.
@@ -4348,7 +4351,10 @@ async function pendingReviewResult(
   });
 }
 
-function isClaudeProgressLabelRequest(request: unknown): boolean {
+function isClaudeProgressLabelRequest(
+  request: unknown,
+  spawnPromptDigest: string | undefined,
+): boolean {
   if (!isRecord(request) || !Array.isArray(request.messages)) return false;
   const last = request.messages.at(-1);
   if (!isRecord(last) || last.role !== "user") return false;
@@ -4361,6 +4367,9 @@ function isClaudeProgressLabelRequest(request: unknown): boolean {
             .map((block) => block.text)
             .join("\n")
         : "";
+  // An admitted opening task can use the same prefix as a progress-label frame.
+  if (spawnPromptDigest && isDelegatedPrompt(prompt, spawnPromptDigest))
+    return false;
   // Claude appends this dedicated user frame for a UI label, not a task result.
   // Do not match tool_result text or historical task instructions.
   return prompt.startsWith(

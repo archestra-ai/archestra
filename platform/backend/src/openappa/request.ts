@@ -483,8 +483,8 @@ export function mayHoldOpenAppaPayload(raw: Buffer): boolean {
  * read from the body's shape. As at the pipeline's entry, the proxy's receipts
  * and markers go first, then call ids come back from their stamps and native
  * question ids. With no gateway identity, only a record that names its own
- * call, or a historical `offers` field, goes. Remedy signatures are not
- * consulted. Returns whether the body changed.
+ * call goes. Remedy signatures are not consulted. Returns whether the body
+ * changed.
  */
 export function sanitizeForwardedRequest(body: object): boolean {
   // Gemini's countTokens may wrap a whole generateContent request.
@@ -627,12 +627,9 @@ const OFFERS_MEMBER: ReadonlySet<string> = new Set(["offers"]);
 const CONTROL_PROXY_MEMBERS: ReadonlySet<string> = new Set(
   PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME],
 );
-/** Names that end in the control and ask_user short names, under any client label. */
+/** Names that end in the control short name, under any client label. */
 const CONTROL_TOOL_SPELLING = new RegExp(
   `(^|[^a-z0-9])${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}$`,
-);
-const ASK_USER_TOOL_SPELLING = new RegExp(
-  `(^|[^a-z0-9])${TOOL_ASK_USER_SHORT_NAME}$`,
 );
 /** What a body must mention before the catch-all parses it. */
 const OPENAPPA_TOOL_TOKENS = [
@@ -678,8 +675,8 @@ function stripProxyMarks(params: {
  * What restoration leaves behind still never reaches the provider, on every
  * wire. A call is ours by name, as this request's identity resolves it, or by
  * a notice or receipt that names its own call. Remedy signatures are not
- * proof. Spelling alone does not take a foreign tool's `payload` or
- * `signature`. Historical `offers` are dropped by field name.
+ * proof. Spelling or field presence alone does not take a foreign tool's
+ * arguments.
  */
 function scrubProxyMembers(params: {
   wire: ProviderWire;
@@ -713,8 +710,6 @@ function scrubProxyMembers(params: {
           readNotice({ callId: id, arguments: args }) !== null)
       )
         keep(call, args, withoutMembers(args, NOTICE_PROXY_MEMBERS));
-      else if ("offers" in args)
-        keep(call, args, withoutMembers(args, OFFERS_MEMBER));
       continue;
     }
     if (
@@ -744,18 +739,9 @@ function scrubProxyMembers(params: {
       );
       continue;
     }
-    if (
-      params.ours.askUser(name, namespace) ||
-      ASK_USER_TOOL_SPELLING.test(name)
-    ) {
+    if (params.ours.askUser(name, namespace)) {
       const args = call.readArguments();
       if (!args) continue;
-      if (
-        !params.ours.askUser(name, namespace) &&
-        !("remedy_offers" in args) &&
-        !("trajectory" in args)
-      )
-        continue;
       keep(call, args, withoutMembers(args, ASK_USER_PROXY_ARGUMENTS));
     }
   }

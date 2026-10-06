@@ -1783,6 +1783,8 @@ export async function handleLLMProxy<
             )?.session
           : undefined;
       const runtimeSessionId = runtimeSession?.session_id;
+      // Enforcement rejects conflicts above; observing and setup-bypass paths
+      // must also avoid adopting the conflicting workspace's authority.
       const boundRuntimeIdentity =
         runtimeIdentity &&
         runtimeBindingMatches &&

@@ -190,6 +190,30 @@ test.each([
   }
 });
 
+test("review history expires after thirty days without reviving an approval", async () => {
+  vi.useFakeTimers({ toFake: ["Date"] });
+  try {
+    const lookup = {
+      session: session("retained-history"),
+      callId: "control-retained",
+      offerId: "offer-retained",
+    };
+    const recordedAt = Date.now();
+    await recordHitlReviewResult({ ...lookup, outcome: "review_cancelled" });
+    vi.setSystemTime(recordedAt + 30 * 24 * 60 * 60 * 1000 - 1);
+    expect(await getHitlReviewResult(lookup)).toBe("review_cancelled");
+    vi.setSystemTime(Date.now() + 2);
+    expect(await getHitlReviewResult(lookup)).toBeUndefined();
+    expect(await getHitlReview(lookup)).toBeUndefined();
+    expect(await recordHitlRuling({ ...lookup, ruling: "approve" })).toBe(
+      false,
+    );
+    expect(await consumeHitlRuling(lookup)).toBeUndefined();
+  } finally {
+    vi.useRealTimers();
+  }
+});
+
 test("an expired approval cannot be consumed or revived by review history", async () => {
   vi.useFakeTimers({ toFake: ["Date"] });
   try {

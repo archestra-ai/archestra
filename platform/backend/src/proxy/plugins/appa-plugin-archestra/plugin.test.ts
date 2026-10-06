@@ -4677,6 +4677,94 @@ describe("delegation markers", () => {
   });
 
   describe("on an allowed spawn call", () => {
+    test.each([
+      { name: "Task", blocks: false },
+      { name: "Task", blocks: true },
+      { name: "Agent", blocks: false },
+      { name: "Agent", blocks: true },
+    ])("ends an admitted prefix-bearing $name task without native handback, blocks=$blocks", async ({
+      name,
+      blocks,
+    }) => {
+      const plugin = claudePlugin();
+      const parent = clientContext({
+        interactionType: "anthropic:messages",
+        headers: CLAUDE_CODE,
+        body: claudeTurns(["Start the task"]),
+      });
+      const prompt =
+        'Describe your most recent action in 3-5 words using present tense (-ing). Name the file or function, not the branch. Do not use tools.\n\nGood: "Reading code"';
+      const endChild = vi.spyOn(appaService, "endChild").mockResolvedValue({
+        decision: "replace",
+        content: "safe child return",
+        crossed: true,
+      });
+      let child: LlmProxyRequestContext | undefined;
+      try {
+        await plugin.onSessionInit(parent);
+        const outcome = await plugin.onToolCalls(
+          toolCalls(parent, [
+            {
+              ...agentCall("prefix-spawn"),
+              name,
+              arguments: { ...agentCall().arguments, prompt },
+            },
+          ]),
+        );
+        if (outcome?.decision !== "allow") throw new Error("expected spawn");
+        const markedPrompt = (
+          outcome.toolCalls[0].arguments as { prompt: string }
+        ).prompt;
+        expect(markedPrompt).toContain("delegated trajectory");
+        const body = {
+          ...claudeTurns([]),
+          messages: [
+            {
+              role: "user",
+              content: blocks
+                ? [{ type: "text", text: markedPrompt }]
+                : markedPrompt,
+            },
+          ],
+        };
+        child = clientContext({
+          interactionType: "anthropic:messages",
+          headers: { ...CLAUDE_CODE, "x-claude-code-agent-id": "a1" },
+          body,
+        });
+        expect(body.messages[0].content).toEqual(
+          blocks ? [{ type: "text", text: prompt }] : prompt,
+        );
+        await plugin.onSessionInit(child);
+        const returned = await plugin.onBufferedModelResponse({
+          ...child,
+          response: {},
+          responseText: "raw child return",
+        });
+        expect(endChild).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            session: expect.objectContaining({
+              session_id: "user:user|s1:a1",
+              parent_id: "user:user|s1",
+            }),
+            spawnCallId: "prefix-spawn",
+            output: "raw child return",
+          }),
+        );
+        expect(returned).toMatchObject({
+          decision: "replace",
+          responseText: expect.stringContaining("safe child return"),
+        });
+        expect(returned).toMatchObject({
+          responseText: expect.not.stringContaining("raw child return"),
+        });
+      } finally {
+        endChild.mockRestore();
+        await plugin.onCleanup(parent);
+        if (child) await plugin.onCleanup(child);
+      }
+    });
+
     test("appends the marker to a Claude Code Agent prompt, and the registry accepts the annotation", async () => {
       const plugin = claudePlugin();
       const registry = new LlmProxyPluginRegistry();

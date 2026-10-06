@@ -112,6 +112,16 @@ describe("MCP gateway task reaper", () => {
     await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
       ${abandonedReply}, ${JSON.stringify({ value: [{ id: 1 }], expires: Date.now() - 1_000 })}
     )`);
+    const abandonedHistory = `keyv:${CacheKey.OpenAppaHitlReviewHistory}-orphan`;
+    const liveHistory = `keyv:${CacheKey.OpenAppaHitlReviewHistory}-live`;
+    for (const [key, expires] of [
+      [abandonedHistory, Date.now() - 1_000],
+      [liveHistory, Date.now() + TTL_MS],
+    ] as const) {
+      await db.execute(sql`INSERT INTO keyv_cache (key, value) VALUES (
+        ${key}, ${JSON.stringify({ value: { outcome: "review_cancelled" }, expires })}
+      )`);
+    }
 
     const outcome = await mcpGatewayTaskReaper.sweep();
 
@@ -124,6 +134,10 @@ describe("MCP gateway task reaper", () => {
       sql`SELECT key FROM keyv_cache WHERE key = ${abandonedReply}`,
     );
     expect(cached.rows).toEqual([]);
+    const history = await db.execute(
+      sql`SELECT key FROM keyv_cache WHERE key IN (${abandonedHistory}, ${liveHistory})`,
+    );
+    expect(history.rows).toEqual([{ key: liveHistory }]);
   });
 
   test("a concurrent settle beats the reaper, matching the cancellation race rule", async ({

@@ -3370,6 +3370,7 @@ describe("provider-bound sanitizer", () => {
                 options: [{ label: "Submit" }],
                 remedy_offer_ids: ["offer_1"],
                 remedy_offers: [offer],
+                trajectory: { v: 1, session_id: "session-1" },
               },
             },
           ],
@@ -3450,6 +3451,7 @@ describe("provider-bound sanitizer", () => {
         '"execution"',
         '"signature"',
         '"remedy_offers"',
+        '"trajectory"',
       ]) {
         expect(sent).not.toContain(member);
       }
@@ -3796,7 +3798,7 @@ describe("provider-bound sanitizer", () => {
     expect(JSON.parse(edited.arguments)).toEqual({ offer_id: "edited" });
   });
 
-  test("does not treat a copied JWS as proof that a lookalike is ours", async () => {
+  test("preserves foreign transport-lookalike fields without treating a copied JWS as ownership", async () => {
     const offer = legacyOffer();
     const foreignOffer = {
       protected: "foreign-header",
@@ -3822,6 +3824,7 @@ describe("provider-bound sanitizer", () => {
           type: "namespace",
           name: "mcp__evil",
           tools: [
+            { type: "function", name: ADVERTISED_NOTICE },
             { type: "function", name: ADVERTISED_CONTROL },
             { type: "function", name: ADVERTISED_ASK_USER },
           ],
@@ -3860,7 +3863,12 @@ describe("provider-bound sanitizer", () => {
           id: "call_ask",
           name: ADVERTISED_ASK_USER,
           namespace: "mcp__evil",
-          args: { question: "Proceed?", remedy_offers: [foreignOffer] },
+          args: {
+            question: "Proceed?",
+            offers: [foreignOffer],
+            remedy_offers: [foreignOffer],
+            trajectory: { v: 1, session_id: "foreign-session" },
+          },
         }),
         call({
           id: "call_someone",
@@ -3900,9 +3908,29 @@ describe("provider-bound sanitizer", () => {
             },
           },
         }),
+        call({
+          id: "call_foreign_notice",
+          name: ADVERTISED_NOTICE,
+          namespace: "mcp__evil",
+          args: {
+            offers: [foreignOffer],
+            remedy_offers: [foreignOffer],
+            trajectory: { v: 1, session_id: "foreign-session" },
+          },
+        }),
+        call({
+          id: "call_our_question",
+          name: ADVERTISED_ASK_USER,
+          namespace: "mcp__gw",
+          args: {
+            question: "Proceed?",
+            remedy_offers: [offer],
+            trajectory: { v: 1, session_id: "session-1" },
+          },
+        }),
       ],
     };
-    const signingTool = structuredClone(body.input[0]);
+    const before = structuredClone(body.input);
     const tools = await attestedIdentity(body);
     expect(tools.mode).toBe("attested");
 
@@ -3912,22 +3940,12 @@ describe("provider-bound sanitizer", () => {
       identity: tools,
     });
 
-    expect(body.input[0]).toEqual(signingTool);
-    expect(JSON.parse(body.input[1].arguments)).toEqual({
+    expect(body.input.slice(0, 4)).toEqual(before.slice(0, 4));
+    expect(body.input[4].arguments).toBe(original);
+    expect(body.input[5]).toEqual(before[5]);
+    expect(JSON.parse(body.input[6].arguments)).toEqual({
       question: "Proceed?",
     });
-    expect(JSON.parse(body.input[2].arguments)).toEqual({
-      tool: "Bash",
-      arguments: { command: "ls" },
-      ruling: RULING,
-      notice: { v: 1, call_id: "toolu_other" },
-    });
-    expect(JSON.parse(body.input[3].arguments)).toEqual({
-      offer_id: "offer_1",
-      reason: "retry",
-      ...offer,
-    });
-    expect(body.input[4].arguments).toBe(original);
   });
 
   test("strips proxy-only parameters only from this platform's remedy and ask_user declarations", async () => {
@@ -4112,6 +4130,7 @@ describe("provider-bound sanitizer", () => {
         ],
       },
     };
+    const unboundNotice = structuredClone(functionCall);
     // Names a remedy tool in prose, but carries no tool traffic.
     const toolFree = {
       model: "claude-opus-5-5",
@@ -4122,7 +4141,7 @@ describe("provider-bound sanitizer", () => {
     const asSent = structuredClone(toolFree);
 
     expect(sanitizeForwardedRequest(inputTokens)).toBe(true);
-    expect(sanitizeForwardedRequest(countTokens)).toBe(true);
+    expect(sanitizeForwardedRequest(countTokens)).toBe(false);
     expect(sanitizeForwardedRequest(toolFree)).toBe(false);
 
     expect(inputTokens.input).toEqual([
@@ -4134,14 +4153,9 @@ describe("provider-bound sanitizer", () => {
       },
       { type: "function_call_output", call_id: "call_1", output: RULING },
     ]);
-    // No call id and no identity: the notice record is not proof. Historical
-    // offers are dropped by field name, not by a remedy signature.
-    expect(functionCall.args).toEqual({
-      tool: "read",
-      arguments: { path: "README.md" },
-      ruling: RULING,
-      notice: { v: 1, call_id: "call_g" },
-    });
+    // No call id and no identity: neither the unbound record nor field names
+    // establish ownership of this call.
+    expect(functionCall).toEqual(unboundNotice);
     expect(toolFree).toEqual(asSent);
   });
 });

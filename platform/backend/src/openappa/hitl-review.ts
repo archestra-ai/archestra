@@ -32,6 +32,8 @@ type HitlAskUserArguments = {
 };
 
 const HITL_REVIEW_TTL_MS = 10 * TimeInMs.Minute;
+// Replay facts outlive live review claims, but abandoned history is not permanent.
+const HITL_HISTORY_TTL_MS = 30 * TimeInMs.Day;
 const HITL_RULINGS: readonly HitlRuling[] = ["approve", "none", "deny"];
 
 /** Recovers the review cache scope from the proxy's current trajectory. */
@@ -106,7 +108,7 @@ export async function recordHitlReviewResult(params: {
       JSON.stringify([params.callId, params.offerId]),
     ),
     { callId: params.callId, offerId: params.offerId, outcome: params.outcome },
-    0,
+    HITL_HISTORY_TTL_MS,
   );
 }
 
@@ -264,11 +266,9 @@ export async function consumeHitlRuling(params: {
         : undefined;
   if (!selected) return undefined;
   await cacheManager.delete(reviewKey(params.session, params.offerId));
-  if (selected)
-    await cacheManager.delete(
-      stagePresenceKey(params.session, params.offerId),
-      { throwOnError: true },
-    );
+  await cacheManager.delete(stagePresenceKey(params.session, params.offerId), {
+    throwOnError: true,
+  });
   return selected;
 }
 

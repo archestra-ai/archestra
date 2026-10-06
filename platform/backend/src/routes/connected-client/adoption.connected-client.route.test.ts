@@ -1,4 +1,5 @@
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -212,6 +213,45 @@ describe("GET /api/connected-clients/adoption", () => {
 
     expect(await memberById(ada.id)).toMatchObject({
       status: "notConnected",
+    });
+  });
+
+  test("built-in agent runs and agent-to-agent calls do not count", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    // An agent run on Claude Code: API traffic, but stamped with a run id.
+    const run = await makeInteraction(gateway.id, {
+      userId: ada.id,
+      source: "api",
+      externalAgentId: "anthropic_claude_code",
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ runId: "task-1" })
+      .where(eq(schema.interactionsTable.id, run.id));
+    // One Archestra agent calling another names them as the external agent.
+    await makeInteraction(gateway.id, {
+      userId: ada.id,
+      source: "api",
+      externalAgentId: `${gateway.id}:${gateway.id}`,
+    });
+    await db.insert(schema.mcpToolCallsTable).values({
+      agentId: gateway.id,
+      mcpServerName: "mcp-gateway",
+      method: "tools/list",
+      userId: ada.id,
+      authMethod: "oauth",
+      runId: "task-1",
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "notConnected",
+      gatewayLastSeenAt: null,
+      llmLastSeenAt: null,
     });
   });
 

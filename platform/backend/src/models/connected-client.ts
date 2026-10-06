@@ -214,6 +214,8 @@ class ConnectedClientModel {
    * chat and apps, which write to the same log with other credentials. LLM
    * proxy traffic counts external API calls, attributed to the passthrough
    * key's owner when one was sent, since the user header alone is only a hint.
+   * Both leave out Archestra's built-in agents (runs and agent-to-agent calls),
+   * which would otherwise pass for a member's own agent.
    */
   static async getAdoption(params: {
     organizationId: string;
@@ -262,6 +264,7 @@ class ConnectedClientModel {
         FROM ${toolCalls}
         WHERE ${toolCalls.createdAt} >= ${sinceTs}
           AND ${toolCalls.authMethod} = 'oauth'
+          AND ${toolCalls.runId} IS NULL
           AND ${toolCalls.userId} IS NOT NULL
           AND ${toolCalls.agentId} IN (${orgAgents})
         GROUP BY ${toolCalls.userId}
@@ -278,7 +281,7 @@ class ConnectedClientModel {
         LEFT JOIN ${schema.virtualApiKeysTable} k
           ON k.id = ${interactions.passthroughVirtualKeyId}
         WHERE ${interactions.createdAt} >= ${sinceTs}
-          AND (${interactions.source} = 'api' OR ${interactions.source} IS NULL)
+          AND ${agentLlmTraffic(organizationId)}
           AND (${interactions.profileId} IN (${orgAgents})
             OR ${interactions.profileId} IS NULL)
           AND coalesce(k.author_id, ${interactions.userId}) IS NOT NULL
@@ -380,6 +383,7 @@ class ConnectedClientModel {
         FROM ${toolCalls}
         WHERE ${toolCalls.createdAt} >= ${sinceTs}
           AND ${toolCalls.authMethod} = 'oauth'
+          AND ${toolCalls.runId} IS NULL
           AND ${toolCalls.agentId} IN (${orgAgents})
           AND ${toolCalls.userId} IN (${orgMembers})
         GROUP BY 1
@@ -391,7 +395,7 @@ class ConnectedClientModel {
         LEFT JOIN ${schema.virtualApiKeysTable} k
           ON k.id = ${interactions.passthroughVirtualKeyId}
         WHERE ${interactions.createdAt} >= ${sinceTs}
-          AND (${interactions.source} = 'api' OR ${interactions.source} IS NULL)
+          AND ${agentLlmTraffic(organizationId)}
           AND (${interactions.profileId} IN (${orgAgents})
             OR ${interactions.profileId} IS NULL)
           AND coalesce(k.author_id, ${interactions.userId}) IN (${orgMembers})
@@ -449,6 +453,22 @@ class ConnectedClientModel {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * LLM proxy calls a member's own agent made: external API traffic, minus
+ * Archestra's built-in agents. Those also reach the proxy as API traffic, but
+ * agent runs stamp a run id and agent-to-agent calls name an Archestra agent
+ * (`<agentId>` or `<agentId>:<agentId>`) as the external agent.
+ */
+function agentLlmTraffic(organizationId: string) {
+  const interactions = schema.interactionsTable;
+  return sql`(${interactions.source} = 'api' OR ${interactions.source} IS NULL)
+    AND ${interactions.runId} IS NULL
+    AND (${interactions.externalAgentId} IS NULL
+      OR split_part(${interactions.externalAgentId}, ':', 1) NOT IN (
+        SELECT ${schema.agentsTable.id}::text FROM ${schema.agentsTable}
+        WHERE ${schema.agentsTable.organizationId} = ${organizationId}))`;
+}
 
 function latest(current: Date | null, next: Date): Date {
   return current && current > next ? current : next;

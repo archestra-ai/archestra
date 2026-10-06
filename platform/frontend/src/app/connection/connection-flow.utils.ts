@@ -5,6 +5,8 @@ import {
   providerSupportsChat,
   SupportedProviders,
 } from "@archestra/shared";
+import { useMemo, useState } from "react";
+import config from "@/lib/config/config";
 
 export type ConnectionBaseUrl = NonNullable<
   archestraApiTypes.GetOrganizationResponses["200"]["connectionBaseUrls"]
@@ -119,4 +121,35 @@ export function resolveEffectiveId(params: {
     firstAvailable ??
     null
   );
+}
+
+/**
+ * The connection base URL for the whole page: the user's pick, then the
+ * admin default, then the first URL the deployment offers. Admins can hide
+ * env URLs from users; those never show up here.
+ */
+export function useConnectionBaseUrl(
+  metadata: readonly ConnectionBaseUrl[] | null | undefined,
+): {
+  baseUrls: readonly string[];
+  baseUrl: string;
+  selectBaseUrl: (url: string) => void;
+} {
+  const baseUrls = useMemo(
+    () =>
+      resolveCandidateBaseUrls({
+        externalProxyUrls: config.api.externalProxyUrls,
+        internalProxyUrl: config.api.internalProxyUrl,
+        metadata: metadata ?? null,
+      }),
+    [metadata],
+  );
+  const adminDefault = resolveAdminDefaultBaseUrl(metadata ?? null);
+  // Derived, not stateful, so the admin default applies once the org loads.
+  const [picked, setPicked] = useState<string | null>(null);
+  const baseUrl =
+    (picked && baseUrls.includes(picked) && picked) ||
+    (adminDefault && baseUrls.includes(adminDefault) && adminDefault) ||
+    baseUrls[0];
+  return { baseUrls, baseUrl, selectBaseUrl: setPicked };
 }

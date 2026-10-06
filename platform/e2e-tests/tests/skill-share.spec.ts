@@ -31,31 +31,15 @@ test.describe("Skills marketplace step on /connection", () => {
     let createdLinkId: string | null = null;
 
     try {
-      await goToPage(page, "/connection");
+      await goToPage(page, "/connection?clientId=generic&mode=manual");
       await page.waitForLoadState("domcontentloaded");
 
-      // Pick "Any Client" so the generic (client-agnostic) snippets render, and
-      // the "Install shared skills" step expands so the share-link disclosure
-      // mounts.
-      //
-      // The client tile is server-rendered, so a click that lands before React
-      // hydration attaches its onClick handler is silently lost — Playwright
-      // reports the click as successful (the SSR button is visible/enabled), but
-      // no client is selected, the skills step never opens, and the create
-      // button never renders. A longer timeout can't recover it: once the click
-      // is dropped the state stays unset for the life of the page. Selecting a
-      // client is idempotent (it sets, never toggles), so retry the click until
-      // the step has opened and the create button is visible.
-      const anyClient = page
-        .getByRole("button", { name: /Any Client/i })
-        .first();
+      // "Any Client" in Manual mode renders the generic (client-agnostic)
+      // snippets in its "Install shared skills" step.
       const shareLinkToggle = page.getByTestId(
         "skills-marketplace-share-link-toggle",
       );
-      await expect(async () => {
-        await anyClient.click();
-        await expect(shareLinkToggle).toBeVisible({ timeout: 3_000 });
-      }).toPass({ timeout: 20_000 });
+      await expect(shareLinkToggle).toBeVisible({ timeout: 20_000 });
 
       // The static marketplace is the primary path and needs no minting: its
       // URL is on the page as soon as the step opens.
@@ -85,7 +69,7 @@ test.describe("Skills marketplace step on /connection", () => {
       createdLinkId = createBody.link.id;
       expect(createBody.cloneUrl).toMatch(PUBLIC_CLONE_URL_REGEX);
 
-      // "Any client" renders the generic snippets, which reference the
+      // "Any Client" renders the generic snippets, which reference the
       // freshly-issued clone URL.
       const generic = page.getByTestId("skills-marketplace-snippets-generic");
       await expect(generic).toBeVisible();

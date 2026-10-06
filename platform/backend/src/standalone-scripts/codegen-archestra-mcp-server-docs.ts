@@ -29,13 +29,41 @@ type ToolPermissionDisplay = string;
 // === Tool group definitions ===
 
 // Domain groups and their shortName→group mapping are the shared taxonomy in
-// `@archestra/shared` (also drives the agent tool-picker UI). Here we derive a
-// display label and a display order from the canonical ordered list.
+// `@archestra/shared` (also drives the agent tool-picker UI). The docs page
+// orders groups by what a reader looks for — the agent's own work first, then
+// the resources it manages, then organization administration — and renames the
+// two groups whose picker labels do not match the docs' product names. A
+// Record keyed by group id makes a new group a compile error until it is placed.
+const docsGroupOrder: Record<ArchestraToolGroupId, number> = {
+  identity: 0,
+  chat: 1,
+  meta: 2,
+  skills: 3,
+  files: 4,
+  skill_sandbox: 5,
+  apps: 6,
+  projects: 7,
+  tasks: 8,
+  agents: 9,
+  knowledge_management: 10,
+  mcp_servers: 11,
+  mcp_gateways: 12,
+  tool_assignment: 13,
+  policies: 14,
+  openappa: 15,
+  limits: 16,
+  teams: 17,
+  plugins: 18,
+};
+const docsGroupLabelOverrides: Partial<Record<ArchestraToolGroupId, string>> = {
+  meta: "Tool Discovery",
+  openappa: "Guardrails",
+};
 const groupLabel = new Map<ArchestraToolGroupId, string>(
-  ARCHESTRA_TOOL_GROUPS.map((group) => [group.id, group.label]),
-);
-const groupOrder = new Map<ArchestraToolGroupId, number>(
-  ARCHESTRA_TOOL_GROUPS.map((group, index) => [group.id, index]),
+  ARCHESTRA_TOOL_GROUPS.map((group) => [
+    group.id,
+    docsGroupLabelOverrides[group.id] ?? group.label,
+  ]),
 );
 
 /**
@@ -95,10 +123,10 @@ const toolAccessNotes: Partial<Record<ArchestraToolShortName, string>> = {
  * these tools are absent from their `tools/list`.
  */
 const CODE_RUNTIME_PREREQUISITE =
-  "served only when the code runtime is enabled — set `ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`, or `ARCHESTRA_CODE_RUNTIME_ENABLED=true` together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
+  "served only when the code runtime is enabled — set [`ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_DAGGER_RUNNER_HOST), or [`ARCHESTRA_CODE_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED) together with an orchestrator kubeconfig. Without it they do not appear in `tools/list`.";
 
 const groupAvailabilityNotes: Partial<Record<ArchestraToolGroupId, string>> = {
-  skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/platform-code-sandbox) page covers what the runtime is and how an agent uses it.`,
+  skill_sandbox: `These tools are ${CODE_RUNTIME_PREREQUISITE} The [Code Sandbox](/docs/agents#code-sandbox) page covers what the runtime is and how an agent uses it.`,
   // Same gate as the sandbox, since these tools ship from the same module —
   // but they read and write saved files rather than entering a container, so
   // the note says what they are instead of pointing at the runtime page.
@@ -127,7 +155,7 @@ async function main() {
 
   const docsFilePath = path.join(
     __dirname,
-    "../../../../docs/pages/platform-archestra-mcp-server.md",
+    "../../../../docs/pages/reference/archestra-mcp-server.md",
   );
 
   const docsDir = path.dirname(docsFilePath);
@@ -141,7 +169,7 @@ async function main() {
   }
 
   const markdownContent = generateMarkdownContent(existingContent);
-  fs.writeFileSync(docsFilePath, markdownContent);
+  fs.writeFileSync(docsFilePath, `${markdownContent.trimEnd()}\n`);
 
   // App-runtime-only built-ins are not part of the agent-facing surface this
   // page documents (they are covered on the Apps page).
@@ -170,9 +198,8 @@ if (import.meta.url === pathToFileURL(process.argv[1]).href) {
 function generateFrontmatter(lastUpdated: string): string {
   return `---
 title: "Archestra MCP Server"
-category: MCP
 description: "Built-in MCP server providing tools for managing Archestra platform resources"
-order: 5
+order: 4
 lastUpdated: ${lastUpdated}
 ---`;
 }
@@ -237,7 +264,7 @@ function generateMarkdownBody(): string {
 
   // Sort groups by order
   const sortedGroups = [...grouped.entries()].sort(
-    ([a], [b]) => (groupOrder.get(a) ?? 0) - (groupOrder.get(b) ?? 0),
+    ([a], [b]) => docsGroupOrder[a] - docsGroupOrder[b],
   );
 
   // Build unified Tools Reference sections (overview table + detailed schemas per group)
@@ -283,12 +310,9 @@ function generateMarkdownBody(): string {
     referenceSections.push(section);
   }
 
-  const preInstalledList = preInstalledShortNames
-    .map((n) => formatToolLink(n))
-    .join(", ");
-  const queryKnowledgeSourcesPermission = formatToolPermission(
-    "query_knowledge_sources",
-  );
+  const preInstalledList = new Intl.ListFormat("en", {
+    type: "conjunction",
+  }).format(preInstalledShortNames.map((n) => formatToolLink(n)));
 
   return `
 <!--
@@ -297,25 +321,16 @@ Do not edit manually.
 Renaming/deleting this page? Add a redirect in docs/redirects.json.
 -->
 
-The Archestra MCP Server is a built-in MCP server that ships with the platform and requires no installation. It exposes tools for managing platform resources such as agents, MCP servers, policies, and limits.
+The Archestra MCP Server is built into every deployment and needs no installation. Its tools let an agent manage agents, MCP servers, policies, and knowledge, build apps, and run code in the sandbox. Every tool name starts with \`archestra__\`. This page lists tools by their short name.
 
-Most tools require explicit assignment to Agents or MCP Gateways before they can be used. The following tools are pre-installed on all new agents by default: ${preInstalledList}.
+## Access
 
-${formatToolLink("query_knowledge_sources")} appears for Agents and MCP Gateways only when at least one [knowledge base or connector](/docs/platform-knowledge) is attached. To use it, the user must have ${queryKnowledgeSourcesPermission}.
+In Custom tool mode, assign the tools to the agent or MCP Gateway the client connects through. Auto mode uses [tool discovery](/docs/mcp/gateway#load-tools-when-needed) to reach tools the user can access. New agents include ${preInstalledList}; enabled features add their own default tools. ${formatToolLink("query_knowledge_sources")} appears only when the agent or gateway has at least one [knowledge base or connector](/docs/knowledge) attached.
 
-All Archestra tools are prefixed with \`archestra__\`. Most built-in tools are always trusted — they bypass tool invocation and trusted data policies.
+Two checks apply to every call:
 
-${formatToolLink("query_knowledge_sources")} is an exception: its output is treated as sensitive by default and is evaluated by trusted data policies. See [AI Tool Guardrails](/docs/platform-ai-tool-guardrails) for more details.
-
-## Auth
-
-Archestra tools are **trusted** by default, meaning they bypass [tool invocation and trusted data policies](/docs/platform-ai-tool-guardrails) — the tool will always execute without policy evaluation.
-
-${formatToolLink("query_knowledge_sources")} is evaluated by trusted data policies and its results are treated as sensitive by default.
-
-However, **RBAC (role-based access control) is still enforced**. Every tool is mapped to a required permission (resource + action). The \`tools/list\` endpoint dynamically filters tools so users only see tools they have permission to use. For example, a user without \`knowledgeSource:create\` permission will not see ${formatToolLink("create_knowledge_base")} in their tool list and cannot execute it.
-
-Some tools enforce an **additional access requirement** in their handler beyond this RBAC permission — for example, the team membership tools gate on \`team:read\` but then require the caller to be an organization-level team manager or an admin (team-member role) of the specific team. These tools are marked with a † in the tables below, and the requirement is spelled out in each tool's details.
+- **Permissions.** Each tool requires the RBAC permission in the last column of its table. \`tools/list\` shows a user only the tools their role allows; a user without \`knowledgeSource:create\`, for example, does not see ${formatToolLink("create_knowledge_base")}. A tool marked † has an extra condition, described in its entry.
+- **Guardrails.** Built-in tools are trusted: [tool invocation and trusted data policies](/docs/agents/guardrails) do not evaluate them. ${formatToolLink("query_knowledge_sources")} is the exception: invocation policies evaluate the call, and trusted data policies evaluate its results as sensitive data.
 
 ## Tools Reference
 
@@ -334,7 +349,7 @@ function extractLastUpdatedFromMarkdown(content: string): string | null {
 }
 
 function generateMarkdownContent(existingContent: string | null): string {
-  const newBody = generateMarkdownBody();
+  const newBody = linkPermissionMentions(generateMarkdownBody());
 
   let lastUpdated: string;
 
@@ -739,4 +754,21 @@ function perItemNoun(resource: Resource): string {
     default:
       return resourceLabels[resource].toLowerCase().replace(/s$/, "");
   }
+}
+
+/**
+ * Link every inline-code `resource:action` permission to its row on the
+ * Permissions reference, as `.github/scripts/check-docs-permission-links.py`
+ * requires of every docs page.
+ */
+function linkPermissionMentions(markdown: string): string {
+  return markdown.replace(
+    /(?<!\[)`([A-Za-z]+):([a-z-]+)`(?!\]\()/g,
+    (mention, resource: string, action: string) =>
+      (allAvailableActions as Record<string, readonly string[]>)[
+        resource
+      ]?.includes(action)
+        ? `[${mention}](/docs/reference/permissions#${resource}:${action})`
+        : mention,
+  );
 }

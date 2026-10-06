@@ -177,7 +177,6 @@ export function McpServerCard({
   const { startChat, isCreating: isChatCreating } = useChatWithCatalogItem();
 
   const isByosEnabled = useFeature("byosEnabled");
-  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const isLocalMcpEnabled = useFeature("orchestratorK8sRuntime");
@@ -402,9 +401,8 @@ export function McpServerCard({
   // connections have failed, prefer one the caller can re-authenticate so the
   // marker stays actionable regardless of row order.
   const canReauthenticate = useCanReauthenticate();
-  const oauthFailedServers = alertingEnabled
-    ? (mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [])
-    : [];
+  const oauthFailedServers =
+    mcpServerOfCurrentCatalogItem?.filter((s) => s.oauthRefreshError) ?? [];
   const oauthFailedServer =
     oauthFailedServers.find((s) => canReauthenticate(s)) ??
     oauthFailedServers[0];

@@ -195,19 +195,9 @@ export function InternalMCPCatalog({
   const currentUserId = session?.user?.id;
   const { data: environmentList } = useEnvironments();
   const byosEnabled = Boolean(useFeature("byosEnabled"));
-  const alertingFeature = useFeature("mcpServerAlertingEnabled");
-  const alertingEnabled = alertingFeature === true;
 
   const [sort, setSort] = useState<SortKey>("attention");
-  const sortOptions =
-    alertingFeature === false
-      ? SORT_OPTIONS.filter((option) => option.key !== "attention")
-      : SORT_OPTIONS;
-  useEffect(() => {
-    if (alertingFeature === false && sort === "attention") {
-      setSort("name-asc");
-    }
-  }, [alertingFeature, sort]);
+  const sortOptions = SORT_OPTIONS;
   // The filters live in the URL, not in component state: the sidebar badge
   // and the retired `?tab=attention` links both have to be able to point at a
   // filtered list, and Back has to undo a filter change rather than leave the
@@ -903,23 +893,12 @@ export function InternalMCPCatalog({
   // surface renders. This feeds the audience facets, Issue filter and table.
   const { issuesByCatalog, facetCounts } =
     useMcpServerIssues(deploymentStatuses);
-  const selectedFacet = alertingEnabled
-    ? selectedAttentionFacet(filters.status)
-    : null;
+  const selectedFacet = selectedAttentionFacet(filters.status);
   useEffect(() => {
-    const requestedFacet = selectedAttentionFacet(filters.status);
-    if (alertingFeature === false && requestedFacet) {
-      selectFacet(null);
-    } else if (userIsMcpServerAdmin && selectedFacet === "others") {
+    if (userIsMcpServerAdmin && selectedFacet === "others") {
       selectFacet("you");
     }
-  }, [
-    alertingFeature,
-    filters.status,
-    userIsMcpServerAdmin,
-    selectedFacet,
-    selectFacet,
-  ]);
+  }, [userIsMcpServerAdmin, selectedFacet, selectFacet]);
   // The facet's membership and its count come out of the same call, so the
   // number on the button is always the number of rows below it.
   const facetCatalogIds = useMemo(

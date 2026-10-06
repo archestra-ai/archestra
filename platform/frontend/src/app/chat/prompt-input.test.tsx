@@ -1178,7 +1178,7 @@ describe("ArchestraPromptInput", () => {
         screen.getByRole("link", { name: /Learn how to enable it/ }),
       ).toHaveAttribute(
         "href",
-        expect.stringContaining("platform-chat#key-escrow"),
+        expect.stringContaining("/docs/chat#key-escrow"),
       );
       expect(onEncryptedChatChange).not.toHaveBeenCalled();
     });

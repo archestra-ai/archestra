@@ -21,7 +21,7 @@ const PAGE_DESCRIPTIONS: Record<string, React.ReactNode> = {
 };
 
 function ApiKeysDescription() {
-  const apiDocsUrl = getFrontendDocsUrl("platform-api-reference");
+  const apiDocsUrl = getFrontendDocsUrl("reference/api");
   return (
     <>
       Personal keys that let your scripts and integrations call the{" "}

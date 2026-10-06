@@ -179,7 +179,13 @@ describe("ConnectPage guardrails chip", () => {
       },
     });
     render(<ConnectionPage />);
-    return screen.getByRole("button", { name: /guardrails/ });
+    // The chip is status only; its info button sits inside it.
+    const chip = screen
+      .getByRole("button", { name: "What the guardrails do" })
+      .closest(".rounded-xl");
+    expect(chip).toHaveTextContent("Guardrails");
+    expect(chip).not.toHaveTextContent("OpenAPPA");
+    return chip as HTMLElement;
   }
 
   it("says the guardrails are off when the deployment is off", () => {

@@ -98,7 +98,7 @@ const ConnectCommandPanel = dynamic(
   { ssr: false },
 );
 
-type DialogKind = "servers" | "skills" | "plugins" | "guardrails" | "cursor";
+type DialogKind = "servers" | "skills" | "plugins" | "cursor";
 
 const MOTION_CSS = `
 @keyframes connect-pop {
@@ -163,7 +163,6 @@ export function ConnectPage() {
 
   const parts = data.partsFor(client);
   const routed = parts.proxy && choices.proxy;
-  const guard = guardrailsStatus(data, client, routed);
   const servers = choices.tools ? data.servers : [];
   const tools = servers.reduce((n, s) => n + s.toolCount, 0);
   const skillsOn = data.skillsEnabled && data.totalSkills > 0;
@@ -315,20 +314,6 @@ export function ConnectPage() {
             Override OpenAI Base URL. A Cursor subscription can't be used as a
             key.
           </p>
-        </div>
-      </InfoDialog>
-      <InfoDialog
-        open={dialog === "guardrails"}
-        onOpenChange={(v) => !v && setDialog(null)}
-        title={`${data.guardrails.name} guardrails`}
-      >
-        <div className="space-y-2">
-          <p>
-            Before a risky tool call runs (deleting data, sending messages
-            outside the org), {data.guardrails.name} checks it against your
-            org's rules and can ask you to approve it first.
-          </p>
-          {guard && <p>{guard.detail}</p>}
         </div>
       </InfoDialog>
     </div>
@@ -1020,8 +1005,6 @@ interface StatusChip {
   icon: ReactNode;
   title: ReactNode;
   sub: ReactNode;
-  /** Opens its details; a status-only chip has none. */
-  onOpen?: () => void;
 }
 
 function ProfileCard({
@@ -1084,7 +1067,17 @@ function ProfileCard({
           {guard.tone === "ok" ? <ShieldCheck /> : <ShieldOff />}
         </ChipIcon>
       ),
-      title: `${data.guardrails.name} guardrails`,
+      title: (
+        <span className="inline-flex items-center gap-1">
+          Guardrails
+          <InfoTip label="What the guardrails do">
+            Before a risky tool call runs (deleting data, sending messages
+            outside the org), the guardrails check it against your org's rules
+            and can ask you to approve it first. Powered by{" "}
+            {data.guardrails.name}. {guard.detail}
+          </InfoTip>
+        </span>
+      ),
       sub: (
         <span
           className={cn(
@@ -1096,7 +1089,6 @@ function ProfileCard({
           {guard.label}
         </span>
       ),
-      onOpen: () => onOpen("guardrails"),
     });
 
   return (
@@ -1263,22 +1255,11 @@ function ProfileCard({
                       </span>
                     </>
                   );
-                  const chip =
-                    "flex min-w-0 items-center gap-2.5 rounded-xl border bg-background py-2 pr-3 pl-2 text-left";
-                  return c.onOpen ? (
-                    <UnstyledButton
+                  return (
+                    <div
                       key={c.id}
-                      type="button"
-                      onClick={c.onOpen}
-                      className={cn(
-                        chip,
-                        "transition-colors hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
-                      )}
+                      className="flex min-w-0 items-center gap-2.5 rounded-xl border bg-background py-2 pr-3 pl-2 text-left"
                     >
-                      {body}
-                    </UnstyledButton>
-                  ) : (
-                    <div key={c.id} className={chip}>
                       {body}
                     </div>
                   );

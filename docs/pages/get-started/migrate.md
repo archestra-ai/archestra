@@ -14,7 +14,6 @@ The migration kit is a skill. Run it in Claude Code, Cursor, OpenCode, or any ag
 It reads Claude Code's project files: `CLAUDE.md`, the `.claude/` folder, `.mcp.json`, and Python tools under `tools/`. An OpenClaw config goes into the report for you to move by hand. Starting from scratch? Skip this page.
 
 <span id="what-it-produces"></span>
-<span id="how-items-map"></span>
 
 ## What Moves
 
@@ -30,7 +29,6 @@ It reads Claude Code's project files: `CLAUDE.md`, the `.claude/` folder, `.mcp.
 Everything else, such as OpenClaw runtime settings and other hook events, goes into a follow-up report for you to move by hand.
 
 <span id="install"></span>
-<span id="migration-steps"></span>
 
 ## Run the Migration
 
@@ -57,8 +55,6 @@ You need a coding agent that runs skills and Python 3.10 or newer.
 4. Approve. The skill creates what you approved and writes a report. It also turns on the organization's skill tools and adds sandbox tools to migrated agents.
 
 Before you share migrated resources, read the report's warnings. The kit hides secrets it finds in config files, but secrets inside instructions or scripts stay there.
-
-<span id="check-the-result"></span>
 
 ## Check the Result
 

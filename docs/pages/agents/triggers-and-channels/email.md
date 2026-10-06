@@ -11,7 +11,7 @@ Give each agent an email address. Send it an email, and the agent answers in the
 
 All agent addresses deliver to one shared Microsoft 365 mailbox. They use plus-addressing, such as `agents+agent-8faa47b5…@example.com`. Microsoft 365 is the only supported provider.
 
-<span id="prerequisites"></span><span id="setting-up-the-mailbox"></span>
+<span id="prerequisites"></span>
 
 ## Connect the Mailbox
 
@@ -31,14 +31,11 @@ You need:
     ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_MAILBOX_ADDRESS=agents@example.com
     ```
 
-
 2. Go to **Settings → Messaging Channels → Email** and run the wizard. It subscribes Archestra to new mail.
 
 ![The incoming email setup steps in Settings](/docs/automated_screenshots/agents-triggers-and-channels-email_setup.webp)
 
 Archestra renews the subscription before it expires. To skip the wizard, set [`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL`](/docs/reference/configuration#ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_WEBHOOK_URL) to `https://<your-archestra-host>/api/webhooks/incoming-email`. For another domain in agent addresses, set [`ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN`](/docs/reference/configuration#ARCHESTRA_AGENTS_INCOMING_EMAIL_OUTLOOK_EMAIL_DOMAIN).
-
-<span id="giving-an-agent-an-address"></span>
 
 ## Give an Agent an Address
 
@@ -63,8 +60,6 @@ What to know:
 
 - Private mode trusts the sender address. Turn on SPF, DKIM, and DMARC for your domain to block spoofed mail.
 - A sender who is not allowed cannot run the agent, and gets no reply.
-
-<span id="what-the-agent-receives"></span>
 
 ## What the Agent Receives
 

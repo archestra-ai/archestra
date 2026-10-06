@@ -1357,7 +1357,7 @@ function KnowledgeSettingsContent() {
                   Use a model to reorder search results by relevance. Optional.{" "}
                   <ExternalDocsLink
                     href={getDocsUrl(
-                      DocsPage.PlatformKnowledgeRetrieval,
+                      DocsPage.PlatformKnowledgeSettings,
                       "reranking",
                     )}
                     className="text-primary hover:underline"
@@ -1480,7 +1480,7 @@ function KnowledgeSettingsContent() {
                           most. Always on.{" "}
                           <ExternalDocsLink
                             href={getDocsUrl(
-                              DocsPage.PlatformKnowledgeRetrieval,
+                              DocsPage.PlatformKnowledgeSettings,
                               "keyword-ranking",
                             )}
                             className="text-primary hover:underline"
@@ -1594,7 +1594,7 @@ function KnowledgeSettingsContent() {
                           model.{" "}
                           <ExternalDocsLink
                             href={getDocsUrl(
-                              DocsPage.PlatformKnowledgeRetrieval,
+                              DocsPage.PlatformKnowledgeSettings,
                               "contextual-retrieval",
                             )}
                             className="text-primary hover:underline"

@@ -33,8 +33,6 @@ graph LR
 
 <span id="how-tools-are-reached"></span>
 
-<span id="getting-tools-to-a-client"></span>
-
 ## Give a Client Tools
 
 Install a server, and your coding agent can use its tools. No gateway to set up. A client set up through [Connect](/docs/get-started/connect) picks up new servers by itself.
@@ -43,7 +41,7 @@ Install a server, and your coding agent can use its tools. No gateway to set up.
 2. Click **Install**, then enter your credential or sign in.
 3. Ask your agent to use the new tools. Each call shows in [Logs](/docs/admin/logs).
 
-<span id="shared-gateway"></span>For a team, an app, or a script that needs a fixed set of tools, [create a gateway](/docs/mcp/gateway#create-a-gateway).
+For a team, an app, or a script that needs a fixed set of tools, [create a gateway](/docs/mcp/gateway#create-a-gateway).
 
 <span id="environments"></span><span id="observability"></span>
 

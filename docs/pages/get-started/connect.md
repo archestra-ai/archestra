@@ -24,15 +24,9 @@ To leave out the proxy or the skills, click **Customize setup** before you appro
 
 ![Connect with Codex selected and its setup prompt](/docs/automated_screenshots/platform-connection_connect-with-ai.webp)
 
-<span id="choose-your-client"></span>
 <span id="claude-code"></span>
 <span id="claude-desktop"></span>
-<span id="coding-client-prerequisites"></span>
-<span id="connect-a-coding-client"></span>
-<span id="connection-page-settings"></span>
-<span id="client-notes"></span>
-<span id="n8n-and-any-client"></span>
-<span id="what-setup-changes"></span>
+
 <span id="codex"></span>
 <span id="cursor"></span>
 <span id="copilot-cli"></span>
@@ -67,7 +61,7 @@ Some clients need one more step. `<gateway>` is the name your client lists for t
 - **OpenCode:** if `opencode mcp list` shows that sign-in is needed, run `opencode mcp auth <gateway>`. Then restart OpenCode in a new terminal.
 
 <span id="startup-guard"></span>
-<span id="disconnect-a-client"></span>
+
 <span id="troubleshooting"></span>
 
 ## After Setup

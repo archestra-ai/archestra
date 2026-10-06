@@ -13,8 +13,6 @@ You set it up once: where it runs, how it signs in, and who can find it. Everyon
 
 You need [`mcpRegistry:create`](/docs/reference/permissions#mcpRegistry:create).
 
-<span id="remote-servers"></span>
-
 ## Add a Remote Server
 
 For a server someone else runs, such as GitHub's or Linear's.
@@ -52,8 +50,6 @@ For a server that ships as a package or an image, such as one you start with `np
 3. Pick the transport: **stdio** for most packages, or **streamable-http** for a server that listens on a port. For HTTP, enter the port and MCP path.
 4. Add its environment variables. To make each person enter their own value, such as an API key, mark it for installation. To fill it from a saved [credential](/docs/admin/security/credentials), pick that credential.
 5. Click **Add Server**, then install and test it. Archestra starts the pod when you install.
-
-<span id="headers-and-oauth-overrides"></span>
 
 ## Headers and OAuth Settings
 

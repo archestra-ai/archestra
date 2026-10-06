@@ -9,8 +9,6 @@ lastUpdated: 2026-10-05
 
 Use the models you deployed in Azure, with an API key or with no key at all through Microsoft Entra ID. Each deployment name becomes a model ID, so `gpt-5-prod` in Azure is `gpt-5-prod` in your requests.
 
-<span id="adding-a-provider"></span><span id="proxy-endpoint"></span><span id="getting-an-azure-api-key"></span><span id="base-url-format"></span>
-
 ## Add Azure
 
 1. Go to **Model Providers → Add API Key** and select **Azure AI Foundry**.
@@ -40,8 +38,6 @@ Let Archestra sign in to Azure as itself, so no Azure key is stored anywhere. It
 3. Add Azure as above, with the API key empty.
 
 To try the flow on your laptop first, see the [keyless example](https://github.com/archestra-ai/examples/tree/main/azure-openai-keyless).
-
-<span id="aks-with-microsoft-entra-workload-id"></span>
 
 ### On AKS
 
@@ -102,8 +98,6 @@ archestra:
 ```
 
 The subject must match your Helm release's namespace and service account. See Microsoft's [AKS Workload ID guide](https://learn.microsoft.com/en-us/azure/aks/workload-identity-deploy-cluster).
-
-<span id="deployment-discovery-and-rbac"></span><span id="routing-notes"></span>
 
 ## When It Does Not Work
 

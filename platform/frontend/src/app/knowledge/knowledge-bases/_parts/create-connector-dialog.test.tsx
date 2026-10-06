@@ -1052,7 +1052,7 @@ describe("CreateConnectorDialog", () => {
         .filter(
           (link) =>
             link.getAttribute("href") ===
-            "https://archestra.ai/docs/knowledge/connectors#m-files-vaf-add-on",
+            "https://archestra.ai/docs/knowledge/connectors/m-files#m-files-vaf-add-on",
         );
       expect(docsLinks).toHaveLength(1);
       // The manual path is the mutually exclusive alternative tab: the
@@ -1355,7 +1355,7 @@ describe("CreateConnectorDialog", () => {
         }),
       ).toHaveAttribute(
         "href",
-        `https://archestra.ai/docs/knowledge/connectors#${docsAnchor}`,
+        `https://archestra.ai/docs/knowledge/connectors/${docsAnchor.replace("-auto-sync-permissions", "")}#${docsAnchor}`,
       );
     });
 
@@ -1425,7 +1425,7 @@ describe("CreateConnectorDialog", () => {
         within(modeItem).getByRole("link", { name: /Learn more/ }),
       ).toHaveAttribute(
         "href",
-        "https://archestra.ai/docs/knowledge/connectors#google-drive-auto-sync-permissions",
+        "https://archestra.ai/docs/knowledge/connectors/google-drive#google-drive-auto-sync-permissions",
       );
     });
   });

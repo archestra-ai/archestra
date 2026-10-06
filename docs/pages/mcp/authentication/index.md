@@ -1,5 +1,6 @@
 ---
-title: Authentication
+title: MCP Authentication
+sidebarTitle: Authentication
 description: How clients sign in to a gateway, and how Archestra signs in to each MCP server
 order: 4
 lastUpdated: 2026-10-05
@@ -11,14 +12,14 @@ Sign in to Archestra once, and every tool call runs as you, in every app. Ask Cl
 
 Every MCP server signs in its own way, and most clients cannot do it for a whole team. Archestra does it for them:
 
-- One sign-in for the client. Coding agents sign in through the browser. Scripts, apps, and your identity provider have their own ways. See [Gateway Sign-In](/docs/mcp/authentication/gateway).
-- The right account for each call. The person's own, a shared bot account, or their company identity, exchanged at call time. See [Server Credentials](/docs/mcp/authentication/servers).
+- One way in for each client. Coding agents authenticate through the browser. Scripts, apps, and your identity provider have their own methods. See [MCP Gateway Authentication](/docs/mcp/authentication/gateway).
+- The right account for each call. The person's own, a shared bot account, or their company identity, exchanged at call time. See [MCP Server Credentials](/docs/mcp/authentication/servers).
 - Credentials stay in Archestra. It stores them, and refreshes OAuth tokens when the provider allows it. Clients never see them.
 - Every call is traceable. The [MCP Gateway logs](/docs/admin/logs) show which account each call used.
 
 ```mermaid
 graph LR
-    Client["MCP client"] -->|"1. Gateway sign-in<br/>OAuth, token, or IdP JWT"| Gateway["MCP Gateway"]
+    Client["MCP client"] -->|"1. Gateway authentication<br/>OAuth, token, or IdP JWT"| Gateway["MCP Gateway"]
     Gateway -->|"2. Server credential<br/>the caller's or a shared one"| Server["MCP server"]
 
     class Gateway accent

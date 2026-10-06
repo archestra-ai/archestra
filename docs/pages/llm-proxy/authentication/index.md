@@ -1,5 +1,6 @@
 ---
-title: Authentication
+title: LLM Proxy Authentication
+sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
 lastUpdated: 2026-10-05
@@ -74,7 +75,7 @@ Use OAuth when your app should get short-lived tokens, not a key that never expi
 
 Go to **Settings → OAuth Clients → Create OAuth Client**, and pick **LLM Proxy** under **What will this client access?**. Then pick a grant type:
 
-<span id="getting-an-access-token"></span><span id="oauth-client-credentials"></span>
+<span id="getting-an-access-token"></span>
 
 ### Call as the App
 
@@ -97,7 +98,7 @@ For a bot or a nightly job with no person behind it.
 - Map a metered API key. A personal subscription cannot serve an app.
 - See the [complete example app](https://github.com/archestra-ai/examples/tree/main/model-router-client-credentials).
 
-<span id="on-behalf-of-users-authorization-code"></span><span id="user-oauth"></span>
+<span id="on-behalf-of-users-authorization-code"></span>
 
 ### Call for a Person
 

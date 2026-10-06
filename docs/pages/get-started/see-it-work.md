@@ -9,8 +9,6 @@ lastUpdated: 2026-10-05
 
 Send one request through Archestra, then find it in the logs. Every model call and tool call shows up there, from Chat and from connected clients.
 
-<span id="check-the-connection"></span>
-
 ## In Chat
 
 1. Open **Chat** in the Archestra sidebar.
@@ -21,7 +19,7 @@ Send one request through Archestra, then find it in the logs. Every model call a
 
 Use the client you connected in [Connect Your Agents](/docs/get-started/connect):
 
-- **Tools:** ask your client to list the Archestra gateway's tools. If they are missing, complete the gateway sign-in shown in **Connect**, then reload the client.
+- **Tools:** ask your client to list the Archestra gateway's tools. If they are missing, complete the gateway authentication shown in **Connect**, then reload the client.
 - **Models:** send any prompt.
 - **Skills:** ask for one of the shared skills you selected during setup.
 

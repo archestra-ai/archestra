@@ -14,8 +14,6 @@ A run uses the agent's instructions, tools, skills, and permissions. Its model c
 
 ![The Create Agent page with Claude Code, Codex, OpenCode, Hermes, and OpenClaw under Popular agents](/docs/automated_screenshots/agents-runtime_create-agent.webp)
 
-<span id="creating-a-runtime-agent"></span>
-
 ## Create an Agent With a Dedicated Runtime
 
 1. Go to **Agents** and click **Add Agent**.
@@ -26,8 +24,6 @@ A run uses the agent's instructions, tools, skills, and permissions. Its model c
 ![The Configuration step with Claude Code selected in the Runtime picker](/docs/automated_screenshots/agents-runtime_runtime-picker.webp)
 
 Already have an agent? Open it, turn on **Dedicated runtime** on its **Agent Runtime** tab, and click **Save changes**.
-
-<span id="images-and-updates"></span>
 
 ### Update the Image
 
@@ -41,15 +37,11 @@ Each run gets a temporary virtual key. Provider keys stay in Archestra.
 - **Codex:** your ChatGPT subscription, connected under **Model Providers**. An OpenAI API key does not replace it.
 - **Other agents:** any [model provider](/docs/llm-proxy/providers) configured in Archestra.
 
-<span id="repository-and-tool-credentials"></span>
-
 What to know:
 
 - Each person connects their own subscription before their first run. Subscription usage shows in the logs, but it does not count toward cost limits.
 - Tools run with the permissions of the person who started the run.
 - Repository tokens and other secrets go under **Environment variables** on the **Agent Runtime** tab. Mark them **Secret**. Connections that several agents share go in [Credentials](/docs/admin/security/credentials).
-
-<span id="working-with-runs"></span>
 
 ## Run a Task
 
@@ -64,8 +56,6 @@ Select the agent in Chat or in a [Project](/docs/chat/projects) and send a task.
 What to know:
 
 - Only the person who started a run can type in it. [Share the run](/docs/admin/access-control#granular-access-control) to give others read-only access. Project members and agent administrators can read it without a share.
-
-<span id="lifetime"></span>
 
 ### How Long a Run Lasts
 
@@ -106,16 +96,12 @@ What to know:
 - **File downloads:** a protected transfer checks the pinned file content before it returns a download command. It refuses a file that needs changes or that passes the protected export limit. The session owner can still download directly.
 - **Old sessions:** turning on Guardrails does not protect work that started before. Start a new session. Guardrails do not replace filesystem or network sandboxing.
 
-<span id="starting-runs-from-elsewhere"></span>
-
 ## Start Runs From Elsewhere
 
 - **Your coding agent:** [hand work off](/docs/agents/runtime/handoff) from Claude Code or another connected agent, and bring it back.
 - **A coordinator agent:** add the agent as a [subagent](/docs/agents/subagents). The coordinator keeps answering while the run works. This also covers messaging channels: the result returns to the original thread.
 - **Email:** an [email](/docs/agents/triggers-and-channels/email) to the agent starts a run. The result returns in the thread when replies are on.
 - **A2A:** A2A clients start runs and continue them with the same `contextId`. See [A2A](/docs/agents/triggers-and-channels/webhook-a2a#sdks).
-
-<span id="startup-troubleshooting"></span>
 
 ## Troubleshooting
 

@@ -61,7 +61,6 @@ To tailor a skill to each person, add `templated: true` to its frontmatter. Its 
 
 The optional `compatibility` field says what the skill needs to run, such as a Python version. Archestra shows it next to the skill's name, and the agent can tell you when your setup does not meet it.
 
-<span id="editing-a-skill"></span>
 <span id="authoring-skills-from-chat"></span>
 
 ## Write a Skill from Chat

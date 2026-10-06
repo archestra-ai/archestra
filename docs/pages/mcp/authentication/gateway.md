@@ -1,20 +1,23 @@
 ---
-title: Gateway Sign-In
-description: Sign in to an MCP Gateway with OAuth, a platform token, or your identity provider's JWT
+title: MCP Gateway Authentication
+sidebarTitle: Gateway Authentication
+description: Authenticate a client to an MCP Gateway with OAuth, a platform token, or your identity provider's JWT
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Every client signs in with what it already has: a browser, a token, or your company's identity token. Claude Code opens a browser tab. A CI job sends one header. An app behind Okta passes on the token it already holds.
+Each client proves who it is before the gateway shows any tools. Pick the method by the client you have:
 
-| Method | Use it for | Calls act as |
+| Your client | Use | Each call acts as |
 | --- | --- | --- |
-| **[OAuth](#oauth-21)** | Claude Code, Cursor, and other MCP clients | The person who signs in |
-| **[Platform token](#bearer-token)** | Scripts and CI jobs | You, a team, or the organization |
-| **[Identity provider JWT](#identity-provider-jwks)** | Clients that already hold a token from your IdP | The person in the token |
-| **[OAuth client](/docs/mcp/authentication/applications)** | Your own app or service | The app, or the person using it |
+| Claude Code, Cursor, or another MCP client | [OAuth](#oauth-21): the client opens a browser for you | The person who signs in |
+| A script or CI job | [Platform token](#bearer-token): one header | You, a team, or the organization |
+| A client that already holds a token from your identity provider | [Identity provider JWT](#identity-provider-jwks): pass that token | The person in the token |
+| Your own app or service | [OAuth client](/docs/mcp/authentication/applications): the app gets its own identity | The app, or the person using it |
+
+Not sure? Use OAuth. It works with any MCP client. By default, you register nothing in Archestra first.
 
 <span id="oauth-21"></span>
 
@@ -91,6 +94,6 @@ ID-JAG lets your identity provider decide which MCP servers each person can use.
 2. The client asks your identity provider for an ID-JAG for one MCP server. The provider checks its access policy first.
 3. The client trades the ID-JAG for that server's access token.
 
-Archestra plays the client role today, not the server role. It gets ID-JAGs from your identity provider to sign in to MCP servers for a person. See [Server Credentials](/docs/mcp/authentication/servers#identity-provider-token-exchange). The gateway does not accept an ID-JAG yet.
+Archestra plays the client role today, not the server role. It gets ID-JAGs from your identity provider to authenticate to MCP servers for a person. See [MCP Server Credentials](/docs/mcp/authentication/servers#identity-provider-token-exchange). The gateway does not accept an ID-JAG yet.
 
 Gateway support waits on the [Identity Continuation Assertion draft](https://datatracker.ietf.org/doc/draft-mcguinness-oauth-id-continuation-assertion/). Without it, Archestra cannot pass the person's identity on to the next server after it accepts an ID-JAG.

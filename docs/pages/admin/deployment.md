@@ -272,8 +272,6 @@ spec:
 
 Full resource reference: [Crossplane provider README](https://github.com/archestra-ai/terraform-provider-archestra/blob/main/crossplane/README.md). Resource coverage is partial — current state and the gap vs. the Terraform provider are tracked on the [coverage badge](https://github.com/archestra-ai/terraform-provider-archestra#archestra-provider).
 
-<span id="connection-page-settings"></span>
-
 ## Connect Page Settings
 
 Admins configure the page under **Settings → Connect Page**, or with **Connection settings** on the Connect page:

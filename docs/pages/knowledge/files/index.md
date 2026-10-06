@@ -1,13 +1,16 @@
 ---
 title: Knowledge Files
+sidebarTitle: Files
 description: Upload reference files, control access, and index them into a Knowledge Base
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
 Upload a document once, and every agent you allow can answer from it, with a citation. A signed contract that came by email, a vendor's SOC 2 report, a policy PDF: if no connector reaches it, upload it here.
+
+![Files page with three directories and uploaded files, each with the Knowledge Base it is indexed in](/docs/automated_screenshots/knowledge_files.webp)
 
 ## Upload and Index
 
@@ -17,11 +20,20 @@ Uploading stores a file. Indexing makes it searchable.
 2. Select files or whole directories, and click **Add to knowledge base**.
 3. Pick a base, or create one from the selection.
 
-Archestra reads the text at upload. A file it cannot read is refused right away, so nothing is stored that search could never find. A scanned PDF is accepted when [Document OCR](/docs/knowledge#document-ocr) is set. Its pages are read when the file is indexed.
+Archestra reads the text at upload. A file it cannot read is refused right away, so nothing is stored that search could never find. A scanned PDF is accepted when [Document OCR](/docs/knowledge/settings#document-ocr) is set. Its pages are read when the file is indexed.
 
 - **Directories** group files. They are flat, with no subdirectories.
 - Each file has its own permissions. Sharing a Knowledge Base does not open its files to more people.
-- A pipeline can upload files through the API. See [Importing](/docs/knowledge/files/importing).
+
+<span id="importing"></span>
+
+## Import from a Pipeline
+
+To keep a file current from a script, call [`PUT /api/knowledge-files/:fileId/content`](/docs/reference/api#/Knowledge%20Files/upsertKnowledgeFile). One call creates or replaces the file and indexes it into a Knowledge Base.
+
+- Make one UUID for each source document, and send it as `fileId` on every import. A replace keeps the file's permissions and labels.
+- The API key needs [`knowledgeSource:create`](/docs/reference/permissions#knowledgeSource:create), [`knowledgeSource:update`](/docs/reference/permissions#knowledgeSource:update), and access to the Knowledge Base.
+- An HTTP success does not mean the file is indexed. Check the `failures` array of each result, then send the request again.
 
 ## Keep a Chat Attachment
 
@@ -41,8 +53,6 @@ Pick by who needs the file, and for how long.
 | Use them for      | A one-off question about a file | Working files for one piece of work | Reference documents agents should answer from |
 
 A file can move up: save a chat attachment here, then index it into a Knowledge Base.
-
-<span id="vendor-security-reviews"></span>
 
 ## Example: Vendor Security Reviews
 

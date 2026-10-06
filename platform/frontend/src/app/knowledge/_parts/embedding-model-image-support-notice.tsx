@@ -94,7 +94,7 @@ export function EmbeddingModelImageSupportNotice({
         image files.{" "}
         <a
           href={getDocsUrl(
-            DocsPage.PlatformKnowledgeRetrieval,
+            DocsPage.PlatformKnowledgeSettings,
             "image-embedding",
           )}
           target="_blank"

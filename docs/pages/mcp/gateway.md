@@ -9,15 +9,15 @@ lastUpdated: 2026-10-05
 
 Give each client the right tools from one URL, and never hand out a server credential. Point Claude Code, Cursor, or your own app at a gateway. It gets tools from every server behind it:
 
-- Signed in to every server for you. Archestra uses the person's own account, a shared bot account, or their company identity. See [Server Credentials](/docs/mcp/authentication/servers).
-- Signed in the way each client can. Browser OAuth for coding agents, a token for scripts, an OAuth client for your apps, or your identity provider's JWT. See [Gateway Sign-In](/docs/mcp/authentication/gateway).
+- Authenticated to every MCP server for you. Archestra uses the person's own account, a shared bot account, or their company identity. See [MCP Server Credentials](/docs/mcp/authentication/servers).
+- Authenticated the way each client can. Browser OAuth for coding agents, a token for scripts, an OAuth client for your apps, or your identity provider's JWT. See [MCP Gateway Authentication](/docs/mcp/authentication/gateway).
 - Only the tools you choose. One gateway for engineers, one for support, one for an app.
 - Without filling the model's context. The client sees two tools, one to search and one to run, not hundreds.
 - With your knowledge, subagents, and skills, through the same URL.
 
 ![The MCP Gateways page with personal and shared gateways](/docs/automated_screenshots/mcp-gateway_gateways.webp)
 
-<span id="creating-a-gateway"></span><span id="connecting-a-client"></span><span id="authentication"></span>
+<span id="authentication"></span>
 
 ## Create a Gateway
 
@@ -29,7 +29,7 @@ You may not need to. Everyone already has a personal gateway, My Gateway, with e
 4. Click **Create**.
 5. Use it from your coding agent: go to **Connect**, click **Customize setup**, and pick the gateway under **Gateway**.
 
-Your agent then lists only the tools you chose. For a script or your own app, use the sign-in options on the gateway's **Connect** tab. See [Gateway Sign-In](/docs/mcp/authentication/gateway).
+Your agent then lists only the tools you chose. For a script or your own app, use the authentication options on the gateway's **Connect** tab. See [MCP Gateway Authentication](/docs/mcp/authentication/gateway).
 
 <span id="tool-assignment"></span><span id="resolve-at-call-time"></span><span id="load-tools-when-needed"></span><span id="subagents"></span>
 
@@ -57,7 +57,7 @@ Let Claude Code or Cursor answer from your company's documents, with links to th
 3. Save. The client gets [`query_knowledge_sources`](/docs/reference/archestra-mcp-server#query_knowledge_sources).
 4. Ask the client a question, such as "What is our deployment rollback procedure?". Each result comes with its document title and link.
 
-Each person finds only the documents [they can open](/docs/knowledge#permissions), so a team or organization token cannot search.
+Each person finds only the documents [they can open](/docs/knowledge#permissions). A team or organization token finds only sources shared with everyone in the organization.
 
 <span id="publish-skills"></span>
 

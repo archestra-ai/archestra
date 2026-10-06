@@ -15,7 +15,7 @@ Archestra records the cost of every model request from chat, agents, and the [LL
 
 ![Costs & Limits → Costs for the last 30 days: billed spend, subscription-covered use, requests, tokens, and daily cost and cache-savings charts](/docs/automated_screenshots/llm-proxy_costs.webp)
 
-<span id="statistics"></span><span id="see-costs"></span>
+<span id="statistics"></span>
 
 ## Track Spending
 
@@ -92,7 +92,7 @@ Archestra tells the two apart from the credential on each request. You configure
 - A Claude subscription that runs into paid usage credits turns metered. Archestra reads this from Anthropic's response headers.
 - To count every new request as metered, set [`ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT=false`](/docs/reference/configuration#ARCHESTRA_LLM_COST_SUBSCRIPTION_AUTODETECT). Past requests keep their classification.
 
-<span id="model-pricing"></span><span id="prompt-caching"></span><span id="get-accurate-numbers"></span><span id="where-prices-come-from"></span>
+<span id="model-pricing"></span><span id="prompt-caching"></span>
 
 ## Where Token Prices Come From
 

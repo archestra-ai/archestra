@@ -1,5 +1,6 @@
 ---
-title: Batteries
+title: Guardrail Batteries
+sidebarTitle: Batteries
 description: Cover an MCP server's tools with a ready-made policy package
 order: 2
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."

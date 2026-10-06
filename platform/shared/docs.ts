@@ -71,7 +71,7 @@ export const DocsPage = {
   PlatformIdentityProviders: "admin/identity",
   PlatformKnowledge: "knowledge",
   PlatformKnowledgeConnectors: "knowledge/connectors",
-  PlatformKnowledgeRetrieval: "knowledge",
+  PlatformKnowledgeSettings: "knowledge/settings",
   PlatformLlmProxyAuthentication: "llm-proxy/authentication",
   PlatformLlmProxy: "llm-proxy",
   PlatformMastraExample: "integrations/mastra",

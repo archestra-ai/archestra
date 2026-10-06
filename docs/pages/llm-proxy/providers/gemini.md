@@ -33,7 +33,7 @@ To use Vertex AI instead of Google AI Studio, configure these environment variab
 | [`ARCHESTRA_GEMINI_VERTEX_AI_LOCATION`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_LOCATION)         | No       | GCP region (default: `us-central1`)    |
 | [`ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE`](/docs/reference/configuration#ARCHESTRA_GEMINI_VERTEX_AI_CREDENTIALS_FILE) | No       | Path to service account JSON key file  |
 
-Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/knowledge#image-embedding).
+Vertex AI mode also gives Knowledge access to Vertex's multimodal embedding model (`multimodalembedding@001`) — see [Image Embedding](/docs/knowledge/settings#image-embedding).
 
 ### GKE with Workload Identity (Recommended)
 

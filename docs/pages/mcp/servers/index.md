@@ -21,8 +21,6 @@ Archestra picks the right account for each call. See [Whose Account a Call Uses]
 
 ![The MCP Registry listing servers and their connection status](/docs/automated_screenshots/mcp-servers_registry.webp)
 
-<span id="adding-a-server"></span><span id="installing-a-server"></span>
-
 ## Add and Install a Server
 
 1. **[Add it](/docs/mcp/servers/adding):** go to **MCP Registry** and click **Add MCP Server**. Pick **Remote** for a server that runs elsewhere, or **Self-hosted** for one Archestra runs.
@@ -30,8 +28,6 @@ Archestra picks the right account for each call. See [Whose Account a Call Uses]
 3. **Give its tools out:** add them to an [agent](/docs/agents) or an [MCP Gateway](/docs/mcp/gateway).
 
 A client set up through [Connect](/docs/get-started/connect) gets the new tools right away. Its gateway offers every tool the person can use. Other agents and gateways get only the tools you pick, unless you set them to offer all tools too. See [Tool Assignment](/docs/mcp/gateway#choose-its-tools).
-
-<span id="manage-servers"></span><span id="keep-servers-working"></span>
 
 ## Know When a Server Breaks
 

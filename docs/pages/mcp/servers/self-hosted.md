@@ -14,8 +14,6 @@ Run any MCP server for your whole team, even one built to run on a laptop. Many 
 - It shows their logs. Container logs are on the server's page. Each tool call is in [Logs](/docs/admin/logs).
 - It keeps them on your network. The [environment](/docs/admin/environments) limits which hosts a server can reach.
 
-<span id="runtime-configuration"></span>
-
 ## Set Up the Cluster
 
 With the quickstart or the Helm chart, there is nothing to set up. Go straight to [adding a self-hosted server](/docs/mcp/servers/adding#self-hosted-servers).
@@ -23,8 +21,6 @@ With the quickstart or the Helm chart, there is nothing to set up. Go straight t
 - **[Quickstart](/docs/get-started#run-archestra):** Archestra runs its own small Kubernetes cluster inside Docker. That is why the command mounts the Docker socket.
 - **[Helm chart](/docs/admin/deployment#helm-deployment):** Archestra runs servers in the cluster it is installed in. The chart creates the service account and permissions it needs.
 - **Anything else:** mount a kubeconfig for the target cluster, and set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG) to its path.
-
-<span id="private-images-and-deployment-overrides"></span>
 
 ## Change How It Runs
 

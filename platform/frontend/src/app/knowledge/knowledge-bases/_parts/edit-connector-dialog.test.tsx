@@ -272,7 +272,7 @@ describe("EditConnectorDialog - Jira admin API key", () => {
       within(apiTokenItem).getByRole("link", { name: /Learn more/ }),
     ).toHaveAttribute(
       "href",
-      "https://archestra.ai/docs/knowledge/connectors#jira-auto-sync-permissions",
+      "https://archestra.ai/docs/knowledge/connectors/jira#jira-auto-sync-permissions",
     );
 
     const adminKeyItem = screen
@@ -282,7 +282,7 @@ describe("EditConnectorDialog - Jira admin API key", () => {
       within(adminKeyItem).getByRole("link", { name: /Learn more/ }),
     ).toHaveAttribute(
       "href",
-      "https://archestra.ai/docs/knowledge/connectors#atlassian-organization-admin-api-key",
+      "https://archestra.ai/docs/knowledge/connectors/jira#organization-admin-api-key",
     );
   });
 
@@ -376,7 +376,7 @@ describe("EditConnectorDialog - Perforce permission sync", () => {
       within(adminPasswordItem).getByRole("link", { name: /Learn more/ }),
     ).toHaveAttribute(
       "href",
-      "https://archestra.ai/docs/knowledge/connectors#perforce-auto-sync-permissions",
+      "https://archestra.ai/docs/knowledge/connectors/perforce#perforce-auto-sync-permissions",
     );
 
     // The edit-mode note and the requirement share one description. Two

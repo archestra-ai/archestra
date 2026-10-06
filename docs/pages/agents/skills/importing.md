@@ -13,8 +13,6 @@ You can bring skills in from three places:
 - **MCP servers:** skills that a server publishes with its tools.
 - **Plugins:** skills inside a [plugin](/docs/agents/plugins).
 
-<span id="importing-from-github"></span>
-
 ## Import from GitHub
 
 1. Go to **Skills** and click **Add new skill**. Pick a popular repository, search the skill index, or click **Custom GitHub URL**.
@@ -38,8 +36,6 @@ Imported skills stay in sync with their repository: every 15 minutes, every hour
 - Synced skills are read-only in Archestra. Permissions and environments stay editable.
 - **Sync now** pulls right away. **Stop syncing** makes the skill editable.
 - If a pull fails, the skill keeps its last good content and shows the error.
-
-<span id="turning-the-online-catalog-off"></span>
 
 ### Turn GitHub Imports Off
 

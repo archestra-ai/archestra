@@ -68,7 +68,7 @@ describe("ConnectorEmbeddingModelNotice", () => {
     ).toHaveAttribute("href", "/settings/knowledge#embedding-configuration");
     expect(screen.getByRole("link", { name: "Learn more" })).toHaveAttribute(
       "href",
-      getDocsUrl(DocsPage.PlatformKnowledgeRetrieval, "image-embedding"),
+      getDocsUrl(DocsPage.PlatformKnowledgeSettings, "image-embedding"),
     );
   });
 

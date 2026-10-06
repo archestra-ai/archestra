@@ -17,8 +17,6 @@ A subagent can be:
 
 ![The Subagents settings on an agent](/docs/automated_screenshots/agents-subagents_agent-subagents.webp)
 
-<span id="adding-subagents"></span>
-
 ## Add Subagents
 
 1. Open the parent agent and go to **Tools, Skills & Knowledge**.

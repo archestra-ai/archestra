@@ -2,7 +2,7 @@
 title: Confluence
 description: Connect Confluence documents to Knowledge and configure source access
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 Let agents answer from your Confluence wiki, with a link to each page. Runbooks, design docs, and team pages become searchable, and private spaces can stay private.
@@ -34,8 +34,31 @@ For Confluence Cloud, use a dedicated account with product access:
 2. Enter the site root, such as `https://example.atlassian.net`, without `/wiki`.
 3. Grant **View** on every synced space. Add the account to every page and ancestor restriction it must index.
 4. Grant **Confluence Administrator** when audit-based incremental permission reads are required.
-5. Create a separate [organization admin API key](/docs/knowledge/connectors#atlassian-organization-admin-api-key) to resolve private managed-account emails.
+5. Create a separate [organization admin API key](#organization-admin-api-key) to resolve private managed-account emails.
 
 A Cloud administrator does not automatically bypass page restrictions through the API. Unreadable pages never enter the index.
 
 For Confluence Server or Data Center with PAT support, create a token under **Profile > Personal access tokens** and leave **Username** empty. On older releases, enter the username in **Username** and the password in **API Token / Personal Access Token**. Membership in the `confluence-administrators` group provides the broadest space and restricted-page visibility.
+
+## Organization Admin API Key
+
+Optional, for Confluence Cloud. Auto-sync permissions uses it to read the email of a managed account whose profile hides it.
+
+1. In [Atlassian administration](https://admin.atlassian.com), go to **Settings → API keys**.
+2. Click **Create API key** and name it.
+3. Leave the key **without scopes**. Permission sync calls the classic admin APIs, which scopes do not cover.
+4. Copy the key into the connector's **Organization admin API key** field.
+
+The API token stays required. Atlassian does not accept admin API keys on the Confluence APIs.
+
+## Changing the Instance Type
+
+Changing **Cloud Instance** on an existing connector changes how it signs in. Enter the credentials again.
+
+| Change | Also do this |
+| --- | --- |
+| To Cloud | Enter the Atlassian account email. |
+| From Cloud | The stored organization admin API key is removed. |
+| New personal access token on Server or Data Center | Leave **Username** empty. |
+| New Basic authentication password | Enter the username again. |
+

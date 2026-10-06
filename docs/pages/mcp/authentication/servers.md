@@ -1,13 +1,14 @@
 ---
-title: Server Credentials
+title: MCP Server Credentials
+sidebarTitle: Server Credentials
 description: Set how Archestra signs in to each MCP server, and whose account each call uses
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-Every MCP server signs in its own way. Set it once per server, and Archestra signs in on every call, as the right account. Ask for your open Jira tickets, and the call uses your Jira account. A status-page bot posts as the bot. Nobody pastes a key into a client.
+These are the credentials Archestra uses to call the MCP servers behind a gateway, such as Jira or GitHub. Each MCP server signs in its own way. Set it once per server, and Archestra signs in on every call, as the right account. Ask for your open Jira tickets, and the call uses your Jira account. A status-page bot posts as the bot. Nobody pastes a key into a client.
 
 <span id="upstream-mcp-server-authentication"></span>
 
@@ -43,7 +44,7 @@ Set the tool's account where you [choose its tools](/docs/mcp/gateway#choose-its
 - A personal install serves only its owner. A team install works only in agents and gateways the team can use.
 - To check which account a call used, see **Identity** in the [MCP Gateway logs](/docs/admin/logs).
 
-<span id="enterprise-identity-credential-resolution"></span><span id="identity-provider-token-exchange"></span>
+<span id="identity-provider-token-exchange"></span>
 
 ## Company Identity
 

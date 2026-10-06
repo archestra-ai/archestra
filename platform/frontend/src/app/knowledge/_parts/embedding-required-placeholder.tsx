@@ -34,7 +34,7 @@ export function EmbeddingRequiredPlaceholder() {
           )}
           <a
             href={getDocsUrl(
-              DocsPage.PlatformKnowledgeRetrieval,
+              DocsPage.PlatformKnowledgeSettings,
               "embedding-model",
             )}
             target="_blank"

@@ -27,8 +27,6 @@ flowchart LR
     class Checks guard
 ```
 
-<span id="using-the-llm-proxy"></span><span id="send-your-coding-agent-through-it"></span><span id="send-your-app-through-it"></span>
-
 ## Start Using It
 
 An app or agent uses the proxy when you change two things: its base URL and its API key. Its code stays the same.

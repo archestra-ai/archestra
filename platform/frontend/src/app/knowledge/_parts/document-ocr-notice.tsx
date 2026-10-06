@@ -72,7 +72,7 @@ export function DocumentOcrNotice({
           text is not searchable.{" "}
           <ExternalDocsLink
             href={getDocsUrl(
-              DocsPage.PlatformKnowledgeRetrieval,
+              DocsPage.PlatformKnowledgeSettings,
               "document-ocr",
             )}
             className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"

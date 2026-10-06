@@ -1,5 +1,6 @@
 ---
-title: Setup
+title: Agent Runtime Setup
+sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
 lastUpdated: 2026-10-05

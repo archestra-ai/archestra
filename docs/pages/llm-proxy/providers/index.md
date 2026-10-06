@@ -11,8 +11,6 @@ Add each AI provider once. Chat, agents, and every app behind the [LLM Proxy](/d
 
 ![The Model Providers page, with personal subscription cards above the provider API keys table](/docs/automated_screenshots/platform-supported-llm-providers_model-providers.webp)
 
-<span id="adding-a-provider-key"></span><span id="add-a-provider-key"></span>
-
 ## Connect a Provider
 
 Connect with an API key that your company pays for by use, or with a subscription that a person already pays for.
@@ -30,11 +28,11 @@ The new key appears in the **Provider API keys** table as **Configured**, and it
 
 You can also set a key through an environment variable, `ARCHESTRA_CHAT_<PROVIDER>_API_KEY` (for example [`ARCHESTRA_CHAT_OPENAI_API_KEY`](/docs/reference/configuration#ARCHESTRA_CHAT_OPENAI_API_KEY)). It is the fallback when no stored key applies.
 
-<span id="turning-providers-off"></span><span id="turn-providers-off"></span>
+<span id="turning-providers-off"></span>
 
 To hide a provider your company does not use, go to **Settings → LLM → Model providers** and switch **Available** off. It leaves every picker, and nobody can add a key for it. Its existing keys keep working. On the same page, you can give a provider a display name.
 
-<span id="personal-subscriptions"></span><span id="use-a-subscription"></span>
+<span id="personal-subscriptions"></span>
 
 ### With a Subscription
 
@@ -112,7 +110,7 @@ OpenRouter's `:free` model variants cost nothing, though they still need an Open
 
 To use Jev through OpenRouter, set the key's base URL to `https://openrouter.ai/api/alpha/decisions`. To change the default endpoint, set [`ARCHESTRA_JEV_BASE_URL`](/docs/reference/configuration#ARCHESTRA_JEV_BASE_URL).
 
-<span id="model-context-and-output-limits"></span><span id="set-model-limits"></span>
+<span id="model-context-and-output-limits"></span>
 
 ## Model Pricing, Limits, and Modalities
 
@@ -123,6 +121,6 @@ Archestra fills in each model's prices, context window, and input types for you.
 | **Pricing** | The cost Archestra records for each request. Wrong prices give wrong [cost reports and budgets](/docs/llm-proxy/costs-and-limits). |
 | **Context window** | When chat compacts a long conversation. |
 | **Max output tokens** | How long one answer can be. Without it, a turn asks for 8,192 tokens, which can cut a long answer short. |
-| **Modalities** | Which files chat sends to the model, and which models you can pick for [embedding](/docs/knowledge#embedding-model) and [OCR](/docs/knowledge#document-ocr). A file the model cannot read goes to the conversation's **Files** panel instead. |
+| **Modalities** | Which files chat sends to the model, and which models you can pick for [embedding](/docs/knowledge/settings#embedding-model) and [OCR](/docs/knowledge/settings#document-ocr). A file the model cannot read goes to the conversation's **Files** panel instead. |
 
 To change one, go to **Models**, edit the model, and open its **Pricing**, **Limits**, or **Modalities** tab. Your values stay through model refreshes. Clear a field to use the synced value again.

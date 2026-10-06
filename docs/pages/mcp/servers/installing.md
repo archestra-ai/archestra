@@ -11,7 +11,7 @@ When an agent uses a tool, it acts as a real account in that app. Ask an agent t
 
 Installing a server connects your account to it. Each person installs with their own account, or a team shares one. Archestra picks the right account for every call.
 
-<span id="personal-connections"></span><span id="shared-service-accounts"></span>
+<span id="shared-service-accounts"></span>
 
 ## Install a Server
 
@@ -28,8 +28,6 @@ Pick who owns the account, then enter its credential. Owner decides who else can
 
 A team or organization install stays when the person who added it leaves. A personal install goes with its owner.
 
-<span id="default-credential"></span>
-
 ## Per-User or Shared: Pick the Default
 
 When a server has both personal and shared installs, its default decides which one a call uses. Set **Default credential** on the server:
@@ -38,8 +36,6 @@ When a server has both personal and shared installs, its default decides which o
 - **Always use one service account:** every call runs as the shared account you pick.
 
 An agent or gateway can override this for each tool. See [Credential Resolution](/docs/mcp/authentication/servers#credential-resolution).
-
-<span id="reconnecting"></span>
 
 ## What to Know
 

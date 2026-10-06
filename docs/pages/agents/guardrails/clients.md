@@ -1,5 +1,6 @@
 ---
-title: Clients
+title: Guardrail Clients
+sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
@@ -8,7 +9,7 @@ lastUpdated: 2026-10-05
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
 
-<span id="client-connections"></span><span id="client-support-matrix"></span>Guardrails check the tool calls of any client that sends its traffic through Archestra. **Archestra Chat, Claude Code, Codex CLI, and OpenCode work as they are.** Any other client adds one header.
+Guardrails check the tool calls of any client that sends its traffic through Archestra. **Archestra Chat, Claude Code, Codex CLI, and OpenCode work as they are.** Any other client adds one header.
 
 ## Connect a Client
 
@@ -16,8 +17,6 @@ lastUpdated: 2026-10-05
 2. For a client without built-in support, add the [session headers](#session-headers).
 
 The **Client coverage** card on **Guardrails → Overview** lists the supported clients, and sets what happens to [unrecognized ones](#unrecognized-clients).
-
-<span id="custom-session-headers"></span>
 
 ## Session Headers
 
@@ -38,8 +37,6 @@ client = OpenAI(
     default_headers={"X-Appa-Session-ID": str(uuid.uuid4())},
 )
 ```
-
-<span id="unsupported-clients"></span>
 
 ## Unrecognized Clients
 

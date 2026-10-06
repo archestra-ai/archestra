@@ -45,7 +45,7 @@ describe("ConnectorDocumentOcrNotice", () => {
     // link entirely instead of pointing at the vendor's docs site.
     expect(screen.getByRole("link", { name: /Learn more/ })).toHaveAttribute(
       "href",
-      getDocsUrl(DocsPage.PlatformKnowledgeRetrieval, "document-ocr"),
+      getDocsUrl(DocsPage.PlatformKnowledgeSettings, "document-ocr"),
     );
   });
 

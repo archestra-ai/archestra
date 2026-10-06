@@ -16,8 +16,6 @@ Open **Logs** in the sidebar to answer questions such as:
 - Who gave this team admin rights, and what did the role look like before?
 - Why did Guardrails block that call?
 
-<span id="what-each-tab-shows"></span>
-
 ## What Gets Logged
 
 | Tab | One row per | Open a row for |
@@ -26,8 +24,6 @@ Open **Logs** in the sidebar to answer questions such as:
 | **MCP Gateway** | Tool call: tool, gateway, account used, result | The arguments and the full result |
 | **Audit** | Change: who, what, when, and if it succeeded | The values before and after, the source IP, and any admin acting as someone else |
 | **Guardrail consults** | [Guardrails](/docs/agents/guardrails) decision: tool, outcome | Why the call was allowed or blocked |
-
-<span id="who-can-read-them"></span>
 
 ## Who Can Read Them
 

@@ -1044,14 +1044,14 @@ Embedding, reranking, and OCR models for the [Knowledge Base](/docs/knowledge) a
 - **`ARCHESTRA_KNOWLEDGE_BASE_QUOTE_VERIFICATION_ENABLED`** - In the built-in chat, asks the model to back claims with verbatim quotes and logs each quote that does not match the cited chunk.
   - Default: `true`
   - Values: `true`, `false`
-  - Log-only: it never blocks or changes an answer. Misses are counted in the `rag_quote_verification_total` metric.
+  - Log-only: it never blocks or changes an answer. Misses are counted in the [`rag_quote_verification_total`](/docs/admin/observability/metrics#rag_quote_verification_total) metric.
 
 - **`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`** - Token budget for one chunk, including its title and metadata.
   - Default: `512`
   - Values: `128`–`2048`
   - Applies at ingest. Existing chunks keep their size until their connector re-syncs.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_CHILD_CHUNK_SIZE_TOKENS`** - Token budget for child chunks under [multi-granularity indexing](/docs/knowledge#search-ranking). Search matches the smaller children and returns their parent passage.
+- **`ARCHESTRA_KNOWLEDGE_BASE_CHILD_CHUNK_SIZE_TOKENS`** - Token budget for child chunks. Search matches the smaller children and returns their parent passage.
   - Default: `0` (off)
   - Values: `0`, or `32`–`2048`. Set it below [`ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS`](/docs/reference/configuration#ARCHESTRA_KNOWLEDGE_BASE_CHUNK_SIZE_TOKENS).
   - Stored vectors grow by about the ratio of the two sizes. Applies at ingest.
@@ -1061,12 +1061,12 @@ Embedding, reranking, and OCR models for the [Knowledge Base](/docs/knowledge) a
   - Values: `0`–`4`. `0` returns the hit alone.
   - Each step adds up to two chunks per result, so the model reads more tokens.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`** - Default [contextual retrieval](/docs/knowledge#contextual-retrieval) mode for organizations that have not chosen one in **Settings → Knowledge**.
+- **`ARCHESTRA_KNOWLEDGE_BASE_CONTEXTUAL_RETRIEVAL_ENABLED`** - Default [contextual retrieval](/docs/knowledge/settings#contextual-retrieval) mode for organizations that have not chosen one in **Settings → Knowledge**.
   - Default: `false` (no context)
   - Values: `true` (per-document context), `false`
   - Per-document context makes one call to the reranking model per changed document.
 
-- **`ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT`** - Maximum number of pages without text that [Document OCR](/docs/knowledge#document-ocr) transcribes in one PDF.
+- **`ARCHESTRA_KNOWLEDGE_BASE_OCR_MAX_PAGES_PER_DOCUMENT`** - Maximum number of pages without text that [Document OCR](/docs/knowledge/settings#document-ocr) transcribes in one PDF.
   - Default: `100`
   - Each page is one call to the OCR model. Pages past the limit stay untranscribed. The document shows a partial-extraction warning.
 
@@ -1362,7 +1362,7 @@ See [Observability](/docs/admin/observability) for metrics, tracing, and dashboa
   - Default: unset (no authentication)
   - Clients send `Authorization: Bearer <token>`.
 
-- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the `llm_active_users` gauge is recomputed.
+- **`ARCHESTRA_METRICS_ACTIVE_USERS_REFRESH_INTERVAL_MS`** - How often the [`llm_active_users`](/docs/admin/observability/metrics#llm_active_users) gauge is recomputed.
   - Default: `300000` (5 minutes)
   - Values: `0` (off), or `30000` and above
 

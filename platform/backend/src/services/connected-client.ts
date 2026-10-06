@@ -2,9 +2,7 @@ import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
   ConnectedClientModel,
-  OAuthAccessTokenModel,
   OAuthClientModel,
-  OAuthRefreshTokenModel,
   SkillShareLinkModel,
 } from "@/models";
 import {
@@ -13,6 +11,7 @@ import {
   ConnectionSetupClientIdSchema,
 } from "@/types";
 import { isOAuthClientForConnectClient } from "./connected-client-oauth";
+import { dropRevokedSkillShareLinkRepo } from "./skill-share-link";
 
 /**
  * Disconnect one of a user's connected clients on the server side: mark its
@@ -32,6 +31,7 @@ export async function disconnectClient(params: {
   setups: number;
   oauthClients: number;
   tokens: number;
+  consents: number;
   shareLinks: number;
 }> {
   const { organizationId, userId, clientId } = params;
@@ -57,33 +57,36 @@ export async function disconnectClient(params: {
       throw new ApiError(404, "Connected client not found");
     }
     let tokens = 0;
+    let consents = 0;
     for (const oauthClient of oauthClients) {
-      // Access rows first: their refresh_id FK is ON DELETE SET NULL.
-      tokens += await OAuthAccessTokenModel.deleteByClientAndUser({
+      const revoked = await OAuthClientModel.revokeUserGrant({
         clientId: oauthClient.clientId,
         userId,
         tx,
       });
-      const refreshRows = await OAuthRefreshTokenModel.listByClientAndUser({
-        clientId: oauthClient.clientId,
-        userId,
-        tx,
-      });
-      tokens += await OAuthRefreshTokenModel.deleteByIds(
-        refreshRows.map((row) => row.id),
-        tx,
-      );
+      tokens += revoked.tokens;
+      consents += revoked.consents;
     }
 
-    let shareLinks = 0;
+    const revokedLinkIds: string[] = [];
     for (const id of skillShareLinkIds) {
       if (await SkillShareLinkModel.revoke({ id, organizationId, tx })) {
-        shareLinks++;
+        revokedLinkIds.push(id);
       }
     }
 
-    return { setups, oauthClients: oauthClients.length, tokens, shareLinks };
+    return {
+      setups,
+      oauthClients: oauthClients.length,
+      tokens,
+      consents,
+      revokedLinkIds,
+    };
   });
+  // As revoking a link on its own does: its materialized repo goes too.
+  for (const id of result.revokedLinkIds) dropRevokedSkillShareLinkRepo(id);
+  const { revokedLinkIds, ...counts } = result;
+  const disconnected = { ...counts, shareLinks: revokedLinkIds.length };
 
   logger.info(
     {
@@ -91,9 +94,9 @@ export async function disconnectClient(params: {
       userId,
       clientId,
       actorUserId: params.actorUserId,
-      ...result,
+      ...disconnected,
     },
     "disconnectClient: connected client disconnected",
   );
-  return result;
+  return disconnected;
 }

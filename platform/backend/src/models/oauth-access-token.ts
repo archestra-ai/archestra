@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { and, eq, inArray, isNull } from "drizzle-orm";
-import db, { schema, type Transaction } from "@/database";
+import db, { schema } from "@/database";
 
 class OAuthAccessTokenModel {
   static hashTokenForLookup(oauthAccessToken: string): string {
@@ -51,27 +51,6 @@ class OAuthAccessTokenModel {
     const rows = await db
       .delete(schema.oauthAccessTokensTable)
       .where(inArray(schema.oauthAccessTokensTable.refreshId, refreshIds))
-      .returning({ id: schema.oauthAccessTokensTable.id });
-    return rows.length;
-  }
-
-  /**
-   * Delete every access token a user holds for one OAuth client, including
-   * ones not minted from a refresh token. Returns the number of rows removed.
-   */
-  static async deleteByClientAndUser(params: {
-    clientId: string;
-    userId: string;
-    tx?: Transaction;
-  }): Promise<number> {
-    const rows = await (params.tx ?? db)
-      .delete(schema.oauthAccessTokensTable)
-      .where(
-        and(
-          eq(schema.oauthAccessTokensTable.clientId, params.clientId),
-          eq(schema.oauthAccessTokensTable.userId, params.userId),
-        ),
-      )
       .returning({ id: schema.oauthAccessTokensTable.id });
     return rows.length;
   }

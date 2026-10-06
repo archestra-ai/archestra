@@ -242,7 +242,7 @@ export function UndoDialog({
             revoke={
               <p className="text-muted-foreground">
                 Under Manage on this page, open Disconnect and press Revoke
-                access, so {data.appName} stops accepting {nameOf(client)}.
+                access. <RevokeEffect data={data} client={client} />
               </p>
             }
           />
@@ -361,6 +361,23 @@ function DisconnectSteps({
 
 // === Disconnect: clean up this computer, then revoke access ===
 
+/** What Revoke access does, in both disconnect dialogs. */
+function RevokeEffect({
+  data,
+  client,
+}: {
+  data: ConnectPageData;
+  client: ConnectClient;
+}) {
+  return (
+    <span>
+      Revoke access removes {nameOf(client)} from this list, signs it out of the
+      gateway where {data.appName} can tell it apart, and revokes the skill
+      links it created. The cleanup prompt removes access on the machine.
+    </span>
+  );
+}
+
 export function DisconnectDialog({
   data,
   client,
@@ -393,9 +410,15 @@ export function DisconnectDialog({
             revoke={
               <div className="space-y-3">
                 <p className="text-muted-foreground">
-                  Once the cleanup is done, revoke access so {data.appName}{" "}
-                  stops accepting {nameOf(client)}.
+                  Once the cleanup is done, revoke access.{" "}
+                  <RevokeEffect data={data} client={client} />
                 </p>
+                {record.deviceNames.length > 1 && (
+                  <p className="text-muted-foreground">
+                    Connected on {record.deviceNames.join(", ")}. Revoking cuts
+                    all of them; run the cleanup prompt on each.
+                  </p>
+                )}
                 <Button
                   variant="destructive"
                   size="sm"

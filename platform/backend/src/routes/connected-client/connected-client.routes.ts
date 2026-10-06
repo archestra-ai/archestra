@@ -61,7 +61,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.DisconnectConnectedClient,
         description:
-          "Disconnect one of the signed-in user's coding clients: it leaves the connected list, its gateway OAuth grant (where the client is identifiable) and skill share links are revoked. Local client configuration is removed separately by /disconnect.md.",
+          "Disconnect one of the signed-in user's coding clients: it leaves the connected list and the skill share links its setups created are revoked. Where the gateway can tell the client apart by its OAuth client (Claude Code, Amp), the user's tokens and consent for it are deleted too; other clients keep their gateway sign-in until it expires. Local client configuration is removed separately by /disconnect.md.",
         tags: ["Connection Setups"],
         params: z.object({ clientId: ConnectedClientIdSchema }),
         response: constructResponseSchema(DisconnectResultSchema),

@@ -1,6 +1,9 @@
-import { withDbTransaction } from "@/database";
+import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
+import db, { schema, withDbTransaction } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   ConnectedClientModel,
   ConnectionSetupModel,
@@ -31,6 +34,7 @@ describe("DELETE /api/connected-clients/:clientId", () => {
       ).organizationId = organizationId;
       (request as typeof request & { user: User }).user = user;
     });
+    registerAuditLogHook(app);
     const { default: routes } = await import("./connected-client.routes");
     await app.register(routes);
   });
@@ -79,6 +83,8 @@ describe("DELETE /api/connected-clients/:clientId", () => {
       await token(user.id, unrelated.clientId),
       await token(other.id, CLAUDE_CODE_OAUTH_CLIENT_ID),
     ];
+    const consentId = await consent(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
+    const keptConsentId = await consent(other.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
 
     const response = await app.inject({
       method: "DELETE",
@@ -105,6 +111,66 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     expect((await SkillShareLinkModel.findById(link.id))?.revokedAt).toEqual(
       expect.any(Date),
     );
+    // Without its consent the client cannot sign the user back in silently.
+    expect(await consentExists(consentId)).toBe(false);
+    expect(await consentExists(keptConsentId)).toBe(true);
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(
+          and(
+            eq(schema.auditLogsTable.action, "connectedClient.deleted"),
+            eq(schema.auditLogsTable.resourceId, user.id),
+          ),
+        );
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        outcome: "success",
+        before: { clientId: "claude-code" },
+      });
+    });
+  });
+
+  test("shows Claude Code from its gateway sign-in alone, and revoking it signs it out", async ({
+    makeOAuthClient,
+  }) => {
+    await makeOAuthClient({ clientId: CLAUDE_CODE_OAUTH_CLIENT_ID });
+    await token(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID);
+
+    expect(
+      await ConnectedClientModel.listForUser({
+        organizationId,
+        userId: user.id,
+      }),
+    ).toEqual([
+      expect.objectContaining({ clientId: "claude-code", platform: null }),
+    ]);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: "/api/connected-clients/claude-code",
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({ setups: 0, tokens: 2 });
+    expect(
+      await ConnectedClientModel.listForUser({
+        organizationId,
+        userId: user.id,
+      }),
+    ).toEqual([]);
+  });
+
+  test("a client connected again after a revoke is listed again, once", async () => {
+    await redeem(user.id, "codex");
+    await app.inject({ method: "DELETE", url: "/api/connected-clients/codex" });
+    await redeem(user.id, "codex");
+
+    const listed = await ConnectedClientModel.listForUser({
+      organizationId,
+      userId: user.id,
+    });
+    expect(listed.map((c) => c.clientId)).toEqual(["codex"]);
   });
 
   test("lists and disconnects Amp from its OAuth sign-in alone", async ({
@@ -189,6 +255,22 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     });
     await ConnectionSetupModel.claimByToken({ rawToken });
     return setup.id;
+  }
+
+  async function consent(userId: string, clientId: string) {
+    const id = crypto.randomUUID();
+    await db
+      .insert(schema.oauthConsentsTable)
+      .values({ id, clientId, userId, scopes: ["mcp"] });
+    return id;
+  }
+
+  async function consentExists(id: string) {
+    const rows = await db
+      .select({ id: schema.oauthConsentsTable.id })
+      .from(schema.oauthConsentsTable)
+      .where(eq(schema.oauthConsentsTable.id, id));
+    return rows.length > 0;
   }
 
   /** A refresh token plus the access token minted from it. */

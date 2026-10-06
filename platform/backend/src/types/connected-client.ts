@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { OAUTH_ONLY_CLIENT_IDS } from "./connected-client-ids";
 import {
   ConnectionSetupClientIdSchema,
   ConnectionSetupPlatformSchema,
@@ -10,7 +11,7 @@ import {
  */
 export const ConnectedClientIdSchema = z.enum([
   ...ConnectionSetupClientIdSchema.options,
-  "amp",
+  ...OAUTH_ONLY_CLIENT_IDS,
 ]);
 export type ConnectedClientId = z.infer<typeof ConnectedClientIdSchema>;
 

@@ -3752,7 +3752,7 @@ export const getConnectedClients = <ThrowOnError extends boolean = false>(option
 export const getConnectedUsers = <ThrowOnError extends boolean = false>(options?: Options<GetConnectedUsersData, ThrowOnError>) => (options?.client ?? client).get<GetConnectedUsersResponses, GetConnectedUsersErrors, ThrowOnError>({ url: '/api/connected-clients/users', ...options });
 
 /**
- * Disconnect one of the signed-in user's coding clients: it leaves the connected list, its gateway OAuth grant (where the client is identifiable) and skill share links are revoked. Local client configuration is removed separately by /disconnect.md.
+ * Disconnect one of the signed-in user's coding clients: it leaves the connected list and the skill share links its setups created are revoked. Where the gateway can tell the client apart by its OAuth client (Claude Code, Amp), the user's tokens and consent for it are deleted too; other clients keep their gateway sign-in until it expires. Local client configuration is removed separately by /disconnect.md.
  *
  * Authentication:
  *

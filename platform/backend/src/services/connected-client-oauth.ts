@@ -1,4 +1,5 @@
 import type { ConnectedClientId } from "@/types/connected-client";
+import { OAUTH_ONLY_CLIENT_IDS } from "@/types/connected-client-ids";
 
 /** Claude Code's CIMD client_id: every install shares this one OAuth client. */
 const CLAUDE_CODE_OAUTH_CLIENT_ID =
@@ -7,9 +8,14 @@ const CLAUDE_CODE_OAUTH_CLIENT_ID =
 const AMP_CLIENT_NAME = /^Amp MCP Client \(.*\)$/;
 const AMP_REDIRECT_URI = "http://localhost:41592/oauth/callback";
 
-/** Agents recognised from their OAuth client alone, with no setup needed. */
-export const OAUTH_ONLY_CLIENT_IDS = [
-  "amp",
+/**
+ * Agents the matcher below can tell apart by their OAuth client. They show as
+ * connected while the user holds a gateway token for one, setup or not, and
+ * disconnecting them revokes that grant.
+ */
+export const OAUTH_RECOGNISED_CLIENT_IDS = [
+  "claude-code",
+  ...OAUTH_ONLY_CLIENT_IDS,
 ] as const satisfies ConnectedClientId[];
 
 /**

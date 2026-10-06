@@ -20,7 +20,7 @@ import {
 } from "@/database/utils/pagination";
 import {
   isOAuthClientForConnectClient,
-  OAUTH_ONLY_CLIENT_IDS,
+  OAUTH_RECOGNISED_CLIENT_IDS,
 } from "@/services/connected-client-oauth";
 import {
   type ConnectedClient,
@@ -89,26 +89,35 @@ class ConnectedClientModel {
       }
     }
 
-    // Agents set up by hand (no setup ticket) show up once they sign in to
-    // the gateway, recognised from their OAuth client.
-    const oauthClients = await OAuthClientModel.listWithUserTokenTimes({
+    // Agents the gateway can tell apart by their OAuth client count as
+    // connected while the user holds a token for one, set up by hand or not.
+    // These are the same rows a disconnect revokes.
+    const oauthClients = await OAuthClientModel.listWithUserTokens({
       userId: params.userId,
     });
-    for (const clientId of OAUTH_ONLY_CLIENT_IDS) {
+    for (const clientId of OAUTH_RECOGNISED_CLIENT_IDS) {
       const matches = oauthClients.filter((c) =>
         isOAuthClientForConnectClient(clientId, c),
       );
       if (matches.length === 0) continue;
-      const first = matches.map((c) => c.firstIssuedAt).filter(isDate);
-      const last = matches.map((c) => c.lastIssuedAt).filter(isDate);
-      if (first.length === 0 || last.length === 0) continue;
+      const first = Math.min(...matches.map((c) => c.firstIssuedAt.getTime()));
+      const last = Math.max(...matches.map((c) => c.lastIssuedAt.getTime()));
+      const client = byClient.get(clientId);
+      if (client) {
+        // Latest connect wins, whichever way it happened.
+        if (first < client.connectedAt.getTime())
+          client.connectedAt = new Date(first);
+        if (last > client.lastConnectedAt.getTime())
+          client.lastConnectedAt = new Date(last);
+        continue;
+      }
       byClient.set(clientId, {
         clientId,
         platform: null,
         mcpGatewayId: null,
         llmProxyId: null,
-        connectedAt: new Date(Math.min(...first.map((d) => d.getTime()))),
-        lastConnectedAt: new Date(Math.max(...last.map((d) => d.getTime()))),
+        connectedAt: new Date(first),
+        lastConnectedAt: new Date(last),
         deviceNames: [],
       });
     }
@@ -304,8 +313,4 @@ function toUsageMap(
     }
   }
   return usage;
-}
-
-function isDate(value: Date | null): value is Date {
-  return value instanceof Date;
 }

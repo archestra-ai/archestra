@@ -61,7 +61,7 @@ export function useDisconnectConnectedClient() {
       return data;
     },
     onSuccess: () => {
-      toast.success("Access revoked.");
+      toast.success("Disconnected.");
       queryClient.invalidateQueries({ queryKey: connectedClientKeys.mine });
     },
   });

@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   ConnectionSetupClientIdSchema,
   type ConnectionSetupPlatform,
+  ConnectionSetupPlatformSchema,
 } from "./connection-setup";
 
 /**
@@ -39,32 +40,24 @@ export interface ConnectedClientRecord extends ConnectedClient {
   connectedAt: Date;
 }
 
-/** One of a member's connected agents, as admins see it under Logs. */
-export const MemberConnectedClientSchema = ConnectedClientSchema.extend({
-  /** First connect for this client. */
+/** One redeemed Connect page setup: a user connected an agent on a machine. */
+export const ConnectionLogEntrySchema = z.object({
+  id: z.string(),
+  /** When the installer redeemed the setup. */
   connectedAt: z.date(),
-});
-
-export const MemberConnectionStatusSchema = z.enum([
-  "connected",
-  "not_connected",
-]);
-export type MemberConnectionStatus = z.infer<
-  typeof MemberConnectionStatusSchema
->;
-
-/**
- * An organization member with the agents they connected through the Connect
- * page; `clients` is empty for members who never connected one.
- */
-export const MemberConnectionsSchema = z.object({
   userId: z.string(),
-  name: z.string(),
-  email: z.string(),
-  image: z.string().nullable(),
-  /** Most recent connect across their agents; null when never connected. */
-  lastConnectedAt: z.date().nullable(),
-  /** Most recently connected first. */
-  clients: z.array(MemberConnectedClientSchema),
+  userName: z.string(),
+  userEmail: z.string(),
+  clientId: ConnectionSetupClientIdSchema,
+  platform: ConnectionSetupPlatformSchema,
+  /** Hostname the installer reported; null for installers that predate it. */
+  deviceName: z.string().nullable(),
+  /** Gateway the agent got tools from; null when tools were left out. */
+  mcpGateway: z.object({ id: z.string(), name: z.string() }).nullable(),
+  /** Whether model calls were routed through the LLM proxy. */
+  modelRouting: z.boolean(),
+  includeSkills: z.boolean(),
+  /** Set once this agent was disconnected. */
+  disconnectedAt: z.date().nullable(),
 });
-export type MemberConnections = z.infer<typeof MemberConnectionsSchema>;
+export type ConnectionLogEntry = z.infer<typeof ConnectionLogEntrySchema>;

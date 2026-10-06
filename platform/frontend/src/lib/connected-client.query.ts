@@ -2,33 +2,30 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils/api";
 
-const { getMemberConnectedClients } = archestraApiSdk;
+const { getConnectedClientLog } = archestraApiSdk;
 
-type MemberConnectionsQuery = NonNullable<
-  archestraApiTypes.GetMemberConnectedClientsData["query"]
+type ConnectionLogQuery = NonNullable<
+  archestraApiTypes.GetConnectedClientLogData["query"]
 >;
-export type MemberConnectionsPage =
-  archestraApiTypes.GetMemberConnectedClientsResponses["200"];
-export type MemberConnections = MemberConnectionsPage["data"][number];
-export type MemberConnectionStatus = NonNullable<
-  MemberConnectionsQuery["status"]
->;
+export type ConnectionLogPage =
+  archestraApiTypes.GetConnectedClientLogResponses["200"];
+export type ConnectionLogEntry = ConnectionLogPage["data"][number];
 
 const connectedClientKeys = {
   all: ["connected-clients"] as const,
-  members: (query: MemberConnectionsQuery) =>
-    [...connectedClientKeys.all, "members", query] as const,
+  log: (query: ConnectionLogQuery) =>
+    [...connectedClientKeys.all, "log", query] as const,
 };
 
-/** Every member with the agents they connected, for the admin Logs tab. */
-export function useMemberConnections(
-  query: Required<Pick<MemberConnectionsQuery, "limit" | "offset">> &
-    Pick<MemberConnectionsQuery, "name" | "status">,
+/** The organization's agent connections, newest first, for the Logs tab. */
+export function useConnectionLog(
+  query: Required<Pick<ConnectionLogQuery, "limit" | "offset">> &
+    Pick<ConnectionLogQuery, "search" | "clientId">,
 ) {
   return useQuery({
-    queryKey: connectedClientKeys.members(query),
+    queryKey: connectedClientKeys.log(query),
     queryFn: async () => {
-      const response = await getMemberConnectedClients({ query });
+      const response = await getConnectedClientLog({ query });
       throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? null;
     },

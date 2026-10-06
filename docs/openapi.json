@@ -148289,13 +148289,13 @@
         }
       }
     },
-    "/api/connected-clients/members": {
+    "/api/connected-clients/log": {
       "get": {
-        "operationId": "getMemberConnectedClients",
+        "operationId": "getConnectedClientLog",
         "tags": [
           "Connection Setups"
         ],
-        "description": "List the organization's members with the coding clients each connected through the Connect page and when, most recently connected first and never-connected members last. The summary counts every member, whatever the filters.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
+        "description": "Log of the organization's agent connections, newest first: one entry each time a member connected a coding client through the Connect page, with the machine and what the setup included.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
         "parameters": [
           {
             "schema": {
@@ -148324,7 +148324,7 @@
               "type": "string"
             },
             "in": "query",
-            "name": "name",
+            "name": "search",
             "required": false,
             "description": "Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email."
           },
@@ -148332,14 +148332,18 @@
             "schema": {
               "type": "string",
               "enum": [
-                "connected",
-                "not_connected"
+                "claude-code",
+                "cursor",
+                "codex",
+                "claude-desktop",
+                "copilot-cli",
+                "opencode"
               ]
             },
             "in": "query",
-            "name": "status",
+            "name": "clientId",
             "required": false,
-            "description": "Only members who connected at least one client, or only those who never did"
+            "description": "Only connections of this client"
           }
         ],
         "responses": {
@@ -148355,73 +148359,87 @@
                       "items": {
                         "type": "object",
                         "properties": {
-                          "userId": {
+                          "id": {
                             "type": "string"
                           },
-                          "name": {
-                            "type": "string"
-                          },
-                          "email": {
-                            "type": "string"
-                          },
-                          "image": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "lastConnectedAt": {
-                            "nullable": true,
+                          "connectedAt": {
                             "type": "string",
                             "format": "date-time"
                           },
-                          "clients": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "clientId": {
-                                  "type": "string",
-                                  "enum": [
-                                    "claude-code",
-                                    "cursor",
-                                    "codex",
-                                    "claude-desktop",
-                                    "copilot-cli",
-                                    "opencode",
-                                    "amp"
-                                  ]
-                                },
-                                "lastConnectedAt": {
-                                  "type": "string",
-                                  "format": "date-time"
-                                },
-                                "deviceNames": {
-                                  "type": "array",
-                                  "items": {
-                                    "type": "string"
-                                  }
-                                },
-                                "connectedAt": {
-                                  "type": "string",
-                                  "format": "date-time"
-                                }
+                          "userId": {
+                            "type": "string"
+                          },
+                          "userName": {
+                            "type": "string"
+                          },
+                          "userEmail": {
+                            "type": "string"
+                          },
+                          "clientId": {
+                            "type": "string",
+                            "enum": [
+                              "claude-code",
+                              "cursor",
+                              "codex",
+                              "claude-desktop",
+                              "copilot-cli",
+                              "opencode"
+                            ]
+                          },
+                          "platform": {
+                            "type": "string",
+                            "enum": [
+                              "macos",
+                              "linux",
+                              "windows"
+                            ]
+                          },
+                          "deviceName": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "mcpGateway": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
                               },
-                              "required": [
-                                "clientId",
-                                "lastConnectedAt",
-                                "deviceNames",
-                                "connectedAt"
-                              ],
-                              "additionalProperties": false
-                            }
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "modelRouting": {
+                            "type": "boolean"
+                          },
+                          "includeSkills": {
+                            "type": "boolean"
+                          },
+                          "disconnectedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
                           }
                         },
                         "required": [
+                          "id",
+                          "connectedAt",
                           "userId",
-                          "name",
-                          "email",
-                          "image",
-                          "lastConnectedAt",
-                          "clients"
+                          "userName",
+                          "userEmail",
+                          "clientId",
+                          "platform",
+                          "deviceName",
+                          "mcpGateway",
+                          "modelRouting",
+                          "includeSkills",
+                          "disconnectedAt"
                         ],
                         "additionalProperties": false
                       }
@@ -148465,32 +148483,11 @@
                         "hasPrev"
                       ],
                       "additionalProperties": false
-                    },
-                    "summary": {
-                      "type": "object",
-                      "properties": {
-                        "memberCount": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
-                        },
-                        "connectedCount": {
-                          "type": "integer",
-                          "minimum": -9007199254740991,
-                          "maximum": 9007199254740991
-                        }
-                      },
-                      "required": [
-                        "memberCount",
-                        "connectedCount"
-                      ],
-                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "data",
-                    "pagination",
-                    "summary"
+                    "pagination"
                   ],
                   "additionalProperties": false
                 }

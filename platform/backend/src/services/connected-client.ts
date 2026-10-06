@@ -1,7 +1,5 @@
-import type { PaginationQuery } from "@archestra/shared";
 import { OAUTH_RECOGNISED_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { withDbTransaction } from "@/database";
-import type { PaginatedResult } from "@/database/utils/pagination";
 import logger from "@/logging";
 import {
   ConnectedClientModel,
@@ -13,8 +11,6 @@ import {
   type ConnectedClientId,
   type ConnectedClientRecord,
   ConnectionSetupClientIdSchema,
-  type MemberConnectionStatus,
-  type MemberConnections,
 } from "@/types";
 import { dropRevokedSkillShareLinkRepo } from "./skill-share-link";
 
@@ -65,45 +61,6 @@ export async function listConnectedClients(params: {
   return [...byClient.values()].sort(
     (a, b) => b.lastConnectedAt.getTime() - a.lastConnectedAt.getTime(),
   );
-}
-
-/**
- * One page of the organization's members with the agents each connected
- * through the Connect page, for admins. Only redeemed setups count here:
- * gateway sign-ins aren't scoped to an organization, and "who ran the Connect
- * page" is what the list answers.
- */
-export async function listMemberConnections(params: {
-  organizationId: string;
-  pagination: PaginationQuery;
-  name?: string;
-  status?: MemberConnectionStatus;
-}): Promise<
-  PaginatedResult<MemberConnections> & {
-    summary: { memberCount: number; connectedCount: number };
-  }
-> {
-  const { page, memberCount, connectedCount } =
-    await ConnectedClientModel.listMembersWithLastConnect(params);
-  const clientsByUser = await ConnectedClientModel.listRedeemedForUsers({
-    organizationId: params.organizationId,
-    userIds: page.data.map((member) => member.userId),
-  });
-  return {
-    ...page,
-    data: page.data.map((member) => ({
-      ...member,
-      clients: (clientsByUser.get(member.userId) ?? []).map(
-        ({ clientId, connectedAt, lastConnectedAt, deviceNames }) => ({
-          clientId,
-          connectedAt,
-          lastConnectedAt,
-          deviceNames,
-        }),
-      ),
-    })),
-    summary: { memberCount, connectedCount },
-  };
 }
 
 /** Audit snapshot of one user's connected client; null when not connected. */

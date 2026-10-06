@@ -5,18 +5,18 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { ConnectedClientModel } from "@/models";
 import {
   disconnectClient,
   listConnectedClients,
-  listMemberConnections,
 } from "@/services/connected-client";
 import {
   ConnectedClientIdSchema,
   ConnectedClientSchema,
+  ConnectionLogEntrySchema,
+  ConnectionSetupClientIdSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
-  MemberConnectionStatusSchema,
-  MemberConnectionsSchema,
 } from "@/types";
 
 const routes: FastifyPluginAsyncZod = async (app) => {
@@ -36,40 +36,35 @@ const routes: FastifyPluginAsyncZod = async (app) => {
   );
 
   app.get(
-    "/api/connected-clients/members",
+    "/api/connected-clients/log",
     {
       schema: {
-        operationId: RouteId.GetMemberConnectedClients,
+        operationId: RouteId.GetConnectedClientLog,
         description:
-          "List the organization's members with the coding clients each connected through the Connect page and when, most recently connected first and never-connected members last. The summary counts every member, whatever the filters.",
+          "Log of the organization's agent connections, newest first: one entry each time a member connected a coding client through the Connect page, with the machine and what the setup included.",
         tags: ["Connection Setups"],
         querystring: PaginationQuerySchema.extend({
-          name: z
+          search: z
             .string()
             .optional()
             .describe(
               "Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email.",
             ),
-          status: MemberConnectionStatusSchema.optional().describe(
-            "Only members who connected at least one client, or only those who never did",
+          clientId: ConnectionSetupClientIdSchema.optional().describe(
+            "Only connections of this client",
           ),
         }),
         response: constructResponseSchema(
-          createPaginatedResponseSchema(MemberConnectionsSchema).extend({
-            summary: z.object({
-              memberCount: z.number().int(),
-              connectedCount: z.number().int(),
-            }),
-          }),
+          createPaginatedResponseSchema(ConnectionLogEntrySchema),
         ),
       },
     },
-    async ({ organizationId, query: { limit, offset, name, status } }) =>
-      listMemberConnections({
+    async ({ organizationId, query: { limit, offset, search, clientId } }) =>
+      ConnectedClientModel.listLog({
         organizationId,
         pagination: { limit, offset },
-        name: name || undefined,
-        status,
+        search: search || undefined,
+        clientId,
       }),
   );
 

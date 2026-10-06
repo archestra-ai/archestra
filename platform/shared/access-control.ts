@@ -593,9 +593,9 @@ export const requiredEndpointPermissionsMap: Partial<
   // A signed-in member lists and disconnects only their own connected clients.
   [RouteId.GetConnectedClients]: {},
   [RouteId.DisconnectConnectedClient]: {},
-  // Who connected which agent is per-employee activity, so it takes
-  // org-wide log visibility (admin tier) on top of reading members.
-  [RouteId.GetMemberConnectedClients]: { log: ["admin"], member: ["read"] },
+  // Who connected which agent is per-employee activity, so the org-wide log
+  // of it takes org-wide log visibility (admin tier) plus reading members.
+  [RouteId.GetConnectedClientLog]: { log: ["admin"], member: ["read"] },
   /**
    * Existence check for a connected remote, used by the Claude Code startup
    * guard on machines with no session. Returns only ok/missing.

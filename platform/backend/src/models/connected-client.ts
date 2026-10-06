@@ -1,15 +1,6 @@
 import type { PaginationQuery } from "@archestra/shared";
-import {
-  and,
-  count,
-  desc,
-  eq,
-  inArray,
-  isNotNull,
-  isNull,
-  max,
-  sql,
-} from "drizzle-orm";
+import { and, count, desc, eq, isNotNull, isNull } from "drizzle-orm";
+import { alias } from "drizzle-orm/pg-core";
 import db, { schema, type Transaction } from "@/database";
 import {
   createPaginatedResult,
@@ -17,9 +8,10 @@ import {
 } from "@/database/utils/pagination";
 import { buildTokenizedSearchFilter } from "@/database/utils/text-search";
 import type {
+  ConnectedClientId,
   ConnectedClientRecord,
+  ConnectionLogEntry,
   ConnectionSetupClientId,
-  MemberConnectionStatus,
 } from "@/types";
 
 const setups = schema.connectionSetupsTable;
@@ -39,27 +31,8 @@ class ConnectedClientModel {
     organizationId: string;
     userId: string;
   }): Promise<ConnectedClientRecord[]> {
-    const byUser = await ConnectedClientModel.listRedeemedForUsers({
-      organizationId: params.organizationId,
-      userIds: [params.userId],
-    });
-    return byUser.get(params.userId) ?? [];
-  }
-
-  /**
-   * {@link listRedeemedForUser} for several users at once, keyed by user id;
-   * users with no redeemed setup are absent. Clients are most recently
-   * connected first.
-   */
-  static async listRedeemedForUsers(params: {
-    organizationId: string;
-    userIds: string[];
-  }): Promise<Map<string, ConnectedClientRecord[]>> {
-    const result = new Map<string, ConnectedClientRecord[]>();
-    if (params.userIds.length === 0) return result;
     const rows = await db
       .select({
-        userId: setups.userId,
         clientId: setups.clientId,
         platform: setups.platform,
         mcpGatewayId: setups.mcpGatewayId,
@@ -71,7 +44,7 @@ class ConnectedClientModel {
       .where(
         and(
           eq(setups.organizationId, params.organizationId),
-          inArray(setups.userId, params.userIds),
+          eq(setups.userId, params.userId),
           isNotNull(setups.consumedAt),
           isNull(setups.revokedAt),
         ),
@@ -79,11 +52,10 @@ class ConnectedClientModel {
       .orderBy(desc(setups.consumedAt));
 
     // Newest first, so the first row per client carries its current setup.
-    const byClient = new Map<string, ConnectedClientRecord>();
-    for (const { userId, consumedAt, deviceName, ...row } of rows) {
+    const byClient = new Map<ConnectedClientId, ConnectedClientRecord>();
+    for (const { consumedAt, deviceName, ...row } of rows) {
       if (!consumedAt) continue;
-      const key = `${userId}:${row.clientId}`;
-      let client = byClient.get(key);
+      let client = byClient.get(row.clientId);
       if (client) {
         client.connectedAt = consumedAt;
       } else {
@@ -93,119 +65,91 @@ class ConnectedClientModel {
           lastConnectedAt: consumedAt,
           deviceNames: [],
         };
-        byClient.set(key, client);
-        const clients = result.get(userId) ?? [];
-        clients.push(client);
-        result.set(userId, clients);
+        byClient.set(row.clientId, client);
       }
       if (deviceName && !client.deviceNames.includes(deviceName)) {
         client.deviceNames.push(deviceName);
       }
     }
 
-    return result;
+    return [...byClient.values()];
   }
 
   /**
-   * One page of the organization's members with when each last connected an
-   * agent (null for never), most recent first and never-connected last, plus
-   * how many members there are and how many have connected. Search and
-   * status narrow the page, not the counts.
+   * The organization's redeemed setups, newest first: one log entry per time
+   * someone connected an agent through the Connect page. Search matches the
+   * user's name or email.
    */
-  static async listMembersWithLastConnect(params: {
+  static async listLog(params: {
     organizationId: string;
     pagination: PaginationQuery;
-    name?: string;
-    status?: MemberConnectionStatus;
-  }): Promise<{
-    page: PaginatedResult<{
-      userId: string;
-      name: string;
-      email: string;
-      image: string | null;
-      lastConnectedAt: Date | null;
-    }>;
-    memberCount: number;
-    connectedCount: number;
-  }> {
-    const { organizationId, pagination, name, status } = params;
-    const members = schema.membersTable;
+    search?: string;
+    clientId?: ConnectionSetupClientId;
+  }): Promise<PaginatedResult<ConnectionLogEntry>> {
     const users = schema.usersTable;
-    const lastConnect = db
-      .select({
-        userId: setups.userId,
-        lastConnectedAt: max(setups.consumedAt).as("last_connected_at"),
-      })
-      .from(setups)
-      .where(
-        and(
-          eq(setups.organizationId, organizationId),
-          isNotNull(setups.consumedAt),
-          isNull(setups.revokedAt),
-        ),
-      )
-      .groupBy(setups.userId)
-      .as("last_connect");
-
-    const filters = and(
-      eq(members.organizationId, organizationId),
+    const gateways = alias(schema.agentsTable, "mcp_gateways");
+    const where = and(
+      eq(setups.organizationId, params.organizationId),
+      isNotNull(setups.consumedAt),
+      params.clientId ? eq(setups.clientId, params.clientId) : undefined,
       buildTokenizedSearchFilter({
-        query: name,
+        query: params.search,
         columns: [users.name, users.email],
       }),
-      status === "connected" ? isNotNull(lastConnect.userId) : undefined,
-      status === "not_connected" ? isNull(lastConnect.userId) : undefined,
     );
 
-    const [rows, [{ total }], [counts]] = await Promise.all([
+    const [rows, [{ total }]] = await Promise.all([
       db
         .select({
-          userId: members.userId,
-          name: users.name,
-          email: users.email,
-          image: users.image,
-          lastConnectedAt: lastConnect.lastConnectedAt,
+          id: setups.id,
+          consumedAt: setups.consumedAt,
+          userId: setups.userId,
+          userName: users.name,
+          userEmail: users.email,
+          clientId: setups.clientId,
+          platform: setups.platform,
+          deviceName: setups.deviceName,
+          mcpGatewayId: gateways.id,
+          mcpGatewayName: gateways.name,
+          llmProxyId: setups.llmProxyId,
+          includeSkills: setups.includeSkills,
+          revokedAt: setups.revokedAt,
         })
-        .from(members)
-        .innerJoin(users, eq(members.userId, users.id))
-        .leftJoin(lastConnect, eq(lastConnect.userId, members.userId))
-        .where(filters)
-        .orderBy(
-          sql`${lastConnect.lastConnectedAt} desc nulls last`,
-          users.name,
-          members.userId,
-        )
-        .limit(pagination.limit)
-        .offset(pagination.offset),
+        .from(setups)
+        .innerJoin(users, eq(setups.userId, users.id))
+        .leftJoin(gateways, eq(setups.mcpGatewayId, gateways.id))
+        .where(where)
+        .orderBy(desc(setups.consumedAt), desc(setups.id))
+        .limit(params.pagination.limit)
+        .offset(params.pagination.offset),
       db
         .select({ total: count() })
-        .from(members)
-        .innerJoin(users, eq(members.userId, users.id))
-        .leftJoin(lastConnect, eq(lastConnect.userId, members.userId))
-        .where(filters),
-      db
-        .select({
-          memberCount: count(),
-          connectedCount: count(lastConnect.userId),
-        })
-        .from(members)
-        .leftJoin(lastConnect, eq(lastConnect.userId, members.userId))
-        .where(eq(members.organizationId, organizationId)),
+        .from(setups)
+        .innerJoin(users, eq(setups.userId, users.id))
+        .where(where),
     ]);
 
-    return {
-      page: createPaginatedResult(
-        rows.map((row) => ({
-          ...row,
-          image: row.image ?? null,
-          lastConnectedAt: row.lastConnectedAt ?? null,
-        })),
-        Number(total),
-        pagination,
-      ),
-      memberCount: Number(counts?.memberCount ?? 0),
-      connectedCount: Number(counts?.connectedCount ?? 0),
-    };
+    return createPaginatedResult(
+      rows.map((row) => ({
+        id: row.id,
+        connectedAt: row.consumedAt as Date,
+        userId: row.userId,
+        userName: row.userName,
+        userEmail: row.userEmail,
+        clientId: row.clientId,
+        platform: row.platform,
+        deviceName: row.deviceName,
+        mcpGateway:
+          row.mcpGatewayId && row.mcpGatewayName
+            ? { id: row.mcpGatewayId, name: row.mcpGatewayName }
+            : null,
+        modelRouting: row.llmProxyId !== null,
+        includeSkills: row.includeSkills,
+        disconnectedAt: row.revokedAt,
+      })),
+      Number(total),
+      params.pagination,
+    );
   }
 
   /**

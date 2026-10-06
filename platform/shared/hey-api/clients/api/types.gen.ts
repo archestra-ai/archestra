@@ -40805,7 +40805,7 @@ export type GetConnectedClientsResponses = {
 
 export type GetConnectedClientsResponse = GetConnectedClientsResponses[keyof GetConnectedClientsResponses];
 
-export type GetMemberConnectedClientsData = {
+export type GetConnectedClientLogData = {
     body?: never;
     path?: never;
     query?: {
@@ -40814,16 +40814,16 @@ export type GetMemberConnectedClientsData = {
         /**
          * Search by user name or email. Case-insensitive: every whitespace-separated word must appear in the name or the email.
          */
-        name?: string;
+        search?: string;
         /**
-         * Only members who connected at least one client, or only those who never did
+         * Only connections of this client
          */
-        status?: 'connected' | 'not_connected';
+        clientId?: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
     };
-    url: '/api/connected-clients/members';
+    url: '/api/connected-clients/log';
 };
 
-export type GetMemberConnectedClientsErrors = {
+export type GetConnectedClientLogErrors = {
     /**
      * Default Response
      */
@@ -40886,25 +40886,29 @@ export type GetMemberConnectedClientsErrors = {
     };
 };
 
-export type GetMemberConnectedClientsError = GetMemberConnectedClientsErrors[keyof GetMemberConnectedClientsErrors];
+export type GetConnectedClientLogError = GetConnectedClientLogErrors[keyof GetConnectedClientLogErrors];
 
-export type GetMemberConnectedClientsResponses = {
+export type GetConnectedClientLogResponses = {
     /**
      * Default Response
      */
     200: {
         data: Array<{
+            id: string;
+            connectedAt: string;
             userId: string;
-            name: string;
-            email: string;
-            image: string | null;
-            lastConnectedAt: string | null;
-            clients: Array<{
-                clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'amp';
-                lastConnectedAt: string;
-                deviceNames: Array<string>;
-                connectedAt: string;
-            }>;
+            userName: string;
+            userEmail: string;
+            clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
+            platform: 'macos' | 'linux' | 'windows';
+            deviceName: string | null;
+            mcpGateway: {
+                id: string;
+                name: string;
+            } | null;
+            modelRouting: boolean;
+            includeSkills: boolean;
+            disconnectedAt: string | null;
         }>;
         pagination: {
             currentPage: number;
@@ -40914,14 +40918,10 @@ export type GetMemberConnectedClientsResponses = {
             hasNext: boolean;
             hasPrev: boolean;
         };
-        summary: {
-            memberCount: number;
-            connectedCount: number;
-        };
     };
 };
 
-export type GetMemberConnectedClientsResponse = GetMemberConnectedClientsResponses[keyof GetMemberConnectedClientsResponses];
+export type GetConnectedClientLogResponse = GetConnectedClientLogResponses[keyof GetConnectedClientLogResponses];
 
 export type DisconnectConnectedClientData = {
     body?: never;

@@ -207,9 +207,9 @@ export function ConnectPage() {
           <div className="absolute top-4 right-6 md:right-10 lg:right-14">
             <Button
               asChild
-              variant="ghost"
+              variant="outline"
               size="sm"
-              className="text-muted-foreground"
+              className="shadow-xs dark:bg-background"
             >
               <Link href="/settings/connection">
                 <Settings />

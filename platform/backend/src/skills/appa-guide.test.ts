@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import { executeArchestraTool } from "@/archestra-mcp-server";
 import config from "@/config";
 import { syncBuiltInSkillsForOrganization } from "@/database/seed";
@@ -9,7 +10,6 @@ import {
 } from "@/services/guardrails-policy";
 import { describe, expect, test } from "@/test";
 import { APPA_GUIDE_SKILL } from "./appa-guide";
-import { APPA_GUIDE_CORE } from "./appa-guide.core.generated";
 import { builtInSkillSourceRef } from "./built-in-skills";
 import { buildSkillCatalogPrompt } from "./skill-catalog-prompt";
 
@@ -219,11 +219,13 @@ describe("APPA Guide feature availability", () => {
   });
 
   test("inlines OpenAPPA's shared policy-writing rules into the always-loaded skill body", () => {
-    expect(APPA_GUIDE_SKILL.content).toContain(APPA_GUIDE_CORE);
+    const core = readFileSync(
+      new URL("./appa-guide.core.generated.md", import.meta.url),
+      "utf8",
+    );
+    expect(APPA_GUIDE_SKILL.content).toContain(core);
     expect(
-      APPA_GUIDE_SKILL.files.some((file) =>
-        file.content.includes(APPA_GUIDE_CORE),
-      ),
+      APPA_GUIDE_SKILL.files.some((file) => file.content.includes(core)),
     ).toBe(false);
   });
 });

@@ -282,7 +282,7 @@ describe("enrichOpenApiWithRbac", () => {
       "This route accepts either an LLM provider API key or a Virtual API Key.",
     );
     expect(postOperation.description).toContain(
-      "[LLM Proxy Authentication](/docs/platform-llm-proxy-authentication)",
+      "[LLM Proxy Authentication](/docs/llm-proxy/authentication)",
     );
   });
 });

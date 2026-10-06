@@ -27,7 +27,7 @@ export default function LlmProxyLayout({
 }) {
   const pathname = usePathname();
   const [actionButton, setActionButton] = useState<React.ReactNode>(null);
-  const docsUrl = getFrontendDocsUrl("platform-llm-proxy");
+  const docsUrl = getFrontendDocsUrl("llm-proxy");
 
   const config = PAGE_CONFIG[pathname] ?? PAGE_CONFIG["/llm/proxy"];
 

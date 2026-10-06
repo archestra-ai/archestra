@@ -90,7 +90,6 @@ import {
   ListInternalMcpCatalogSchema,
   type LocalConfig,
   type McpServer,
-  type McpServerAlertMute,
   McpServerAlertMuteSchema,
   type McpServerDismissibleAlertKind,
   McpServerDismissibleAlertKindSchema,
@@ -256,12 +255,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               targets: list,
             }),
             flagImageApprovalRequired(list, request.organizationId),
-            config.mcpServer.alertingEnabled
-              ? McpServerAlertMuteModel.findForViewer({
-                  userId: request.user.id,
-                  catalogIds: list.map((item) => item.id),
-                })
-              : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
+            McpServerAlertMuteModel.findForViewer({
+              userId: request.user.id,
+              catalogIds: list.map((item) => item.id),
+            }),
           ]);
         // SPDX-SnippetEnd
         return reply.send(
@@ -293,12 +290,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ] = await Promise.all([
         AppModel.getAppIdsByCatalogIds(appCatalogIds),
         AppModel.getAppEnabledByCatalogIds(appCatalogIds),
-        config.mcpServer.alertingEnabled
-          ? McpServerAlertMuteModel.findForViewer({
-              userId: request.user.id,
-              catalogIds: items.map((item) => item.id),
-            })
-          : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
+        McpServerAlertMuteModel.findForViewer({
+          userId: request.user.id,
+          catalogIds: items.map((item) => item.id),
+        }),
         ResourcePermissions.getCatalogActions({
           organizationId: request.organizationId,
           userId: request.user.id,
@@ -346,7 +341,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      assertMcpServerAlertingEnabled();
       const {
         params: { id: catalogId, kind },
         body: { issueFingerprint, reason },
@@ -389,7 +383,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      assertMcpServerAlertingEnabled();
       const {
         params: { id: catalogId, kind },
         query: { issueFingerprint },
@@ -2717,12 +2710,6 @@ function currentCatalogRuntimeAlert(params: {
       restartCount: runtime.restartCount,
     }),
   };
-}
-
-function assertMcpServerAlertingEnabled(): void {
-  if (!config.mcpServer.alertingEnabled) {
-    throw new ApiError(404, "Not found");
-  }
 }
 
 export default internalMcpCatalogRoutes;

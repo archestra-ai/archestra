@@ -508,11 +508,8 @@ describe("McpCatalogItemDetailPage overview", () => {
         typeof useSearchParams
       >,
     );
-    vi.mocked(useFeature).mockImplementation(
-      (feature) =>
-        (feature === "mcpServerAlertingEnabled") as ReturnType<
-          typeof useFeature
-        >,
+    vi.mocked(useFeature).mockReturnValue(
+      false as ReturnType<typeof useFeature>,
     );
     useMcpServers.mockReturnValue({
       data: [

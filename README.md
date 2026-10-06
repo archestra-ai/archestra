@@ -14,8 +14,8 @@ OpenTelemetry traces, and Prometheus metrics — first-class, not bolted on.*
 [![Last commit](https://img.shields.io/github/last-commit/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/commits/main)
 [![Commit activity](https://img.shields.io/github/commit-activity/m/archestra-ai/archestra)](https://github.com/archestra-ai/archestra/pulse)
 
-[Quickstart](https://archestra.ai/docs/platform-quickstart) &nbsp;·&nbsp;
-[Docs](https://archestra.ai/docs/platform-overview) &nbsp;·&nbsp;
+[Quickstart](https://archestra.ai/docs/get-started#run-archestra) &nbsp;·&nbsp;
+[Docs](https://archestra.ai/docs/get-started) &nbsp;·&nbsp;
 [Releases](https://github.com/archestra-ai/archestra/releases) &nbsp;·&nbsp;
 [Slack](https://archestra.ai/join-slack)
 
@@ -32,45 +32,45 @@ https://github.com/user-attachments/assets/912b85e2-ef14-4e83-a807-5e2a81457a88
 Point your users — or your agents, or Claude / Codex / Cursor — at one URL. Archestra handles the rest:
 
 - 💬 **Chat for non-technical users.** Internal AI assistant with
-  [projects](https://archestra.ai/docs/platform-projects),
-  [MCP apps](https://archestra.ai/docs/platform-apps), and
-  [Slack](https://archestra.ai/docs/platform-slack),
-  [MS Teams](https://archestra.ai/docs/platform-ms-teams), and
-  [email](https://archestra.ai/docs/platform-agent-triggers-email)
+  [projects](https://archestra.ai/docs/workspace/projects),
+  [MCP apps](https://archestra.ai/docs/workspace/apps), and
+  [Slack](https://archestra.ai/docs/agents/triggers-and-channels/slack),
+  [MS Teams](https://archestra.ai/docs/agents/triggers-and-channels/ms-teams), and
+  [email](https://archestra.ai/docs/agents/triggers-and-channels/email)
   front-ends.
 - 🛠️ **Developer LLM & MCP portal.** One token for Claude Code, Codex,
-  Cursor — see the [proxy](https://archestra.ai/docs/platform-llm-proxy).
-- 🚪 **LLM gateway** for [any provider](https://archestra.ai/docs/platform-supported-llm-providers)
+  Cursor — see the [proxy](https://archestra.ai/docs/llm-proxy).
+- 🚪 **LLM gateway** for [any provider](https://archestra.ai/docs/llm-proxy/providers)
   (Anthropic, OpenAI, Azure, Bedrock, DeepSeek, …) with
-  [cost limits](https://archestra.ai/docs/platform-costs-and-limits),
-  [virtual API keys](https://archestra.ai/docs/platform-llm-proxy-authentication),
-  and [dynamic model routing](https://archestra.ai/docs/platform-model-router-client-credentials-example).
-- 🔌 **MCP gateway** with [OAuth + On-Behalf-Of](https://archestra.ai/docs/mcp-authentication)
+  [cost limits](https://archestra.ai/docs/llm-proxy/costs-and-limits),
+  [virtual API keys](https://archestra.ai/docs/llm-proxy/authentication),
+  and [dynamic model routing](https://archestra.ai/docs/reference/clients/model-router-client-credentials).
+- 🔌 **MCP gateway** with [OAuth + On-Behalf-Of](https://archestra.ai/docs/mcp/authentication)
   so tools run as the user, not a shared service account.
-- 🤝 **A2A gateway** for [agent-to-agent triggers](https://archestra.ai/docs/platform-agent-triggers-webhook-a2a).
+- 🤝 **A2A gateway** for [agent-to-agent triggers](https://archestra.ai/docs/agents/triggers-and-channels/webhook-a2a).
 - 📦 **Private MCP registry** so teams ship their own tools — see
-  [registry docs](https://archestra.ai/docs/platform-private-registry).
+  [registry docs](https://archestra.ai/docs/mcp/servers).
 - 🎼 **MCP orchestrator** with a
-  [Kubernetes operator](https://archestra.ai/docs/platform-orchestrator) and
-  [self-serve promotion](https://archestra.ai/docs/platform-environments).
-- 🤖 **Agent runtime** with [scheduled / email / webhook triggers](https://archestra.ai/docs/platform-agents),
-  [sub-agent delegation](https://archestra.ai/docs/platform-agents),
-  [reusable skills](https://archestra.ai/docs/platform-agent-skills-sharing),
+  [Kubernetes operator](https://archestra.ai/docs/mcp/servers#mcp-orchestrator) and
+  [self-serve promotion](https://archestra.ai/docs/administration/environments).
+- 🤖 **Agent runtime** with [scheduled / email / webhook triggers](https://archestra.ai/docs/agents),
+  [sub-agent delegation](https://archestra.ai/docs/agents),
+  [reusable skills](https://archestra.ai/docs/agents/skills/sharing),
   sandboxed code execution, and a K8s-native filesystem.
 - 📚 **RAG knowledge base** plumbed via
-  [connectors](https://archestra.ai/docs/platform-knowledge-connectors) to
+  [connectors](https://archestra.ai/docs/knowledge/connectors) to
   your existing stack.
-- 🧩 **Mini app builder** — see [apps](https://archestra.ai/docs/platform-apps).
-- 🛡️ **Deterministic guardrails** for [tool calls](https://archestra.ai/docs/platform-ai-tool-guardrails),
-  [Dual-LLM](https://archestra.ai/docs/platform-built-in-subagents#dual-llm-agent) verification, and
-  [Lethal Trifecta](https://archestra.ai/docs/platform-ai-tool-guardrails#the-lethal-trifecta) protections.
-- 🪪 **Identity & access** with [SSO](https://archestra.ai/docs/platform-sso)
-  (OIDC, SAML, Okta, Entra), [RBAC with role mapping & team sync](https://archestra.ai/docs/platform-access-control),
-  and [secrets management](https://archestra.ai/docs/platform-secrets-management).
-- 🌎 **Environments** with [per-env egress policies](https://archestra.ai/docs/platform-environments)
-  and [per-env cost limits](https://archestra.ai/docs/platform-costs-and-limits).
+- 🧩 **Mini app builder** — see [apps](https://archestra.ai/docs/workspace/apps).
+- 🛡️ **Deterministic guardrails** for [tool calls](https://archestra.ai/docs/agents/guardrails),
+  [Dual-LLM](https://archestra.ai/docs/agents/subagents/built-in#dual-llm-agent) verification, and
+  [Lethal Trifecta](https://archestra.ai/docs/agents/guardrails#the-lethal-trifecta) protections.
+- 🪪 **Identity & access** with [SSO](https://archestra.ai/docs/administration/identity/sso)
+  (OIDC, SAML, Okta, Entra), [RBAC with role mapping & team sync](https://archestra.ai/docs/administration/access-control),
+  and [secrets management](https://archestra.ai/docs/administration/security/secrets-management).
+- 🌎 **Environments** with [per-env egress policies](https://archestra.ai/docs/administration/environments)
+  and [per-env cost limits](https://archestra.ai/docs/llm-proxy/costs-and-limits).
 - 🔭 **Observability** out of the box: OpenTelemetry traces, Prometheus
-  metrics, logs, [per-team cost tracking](https://archestra.ai/docs/platform-costs-and-limits).
+  metrics, logs, [per-team cost tracking](https://archestra.ai/docs/llm-proxy/costs-and-limits).
 
 > Already running dangerous single-tenant agents like Claude Cowork,
 > OpenClaw, or Hermes in your enterprise? **[Migration Kit →](migration-kit/README.md)**
@@ -90,7 +90,7 @@ docker run \
 ```
 
 Open <http://localhost:3000>. Full Docker / Helm / Kubernetes instructions
-live in the [quickstart docs](https://archestra.ai/docs/platform-quickstart).
+live in the [quickstart docs](https://archestra.ai/docs/get-started#run-archestra).
 
 ### Release channels
 
@@ -104,19 +104,19 @@ New features and bug fixes land on `main` first and ship in rolling beta release
 
 - ✅ $13.5M total funding
 - ✅ Three Fortune-50 deployments
-- ✅ 31 ms at p95 — [performance benchmarks →](https://archestra.ai/docs/platform-performance-benchmarks)
+- ✅ 31 ms at p95 — [performance benchmarks →](https://archestra.ai/docs/administration/observability/performance-benchmarks)
 - ✅ [Terraform provider →](https://github.com/archestra-ai/terraform-provider-archestra)
-- ✅ [Helm chart →](https://archestra.ai/docs/platform-deployment#helm-deployment-recommended-for-production)
+- ✅ [Helm chart →](https://archestra.ai/docs/administration/deployment#helm-deployment-recommended-for-production)
 
 ## Deeper docs
 
-- 📖 [**Platform overview**](https://archestra.ai/docs/platform-overview) —
+- 📖 [**Platform overview**](https://archestra.ai/docs/get-started) —
   what's in the box, how the pieces fit together.
-- 📐 [**Deployment**](https://archestra.ai/docs/platform-deployment) —
+- 📐 [**Deployment**](https://archestra.ai/docs/administration/deployment) —
   Docker, Helm, Kubernetes, every env var, secrets management.
-- 💰 [**Pricing model**](https://archestra.ai/docs/platform-pricing-model) —
+- 💰 [**Pricing model**](https://archestra.ai/docs/get-started/pricing) —
   Open Core, free for teams under 30 users, enterprise licensing.
-- 🛡️ [**Security & bug bounty**](https://archestra.ai/docs/security)
+- 🛡️ [**Security & bug bounty**](https://archestra.ai/docs/contributing/security)
 - 🤝 [**Contributing**](https://archestra.ai/docs/contributing) —
   set up the dev env, run e2e tests, open a PR.
 - [**Release guide**](platform/dev/RELEASE.md) —

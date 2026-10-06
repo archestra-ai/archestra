@@ -72,7 +72,7 @@ export function SystemPromptEditor({
 }) {
   const docsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAgents,
-    "system-prompt-templating",
+    "prompt-templates",
   );
   // What the text wants, and what the reader has asked for by dragging. A
   // drag raises the floor rather than freezing the box, so the editor still

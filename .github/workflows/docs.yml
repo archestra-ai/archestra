@@ -1,0 +1,181 @@
+name: Docs
+
+# Everything docs in one place: the docs content checks that run on every pull
+# request, and the screenshot capture that re-renders every docs screenshot of
+# the app in light and dark mode.
+#
+# Screenshots are captured when docs get published: on release-please pull
+# requests (the capture commits changed images back to the release branch) and
+# on a manual run (which opens a pull request with the changes). Locally the
+# same capture runs with `pnpm docs:screenshots` (see
+# .agents/skills/archestra-docs-writer/SKILL.md).
+
+on:
+  pull_request:
+    types:
+      - opened
+      - synchronize
+      - reopened
+  # Required checks must also run on merge_group when merge queue is enabled.
+  merge_group:
+  workflow_dispatch:
+    inputs:
+      only:
+        description: Comma-separated screenshot ids (or prefixes) to capture; empty captures all
+        required: false
+        default: ""
+
+permissions: {}
+
+concurrency:
+  group: "docs-${{ github.event.pull_request.number || github.event.merge_group.head_sha || github.ref }}"
+  cancel-in-progress: true
+
+jobs:
+  docs-image-policy:
+    name: Docs Image Policy
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Enforce docs asset format and size policy
+        run: python3 .github/scripts/check-docs-image-policy.py
+
+  docs-links:
+    name: Docs Link Check
+    if: github.event_name != 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Validate docs navigation
+        run: python3 .github/scripts/check-docs-navigation.py
+
+      - name: Check internal doc links, anchors, and asset embeds resolve
+        run: python3 .github/scripts/check-docs-links.py
+
+      - name: Check built-in MCP tool mentions link to the tool reference
+        run: python3 .github/scripts/check-docs-mcp-tool-links.py
+
+      - name: Check API route mentions deep-link to the API reference
+        run: python3 .github/scripts/check-docs-api-links.py
+
+      - name: Check RBAC permission mentions link to the permissions reference
+        run: python3 .github/scripts/check-docs-permission-links.py
+
+      - name: Check environment variable mentions link to their reference entry
+        run: python3 .github/scripts/check-docs-env-var-links.py
+
+      - name: Check metric mentions link to the metrics reference
+        run: python3 .github/scripts/check-docs-metric-links.py
+
+      - name: Run docs check regression tests
+        run: python3 -m unittest discover -s .github/scripts -p 'test_docs_*.py'
+
+  docs-screenshots:
+    name: Docs Screenshots
+    # Release-please PRs come from this repository's own branch, so the capture
+    # can push to it; manual runs open a pull request instead.
+    if: >-
+      github.event_name == 'workflow_dispatch' ||
+      (github.event_name == 'pull_request' &&
+       github.event.pull_request.head.repo.full_name == github.repository &&
+       startsWith(github.event.pull_request.head.ref, 'release-please--'))
+    runs-on: blacksmith-8vcpu-ubuntu-2404
+    timeout-minutes: 60
+    permissions:
+      contents: write # Required to push updated screenshots.
+      pull-requests: write # Required to open the screenshot pull request on manual runs.
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      # Pushes made with GITHUB_TOKEN don't re-trigger workflows; the app token's do.
+      - name: Generate GitHub App token
+        id: generate-token
+        uses: ./.github/actions/github-app-token
+        with:
+          app-id: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_ID }}
+          private-key: ${{ secrets.ARCHESTRA_RELEASER_GITHUB_APP_PRIVATE_KEY }}
+
+      - name: Checkout with push credentials
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true # zizmor: ignore[artipacked] the job pushes updated screenshots.
+          ref: ${{ github.head_ref || github.ref_name }}
+          token: ${{ steps.generate-token.outputs.token }}
+          fetch-depth: 1
+
+      - name: Setup environment
+        uses: ./.github/actions/setup-env
+        with:
+          working-directory: ./platform
+
+      - name: Install Chromium
+        working-directory: ./platform
+        run: pnpm --filter @archestra/docs-screenshots exec playwright install --with-deps chromium
+
+      # Reuses the platform image CI built for this tree when there is one,
+      # otherwise builds it.
+      - name: Start Archestra (e2e-lite stack)
+        run: ./platform/scripts/e2e-lite.sh up
+
+      - name: Seed demo data and capture screenshots
+        working-directory: ./platform
+        env:
+          ARCHESTRA_URL: http://localhost:3000
+          DOCS_SCREENSHOTS_ONLY: ${{ inputs.only }}
+        run: pnpm docs:screenshots
+
+      - name: Docs image policy
+        run: python3 .github/scripts/check-docs-image-policy.py
+
+      - name: Commit updated screenshots
+        env:
+          GH_TOKEN: ${{ steps.generate-token.outputs.token }}
+          EVENT_NAME: ${{ github.event_name }}
+          BASE_BRANCH: ${{ github.ref_name }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          if [ -z "$(git status --porcelain -- docs/assets)" ]; then
+            echo "Screenshots are up to date."
+            exit 0
+          fi
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add docs/assets
+          git diff --cached --stat
+          if [ "$EVENT_NAME" = "pull_request" ]; then
+            git commit -m "docs: update screenshots"
+            git push
+          else
+            branch="docs/screenshots-${RUN_ID}"
+            git switch -c "$branch"
+            git commit -m "docs: update screenshots"
+            git push origin "$branch"
+            gh pr create \
+              --base "$BASE_BRANCH" \
+              --head "$branch" \
+              --title "docs: update screenshots" \
+              --body "Re-captured every docs screenshot of the app in light and dark mode (workflow run ${RUN_ID})."
+          fi
+
+      - name: Stop Archestra
+        if: always()
+        run: ./platform/scripts/e2e-lite.sh down

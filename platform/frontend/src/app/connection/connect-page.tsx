@@ -226,9 +226,9 @@ export function ConnectPage() {
           </div>
         )}
 
-        <section className="grid items-start gap-10 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16 [&>*]:max-w-2xl @min-[66rem]:[&>*]:max-w-none">
+        <section className="grid items-start gap-10 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-x-12 @min-[66rem]:gap-y-8 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-x-16 [&>*]:max-w-2xl @min-[66rem]:[&>*]:max-w-none">
           {/* Left: headline, picker */}
-          <div className="min-w-0">
+          <div className="min-w-0 @min-[66rem]:col-start-1 @min-[66rem]:row-start-1">
             <h1 className="text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @7xl:text-6xl">
               Connect your agent to {data.appName}
             </h1>
@@ -264,30 +264,32 @@ export function ConnectPage() {
               setDialog(d);
             }}
           />
+          {/* Under the picker, beside the card: the prompt, or the manual
+              steps. Stacked, it comes last. */}
+          <div className="min-w-0 @min-[66rem]:col-start-1 @min-[66rem]:row-start-2">
+            <ConnectArea
+              data={data}
+              client={client}
+              setup={setup}
+              step={step}
+              manual={manual}
+              scriptable={scriptable}
+              script={script}
+              download={download}
+              choices={choices}
+              prompt={prompt}
+              onManual={(v) => {
+                setManualChosen(v);
+                // Only manual setup is bookmarkable; Script is a view of Prompt.
+                if (setup === "prompt-or-manual")
+                  updateUrlParams({ mode: v ? "manual" : null });
+              }}
+              onCursorNote={() => setDialog("cursor")}
+              footprint={data.footprintFor(client)}
+              skillCount={skillCount}
+            />
+          </div>
         </section>
-
-        {/* Full width under the hero: the prompt, or the manual steps. */}
-        <ConnectArea
-          data={data}
-          client={client}
-          setup={setup}
-          step={step}
-          manual={manual}
-          scriptable={scriptable}
-          script={script}
-          download={download}
-          choices={choices}
-          prompt={prompt}
-          onManual={(v) => {
-            setManualChosen(v);
-            // Only manual setup is bookmarkable; Script is a view of Prompt.
-            if (setup === "prompt-or-manual")
-              updateUrlParams({ mode: v ? "manual" : null });
-          }}
-          onCursorNote={() => setDialog("cursor")}
-          footprint={data.footprintFor(client)}
-          skillCount={skillCount}
-        />
       </div>
 
       <BrowseDialog
@@ -833,7 +835,7 @@ function Band({
       aria-label="Connect"
       aria-busy={busy}
       inert={busy}
-      className="mt-6 rounded-3xl border border-primary/40 bg-card/80 p-5 shadow-sm ring-1 ring-primary/15 transition-colors duration-300 md:px-7 md:py-6"
+      className="rounded-3xl border border-primary/40 bg-card/80 p-5 shadow-sm ring-1 ring-primary/15 transition-colors duration-300 md:px-7 md:py-6"
     >
       {children}
     </section>
@@ -1192,7 +1194,7 @@ function ProfileCard({
   return (
     <aside
       aria-label={`What ${client.label} gets`}
-      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm @min-[66rem]:mt-2"
+      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm @min-[66rem]:col-start-2 @min-[66rem]:row-span-2 @min-[66rem]:row-start-1 @min-[66rem]:mt-2"
     >
       <div className="flex items-center gap-3.5">
         <div key={`icon-${client.id}`} className="connect-icon">

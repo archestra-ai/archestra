@@ -49,6 +49,21 @@ impl Hold<'_> {
     pub fn disarm(&mut self) {
         self.open = false;
     }
+
+    /// Readonly replay has no eventlog claim to finish this transaction. Commit
+    /// its admission renewal only after all retained rows have been inspected.
+    pub fn commit(mut self) -> Result<(), Error> {
+        if self.open {
+            self.pg
+                .with_client(|client| {
+                    client.batch_execute("COMMIT")?;
+                    Ok(())
+                })
+                .map_err(Error::Storage)?;
+            self.disarm();
+        }
+        Ok(())
+    }
 }
 
 impl Drop for Hold<'_> {
@@ -65,17 +80,7 @@ impl Drop for Hold<'_> {
 }
 
 pub fn touch(pg: &LeasedPostgres, subject: Subject<'_>) -> Result<(), Error> {
-    let mut held = hold(pg, subject)?;
-    if !held.open {
-        return Ok(());
-    }
-    pg.with_client(|client| {
-        client.batch_execute("COMMIT")?;
-        Ok(())
-    })
-    .map_err(Error::Storage)?;
-    held.disarm();
-    Ok(())
+    hold(pg, subject)?.commit()
 }
 
 pub fn hold<'a>(pg: &'a LeasedPostgres, subject: Subject<'_>) -> Result<Hold<'a>, Error> {

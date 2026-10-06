@@ -75,7 +75,20 @@ const native = await vi.hoisted(async () => {
   );
   return createRuntimeModule();
 });
-vi.mock("@archestra/openappa-rs", () => native);
+vi.mock("@archestra/openappa-rs", () => ({
+  ...native,
+  dispatchHook: async (...args: Parameters<typeof native.dispatchHook>) => {
+    // These policy tests have no completed receipts. Keep the readonly probe
+    // out of their callbacks/counts, but preserve every other native event.
+    if (JSON.parse(args[0]).event === "replay_completed_results") {
+      return JSON.stringify({
+        decision: "replay_completed_results",
+        results: [],
+      });
+    }
+    return native.dispatchHook(...args);
+  },
+}));
 vi.mock("@/cache-manager");
 
 const originalReplayEncryptionConfig = config.secretsManager;

@@ -11,6 +11,7 @@ import {
   OPENAPPA_REWRITE_MAX_BATCH,
   OPENAPPA_REWRITE_MAX_BYTES,
   OPENAPPA_REWRITE_MAX_ENTRIES,
+  OPENAPPA_REWRITE_MAX_FORK_DEPTH,
   OPENAPPA_REWRITE_MAX_IDLE_TTL_MS,
   OPENAPPA_REWRITE_MAX_SWEEP_BATCH,
   OPENAPPA_REWRITE_TOUCH_SLACK_MS,
@@ -567,6 +568,15 @@ describe("OpenAppaRewriteModel", () => {
       OpenAppaRewriteModel.readHead(scope, "anthropic:messages", { now: T0 }),
     ).rejects.toMatchObject({ statusCode: 409 });
     await expect(
+      OpenAppaRewriteModel.commitProjection({
+        scope,
+        wire: "anthropic:messages",
+        expectedRevision: 1,
+        pairs: [],
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    await expect(
       OpenAppaRewriteModel.compareAndSwapHead({
         scope,
         wire: "anthropic:messages",
@@ -591,7 +601,7 @@ describe("OpenAppaRewriteModel", () => {
     );
   });
 
-  test("preserves valid existing heads while adding counted initialization evidence", async () => {
+  test("a projection no-op preserves legacy heads while adding counted initialization evidence", async () => {
     const scope = await openAt({
       organizationId: "org-existing-head",
       sessionId: "session",
@@ -608,12 +618,15 @@ describe("OpenAppaRewriteModel", () => {
       stateDigest: createHash("sha256").update(state).digest("hex"),
       updatedAt: T0,
     });
-    const head = await OpenAppaRewriteModel.readHead(
+    const { head, pairs } = await OpenAppaRewriteModel.commitProjection({
       scope,
-      "anthropic:messages",
-      { now: T0 },
-    );
+      wire: "anthropic:messages",
+      expectedRevision: 7,
+      pairs: [],
+      now: T0,
+    });
     expect(head).toEqual({ wire: "anthropic:messages", revision: 7, state });
+    expect(pairs).toEqual([]);
     expect(await pairCount(scope)).toBe(1);
     expect(
       await countStatements(() =>
@@ -934,6 +947,107 @@ describe("OpenAppaRewriteModel", () => {
     ).rejects.toMatchObject({ statusCode: 410 });
   });
 
+  test("seeds mapped fork chains once and still protects unmapped descendants", async () => {
+    const source = await openAt({
+      organizationId: "org-fork-seeds",
+      sessionId: "mapped-0",
+      root: "mapped-root-0",
+      idleTtlMs: 1_000,
+    });
+    await OpenAppaRewriteModel.appendBatch(source, [bytes("k", "o", "r")], {
+      now: T0,
+    });
+    for (let index = 1; index <= 2; index++) {
+      const fork = await openAt({
+        organizationId: source.organizationId,
+        sessionId: `mapped-${index}`,
+        root: `mapped-root-${index}`,
+        forkedFrom: `mapped-${index - 1}`,
+        now: T0,
+      });
+      expect(fork.groupId).toBe(source.groupId);
+    }
+    for (let index = 1; index <= 2; index++) {
+      await native({
+        organizationId: source.organizationId,
+        sessionId: `unmapped-${index}`,
+        root: `unmapped-root-${index}`,
+        forkedFrom: index === 1 ? "mapped-2" : "unmapped-1",
+      });
+    }
+    const after = new Date(source.expiresAt.getTime() + 1);
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: source.organizationId,
+      sessionId: "unmapped-2",
+      operationId: "pending-descendant",
+      root: "unmapped-root-2",
+      status: "pending",
+      input: { call: "x" },
+      createdAt: after,
+    });
+    const memberQueries: unknown[][] = [];
+    await countStatements(
+      async () => {
+        expect(
+          await OpenAppaRewriteModel.expireInactive({
+            now: after,
+            batchSize: 8,
+          }),
+        ).toBe(0);
+      },
+      (args) => {
+        if (String(args[0]).includes("WITH RECURSIVE members AS"))
+          memberQueries.push(args);
+      },
+    );
+    const memberQuery = memberQueries[0];
+    expect(memberQuery).toBeDefined();
+    if (!memberQuery || typeof memberQuery[0] !== "string")
+      throw new Error("Missing native-work query");
+    const boundary = memberQuery[0].indexOf("SELECT 1 AS pending");
+    expect(boundary).toBeGreaterThan(0);
+    // Execute the production CTE with a fully consumed row set: EXISTS can stop
+    // early and hide duplicate traversal of already-enrolled fork chains.
+    const cte = memberQuery[0].slice(0, boundary);
+    const parameterCount = Math.max(
+      ...Array.from(cte.matchAll(/\$(\d+)/g), (match) => Number(match[1])),
+    );
+    const parameters = memberQuery[1];
+    if (!Array.isArray(parameters)) throw new Error("Missing query parameters");
+    const client = (
+      db as unknown as {
+        $client: {
+          query: (
+            query: string,
+            params: unknown[],
+          ) => Promise<{ rows: { session_id: string; depth: number }[] }>;
+        };
+      }
+    ).$client;
+    const members = await client.query(
+      `${cte} SELECT session_id, depth FROM members ORDER BY session_id`,
+      parameters.slice(0, parameterCount),
+    );
+    expect(members.rows).toEqual([
+      { session_id: "mapped-0", depth: 1 },
+      { session_id: "mapped-1", depth: 1 },
+      { session_id: "mapped-2", depth: 1 },
+      { session_id: "unmapped-1", depth: 2 },
+      { session_id: "unmapped-2", depth: 3 },
+    ]);
+    expect(
+      await OpenAppaRewriteModel.loadBatch(source, ["k"], { now: after }),
+    ).toHaveLength(1);
+    const renewed = await OpenAppaRewriteModel.verify(source, { now: after });
+    await db.delete(schema.openappaOperationsTable);
+    expect(
+      await OpenAppaRewriteModel.expireInactive({
+        now: new Date(renewed.expiresAt.getTime() + 1),
+        batchSize: 8,
+      }),
+    ).toBe(1);
+  });
+
   test("a pending processed result also blocks collection", async () => {
     const scope = await openAt({
       organizationId: "org-result",
@@ -1121,10 +1235,45 @@ describe("OpenAppaRewriteModel", () => {
     await OpenAppaRewriteModel.appendBatch(live, [bytes("stay", "o", "r")], {
       now: T0,
     });
-    await OpenAppaRewriteModel.expireInactive({
+    const otherOrg = await openAt({
+      organizationId: "org-sweep-other",
+      sessionId: "idle",
+      root: idle.root,
+      idleTtlMs: 60_000,
+    });
+    await OpenAppaRewriteModel.appendBatch(
+      otherOrg,
+      [bytes("stay", "o", "r")],
+      {
+        now: T0,
+      },
+    );
+    for (const scope of [idle, live, otherOrg]) {
+      await OpenAppaRewriteModel.compareAndSwapHead({
+        scope,
+        wire: "anthropic:messages",
+        expectedRevision: 0,
+        state: Buffer.from("head"),
+        now: T0,
+      });
+    }
+    const sweep = {
       now: new Date(idle.expiresAt.getTime() + 1),
       batchSize: 2,
-    });
+    };
+    expect(await OpenAppaRewriteModel.expireInactive(sweep)).toBe(2);
+    expect(await OpenAppaRewriteModel.expireInactive(sweep)).toBe(1);
+    expect(await pairCount(live)).toBe(2);
+    for (const scope of [live, otherOrg]) {
+      expect(
+        await OpenAppaRewriteModel.readHead(scope, "anthropic:messages", {
+          now: T0,
+        }),
+      ).toMatchObject({ revision: 1, state: Buffer.from("head") });
+    }
+    expect(
+      await OpenAppaRewriteModel.loadBatch(otherOrg, ["stay"], { now: T0 }),
+    ).toHaveLength(1);
     expect(
       await OpenAppaRewriteModel.loadBatch(live, ["stay"], { now: T0 }),
     ).toHaveLength(1);
@@ -1439,6 +1588,697 @@ describe("OpenAppaRewriteModel", () => {
     ).toBe(1);
   });
 
+  test("a healthy projection no-op reads once without advancing or touching the head", async () => {
+    const scope = await openAt({
+      organizationId: "org-no-op",
+      sessionId: "session",
+      root: "root",
+    });
+    const committed = await OpenAppaRewriteModel.commitProjection({
+      scope,
+      wire: "anthropic:messages",
+      expectedRevision: 0,
+      state: Buffer.from("head"),
+      pairs: [],
+      now: T0,
+    });
+    const before = await db.select().from(schema.openappaRewriteGroupsTable);
+    const statements: string[] = [];
+    expect(
+      await countStatements(
+        async () => {
+          const result = await OpenAppaRewriteModel.commitProjection({
+            scope,
+            wire: "anthropic:messages",
+            expectedRevision: 1,
+            pairs: [],
+            now: later(1),
+          });
+          expect(result).toEqual(committed);
+        },
+        (args) => statements.push(String(args[0])),
+      ),
+    ).toBe(1);
+    expect(statements[0]).not.toMatch(/FOR UPDATE|INSERT|DELETE|UPDATE/i);
+    expect(await db.select().from(schema.openappaRewriteGroupsTable)).toEqual(
+      before,
+    );
+    expect(await pairCount(scope)).toBe(1);
+    for (const expectedRevision of [0, 2]) {
+      await expect(
+        OpenAppaRewriteModel.commitProjection({
+          scope,
+          wire: "anthropic:messages",
+          expectedRevision,
+          pairs: [],
+          now: T0,
+        }),
+      ).rejects.toMatchObject({
+        statusCode: 409,
+        message: "Replay record conflict",
+        shouldRetry: false,
+      });
+    }
+    await expect(
+      OpenAppaRewriteModel.commitProjection({
+        scope,
+        wire: "openai:responses",
+        expectedRevision: 0,
+        pairs: [],
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    for (const forged of [
+      { ...scope, epoch: scope.epoch + 1 },
+      { ...scope, sessionId: "stranger" },
+      { ...scope, root: "foreign-root" },
+      { ...scope, organizationId: "foreign-org" },
+      { ...scope, protocolVersion: 2 as unknown as 1 },
+    ]) {
+      await expect(
+        OpenAppaRewriteModel.commitProjection({
+          scope: forged,
+          wire: "anthropic:messages",
+          expectedRevision: 1,
+          pairs: [],
+          now: T0,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+    }
+    await db
+      .update(schema.openappaRewriteHeadsTable)
+      .set({ stateDigest: "0".repeat(64) });
+    await expect(
+      OpenAppaRewriteModel.commitProjection({
+        scope,
+        wire: "anthropic:messages",
+        expectedRevision: 1,
+        pairs: [],
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("projection no-ops still renew due leases, guard pending work, and reject expiry", async () => {
+    const scope = await openAt({
+      organizationId: "org-no-op-expiry",
+      sessionId: "session",
+      root: "root",
+      idleTtlMs: 1_000,
+    });
+    const params = {
+      scope,
+      wire: "anthropic:messages",
+      expectedRevision: 1,
+      pairs: [],
+    };
+    await OpenAppaRewriteModel.commitProjection({
+      ...params,
+      expectedRevision: 0,
+      state: Buffer.from("head"),
+      now: T0,
+    });
+    const touchAt = later(OPENAPPA_REWRITE_TOUCH_SLACK_MS + 1);
+    await OpenAppaRewriteModel.commitProjection({ ...params, now: touchAt });
+    const [touched] = await db.select().from(schema.openappaRewriteGroupsTable);
+    expect(touched.expiresAt.getTime()).toBeGreaterThan(
+      scope.expiresAt.getTime(),
+    );
+    const dueAt = new Date(touched.expiresAt.getTime() + 1);
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: scope.organizationId,
+      sessionId: scope.sessionId,
+      operationId: "pending-no-op",
+      root: scope.root,
+      status: "pending",
+      input: { call: "x" },
+      createdAt: dueAt,
+    });
+    expect(
+      await OpenAppaRewriteModel.commitProjection({ ...params, now: dueAt }),
+    ).toMatchObject({ pairs: [], head: { revision: 1 } });
+    const [renewed] = await db.select().from(schema.openappaRewriteGroupsTable);
+    expect(renewed.expiresAt.getTime()).toBeGreaterThan(dueAt.getTime());
+    await db.delete(schema.openappaOperationsTable);
+    const expiredAt = new Date(renewed.expiresAt.getTime() + 1);
+    await expect(
+      OpenAppaRewriteModel.commitProjection({ ...params, now: expiredAt }),
+    ).rejects.toMatchObject({ statusCode: 410, shouldRetry: false });
+    await OpenAppaRewriteModel.expireInactive({ now: expiredAt });
+    await expect(
+      OpenAppaRewriteModel.commitProjection({ ...params, now: expiredAt }),
+    ).rejects.toMatchObject({ statusCode: 410, shouldRetry: false });
+  });
+
+  test("a healthy projection snapshot reads scope, initialized head, and requested pairs together", async () => {
+    const scope = await openAt({
+      organizationId: "org-projection-snapshot",
+      sessionId: "owner",
+      root: "root",
+    });
+    const wire = "anthropic:messages";
+    const pair = bytes('a"b,c}d\\e', "original", "rewritten");
+    await OpenAppaRewriteModel.commitProjection({
+      scope,
+      wire,
+      expectedRevision: 0,
+      state: Buffer.from("head"),
+      pairs: [pair],
+      now: T0,
+    });
+    const before = await db.select().from(schema.openappaRewriteGroupsTable);
+    const statements: string[] = [];
+    expect(
+      await countStatements(
+        async () => {
+          const snapshot = await OpenAppaRewriteModel.readProjectionSnapshot({
+            scope: { ...scope, expiresAt: later(1) },
+            wire,
+            keys: [pair.fragmentKey, pair.fragmentKey],
+            now: T0,
+          });
+          expect(snapshot).toEqual({
+            scope,
+            hasAncestors: false,
+            head: { wire, revision: 1, state: Buffer.from("head") },
+            headInitialized: true,
+            pairs: [pair],
+            readOnlyNoopEligible: true,
+          });
+          expect(Object.isFrozen(snapshot)).toBe(true);
+        },
+        (args) => statements.push(String(args[0])),
+      ),
+    ).toBe(1);
+    expect(statements[0]).not.toMatch(/FOR UPDATE|INSERT|DELETE|UPDATE/i);
+    expect(await db.select().from(schema.openappaRewriteGroupsTable)).toEqual(
+      before,
+    );
+    const incomplete = await OpenAppaRewriteModel.readProjectionSnapshot({
+      scope,
+      wire,
+      keys: [pair.fragmentKey, "missing"],
+      now: T0,
+    });
+    expect(incomplete.pairs).toEqual([pair]);
+    expect(incomplete.readOnlyNoopEligible).toBe(false);
+    const otherWire = await OpenAppaRewriteModel.readProjectionSnapshot({
+      scope,
+      wire: "openai:responses",
+      keys: [],
+      now: T0,
+    });
+    expect(otherWire).toMatchObject({
+      head: { revision: 0 },
+      headInitialized: false,
+      readOnlyNoopEligible: false,
+    });
+  });
+
+  test("projection snapshots reject forged scopes and corrupt heads or requested ciphertext", async () => {
+    const scope = await openAt({
+      organizationId: "org-snapshot-forgery",
+      sessionId: "owner",
+      root: "root",
+    });
+    const params = { scope, wire: "anthropic:messages", keys: ["k"], now: T0 };
+    await OpenAppaRewriteModel.commitProjection({
+      scope,
+      wire: params.wire,
+      expectedRevision: 0,
+      state: Buffer.from("head"),
+      pairs: [bytes("k", "cipher-original", "cipher-rewritten")],
+      now: T0,
+    });
+    for (const forged of [
+      { ...scope, organizationId: "foreign" },
+      { ...scope, sessionId: "foreign" },
+      { ...scope, root: "foreign" },
+      { ...scope, groupId: "foreign" },
+      { ...scope, epoch: 2 },
+      { ...scope, protocolVersion: 2 as unknown as 1 },
+    ]) {
+      await expect(
+        OpenAppaRewriteModel.readProjectionSnapshot({
+          ...params,
+          scope: forged,
+        }),
+      ).rejects.toMatchObject({ statusCode: 409, shouldRetry: false });
+    }
+    await db
+      .update(schema.openappaRewritePairsTable)
+      .set({ rewrittenDigest: "0".repeat(64) })
+      .where(eq(schema.openappaRewritePairsTable.fragmentKey, "k"));
+    await expect(
+      OpenAppaRewriteModel.readProjectionSnapshot(params),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Replay record conflict",
+    });
+    await db
+      .update(schema.openappaRewriteHeadsTable)
+      .set({ stateDigest: "0".repeat(64) });
+    await expect(
+      OpenAppaRewriteModel.readProjectionSnapshot({ ...params, keys: [] }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    await db.delete(schema.openappaRewriteHeadsTable);
+    await expect(
+      OpenAppaRewriteModel.readProjectionSnapshot({ ...params, keys: [] }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("a stale or caller-modified snapshot cannot authorize a projection write", async () => {
+    const scope = await openAt({
+      organizationId: "org-snapshot-not-authority",
+      sessionId: "owner",
+      root: "root",
+    });
+    const params = { scope, wire: "anthropic:messages", keys: [], now: T0 };
+    await OpenAppaRewriteModel.commitProjection({
+      ...params,
+      expectedRevision: 0,
+      state: Buffer.from("first-head"),
+      pairs: [],
+    });
+    const snapshot = await OpenAppaRewriteModel.readProjectionSnapshot(params);
+    await OpenAppaRewriteModel.commitProjection({
+      ...params,
+      expectedRevision: 1,
+      state: Buffer.from("new-head"),
+      pairs: [],
+    });
+    snapshot.head.state.fill(0);
+    await expect(
+      OpenAppaRewriteModel.commitProjection({
+        ...snapshot,
+        wire: params.wire,
+        expectedRevision: snapshot.head.revision,
+        state: Buffer.from("forged-head"),
+        pairs: [bytes("forged", "a", "b")],
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    expect(await pairCount(scope)).toBe(1);
+    expect(
+      await OpenAppaRewriteModel.readHead(scope, params.wire, { now: T0 }),
+    ).toMatchObject({
+      revision: 2,
+      state: Buffer.from("new-head"),
+    });
+    await db
+      .update(schema.openappaRewriteGroupsTable)
+      .set({ status: "expired" });
+    await expect(
+      OpenAppaRewriteModel.commitProjection({
+        ...snapshot,
+        wire: params.wire,
+        expectedRevision: 2,
+        pairs: [],
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ statusCode: 410 });
+  });
+
+  test("legacy and due projection snapshots use locked initialization or expiry guards", async () => {
+    const scope = await openAt({
+      organizationId: "org-snapshot-slow",
+      sessionId: "owner",
+      root: "root",
+      idleTtlMs: 1_000,
+    });
+    const state = Buffer.from("legacy-head");
+    const params = { scope, wire: "anthropic:messages", keys: [], now: T0 };
+    await db.insert(schema.openappaRewriteHeadsTable).values({
+      organizationId: scope.organizationId,
+      groupId: scope.groupId,
+      sessionId: scope.sessionId,
+      wire: params.wire,
+      revision: 7,
+      state,
+      stateDigest: createHash("sha256").update(state).digest("hex"),
+      updatedAt: T0,
+    });
+    const statements: string[] = [];
+    await countStatements(
+      async () => {
+        const snapshot =
+          await OpenAppaRewriteModel.readProjectionSnapshot(params);
+        expect(snapshot).toMatchObject({
+          head: { revision: 7, state },
+          headInitialized: true,
+          readOnlyNoopEligible: false,
+        });
+      },
+      (args) => statements.push(String(args[0])),
+    );
+    expect(
+      statements.some((statement) =>
+        statement.toUpperCase().includes("FOR UPDATE"),
+      ),
+    ).toBe(true);
+    expect(await pairCount(scope)).toBe(1);
+    const renewed = await OpenAppaRewriteModel.readProjectionSnapshot({
+      ...params,
+      now: later(OPENAPPA_REWRITE_TOUCH_SLACK_MS + 1),
+    });
+    expect(renewed.readOnlyNoopEligible).toBe(false);
+    expect(renewed.scope.expiresAt.getTime()).toBeGreaterThan(
+      scope.expiresAt.getTime(),
+    );
+    const dueAt = new Date(renewed.scope.expiresAt.getTime() + 1);
+    await db.insert(schema.openappaOperationsTable).values({
+      organizationId: scope.organizationId,
+      sessionId: scope.sessionId,
+      operationId: "pending-snapshot",
+      root: scope.root,
+      status: "pending",
+      input: { call: "x" },
+      createdAt: dueAt,
+    });
+    const pending = await OpenAppaRewriteModel.readProjectionSnapshot({
+      ...params,
+      now: dueAt,
+    });
+    expect(pending.readOnlyNoopEligible).toBe(false);
+    expect(pending.scope.expiresAt.getTime()).toBeGreaterThan(dueAt.getTime());
+    await db.delete(schema.openappaOperationsTable);
+    await expect(
+      OpenAppaRewriteModel.readProjectionSnapshot({
+        ...params,
+        now: new Date(pending.scope.expiresAt.getTime() + 1),
+      }),
+    ).rejects.toMatchObject({ statusCode: 410 });
+    const [expired] = await db.select().from(schema.openappaRewriteGroupsTable);
+    expect(expired.status).toBe("expired");
+  });
+
+  test("batches authorized parent and fork enrollment with owner-tagged pairs in one query", async () => {
+    const source = await openAt({
+      organizationId: "org-lineage-batch",
+      sessionId: "source",
+      root: "source-root",
+    });
+    const fork = await openAt({
+      organizationId: source.organizationId,
+      sessionId: "fork",
+      root: "fork-root",
+      forkedFrom: source.sessionId,
+    });
+    const child = await openAt({
+      organizationId: source.organizationId,
+      sessionId: "child",
+      root: fork.root,
+      parentId: fork.sessionId,
+    });
+    for (const owner of [source, fork, child]) {
+      await OpenAppaRewriteModel.appendBatch(
+        owner,
+        [bytes("same-key", owner.sessionId, "approved")],
+        { now: T0 },
+      );
+    }
+    const stranger = await openAt({
+      organizationId: source.organizationId,
+      sessionId: "stranger",
+      root: fork.root,
+    });
+    await OpenAppaRewriteModel.appendBatch(
+      stranger,
+      [bytes("same-key", "foreign", "foreign")],
+      { now: T0 },
+    );
+    const before = await db.select().from(schema.openappaRewriteGroupsTable);
+    const params = {
+      organizationId: child.organizationId,
+      sessionId: child.sessionId,
+      callerId: "caller",
+      scope: child,
+      keys: ["missing", "same-key", "same-key"],
+      now: T0,
+    };
+    expect(
+      await countStatements(async () => {
+        const owners = await OpenAppaRewriteModel.loadLineageBatch(params);
+        expect(owners.map((owner) => owner.scope.sessionId)).toEqual([
+          "child",
+          "source",
+          "fork",
+        ]);
+        expect(owners.map((owner) => owner.pairs)).toEqual([
+          [bytes("same-key", "child", "approved")],
+          [bytes("same-key", "source", "approved")],
+          [bytes("same-key", "fork", "approved")],
+        ]);
+      }),
+    ).toBe(1);
+    expect(await db.select().from(schema.openappaRewriteGroupsTable)).toEqual(
+      before,
+    );
+    await expect(
+      OpenAppaRewriteModel.loadLineageBatch({ ...params, callerId: "foreign" }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    for (const scope of [
+      { ...child, groupId: "foreign" },
+      { ...child, root: "foreign" },
+      { ...child, epoch: 2 },
+      { ...child, protocolVersion: 2 as unknown as 1 },
+      { ...child, organizationId: "foreign" },
+      { ...child, sessionId: "stranger" },
+    ]) {
+      await expect(
+        OpenAppaRewriteModel.loadLineageBatch({ ...params, scope }),
+      ).rejects.toMatchObject({ statusCode: 409 });
+    }
+    await db
+      .update(schema.openappaRewritePairsTable)
+      .set({ originalDigest: "0".repeat(64) })
+      .where(eq(schema.openappaRewritePairsTable.sessionId, "source"));
+    await expect(
+      OpenAppaRewriteModel.loadLineageBatch(params),
+    ).rejects.toMatchObject({
+      statusCode: 409,
+      message: "Replay record conflict",
+    });
+  });
+
+  test("lineage batches reject missing, cyclic, foreign-caller, and truncated ancestry", async () => {
+    const source = await openAt({
+      organizationId: "org-lineage-invalid",
+      sessionId: "source",
+      root: "root",
+    });
+    const child = await openAt({
+      organizationId: source.organizationId,
+      sessionId: "child",
+      root: "root",
+      parentId: "source",
+    });
+    const params = {
+      organizationId: child.organizationId,
+      sessionId: child.sessionId,
+      callerId: "caller",
+      scope: child,
+      keys: [],
+      now: T0,
+    };
+    for (const mutation of [
+      { parentId: "child" },
+      { parentId: "missing" },
+      { parentId: null, callerId: "foreign" },
+      { parentId: null, callerId: "caller", sessionId: "mismatched-actor" },
+    ]) {
+      await db
+        .update(schema.openappaSessionsTable)
+        .set(mutation)
+        .where(
+          eq(
+            schema.openappaSessionsTable.actor,
+            openappaActor(source.sessionId),
+          ),
+        );
+      await expect(
+        OpenAppaRewriteModel.loadLineageBatch(params),
+      ).rejects.toMatchObject({ statusCode: 409 });
+    }
+    for (let index = 0; index <= OPENAPPA_REWRITE_MAX_FORK_DEPTH; index++) {
+      await native({
+        organizationId: "org-lineage-truncated",
+        sessionId: `s${index}`,
+        root: "root",
+        parentId: index === 0 ? null : `s${index - 1}`,
+      });
+    }
+    await expect(
+      OpenAppaRewriteModel.loadLineageBatch({
+        organizationId: "org-lineage-truncated",
+        sessionId: `s${OPENAPPA_REWRITE_MAX_FORK_DEPTH}`,
+        callerId: "caller",
+        keys: [],
+        now: T0,
+      }),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("strict lineage validates each owner's enrollment and excludes unfinished reservations", async () => {
+    const source = await openAt({
+      organizationId: "org-lineage-enrollment",
+      sessionId: "source",
+      root: "source-root",
+    });
+    const child = await openAt({
+      organizationId: source.organizationId,
+      sessionId: "child",
+      root: "child-root",
+      parentId: "source",
+    });
+    const params = {
+      organizationId: child.organizationId,
+      sessionId: child.sessionId,
+      callerId: "caller",
+      scope: child,
+      keys: ["k"],
+      now: T0,
+    };
+    await expect(
+      OpenAppaRewriteModel.loadLineageBatch(params),
+    ).rejects.toMatchObject({ statusCode: 409 });
+    // Discovery mode keeps each independently enrolled group attached to its owner.
+    expect(
+      (
+        await OpenAppaRewriteModel.loadLineageBatch({
+          ...params,
+          scope: undefined,
+        })
+      ).map((owner) => owner.scope),
+    ).toEqual([child, source]);
+    await db
+      .update(schema.openappaRewriteRootsTable)
+      .set({ groupId: source.groupId })
+      .where(eq(schema.openappaRewriteRootsTable.nativeRoot, child.root));
+    const aligned = { ...params, scope: { ...child, groupId: source.groupId } };
+    await OpenAppaRewriteModel.reservePair({
+      scope: source,
+      pair: bytes("k", "identity", "reserved"),
+      reservationId: "00000000-0000-4000-8000-000000000005",
+      maxBytes: 100,
+      now: T0,
+    });
+    expect(
+      (await OpenAppaRewriteModel.loadLineageBatch(aligned)).map(
+        (owner) => owner.pairs,
+      ),
+    ).toEqual([[], []]);
+    for (const mutation of [
+      { protocolVersion: 2 },
+      { protocolVersion: 1, epoch: 2 },
+    ]) {
+      await db
+        .update(schema.openappaRewriteGroupsTable)
+        .set(mutation)
+        .where(eq(schema.openappaRewriteGroupsTable.groupId, source.groupId));
+      await expect(
+        OpenAppaRewriteModel.loadLineageBatch(aligned),
+      ).rejects.toMatchObject({ statusCode: 409 });
+    }
+    await db
+      .delete(schema.openappaRewriteGroupsTable)
+      .where(eq(schema.openappaRewriteGroupsTable.groupId, source.groupId));
+    await expect(
+      OpenAppaRewriteModel.loadLineageBatch(aligned),
+    ).rejects.toMatchObject({ statusCode: 409 });
+  });
+
+  test("lineage query bounds the total owner/key slots rather than silently truncating", async () => {
+    const source = await openAt({
+      organizationId: "org-lineage-limit",
+      sessionId: "source",
+      root: "root",
+    });
+    const child = await openAt({
+      organizationId: source.organizationId,
+      sessionId: "child",
+      root: "root",
+      parentId: "source",
+    });
+    await expect(
+      OpenAppaRewriteModel.loadLineageBatch({
+        organizationId: child.organizationId,
+        sessionId: child.sessionId,
+        callerId: "caller",
+        scope: child,
+        keys: Array.from(
+          { length: Math.floor(OPENAPPA_REWRITE_MAX_BATCH / 2) + 1 },
+          (_, index) => `k${index}`,
+        ),
+        now: T0,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 400,
+      message: "Replay record limit exceeded",
+    });
+  });
+
+  test("receipt lineage omits unenrolled or expired owners and uses fresh locked guards when due", async () => {
+    const source = await openAt({
+      organizationId: "org-lineage-slow",
+      sessionId: "source",
+      root: "root",
+      idleTtlMs: 1_000,
+    });
+    await OpenAppaRewriteModel.appendBatch(
+      source,
+      [bytes("k", "original", "approved")],
+      { now: T0 },
+    );
+    await native({
+      organizationId: source.organizationId,
+      sessionId: "child",
+      root: "unenrolled-root",
+      parentId: "source",
+    });
+    const params = {
+      organizationId: source.organizationId,
+      sessionId: "child",
+      callerId: "caller",
+      keys: ["k"],
+      now: T0,
+    };
+    expect(await OpenAppaRewriteModel.loadLineageBatch(params)).toEqual([
+      { scope: source, pairs: [bytes("k", "original", "approved")] },
+    ]);
+    const statements: string[] = [];
+    await countStatements(
+      async () => {
+        const owners = await OpenAppaRewriteModel.loadLineageBatch({
+          ...params,
+          now: later(OPENAPPA_REWRITE_TOUCH_SLACK_MS + 1),
+        });
+        expect(owners).toHaveLength(1);
+        expect(owners[0].scope.expiresAt.getTime()).toBeGreaterThan(
+          source.expiresAt.getTime(),
+        );
+        expect(owners[0].pairs).toEqual([bytes("k", "original", "approved")]);
+      },
+      (args) => statements.push(String(args[0])),
+    );
+    expect(
+      statements.some((statement) =>
+        statement.toUpperCase().includes("FOR UPDATE"),
+      ),
+    ).toBe(true);
+    await db
+      .update(schema.openappaRewriteGroupsTable)
+      .set({ status: "expired" });
+    expect(await OpenAppaRewriteModel.loadLineageBatch(params)).toEqual([]);
+    await expect(
+      OpenAppaRewriteModel.loadLineageBatch({
+        ...params,
+        sessionId: "source",
+        scope: source,
+      }),
+    ).rejects.toMatchObject({ statusCode: 410 });
+  });
+
   test("healthy reads use one statement and the retention indexes", async () => {
     const scope = await openAt({
       organizationId: "org-budget",
@@ -1562,7 +2402,10 @@ describe("OpenAppaRewriteModel", () => {
   });
 });
 
-async function countStatements(run: () => Promise<unknown>): Promise<number> {
+async function countStatements(
+  run: () => Promise<unknown>,
+  observe?: (args: unknown[]) => void,
+): Promise<number> {
   const client = (
     db as unknown as {
       $client: {
@@ -1580,6 +2423,7 @@ async function countStatements(run: () => Promise<unknown>): Promise<number> {
   const originalTransaction = client.transaction.bind(client);
   client.query = async (...args: unknown[]) => {
     count += 1;
+    observe?.(args);
     return originalQuery(...args);
   };
   client.transaction = async (fn) =>
@@ -1587,6 +2431,7 @@ async function countStatements(run: () => Promise<unknown>): Promise<number> {
       const originalTxQuery = tx.query.bind(tx);
       tx.query = async (...args: unknown[]) => {
         count += 1;
+        observe?.(args);
         return originalTxQuery(...args);
       };
       return fn(tx);

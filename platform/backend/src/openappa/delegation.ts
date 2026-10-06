@@ -200,14 +200,16 @@ export function restoreVerifiedDelegationEcho(params: {
   organizationId: string;
   callerId: string;
   spawnerNativeId: string;
-  spawnCallIds: readonly string[];
+  spawnCallIds: readonly string[] | ReadonlySet<string>;
   recordedMarkers: readonly string[];
 }): string {
   const marker = trailingMarker(params.text);
   if (
     !marker ||
     !marker.spawnCallId ||
-    !params.spawnCallIds.includes(marker.spawnCallId) ||
+    !("has" in params.spawnCallIds
+      ? params.spawnCallIds.has(marker.spawnCallId)
+      : params.spawnCallIds.includes(marker.spawnCallId)) ||
     !verifyDelegatedPrompt({
       marker,
       organizationId: params.organizationId,

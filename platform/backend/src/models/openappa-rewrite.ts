@@ -56,6 +56,23 @@ type NativeSession = {
   forkedFrom: string | null;
 };
 
+type AncestorRow = {
+  sessionId: string;
+  actor: string | null;
+  parentId: string | null;
+  forkedFrom: string | null;
+  callerId: string | null;
+};
+
+type ProjectionSnapshot = {
+  readonly scope: Readonly<OpenAppaRewriteScope>;
+  readonly head: Readonly<OpenAppaRewriteHead>;
+  readonly headInitialized: boolean;
+  readonly hasAncestors: boolean;
+  readonly pairs: readonly OpenAppaRewritePair[];
+  readonly readOnlyNoopEligible: boolean;
+};
+
 type GroupRow = {
   organizationId: string;
   groupId: string;
@@ -100,6 +117,7 @@ type Enrollment =
   | { kind: "healthy"; scope: OpenAppaRewriteScope };
 
 type Snapshot = {
+  hasAncestors?: boolean;
   kind: "conflict" | "expired" | "slow" | "live";
   now: Date;
   row: GroupRow | null;
@@ -116,13 +134,7 @@ export default class OpenAppaRewriteModel {
     callerId?: string;
   }): Promise<string[]> {
     assertIdentity(params.organizationId, params.sessionId);
-    const result = await db.execute<{
-      sessionId: string;
-      actor: string | null;
-      parentId: string | null;
-      forkedFrom: string | null;
-      callerId: string | null;
-    }>(sql`
+    const result = await db.execute<AncestorRow>(sql`
       WITH RECURSIVE ancestors(session_id) AS (
         SELECT ${params.sessionId}::text
         UNION
@@ -145,31 +157,179 @@ export default class OpenAppaRewriteModel {
        AND s.session_id = a.session_id
       LIMIT ${OPENAPPA_REWRITE_MAX_FORK_DEPTH + 1}
     `);
-    if (result.rows.length > OPENAPPA_REWRITE_MAX_FORK_DEPTH)
-      throw scopeConflict();
-    const byId = new Map(result.rows.map((row) => [row.sessionId, row]));
-    const visited = new Set<string>();
-    const visiting = new Set<string>();
-    const visit = (id: string) => {
-      if (visiting.has(id)) throw scopeConflict();
-      if (visited.has(id)) return;
-      const row = byId.get(id);
+    return validatedAncestors({ ...params, rows: result.rows });
+  }
+
+  /**
+   * Read-only projection state, never a write authorization. Only a proven
+   * no-op completed synchronously after this await may use the healthy result
+   * as its final read. Any later await, missing key, or native work requires a
+   * fresh commitProjection check; no mutation method accepts this snapshot.
+   */
+  static async readProjectionSnapshot(params: {
+    scope: OpenAppaRewriteScope;
+    wire: string;
+    keys: readonly string[];
+    now?: Date;
+  }): Promise<ProjectionSnapshot> {
+    assertScope(params.scope);
+    assertWire(params.wire);
+    assertNow(params.now);
+    if (params.keys.length > OPENAPPA_REWRITE_MAX_BATCH) throw limitError();
+    const keys = uniqueKeys(params.keys);
+    const snap = await readScope(params.scope, {
+      now: params.now,
+      wire: params.wire,
+      keys,
+      lock: false,
+    });
+    if (snap.kind === "expired") throw expiredError();
+    if (snap.kind === "conflict") throw scopeConflict();
+    if (snap.kind === "live" && (!snap.head || snap.headInitialized)) {
+      return projectionSnapshot({
+        snap,
+        scope: params.scope,
+        wire: params.wire,
+        keys,
+        healthy: true,
+      });
+    }
+    const outcome = await db.transaction(async (tx) => {
+      const locked = await readScope(params.scope, {
+        now: params.now,
+        wire: params.wire,
+        keys,
+        lock: true,
+        tx,
+      });
+      if (locked.kind === "expired") throw expiredError();
+      if (locked.kind !== "live" || !locked.row) throw scopeConflict();
+      const settled = await settleGroup(
+        tx,
+        locked.row,
+        sessionFrom(params.scope),
+        locked.now,
+      );
+      if (settled.status !== "live") return settled;
+      if (locked.head && !locked.headInitialized) {
+        await initializeHead(tx, {
+          scope: settled.scope,
+          wire: params.wire,
+          state: locked.head.state,
+          now: locked.now,
+        });
+        locked.headInitialized = true;
+      }
+      return projectionSnapshot({
+        snap: locked,
+        scope: settled.scope,
+        wire: params.wire,
+        keys,
+        healthy: false,
+      });
+    });
+    if ("status" in outcome)
+      throw outcome.status === "expired" ? expiredError() : scopeConflict();
+    return outcome;
+  }
+
+  /** Owner-tagged receipts; strict scope mode also requires one group/epoch. */
+  static async loadLineageBatch(params: {
+    organizationId: string;
+    sessionId: string;
+    callerId?: string;
+    keys: readonly string[];
+    scope?: OpenAppaRewriteScope;
+    now?: Date;
+  }): Promise<{ scope: OpenAppaRewriteScope; pairs: OpenAppaRewritePair[] }[]> {
+    assertIdentity(params.organizationId, params.sessionId);
+    assertNow(params.now);
+    if (params.scope) {
+      assertScope(params.scope);
       if (
-        !row ||
-        row.actor !== openappaActor(id) ||
-        row.callerId !== (params.callerId ?? null)
+        params.scope.organizationId !== params.organizationId ||
+        params.scope.sessionId !== params.sessionId
       )
         throw scopeConflict();
-      visiting.add(id);
-      for (const ancestor of [row.parentId, row.forkedFrom]) {
-        if (ancestor) visit(ancestor);
+    }
+    if (params.keys.length > OPENAPPA_REWRITE_MAX_BATCH) throw limitError();
+    const keys = uniqueKeys(params.keys);
+    const rows = await readLineage({ ...params, keys });
+    const owners = new Map<string, LineageRow[]>();
+    for (const row of rows) {
+      const owner = owners.get(row.sessionId);
+      if (owner) owner.push(row);
+      else owners.set(row.sessionId, [row]);
+    }
+    const ancestors = validatedAncestors({
+      ...params,
+      rows: [...owners.values()].map((owner) => owner[0]),
+    });
+    if (owners.size * keys.length > OPENAPPA_REWRITE_MAX_BATCH)
+      throw limitError();
+    const result: {
+      scope: OpenAppaRewriteScope;
+      pairs: OpenAppaRewritePair[];
+    }[] = [];
+    for (const sessionId of [params.sessionId, ...ancestors]) {
+      const ownerRows = owners.get(sessionId);
+      const row = ownerRows?.[0];
+      if (!row || !ownerRows) throw scopeConflict();
+      const enrolled = interpretEnrollment({
+        row,
+        organizationId: params.organizationId,
+        sessionId,
+      });
+      if (enrolled.kind === "absent" || enrolled.kind === "expired") {
+        if (!params.scope) continue;
+        throw enrolled.kind === "expired" ? expiredError() : scopeConflict();
       }
-      visiting.delete(id);
-      visited.add(id);
-    };
-    visit(params.sessionId);
-    visited.delete(params.sessionId);
-    return [...visited];
+      if (enrolled.kind === "conflict") throw scopeConflict();
+      // All scope checks precede checksum interpretation or a locked fallback.
+      if (
+        params.scope &&
+        (row.groupId !== params.scope.groupId ||
+          Number(row.epoch) !== params.scope.epoch ||
+          (sessionId === params.sessionId && row.root !== params.scope.root))
+      )
+        throw scopeConflict();
+      if (enrolled.kind === "healthy") {
+        result.push({
+          scope: enrolled.scope,
+          pairs: pairsInOrder(keys, collectPairs(ownerRows)),
+        });
+        continue;
+      }
+      try {
+        const scope = await OpenAppaRewriteModel.openExisting({
+          organizationId: params.organizationId,
+          sessionId,
+          protocolVersion: OPENAPPA_REWRITE_PROTOCOL_VERSION,
+          now: params.now,
+        });
+        if (
+          scope.root !== row.root ||
+          scope.groupId !== row.groupId ||
+          scope.epoch !== Number(row.epoch)
+        )
+          throw scopeConflict();
+        result.push({
+          scope,
+          pairs: await OpenAppaRewriteModel.loadBatch(scope, keys, {
+            now: params.now,
+          }),
+        });
+      } catch (error) {
+        if (
+          !params.scope &&
+          error instanceof ApiError &&
+          error.statusCode === 410
+        )
+          continue;
+        throw error;
+      }
+    }
+    return result;
   }
 
   static async open(
@@ -665,6 +825,24 @@ export default class OpenAppaRewriteModel {
         ? undefined
         : asBytes(params.state, OPENAPPA_REWRITE_MAX_HEAD_BYTES);
     const stateDigest = state ? digestOf(state) : undefined;
+    if (prepared.length === 0 && state === undefined) {
+      const snap = await readScope(params.scope, {
+        now: params.now,
+        wire: params.wire,
+        lock: false,
+      });
+      if (snap.kind === "expired") throw expiredError();
+      if (snap.kind === "conflict") throw scopeConflict();
+      if (snap.kind === "live") {
+        const current = snap.head?.revision ?? 0;
+        if (current !== params.expectedRevision || current === 0)
+          throw recordConflict();
+        // The authoritative snapshot linearizes only this read-only no-op.
+        // Legacy heads still need the locked initialization path below.
+        if (snap.head && snap.headInitialized)
+          return { pairs: [], head: snap.head };
+      }
+    }
     return db.transaction(async (tx) => {
       const locked = await readScope(params.scope, {
         now: params.now,
@@ -819,6 +997,142 @@ function conflictGate(): { status: "conflict" } {
   return { status: "conflict" };
 }
 
+function validatedAncestors(params: {
+  organizationId: string;
+  sessionId: string;
+  callerId?: string;
+  rows: AncestorRow[];
+}): string[] {
+  if (params.rows.length > OPENAPPA_REWRITE_MAX_FORK_DEPTH)
+    throw scopeConflict();
+  const byId = new Map(params.rows.map((row) => [row.sessionId, row]));
+  if (byId.size !== params.rows.length) throw scopeConflict();
+  const visited = new Set<string>();
+  const visiting = new Set<string>();
+  const visit = (id: string) => {
+    if (visiting.has(id)) throw scopeConflict();
+    if (visited.has(id)) return;
+    const row = byId.get(id);
+    if (
+      !row ||
+      row.actor !== openappaActor(id) ||
+      row.callerId !== (params.callerId ?? null)
+    )
+      throw scopeConflict();
+    visiting.add(id);
+    for (const ancestor of [row.parentId, row.forkedFrom]) {
+      if (ancestor) visit(ancestor);
+    }
+    visiting.delete(id);
+    visited.add(id);
+  };
+  visit(params.sessionId);
+  if (visited.size !== byId.size) throw scopeConflict();
+  visited.delete(params.sessionId);
+  return [...visited];
+}
+
+function projectionSnapshot(params: {
+  snap: Snapshot;
+  scope: OpenAppaRewriteScope;
+  wire: string;
+  keys: readonly string[];
+  healthy: boolean;
+}): ProjectionSnapshot {
+  if (!params.snap.row) throw scopeConflict();
+  const stored = pairsInOrder(params.keys, params.snap.pairs);
+  return Object.freeze({
+    scope: Object.freeze(
+      liveScope(
+        params.scope,
+        params.snap.row,
+        params.healthy ? params.snap.row.expiresAt : params.scope.expiresAt,
+      ),
+    ),
+    head: Object.freeze(params.snap.head ?? emptyHead(params.wire)),
+    headInitialized: params.snap.headInitialized,
+    hasAncestors: params.snap.hasAncestors !== false,
+    pairs: Object.freeze(stored),
+    readOnlyNoopEligible:
+      params.healthy &&
+      params.snap.headInitialized &&
+      (params.snap.head?.revision ?? 0) > 0 &&
+      stored.length === params.keys.length,
+  });
+}
+
+async function readLineage(params: {
+  organizationId: string;
+  sessionId: string;
+  callerId?: string;
+  keys: readonly string[];
+  scope?: OpenAppaRewriteScope;
+  now?: Date;
+}): Promise<LineageRow[]> {
+  const asOf = params.now
+    ? sql`${params.now}::timestamptz`
+    : sql`clock_timestamp()`;
+  const groupGuard = params.scope
+    ? sql`AND g.group_id = ${params.scope.groupId} AND g.epoch = ${params.scope.epoch}`
+    : sql``;
+  const result = await db.execute<LineageRow>(sql`
+    WITH RECURSIVE ancestors(session_id) AS (
+      SELECT ${params.sessionId}::text
+      UNION
+      SELECT link.session_id
+      FROM ancestors a
+      JOIN openappa_sessions s
+        ON s.organization_id = ${params.organizationId}
+       AND s.actor = 'archestra:' || encode(sha256(convert_to(a.session_id, 'UTF8')), 'hex')
+       AND s.session_id = a.session_id
+      CROSS JOIN LATERAL unnest(ARRAY[s.parent_id, s.forked_from]) link(session_id)
+      WHERE link.session_id IS NOT NULL
+    ), owners AS MATERIALIZED (
+      SELECT session_id FROM ancestors
+      LIMIT ${OPENAPPA_REWRITE_MAX_FORK_DEPTH + 1}
+    ), clk AS MATERIALIZED (
+      SELECT ${asOf} AS as_of
+    )
+    SELECT a.session_id AS "sessionId", s.actor, s.root,
+      s.parent_id AS "parentId", s.forked_from AS "forkedFrom",
+      s.caller_id AS "callerId", r.group_id AS "mappedGroupId",
+      g.group_id AS "groupId", g.epoch,
+      g.protocol_version AS "protocolVersion", g.status,
+      g.idle_ttl_ms AS "idleTtlMs", g.expires_at AS "expiresAt",
+      g.entry_count AS "entryCount", g.byte_count AS "byteCount",
+      g.max_entries AS "maxEntries", g.max_bytes AS "maxBytes",
+      clk.as_of AS "now", p.fragment_key AS "fragmentKey",
+      p.original, p.original_digest AS "originalDigest",
+      p.rewritten, p.rewritten_digest AS "rewrittenDigest",
+      p.byte_len AS "byteLen", p.reservation_expires_at AS "reservationExpiresAt",
+      NULL::text AS "wire", NULL::int AS "revision", NULL::bytea AS "state",
+      NULL::text AS "stateDigest", false AS "headInitialized"
+    FROM owners a
+    CROSS JOIN clk
+    LEFT JOIN openappa_sessions s
+      ON s.organization_id = ${params.organizationId}
+     AND s.actor = 'archestra:' || encode(sha256(convert_to(a.session_id, 'UTF8')), 'hex')
+     AND s.session_id = a.session_id
+    LEFT JOIN openappa_rewrite_roots r
+      ON r.organization_id = s.organization_id AND r.native_root = s.root
+    LEFT JOIN openappa_rewrite_groups g
+      ON g.organization_id = s.organization_id AND g.group_id = r.group_id
+    LEFT JOIN openappa_rewrite_pairs p
+      ON p.organization_id = g.organization_id AND p.group_id = g.group_id
+     AND p.session_id = s.session_id
+     AND p.fragment_key = ANY(${textArrayLiteral(params.keys)}::text[])
+     AND s.caller_id IS NOT DISTINCT FROM ${params.callerId ?? null}::text
+     AND g.protocol_version = ${OPENAPPA_REWRITE_PROTOCOL_VERSION}
+     AND g.epoch >= 1 AND g.status = 'live'
+     AND g.expires_at >= clk.as_of + (g.idle_ttl_ms * interval '1 millisecond')
+     AND g.expires_at >= clk.as_of + (${OPENAPPA_REWRITE_TOUCH_SLACK_MS}::int * interval '1 millisecond')
+     AND (SELECT count(*) FROM owners) <= ${OPENAPPA_REWRITE_MAX_FORK_DEPTH}
+     AND (SELECT count(*) FROM owners) * ${params.keys.length} <= ${OPENAPPA_REWRITE_MAX_BATCH}
+     ${groupGuard}
+  `);
+  return result.rows;
+}
+
 function emptyHead(wire: string): OpenAppaRewriteHead {
   return { wire, revision: 0, state: Buffer.alloc(0) };
 }
@@ -930,12 +1244,28 @@ async function readEnrollment(
       AND s.actor = ${openappaActor(sessionId)}
     LIMIT 1
   `);
-  const row = result.rows[0];
+  return interpretEnrollment({
+    row: result.rows[0],
+    organizationId,
+    sessionId,
+  });
+}
+
+function interpretEnrollment(params: {
+  row: EnrollmentRow | undefined;
+  organizationId: string;
+  sessionId: string;
+}): Enrollment {
+  const { row, organizationId, sessionId } = params;
   if (!row || row.sessionId !== sessionId) return { kind: "conflict" };
   if (!row.mappedGroupId) return { kind: "absent" };
   if (!row.groupId || !row.status || row.epoch == null)
     return { kind: "conflict" };
-  if (Number(row.protocolVersion) !== OPENAPPA_REWRITE_PROTOCOL_VERSION) {
+  if (
+    Number(row.protocolVersion) !== OPENAPPA_REWRITE_PROTOCOL_VERSION ||
+    !Number.isSafeInteger(Number(row.epoch)) ||
+    Number(row.epoch) < 1
+  ) {
     return { kind: "conflict" };
   }
   if (row.status === "expired") return { kind: "expired" };
@@ -1045,6 +1375,8 @@ async function readScope(
     SELECT
       s.session_id AS "sessionId",
       s.root AS "root",
+      s.parent_id AS "parentId",
+      s.forked_from AS "forkedFrom",
       g.epoch AS "epoch",
       g.protocol_version AS "protocolVersion",
       g.status AS "status",
@@ -1149,6 +1481,7 @@ function interpretScope(
     pairs: collectPairs(rows),
     head: collectHead(rows, wire),
     headInitialized: raw.headInitialized,
+    hasAncestors: raw.parentId !== null || raw.forkedFrom !== null,
   };
 }
 
@@ -1547,6 +1880,13 @@ async function hasPendingNativeWork(
        AND child.organization_id = ${group.organizationId}
       WHERE members.depth < ${OPENAPPA_REWRITE_MAX_FORK_DEPTH}
         AND NOT child.session_id = ANY(members.visited)
+        -- Mapped-root sessions are seeds and traverse their own descendants.
+        AND NOT EXISTS (
+          SELECT 1 FROM openappa_rewrite_roots r
+          WHERE r.organization_id = ${group.organizationId}
+            AND r.group_id = ${group.groupId}
+            AND r.native_root = child.root
+        )
     )
     SELECT 1 AS pending
     WHERE EXISTS (
@@ -1741,7 +2081,9 @@ async function deletePayload(
             FOR UPDATE SKIP LOCKED
           )
           DELETE FROM openappa_rewrite_pairs
-          WHERE ctid IN (SELECT ctid FROM doomed)
+          WHERE organization_id = ${params.organizationId}
+            AND group_id = ${params.groupId}
+            AND ctid IN (SELECT ctid FROM doomed)
           RETURNING 1 AS deleted
         `)
       : await tx.execute(sql`
@@ -1754,7 +2096,9 @@ async function deletePayload(
             FOR UPDATE SKIP LOCKED
           )
           DELETE FROM openappa_rewrite_heads
-          WHERE ctid IN (SELECT ctid FROM doomed)
+          WHERE organization_id = ${params.organizationId}
+            AND group_id = ${params.groupId}
+            AND ctid IN (SELECT ctid FROM doomed)
           RETURNING 1 AS deleted
         `);
   return result.rows.length;
@@ -2029,6 +2373,8 @@ type EnrollmentRow = {
 type ScopeRow = {
   sessionId: string;
   root: string;
+  parentId?: string | null;
+  forkedFrom?: string | null;
   epoch: number | string | null;
   protocolVersion: number | string | null;
   status: string | null;
@@ -2052,6 +2398,8 @@ type ScopeRow = {
   stateDigest: string | null;
   headInitialized: boolean;
 };
+
+type LineageRow = ScopeRow & AncestorRow & EnrollmentRow;
 
 type SweepRow = {
   organizationId: string;

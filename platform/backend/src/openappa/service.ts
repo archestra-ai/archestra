@@ -98,6 +98,17 @@ const NativeDecisionSchema = z
     }),
     z.object({ decision: z.literal("pass_control") }),
     z.object({
+      decision: z.literal("replay_completed_results"),
+      results: z
+        .array(
+          z.object({
+            tool_call_id: z.string().min(1).max(1024),
+            decision: z.unknown(),
+          }),
+        )
+        .max(256),
+    }),
+    z.object({
       decision: z.literal("deny_call"),
       feedback: z.string(),
       offers: z.array(NativeOfferSchema).optional(),
@@ -653,7 +664,14 @@ async function approveToolResult(params: {
     },
     params.policy,
   );
-  const content = extractApprovedOutput(decision, params.output);
+  return processedToolResult(decision, params.output);
+}
+
+function processedToolResult(
+  decision: NativeDecision,
+  fallbackOutput: string,
+): ProcessedToolResult {
+  const content = extractApprovedOutput(decision, fallbackOutput);
   const outputSource =
     ("output_source" in decision ? decision.output_source : undefined) ??
     ("reason" in decision && decision.reason ? "runtime" : "tool");
@@ -725,6 +743,47 @@ const UNRELEASED_CALL_CODE = "unreleased_call";
 const UNRELEASED_CALL_TEXT =
   "[appa] Tool output withheld: this result has no record of releasing a call.";
 const MAX_UNEXECUTED_RESULT_CHARS = 4000;
+const MAX_COMPLETED_RESULT_BATCH = 256;
+
+async function replayCompletedResults(params: {
+  session: OpenAppaSession;
+  toolCallIds: string[];
+  policy: DispatchPolicy;
+}): Promise<Map<string, NativeDecision>> {
+  try {
+    const replay = await dispatch(
+      params.session,
+      { event: "replay_completed_results", tool_call_ids: params.toolCallIds },
+      params.policy,
+    );
+    if (replay.decision !== "replay_completed_results") {
+      throw new Error("OpenAPPA returned an unexpected replay response");
+    }
+    const completed = new Map<string, NativeDecision>();
+    let position = 0;
+    for (const result of replay.results) {
+      // A sparse batch must still be an ordered subset of this exact request.
+      while (params.toolCallIds[position] !== result.tool_call_id) {
+        if (position >= params.toolCallIds.length) {
+          throw new Error("OpenAPPA returned an unrelated replay receipt");
+        }
+        position++;
+      }
+      position++;
+      const decision = NativeDecisionSchema.parse(result.decision);
+      if (
+        !isOutputDecision(decision) ||
+        decision.approved_output === undefined
+      ) {
+        throw new Error("OpenAPPA replay receipt lacks retained output");
+      }
+      completed.set(result.tool_call_id, decision);
+    }
+    return completed;
+  } catch (error) {
+    throw openappaFailure(error);
+  }
+}
 
 function isOutputDecision(
   decision: NativeDecision,
@@ -782,7 +841,11 @@ export async function processProxyResults(params: {
     encryptedChat: params.encryptedChat,
   });
   const updates: Record<string, ProcessedToolResult> = {};
-  for (const result of params.results) {
+  let completed = new Map<string, NativeDecision>();
+  // Candidate IDs survive invalidation only as hints, never as release authority.
+  let completedCandidates = new Set<string>();
+  let batchEnd = 0;
+  for (const [index, result] of params.results.entries()) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
     // The runtime released no question call, so it would withhold the answer.
@@ -794,6 +857,7 @@ export async function processProxyResults(params: {
     // A pending match is not a grant, and a forged echo is not dispatched.
     const receipt = receipts.get(result.id);
     if (receipt) {
+      completed.clear();
       const echoed = toolResultText(result.content);
       if (controlEchoMatches(receipt.bytes, echoed) === "match") {
         updates[result.id] = {
@@ -810,6 +874,35 @@ export async function processProxyResults(params: {
       };
       continue;
     }
+    if (
+      index >= batchEnd ||
+      (completedCandidates.has(result.id) && !completed.has(result.id))
+    ) {
+      if (index >= batchEnd) {
+        batchEnd = Math.min(
+          index + MAX_COMPLETED_RESULT_BATCH,
+          params.results.length,
+        );
+      }
+      completed = await replayCompletedResults({
+        session: params.session,
+        toolCallIds: params.results.slice(index, batchEnd).map(({ id }) => id),
+        policy,
+      });
+      completedCandidates = new Set(completed.keys());
+    }
+    const retained = completed.get(result.id);
+    if (retained) {
+      const approved = processedToolResult(retained, "");
+      const unexecutedControl =
+        approved.code === UNRELEASED_CALL_CODE &&
+        params.isControlResult?.(result) === true;
+      updates[result.id] = unexecutedControl
+        ? unexecutedControlResult(result.content)
+        : approved;
+      if (unexecutedControl) completed.clear();
+      continue;
+    }
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
@@ -818,6 +911,9 @@ export async function processProxyResults(params: {
         : spawn === "failed" || result.isError
           ? "failure"
           : "success";
+    // Keep window/miss knowledge, but discard every decision before awaited work.
+    // The ordinary dispatch already performs its own fresh native guards.
+    completed.clear();
     const approved = await approveToolResult({
       session: params.session,
       toolCallId: result.id,

@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { describe, expect, test } from "vitest";
+import { markOmitted } from "./provenance";
 import {
   captureRewriteRequest,
   RewriteProjectionError,
@@ -26,6 +27,495 @@ const chat = "openai:chatCompletions" as const;
 const responses = "openai:responses" as const;
 
 describe("rewrite projection", () => {
+  test("prepared candidate owns provider fields, provenance, layout, and policy values across awaits", async () => {
+    const body = JSON.parse(
+      '{"model":"m","__proto__":{"vendor":"keep"},"system":[{"type":"text","text":"base"}],"messages":[{"role":"user","content":[{"type":"text","text":"omit-this"},{"type":"tool_result","tool_use_id":"t1","content":"raw"}]}],"tools":[{"name":"read","input_schema":{"properties":{"__proto__":{"type":"string"}}}},{"name":"notice","input_schema":{},"cache_control":{"type":"ephemeral","ttl":"1h"}}]}',
+    ) as {
+      model: string;
+      system: Array<{ type: string; text: string }>;
+      messages: Array<{
+        role: string;
+        content: Array<Record<string, unknown>>;
+      }>;
+      tools: Array<Record<string, unknown>>;
+      [key: string]: unknown;
+    };
+    const capture = captureRewriteRequest(body, anthropic);
+    markOmitted(body.messages[0].content[0]);
+    body.system[0].text = "base with guidance";
+    body.tools[0].cache_control = body.tools[1].cache_control;
+    body.tools.pop();
+    const approved = [{ type: "text", text: "approved" }];
+    const updates = new Map<string, unknown>([["t1", approved]]);
+    const policyIds = ["t1"];
+    const policySplices = [{ id: "t1", content: approved }];
+    const options: ProjectOptions = {
+      allowInitial: true,
+      policyToolResultIds: policyIds,
+      policySplices,
+      toolResultUpdates: updates,
+    };
+    const prepared = capture.prepareCandidate(body, options);
+    const expectedKeys = [...prepared.keys];
+    await Promise.resolve();
+    body.model = "late-model";
+    body.system[0].text = "late-guidance";
+    (originOf(body.messages[0]) as { id: number }).id = 99999;
+    body.messages[0].content[1].content = "late-raw";
+    body.tools[0].cache_control = { type: "ephemeral", ttl: "5m" };
+    (body.__proto__ as Record<string, unknown>).vendor = "late-vendor";
+    approved[0].text = "late-approval";
+    updates.clear();
+    policyIds.length = 0;
+    policySplices[0].id = "late-id";
+    options.allowInitial = false;
+    const projected = prepared.project(new Map());
+    expect(projected.keys).toBe(prepared.keys);
+    expect(projected.keys).toEqual(expectedKeys);
+    expect(projected.keys).toContain(
+      rewriteSpliceKey(anthropic, "t1", [{ type: "text", text: "approved" }]),
+    );
+    expect(projected.request).toEqual(
+      JSON.parse(
+        '{"model":"m","__proto__":{"vendor":"keep"},"system":[{"type":"text","text":"base with guidance"}],"messages":[{"role":"user","content":[{"type":"tool_result","tool_use_id":"t1","content":[{"type":"text","text":"approved"}]}]}],"tools":[{"name":"read","input_schema":{"properties":{"__proto__":{"type":"string"}}},"cache_control":{"type":"ephemeral","ttl":"1h"}}]}',
+      ),
+    );
+    expect(hasSymbol(projected.request)).toBe(false);
+    expect(Object.hasOwn(projected.request as object, "__proto__")).toBe(true);
+    const request = projected.request as { system: Array<{ text: string }> };
+    request.system[0].text = "caller-mutated-output";
+    expect(prepared.project(new Map()).request).not.toEqual(projected.request);
+    expect(JSON.stringify(prepared.project(new Map()).request)).toContain(
+      "base with guidance",
+    );
+  });
+
+  test.each([
+    anthropic,
+    chat,
+    responses,
+  ])("prepared and existing APIs agree on initial, appended, and revised policy projections (%s)", (family) => {
+    const historyKey = family === responses ? "input" : "messages";
+    const envelopeKey = family === anthropic ? "system" : "instructions";
+    const source = (appended: boolean): Record<string, unknown> => ({
+      model: "m",
+      ...(family === chat ? {} : { [envelopeKey]: "base" }),
+      [historyKey]: [
+        { role: "user", content: "first" },
+        family === anthropic
+          ? {
+              role: "user",
+              content: [
+                { type: "tool_result", tool_use_id: "t1", content: "raw" },
+              ],
+            }
+          : family === chat
+            ? { role: "tool", tool_call_id: "t1", content: "raw" }
+            : { type: "function_call_output", call_id: "t1", output: "raw" },
+        ...(appended ? [{ role: "user", content: "tail" }] : []),
+      ],
+      tools: [
+        family === anthropic
+          ? { name: "read", input_schema: { type: "object" } }
+          : family === chat
+            ? {
+                type: "function",
+                function: { name: "read", parameters: { type: "object" } },
+              }
+            : {
+                type: "function",
+                name: "read",
+                parameters: { type: "object" },
+              },
+      ],
+    });
+    const render = (candidate: Record<string, unknown>, version: number) => {
+      const history = candidate[historyKey] as Array<Record<string, unknown>>;
+      history[0].content = `rendered-${version}`;
+      if (history.length > 2) history[2].content = "rendered-tail";
+      history.unshift({
+        role: family === anthropic ? "user" : "developer",
+        content: `guidance-${version}`,
+      });
+      if (family !== chat) candidate[envelopeKey] = `base-${version}`;
+    };
+    let previous: RewriteProjection | undefined;
+    const stored = new Map<string, RewriteFragmentPair>();
+    for (const version of [1, 2, 3]) {
+      const body = source(version > 1);
+      const directBody = source(version > 1);
+      const capture = captureRewriteRequest(body, family);
+      const directCapture = captureRewriteRequest(directBody, family);
+      render(body, version);
+      render(directBody, version);
+      const options: ProjectOptions = {
+        allowInitial: version === 1,
+        heads: previous?.heads,
+        policySplices: [{ id: "t1", content: `approved-${version}` }],
+      };
+      const keys = capture.candidateKeys(body, options);
+      const prepared = capture.prepareCandidate(body, options);
+      expect(prepared.keys).toEqual(keys);
+      expect(prepared.referencedSpliceKeys(stored)).toEqual(
+        capture.referencedSpliceKeys(stored, options.heads),
+      );
+      const projected = prepared.project(stored);
+      expect(projected).toEqual(
+        directCapture.project(directBody, stored, options),
+      );
+      expect(JSON.stringify(projected.request)).toContain(
+        `approved-${version}`,
+      );
+      expect(JSON.stringify(projected.request)).toContain("rendered-1");
+      expect(JSON.stringify(projected.request)).not.toContain('"raw"');
+      if (version > 1) {
+        expect(JSON.stringify(projected.request)).toContain("rendered-tail");
+        expect(JSON.stringify(projected.request)).not.toContain(
+          `guidance-${version}`,
+        );
+      }
+      for (const record of projected.records) stored.set(record.key, record);
+      previous = projected;
+    }
+  });
+
+  test("prepared insertion anchors and splice lookup keep snapshotted heads and authorization", async () => {
+    const first = projectTool("raw");
+    const override = projectTool("raw", pairs(first), {
+      heads: first.heads,
+      policySplices: [{ id: "t1", content: "approved" }],
+    });
+    const body = toolResult("raw");
+    const capture = captureRewriteRequest(body, anthropic);
+    const heads = { ...override.heads };
+    const prepared = capture.prepareCandidate(body, { heads });
+    const empty = new Map<string, RewriteFragmentPair>();
+    const expected = capture.referencedSpliceKeys(empty, heads);
+    await Promise.resolve();
+    heads.splice = "late-splice-head";
+    heads.item = "late-item-head";
+    expect(prepared.referencedSpliceKeys(empty)).toEqual(expected);
+    expect(prepared.project(pairs(first, override)).request).toEqual(
+      override.request,
+    );
+
+    const insertedBody = {
+      messages: [
+        { role: "user", content: "source" } as Record<string, unknown>,
+      ],
+    };
+    const insertedCapture = captureRewriteRequest(insertedBody, chat);
+    insertedBody.messages.unshift({
+      role: "tool",
+      tool_call_id: "__proto__",
+      content: "head",
+    });
+    insertedBody.messages.push({
+      role: "tool",
+      tool_call_id: "tail",
+      content: "tail",
+    });
+    const ids = ["__proto__", "tail"];
+    const insertion = insertedCapture.prepareCandidate(insertedBody, {
+      allowInitial: true,
+      policyToolResultIds: ids,
+    });
+    const expectedRequest = JSON.parse(JSON.stringify(insertedBody));
+    ids.length = 0;
+    insertedBody.messages.reverse();
+    insertedBody.messages[0].content = "changed-tail";
+    expect(insertion.project(new Map()).request).toEqual(expectedRequest);
+  });
+
+  test("preparation reads candidate material once and projection never re-reads live fields", () => {
+    const body = {
+      messages: [{ role: "tool", tool_call_id: "t1", content: "source" }],
+    };
+    const capture = captureRewriteRequest(body, chat);
+    let reads = 0;
+    Object.defineProperty(body.messages[0], "content", {
+      enumerable: true,
+      configurable: true,
+      get() {
+        reads += 1;
+        if (reads > 1) throw new Error("candidate material read twice");
+        return "rendered";
+      },
+    });
+    let policyReads = 0;
+    const content = [{ type: "text", text: "approved" }];
+    Object.defineProperty(content[0], "text", {
+      enumerable: true,
+      get() {
+        policyReads += 1;
+        if (policyReads > 1)
+          throw new Error("shared policy material read twice");
+        return "approved";
+      },
+    });
+    const prepared = capture.prepareCandidate(body, {
+      allowInitial: true,
+      policySplices: [{ id: "t1", content }],
+      toolResultUpdates: new Map([["t1", content]]),
+    });
+    const first = prepared.project(new Map());
+    const repeated = prepared.project(pairs(first));
+    expect(first.request).toEqual({
+      messages: [
+        {
+          role: "tool",
+          tool_call_id: "t1",
+          content: [{ type: "text", text: "approved" }],
+        },
+      ],
+    });
+    expect(repeated.request).toEqual(first.request);
+    expect(repeated.records).toHaveLength(0);
+    expect(first.keys).toBe(prepared.keys);
+    expect(repeated.keys).toBe(prepared.keys);
+    expect(prepared.keys).toContain(
+      rewriteSpliceKey(chat, "t1", [{ type: "text", text: "approved" }]),
+    );
+    expect(reads).toBe(1);
+    expect(policyReads).toBe(1);
+  });
+
+  test("retains source order and injection anchors across a long mixed-role history", () => {
+    const source = () => ({
+      messages: Array.from({ length: 64 }, (_, index) => ({
+        role: index % 2 === 0 ? "user" : "assistant",
+        content: [{ type: "text", text: `source-${index}` }],
+      })),
+    });
+    const body = source();
+    const capture = captureRewriteRequest(body, chat);
+    body.messages = body.messages.flatMap((message, index) => [
+      {
+        role: "developer",
+        content: [{ type: "text", text: `before-${index}` }],
+      },
+      { ...message },
+      {
+        role: "developer",
+        content: [{ type: "text", text: `after-${index}` }],
+      },
+    ]);
+    const first = capture.project(body, new Map(), { allowInitial: true });
+    expect(JSON.stringify(first.request)).toBe(JSON.stringify(body));
+
+    const next = source();
+    next.messages.push({
+      role: "user",
+      content: [{ type: "text", text: "tail" }],
+    });
+    const again = captureRewriteRequest(next, chat);
+    expect(again.extendsHeads(first.heads)).toBe(true);
+    expect(again.extendsHeads({ item: "missing-head" })).toBe(false);
+    next.messages[0].content[0].text = "renderer-drift";
+    const second = again.project(next, pairs(first), { heads: first.heads });
+    expect(second.request).toEqual({
+      messages: [
+        ...body.messages,
+        { role: "user", content: [{ type: "text", text: "tail" }] },
+      ],
+    });
+    expect(second.records).toHaveLength(1);
+  });
+
+  test.each([
+    "messages",
+    "system",
+    "tools",
+  ] as const)("rejects duplicated or reordered origin stamps in %s", (container) => {
+    const source = () => ({
+      messages: [
+        { role: "user", content: "first" },
+        { role: "assistant", content: "second" },
+      ],
+      system: [
+        { type: "text", text: "first" },
+        { type: "text", text: "second" },
+      ],
+      tools: [
+        { name: "first", input_schema: {} },
+        { name: "second", input_schema: {} },
+      ],
+    });
+    for (const duplicate of [false, true]) {
+      const body = source();
+      const capture = captureRewriteRequest(body, anthropic);
+      const entries = body[container] as Array<Record<string, unknown>>;
+      if (duplicate) entries.push({ ...entries[0] });
+      else entries.reverse();
+      expectReject(
+        () => capture.project(body, new Map(), { allowInitial: true }),
+        "reordered",
+      );
+    }
+  });
+
+  test.each([
+    false,
+    true,
+  ])("preserves exact result IDs before first normalized-ID matches (exact=%s)", (exact) => {
+    const stamped = (sessionId: string) =>
+      stampToolCallId({
+        callId: "shared",
+        sessionId,
+        organizationId: "org",
+        callerId: "caller",
+        secret: "synthetic-key",
+      });
+    const ids = [
+      stamped("first"),
+      stamped("second"),
+      ...(exact ? ["shared"] : []),
+    ];
+    const body = {
+      messages: ids.map((id) => ({
+        role: "tool",
+        tool_call_id: id,
+        content: "raw",
+      })),
+    };
+    const projected = captureRewriteRequest(body, chat).project(
+      body,
+      new Map(),
+      {
+        allowInitial: true,
+        policySplices: exact
+          ? ids.map((id, index) => ({ id, content: `approved-${index}` }))
+          : [{ id: "shared", content: "approved-first-match" }],
+      },
+    );
+    expect(projected.request).toEqual({
+      messages: ids.map((id, index) => ({
+        role: "tool",
+        tool_call_id: id,
+        content: exact ? `approved-${index}` : "approved-first-match",
+      })),
+    });
+  });
+
+  test.each([
+    false,
+    true,
+  ])("keeps first splice discovery and last explicit policy precedence (content=%s)", (hasContent) => {
+    const body = toolResult("raw-first");
+    body.messages[0].content.push({
+      ...body.messages[0].content[0],
+      content: "raw-second",
+    });
+    const capture = captureRewriteRequest(body, anthropic);
+    const options: ProjectOptions = {
+      allowInitial: true,
+      policySplices: [
+        { id: "t1", ...(hasContent ? { content: "first-splice" } : {}) },
+        { id: "t1", content: "last-splice" },
+      ],
+    };
+    const expected = rewriteSpliceKey(
+      anthropic,
+      "t1",
+      hasContent ? "first-splice" : "raw-first",
+    );
+    expect(capture.candidateKeys(body, options)).toContain(expected);
+    expect(capture.candidateKeys(body, options)).not.toContain(
+      rewriteSpliceKey(anthropic, "t1", "last-splice"),
+    );
+    expect(
+      capture.candidateKeys(body, {
+        ...options,
+        toolResultUpdates: new Map([["t1", undefined]]),
+      }),
+    ).toEqual(capture.keys);
+    expect(capture.project(body, new Map(), options).request).toEqual({
+      ...body,
+      messages: [
+        {
+          ...body.messages[0],
+          content: body.messages[0].content.map((result) => ({
+            ...result,
+            content: "last-splice",
+          })),
+        },
+      ],
+    });
+  });
+
+  test("keeps policy insert order at each anchor, including prototype-like IDs", () => {
+    const body = {
+      messages: [
+        { role: "user", content: "first" },
+        { role: "assistant", content: "second" },
+      ],
+    };
+    const capture = captureRewriteRequest(body, chat);
+    const result = (id: string) => ({
+      role: "tool",
+      tool_call_id: id,
+      content: id,
+    });
+    const inserted = [
+      "__proto__",
+      "constructor",
+      "middle-1",
+      "middle-2",
+      "tail",
+    ];
+    body.messages.splice(1, 0, result("middle-1"), result("middle-2"));
+    body.messages.unshift(result("__proto__"), result("constructor"));
+    body.messages.push(result("tail"));
+    const expected = JSON.stringify(body);
+    const projected = capture.project(body, new Map(), {
+      allowInitial: true,
+      policyToolResultIds: inserted,
+    });
+    expect(JSON.stringify(projected.request)).toBe(expected);
+  });
+
+  test("reuses baked admissions for many results in one holder without new splices", () => {
+    const ids = [
+      "__proto__",
+      "constructor",
+      ...Array.from({ length: 30 }, (_, index) => `result-${index}`),
+    ];
+    const source = (prefix: string) => ({
+      messages: [
+        {
+          role: "user",
+          content: ids.map((id) => ({
+            type: "tool_result",
+            tool_use_id: id,
+            content: `${prefix}-${id}`,
+          })),
+        },
+      ],
+    });
+    const updates = new Map(ids.map((id) => [id, `approved-${id}`]));
+    const body = source("raw");
+    const first = captureRewriteRequest(body, anthropic).project(
+      body,
+      new Map(),
+      {
+        allowInitial: true,
+        toolResultUpdates: updates,
+      },
+    );
+    const resent = source("changed");
+    const second = captureRewriteRequest(resent, anthropic).project(
+      resent,
+      pairs(first),
+      {
+        heads: first.heads,
+        toolResultUpdates: updates,
+      },
+    );
+    expect(second.request).toEqual(source("approved"));
+    expect(second.records).toHaveLength(0);
+    expect(second.heads.splice).toBeUndefined();
+  });
+
   test("preserves empty Responses tool declarations across appended turns", () => {
     const input = [
       { type: "additional_tools", id: "tools-1", role: "developer", tools: [] },

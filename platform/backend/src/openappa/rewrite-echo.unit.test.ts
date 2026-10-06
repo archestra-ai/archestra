@@ -4,6 +4,7 @@ import {
   captureRewriteEcho,
   type RewriteBytes,
   type RewriteWireFamily,
+  recordedDelegationText,
   recordRewriteCalls,
   recordRewriteText,
   restoreRewriteCalls,
@@ -16,6 +17,94 @@ import { signRuntimeToolProof } from "./runtime-tool-claims";
 import { stampToolCallId } from "./trajectory-stamp";
 
 describe("exact APPA echo replay", () => {
+  test("matches delegation insertion to one exact original string", () => {
+    const marker =
+      "\n\n[appa] delegated trajectory opaque-token \u2014 child of root.";
+    const pair = {
+      key: "test",
+      original: Buffer.from(
+        JSON.stringify({ prompt: "task", other: "task-long" }),
+      ),
+      rewritten: Buffer.from(JSON.stringify({ prompt: `task${marker}` })),
+    };
+    expect(recordedDelegationText(pair)).toEqual([
+      { original: "task", rewritten: `task${marker}`, marker },
+    ]);
+    expect(
+      recordedDelegationText({
+        ...pair,
+        original: Buffer.from(
+          JSON.stringify({ prompt: "task", duplicate: "task" }),
+        ),
+      }),
+    ).toEqual([]);
+  });
+
+  test("does not treat existing delegation text as a new inserted suffix", () => {
+    const original = "quoted [appa] delegated trajectory old-token";
+    expect(
+      recordedDelegationText({
+        key: "test",
+        original: Buffer.from(JSON.stringify({ prompt: original })),
+        rewritten: Buffer.from(
+          JSON.stringify({
+            prompt: `${original}\n\n[appa] delegated trajectory new-token`,
+          }),
+        ),
+      }),
+    ).toEqual([]);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("restores a call batch without changing caller order (reverse=%s)", (reverse) => {
+    const family = "openai:responses";
+    const originals = Array.from({ length: 32 }, (_, index) => ({
+      type: "function_call",
+      call_id: `provider-${index}`,
+      name: "read",
+      arguments: `{ "n":${index}, "path":"\\u0061" }`,
+      provider_extension: index,
+    }));
+    const rewritten = originals.map((call, index) => ({
+      ...call,
+      call_id: `client-${index}`,
+      arguments: JSON.stringify({ n: index, path: "a" }),
+    }));
+    const saved = records(
+      recordRewriteCalls({
+        family,
+        response: { output: rewritten },
+        originals: captureRewriteCalls({
+          family,
+          response: { output: originals },
+        }),
+        emitted: originals.map((call, index) => ({
+          id: call.call_id,
+          wireId: rewritten[index].call_id,
+        })),
+        recorded: new Map(),
+      }),
+    );
+    const ordered = reverse ? [...rewritten].reverse() : rewritten;
+    const spoof = { ...rewritten[0], role: "user" };
+    const provider = { input: [...structuredClone(ordered), spoof] };
+    restoreRewriteCalls({
+      family,
+      clientRequest: { input: structuredClone(rewritten) },
+      providerRequest: provider,
+      recorded: saved,
+    });
+    expect(JSON.stringify(provider.input)).toBe(
+      JSON.stringify([
+        ...(reverse ? [...originals].reverse() : originals),
+        spoof,
+      ]),
+    );
+    expect(spoof).toEqual({ ...rewritten[0], role: "user" });
+  });
+
   test("restores raw argument spelling, provider fields, namespace, and result IDs", () => {
     const family = "openai:responses";
     const original = {
@@ -644,6 +733,190 @@ describe.each<RewriteWireFamily>([
   "openai:chatCompletions",
   "openai:responses",
 ])("assistant call boundaries on %s", (family) => {
+  test.each([
+    false,
+    true,
+  ])("rejects duplicate candidate IDs without provenance (same-holder=%s)", (sameHolder) => {
+    const fixture = roleBoundaryFixture(family);
+    const first = fixture.history("assistant");
+    const second = sameHolder ? first : fixture.history("assistant");
+    const providerRequest = {
+      input: [...(first.input ?? []), ...(second.input ?? [])],
+      messages: [...(first.messages ?? []), ...(second.messages ?? [])],
+    };
+    const before = JSON.stringify(providerRequest);
+    expect(() =>
+      restoreRewriteCalls({
+        family,
+        clientRequest: fixture.history("assistant"),
+        providerRequest,
+        recorded: fixture.saved,
+      }),
+    ).toThrow("missing or ambiguous");
+    expect(JSON.stringify(providerRequest)).toBe(before);
+  });
+
+  test.each([
+    false,
+    true,
+  ])("keeps ID then identity then stamp matching priority (unique-id=%s)", (uniqueId) => {
+    const fixture = roleBoundaryFixture(family);
+    const holder = structuredClone(fixture.clientCall);
+    const echo = captureRewriteEcho({
+      family,
+      body: fixture.history("assistant", holder),
+    });
+    const stamp = { v: 1, id: 1 };
+    Object.defineProperty(holder, rewriteOrigin, {
+      value: stamp,
+      enumerable: true,
+    });
+    const identityTarget = { ...holder };
+    identityTarget[family === "openai:responses" ? "call_id" : "id"] =
+      "identity-target";
+    Object.defineProperty(identityTarget, rewriteOrigin, {
+      value: { v: 1, id: 2 },
+      enumerable: true,
+    });
+    const stampTarget = structuredClone(fixture.clientCall);
+    stampTarget[family === "openai:responses" ? "call_id" : "id"] =
+      "stamp-target";
+    Object.defineProperty(stampTarget, rewriteOrigin, {
+      value: stamp,
+      enumerable: true,
+    });
+    const idTarget = structuredClone(fixture.clientCall);
+    const calls = [
+      idTarget,
+      ...(!uniqueId ? [structuredClone(fixture.clientCall)] : []),
+      identityTarget,
+      stampTarget,
+    ];
+    const histories = calls.map((call) => fixture.history("assistant", call));
+    const providerRequest = {
+      input: histories.flatMap((history) => history.input ?? []),
+      messages: histories.flatMap((history) => history.messages ?? []),
+    };
+    const chosen = uniqueId ? idTarget : identityTarget;
+    const untouched = calls
+      .filter((call) => call !== chosen)
+      .map((call) => JSON.stringify(call));
+    restoreRewriteCalls({
+      family,
+      clientRequest: echo.request,
+      sources: echo.sources,
+      providerRequest,
+      recorded: fixture.saved,
+    });
+    expect(JSON.stringify(chosen)).toBe(fixture.original.toString("utf8"));
+    expect(
+      calls
+        .filter((call) => call !== chosen)
+        .map((call) => JSON.stringify(call)),
+    ).toEqual(untouched);
+  });
+
+  test("rejects competing unique client and original ID candidates", () => {
+    const fixture = roleBoundaryFixture(family);
+    const originalIdTarget = structuredClone(fixture.clientCall);
+    originalIdTarget[family === "openai:responses" ? "call_id" : "id"] =
+      "provider_call";
+    const histories = [
+      fixture.history("assistant"),
+      fixture.history("assistant", originalIdTarget),
+    ];
+    const providerRequest = {
+      input: histories.flatMap((history) => history.input ?? []),
+      messages: histories.flatMap((history) => history.messages ?? []),
+    };
+    const before = JSON.stringify(providerRequest);
+    expect(() =>
+      restoreRewriteCalls({
+        family,
+        clientRequest: fixture.history("assistant"),
+        providerRequest,
+        recorded: fixture.saved,
+      }),
+    ).toThrow("missing or ambiguous");
+    expect(JSON.stringify(providerRequest)).toBe(before);
+  });
+
+  test("deduplicates a site's own and parent stamp while rejecting duplicate identities", () => {
+    const fixture = roleBoundaryFixture(family);
+    const holder = structuredClone(fixture.clientCall);
+    const echo = captureRewriteEcho({
+      family,
+      body: fixture.history("assistant", holder),
+    });
+    const stamp = { v: 1, id: 1 };
+    Object.defineProperty(holder, rewriteOrigin, {
+      value: stamp,
+      enumerable: true,
+    });
+    const targets = [{ ...holder }, { ...holder }];
+    for (const target of targets) {
+      target[family === "openai:responses" ? "call_id" : "id"] = "changed";
+    }
+    const ambiguous = targets.map((target) =>
+      fixture.history("assistant", target),
+    );
+    const providerRequest = {
+      input: ambiguous.flatMap((history) => history.input ?? []),
+      messages: ambiguous.flatMap((history) => history.messages ?? []),
+    };
+    expect(() =>
+      restoreRewriteCalls({
+        family,
+        clientRequest: echo.request,
+        sources: echo.sources,
+        providerRequest,
+        recorded: fixture.saved,
+      }),
+    ).toThrow("missing or ambiguous");
+
+    const target = structuredClone(fixture.clientCall);
+    target[family === "openai:responses" ? "call_id" : "id"] = "stamp-only";
+    Object.defineProperty(target, rewriteOrigin, {
+      value: stamp,
+      enumerable: true,
+    });
+    const stamped = fixture.history("assistant", target);
+    Object.defineProperty(
+      family === "openai:responses"
+        ? stamped
+        : (stamped.messages?.[0] as object),
+      rewriteOrigin,
+      { value: stamp, enumerable: true },
+    );
+    // The ambiguous identity holders must not also match the source stamp.
+    for (const candidate of targets)
+      delete (candidate as Record<symbol, unknown>)[rewriteOrigin];
+    // Responses calls share the request parent, so a stamped root owns all of them.
+    const stampedProvider =
+      family === "openai:responses"
+        ? stamped
+        : {
+            messages: [
+              ...providerRequest.messages,
+              ...(stamped.messages ?? []),
+            ],
+          };
+    restoreRewriteCalls({
+      family,
+      clientRequest: echo.request,
+      sources: echo.sources,
+      providerRequest: stampedProvider,
+      recorded: fixture.saved,
+    });
+    expect(JSON.stringify(target)).toBe(fixture.original.toString("utf8"));
+    expect(
+      targets.map(
+        (candidate) =>
+          candidate[family === "openai:responses" ? "call_id" : "id"],
+      ),
+    ).toEqual(["changed", "changed"]);
+  });
+
   test("restores owned nested argument string bytes and preserves cache/provenance", () => {
     const fixture = roleBoundaryFixture(family);
     const target = structuredClone(fixture.clientCall);

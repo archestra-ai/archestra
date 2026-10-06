@@ -237,6 +237,8 @@ struct Input {
     #[serde(default)]
     tool_call_id: Option<String>,
     #[serde(default)]
+    tool_call_ids: Option<Vec<String>>,
+    #[serde(default)]
     tool: Option<String>,
     #[serde(default)]
     arguments: Option<Box<RawValue>>,
@@ -278,6 +280,7 @@ struct Input {
 /// Maximum byte length for precheck refusal text.
 /// Refusal text is recorded and replayed verbatim as the remedy result.
 const MAX_PRECHECK_REFUSAL_BYTES: usize = 64 * 1024;
+const MAX_REPLAY_RESULTS: usize = 256;
 
 #[derive(Clone, Copy, Deserialize, Serialize, PartialEq, Eq)]
 #[serde(rename_all = "snake_case")]
@@ -285,6 +288,8 @@ enum HookEventKind {
     SessionStart,
     ToolCall,
     ToolResult,
+    /// Read only already-completed, locally qualified result receipts.
+    ReplayCompletedResults,
     CancelCall,
     Remedy,
     Yell,
@@ -967,8 +972,29 @@ fn validate(input: &Input) -> napi::Result<()> {
     }
     // Reject malformed host requests before writing an interrupted-operation
     // receipt. A typo is not evidence that an external consult may have run.
+    if input.event != HookEventKind::ReplayCompletedResults && input.tool_call_ids.is_some() {
+        return Err(error(
+            "tool_call_ids only belongs to completed-result replay",
+        ));
+    }
     match input.event {
         HookEventKind::SessionStart => {}
+        HookEventKind::ReplayCompletedResults => {
+            let ids = input
+                .tool_call_ids
+                .as_ref()
+                .ok_or_else(|| error("missing tool_call_ids"))?;
+            if ids.is_empty() || ids.len() > MAX_REPLAY_RESULTS {
+                return Err(error(
+                    "completed-result replay requires 1..256 tool call IDs",
+                ));
+            }
+            for id in ids {
+                if id.is_empty() || id.len() > 1024 || id.chars().any(char::is_control) {
+                    return Err(error("invalid replay tool call identity"));
+                }
+            }
+        }
         HookEventKind::ToolResult => {
             required(&input.tool_call_id, "tool_call_id")?;
             if input.output.is_none() {
@@ -1117,6 +1143,7 @@ pub async fn execute_remedy_by_offer(
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
+        tool_call_ids: None,
         tool: owner.tool.clone(),
         arguments: Some(visible_arguments),
         original_arguments: Some(original_arguments),
@@ -2028,7 +2055,6 @@ impl State {
     ) -> napi::Result<Value> {
         let pg = postgres_store(&self.store)?;
         let _lock = SessionLock::acquire(pg, root.clone())?;
-        admission::touch(pg, admission_subject(&input, &root)).map_err(admission_error)?;
         // Check every member of the family: continuing a parent while a child's
         // result is interrupted could otherwise bypass inherited restrictions.
         let interrupted = self
@@ -2039,6 +2065,10 @@ impl State {
             return Err(error(
                 "OpenAPPA session has interrupted processing; operator recovery is required",
             ));
+        }
+
+        if input.event == HookEventKind::ReplayCompletedResults {
+            return replay_completed_results(pg, &input, &root, &key);
         }
 
         let actor = Actor {
@@ -2077,6 +2107,9 @@ impl State {
                 ));
             }
         } else {
+            // Initialization can append or consult before a receipt claim. Recorded
+            // sessions are admitted by their claim (or guarded replay) below.
+            admission::touch(pg, admission_subject(&input, &root)).map_err(admission_error)?;
             let forked_at = input
                 .fork_of
                 .as_deref()
@@ -2381,6 +2414,7 @@ impl State {
                 },
                 HookEventKind::SessionStart
                 | HookEventKind::ToolResult
+                | HookEventKind::ReplayCompletedResults
                 | HookEventKind::CancelCall
                 | HookEventKind::Remedy
                 | HookEventKind::Yell
@@ -2484,6 +2518,10 @@ impl State {
     ) -> napi::Result<Value> {
         let call_id = required(&input.tool_call_id, "tool_call_id")?.to_owned();
         if let Some(withheld) = peer::forged_read_result(pg, input, &call_id)? {
+            // Native peer receipts bypass the processed-result claim. Their lookup
+            // is read-only, but replay still needs current retention authority.
+            admission::touch(pg, admission_subject(input, &actor.root.0))
+                .map_err(admission_error)?;
             return Ok(withheld);
         }
         let key = processed_result_key(input, call_id.clone());
@@ -3321,6 +3359,148 @@ fn claim_operation(
     }
 }
 
+/// This operation never claims a missing result or opens a new session. IDs are
+/// lookup hints, not release authority. Inherited receipts still use the ordered
+/// dispatch path, which enforces the source session's fork watermark.
+fn replay_completed_results(
+    pg: &LeasedPostgres,
+    input: &Input,
+    root: &str,
+    key: &SessionKey,
+) -> napi::Result<Value> {
+    let lookup = key.clone();
+    let session = pg
+        .with_client(move |client| {
+            Ok(client.query_opt(
+                "SELECT root, session_id, parent_id, forked_from, caller_id FROM openappa_sessions \
+                 WHERE organization_id = $1 AND actor = $2",
+                &[&lookup.organization_id, &lookup.actor],
+            )?)
+        })
+        .map_err(error)?;
+    let qualified_session = if let Some(session) = &session {
+        let saved_root: String = session.get("root");
+        let saved_session: String = session.get("session_id");
+        let saved_parent: Option<String> = session.get("parent_id");
+        let saved_fork: Option<String> = session.get("forked_from");
+        let saved_caller: Option<String> = session.get("caller_id");
+        if saved_root != root
+            || saved_session != input.session_id
+            || saved_parent != input.parent_id
+            || (input.fork_of.is_some() && saved_fork != input.fork_of)
+        {
+            return Err(error("completed-result replay session identity changed"));
+        }
+        // Upstream session-bound claims allow other session participants. Do
+        // not change that contract: an unproven caller uses the ordinary path,
+        // but cannot obtain bytes from this fast lookup.
+        saved_caller == input.caller_id
+    } else {
+        false
+    };
+    let held = admission::hold(pg, admission_subject(input, root)).map_err(admission_error)?;
+    let results = if qualified_session {
+        let organization = input.organization_id.clone();
+        let session = input.session_id.clone();
+        let caller = input.caller_id.clone();
+        let root = root.to_owned();
+        let ids = input
+            .tool_call_ids
+            .clone()
+            .ok_or_else(|| error("missing tool_call_ids"))?;
+        pg.with_client(move |client| {
+            let rows = client.query(
+                "SELECT wanted.id, result.decision, result.approved_output, operation.input \
+                 FROM unnest($1::text[]) WITH ORDINALITY AS wanted(id, ordinal) \
+                 JOIN openappa_processed_results AS result \
+                   ON result.organization_id = $2 AND result.session_id = $3 \
+                  AND result.tool_call_id = wanted.id AND result.root = $4 \
+                  AND result.caller_id IS NOT DISTINCT FROM $5 AND result.status = 'complete' \
+                 JOIN openappa_operations AS operation \
+                   ON operation.organization_id = $2 AND operation.session_id = $3 \
+                  AND operation.operation_id = 'call:' || wanted.id AND operation.root = $4 \
+                  AND operation.caller_id IS NOT DISTINCT FROM $5 \
+                  AND operation.status = 'complete' AND operation.decision IS NOT NULL \
+                 ORDER BY wanted.ordinal",
+                &[&ids, &organization, &session, &root, &caller],
+            )?;
+            let mut results = Vec::with_capacity(rows.len());
+            for row in rows {
+                let decision: Option<Value> = row.get("decision");
+                let approved: Option<String> = row.get("approved_output");
+                let operation_input: Option<Value> = row.get("input");
+                if let Some(decision) =
+                    qualified_replay_decision(decision, approved, operation_input)
+                {
+                    let id: String = row.get("id");
+                    results.push(json!({ "tool_call_id": id, "decision": decision }));
+                }
+            }
+            Ok(results)
+        })
+        .map_err(error)?
+    } else {
+        Vec::new()
+    };
+    held.commit().map_err(admission_error)?;
+    Ok(json!({ "decision": "replay_completed_results", "results": results }))
+}
+
+fn qualified_replay_decision(
+    decision: Option<Value>,
+    approved: Option<String>,
+    operation_input: Option<Value>,
+) -> Option<Value> {
+    let decision = decision?;
+    // Legacy rows without explicit retained output cannot be replayed using the
+    // client echo as a fallback. Leave them on the existing validated path.
+    if decision.get("approved_output").and_then(Value::as_str) != approved.as_deref()
+        || approved.is_none()
+    {
+        return None;
+    }
+    if !matches!(
+        decision.get("decision").and_then(Value::as_str),
+        Some(
+            "ack"
+                | "deny_call"
+                | "block"
+                | "replace_output"
+                | "deliver_value"
+                | "child_return"
+                | "mcp_result"
+        )
+    ) {
+        return None;
+    }
+    let input = operation_input?;
+    if input.get("semantic").is_some()
+        && (input.get("version").and_then(Value::as_u64) != Some(1)
+            || input.get("binding").and_then(Value::as_str) != Some("session"))
+    {
+        return None;
+    }
+    let context = input.get("context").cloned();
+    let semantic = input
+        .get("semantic")
+        .or_else(|| input.get("input"))
+        .cloned()
+        .unwrap_or(input);
+    let call = recorded_call(context, semantic).ok()?;
+    let tool = canonical_tool(&call.tool).ok()?;
+    // Peer receipts have additional native read/list evidence and can replace a
+    // prior denial. Use forged_read_result's existing validation, never a plain
+    // processed-result hit, even if a client copied peer flags into its echo.
+    if peer::is_peer_read_tool(&call.tool)
+        || call.tool == "list_peer_messages"
+        || call.tool.ends_with("__list_peer_messages")
+        || tool.ends_with("/list_peer_messages")
+    {
+        return None;
+    }
+    Some(decision)
+}
+
 fn claim_processed_result(
     store: &LogStore,
     input: &Input,
@@ -3935,13 +4115,131 @@ mod remedy_tests {
 }
 
 #[cfg(test)]
+mod completed_replay_tests {
+    use super::{Input, qualified_replay_decision, validate};
+    use serde_json::{Value, json};
+
+    #[test]
+    fn replay_input_is_bounded_and_not_accepted_on_other_events() {
+        let input = |ids: Value| -> Input {
+            serde_json::from_value(json!({
+                "organization_id": "org", "session_id": "session",
+                "event": "replay_completed_results", "tool_call_ids": ids,
+            }))
+            .unwrap()
+        };
+        assert!(validate(&input(json!(["one", "one"]))).is_ok());
+        assert!(validate(&input(json!(vec!["id"; 256]))).is_ok());
+        for ids in [
+            json!([]),
+            json!([""]),
+            json!(["bad\n"]),
+            json!(["x".repeat(1025)]),
+            json!(vec!["id"; 257]),
+        ] {
+            assert!(validate(&input(ids)).is_err());
+        }
+        let mut request = input(json!(["one"]));
+        request.event = super::HookEventKind::SessionStart;
+        assert!(validate(&request).is_err());
+    }
+
+    #[test]
+    fn retained_decision_is_exact_and_requires_retained_output_and_call_context() {
+        let decision = json!({
+            "decision": "replace_output", "approved_output": "exact\nretained bytes",
+            "output_source": "runtime", "reason": "policy", "offers": [{"offer_id": "offer"}],
+        });
+        let input = json!({
+            "version": 1, "binding": "session",
+            "semantic": {"tool": "original_dispatch", "arguments": {"original": true}},
+            "context": {"tool": "read_file", "arguments": {"path": "file"}, "spawn": false},
+        });
+        assert_eq!(
+            qualified_replay_decision(
+                Some(decision.clone()),
+                Some("exact\nretained bytes".into()),
+                Some(input.clone())
+            ),
+            Some(decision.clone())
+        );
+        assert!(
+            qualified_replay_decision(
+                Some(decision.clone()),
+                Some("different".into()),
+                Some(input)
+            )
+            .is_none()
+        );
+        assert!(qualified_replay_decision(Some(decision.clone()), None, None).is_none());
+        for (version, binding) in [(2, "session"), (1, "caller")] {
+            assert!(
+                qualified_replay_decision(
+                    Some(decision.clone()),
+                    Some("exact\nretained bytes".into()),
+                    Some(json!({
+                        "version": version, "binding": binding,
+                        "semantic": {"tool": "read_file", "arguments": {}},
+                    })),
+                )
+                .is_none()
+            );
+        }
+        assert!(
+            qualified_replay_decision(
+                Some(decision),
+                Some("exact\nretained bytes".into()),
+                Some(json!({"tool": "read_file"}))
+            )
+            .is_none()
+        );
+    }
+
+    #[test]
+    fn peer_reads_lists_and_forged_peer_receipts_use_the_existing_validation() {
+        for tool in [
+            "read_peer_message",
+            "acme__read_peer_message",
+            "list_peer_messages",
+            "acme__list_peer_messages",
+            "mcp__gateway__archestra__list_peer_messages",
+        ] {
+            for flags in [
+                json!({}),
+                json!({"peer_read": true, "result": {"isError": false}}),
+                json!({"peer_list": true}),
+            ] {
+                let mut decision = json!({"decision": "ack", "approved_output": "not evidence"});
+                decision
+                    .as_object_mut()
+                    .unwrap()
+                    .extend(flags.as_object().unwrap().clone());
+                assert!(
+                    qualified_replay_decision(
+                        Some(decision),
+                        Some("not evidence".into()),
+                        Some(json!({"tool": tool, "arguments": {}}))
+                    )
+                    .is_none()
+                );
+            }
+        }
+    }
+}
+
+#[cfg(test)]
 mod replay_expiry_tests {
     use super::{
-        HookEventKind, Input, cached_cancel_decision, claim_processed_result, processed_result_key,
+        HookEventKind, INITIAL_POLICY, Input, SessionKey, State, cached_cancel_decision,
+        claim_processed_result, processed_result_key,
     };
     use appa_eventlog::{Backend, LogStore, ProcessedResultClaim};
     use postgres::{Client, NoTls};
     use std::num::NonZeroUsize;
+    use std::sync::{Arc, mpsc};
+    use std::thread;
+    use std::time::{Duration, Instant};
+    use tokio::sync::Semaphore;
 
     #[test]
     fn expired_replay_refuses_before_a_cached_cancel_or_completed_result_returns() {
@@ -3972,6 +4270,21 @@ mod replay_expiry_tests {
         live_cancel_replay_stays_idempotent(&store);
         expired_completed_result_is_410_and_writes_no_cancel(&store);
         live_completed_result_does_not_write_cancel(&store);
+        // postgres::Client owns a blocking runtime. Keep direct fixture connects
+        // and cleanup outside Tokio; only dispatch futures need this executor.
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .expect("replay dispatch runtime")
+            .block_on(async {
+                recorded_dispatches_keep_authoritative_admission(&store).await;
+                unstarted_dispatch_refuses_before_initialization(&store).await;
+                completed_batch_is_ordered_readonly_and_conservative(&store).await;
+            });
+        cleanup_wins_before_a_result_claim(&store, &replay_url, true, false);
+        cleanup_wins_before_a_result_claim(&store, &replay_url, false, false);
+        cleanup_wins_before_a_result_claim(&store, &replay_url, true, true);
+        cleanup_wins_before_a_result_claim(&store, &replay_url, false, true);
         drop(store);
         drop(config);
         admin
@@ -4090,6 +4403,501 @@ mod replay_expiry_tests {
         assert!(matches!(claimed, ProcessedResultClaim::Complete { .. }));
         assert_eq!(cancel_count(store, org), 0);
         drop(leased);
+    }
+
+    async fn recorded_dispatches_keep_authoritative_admission(store: &LogStore) {
+        for (status, protocol) in [("expired", 1), ("live", 2)] {
+            for (index, event) in [
+                HookEventKind::ToolResult,
+                HookEventKind::ReplayCompletedResults,
+                HookEventKind::CancelCall,
+                HookEventKind::ToolCall,
+                HookEventKind::SessionStart,
+                HookEventKind::Remedy,
+                HookEventKind::Yell,
+                HookEventKind::Prompt,
+                HookEventKind::TurnEnd,
+                HookEventKind::ChildEnd,
+                HookEventKind::ChildReturn,
+                HookEventKind::ChildAddress,
+            ]
+            .into_iter()
+            .enumerate()
+            {
+                let org = format!("org-recorded-{status}-{index}");
+                seed(store, &org, status, protocol);
+                insert_session(store, &org);
+                insert_completed_result(store, &org);
+                let state = leased_state(store);
+                let request = dispatch_input(&org, event);
+                let error = state
+                    .dispatch_on_lease(request.clone(), root(&org), SessionKey::of(&request))
+                    .await
+                    .expect_err("recorded dispatch must not bypass its final admission");
+                assert!(error.to_string().contains(crate::admission::EXPIRED));
+                assert_eq!(pending_count(store, &org), 0);
+                assert_eq!(result_pending_count(store, &org), 0);
+                assert_eq!(cancel_count(store, &org), 0);
+                assert_eq!(group_status(store, &org), status);
+                assert_eq!(protocol_version(store, &org), protocol);
+            }
+        }
+
+        let org = "org-recorded-live";
+        seed(store, org, "live", 1);
+        insert_session(store, org);
+        insert_completed_result(store, org);
+        let state = leased_state(store);
+        for event in [HookEventKind::ToolResult, HookEventKind::CancelCall] {
+            let request = dispatch_input(org, event);
+            let decision = state
+                .dispatch_on_lease(request.clone(), root(org), SessionKey::of(&request))
+                .await
+                .expect("completed result replays unchanged");
+            assert_eq!(decision, serde_json::json!({"decision": "allow_call"}));
+        }
+        let request = dispatch_input(org, HookEventKind::SessionStart);
+        assert_eq!(
+            state
+                .dispatch_on_lease(request.clone(), root(org), SessionKey::of(&request))
+                .await
+                .unwrap(),
+            serde_json::json!({"decision": "ack"})
+        );
+        assert_eq!(cancel_count(store, org), 0);
+        assert_eq!(pending_count(store, org), 0);
+
+        let org = "org-expired-peer-replay";
+        seed(store, org, "expired", 1);
+        insert_session(store, org);
+        insert_cancel(store, org, r#"{"decision":"allow_call"}"#);
+        let leased = store.lease().unwrap();
+        leased
+            .postgres()
+            .unwrap()
+            .with_client(|client| {
+                client.execute(
+                    "UPDATE openappa_operations SET operation_id = 'call:call-1', \
+                 input = '{\"tool\":\"read_peer_message\",\"arguments\":{},\"spawn\":false}' \
+                 WHERE organization_id = 'org-expired-peer-replay'",
+                    &[],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        drop(leased);
+        let state = leased_state(store);
+        let request = dispatch_input(org, HookEventKind::ToolResult);
+        let error = state
+            .dispatch_on_lease(request.clone(), root(org), SessionKey::of(&request))
+            .await
+            .expect_err("peer replay must not bypass retention admission");
+        assert!(error.to_string().contains(crate::admission::EXPIRED));
+        assert_eq!(result_pending_count(store, org), 0);
+    }
+
+    async fn unstarted_dispatch_refuses_before_initialization(store: &LogStore) {
+        let org = "org-unstarted-expired";
+        seed(store, org, "expired", 1);
+        let state = leased_state(store);
+        let request = dispatch_input(org, HookEventKind::SessionStart);
+        let error = state
+            .dispatch_on_lease(request.clone(), root(org), SessionKey::of(&request))
+            .await
+            .expect_err("initialization needs admission before runtime effects");
+        assert!(error.to_string().contains(crate::admission::EXPIRED));
+        assert_eq!(
+            count(
+                store,
+                org,
+                "SELECT count(*) FROM openappa_sessions WHERE organization_id = $1"
+            ),
+            0
+        );
+        let native_root = root(org);
+        let events: i64 = state
+            .store
+            .postgres()
+            .unwrap()
+            .with_client(move |client| {
+                Ok(client
+                    .query_one(
+                        "SELECT count(*) FROM openappa_events WHERE root = $1",
+                        &[&native_root],
+                    )?
+                    .get(0))
+            })
+            .unwrap();
+        assert_eq!(events, 0);
+    }
+
+    async fn completed_batch_is_ordered_readonly_and_conservative(store: &LogStore) {
+        let org = "org-completed-batch";
+        seed(store, org, "live", 1);
+        insert_session(store, org);
+        let native_root = root(org);
+        let leased = store.lease().unwrap();
+        leased.postgres().unwrap().with_client(move |client| {
+            for (id, tool) in [
+                ("first", "read_file"),
+                ("last", "read_file"),
+                ("peer", "read_peer_message"),
+                ("foreign-root", "read_file"),
+                ("foreign-caller", "read_file"),
+            ] {
+                let operation = format!("call:{id}");
+                let input = serde_json::json!({"tool": tool, "arguments": {}, "spawn": false});
+                let release = serde_json::json!({"decision": "allow_call"});
+                let decision = serde_json::json!({
+                    "decision": "ack", "approved_output": format!("retained {id}"), "output_source": "tool"
+                });
+                let approved = format!("retained {id}");
+                client.execute(
+                    "INSERT INTO openappa_operations \
+                     (organization_id, session_id, operation_id, root, input, status, decision) \
+                     VALUES ($1, 'session', $2, $3, $4, 'complete', $5)",
+                    &[&org, &operation, &native_root, &input, &release],
+                )?;
+                client.execute(
+                    "INSERT INTO openappa_processed_results \
+                     (organization_id, session_id, tool_call_id, root, status, approved_output, decision) \
+                     VALUES ($1, 'session', $2, $3, 'complete', $4, $5)",
+                    &[&org, &id, &native_root, &approved, &decision],
+                )?;
+            }
+            client.execute(
+                "UPDATE openappa_processed_results SET root = 'wrong-root' \
+                 WHERE organization_id = $1 AND tool_call_id = 'foreign-root'",
+                &[&org],
+            )?;
+            client.execute(
+                "UPDATE openappa_operations SET caller_id = 'user:other' \
+                 WHERE organization_id = $1 AND operation_id = 'call:foreign-caller'",
+                &[&org],
+            )?;
+            Ok(())
+        }).unwrap();
+        drop(leased);
+        let state = leased_state(store);
+        let mut request = dispatch_input(org, HookEventKind::ReplayCompletedResults);
+        request.tool_call_ids = Some(
+            [
+                "last",
+                "new",
+                "first",
+                "peer",
+                "foreign-root",
+                "foreign-caller",
+                "last",
+            ]
+            .map(str::to_owned)
+            .to_vec(),
+        );
+        let replay = state
+            .dispatch_on_lease(request.clone(), root(org), SessionKey::of(&request))
+            .await
+            .unwrap();
+        assert_eq!(
+            replay,
+            serde_json::json!({
+                "decision": "replay_completed_results",
+                "results": [
+                    {"tool_call_id": "last", "decision": {"decision": "ack", "approved_output": "retained last", "output_source": "tool"}},
+                    {"tool_call_id": "first", "decision": {"decision": "ack", "approved_output": "retained first", "output_source": "tool"}},
+                    {"tool_call_id": "last", "decision": {"decision": "ack", "approved_output": "retained last", "output_source": "tool"}},
+                ]
+            })
+        );
+        assert_eq!(result_pending_count(store, org), 0);
+        assert_eq!(pending_count(store, org), 0);
+        assert_eq!(cancel_count(store, org), 0);
+        assert_eq!(
+            count(
+                store,
+                org,
+                "SELECT count(*) FROM openappa_processed_results WHERE organization_id = $1"
+            ),
+            5
+        );
+
+        let mut peer_request = dispatch_input(org, HookEventKind::ToolResult);
+        peer_request.tool_call_id = Some("peer".to_owned());
+        let withheld = state
+            .dispatch_on_lease(
+                peer_request.clone(),
+                root(org),
+                SessionKey::of(&peer_request),
+            )
+            .await
+            .expect("peer fallback must validate its native evidence");
+        assert_eq!(withheld, crate::peer::withheld_peer_read());
+        assert_ne!(withheld["approved_output"], "retained peer");
+        assert_eq!(result_pending_count(store, org), 0);
+
+        request.caller_id = Some("user:forged".to_owned());
+        let replay = state
+            .dispatch_on_lease(request.clone(), root(org), SessionKey::of(&request))
+            .await
+            .expect("an unqualified participant falls back without fast-path bytes");
+        assert_eq!(replay["results"], serde_json::json!([]));
+        request.caller_id = None;
+        request.fork_of = Some("other-history".to_owned());
+        assert!(
+            state
+                .dispatch_on_lease(request.clone(), root(org), SessionKey::of(&request))
+                .await
+                .is_err()
+        );
+        request.fork_of = None;
+
+        let native_root = root(org);
+        state
+            .store
+            .postgres()
+            .unwrap()
+            .with_client(move |client| {
+                client.execute(
+                    "INSERT INTO openappa_processed_results \
+                 (organization_id, session_id, tool_call_id, root, status) \
+                 VALUES ($1, 'session', 'pending', $2, 'pending')",
+                    &[&org, &native_root],
+                )?;
+                Ok(())
+            })
+            .unwrap();
+        let error = state
+            .dispatch_on_lease(request.clone(), root(org), SessionKey::of(&request))
+            .await
+            .expect_err("a completed prefix cannot bypass interrupted family work");
+        assert!(error.to_string().contains("interrupted processing"));
+        assert_eq!(result_pending_count(store, org), 1);
+        drop(state);
+
+        let unstarted_org = "org-batch-unstarted";
+        seed(store, unstarted_org, "live", 1);
+        let state = leased_state(store);
+        let request = dispatch_input(unstarted_org, HookEventKind::ReplayCompletedResults);
+        let replay = state
+            .dispatch_on_lease(
+                request.clone(),
+                root(unstarted_org),
+                SessionKey::of(&request),
+            )
+            .await
+            .unwrap();
+        assert_eq!(replay["results"], serde_json::json!([]));
+        assert_eq!(
+            count(
+                store,
+                unstarted_org,
+                "SELECT count(*) FROM openappa_sessions WHERE organization_id = $1"
+            ),
+            0
+        );
+        assert_eq!(
+            count(
+                store,
+                unstarted_org,
+                "SELECT count(*) FROM openappa_processed_results WHERE organization_id = $1"
+            ),
+            0
+        );
+        assert_eq!(pending_count(store, unstarted_org), 0);
+        drop(state);
+
+        // No local call metadata means the ordinary path must enforce the fork
+        // watermark; this readonly lookup must not adopt the parent's receipt.
+        let fork_org = "org-batch-fork";
+        seed(store, fork_org, "live", 1);
+        insert_session(store, fork_org);
+        insert_completed_result(store, fork_org);
+        let state = leased_state(store);
+        state.store.postgres().unwrap().with_client(move |client| {
+            client.execute(
+                "UPDATE openappa_sessions SET forked_from = 'parent-history', forked_at = clock_timestamp() WHERE organization_id = $1",
+                &[&fork_org],
+            )?;
+            let actor = crate::session_actor("parent-history");
+            client.execute(
+                "INSERT INTO openappa_sessions (organization_id, actor, root, session_id) \
+                 VALUES ($1, $2, 'parent-root', 'parent-history')",
+                &[&fork_org, &actor],
+            )?;
+            let decision = serde_json::json!({"decision": "ack", "approved_output": "exact inherited output", "output_source": "tool"});
+            client.execute(
+                "INSERT INTO openappa_processed_results \
+                 (organization_id, session_id, tool_call_id, root, status, approved_output, decision, created_at) \
+                 VALUES ($1, 'parent-history', 'before', 'parent-root', 'complete', 'exact inherited output', $2, clock_timestamp() - INTERVAL '1 hour'), \
+                        ($1, 'parent-history', 'after', 'parent-root', 'complete', 'exact inherited output', $2, clock_timestamp() + INTERVAL '1 hour')",
+                &[&fork_org, &decision],
+            )?;
+            Ok(())
+        }).unwrap();
+        let mut request = dispatch_input(fork_org, HookEventKind::ReplayCompletedResults);
+        request.fork_of = Some("parent-history".to_owned());
+        request.tool_call_ids = Some(["call-1", "before", "after"].map(str::to_owned).to_vec());
+        let replay = state
+            .dispatch_on_lease(request.clone(), root(fork_org), SessionKey::of(&request))
+            .await
+            .unwrap();
+        assert_eq!(replay["results"], serde_json::json!([]));
+        assert_eq!(result_pending_count(store, fork_org), 0);
+        assert_eq!(cancel_count(store, fork_org), 0);
+        for (id, expected) in [
+            (
+                "before",
+                serde_json::json!({"decision": "ack", "approved_output": "exact inherited output", "output_source": "tool"}),
+            ),
+            ("after", crate::unknown_result_response()),
+        ] {
+            let mut request = dispatch_input(fork_org, HookEventKind::ToolResult);
+            request.fork_of = Some("parent-history".to_owned());
+            request.tool_call_id = Some(id.to_owned());
+            let replay = state
+                .dispatch_on_lease(request.clone(), root(fork_org), SessionKey::of(&request))
+                .await
+                .unwrap();
+            assert_eq!(replay, expected);
+        }
+        assert_eq!(result_pending_count(store, fork_org), 0);
+        assert_eq!(cancel_count(store, fork_org), 0);
+    }
+
+    fn cleanup_wins_before_a_result_claim(
+        store: &LogStore,
+        url: &str,
+        complete: bool,
+        batch: bool,
+    ) {
+        let org = match (complete, batch) {
+            (true, false) => "org-race-complete",
+            (false, false) => "org-race-unrecorded",
+            (true, true) => "org-race-batch-complete",
+            (false, true) => "org-race-batch-unrecorded",
+        };
+        seed(store, org, "live", 1);
+        insert_session(store, org);
+        if complete {
+            insert_completed_result(store, org);
+        }
+        let mut cleanup = Client::connect(url, NoTls).unwrap();
+        cleanup.batch_execute("BEGIN").unwrap();
+        cleanup
+            .query_one(
+                "SELECT 1 FROM openappa_rewrite_groups WHERE organization_id = $1 FOR UPDATE",
+                &[&org],
+            )
+            .unwrap();
+        let state = leased_state(store);
+        let (ready_tx, ready_rx) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            let pid: i32 = state
+                .store
+                .postgres()
+                .unwrap()
+                .with_client(|client| Ok(client.query_one("SELECT pg_backend_pid()", &[])?.get(0)))
+                .unwrap();
+            ready_tx.send(pid).unwrap();
+            let request = dispatch_input(
+                org,
+                if batch {
+                    HookEventKind::ReplayCompletedResults
+                } else {
+                    HookEventKind::ToolResult
+                },
+            );
+            tokio::runtime::Builder::new_current_thread()
+                .enable_all()
+                .build()
+                .unwrap()
+                .block_on(state.dispatch_on_lease(
+                    request.clone(),
+                    root(org),
+                    SessionKey::of(&request),
+                ))
+        });
+        let pid = ready_rx.recv_timeout(Duration::from_secs(5)).unwrap();
+        let deadline = Instant::now() + Duration::from_secs(5);
+        loop {
+            let blocked: bool = cleanup.query_one(
+                "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE pid = $1 AND wait_event_type = 'Lock')",
+                &[&pid],
+            ).unwrap().get(0);
+            if blocked {
+                break;
+            }
+            assert!(Instant::now() < deadline, "claim did not wait on cleanup");
+            thread::sleep(Duration::from_millis(20));
+        }
+        cleanup
+            .execute(
+                "UPDATE openappa_rewrite_groups SET status = 'expired' WHERE organization_id = $1",
+                &[&org],
+            )
+            .unwrap();
+        cleanup.batch_execute("COMMIT").unwrap();
+        let error = worker.join().unwrap().expect_err("cleanup won admission");
+        assert!(error.to_string().contains(crate::admission::EXPIRED));
+        assert_eq!(result_pending_count(store, org), 0);
+        assert_eq!(pending_count(store, org), 0);
+        assert_eq!(cancel_count(store, org), 0);
+        assert_eq!(group_status(store, org), "expired");
+    }
+
+    fn leased_state(store: &LogStore) -> State {
+        let store = Arc::new(store.lease().unwrap());
+        let runtime = crate::policy::open(
+            crate::policy::compile(INITIAL_POLICY, |_| None).unwrap(),
+            store.clone(),
+        )
+        .unwrap();
+        State {
+            runtime: Arc::new(runtime),
+            store,
+            connections: Arc::new(Semaphore::new(4)),
+            deployments: Arc::default(),
+            reporting: None,
+        }
+    }
+
+    fn dispatch_input(org: &str, event: HookEventKind) -> Input {
+        let mut request = input(org);
+        request.event = event;
+        if event == HookEventKind::ReplayCompletedResults {
+            request.tool_call_ids = Some(vec!["call-1".to_owned()]);
+        }
+        request.tool_call_id = Some("call-1".to_owned());
+        request.operation_id = Some("call:call-1".to_owned());
+        request.output = Some("untrusted replay".to_owned());
+        request.arguments =
+            Some(serde_json::value::RawValue::from_string("{}".to_owned()).unwrap());
+        if event == HookEventKind::Remedy {
+            request.caller_id = Some("user:reviewer".to_owned());
+        }
+        request
+    }
+
+    fn insert_session(store: &LogStore, org: &str) {
+        let org = org.to_owned();
+        let native_root = root(&org);
+        let actor = crate::session_actor("session");
+        let leased = store.lease().unwrap();
+        leased.postgres().unwrap().with_client(move |client| {
+            client.execute(
+                "INSERT INTO openappa_sessions (organization_id, actor, root, session_id, start_decision) \
+                 VALUES ($1, $2, $3, 'session', '{\"decision\":\"ack\"}')",
+                &[&org, &actor, &native_root],
+            )?;
+            Ok(())
+        }).unwrap();
+    }
+
+    fn result_pending_count(store: &LogStore, org: &str) -> i64 {
+        count(
+            store,
+            org,
+            "SELECT count(*) FROM openappa_processed_results WHERE organization_id = $1 AND status = 'pending'",
+        )
     }
 
     fn input(org: &str) -> Input {
@@ -4259,7 +5067,9 @@ mod replay_expiry_tests {
                    actor text NOT NULL,
                    root text NOT NULL,
                    session_id text NOT NULL,
+                   start_decision jsonb NOT NULL DEFAULT '{}',
                    forked_from text,
+                   forked_at timestamptz,
                    parent_id text,
                    caller_id text,
                    PRIMARY KEY (organization_id, actor)
@@ -4278,6 +5088,7 @@ mod replay_expiry_tests {
                  );
                   CREATE TABLE openappa_processed_results (
                     organization_id text NOT NULL,
+                    caller_id text,
                     session_id text NOT NULL,
                     tool_call_id text NOT NULL,
                     root text NOT NULL,

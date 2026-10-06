@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { isOmitted } from "./provenance";
+import { isOmitted, markOmitted } from "./provenance";
 import { parseTrajectoryStamp } from "./trajectory-stamp";
 
 /** @public — enumerable origin stamp; object spread keeps it, JSON.stringify drops it. */
@@ -85,6 +85,19 @@ export class RewriteProjectionError extends Error {
 type RewriteCapture = {
   readonly family: RewriteWireFamily;
   readonly keys: readonly string[];
+  /** Call after plugin mutations and inverse restoration, before awaiting reads. */
+  prepareCandidate(
+    candidateBody: unknown,
+    options?: ProjectOptions,
+  ): {
+    readonly keys: readonly string[];
+    referencedSpliceKeys(
+      records: ReadonlyMap<string, RewriteFragmentPair>,
+    ): readonly string[];
+    project(
+      records: ReadonlyMap<string, RewriteFragmentPair>,
+    ): RewriteProjection;
+  };
   candidateKeys(
     candidateBody: unknown,
     options?: ProjectOptions,
@@ -124,7 +137,7 @@ export function rewriteSpliceKey(
   toolResultId: string,
   content: unknown,
 ): string {
-  return `${family}:splice:${encodeURIComponent(toolResultId)}:${rewritePolicyEpoch(content)}`;
+  return spliceKey(family, toolResultId, rewritePolicyEpoch(content));
 }
 
 /** @public — call before any APPA input mutation. */
@@ -136,10 +149,11 @@ export function captureRewriteRequest(
   const root = asRecord(body);
   if (!root) fail("incompatible");
 
-  let activePolicyIds = new Set<string>();
   let bakedPolicy = new Map<string, unknown>();
-  const tagged: number[] = [];
-  const containerStamps = new Map<string, number[]>();
+  let bakedPolicyByIdentity = new Map<string, unknown>();
+  let splicesByIdentity = new Map<string, unknown>();
+  const tagged = new Set<number>();
+  const containerStamps = new Map<string, Set<number>>();
   const toolIds = new Set<number>();
   let nextId = 1;
   const atoms: Atom[] = [];
@@ -148,10 +162,10 @@ export function captureRewriteRequest(
     envelope: undefined,
     tool: undefined,
   };
-  const sourceChains: Record<Domain, string[]> = {
-    item: [],
-    envelope: [],
-    tool: [],
+  const sourceChains: Record<Domain, Set<string>> = {
+    item: new Set(),
+    envelope: new Set(),
+    tool: new Set(),
   };
   const sourceMarkers: MarkerSite[] = [];
   const stampToAtom = new Map<number, string>();
@@ -176,7 +190,7 @@ export function captureRewriteRequest(
       configurable: true,
       writable: false,
     });
-    tagged.push(id);
+    tagged.add(id);
     stampToAtom.set(id, chainHash);
     if (tool) toolIds.add(id);
     if (container) noteStamp(container, id);
@@ -196,7 +210,7 @@ export function captureRewriteRequest(
       serialize(structural),
     );
     chains[domain] = chainHash;
-    sourceChains[domain].push(chainHash);
+    sourceChains[domain].add(chainHash);
     const atom: Atom = {
       domain,
       key: `${family}:${domain}:${chainHash}`,
@@ -228,21 +242,43 @@ export function captureRewriteRequest(
   );
   captureTools(root, family, push, tag, sourceMarkers);
 
-  const cacheKey =
-    sourceMarkers.length === 0
-      ? undefined
-      : `${family}:cache:${digestHex(sourceMarkers)}`;
+  const domainAtoms: Record<Domain, Atom[]> = {
+    item: atoms.filter((atom) => atom.domain === "item"),
+    envelope: atoms.filter((atom) => atom.domain === "envelope"),
+    tool: atoms.filter((atom) => atom.domain === "tool"),
+  };
+  const itemById = new Map<number, Atom>();
+  const resultAtoms = new Map<string, Atom>();
+  for (const atom of atoms) {
+    if (
+      atom.domain === "item" &&
+      atom.nodeId !== undefined &&
+      !itemById.has(atom.nodeId)
+    ) {
+      itemById.set(atom.nodeId, atom);
+    }
+    for (const id of atom.toolResultIds) {
+      if (!resultAtoms.has(id)) resultAtoms.set(id, atom);
+    }
+  }
+
+  const sourceLayoutDigest =
+    sourceMarkers.length === 0 ? undefined : sha256(serialize(sourceMarkers));
+  const cacheKey = sourceLayoutDigest
+    ? `${family}:cache:${sourceLayoutDigest.toString("hex")}`
+    : undefined;
   const keys = atoms.map((atom) => atom.key);
   if (cacheKey) keys.push(cacheKey);
 
   const capture: RewriteCapture = {
     family,
     keys,
+    prepareCandidate,
     candidateKeys(candidateBody, options) {
       return exactKeys(candidateBody, options ?? {});
     },
-    candidateSpliceIds(candidateBody, options) {
-      return [...spliceIdSet(candidateBody, options ?? {})];
+    candidateSpliceIds(_candidateBody, options) {
+      return [...authorizedIds(options ?? {})];
     },
     referencedSpliceKeys(records, heads) {
       return nextSpliceKeys(
@@ -256,12 +292,17 @@ export function captureRewriteRequest(
       for (const domain of ["item", "envelope", "tool"] as const) {
         const head = heads[domain];
         if (head === undefined) continue;
-        if (!sourceChains[domain].includes(head)) return false;
+        if (!sourceChains[domain].has(head)) return false;
       }
       return true;
     },
     project(candidateBody, records, options) {
-      return projectBody(candidateBody, records, options ?? {});
+      const projected = prepareCandidate(candidateBody, options).project(
+        records,
+      );
+      stripSymbols(body);
+      if (candidateBody !== root) stripSymbols(candidateBody);
+      return projected;
     },
   };
 
@@ -270,15 +311,31 @@ export function captureRewriteRequest(
   function exactKeys(
     candidateBody: unknown,
     options: ProjectOptions,
+    ids = authorizedIds(options),
+    inserts = policyInserts(candidateBody, ids),
+    epoch = rewritePolicyEpoch,
   ): string[] {
     const out = [...keys];
-    for (const id of spliceIdSet(candidateBody, options)) {
-      const content = authoritativeContent(candidateBody, id, options);
-      if (content !== undefined)
-        out.push(rewriteSpliceKey(family, id, content));
+    const policy = new Map<string, PolicySplice>();
+    for (const splice of options.policySplices ?? []) {
+      const id = spliceIdentity(splice);
+      if (id !== undefined && !policy.has(id)) policy.set(id, splice);
     }
-    for (const insert of policyInserts(candidateBody, options))
-      out.push(insert.key);
+    const contents =
+      ids.size > 0
+        ? indexResultContents(candidateBody)
+        : new Map<string, unknown>();
+    for (const id of ids) {
+      const splice = policy.get(id);
+      const content = options.toolResultUpdates?.has(id)
+        ? options.toolResultUpdates.get(id)
+        : splice && "content" in splice
+          ? splice.content
+          : contents.get(resultIdentity(id));
+      if (content !== undefined)
+        out.push(spliceKey(family, id, epoch(content)));
+    }
+    for (const insert of inserts) out.push(insert.key);
     if (toolAtoms().length === 0 && hasToolContainer(candidateBody)) {
       out.push(toolHeadKey());
     }
@@ -288,29 +345,92 @@ export function captureRewriteRequest(
     return out;
   }
 
-  function projectBody(
+  function prepareCandidate(
     candidateBody: unknown,
-    records: ReadonlyMap<string, RewriteFragmentPair>,
-    options: ProjectOptions,
-  ): RewriteProjection {
-    const candidate = asRecord(candidateBody);
+    suppliedOptions: ProjectOptions = {},
+  ): ReturnType<RewriteCapture["prepareCandidate"]> {
+    const copies = new WeakMap<object, unknown>();
+    const candidate = asRecord(snapshotValue(candidateBody, copies));
     if (!candidate) fail("incompatible");
-    activePolicyIds = authorizedIds(options);
+    const options: ProjectOptions = {
+      ...suppliedOptions,
+      heads: suppliedOptions.heads ? { ...suppliedOptions.heads } : undefined,
+      policyToolResultIds: suppliedOptions.policyToolResultIds?.slice(),
+      policySplices: suppliedOptions.policySplices?.map(
+        (splice) => snapshotValue(splice, copies) as PolicySplice,
+      ),
+      toolResultUpdates: suppliedOptions.toolResultUpdates
+        ? new Map(
+            [...suppliedOptions.toolResultUpdates].map(([id, content]) => [
+              id,
+              snapshotValue(content, copies),
+            ]),
+          )
+        : undefined,
+    };
     verifyStamps(candidate);
+    const ids = authorizedIds(options);
+    const inserts = policyInserts(candidate, ids);
+    const epochs = new Map<unknown, string>();
+    const epoch = (content: unknown) => {
+      const found = epochs.get(content);
+      if (found !== undefined) return found;
+      const hash = rewritePolicyEpoch(content);
+      epochs.set(content, hash);
+      return hash;
+    };
+    const readKeys = Object.freeze(
+      exactKeys(candidate, options, ids, inserts, epoch),
+    );
+    const viewFor = candidateViews(candidate);
+    const injections = candidateInjections(candidate, ids);
+    const explicit = explicitPolicy(options, new Set(resultAtoms.keys()));
+    let layout: MarkerSite[] | undefined;
+    let tools: unknown[] | undefined;
+    const material: CandidateMaterial = {
+      candidate,
+      options,
+      readKeys,
+      inserts,
+      viewFor,
+      injections,
+      explicit,
+      epoch,
+      layout: () => (layout ??= collectCandidateMarkers(candidate)),
+      tools: () => (tools ??= untaggedTools(candidate)),
+    };
+    return Object.freeze({
+      keys: readKeys,
+      referencedSpliceKeys(records: ReadonlyMap<string, RewriteFragmentPair>) {
+        return capture.referencedSpliceKeys(records, options.heads);
+      },
+      project(records: ReadonlyMap<string, RewriteFragmentPair>) {
+        return projectBody(material, records);
+      },
+    });
+  }
+
+  function projectBody(
+    material: CandidateMaterial,
+    records: ReadonlyMap<string, RewriteFragmentPair>,
+  ): RewriteProjection {
+    const { candidate, options } = material;
     const created: RewriteRecord[] = [];
-    const planned = planPolicy(records, options, created);
+    const planned = planPolicy(records, options, created, material);
+    bakedPolicyByIdentity = indexResultIdentities(bakedPolicy);
+    splicesByIdentity = indexResultIdentities(planned.splices);
     const decisions = new Map<string, Payload>();
     const heads = commitDomains(
       records,
       options,
       decisions,
       created,
-      candidate,
+      material,
       new Set([...planned.splices.keys(), ...planned.replayed]),
     );
     if (planned.spliceHead) heads.splice = planned.spliceHead;
-    const inserts = commitInserts(candidate, records, options, created);
-    const layout = commitCache(candidate, records, created);
+    const inserts = commitInserts(material.inserts, records, options, created);
+    const layout = commitCache(material, records, created);
     const request = assemble(
       candidate,
       decisions,
@@ -318,13 +438,10 @@ export function captureRewriteRequest(
       inserts,
       layout,
     );
-    const readKeys = exactKeys(candidate, options);
-    stripSymbols(body);
-    if (candidate !== root) stripSymbols(candidate);
     return {
       records: created,
       request: parseJson(serialize(request)),
-      keys: readKeys,
+      keys: material.readKeys,
       heads,
     };
   }
@@ -332,18 +449,18 @@ export function captureRewriteRequest(
   function verifyStamps(candidate: Record<string, unknown>): void {
     const foundAll: number[] = [];
     collectStamps(candidate, foundAll);
-    const known = new Set(tagged);
     for (const id of foundAll) {
-      if (!known.has(id)) fail("unknown-provenance");
+      if (!tagged.has(id)) fail("unknown-provenance");
     }
-    for (const [container, expected] of containerStamps) {
+    for (const [container, expectedIds] of containerStamps) {
+      const expected = [...expectedIds];
       const found: number[] = [];
       for (const entry of containerEntries(candidate, container)) {
         collectStamps(entry, found);
       }
       let cursor = 0;
       for (const id of found) {
-        if (!expected.includes(id)) continue;
+        if (!expectedIds.has(id)) continue;
         while (cursor < expected.length && expected[cursor] !== id) cursor += 1;
         if (cursor >= expected.length) fail("reordered");
         cursor += 1;
@@ -357,8 +474,8 @@ export function captureRewriteRequest(
   }
 
   function noteStamp(container: string, id: number): void {
-    const list = containerStamps.get(container) ?? [];
-    if (!list.includes(id)) list.push(id);
+    const list = containerStamps.get(container) ?? new Set<number>();
+    list.add(id);
     containerStamps.set(container, list);
   }
 
@@ -367,36 +484,39 @@ export function captureRewriteRequest(
     options: ProjectOptions,
     decisions: Map<string, Payload>,
     created: RewriteRecord[],
-    candidate: Record<string, unknown>,
+    material: CandidateMaterial,
     covered: ReadonlySet<string>,
   ): RewriteHeads {
-    const views = candidateViews(candidate);
-    const injections = candidateInjections(candidate);
     const heads: RewriteHeads = {};
     for (const domain of DOMAINS) {
-      const domainAtoms = atoms.filter((atom) => atom.domain === domain);
+      const mine = domainAtoms[domain];
       const head = options.heads?.[domain];
-      if (domainAtoms.length === 0) {
+      if (mine.length === 0) {
         if (head) heads[domain] = head;
         continue;
       }
-      const prefix = prefixLength(domain, domainAtoms, records, options, head);
-      for (let index = 0; index < domainAtoms.length; index += 1) {
-        const atom = domainAtoms[index];
+      const prefix = prefixLength(domain, mine, records, options, head);
+      for (let index = 0; index < mine.length; index += 1) {
+        const atom = mine[index];
         if (index < prefix) {
           decisions.set(atom.key, loadPayload(atom, records, covered));
           continue;
         }
-        const payload = payloadForNew(atom, views, injections);
+        const payload = payloadForNew(
+          atom,
+          material.viewFor,
+          material.injections,
+        );
         created.push(storePayload(atom.key, atom.digest, payload));
         decisions.set(atom.key, roundTrip(payload));
       }
-      heads[domain] = domainAtoms[domainAtoms.length - 1].chainHash;
+      heads[domain] = mine[mine.length - 1].chainHash;
     }
     if (toolAtoms().length === 0) {
       const headKey = toolHeadKey();
-      const injected = untaggedTools(candidate);
-      if (injected.length > 0 || records.has(headKey)) {
+      const existing = records.get(headKey);
+      const injected = existing ? [] : material.tools();
+      if (injected.length > 0 || existing) {
         const payload = records.has(headKey)
           ? decodePayload(records.get(headKey) as RewriteFragmentPair)
           : {
@@ -480,10 +600,10 @@ export function captureRewriteRequest(
 
   function payloadForNew(
     atom: Atom,
-    views: Map<string, unknown>,
+    viewFor: (atom: Atom) => unknown,
     injections: Map<string, { before: unknown[]; after: unknown[] }>,
   ): Payload {
-    const view = views.get(atom.key);
+    const view = viewFor(atom);
     const extra = injections.get(atom.key) ?? { before: [], after: [] };
     if (view === OMIT) {
       return { v: 1, before: [], after: [], self: null, omit: true };
@@ -491,6 +611,7 @@ export function captureRewriteRequest(
     const projected = bakeResults(
       view === undefined ? atom.fragment.body : view,
       bakedPolicy,
+      bakedPolicyByIdentity,
     );
     const bodySame =
       serialize(projected) === serialize(atom.fragment.body) &&
@@ -519,46 +640,44 @@ export function captureRewriteRequest(
 
   function candidateViews(
     candidate: Record<string, unknown>,
-  ): Map<string, unknown> {
+  ): (atom: Atom) => unknown {
     const views = new Map<string, unknown>();
     const indexed = indexStamps(candidate);
-    for (const atom of atoms) {
+    return (atom) => {
+      if (views.has(atom.key)) return views.get(atom.key);
+      let view: unknown;
       if (atom.nodeId === undefined) {
         const field = atom.fragment.container;
-        if (!field) continue;
-        views.set(
-          atom.key,
-          candidate[field] === undefined
+        view = field
+          ? candidate[field] === undefined
             ? atom.fragment.body
-            : cloneValue(candidate[field]),
-        );
-        continue;
-      }
-      const node = indexed.get(atom.nodeId);
-      if (!node) {
-        if (atom.domain === "tool") views.set(atom.key, OMIT);
-        continue;
-      }
-      if (isOmitted(node)) {
-        views.set(atom.key, OMIT);
-        continue;
-      }
-      if (atom.domain === "tool") {
-        const tool = canonicalizeTool(node);
-        if (atom.fragment.shape === "shell" && atom.fragment.memberKey) {
-          tool[atom.fragment.memberKey] = [];
+            : cloneValue(candidate[field])
+          : undefined;
+      } else {
+        const node = indexed.get(atom.nodeId);
+        if (!node) {
+          view = atom.domain === "tool" ? OMIT : undefined;
+        } else if (isOmitted(node)) {
+          view = OMIT;
+        } else if (atom.domain === "tool") {
+          const tool = canonicalizeTool(node);
+          if (atom.fragment.shape === "shell" && atom.fragment.memberKey) {
+            tool[atom.fragment.memberKey] = [];
+          }
+          view = tool;
+        } else {
+          const message = canonicalizeMessage(node, family);
+          view = isEmptiedHolder(message) ? OMIT : message;
         }
-        views.set(atom.key, tool);
-        continue;
       }
-      const view = canonicalizeMessage(node, family);
-      views.set(atom.key, isEmptiedHolder(view) ? OMIT : view);
-    }
-    return views;
+      views.set(atom.key, view);
+      return view;
+    };
   }
 
   function candidateInjections(
     candidate: Record<string, unknown>,
+    ids: ReadonlySet<string>,
   ): Map<string, { before: unknown[]; after: unknown[] }> {
     const map = new Map<string, { before: unknown[]; after: unknown[] }>();
     const ensure = (key: string) => {
@@ -568,17 +687,19 @@ export function captureRewriteRequest(
       map.set(key, created);
       return created;
     };
-    anchorList(historyOf(candidate), itemAtoms(), ensure);
+    anchorList(historyOf(candidate), itemAtoms(), ensure, ids);
     anchorList(
       envelopeOf(candidate),
       envelopeAtoms().filter((atom) => atom.fragment.shape !== "field"),
       ensure,
+      ids,
     );
     for (const container of toolContainerList(candidate)) {
       anchorList(
         container.entries,
         toolAtoms().filter((atom) => atom.fragment.container === container.id),
         ensure,
+        ids,
       );
     }
     return map;
@@ -588,50 +709,57 @@ export function captureRewriteRequest(
     entries: unknown[],
     owned: Atom[],
     ensure: (key: string) => { before: unknown[]; after: unknown[] },
+    ids: ReadonlySet<string>,
   ): void {
     if (owned.length === 0) return;
     let last = owned[0].key;
     let seen = false;
-    const ownerIds = new Set(owned.map((atom) => atom.nodeId));
+    const owners = new Map<number, Atom>();
+    for (const atom of owned) {
+      if (atom.nodeId !== undefined && !owners.has(atom.nodeId)) {
+        owners.set(atom.nodeId, atom);
+      }
+    }
     for (const entry of entries) {
       const stamp = readStamp(entry);
-      if (!stamp || !ownerIds.has(stamp.id)) {
-        if (isPolicyInsert(entry)) continue;
+      const match = stamp ? owners.get(stamp.id) : undefined;
+      if (!match) {
+        if (isPolicyInsert(entry, ids)) continue;
         const slot = seen ? "after" : "before";
         const key = seen ? last : owned[0].key;
         ensure(key)[slot].push(cloneValue(entry));
         continue;
       }
       seen = true;
-      const match = owned.find((atom) => atom.nodeId === stamp.id);
-      if (match) last = match.key;
+      last = match.key;
     }
   }
 
   function canonicalResultIds(): string[] {
-    return [...new Set(atoms.flatMap((atom) => atom.toolResultIds))];
+    return [...resultAtoms.keys()];
   }
 
   function planPolicy(
     records: ReadonlyMap<string, RewriteFragmentPair>,
     options: ProjectOptions,
     created: RewriteRecord[],
+    material: CandidateMaterial,
   ): {
     splices: Map<string, unknown>;
     replayed: Set<string>;
     spliceHead?: string;
   } {
     const atomIds = new Set(canonicalResultIds());
-    const explicit = explicitPolicy(options, atomIds);
     const indexed = options.heads?.splice
       ? readOverrides(family, records, options.heads.splice, [...atomIds])
       : new Map<string, unknown>();
     const effective = new Map(indexed);
     const updates: Array<{ id: string; content: unknown }> = [];
     const replayed = new Set<string>();
+    const emissions = new Map<string, Map<string, unknown> | null>();
     bakedPolicy = new Map();
-    for (const [id, content] of explicit) {
-      const atom = atoms.find((item) => item.toolResultIds.includes(id));
+    for (const [id, content] of material.explicit) {
+      const atom = resultAtoms.get(id);
       if (!atom || !records.has(atom.key)) {
         bakedPolicy.set(id, content);
         continue;
@@ -639,11 +767,14 @@ export function captureRewriteRequest(
       const current = effective.get(id);
       if (
         current !== undefined &&
-        rewritePolicyEpoch(current) === rewritePolicyEpoch(content)
+        material.epoch(current) === material.epoch(content)
       ) {
         continue;
       }
-      if (current === undefined && recordedEmits(atom, records, id, content)) {
+      if (
+        current === undefined &&
+        recordedEmits(atom, records, id, content, emissions, material.epoch)
+      ) {
         // The fragment already emits this admission. A later client resend
         // may change only the result text; that digest mismatch is covered
         // without writing a second splice.
@@ -656,14 +787,16 @@ export function captureRewriteRequest(
     const splices = new Map<string, unknown>();
     for (const [id, content] of effective) {
       if (bakedPolicy.has(id)) continue;
-      const key = rewriteSpliceKey(family, id, content);
+      const key = spliceKey(family, id, material.epoch(content));
       const existing = records.get(key);
       if (existing) {
         splices.set(id, decodeSplice(existing));
         continue;
       }
       const payload: Payload = { v: 1, before: [], after: [], self: content };
-      created.push(storePayload(key, sha256(serialize(content)), payload));
+      created.push(
+        storePayload(key, Buffer.from(material.epoch(content), "hex"), payload),
+      );
       splices.set(id, roundTrip(payload).self);
     }
     let spliceHead = options.heads?.splice;
@@ -674,18 +807,19 @@ export function captureRewriteRequest(
         spliceHead,
         updates,
         created,
+        material.epoch,
       );
     }
     return { splices, replayed, spliceHead };
   }
 
   function commitInserts(
-    candidate: Record<string, unknown>,
+    inserts: readonly Insert[],
     records: ReadonlyMap<string, RewriteFragmentPair>,
     options: ProjectOptions,
     created: RewriteRecord[],
   ): Insert[] {
-    return policyInserts(candidate, options).map((insert) => {
+    return inserts.map((insert) => {
       const existing = records.get(insert.key);
       if (existing) {
         return {
@@ -703,18 +837,16 @@ export function captureRewriteRequest(
   }
 
   function commitCache(
-    candidate: Record<string, unknown>,
+    material: CandidateMaterial,
     records: ReadonlyMap<string, RewriteFragmentPair>,
     created: RewriteRecord[],
   ): MarkerSite[] {
-    if (!cacheKey) return [];
+    if (!cacheKey || !sourceLayoutDigest) return [];
     const existing = records.get(cacheKey);
     if (existing) return decodeMarkers(existing);
-    const layout = collectCandidateMarkers(candidate);
+    const layout = material.layout();
     const payload: Payload = { v: 1, before: [], after: [], self: layout };
-    created.push(
-      storePayload(cacheKey, sha256(serialize(sourceMarkers)), payload),
-    );
+    created.push(storePayload(cacheKey, sourceLayoutDigest, payload));
     const decoded = roundTrip(payload).self;
     return Array.isArray(decoded) ? (decoded as MarkerSite[]) : [];
   }
@@ -806,9 +938,17 @@ export function captureRewriteRequest(
   ): unknown {
     const payload = decisions.get(atom.key);
     if (!payload || payload.self === null || payload.self === undefined) {
-      return applySpliceValue(cloneValue(atom.fragment.body), splices);
+      return applySpliceValue(
+        cloneValue(atom.fragment.body),
+        splices,
+        splicesByIdentity,
+      );
     }
-    return applySpliceValue(cloneValue(payload.self), splices);
+    return applySpliceValue(
+      cloneValue(payload.self),
+      splices,
+      splicesByIdentity,
+    );
   }
 
   function emitHistory(
@@ -818,8 +958,14 @@ export function captureRewriteRequest(
     emitted: Map<string, Record<string, unknown>>,
   ): unknown[] {
     const messages: unknown[] = [];
+    const byAnchor = new Map<string, Insert[]>();
     for (const insert of inserts) {
-      if (insert.anchor === "head") messages.push(cloneValue(insert.message));
+      const group = byAnchor.get(insert.anchor) ?? [];
+      group.push(insert);
+      byAnchor.set(insert.anchor, group);
+    }
+    for (const insert of byAnchor.get("head") ?? []) {
+      messages.push(cloneValue(insert.message));
     }
     for (const atom of itemAtoms()) {
       const payload = decisions.get(atom.key);
@@ -829,9 +975,8 @@ export function captureRewriteRequest(
       if (isRecord(body)) emitted.set(atom.chainHash, body);
       messages.push(body);
       for (const entry of payload.after) messages.push(cloneValue(entry));
-      for (const insert of inserts) {
-        if (insert.anchor === atom.chainHash)
-          messages.push(cloneValue(insert.message));
+      for (const insert of byAnchor.get(atom.chainHash) ?? []) {
+        messages.push(cloneValue(insert.message));
       }
     }
     return messages;
@@ -923,35 +1068,39 @@ export function captureRewriteRequest(
       payload.self === undefined
     ) {
       const base = cloneValue(atom.fragment.body);
-      return substituteResults(base, splices, atom.fragment.body);
+      return substituteResults(
+        base,
+        splices,
+        atom.fragment.body,
+        splicesByIdentity,
+      );
     }
     return substituteResults(
       cloneValue(payload.self),
       splices,
       atom.fragment.body,
+      splicesByIdentity,
     );
   }
 
   function policyInserts(
     candidateBody: unknown,
-    options: ProjectOptions,
+    authorized: ReadonlySet<string>,
   ): Insert[] {
     const candidate = asRecord(candidateBody);
     if (!candidate) return [];
-    const authorized = authorizedIds(options);
     if (authorized.size === 0) return [];
-    const sourceIds = new Set(atoms.flatMap((atom) => atom.toolResultIds));
     const inserts: Insert[] = [];
     let anchor = "head";
     for (const entry of historyOf(candidate)) {
       const stamp = readStamp(entry);
       if (stamp) {
-        const owned = itemAtoms().find((atom) => atom.nodeId === stamp.id);
+        const owned = itemById.get(stamp.id);
         if (owned) anchor = owned.chainHash;
         continue;
       }
       const id = toolResultIdOf(entry, family);
-      if (!id || !authorized.has(id) || sourceIds.has(id)) continue;
+      if (!id || !authorized.has(id) || resultAtoms.has(id)) continue;
       inserts.push({
         key: `${family}:insert:${anchor}:${encodeURIComponent(id)}`,
         anchor,
@@ -961,39 +1110,26 @@ export function captureRewriteRequest(
     return inserts;
   }
 
-  function spliceIdSet(
-    candidateBody: unknown,
-    options: ProjectOptions,
-  ): Set<string> {
-    const ids = authorizedIds(options);
-    const candidate = asRecord(candidateBody);
-    if (!candidate) return ids;
-    for (const id of resultIdsIn(candidate)) {
-      if (isAuthorized(id, options)) ids.add(id);
-    }
-    return ids;
-  }
-
   function toolAtoms(): Atom[] {
-    return atoms.filter((atom) => atom.domain === "tool");
+    return domainAtoms.tool;
   }
 
   function itemAtoms(): Atom[] {
-    return atoms.filter((atom) => atom.domain === "item");
+    return domainAtoms.item;
   }
 
   function envelopeAtoms(): Atom[] {
-    return atoms.filter((atom) => atom.domain === "envelope");
+    return domainAtoms.envelope;
   }
 
   function toolHeadKey(): string {
     return `${family}:tool:head`;
   }
 
-  function isPolicyInsert(entry: unknown): boolean {
+  function isPolicyInsert(entry: unknown, ids: ReadonlySet<string>): boolean {
     const id = toolResultIdOf(entry, family);
-    if (!id || !activePolicyIds.has(id)) return false;
-    return atoms.every((atom) => !atom.toolResultIds.includes(id));
+    if (!id || !ids.has(id)) return false;
+    return !resultAtoms.has(id);
   }
 }
 
@@ -1192,6 +1328,19 @@ type Insert = {
   message: unknown;
 };
 
+type CandidateMaterial = {
+  candidate: Record<string, unknown>;
+  options: ProjectOptions;
+  readKeys: readonly string[];
+  inserts: readonly Insert[];
+  viewFor: (atom: Atom) => unknown;
+  injections: Map<string, { before: unknown[]; after: unknown[] }>;
+  explicit: ReadonlyMap<string, unknown>;
+  epoch: (content: unknown) => string;
+  layout: () => MarkerSite[];
+  tools: () => unknown[];
+};
+
 function spliceIdentity(entry: {
   id?: string;
   toolResultId?: string;
@@ -1204,13 +1353,23 @@ function explicitPolicy(
   atomIds: ReadonlySet<string>,
 ): Map<string, unknown> {
   const policy = new Map<string, unknown>();
+  if (!options.toolResultUpdates?.size && !options.policySplices?.length) {
+    return policy;
+  }
+  const byIdentity = new Map<string, string>();
+  for (const id of atomIds) {
+    const identity = resultIdentity(id);
+    if (!byIdentity.has(identity)) byIdentity.set(identity, id);
+  }
+  const atomIdForPolicy = (id: string) =>
+    atomIds.has(id) ? id : byIdentity.get(resultIdentity(id));
   for (const [id, content] of options.toolResultUpdates ?? []) {
-    const atomId = atomIdForPolicy(id, atomIds);
+    const atomId = atomIdForPolicy(id);
     if (atomId) policy.set(atomId, content);
   }
   for (const splice of options.policySplices ?? []) {
     const id = spliceIdentity(splice);
-    const atomId = id ? atomIdForPolicy(id, atomIds) : undefined;
+    const atomId = id ? atomIdForPolicy(id) : undefined;
     if (!atomId || !("content" in splice)) continue;
     policy.set(atomId, splice.content);
   }
@@ -1222,45 +1381,51 @@ function recordedEmits(
   records: ReadonlyMap<string, RewriteFragmentPair>,
   id: string,
   content: unknown,
+  emissions: Map<string, Map<string, unknown> | null>,
+  epoch: (content: unknown) => string,
 ): boolean {
-  const pair = records.get(atom.key);
-  if (!pair) return false;
-  const payload = decodePair(pair).payload;
-  if (payload.omit) return false;
-  const source =
-    payload.contentIdentity ||
-    payload.self === null ||
-    payload.self === undefined
-      ? atom.fragment.body
-      : payload.self;
-  return (
-    rewritePolicyEpoch(resultContent(source, id)) ===
-    rewritePolicyEpoch(content)
-  );
+  if (!emissions.has(atom.key)) {
+    const pair = records.get(atom.key);
+    if (!pair) return false;
+    const payload = decodePair(pair).payload;
+    const source =
+      payload.contentIdentity ||
+      payload.self === null ||
+      payload.self === undefined
+        ? atom.fragment.body
+        : payload.self;
+    emissions.set(atom.key, payload.omit ? null : indexResultContents(source));
+  }
+  const contents = emissions.get(atom.key);
+  if (!contents) return false;
+  return epoch(contents.get(resultIdentity(id))) === epoch(content);
 }
 
-function resultContent(value: unknown, id: string): unknown {
-  let found: unknown;
+function indexResultContents(value: unknown): Map<string, unknown> {
+  const contents = new Map<string, unknown>();
   walk(value, (node) => {
-    const nodeId = toolResultIdOf(node, undefined);
-    if (!nodeId || resultIdentity(nodeId) !== resultIdentity(id)) return;
+    const id = toolResultIdOf(node, undefined);
     const record = asRecord(node);
-    if (!record || found !== undefined) return;
-    found =
+    if (!id || !record) return;
+    const identity = resultIdentity(id);
+    if (contents.has(identity)) return;
+    const content =
       record.type === "function_call_output" ||
       record.type === "custom_tool_call_output"
         ? record.output
         : record.content;
+    if (content !== undefined) contents.set(identity, content);
   });
-  return found;
+  return contents;
 }
 
 function bakeResults(
   value: unknown,
   baked: ReadonlyMap<string, unknown>,
+  byIdentity: ReadonlyMap<string, unknown>,
 ): unknown {
   if (baked.size === 0) return value;
-  return substituteResults(cloneValue(value), baked, value);
+  return substituteResults(cloneValue(value), baked, value, byIdentity);
 }
 
 function containerEntries(
@@ -1307,7 +1472,7 @@ function isTextOrCompactionHolder(record: Record<string, unknown>): boolean {
 }
 
 function fieldFragment(container: string, body: unknown): Fragment {
-  return { break: true, shape: "field", body, container };
+  return { break: true, shape: "field", body: cloneValue(body), container };
 }
 
 function noteMarker(
@@ -1504,11 +1669,12 @@ function substituteResults(
   value: unknown,
   splices: ReadonlyMap<string, unknown>,
   source: unknown,
+  byIdentity: ReadonlyMap<string, unknown>,
 ): unknown {
   const record = asRecord(value);
   if (!record) return value;
   const id = toolResultIdOf(record, undefined);
-  const spliced = id ? spliceContent(splices, id) : undefined;
+  const spliced = id ? spliceContent(splices, id, byIdentity) : undefined;
   if (id && spliced !== undefined) {
     const content = cloneValue(spliced);
     if (record.role === "tool" || record.type === "tool_result")
@@ -1525,7 +1691,7 @@ function substituteResults(
     Array.isArray(asRecord(source)?.content)
   ) {
     record.content = record.content.map((entry) =>
-      substituteResults(entry, splices, entry),
+      substituteResults(entry, splices, entry, byIdentity),
     );
   }
   return record;
@@ -1534,8 +1700,9 @@ function substituteResults(
 function applySpliceValue(
   value: unknown,
   splices: ReadonlyMap<string, unknown>,
+  byIdentity: ReadonlyMap<string, unknown>,
 ): unknown {
-  return substituteResults(value, splices, value);
+  return substituteResults(value, splices, value, byIdentity);
 }
 
 function resultIdsIn(value: unknown): string[] {
@@ -1581,49 +1748,6 @@ function withAuthoritative(message: unknown, options: ProjectOptions): unknown {
     else record.content = content;
   });
   return copy;
-}
-
-function authoritativeContent(
-  candidateBody: unknown,
-  id: string,
-  options: ProjectOptions,
-): unknown | undefined {
-  if (options.toolResultUpdates?.has(id))
-    return options.toolResultUpdates.get(id);
-  const splice = options.policySplices?.find(
-    (entry) => spliceIdentity(entry) === id,
-  );
-  if (splice && "content" in splice) return splice.content;
-  if (!isAuthorized(id, options)) return undefined;
-  return findResultContent(candidateBody, id);
-}
-
-function findResultContent(value: unknown, id: string): unknown | undefined {
-  let found: unknown;
-  walk(value, (node) => {
-    const nodeId = toolResultIdOf(node, undefined);
-    if (!nodeId || resultIdentity(nodeId) !== resultIdentity(id)) return;
-    const record = asRecord(node);
-    if (!record || found !== undefined) return;
-    if (
-      record.type === "function_call_output" ||
-      record.type === "custom_tool_call_output"
-    ) {
-      found = record.output;
-      return;
-    }
-    found = record.content;
-  });
-  return found;
-}
-
-function isAuthorized(id: string, options: ProjectOptions): boolean {
-  return (
-    options.toolResultUpdates?.has(id) === true ||
-    options.policyToolResultIds?.includes(id) === true ||
-    options.policySplices?.some((entry) => spliceIdentity(entry) === id) ===
-      true
-  );
 }
 
 function authorizedIds(options: ProjectOptions): Set<string> {
@@ -1959,6 +2083,10 @@ function spliceIndexKey(family: string, hash: string): string {
   return `${family}:splice-index:${hash}`;
 }
 
+function spliceKey(family: string, id: string, epoch: string): string {
+  return `${family}:splice:${encodeURIComponent(id)}:${epoch}`;
+}
+
 function nextSpliceKeys(
   family: string,
   records: ReadonlyMap<string, RewriteFragmentPair>,
@@ -2043,6 +2171,7 @@ function writeSpliceIndex(
   root: string | undefined,
   updates: readonly { id: string; content: unknown }[],
   created: RewriteRecord[],
+  epoch: (content: unknown) => string,
 ): string {
   const fresh: SpliceIndexNode[] = [];
   const local = new Map<string, SpliceIndexNode>();
@@ -2057,8 +2186,8 @@ function writeSpliceIndex(
   for (const update of updates) {
     const entry: SpliceLeafEntry = {
       id: update.id,
-      epoch: rewritePolicyEpoch(update.content),
-      key: rewriteSpliceKey(family, update.id, update.content),
+      epoch: epoch(update.content),
+      key: spliceKey(family, update.id, epoch(update.content)),
       content: update.content,
     };
     node = insertOverride(node, entry, 0, load, remember);
@@ -2222,6 +2351,48 @@ function cloneValue(value: unknown): unknown {
   return out;
 }
 
+function snapshotValue(
+  value: unknown,
+  copies: WeakMap<object, unknown>,
+): unknown {
+  if (value && typeof value === "object" && copies.has(value)) {
+    return copies.get(value);
+  }
+  if (Array.isArray(value)) {
+    const out: unknown[] = [];
+    copies.set(value, out);
+    for (const entry of value) out.push(snapshotValue(entry, copies));
+    return Object.freeze(out);
+  }
+  if (Buffer.isBuffer(value)) {
+    const out = Buffer.from(value);
+    copies.set(value, out);
+    return out;
+  }
+  const record = asRecord(value);
+  if (!record) return value;
+  const out: Record<string | symbol, unknown> = Object.create(null);
+  copies.set(record, out);
+  for (const key of Object.keys(record)) {
+    out[key] = snapshotValue(record[key], copies);
+  }
+  // Canonical JSON drops these marks, but lazy candidate views still need them.
+  for (const symbol of Object.getOwnPropertySymbols(record)) {
+    out[symbol] = snapshotValue(
+      (record as Record<symbol, unknown>)[symbol],
+      copies,
+    );
+  }
+  if (!Object.hasOwn(out, rewriteOrigin) && rewriteOrigin in record) {
+    out[rewriteOrigin] = snapshotValue(
+      (record as { [rewriteOrigin]?: unknown })[rewriteOrigin],
+      copies,
+    );
+  }
+  if (isOmitted(record)) markOmitted(out);
+  return Object.freeze(out);
+}
+
 function stripSymbols(value: unknown): void {
   if (Array.isArray(value)) {
     for (const entry of value) stripSymbols(entry);
@@ -2261,28 +2432,24 @@ function resultIdentity(id: string): string {
   return parseTrajectoryStamp(id)?.callId ?? id;
 }
 
-function atomIdForPolicy(
-  id: string,
-  atomIds: ReadonlySet<string>,
-): string | undefined {
-  if (atomIds.has(id)) return id;
-  const identity = resultIdentity(id);
-  for (const atomId of atomIds) {
-    if (resultIdentity(atomId) === identity) return atomId;
+function indexResultIdentities(
+  contents: ReadonlyMap<string, unknown>,
+): Map<string, unknown> {
+  const byIdentity = new Map<string, unknown>();
+  for (const [id, content] of contents) {
+    const identity = resultIdentity(id);
+    if (!byIdentity.has(identity)) byIdentity.set(identity, content);
   }
-  return undefined;
+  return byIdentity;
 }
 
 function spliceContent(
   splices: ReadonlyMap<string, unknown>,
   id: string,
+  byIdentity: ReadonlyMap<string, unknown>,
 ): unknown | undefined {
   if (splices.has(id)) return splices.get(id);
-  const identity = resultIdentity(id);
-  for (const [key, value] of splices) {
-    if (resultIdentity(key) === identity) return value;
-  }
-  return undefined;
+  return byIdentity.get(resultIdentity(id));
 }
 
 function normalizeResultIds(value: unknown): unknown {

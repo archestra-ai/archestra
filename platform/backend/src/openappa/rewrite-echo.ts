@@ -210,21 +210,22 @@ export function recordedDelegationText(pair: RewriteBytes): Array<{
   rewritten: string;
   marker: string;
 }> {
-  const originals = strings(decodeRecord(pair.original));
+  const originals = new Map<string, number>();
+  for (const original of strings(decodeRecord(pair.original))) {
+    originals.set(original, (originals.get(original) ?? 0) + 1);
+  }
   const rewritten = strings(decodeRecord(pair.rewritten));
   return rewritten.flatMap((value) => {
-    if (!value.includes("[appa] delegated trajectory ")) return [];
-    const matches = originals.filter(
-      (original) =>
-        value.startsWith(`${original}\n\n[appa] delegated trajectory `) &&
-        !original.includes("[appa] delegated trajectory "),
-    );
-    return matches.length === 1
+    const markerStart = value.indexOf("\n\n[appa] delegated trajectory ");
+    if (markerStart < 0) return [];
+    const original = value.slice(0, markerStart);
+    return originals.get(original) === 1 &&
+      !original.includes("[appa] delegated trajectory ")
       ? [
           {
-            original: matches[0],
+            original,
             rewritten: value,
-            marker: value.slice(matches[0].length),
+            marker: value.slice(markerStart),
           },
         ]
       : [];
@@ -341,10 +342,9 @@ export function restoreRewriteCalls(params: {
   /** Live holders from captureRewriteEcho. Optional when clientRequest keeps them. */
   sources?: readonly RewriteEchoSource[];
 }): ReadonlyMap<string, string> {
-  const candidates = callSites({
-    family: params.family,
-    body: params.providerRequest,
-  });
+  const candidates = indexCandidates(
+    callSites({ family: params.family, body: params.providerRequest }),
+  );
   const references = new Map<string, string>();
   for (const source of echoCalls(params)) {
     const alias = params.recorded.get(aliasKey(params.family, source.id));
@@ -722,32 +722,64 @@ function echoCalls(params: {
   });
 }
 
+function indexCandidates(candidates: CallSite[]): {
+  byId: Map<string, CallSite | null>;
+  byIdentity: Map<unknown, CallSite | null>;
+  byStamp: Map<unknown, CallSite | null>;
+} {
+  const byId = new Map<string, CallSite | null>();
+  const byIdentity = new Map<unknown, CallSite | null>();
+  const byStamp = new Map<unknown, CallSite | null>();
+  const add = <Key>(
+    map: Map<Key, CallSite | null>,
+    key: Key,
+    site: CallSite,
+  ) => {
+    // Matching used strict equality; NaN must never become a Map match.
+    if (key === undefined || (typeof key === "number" && Number.isNaN(key))) {
+      return;
+    }
+    map.set(key, map.has(key) ? null : site);
+  };
+  for (const site of candidates) {
+    add(byId, site.id, site);
+    add(byIdentity, symbolValue(site.value, echoIdentity), site);
+    const stamp = originStamp(site.value);
+    const parentStamp = site.parent ? originStamp(site.parent) : undefined;
+    add(byStamp, stamp, site);
+    // A holder and its parent matching the same stamp count as one site.
+    if (parentStamp !== stamp) add(byStamp, parentStamp, site);
+  }
+  return { byId, byIdentity, byStamp };
+}
+
 function selectCandidate(params: {
   source: EchoCall;
-  candidates: CallSite[];
+  candidates: ReturnType<typeof indexCandidates>;
   possibleIds: ReadonlySet<string>;
 }): CallSite | undefined {
-  const byId = params.candidates.filter((site) =>
-    params.possibleIds.has(site.id),
-  );
-  if (byId.length === 1) return byId[0];
+  let byId: CallSite | null | undefined;
+  for (const id of params.possibleIds) {
+    const site = params.candidates.byId.get(id);
+    if (site === undefined) continue;
+    if (byId !== undefined || site === null) {
+      byId = null;
+      break;
+    }
+    byId = site;
+  }
+  if (byId) return byId;
   const identity = symbolValue(params.source.holder, echoIdentity);
   if (identity !== undefined) {
-    const marked = params.candidates.filter(
-      (site) => symbolValue(site.value, echoIdentity) === identity,
-    );
-    if (marked.length === 1) return marked[0];
+    const marked = params.candidates.byIdentity.get(identity);
+    if (marked) return marked;
   }
   const stamp =
     originStamp(params.source.holder) ??
     (params.source.parent ? originStamp(params.source.parent) : undefined);
   if (stamp !== undefined) {
-    const stamped = params.candidates.filter(
-      (site) =>
-        originStamp(site.value) === stamp ||
-        (site.parent ? originStamp(site.parent) === stamp : false),
-    );
-    if (stamped.length === 1) return stamped[0];
+    const stamped = params.candidates.byStamp.get(stamp);
+    if (stamped) return stamped;
   }
   return undefined;
 }

@@ -2798,6 +2798,9 @@ async function handleStreaming<
   const rewriteStream = ctx.rewriteReplay
     ? new RewriteStreamCapture(ctx.rewriteReplay.family)
     : undefined;
+  let replayResponseSource:
+    | ReturnType<AppaRewriteReplay["captureResponse"]>
+    | undefined;
   if (pluginContext && pluginRegistry?.governsHostedToolCalls(pluginContext)) {
     streamAdapter.withholdHostedToolCalls?.();
   }
@@ -2899,12 +2902,12 @@ async function handleStreaming<
       );
     }
     if (!ctx.rewriteReplay || !rewriteStream) return;
+    if (!replayResponseSource)
+      throw new ApiError(409, "Provider response capture is unavailable");
     const proposed = new RewriteStreamCapture(ctx.rewriteReplay.family);
     for (const event of params.events) proposed.observeClientEvent(event);
     await ctx.rewriteReplay.recordResponse({
-      source: ctx.rewriteReplay.captureResponse(
-        rewriteStream.originalResponse(),
-      ),
+      source: replayResponseSource,
       response: proposed.clientResponse(),
       emitted: params.emitted,
       policyCallIds: params.policyCallIds,
@@ -3203,6 +3206,10 @@ async function handleStreaming<
     if (ctx.rewriteReplay && !upstreamCompleted) {
       throw new ApiError(502, "Provider stream ended before completion");
     }
+    replayResponseSource =
+      ctx.rewriteReplay && rewriteStream
+        ? ctx.rewriteReplay.captureResponse(rewriteStream.originalResponse())
+        : undefined;
 
     logger.info("Stream loop completed, processing final events");
 
@@ -3450,6 +3457,8 @@ async function handleStreaming<
     // inverse commits, so an expired or unverified failure emits no approximation.
     const endEvent = streamAdapter.formatEndSSE();
     if (ctx.rewriteReplay && rewriteStream) {
+      if (!replayResponseSource)
+        throw new ApiError(409, "Provider response capture is unavailable");
       for (const event of bufferedModelEvents)
         rewriteStream.observeClientEvent(event);
       for (const event of bufferedPolicyEvents)
@@ -3459,9 +3468,7 @@ async function handleStreaming<
         pluginContext?.resources.get(APPA_REPLAY_APPROVED_TEXT) ??
         toolInvocationRefusal?.contentMessage;
       await ctx.rewriteReplay.recordResponse({
-        source: ctx.rewriteReplay.captureResponse(
-          rewriteStream.originalResponse(),
-        ),
+        source: replayResponseSource,
         response: rewriteStream.clientResponse(),
         emitted: hostedHold?.notices ?? streamAdapter.state.toolCalls,
         policyCallIds: hostedHold?.notices.map((call) => call.id),

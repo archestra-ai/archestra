@@ -349,7 +349,20 @@ export class AppaRewriteReplay {
       }
       return params.replay.readControlReceipts(ids);
     }
-    const scopes = await readableControlScopes(params.session);
+    let scopes: ReplayScope[];
+    try {
+      scopes = (
+        await OpenAppaRewriteModel.loadLineageBatch({
+          organizationId: params.session.organization_id,
+          sessionId: params.session.session_id,
+          callerId: params.session.caller_id,
+          keys: [],
+        })
+      ).map(({ scope }) => scope);
+    } catch (error) {
+      if (!unavailableReceipt(error)) throw error;
+      scopes = await readableControlScopes(params.session);
+    }
     if (scopes.length === 0) return new Map();
     try {
       return await AppaRewriteReplay.controlReplay(
@@ -369,12 +382,48 @@ export class AppaRewriteReplay {
   ): Promise<Map<string, ControlReceipt>> {
     const ids = uniqueControlIds(toolCallIds);
     if (ids.length === 0) return new Map();
-    const readable = scopes ?? (await this.liveControlScopes());
     const verified: ReplayScope[] = [];
     const keys = ids.map(controlReceiptKey);
-    for (const scope of readable) {
-      if (await this.loadVerifiedControlScope(keys, scope)) {
+    const logicalKeys = new Map(
+      keys.map((key) => [this.physicalKey(key), key]),
+    );
+    let batched = false;
+    try {
+      const owners = await OpenAppaRewriteModel.loadLineageBatch({
+        organizationId: this.input.session.organization_id,
+        sessionId: this.input.session.session_id,
+        callerId: this.input.session.caller_id,
+        keys: [...logicalKeys.keys()],
+      });
+      for (const { scope, pairs } of owners) {
+        if (
+          scopes &&
+          !scopes.some((allowed) => this.sameIdentity(allowed, scope))
+        )
+          continue;
+        this.dropControlCache(scope, logicalKeys);
+        const bucket = this.bucket(scope);
+        for (const pair of pairs) {
+          const key = logicalKeys.get(pair.fragmentKey);
+          if (!key) throw replayUnavailable();
+          bucket.set(key, this.decodePair(key, pair, scope));
+        }
         verified.push(scope);
+      }
+      batched = true;
+    } catch (error) {
+      if (
+        !unavailableReceipt(error) &&
+        !(error instanceof ApiError && error.statusCode === 400)
+      )
+        throw error;
+    }
+    if (!batched) {
+      verified.length = 0;
+      const readable = scopes ?? (await this.liveControlScopes());
+      for (const scope of readable) {
+        if (await this.loadVerifiedControlScope(keys, scope))
+          verified.push(scope);
       }
     }
     const found = new Map<string, ControlReceipt>();
@@ -517,13 +566,43 @@ export class AppaRewriteReplay {
       const annotations = annotationKeys.flatMap((key) =>
         this.pairsForKey(key).flatMap((pair) => recordedDelegationText(pair)),
       );
+      const annotationIndex = indexDelegationAnnotations(annotations);
+      const spawnCallIds = new Set(params.delegationCallIds ?? []);
+      const holders = new Map<object, ReplayTextSite[]>();
+      const origins = new Map<unknown, ReplayTextSite[]>();
+      const values = new Map<string, Map<unknown, Set<ReplayTextSite>>>();
+      for (const site of rewriteTextSites(this.input.capture.body)) {
+        const owned = holders.get(site.holder) ?? [];
+        owned.push(site);
+        holders.set(site.holder, owned);
+        const stamp = (site.holder as Record<symbol, unknown>)[rewriteOrigin];
+        if (
+          stamp !== undefined &&
+          !(typeof stamp === "number" && Number.isNaN(stamp))
+        ) {
+          const stamped = origins.get(stamp) ?? [];
+          stamped.push(site);
+          origins.set(stamp, stamped);
+        }
+        const sameField = values.get(site.field) ?? new Map();
+        const sameValue = sameField.get(site.holder[site.field]) ?? new Set();
+        sameValue.add(site);
+        sameField.set(site.holder[site.field], sameValue);
+        values.set(site.field, sameField);
+      }
       for (const site of sites) {
         const restored = restoreRewriteText({
           text: site.value,
           recorded: texts,
         });
         if (restored !== undefined) {
-          this.restoreTextHolder(site, deliveredText(restored));
+          this.restoreTextHolder({
+            source: site,
+            value: deliveredText(restored),
+            holders,
+            origins,
+            values,
+          });
           continue;
         }
         let text = site.value;
@@ -535,11 +614,7 @@ export class AppaRewriteReplay {
           if (restored !== undefined)
             text = text.replaceAll(recorded, restored);
         }
-        for (const annotation of annotations) {
-          // A recorded insertion is removed as a literal span. Surrounding
-          // client text, including whitespace, is not parsed or normalized.
-          text = text.replaceAll(annotation.rewritten, annotation.original);
-        }
+        text = restoreDelegationAnnotations({ text, index: annotationIndex });
         if (this.input.session.caller_id) {
           text = restoreVerifiedDelegationEcho({
             text,
@@ -549,15 +624,25 @@ export class AppaRewriteReplay {
               this.input.session,
               this.input.session.parent_id ?? this.input.session.session_id,
             ),
-            spawnCallIds: params.delegationCallIds ?? [],
-            recordedMarkers: annotations.map((annotation) => annotation.marker),
+            spawnCallIds,
+            recordedMarkers: delegationAnnotationCandidates({
+              text,
+              index: annotationIndex,
+              after: -1,
+            }).map((index) => annotations[index].marker),
           });
         }
         if (text.includes("[appa] delegated trajectory "))
           throw replayUnavailable();
         text = unwrapKnownMetadata(text);
         if (hasRewriteCarrier(text)) throw replayUnavailable();
-        this.restoreTextHolder(site, deliveredText(text));
+        this.restoreTextHolder({
+          source: site,
+          value: deliveredText(text),
+          holders,
+          origins,
+          values,
+        });
       }
     } catch (error) {
       throw replayUnavailable(error);
@@ -567,15 +652,26 @@ export class AppaRewriteReplay {
   /** Final request boundary: after all plugins and before provider dispatch. */
   async prepareRequest<T>(candidate: T): Promise<T> {
     try {
-      await this.ensureLive();
       const { capture, scope, wire } = this.input;
-      await this.loadWithLineage(
-        rewriteEchoKeys({
-          family: capture.family,
-          request: capture.echo.request,
-        }),
-      );
-      await this.loadAliasTargets();
+      const snapshot = await OpenAppaRewriteModel.readProjectionSnapshot({
+        scope,
+        wire,
+        keys: [],
+      });
+      let needsFinalCheck = !snapshot.readOnlyNoopEligible;
+      if (!snapshot.hasAncestors) this.inheritedScopes = [];
+      const echoKeys = rewriteEchoKeys({
+        family: capture.family,
+        request: capture.echo.request,
+      });
+      if (!this.lineageCached(echoKeys)) {
+        await this.loadWithLineage(echoKeys);
+        needsFinalCheck = true;
+      }
+      if (!this.aliasTargetsCached()) {
+        await this.loadAliasTargets();
+        needsFinalCheck = true;
+      }
       const callReferences = restoreRewriteCalls({
         family: capture.family,
         clientRequest: capture.echo.request,
@@ -583,12 +679,19 @@ export class AppaRewriteReplay {
         recorded: this.inverseRecords(capture.echo.sources),
         sources: capture.echo.sources,
       });
+      const aliasesByOriginal = new Map<string, string[]>();
+      for (const [alias, original] of callReferences) {
+        const aliases = aliasesByOriginal.get(original) ?? [];
+        aliases.push(alias);
+        aliasesByOriginal.set(original, aliases);
+      }
       const policySplices = [...this.policyOutputs].flatMap(([id, content]) => {
         const originalId = callReferences.get(id) ?? id;
-        const resultIds = new Set([id, originalId]);
-        for (const [alias, original] of callReferences) {
-          if (original === originalId) resultIds.add(alias);
-        }
+        const resultIds = new Set([
+          id,
+          originalId,
+          ...(aliasesByOriginal.get(originalId) ?? []),
+        ]);
         const epoch = rewritePolicyEpoch(content);
         return [...resultIds].map((toolResultId) => ({
           toolResultId,
@@ -596,7 +699,7 @@ export class AppaRewriteReplay {
           content,
         }));
       });
-      const head = await OpenAppaRewriteModel.readHead(scope, wire);
+      const head = snapshot.head;
       const state =
         head.revision === 0
           ? undefined
@@ -613,29 +716,36 @@ export class AppaRewriteReplay {
         heads: callerEdit ? undefined : state?.heads,
         policySplices,
       };
-      await this.load(capture.projection.candidateKeys(candidate, options));
+      const prepared = capture.projection.prepareCandidate(candidate, options);
+      if (this.loadCached(prepared.keys).length > 0) {
+        await this.load(prepared.keys);
+        needsFinalCheck = true;
+      }
       // Fetch one index level at a time, batching all paths in this history.
       // A missing node is an expired/corrupt record, never an empty override.
       for (let depth = 0; ; depth++) {
-        const keys = capture.projection.referencedSpliceKeys(
-          this.ownRecords(),
-          options.heads,
-        );
+        const keys = prepared.referencedSpliceKeys(this.ownRecords());
         if (keys.length === 0) break;
         if (depth > 65) throw replayUnavailable();
-        await this.load(keys);
+        if (this.loadCached(keys).length > 0) {
+          await this.load(keys);
+          needsFinalCheck = true;
+        }
         if (keys.some((key) => !this.ownRecords().has(key)))
           throw replayUnavailable();
       }
-      const projected = capture.projection.project(
-        candidate,
-        this.ownRecords(),
-        options,
-      );
+      const projected = prepared.project(this.ownRecords());
       const next = Buffer.from(
         JSON.stringify({ version: 1, heads: projected.heads }),
       );
       const previous = state && JSON.stringify(state);
+      if (
+        !needsFinalCheck &&
+        projected.records.length === 0 &&
+        previous === next.toString("utf8")
+      ) {
+        return projected.request as T;
+      }
       await this.persist(projected.records, {
         wire,
         expectedRevision: head.revision,
@@ -703,11 +813,13 @@ export class AppaRewriteReplay {
       });
       if (!params.callsOnly) {
         const texts = rewriteTextSites(params.response);
+        const textPairs: RewriteBytes[] = [];
+        const sourceTexts = new Set(params.source.texts);
         for (const site of texts) {
           if (!needsTextInverse(site.value)) continue;
           const original = recordedTextOriginal({
             client: site.value,
-            sourceTexts: params.source.texts,
+            sourceTexts,
             ...(params.approvedText !== undefined
               ? { approvedText: params.approvedText }
               : {}),
@@ -717,25 +829,26 @@ export class AppaRewriteReplay {
             original,
             rewritten: site.value,
           });
-          if (pair) {
-            await this.load([pair.key]);
-            const stored = this.ownRecords().get(pair.key);
-            if (stored && !samePair(stored, pair)) {
-              logger.warn(
-                {
-                  key: pair.key.split(":")[0],
-                  originalBytes: pair.original.length,
-                  rewrittenBytes: pair.rewritten.length,
-                  storedOriginalBytes: stored.original.length,
-                  storedRewrittenBytes: stored.rewritten.length,
-                  callCount: params.emitted.length,
-                  approved: params.approvedText !== undefined,
-                },
-                "OpenAPPA text inverse differs from the stored pair",
-              );
-            }
-            if (!stored || !samePair(stored, pair)) pairs.push(pair);
+          if (pair) textPairs.push(pair);
+        }
+        await this.load(textPairs.map((pair) => pair.key));
+        for (const pair of textPairs) {
+          const stored = this.ownRecords().get(pair.key);
+          if (stored && !samePair(stored, pair)) {
+            logger.warn(
+              {
+                key: pair.key.split(":")[0],
+                originalBytes: pair.original.length,
+                rewrittenBytes: pair.rewritten.length,
+                storedOriginalBytes: stored.original.length,
+                storedRewrittenBytes: stored.rewritten.length,
+                callCount: params.emitted.length,
+                approved: params.approvedText !== undefined,
+              },
+              "OpenAPPA text inverse differs from the stored pair",
+            );
           }
+          if (!stored || !samePair(stored, pair)) pairs.push(pair);
         }
         const manifestKey = `${this.family}:response:v1:${this.input.capture.requestDigest}:${params.source.identity}`;
         await this.load([manifestKey]);
@@ -763,19 +876,9 @@ export class AppaRewriteReplay {
     keys: readonly string[],
     scope = this.input.scope,
   ): Promise<void> {
-    this.assertReadable(scope);
-    const bucket = this.bucket(scope);
-    const missing = [...new Set(keys)].filter((key) => !bucket.has(key));
-    if (missing.length === 0) return;
-    const uncached: string[] = [];
-    for (const key of missing) {
-      const cached = bytesCache.get(
-        this.cacheKey(scope, this.physicalKey(key)),
-      );
-      if (cached) bucket.set(key, this.decodePair(key, cached, scope));
-      else uncached.push(key);
-    }
+    const uncached = this.loadCached(keys, scope);
     if (uncached.length === 0) return;
+    const bucket = this.bucket(scope);
     const logicalKeys = new Map(
       uncached.map((key) => [this.physicalKey(key), key]),
     );
@@ -790,13 +893,102 @@ export class AppaRewriteReplay {
     this.cacheRows(scope, rows);
   }
 
+  private loadCached(
+    keys: readonly string[],
+    scope = this.input.scope,
+  ): string[] {
+    this.assertReadable(scope);
+    const bucket = this.bucket(scope);
+    const uncached: string[] = [];
+    for (const key of new Set(keys)) {
+      if (bucket.has(key)) continue;
+      const cached = bytesCache.get(
+        this.cacheKey(scope, this.physicalKey(key)),
+      );
+      if (cached) bucket.set(key, this.decodePair(key, cached, scope));
+      else uncached.push(key);
+    }
+    return uncached;
+  }
+
+  private lineageCached(keys: readonly string[]): boolean {
+    if (keys.length === 0) return true;
+    if (this.inheritedScopes === undefined) return false;
+    return this.scopes().every(
+      (scope) => this.loadCached(keys, scope).length === 0,
+    );
+  }
+
+  private aliasTargetsCached(): boolean {
+    let complete = true;
+    for (const scope of this.scopes()) {
+      const aliases = [...this.bucket(scope).values()]
+        .filter((pair) => pair.key.startsWith("echo-alias:v1:"))
+        .map((pair) => pair.rewritten.toString("utf8"));
+      if (this.loadCached(aliases, scope).length > 0) complete = false;
+    }
+    return complete;
+  }
+
   private async loadWithLineage(keys: readonly string[]): Promise<void> {
     if (keys.length === 0) return;
-    await this.load(keys);
-    await this.ensureInheritedScopes();
-    for (const inherited of this.inheritedScopes ?? []) {
-      await this.load(keys, inherited);
+    const requested = [...new Set(keys)];
+    const discovering = this.inheritedScopes === undefined;
+    const missing = new Set<string>();
+    for (const scope of this.scopes()) {
+      const bucket = this.bucket(scope);
+      for (const key of requested) {
+        if (bucket.has(key)) continue;
+        const cached = bytesCache.get(
+          this.cacheKey(scope, this.physicalKey(key)),
+        );
+        if (cached) bucket.set(key, this.decodePair(key, cached, scope));
+        else missing.add(key);
+      }
     }
+    if (this.inheritedScopes !== undefined && missing.size === 0) return;
+    const logicalKeys = new Map(
+      [...missing].map((key) => [this.physicalKey(key), key]),
+    );
+    let owners: Awaited<
+      ReturnType<typeof OpenAppaRewriteModel.loadLineageBatch>
+    >;
+    try {
+      owners = await OpenAppaRewriteModel.loadLineageBatch({
+        organizationId: this.input.session.organization_id,
+        sessionId: this.input.session.session_id,
+        callerId: this.input.session.caller_id,
+        scope: this.input.scope,
+        keys: [...logicalKeys.keys()],
+      });
+    } catch (error) {
+      // Oversized owner/key products retain the bounded per-owner read path.
+      if (!(error instanceof ApiError) || error.statusCode !== 400) throw error;
+      await this.load(requested);
+      await this.ensureInheritedScopes();
+      for (const inherited of this.inheritedScopes ?? [])
+        await this.load(requested, inherited);
+      return;
+    }
+    this.inheritedScopes = owners
+      .map(({ scope }) => scope)
+      .filter((scope) => !this.sameScope(scope));
+    for (const { scope, pairs } of owners) {
+      this.assertReadable(scope);
+      this.cacheRows(scope, pairs);
+      const bucket = this.bucket(scope);
+      for (const pair of pairs) {
+        const key = logicalKeys.get(pair.fragmentKey);
+        if (key && !bucket.has(key))
+          bucket.set(key, this.decodePair(key, pair, scope));
+      }
+    }
+    if (
+      discovering &&
+      this.inheritedScopes.length > 0 &&
+      !this.lineageCached(requested)
+    )
+      await this.loadWithLineage(requested);
   }
 
   private async ensureInheritedScopes(): Promise<void> {
@@ -971,34 +1163,39 @@ export class AppaRewriteReplay {
     }
   }
 
-  private restoreTextHolder(
-    source: ReturnType<typeof rewriteTextSites>[number],
-    value: string,
-  ): void {
+  private restoreTextHolder(params: {
+    source: ReplayTextSite;
+    value: string;
+    holders: ReadonlyMap<object, readonly ReplayTextSite[]>;
+    origins: ReadonlyMap<unknown, readonly ReplayTextSite[]>;
+    values: ReadonlyMap<string, Map<unknown, Set<ReplayTextSite>>>;
+  }): void {
+    const { source, value, holders, origins, values } = params;
     const stamp = (source.holder as Record<symbol, unknown>)[rewriteOrigin];
-    const matches = rewriteTextSites(this.input.capture.body).filter(
-      (candidate) =>
-        candidate.field === source.field &&
-        (candidate.holder === source.holder ||
-          (stamp !== undefined &&
-            (candidate.holder as Record<symbol, unknown>)[rewriteOrigin] ===
-              stamp)),
-    );
+    const matches = [
+      ...new Set([
+        ...(holders.get(source.holder) ?? []),
+        ...(stamp !== undefined ? (origins.get(stamp) ?? []) : []),
+      ]),
+    ].filter((candidate) => candidate.field === source.field);
+    const sameField = values.get(source.field);
+    let target: ReplayTextSite | undefined = matches[0];
     if (matches.length !== 1) {
-      const current = rewriteTextSites(this.input.capture.body).filter(
-        (site) => site.field === source.field,
-      );
-      if (current.some((site) => site.holder[site.field] === value)) return;
-      const pending = current.filter(
-        (site) => site.holder[site.field] === source.holder[source.field],
-      );
-      if (pending.length === 1) {
-        pending[0].holder[source.field] = value;
-        return;
-      }
-      throw replayUnavailable();
+      if (sameField?.get(value)?.size) return;
+      const pending = sameField?.get(source.holder[source.field]);
+      if (pending?.size !== 1) throw replayUnavailable();
+      target = pending.values().next().value;
     }
-    matches[0].holder[source.field] = value;
+    if (!target || !sameField) throw replayUnavailable();
+    // Keep fallback value ownership current as earlier holders are restored.
+    const previous = target.holder[target.field];
+    const owned = sameField.get(previous);
+    owned?.delete(target);
+    if (owned?.size === 0) sameField.delete(previous);
+    target.holder[target.field] = value;
+    const restored = sameField.get(value) ?? new Set<ReplayTextSite>();
+    restored.add(target);
+    sameField.set(value, restored);
   }
 
   private physicalKey(key: string): string {
@@ -1041,11 +1238,11 @@ export class AppaRewriteReplay {
     keys: readonly string[],
     scope: ReplayScope,
   ): Promise<boolean> {
-    this.dropControlCache(scope);
+    const logicalKeys = new Map(
+      keys.map((key) => [this.physicalKey(key), key]),
+    );
+    this.dropControlCache(scope, logicalKeys);
     try {
-      const logicalKeys = new Map(
-        keys.map((key) => [this.physicalKey(key), key]),
-      );
       const rows = await OpenAppaRewriteModel.loadBatch(scope, [
         ...logicalKeys.keys(),
       ]);
@@ -1057,15 +1254,21 @@ export class AppaRewriteReplay {
       }
       return true;
     } catch (error) {
-      this.dropControlCache(scope);
+      this.dropControlCache(scope, logicalKeys);
       if (!unavailableReceipt(error)) throw error;
       return false;
     }
   }
 
-  private dropControlCache(scope: ReplayScope): void {
-    this.recordsByOwner.delete(this.ownerKey(scope));
-    bytesCache.deleteByPrefix(this.cachePrefix(scope));
+  private dropControlCache(
+    scope: ReplayScope,
+    logicalKeys: ReadonlyMap<string, string>,
+  ): void {
+    const bucket = this.recordsByOwner.get(this.ownerKey(scope));
+    for (const [physicalKey, logicalKey] of logicalKeys) {
+      bucket?.delete(logicalKey);
+      bytesCache.delete(this.cacheKey(scope, physicalKey));
+    }
   }
 
   private assertReadable(scope: ReplayScope): void {
@@ -1129,6 +1332,13 @@ export class AppaRewriteReplay {
     const echoById = new Map(
       sources.map((source) => [source.id, source.bytes]),
     );
+    const echoesByKey = new Map<string, Array<{ id: string; bytes: Buffer }>>();
+    for (const source of sources) {
+      const key = replayCallKey(this.family, source.id);
+      const echoes = echoesByKey.get(key);
+      if (echoes) echoes.push(source);
+      else echoesByKey.set(key, [source]);
+    }
     const aliases = new Map<
       string,
       Array<{ scope: ReplayScope; pair: RewriteBytes }>
@@ -1163,7 +1373,7 @@ export class AppaRewriteReplay {
       }
     }
     for (const [key, owners] of calls) {
-      const selected = this.selectCallOwner(key, owners, sources);
+      const selected = this.selectCallOwner(owners, echoesByKey.get(key) ?? []);
       if (selected) merged.set(key, pairForOriginalIdEcho(selected.pair));
     }
     for (const [key, pair] of this.textRecords()) merged.set(key, pair);
@@ -1204,13 +1414,9 @@ export class AppaRewriteReplay {
   }
 
   private selectCallOwner(
-    key: string,
     owners: Array<{ scope: ReplayScope; pair: RewriteBytes }>,
-    sources: readonly { id: string; bytes: Buffer }[],
+    echoes: readonly { id: string; bytes: Buffer }[],
   ): { scope: ReplayScope; pair: RewriteBytes } | undefined {
-    const echoes = sources.filter(
-      (source) => replayCallKey(this.family, source.id) === key,
-    );
     if (echoes.length === 0) return owners.length === 1 ? owners[0] : undefined;
     const matches = owners.filter((owner) =>
       echoes.some(
@@ -1314,6 +1520,13 @@ type ReplayResponseCapture = {
   calls: ReadonlyMap<string, Buffer>;
   texts: readonly string[];
 };
+type ReplayTextSite = ReturnType<typeof rewriteTextSites>[number];
+type DelegationAnnotation = ReturnType<typeof recordedDelegationText>[number];
+type DelegationAnnotationIndex = {
+  annotations: readonly DelegationAnnotation[];
+  byToken: ReadonlyMap<string, readonly number[]>;
+  unindexed: readonly number[];
+};
 
 const bytesCache = new LRUCacheManager<StoredPair>({
   maxSize: 4096,
@@ -1338,6 +1551,68 @@ const DELEGATION_SUFFIX = new RegExp(`${DELEGATION_BODY}$`);
 function nativeSessionId(session: OpenAppaSession, id: string): string {
   const prefix = session.caller_id ? `${session.caller_id}|` : undefined;
   return prefix && id.startsWith(prefix) ? id.slice(prefix.length) : id;
+}
+
+function indexDelegationAnnotations(
+  annotations: readonly DelegationAnnotation[],
+): DelegationAnnotationIndex {
+  const byToken = new Map<string, number[]>();
+  const unindexed: number[] = [];
+  for (const [index, annotation] of annotations.entries()) {
+    const token = /\[appa\] delegated trajectory ([^\s]+)/.exec(
+      annotation.marker,
+    )?.[1];
+    if (!token) {
+      unindexed.push(index);
+      continue;
+    }
+    const owned = byToken.get(token) ?? [];
+    owned.push(index);
+    byToken.set(token, owned);
+  }
+  return { annotations, byToken, unindexed };
+}
+
+function delegationAnnotationCandidates(params: {
+  text: string;
+  index: DelegationAnnotationIndex;
+  after: number;
+}): number[] {
+  const candidates = new Set(
+    params.index.unindexed.filter((index) => index > params.after),
+  );
+  for (const match of params.text.matchAll(
+    /\[appa\] delegated trajectory ([^\s]+)/g,
+  )) {
+    for (const index of params.index.byToken.get(match[1]) ?? []) {
+      if (index > params.after) candidates.add(index);
+    }
+  }
+  return [...candidates].sort((left, right) => left - right);
+}
+
+function restoreDelegationAnnotations(params: {
+  text: string;
+  index: DelegationAnnotationIndex;
+}): string {
+  let text = params.text;
+  let candidates = delegationAnnotationCandidates({ ...params, after: -1 });
+  let cursor = 0;
+  while (cursor < candidates.length) {
+    const index = candidates[cursor++];
+    const annotation = params.index.annotations[index];
+    const restored = text.replaceAll(annotation.rewritten, annotation.original);
+    if (restored === text) continue;
+    text = restored;
+    // Preserve ordered replacements: removing a span can expose a later one.
+    candidates = delegationAnnotationCandidates({
+      text,
+      index: params.index,
+      after: index,
+    });
+    cursor = 0;
+  }
+  return text;
 }
 
 function needsTextInverse(text: string): boolean {
@@ -1447,14 +1722,14 @@ function stripTrailingDelegationMarker(text: string): string {
 
 function recordedTextOriginal(params: {
   client: string;
-  sourceTexts: readonly string[];
+  sourceTexts: ReadonlySet<string>;
   approvedText?: string;
 }): string | undefined {
   const unwrapped = unwrapKnownMetadata(params.client);
   if (params.approvedText !== undefined && unwrapped === params.approvedText) {
     return params.approvedText;
   }
-  if (params.sourceTexts.includes(unwrapped)) return unwrapped;
+  if (params.sourceTexts.has(unwrapped)) return unwrapped;
   if (unwrapped === "") return "";
   return undefined;
 }

@@ -1284,6 +1284,451 @@ describe("OpenAiResponsesStreamAdapter.toProviderResponse", () => {
   });
 });
 
+describe("OpenAiResponsesStreamAdapter call accumulation", () => {
+  test("keeps ordered slots and exact bytes through interleaved function deltas", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const calls = adapter.state.toolCalls;
+    const argumentsByCall = Array.from(
+      { length: 32 },
+      (_, index) => ` { "index" : ${index}, "escaped" : "\\u0041" }\n`,
+    );
+    for (const [index] of argumentsByCall.entries()) {
+      expect(
+        adapter.processChunk({
+          type: "response.output_item.added",
+          output_index: 31 - index,
+          sequence_number: index,
+          item: {
+            id: `item_${index}`,
+            call_id: `call_${index}`,
+            type: "function_call",
+            name: `tool_${index}`,
+            arguments: "",
+            namespace: index % 2 ? "other" : "functions",
+          },
+        } as never),
+      ).toMatchObject({ sseData: null, isToolCallChunk: true, isFinal: false });
+    }
+    const slots = [...calls];
+    for (let offset = 0; offset < argumentsByCall[0].length + 1; offset++) {
+      for (let index = argumentsByCall.length - 1; index >= 0; index--) {
+        const delta = argumentsByCall[index][offset];
+        if (delta === undefined) continue;
+        adapter.processChunk({
+          type: "response.function_call_arguments.delta",
+          item_id: `item_${index}`,
+          output_index: 31 - index,
+          sequence_number: offset * 32 + index + 32,
+          delta,
+        } as never);
+      }
+    }
+    expect(adapter.state.toolCalls).toBe(calls);
+    for (const [index, slot] of slots.entries()) {
+      expect(calls[index]).toBe(slot);
+      expect(slot).toMatchObject({
+        id: `call_${index}`,
+        arguments: argumentsByCall[index],
+      });
+    }
+    const completed = adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 10000,
+      response: {
+        id: "resp_interleaved",
+        model: "test-model",
+        output: [],
+        provider_extension: { retained: true },
+      },
+    } as never);
+    expect(completed).toMatchObject({
+      sseData: null,
+      isToolCallChunk: true,
+      isFinal: true,
+    });
+    const response = adapter.toProviderResponse();
+    expect(response).toMatchObject({ provider_extension: { retained: true } });
+    expect(response.output).toEqual(
+      argumentsByCall.map((argumentsText, index) =>
+        expect.objectContaining({
+          call_id: `call_${index}`,
+          name: `tool_${index}`,
+          arguments: argumentsText,
+          namespace: index % 2 ? "other" : "functions",
+        }),
+      ),
+    );
+  });
+
+  test("materializes tiny custom-input deltas only when arguments are read", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 0,
+      item: {
+        type: "custom_tool_call",
+        id: "item_patch",
+        call_id: "call_patch",
+        name: "apply_patch",
+        input: "prefix\n",
+      },
+    } as never);
+    const calls = adapter.state.toolCalls;
+    const call = calls[0];
+    const input = '"\\\r\n\t\u0000\ud83d\ude80'.repeat(256);
+    const stringify = vi.spyOn(JSON, "stringify");
+    const parse = vi.spyOn(JSON, "parse");
+    let beforeRead = -1;
+    let afterReads = -1;
+    let parseCount = -1;
+    let argumentsText = "";
+    try {
+      for (const [sequence, delta] of input.split("").entries()) {
+        adapter.processChunk({
+          type: "response.custom_tool_call_input.delta",
+          item_id: "item_patch",
+          output_index: 0,
+          sequence_number: sequence + 1,
+          delta,
+        } as never);
+      }
+      beforeRead = stringify.mock.calls.length;
+      argumentsText = call.arguments;
+      void call.arguments;
+      afterReads = stringify.mock.calls.length;
+      parseCount = parse.mock.calls.length;
+    } finally {
+      stringify.mockRestore();
+      parse.mockRestore();
+    }
+    expect(beforeRead).toBe(0);
+    expect(afterReads).toBe(1);
+    expect(parseCount).toBe(0);
+    expect(adapter.state.toolCalls).toBe(calls);
+    expect(calls[0]).toBe(call);
+    expect(argumentsText).toBe(JSON.stringify({ input: `prefix\n${input}` }));
+    expect(adapter.toProviderResponse().output[0]).toMatchObject({
+      type: "custom_tool_call",
+      input: `prefix\n${input}`,
+    });
+  });
+
+  test.each([
+    "function_call",
+    "custom_tool_call",
+  ])("preserves %s snapshot replacement and empty partial-done fallback", (type) => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const item = {
+      id: "item_snapshot",
+      call_id: "call_snapshot",
+      type,
+      name: "tool",
+      ...(type === "function_call"
+        ? { arguments: "initial" }
+        : { input: "initial" }),
+    };
+    adapter.processChunk({
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item,
+    } as never);
+    const calls = adapter.state.toolCalls;
+    const call = calls[0];
+    const doneType =
+      type === "function_call"
+        ? "response.function_call_arguments.done"
+        : "response.custom_tool_call_input.done";
+    adapter.processChunk({
+      type: doneType,
+      item_id: item.id,
+      output_index: 0,
+      sequence_number: 2,
+      name: "tool",
+      ...(type === "function_call"
+        ? { arguments: "replacement" }
+        : { input: "replacement" }),
+    } as never);
+    expect(call.arguments).toBe(
+      type === "function_call"
+        ? "replacement"
+        : JSON.stringify({ input: "replacement" }),
+    );
+    adapter.processChunk({
+      type: "response.output_item.done",
+      output_index: 0,
+      sequence_number: 3,
+      item: {
+        ...item,
+        name: "",
+        ...(type === "function_call" ? { arguments: "" } : { input: "" }),
+      },
+    } as never);
+    expect(call.arguments).toBe(
+      type === "function_call"
+        ? "replacement"
+        : JSON.stringify({ input: "replacement" }),
+    );
+    // An argument/input done snapshot is authoritative, even when empty.
+    adapter.processChunk({
+      type: doneType,
+      item_id: item.id,
+      output_index: 0,
+      sequence_number: 4,
+      name: "tool",
+      ...(type === "function_call" ? { arguments: "" } : { input: "" }),
+    } as never);
+    expect(call.arguments).toBe(
+      type === "function_call" ? "" : JSON.stringify({ input: "" }),
+    );
+    adapter.processChunk({
+      type:
+        type === "function_call"
+          ? "response.function_call_arguments.delta"
+          : "response.custom_tool_call_input.delta",
+      item_id: item.id,
+      output_index: 0,
+      sequence_number: 5,
+      delta: "tail",
+    } as never);
+    expect(call.arguments).toBe(
+      type === "function_call" ? "tail" : JSON.stringify({ input: "tail" }),
+    );
+    expect(adapter.state.toolCalls).toBe(calls);
+    expect(calls[0]).toBe(call);
+  });
+
+  test("backfills only indexed frames and preserves extensions and duplicate item slots", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const unrelated = {
+      type: "response.output_item.added",
+      output_index: 0,
+      sequence_number: 1,
+      item: {
+        type: "function_call",
+        id: "item_unrelated",
+        call_id: "call_unrelated",
+        name: "other",
+        arguments: "{}",
+      },
+    };
+    adapter.processChunk(unrelated as never);
+    const readUnrelatedItem = vi.fn(() => unrelated.item);
+    // A traversal of unrelated held frames is a deterministic regression,
+    // without depending on timing or the engine's string representation.
+    adapter.state.rawToolCallEvents[0] = {
+      ...unrelated,
+      get item() {
+        return readUnrelatedItem();
+      },
+    };
+    const added = {
+      type: "response.output_item.added",
+      output_index: 1,
+      sequence_number: 2,
+      provider_event_extension: "event-bytes",
+      item: {
+        type: "function_call",
+        id: "item_late",
+        call_id: "call_late",
+        name: "",
+        arguments: ' { "bytes" : "\\u0042" } ',
+        provider_item_extension: { opaque: true },
+      },
+    };
+    adapter.processChunk(added as never);
+    const retained = adapter.state.rawToolCallEvents;
+    adapter.processChunk({
+      ...added,
+      type: "response.output_item.done",
+      sequence_number: 3,
+      item: {
+        ...added.item,
+        name: "read_file",
+        namespace: "functions",
+        arguments: "",
+      },
+    } as never);
+    expect(readUnrelatedItem).not.toHaveBeenCalled();
+    expect(retained[1]).toBe(added);
+    expect(added.item).not.toHaveProperty("namespace");
+    expect(adapter.state.rawToolCallEvents[1]).toMatchObject({
+      provider_event_extension: "event-bytes",
+      item: {
+        name: "read_file",
+        namespace: "functions",
+        arguments: added.item.arguments,
+        provider_item_extension: { opaque: true },
+      },
+    });
+    const slot = adapter.state.toolCalls[1];
+    adapter.processChunk({ ...added, sequence_number: 4 } as never);
+    expect(adapter.state.toolCalls).toHaveLength(2);
+    expect(adapter.state.toolCalls[1]).toBe(slot);
+    expect(slot).toMatchObject({
+      name: "read_file",
+      namespace: "functions",
+      arguments: added.item.arguments,
+    });
+  });
+
+  test("retains first-match custom-kind semantics for duplicate call IDs at release", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    for (const [index, type] of [
+      "custom_tool_call",
+      "function_call",
+    ].entries()) {
+      adapter.processChunk({
+        type: "response.output_item.added",
+        output_index: index,
+        sequence_number: index,
+        item: {
+          type,
+          id: `item_duplicate_${index}`,
+          call_id: "call_duplicate",
+          name: index === 0 ? "apply_patch" : "other",
+          ...(index === 0 ? { input: "patch" } : { arguments: "{}" }),
+        },
+      } as never);
+    }
+    expect(adapter.state.toolCalls.map((call) => call.name)).toEqual([
+      "apply_patch",
+      "other",
+    ]);
+    // The partial completion does not carry either call, so kind selection
+    // must use the first streamed duplicate rather than Map's last value.
+    adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 3,
+      response: {
+        id: "resp_partial_duplicates",
+        model: "test-model",
+        output: [
+          {
+            type: "reasoning",
+            id: "reasoning",
+            summary: [],
+            provider_extension: "opaque",
+          },
+        ],
+      },
+    } as never);
+    const frames = (
+      adapter.formatToolCallsSSE?.([
+        { id: "call_duplicate", name: "other", arguments: "{}" },
+      ]) ?? []
+    ).map(
+      (frame) =>
+        parseSse(frame) as {
+          type: string;
+          response?: { output: unknown[] };
+        },
+    );
+    expect(frames.map((frame) => frame.type)).toContain(
+      "response.function_call_arguments.delta",
+    );
+    expect(frames.map((frame) => frame.type)).not.toContain(
+      "response.custom_tool_call_input.delta",
+    );
+    expect(frames.at(-1)?.response?.output[0]).toMatchObject({
+      provider_extension: "opaque",
+    });
+  });
+
+  test("uses the first rewritten duplicate for kind and the last for completion replacement", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    const item = {
+      type: "custom_tool_call",
+      id: "item_duplicate",
+      call_id: "call_duplicate",
+      name: "apply_patch",
+      input: "original patch\r\n",
+      provider_extension: "opaque",
+    };
+    adapter.processChunk({
+      type: "response.completed",
+      sequence_number: 1,
+      response: { id: "resp_duplicates", model: "test-model", output: [item] },
+    } as never);
+    const frames = (
+      adapter.formatToolCallsSSE?.([
+        { id: item.call_id, name: "notice", arguments: "{}" },
+        {
+          id: item.call_id,
+          name: item.name,
+          arguments: JSON.stringify({ input: "original patch\r\n" }),
+        },
+      ]) ?? []
+    ).map((frame) => parseSse(frame) as { type: string });
+    expect(
+      frames.filter((frame) => frame.type === "response.output_item.added"),
+    ).toHaveLength(2);
+    expect(frames.map((frame) => frame.type)).not.toContain(
+      "response.custom_tool_call_input.delta",
+    );
+    expect(adapter.toProviderResponse().output).toEqual([item]);
+  });
+
+  test("discards custom slots and raw inputs when a hosted turn is withheld", () => {
+    const adapter = openAiResponsesAdapterFactory.createStreamAdapter();
+    adapter.withholdHostedToolCalls?.();
+    const chunks = [
+      {
+        type: "response.output_item.added",
+        output_index: 0,
+        sequence_number: 1,
+        item: {
+          id: "web_search",
+          type: "web_search_call",
+          status: "in_progress",
+        },
+      },
+      {
+        type: "response.output_item.added",
+        output_index: 1,
+        sequence_number: 2,
+        item: {
+          id: "item_patch",
+          call_id: "call_patch",
+          type: "custom_tool_call",
+          name: "apply_patch",
+          input: "withheld-",
+        },
+      },
+      {
+        type: "response.custom_tool_call_input.delta",
+        item_id: "item_patch",
+        output_index: 1,
+        sequence_number: 3,
+        delta: "raw-input",
+      },
+      {
+        type: "response.completed",
+        sequence_number: 4,
+        response: { id: "resp_held", model: "test-model", output: [] },
+      },
+    ];
+    for (const chunk of chunks) {
+      expect(adapter.processChunk(chunk as never).sseData).toBeNull();
+    }
+    const notice = { id: "web_search", name: "notice", arguments: "{}" };
+    const frames = adapter.formatHeldHostedToolCallsSSE?.([notice]) ?? [];
+    expect(JSON.stringify(frames)).not.toContain("withheld-");
+    expect(JSON.stringify(frames)).not.toContain("raw-input");
+    expect(adapter.state.toolCalls).toEqual([notice]);
+    expect(adapter.getRawToolCallEvents()).toEqual([]);
+    adapter.prepareResponseReplacement?.();
+    adapter.formatCompleteTextSSE("approved replacement");
+    expect(adapter.toProviderResponse().output).toEqual([
+      expect.objectContaining({
+        type: "message",
+        content: [expect.objectContaining({ text: "approved replacement" })],
+      }),
+    ]);
+  });
+});
+
 describe("OpenAiResponsesStreamAdapter hosted tool calls", () => {
   type Chunk = Parameters<
     ReturnType<

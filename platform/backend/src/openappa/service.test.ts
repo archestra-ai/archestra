@@ -105,6 +105,20 @@ const session = {
   session_id: "conversation",
 };
 
+// Existing cases exercise new-result/control behavior. Keep their readonly
+// lookup empty; completed-replay cases below configure the native boundary.
+function mockDispatch(implementation: (raw: string) => Promise<string>) {
+  native.dispatchHook.mockImplementation(async (raw: string) => {
+    if (JSON.parse(raw).event === "replay_completed_results") {
+      return JSON.stringify({
+        decision: "replay_completed_results",
+        results: [],
+      });
+    }
+    return implementation(raw);
+  });
+}
+
 beforeEach(async ({ makeOrganization }) => {
   organizationId = (await makeOrganization()).id;
   config.llmProxy.plugins = ["appa"];
@@ -135,7 +149,7 @@ beforeEach(async ({ makeOrganization }) => {
       result: { content: [{ type: "text", text: "[appa] Authorized." }] },
     }),
   );
-  native.dispatchHook.mockImplementation(async (raw: string) => {
+  mockDispatch(async (raw: string) => {
     const event = JSON.parse(raw);
     return JSON.stringify(
       event.event === "tool_result"
@@ -151,6 +165,509 @@ beforeEach(async ({ makeOrganization }) => {
 afterEach(() => {
   vi.restoreAllMocks();
   vi.clearAllMocks();
+});
+
+describe("native completed-result replay", () => {
+  const result = (id: string) => ({
+    id,
+    name: "read_file",
+    content: `client echo ${id}`,
+    isError: false,
+  });
+  const retained = (id: string, content = `retained ${id}`) => ({
+    tool_call_id: id,
+    decision: {
+      decision: "replace_output",
+      approved_output: content,
+      output_source: "runtime",
+      reason: "retained policy reason",
+    },
+  });
+
+  test("replays a completed run without per-result dispatch and preserves retained output", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "replay_completed_results") {
+        return JSON.stringify({
+          decision: "replay_completed_results",
+          results: event.tool_call_ids.map((id: string) => retained(id)),
+        });
+      }
+      if (event.event === "tool_result") throw new Error("must not reevaluate");
+      return JSON.stringify({ decision: "ack" });
+    });
+    const processed = await processProxyResults({
+      session,
+      results: [result("second"), result("first")],
+      canonicalize: (name) => name,
+    });
+    expect(processed.toolResultUpdates).toEqual({
+      second: {
+        content: "retained second",
+        outputSource: "runtime",
+        reason: "retained policy reason",
+      },
+      first: {
+        content: "retained first",
+        outputSource: "runtime",
+        reason: "retained policy reason",
+      },
+    });
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw)),
+    ).toEqual([
+      { ...session, event: "session_start" },
+      {
+        ...session,
+        event: "replay_completed_results",
+        tool_call_ids: ["second", "first"],
+      },
+    ]);
+  });
+
+  test("does not probe two known misses and refreshes only at the later completed candidate", async () => {
+    let newWork = false;
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "replay_completed_results") {
+        return JSON.stringify({
+          decision: "replay_completed_results",
+          results: event.tool_call_ids
+            .filter((id: string) => id.startsWith("old"))
+            .map((id: string) =>
+              retained(id, newWork ? "fresh retained bytes" : `retained ${id}`),
+            ),
+        });
+      }
+      if (event.event === "tool_result") {
+        await Promise.resolve();
+        newWork = true;
+        return JSON.stringify({
+          decision: "ack",
+          approved_output: `processed ${event.tool_call_id}`,
+          output_source: "tool",
+        });
+      }
+      return JSON.stringify({ decision: "ack" });
+    });
+    const processed = await processProxyResults({
+      session,
+      results: [
+        result("old-first"),
+        result("new"),
+        result("missing"),
+        result("old-last"),
+      ],
+      canonicalize: (name) => name,
+    });
+    expect(processed.toolResultUpdates["old-first"].content).toBe(
+      "retained old-first",
+    );
+    expect(processed.toolResultUpdates.new.content).toBe("processed new");
+    expect(processed.toolResultUpdates.missing.content).toBe(
+      "processed missing",
+    );
+    expect(processed.toolResultUpdates["old-last"].content).toBe(
+      "fresh retained bytes",
+    );
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const event = JSON.parse(raw);
+        return [event.event, event.tool_call_id ?? event.tool_call_ids];
+      }),
+    ).toEqual([
+      ["session_start", undefined],
+      ["replay_completed_results", ["old-first", "new", "missing", "old-last"]],
+      ["tool_result", "new"],
+      ["tool_result", "missing"],
+      ["replay_completed_results", ["old-last"]],
+    ]);
+  });
+
+  test.each([
+    256, 513,
+  ])("probes once per bounded window for %i all-new results", async (count) => {
+    const results = Array.from({ length: count }, (_, index) =>
+      result(`new-${index}`),
+    );
+    mockDispatch(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "tool_result"
+          ? {
+              decision: "ack",
+              approved_output: `processed ${event.tool_call_id}`,
+              output_source: "tool",
+            }
+          : { decision: "ack" },
+      );
+    });
+    const processed = await processProxyResults({
+      session,
+      results,
+      canonicalize: (name) => name,
+    });
+    expect(
+      Object.values(processed.toolResultUpdates).map(({ content }) => content),
+    ).toEqual(results.map(({ id }) => `processed ${id}`));
+    const expected: Array<[string, string | string[] | undefined]> = [
+      ["session_start", undefined],
+    ];
+    for (const [index, { id }] of results.entries()) {
+      if (index % 256 === 0) {
+        expected.push([
+          "replay_completed_results",
+          results.slice(index, index + 256).map(({ id }) => id),
+        ]);
+      }
+      expected.push(["tool_result", id]);
+    }
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const event = JSON.parse(raw);
+        return [event.event, event.tool_call_id ?? event.tool_call_ids];
+      }),
+    ).toEqual(expected);
+  });
+
+  test("remembers an empty refreshed window instead of probing every later miss", async () => {
+    let newWork = false;
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "replay_completed_results") {
+        return JSON.stringify({
+          decision: "replay_completed_results",
+          results: newWork ? [] : [retained("old-first"), retained("old-last")],
+        });
+      }
+      if (event.event === "tool_result") {
+        await Promise.resolve();
+        newWork = true;
+        return JSON.stringify({
+          decision: "ack",
+          approved_output: `processed ${event.tool_call_id}`,
+          output_source: "tool",
+        });
+      }
+      return JSON.stringify({ decision: "ack" });
+    });
+    const results = [
+      result("new"),
+      result("old-first"),
+      result("missing"),
+      result("old-last"),
+    ];
+    const processed = await processProxyResults({
+      session,
+      results,
+      canonicalize: (name) => name,
+    });
+    expect(
+      Object.values(processed.toolResultUpdates).map(({ content }) => content),
+    ).toEqual(results.map(({ id }) => `processed ${id}`));
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const event = JSON.parse(raw);
+        return [event.event, event.tool_call_id ?? event.tool_call_ids];
+      }),
+    ).toEqual([
+      ["session_start", undefined],
+      ["replay_completed_results", ["new", "old-first", "missing", "old-last"]],
+      ["tool_result", "new"],
+      ["replay_completed_results", ["old-first", "missing", "old-last"]],
+      ["tool_result", "old-first"],
+      ["tool_result", "missing"],
+      ["tool_result", "old-last"],
+    ]);
+  });
+
+  test("keeps the original window boundary when a late candidate requires refresh", async () => {
+    const results = Array.from({ length: 258 }, (_, index) =>
+      result(index === 254 || index === 256 ? `old-${index}` : `new-${index}`),
+    );
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "replay_completed_results"
+          ? {
+              decision: "replay_completed_results",
+              results: event.tool_call_ids
+                .filter((id: string) => id.startsWith("old"))
+                .map((id: string) => retained(id)),
+            }
+          : event.event === "tool_result"
+            ? {
+                decision: "ack",
+                approved_output: `processed ${event.tool_call_id}`,
+                output_source: "tool",
+              }
+            : { decision: "ack" },
+      );
+    });
+    const processed = await processProxyResults({
+      session,
+      results,
+      canonicalize: (name) => name,
+    });
+    expect(Object.keys(processed.toolResultUpdates)).toHaveLength(258);
+    expect(processed.toolResultUpdates["old-254"].content).toBe(
+      "retained old-254",
+    );
+    expect(processed.toolResultUpdates["old-256"].content).toBe(
+      "retained old-256",
+    );
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter((event) => event.event === "replay_completed_results")
+        .map((event) => event.tool_call_ids),
+    ).toEqual([
+      results.slice(0, 256).map(({ id }) => id),
+      ["old-254", "new-255"],
+      ["old-256", "new-257"],
+    ]);
+  });
+
+  test.each([
+    { misses: [] },
+    { misses: ["missing-first", "missing-second"] },
+  ])("control processing invalidates decisions without forgetting misses ($misses)", async ({
+    misses,
+  }) => {
+    const bytes = '{"outcome":"review_required","offer_id":"control-offer"}';
+    await AppaRewriteReplay.storeControlOutcome({
+      session,
+      toolCallId: "control",
+      outcome: "pending",
+      bytes,
+      encryptedChat: { kind: "none" },
+    });
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "replay_completed_results"
+          ? {
+              decision: "replay_completed_results",
+              results: event.tool_call_ids
+                .filter((id: string) => id.startsWith("old"))
+                .map((id: string) => retained(id)),
+            }
+          : event.event === "tool_result"
+            ? {
+                decision: "ack",
+                approved_output: `processed ${event.tool_call_id}`,
+                output_source: "tool",
+              }
+            : { decision: "ack" },
+      );
+    });
+    const processed = await processProxyResults({
+      session,
+      results: [
+        result("old-first"),
+        { ...result("control"), content: bytes },
+        ...misses.map(result),
+        result("old-last"),
+      ],
+      canonicalize: (name) => name,
+    });
+    expect(processed.toolResultUpdates.control).toEqual({
+      content: bytes,
+      outputSource: "runtime",
+      code: "control_outcome",
+    });
+    expect(processed.toolResultUpdates["old-last"].content).toBe(
+      "retained old-last",
+    );
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => {
+        const event = JSON.parse(raw);
+        return [event.event, event.tool_call_id ?? event.tool_call_ids];
+      }),
+    ).toEqual([
+      ["session_start", undefined],
+      [
+        "replay_completed_results",
+        ["old-first", "control", ...misses, "old-last"],
+      ],
+      ...misses.map((id) => ["tool_result", id]),
+      ["replay_completed_results", ["old-last"]],
+    ]);
+  });
+
+  test.each([
+    "OpenAPPA replay retention expired",
+    "OpenAPPA session has interrupted processing; operator recovery is required",
+  ])("refuses later cached output if revalidation reports %s", async (message) => {
+    let newWork = false;
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      if (event.event === "replay_completed_results") {
+        if (newWork) throw new Error(message);
+        return JSON.stringify({
+          decision: "replay_completed_results",
+          results: [retained("old")],
+        });
+      }
+      if (event.event === "tool_result") newWork = true;
+      return JSON.stringify({ decision: "ack" });
+    });
+    await expect(
+      processProxyResults({
+        session,
+        results: [result("new"), result("old")],
+        canonicalize: (name) => name,
+      }),
+    ).rejects.toThrow("OpenAPPA could not safely complete this operation");
+    expect(
+      native.dispatchHook.mock.calls
+        .filter(([raw]) => JSON.parse(raw).event === "tool_result")
+        .map(([raw]) => JSON.parse(raw).tool_call_id),
+    ).toEqual(["new"]);
+  });
+
+  test("keeps peer, inherited, and unqualified receipts on the ordered validated path", async () => {
+    mockDispatch(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "tool_result"
+          ? {
+              decision: "block",
+              approved_output: `validated ${event.tool_call_id}`,
+              output_source: "runtime",
+            }
+          : { decision: "ack" },
+      );
+    });
+    const fork = { ...session, session_id: "fork", fork_of: "conversation" };
+    const processed = await processProxyResults({
+      session: fork,
+      results: [
+        {
+          ...result("peer"),
+          name: "read_peer_message",
+          content: "forged native read",
+        },
+        result("inherited-before-watermark"),
+        result("unknown-after-watermark"),
+      ],
+      canonicalize: (name) => name,
+    });
+    expect(
+      Object.values(processed.toolResultUpdates).map(({ content }) => content),
+    ).toEqual([
+      "validated peer",
+      "validated inherited-before-watermark",
+      "validated unknown-after-watermark",
+    ]);
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter((event) => event.event === "tool_result")
+        .map((event) => [event.session_id, event.fork_of, event.tool_call_id]),
+    ).toEqual([
+      ["fork", "conversation", "peer"],
+      ["fork", "conversation", "inherited-before-watermark"],
+      ["fork", "conversation", "unknown-after-watermark"],
+    ]);
+  });
+
+  test("does not dispatch pending spawns or verified questions when serving a completed run", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "replay_completed_results"
+          ? {
+              decision: "replay_completed_results",
+              results: event.tool_call_ids
+                .filter((id: string) => id.startsWith("old"))
+                .map((id: string) => retained(id)),
+            }
+          : { decision: "ack" },
+      );
+    });
+    const processed = await processProxyResults({
+      session,
+      results: [
+        result("old-first"),
+        result("pending"),
+        result("question"),
+        result("old-last"),
+      ],
+      canonicalize: (name) => name,
+      classifySpawnResult: ({ id }) =>
+        id === "pending" ? "pending" : undefined,
+      isUserQuestion: ({ id }) => id === "question",
+    });
+    expect(Object.keys(processed.toolResultUpdates)).toEqual([
+      "old-first",
+      "old-last",
+    ]);
+    expect(
+      native.dispatchHook.mock.calls.map(([raw]) => JSON.parse(raw).event),
+    ).toEqual(["session_start", "replay_completed_results"]);
+  });
+
+  test("bounds long completed histories without dropping results", async () => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "replay_completed_results"
+          ? {
+              decision: "replay_completed_results",
+              results: event.tool_call_ids.map((id: string) => retained(id)),
+            }
+          : { decision: "ack" },
+      );
+    });
+    const processed = await processProxyResults({
+      session,
+      results: Array.from({ length: 257 }, (_, index) =>
+        result(`old-${index}`),
+      ),
+      canonicalize: (name) => name,
+    });
+    expect(Object.keys(processed.toolResultUpdates)).toHaveLength(257);
+    expect(
+      native.dispatchHook.mock.calls
+        .map(([raw]) => JSON.parse(raw))
+        .filter((event) => event.event === "replay_completed_results")
+        .map((event) => event.tool_call_ids.length),
+    ).toEqual([256, 1]);
+  });
+
+  test.each([
+    [retained("foreign-id")],
+    [retained("second"), retained("first")],
+    [{ tool_call_id: "first", decision: { decision: "ack" } }],
+    [
+      {
+        tool_call_id: "first",
+        decision: { decision: "unknown", approved_output: "unsafe" },
+      },
+    ],
+  ])("fails closed on an unrelated, reordered, or unqualified native batch %#", async (...receipts) => {
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      return JSON.stringify(
+        event.event === "replay_completed_results"
+          ? { decision: "replay_completed_results", results: receipts }
+          : { decision: "ack" },
+      );
+    });
+    await expect(
+      processProxyResults({
+        session,
+        results: [result("first"), result("second")],
+        canonicalize: (name) => name,
+      }),
+    ).rejects.toThrow("OpenAPPA could not safely complete this operation");
+    expect(
+      native.dispatchHook.mock.calls.some(
+        ([raw]) => JSON.parse(raw).event === "tool_result",
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("APPA feature boundary", () => {
@@ -986,7 +1503,7 @@ describe("APPA feature boundary", () => {
 
     beforeEach(() => {
       // The runtime released no call under these ids.
-      native.dispatchHook.mockImplementation(async (raw: string) => {
+      mockDispatch(async (raw: string) => {
         const event = JSON.parse(raw);
         return JSON.stringify(
           event.event === "tool_result"
@@ -1096,7 +1613,7 @@ describe("APPA feature boundary", () => {
     });
 
     test("keeps the runtime's answer for a remedy the gateway ran", async () => {
-      native.dispatchHook.mockImplementation(async (raw: string) => {
+      mockDispatch(async (raw: string) => {
         const event = JSON.parse(raw);
         return JSON.stringify(
           event.event === "tool_result"
@@ -1156,7 +1673,7 @@ describe("APPA feature boundary", () => {
           result: { content: [{ type: "text", text }] },
         });
       });
-      native.dispatchHook.mockImplementation(async (raw: string) => {
+      mockDispatch(async (raw: string) => {
         const event = JSON.parse(raw);
         return JSON.stringify(
           event.event === "tool_result"
@@ -1633,7 +2150,7 @@ describe("APPA feature boundary", () => {
       content,
       isError: false,
     };
-    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    mockDispatch(async () => JSON.stringify({ decision: "ack" }));
     const result = await processProxyResults({
       session,
       canonicalize: (name) => name,
@@ -1657,7 +2174,7 @@ describe("APPA feature boundary", () => {
   });
 
   test("reports a failed spawn launch so the runtime closes its prepared fork", async () => {
-    native.dispatchHook.mockResolvedValue(JSON.stringify({ decision: "ack" }));
+    mockDispatch(async () => JSON.stringify({ decision: "ack" }));
     await processProxyResults({
       session,
       canonicalize: (name) => name,
@@ -2381,6 +2898,11 @@ describe("APPA feature boundary", () => {
       { ...session, event: "session_start" },
       {
         ...session,
+        event: "replay_completed_results",
+        tool_call_ids: ["call"],
+      },
+      {
+        ...session,
         event: "tool_result",
         tool_call_id: "call",
         output: "RAW RESULT",
@@ -2427,7 +2949,7 @@ describe("APPA feature boundary", () => {
   });
 
   test("preserves an explicit native unknown-control ruling without inspecting its text", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
+    mockDispatch(async (raw: string) => {
       const event = JSON.parse(raw);
       return JSON.stringify(
         event.event === "tool_result" && event.tool_call_id === "remedy"
@@ -2478,7 +3000,7 @@ describe("APPA feature boundary", () => {
     });
   });
   test("accepts mcp_result decision from native runtime for control tool results", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
+    mockDispatch(async (raw: string) => {
       const event = JSON.parse(raw);
       return JSON.stringify(
         event.event === "tool_result" && event.tool_call_id === "remedy"
@@ -2512,7 +3034,7 @@ describe("APPA feature boundary", () => {
     });
   });
   test("handles unreleased tool denials returning deny_call with approved_output (chat bug reproduction)", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
+    mockDispatch(async (raw: string) => {
       const event = JSON.parse(raw);
       return JSON.stringify(
         event.event === "tool_result" && event.tool_call_id === "denied_call"
@@ -2546,7 +3068,7 @@ describe("APPA feature boundary", () => {
     });
   });
   test("handles block decision falling back to reason or feedback when approved_output is absent", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
+    mockDispatch(async (raw: string) => {
       const event = JSON.parse(raw);
       return JSON.stringify(
         event.event === "tool_result" && event.tool_call_id === "blocked_call"
@@ -2576,7 +3098,7 @@ describe("APPA feature boundary", () => {
     });
   });
   test("handles mcp_result without approved_output, extracting text from result.content blocks", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
+    mockDispatch(async (raw: string) => {
       const event = JSON.parse(raw);
       return JSON.stringify(
         event.event === "tool_result" && event.tool_call_id === "mcp_call"
@@ -2612,7 +3134,7 @@ describe("APPA feature boundary", () => {
     });
   });
   test("handles deliver_value, child_return, and refuse decisions", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
+    mockDispatch(async (raw: string) => {
       const event = JSON.parse(raw);
       if (event.tool_call_id === "deliver_call") {
         return JSON.stringify({
@@ -2664,7 +3186,7 @@ describe("APPA feature boundary", () => {
     });
   });
   test("fails closed with 503 when encountering an unknown decision type", async () => {
-    native.dispatchHook.mockImplementation(async (raw: string) => {
+    mockDispatch(async (raw: string) => {
       const event = JSON.parse(raw);
       if (event.event === "tool_result") {
         return JSON.stringify({

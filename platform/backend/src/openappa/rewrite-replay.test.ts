@@ -422,6 +422,61 @@ describe("AppaRewriteReplay", () => {
     });
   });
 
+  test("keeps ordered delegation restoration when one removal exposes another span", async () => {
+    await withSecret(async () => {
+      const session = await nativeSession();
+      const body = anthropicBody();
+      const replay = await open(session, body, "anthropic:messages");
+      await replay.prepareRequest(body);
+      const firstMarker =
+        "\n\n[appa] delegated trajectory appa2-YQ.0000000000000000000000000000000000000000 \u2014 child of root.";
+      const secondMarker =
+        "\n\n[appa] delegated trajectory appa2-Yg.1111111111111111111111111111111111111111 \u2014 child of root.";
+      const source = {
+        id: "msg-delegation",
+        content: [
+          {
+            type: "tool_use",
+            id: "call-a",
+            name: "spawn",
+            input: { prompt: "middle" },
+          },
+          {
+            type: "tool_use",
+            id: "call-b",
+            name: "spawn",
+            input: { prompt: "prefixmiddle" },
+          },
+        ],
+      };
+      const rewritten = {
+        ...source,
+        content: [
+          { ...source.content[0], input: { prompt: `middle${firstMarker}` } },
+          {
+            ...source.content[1],
+            input: { prompt: `prefixmiddle${secondMarker}` },
+          },
+        ],
+      };
+      await replay.recordResponse({
+        source: replay.captureResponse(source),
+        response: rewritten,
+        emitted: [{ id: "call-a" }, { id: "call-b" }],
+        callsOnly: true,
+      });
+      const echo = anthropicBody();
+      echo.messages = [
+        { role: "user", content: `prefixmiddle${firstMarker}${secondMarker}` },
+      ];
+      const again = await open(session, echo, "anthropic:messages");
+      await again.restoreTextEchoes({
+        delegationCallIds: ["call-a", "call-b"],
+      });
+      expect(echo.messages[0].content).toBe("prefixmiddle");
+    });
+  });
+
   test("records the full wrapped source text, including newlines", async () => {
     await withSecret(async () => {
       const session = await nativeSession();
@@ -964,12 +1019,18 @@ describe("AppaRewriteReplay", () => {
     });
   });
 
-  test("populates the byte-bounded ciphertext cache once per batch", async () => {
+  test("populates ciphertext once per batch and keeps inverses warm across receipt lookup", async () => {
     await withSecret(async () => {
       const session = await nativeSession();
       const body = anthropicBody();
       const replay = await open(session, body, "anthropic:messages");
       await replay.prepareRequest(body);
+      await AppaRewriteReplay.storeControlOutcome({
+        session: session.session,
+        toolCallId: "control-cache-check",
+        outcome: "pending",
+        bytes: "pending-control-outcome",
+      });
       const calls = Array.from({ length: 256 }, (_, index) =>
         toolUse(`call_${index}`, { q: index }),
       );
@@ -1006,6 +1067,15 @@ describe("AppaRewriteReplay", () => {
 
         get.mockClear();
         load.mockClear();
+        const receipts = await AppaRewriteReplay.readControlReceipts({
+          session: session.session,
+          toolCallIds: ["call_0", "control-cache-check"],
+        });
+        expect(receipts.has("call_0")).toBe(false);
+        expect(receipts.get("control-cache-check")).toEqual({
+          outcome: "pending",
+          bytes: "pending-control-outcome",
+        });
         const echo = echoBody(toolUse("call_0", { q: 0 }));
         const warm = await open(session, echo, "anthropic:messages");
         const restored = await warm.prepareRequest(echo);
@@ -1046,7 +1116,7 @@ describe("AppaRewriteReplay", () => {
       await replay.prepareRequest(body);
       let now = Date.now();
       const clock = vi.spyOn(Date, "now").mockImplementation(() => now);
-      const load = vi.spyOn(OpenAppaRewriteModel, "loadBatch");
+      const load = vi.spyOn(OpenAppaRewriteModel, "loadLineageBatch");
       try {
         const old = appendSessionReceipt("old", "ABC-DEFG");
         await replay.recordResponse({
@@ -1084,7 +1154,9 @@ describe("AppaRewriteReplay", () => {
           await open(session, expiredEcho, "anthropic:messages")
         ).restoreTextEchoes();
         expect(expiredEcho.messages[1].content).toBe("old");
-        expect(load).toHaveBeenCalledTimes(1);
+        expect(
+          load.mock.calls.filter(([params]) => params.keys.length > 0),
+        ).toHaveLength(1);
 
         load.mockClear();
         const warmEcho = makeEcho(recent);
@@ -1092,7 +1164,9 @@ describe("AppaRewriteReplay", () => {
           await open(session, warmEcho, "anthropic:messages")
         ).restoreTextEchoes();
         expect(warmEcho.messages[1].content).toBe("recent");
-        expect(load).not.toHaveBeenCalled();
+        expect(
+          load.mock.calls.filter(([params]) => params.keys.length > 0),
+        ).toHaveLength(0);
       } finally {
         load.mockRestore();
         clock.mockRestore();
@@ -1840,6 +1914,42 @@ describe("control outcome receipts", () => {
           ),
         );
       expect(group.status).toBe("expired");
+    });
+  });
+
+  test("rechecks durable control bytes instead of serving a cached receipt", async () => {
+    await withSecret(async () => {
+      const session = await nativeSession();
+      await AppaRewriteReplay.storeControlOutcome({
+        session: session.session,
+        toolCallId: "control-durable-check",
+        outcome: "pending",
+        bytes: MARKER,
+      });
+      const live = await open(session, anthropicBody(), "anthropic:messages");
+      expect(
+        (await live.readControlReceipts(["control-durable-check"])).get(
+          "control-durable-check",
+        )?.bytes,
+      ).toBe(MARKER);
+      await db
+        .update(schema.openappaRewritePairsTable)
+        .set({ original: Buffer.from("corrupt-control-ciphertext") })
+        .where(
+          eq(
+            schema.openappaRewritePairsTable.organizationId,
+            session.organizationId,
+          ),
+        );
+      expect(await live.readControlReceipts(["control-durable-check"])).toEqual(
+        new Map(),
+      );
+      expect(
+        await AppaRewriteReplay.readControlReceipts({
+          session: session.session,
+          toolCallIds: ["control-durable-check"],
+        }),
+      ).toEqual(new Map());
     });
   });
 

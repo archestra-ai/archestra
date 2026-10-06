@@ -17,7 +17,8 @@ export class RewriteStreamCapture {
 
   private readonly original: Assembler;
   private readonly client: Assembler;
-  private clientRemainder = "";
+  private readonly providerFrames = createFrameState();
+  private readonly clientFrames = createFrameState();
   private retained = 0;
 
   constructor(family: RewriteStreamFamily) {
@@ -35,41 +36,118 @@ export class RewriteStreamCapture {
 
   observeProviderChunk(chunk: unknown): void {
     if (typeof chunk === "string" || chunk instanceof Uint8Array) {
-      this.ingestFrames(this.original, decode(chunk));
+      this.ingestFrames(this.original, chunk);
       return;
     }
     this.original.ingest(chunk);
   }
 
   observeClientEvent(data: string | Uint8Array): void {
-    this.ingestFrames(this.client, decode(data));
+    this.ingestFrames(this.client, data);
   }
 
   originalResponse(): unknown {
+    rejectTruncatedFrames(this.providerFrames);
     return this.original.snapshot();
   }
 
   clientResponse(): unknown {
+    rejectTruncatedFrames(this.clientFrames);
     return this.client.snapshot();
   }
 
-  private ingestFrames(assembler: Assembler, text: string): void {
-    const source =
-      assembler === this.client ? this.clientRemainder + text : text;
-    if (Buffer.byteLength(source, "utf8") > RETENTION_LIMIT) {
+  private ingestFrames(assembler: Assembler, data: string | Uint8Array): void {
+    const frames =
+      assembler === this.client ? this.clientFrames : this.providerFrames;
+    const text = this.decode(frames, data);
+    if (text.length === 0) return;
+    // Scan only the new text and the suffix that can straddle an SSE delimiter.
+    const source = frames.tail + text;
+    const sourceBytes =
+      frames.bytes +
+      Buffer.byteLength(text, "utf8") -
+      (joinsSurrogates(frames.tail.charCodeAt(frames.tail.length - 1), text)
+        ? 2
+        : 0);
+    if (sourceBytes > RETENTION_LIMIT) {
       throw new RewriteStreamError("Rewrite stream retention limit exceeded");
     }
-    const frames = splitFrames(source);
-    if (assembler === this.client) this.clientRemainder = frames.rest;
-    for (const frame of frames.events) {
-      const event = parseSseFrame(frame);
-      if (event === undefined) continue;
-      assembler.ingest(event);
+    const delimiter = /\r?\n\r?\n/g;
+    let start = 0;
+    let match = delimiter.exec(source);
+    if (!match) {
+      this.retain(sourceBytes - frames.bytes);
+      const prefix = source.slice(0, Math.max(0, source.length - 3));
+      if (prefix.length > 0) frames.fragments.push(prefix);
+      frames.tail = source.slice(-3);
+      frames.bytes = sourceBytes;
+      return;
     }
+    this.retain(-frames.bytes);
+    frames.bytes = 0;
+    const prefix = frames.fragments.join("");
+    frames.fragments = [];
+    frames.tail = "";
+    while (match) {
+      const frame =
+        (start === 0 ? prefix : "") + source.slice(start, match.index);
+      // SSE permits one initial BOM; keep all subsequent Unicode unchanged.
+      const event = parseSseFrame(
+        frames.firstFrame && frame.startsWith("\ufeff")
+          ? frame.slice(1)
+          : frame,
+      );
+      frames.firstFrame = false;
+      start = delimiter.lastIndex;
+      if (event !== undefined) assembler.ingest(event);
+      match = delimiter.exec(source);
+    }
+    const rest = source.slice(start);
+    const bytes = Buffer.byteLength(rest, "utf8");
+    this.retain(bytes);
+    if (rest.length > 3) frames.fragments.push(rest.slice(0, -3));
+    frames.tail = rest.slice(-3);
+    frames.bytes = bytes;
+  }
+
+  private decode(frames: FrameState, data: string | Uint8Array): string {
+    if (frames.failure) throw frames.failure;
+    if (typeof data === "string") {
+      // Strings are already decoded: never encode/repair their surrogate halves
+      // or splice them into an unfinished byte sequence.
+      if (data.length > 0 && frames.pendingBytes > 0) {
+        frames.failure = new RewriteStreamError("Invalid rewrite stream UTF-8");
+        throw frames.failure;
+      }
+      return data;
+    }
+    let text: string;
+    try {
+      text = frames.decoder.decode(data, { stream: true });
+    } catch {
+      frames.failure = new RewriteStreamError("Invalid rewrite stream UTF-8");
+      throw frames.failure;
+    }
+    // With fatal decoding and BOM preservation, emitted UTF-8 bytes plus the
+    // decoder's (at most three) pending bytes exactly equal the input bytes.
+    const pendingBytes =
+      frames.pendingBytes + data.byteLength - Buffer.byteLength(text, "utf8");
+    try {
+      this.retain(pendingBytes - frames.pendingBytes);
+    } catch (error) {
+      // The decoder cannot be rewound if its new pending bytes exceed the cap.
+      frames.failure = new RewriteStreamError(
+        "Rewrite stream retention limit exceeded",
+      );
+      throw error;
+    }
+    frames.pendingBytes = pendingBytes;
+    return text;
   }
 
   private retain(bytes: number): void {
-    if (!Number.isSafeInteger(bytes) || bytes < 0) {
+    // Replacements adjust retained JSON bytes; appends charge only the new suffix.
+    if (!Number.isSafeInteger(bytes) || this.retained + bytes < 0) {
       throw new RewriteStreamError("Rewrite stream retention limit exceeded");
     }
     if (this.retained + bytes > RETENTION_LIMIT) {
@@ -81,6 +159,29 @@ export class RewriteStreamCapture {
 
 type JsonRecord = Record<string, unknown>;
 type Retain = (bytes: number) => void;
+type FieldTails = WeakMap<object, Map<string, number>>;
+
+type FrameState = {
+  decoder: TextDecoder;
+  pendingBytes: number;
+  failure: RewriteStreamError | undefined;
+  fragments: string[];
+  tail: string;
+  bytes: number;
+  firstFrame: boolean;
+};
+
+function createFrameState(): FrameState {
+  return {
+    decoder: new TextDecoder("utf-8", { fatal: true, ignoreBOM: true }),
+    pendingBytes: 0,
+    failure: undefined,
+    fragments: [],
+    tail: "",
+    bytes: 0,
+    firstFrame: true,
+  };
+}
 
 interface Assembler {
   ingest(event: unknown): void;
@@ -99,9 +200,13 @@ function createAssembler(
 class AnthropicAssembler implements Assembler {
   private readonly blocks = new Map<number, JsonRecord>();
   private readonly partialJson = new Map<number, string>();
+  private readonly partialJsonTails = new Map<number, number>();
+  private readonly fieldTails: FieldTails = new WeakMap();
   private responseId: string | undefined;
 
-  constructor(private readonly retain: Retain) {}
+  constructor(private readonly retain: Retain) {
+    retain(jsonBytes({ content: [] }));
+  }
 
   ingest(event: unknown): void {
     const record = asRecord(event);
@@ -152,8 +257,19 @@ class AnthropicAssembler implements Assembler {
       return;
     }
     const copy = cloneRecord(block);
-    this.retain(jsonBytes(copy));
+    const previous = this.blocks.get(index);
+    const partial = this.partialJson.get(index);
+    this.retain(
+      jsonBytes(copy) -
+        (previous ? jsonBytes(previous) : 0) +
+        (previous ? 0 : jsonBytes(index) + 1) +
+        (copy.type === "tool_use" ? jsonBytes([index, ""]) : 0) -
+        (partial === undefined ? 0 : jsonBytes([index, partial])),
+    );
+    rememberFieldTails(copy, this.fieldTails);
     this.blocks.set(index, copy);
+    this.partialJson.delete(index);
+    this.partialJsonTails.delete(index);
     if (copy.type === "tool_use") this.partialJson.set(index, "");
   }
 
@@ -168,9 +284,12 @@ class AnthropicAssembler implements Assembler {
     if (!block) {
       if (delta.type === "input_json_delta") failClosed();
       if (delta.type === "text_delta" && typeof delta.text === "string") {
-        this.blocks.set(index, { type: "text", text: "" });
+        this.startBlock({ index, content_block: { type: "text", text: "" } });
       } else if (delta.type === "thinking_delta") {
-        this.blocks.set(index, { type: "thinking", thinking: "" });
+        this.startBlock({
+          index,
+          content_block: { type: "thinking", thinking: "" },
+        });
       } else {
         return;
       }
@@ -178,31 +297,54 @@ class AnthropicAssembler implements Assembler {
     const target = this.blocks.get(index);
     if (!target || !delta) return;
     if (delta.type === "text_delta" && typeof delta.text === "string") {
-      this.retain(Buffer.byteLength(delta.text, "utf8"));
-      target.text = `${textOf(target.text)}${delta.text}`;
+      appendRetainedField({
+        target,
+        key: "text",
+        delta: delta.text,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
       return;
     }
     if (delta.type === "thinking_delta" && typeof delta.thinking === "string") {
-      this.retain(Buffer.byteLength(delta.thinking, "utf8"));
-      target.thinking = `${textOf(target.thinking)}${delta.thinking}`;
+      appendRetainedField({
+        target,
+        key: "thinking",
+        delta: delta.thinking,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
       return;
     }
     if (
       delta.type === "signature_delta" &&
       typeof delta.signature === "string"
     ) {
-      this.retain(Buffer.byteLength(delta.signature, "utf8"));
-      target.signature = `${textOf(target.signature)}${delta.signature}`;
+      appendRetainedField({
+        target,
+        key: "signature",
+        delta: delta.signature,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
       return;
     }
     if (delta.type === "input_json_delta") {
       if (target.type !== "tool_use") return;
       if (typeof delta.partial_json !== "string") failClosed();
-      this.retain(Buffer.byteLength(delta.partial_json, "utf8"));
+      this.retain(
+        appendedBytes(this.partialJsonTails.get(index), delta.partial_json),
+      );
       this.partialJson.set(
         index,
         `${this.partialJson.get(index) ?? ""}${delta.partial_json}`,
       );
+      if (delta.partial_json.length > 0) {
+        this.partialJsonTails.set(
+          index,
+          delta.partial_json.charCodeAt(delta.partial_json.length - 1),
+        );
+      }
     }
   }
 
@@ -229,9 +371,12 @@ class AnthropicAssembler implements Assembler {
 
 class ChatAssembler implements Assembler {
   private readonly choices = new Map<number, ChatChoice>();
+  private readonly fieldTails: FieldTails = new WeakMap();
   private responseId: string | undefined;
 
-  constructor(private readonly retain: Retain) {}
+  constructor(private readonly retain: Retain) {
+    retain(jsonBytes({ choices: [] }));
+  }
 
   ingest(event: unknown): void {
     if (event === "[DONE]") return;
@@ -255,11 +400,22 @@ class ChatAssembler implements Assembler {
       if (!delta) continue;
       const current = this.choice(index);
       if (typeof delta.role === "string" && delta.role.length > 0) {
-        current.role = delta.role;
+        setRetainedField({
+          target: current,
+          key: "role",
+          value: delta.role,
+          retain: this.retain,
+          tails: this.fieldTails,
+        });
       }
       if (typeof delta.content === "string") {
-        this.retain(Buffer.byteLength(delta.content, "utf8"));
-        current.content = `${current.content ?? ""}${delta.content}`;
+        appendRetainedField({
+          target: current,
+          key: "content",
+          delta: delta.content,
+          retain: this.retain,
+          tails: this.fieldTails,
+        });
       }
       this.absorbReasoning(current, delta);
       if (Array.isArray(delta.tool_calls)) {
@@ -303,6 +459,7 @@ class ChatAssembler implements Assembler {
       content: null as string | null,
       toolCalls: new Map<number, JsonRecord>(),
     };
+    this.retain(jsonBytes(created) + jsonBytes(index) + 1);
     this.choices.set(index, created);
     return created;
   }
@@ -310,8 +467,13 @@ class ChatAssembler implements Assembler {
   private absorbReasoning(choice: ChatChoice, delta: JsonRecord): void {
     const reasoning = delta.reasoning_content ?? delta.reasoning;
     if (typeof reasoning !== "string" || reasoning.length === 0) return;
-    this.retain(Buffer.byteLength(reasoning, "utf8"));
-    choice.reasoningContent = `${choice.reasoningContent ?? ""}${reasoning}`;
+    appendRetainedField({
+      target: choice,
+      key: "reasoningContent",
+      delta: reasoning,
+      retain: this.retain,
+      tails: this.fieldTails,
+    });
   }
 
   private mergeCall(choice: ChatChoice, value: unknown): void {
@@ -322,37 +484,64 @@ class ChatAssembler implements Assembler {
     }
     const call = choice.toolCalls.get(delta.index) ?? {};
     if (!choice.toolCalls.has(delta.index)) {
+      this.retain(jsonBytes(call) + jsonBytes(delta.index) + 1);
       choice.toolCalls.set(delta.index, call);
     }
     for (const [key, field] of Object.entries(delta)) {
       if (key === "index" || key === "function") continue;
       if (typeof field === "string") {
         if (field.length === 0) continue;
-        this.retain(Buffer.byteLength(field, "utf8"));
         if (key === "id" && typeof call.id === "string" && call.id.length > 0) {
           continue;
         }
-      } else {
-        this.retain(jsonBytes(field));
       }
-      call[key] = cloneValue(field);
+      setRetainedField({
+        target: call,
+        key,
+        value: cloneValue(field),
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
     }
     const fn = asRecord(delta.function);
     if (!fn) return;
     const target = asRecord(call.function) ?? {};
-    call.function = target;
+    if (target !== call.function) {
+      setRetainedField({
+        target: call,
+        key: "function",
+        value: target,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
+    }
     if (typeof fn.name === "string" && fn.name.length > 0) {
-      this.retain(Buffer.byteLength(fn.name, "utf8"));
-      target.name = `${textOf(target.name)}${fn.name}`;
+      appendRetainedField({
+        target,
+        key: "name",
+        delta: fn.name,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
     }
     if (typeof fn.arguments === "string") {
-      this.retain(Buffer.byteLength(fn.arguments, "utf8"));
-      target.arguments = `${textOf(target.arguments)}${fn.arguments}`;
+      appendRetainedField({
+        target,
+        key: "arguments",
+        delta: fn.arguments,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
     }
     for (const [key, field] of Object.entries(fn)) {
       if (key === "name" || key === "arguments") continue;
-      this.retain(jsonBytes(field));
-      target[key] = cloneValue(field);
+      setRetainedField({
+        target,
+        key,
+        value: cloneValue(field),
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
     }
   }
 }
@@ -367,10 +556,13 @@ type ChatChoice = {
 class ResponsesAssembler implements Assembler {
   private readonly items = new Map<number, JsonRecord>();
   private readonly indexByItemId = new Map<string, number>();
+  private fieldTails: FieldTails = new WeakMap();
   private completed: JsonRecord[] | undefined;
   private responseId: string | undefined;
 
-  constructor(private readonly retain: Retain) {}
+  constructor(private readonly retain: Retain) {
+    retain(jsonBytes({ output: [] }));
+  }
 
   ingest(event: unknown): void {
     const record = asRecord(event);
@@ -452,9 +644,8 @@ class ResponsesAssembler implements Assembler {
       return;
     }
     const copy = cloneRecord(item);
-    this.retain(jsonBytes(copy));
+    const previous = this.items.get(index);
     if (event.type === "response.output_item.done") {
-      const previous = this.items.get(index);
       if (previous && copy.arguments === undefined && previous.arguments) {
         copy.arguments = previous.arguments;
       }
@@ -462,14 +653,34 @@ class ResponsesAssembler implements Assembler {
         copy.input = previous.input;
       }
     } else if (this.items.has(index)) {
-      const previous = this.items.get(index);
       if (previous?.arguments && !copy.arguments) {
         copy.arguments = previous.arguments;
       }
     }
+    this.retain(
+      jsonBytes(copy) -
+        (previous ? jsonBytes(previous) : 0) +
+        (previous ? 0 : jsonBytes(index) + 1),
+    );
+    rememberFieldTails(copy, this.fieldTails);
+    if (Array.isArray(copy.content)) {
+      for (const part of copy.content) {
+        const record = asRecord(part);
+        if (record) rememberFieldTails(record, this.fieldTails);
+      }
+    }
     this.items.set(index, copy);
+    const previousId = previous?.id ?? previous?.call_id;
     const itemId = copy.id ?? copy.call_id;
-    if (typeof itemId === "string") this.indexByItemId.set(itemId, index);
+    if (
+      previousId !== itemId &&
+      typeof previousId === "string" &&
+      this.indexByItemId.get(previousId) === index
+    ) {
+      this.retain(-jsonBytes([previousId, index]));
+      this.indexByItemId.delete(previousId);
+    }
+    this.noteItemId(itemId, index);
   }
 
   private argumentEvent(event: JsonRecord): void {
@@ -477,26 +688,54 @@ class ResponsesAssembler implements Assembler {
     if (!item) failClosed();
     if (event.type === "response.function_call_arguments.delta") {
       if (typeof event.delta !== "string") failClosed();
-      this.retain(Buffer.byteLength(event.delta, "utf8"));
-      item.arguments = `${textOf(item.arguments)}${event.delta}`;
+      appendRetainedField({
+        target: item,
+        key: "arguments",
+        delta: event.delta,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
       return;
     }
     if (event.type === "response.function_call_arguments.done") {
       if (typeof event.arguments !== "string") failClosed();
-      this.retain(Buffer.byteLength(event.arguments, "utf8"));
-      item.arguments = event.arguments;
-      if (typeof event.name === "string" && !item.name) item.name = event.name;
+      setRetainedField({
+        target: item,
+        key: "arguments",
+        value: event.arguments,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
+      if (typeof event.name === "string" && !item.name) {
+        setRetainedField({
+          target: item,
+          key: "name",
+          value: event.name,
+          retain: this.retain,
+          tails: this.fieldTails,
+        });
+      }
       return;
     }
     if (event.type === "response.custom_tool_call_input.delta") {
       if (typeof event.delta !== "string") failClosed();
-      this.retain(Buffer.byteLength(event.delta, "utf8"));
-      item.input = `${textOf(item.input)}${event.delta}`;
+      appendRetainedField({
+        target: item,
+        key: "input",
+        delta: event.delta,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
       return;
     }
     if (typeof event.input !== "string") failClosed();
-    this.retain(Buffer.byteLength(event.input, "utf8"));
-    item.input = event.input;
+    setRetainedField({
+      target: item,
+      key: "input",
+      value: event.input,
+      retain: this.retain,
+      tails: this.fieldTails,
+    });
   }
 
   private textEvent(event: JsonRecord): void {
@@ -504,46 +743,84 @@ class ResponsesAssembler implements Assembler {
     const contentIndex =
       typeof event.content_index === "number" ? event.content_index : 0;
     if (typeof index !== "number") return;
-    const item = this.items.get(index) ?? {
+    const existing = this.items.get(index);
+    const item = existing ?? {
       type: "message",
       role: "assistant",
       content: [],
     };
+    if (!existing) this.retain(jsonBytes(item) + jsonBytes(index) + 1);
     this.items.set(index, item);
     if (typeof item.id !== "string" && typeof event.item_id === "string") {
-      item.id = event.item_id;
-      this.indexByItemId.set(event.item_id, index);
+      setRetainedField({
+        target: item,
+        key: "id",
+        value: event.item_id,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
+      this.noteItemId(event.item_id, index);
     }
     const content = Array.isArray(item.content) ? item.content : [];
-    item.content = content;
-    const part = asRecord(content[contentIndex]) ?? {
+    if (content !== item.content) {
+      setRetainedField({
+        target: item,
+        key: "content",
+        value: content,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
+    }
+    const existingPart = asRecord(content[contentIndex]);
+    const part = existingPart ?? {
       type: "output_text",
       text: "",
     };
-    content[contentIndex] = part;
+    if (!existingPart) {
+      setRetainedPart({
+        content,
+        index: contentIndex,
+        part,
+        retain: this.retain,
+      });
+    }
     if (event.type === "response.output_text.done") {
       if (typeof event.text !== "string") return;
-      this.retain(Buffer.byteLength(event.text, "utf8"));
-      part.text = event.text;
+      setRetainedField({
+        target: part,
+        key: "text",
+        value: event.text,
+        retain: this.retain,
+        tails: this.fieldTails,
+      });
       return;
     }
     if (typeof event.delta !== "string") return;
-    this.retain(Buffer.byteLength(event.delta, "utf8"));
-    part.text = `${textOf(part.text)}${event.delta}`;
+    appendRetainedField({
+      target: part,
+      key: "text",
+      delta: event.delta,
+      retain: this.retain,
+      tails: this.fieldTails,
+    });
   }
 
   private complete(event: JsonRecord): void {
     const response = asRecord(event.response);
     const output = response?.output;
     if (!Array.isArray(output) || output.length === 0) return;
-    const copy = output.map((item) => {
-      const record = asRecord(item);
-      if (!record) return item;
-      const cloned = cloneRecord(record);
-      this.retain(jsonBytes(cloned));
-      return cloned;
-    });
-    this.completed = copy as JsonRecord[];
+    const copy = cloneValue(output) as JsonRecord[];
+    let released = this.completed ? jsonBytes(this.completed) - 2 : 0;
+    for (const [index, item] of this.items) {
+      released += jsonBytes(item) + jsonBytes(index) + 1;
+    }
+    for (const entry of this.indexByItemId) released += jsonBytes(entry);
+    this.retain(jsonBytes(copy) - 2 - released);
+    this.completed = copy;
+    // The terminal snapshot supersedes the accumulated items, including metadata.
+    this.items.clear();
+    this.indexByItemId.clear();
+    this.fieldTails = new WeakMap();
   }
 
   private itemFor(event: JsonRecord): JsonRecord | undefined {
@@ -564,11 +841,22 @@ class ResponsesAssembler implements Assembler {
           : "function_call",
       id: typeof event.item_id === "string" ? event.item_id : undefined,
     };
+    this.retain(jsonBytes(created) + jsonBytes(event.output_index) + 1);
     this.items.set(event.output_index, created);
     if (typeof event.item_id === "string") {
-      this.indexByItemId.set(event.item_id, event.output_index);
+      this.noteItemId(event.item_id, event.output_index);
     }
     return created;
+  }
+
+  private noteItemId(id: unknown, index: number): void {
+    if (typeof id !== "string") return;
+    const previous = this.indexByItemId.get(id);
+    this.retain(
+      jsonBytes([id, index]) -
+        (previous === undefined ? 0 : jsonBytes([id, previous])),
+    );
+    this.indexByItemId.set(id, index);
   }
 }
 
@@ -598,10 +886,17 @@ function parseSseFrame(frame: string): unknown {
   }
 }
 
-function splitFrames(text: string): { events: string[]; rest: string } {
-  const parts = text.split(/\r?\n\r?\n/);
-  const rest = parts.pop() ?? "";
-  return { events: parts.filter((part) => part.length > 0), rest };
+function rejectTruncatedFrames(frames: FrameState): void {
+  if (frames.failure) throw frames.failure;
+  if (frames.pendingBytes > 0) {
+    throw new RewriteStreamError("Truncated rewrite stream UTF-8");
+  }
+  if (
+    frames.tail.trim().length > 0 ||
+    frames.fragments.some((fragment) => fragment.trim().length > 0)
+  ) {
+    throw new RewriteStreamError("Truncated rewrite stream frame");
+  }
 }
 
 function rejectUnknownCall(value: unknown): void {
@@ -657,7 +952,7 @@ function rememberResponseId(
   retain: Retain,
 ): string | undefined {
   if (current || typeof id !== "string" || id.length === 0) return current;
-  retain(Buffer.byteLength(id, "utf8"));
+  retain(jsonBytes(id) + jsonBytes("id") + 2);
   return id;
 }
 
@@ -673,6 +968,115 @@ function asRecord(value: unknown): JsonRecord | undefined {
 
 function textOf(value: unknown): string {
   return typeof value === "string" ? value : "";
+}
+
+function setRetainedField(params: {
+  target: object;
+  key: string;
+  value: unknown;
+  retain: Retain;
+  tails: FieldTails;
+}): void {
+  const { target, key, value, retain, tails } = params;
+  const record = target as JsonRecord;
+  const previous = record[key];
+  const keyBytes = jsonBytes(key) + 1;
+  const present = previous !== undefined;
+  const nextPresent = value !== undefined;
+  const hasOtherFields = Object.keys(record).some(
+    (field) => field !== key && record[field] !== undefined,
+  );
+  const overhead = keyBytes + (hasOtherFields ? 1 : 0);
+  retain(
+    (nextPresent ? jsonBytes(value) + overhead : 0) -
+      (present ? jsonBytes(previous) + overhead : 0),
+  );
+  record[key] = value;
+  rememberFieldTail({ target, key, value, tails });
+}
+
+function appendRetainedField(params: {
+  target: object;
+  key: string;
+  delta: string;
+  retain: Retain;
+  tails: FieldTails;
+}): void {
+  const { target, key, delta, retain, tails } = params;
+  const record = target as JsonRecord;
+  if (typeof record[key] !== "string") {
+    setRetainedField({ target: record, key, value: "", retain, tails });
+  }
+  const previous = textOf(record[key]);
+  retain(appendedBytes(tails.get(target)?.get(key), delta));
+  record[key] = previous + delta;
+  if (delta.length > 0) {
+    rememberFieldTail({ target, key, value: delta, tails });
+  }
+}
+
+function rememberFieldTails(target: JsonRecord, tails: FieldTails): void {
+  for (const [key, value] of Object.entries(target)) {
+    if (typeof value === "string") {
+      rememberFieldTail({ target, key, value, tails });
+    }
+  }
+}
+
+function rememberFieldTail(params: {
+  target: object;
+  key: string;
+  value: unknown;
+  tails: FieldTails;
+}): void {
+  const { target, key, value, tails } = params;
+  if (typeof value !== "string" || value.length === 0) {
+    tails.get(target)?.delete(key);
+    return;
+  }
+  let fields = tails.get(target);
+  if (!fields) {
+    fields = new Map();
+    tails.set(target, fields);
+  }
+  // Cache the incoming suffix, never index into a growing concatenated prefix.
+  fields.set(key, value.charCodeAt(value.length - 1));
+}
+
+function appendedBytes(last: number | undefined, delta: string): number {
+  // Two escaped surrogate halves become one UTF-8 code point when joined.
+  return jsonBytes(delta) - 2 - (joinsSurrogates(last, delta) ? 8 : 0);
+}
+
+function joinsSurrogates(last: number | undefined, next: string): boolean {
+  const first = next.charCodeAt(0);
+  return (
+    last !== undefined &&
+    last >= 0xd800 &&
+    last <= 0xdbff &&
+    first >= 0xdc00 &&
+    first <= 0xdfff
+  );
+}
+
+function setRetainedPart(params: {
+  content: unknown[];
+  index: number;
+  part: JsonRecord;
+  retain: Retain;
+}): void {
+  const { content, index, part, retain } = params;
+  if (!Number.isSafeInteger(index) || index < 0 || index >= 0xffffffff) {
+    failClosed();
+  }
+  const bytes =
+    index < content.length
+      ? jsonBytes(part) - jsonBytes(content[index] ?? null)
+      : jsonBytes(part) +
+        (index - content.length) * 5 +
+        (content.length === 0 ? 0 : 1);
+  retain(bytes);
+  content[index] = part;
 }
 
 function cloneRecord(value: JsonRecord): JsonRecord {
@@ -694,8 +1098,4 @@ function jsonBytes(value: unknown): number {
   } catch {
     throw new RewriteStreamError("Rewrite stream retention limit exceeded");
   }
-}
-
-function decode(data: string | Uint8Array): string {
-  return typeof data === "string" ? data : new TextDecoder().decode(data);
 }

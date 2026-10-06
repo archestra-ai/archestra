@@ -8,6 +8,749 @@ const sse = (event: unknown, name?: string) =>
   }\n\n`;
 
 describe("RewriteStreamCapture", () => {
+  test.each([
+    "anthropic:messages",
+    "openai:chatCompletions",
+    "openai:responses",
+  ] as const)("preserves many tiny Unicode text and argument appends for %s", (family) => {
+    const capture = new RewriteStreamCapture(family);
+    const mirror = (event: unknown) => {
+      capture.observeProviderChunk(event);
+      capture.observeClientEvent(sse(event));
+    };
+    const fragments = Array.from({ length: 512 }, () => [
+      "a",
+      "\u00e9",
+      "\u6f22",
+      "\ud83d",
+      "",
+      "\ude80",
+      "\ud800",
+      "x",
+      "\udc00",
+    ]).flat();
+    const text = fragments.join("");
+    const argumentsText = `{"text":"${text}"}`;
+    if (family === "anthropic:messages") {
+      mirror({
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "seed\ud83d" },
+      });
+      mirror({
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "text_delta", text: "\ude80" },
+      });
+      mirror({
+        type: "content_block_start",
+        index: 0,
+        content_block: { type: "text", text: "" },
+      });
+      mirror({
+        type: "content_block_start",
+        index: 1,
+        content_block: {
+          type: "tool_use",
+          id: "call_tiny",
+          name: "read",
+          input: {},
+        },
+      });
+      mirror({
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: "discard\ud83d" },
+      });
+      mirror({
+        type: "content_block_start",
+        index: 1,
+        content_block: {
+          type: "tool_use",
+          id: "call_tiny",
+          name: "read",
+          input: {},
+        },
+      });
+      mirror({
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '{"text":"' },
+      });
+      for (const delta of fragments) {
+        mirror({
+          type: "content_block_delta",
+          index: 0,
+          delta: { type: "text_delta", text: delta },
+        });
+        mirror({
+          type: "content_block_delta",
+          index: 1,
+          delta: { type: "input_json_delta", partial_json: delta },
+        });
+      }
+      mirror({
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "input_json_delta", partial_json: '"}' },
+      });
+      const expected = {
+        content: [
+          { type: "text", text },
+          { type: "tool_use", id: "call_tiny", name: "read", input: { text } },
+        ],
+      };
+      expect(capture.originalResponse()).toEqual(expected);
+      expect(capture.clientResponse()).toEqual(expected);
+      return;
+    }
+    if (family === "openai:chatCompletions") {
+      const delta = ({
+        content,
+        args,
+        name = "",
+      }: {
+        content: string;
+        args: string;
+        name?: string;
+      }) => ({
+        choices: [
+          {
+            index: 0,
+            delta: {
+              content,
+              reasoning_content: content,
+              tool_calls: [
+                {
+                  index: 0,
+                  id: "call_tiny",
+                  type: "function",
+                  function: { name, arguments: args },
+                },
+              ],
+            },
+          },
+        ],
+      });
+      mirror(delta({ content: "", args: '{"text":"', name: "read" }));
+      for (const fragment of fragments) {
+        mirror(delta({ content: fragment, args: fragment }));
+      }
+      mirror(delta({ content: "", args: '"}' }));
+      const expected = {
+        choices: [
+          {
+            message: {
+              role: "assistant",
+              content: text,
+              reasoning_content: text,
+              tool_calls: [
+                {
+                  id: "call_tiny",
+                  type: "function",
+                  function: { name: "read", arguments: argumentsText },
+                },
+              ],
+            },
+          },
+        ],
+      };
+      expect(capture.originalResponse()).toEqual(expected);
+      expect(capture.clientResponse()).toEqual(expected);
+      return;
+    }
+    mirror({
+      type: "response.output_item.added",
+      output_index: 1,
+      item: {
+        type: "function_call",
+        call_id: "call_tiny",
+        name: "read",
+        arguments: '{"text":"',
+      },
+    });
+    for (const delta of fragments) {
+      mirror({ type: "response.output_text.delta", output_index: 0, delta });
+      mirror({
+        type: "response.function_call_arguments.delta",
+        output_index: 1,
+        delta,
+      });
+    }
+    mirror({
+      type: "response.function_call_arguments.delta",
+      output_index: 1,
+      delta: '"}',
+    });
+    const expected = {
+      output: [
+        {
+          type: "message",
+          role: "assistant",
+          content: [{ type: "output_text", text }],
+        },
+        {
+          type: "function_call",
+          call_id: "call_tiny",
+          name: "read",
+          arguments: argumentsText,
+        },
+      ],
+    };
+    expect(capture.originalResponse()).toEqual(expected);
+    expect(capture.clientResponse()).toEqual(expected);
+  });
+
+  test.each([
+    ["function_call", "function_call_arguments", "arguments"],
+    ["custom_tool_call", "custom_tool_call_input", "input"],
+    ["message", "output_text", "text"],
+  ] as const)("keeps exact %s byte limits after replacements, empty appends, and surrogate joins", (type, eventType, field) => {
+    const capture = new RewriteStreamCapture("openai:responses");
+    const item = (value: string) =>
+      type === "message"
+        ? {
+            id: "item_tail",
+            type,
+            role: "assistant",
+            content: [{ type: "output_text", text: value }],
+            provider_extension: { signed: "opaque" },
+          }
+        : {
+            id: "item_tail",
+            type,
+            call_id: "call_tail",
+            name: "read",
+            [field]: value,
+            provider_extension: { signed: "opaque" },
+          };
+    const append = (delta: string) =>
+      capture.observeProviderChunk({
+        type: `response.${eventType}.delta`,
+        output_index: 0,
+        delta,
+      });
+    const done = (value: string) =>
+      capture.observeProviderChunk({
+        type: `response.${eventType}.done`,
+        output_index: 0,
+        [field]: value,
+      });
+    const replace = (value: string) =>
+      capture.observeProviderChunk({
+        type: "response.output_item.done",
+        output_index: 0,
+        item: item(value),
+      });
+    replace("seed\ud83d");
+    append("");
+    append("\ude80");
+    expect(capture.originalResponse()).toEqual({
+      output: [item("seed\ud83d\ude80")],
+    });
+    done("");
+    append("\ude80");
+    const fragments = Array.from({ length: 256 }, () => [
+      "a",
+      "\u00e9",
+      "\u6f22",
+      "\ud83d",
+      "",
+      "\ude80",
+      "\ud800",
+      "x",
+      "\udc00",
+      "\n",
+      '"',
+      "\\",
+    ]).flat();
+    for (const fragment of fragments) append(fragment);
+    expect(capture.originalResponse()).toEqual({
+      output: [item(`\ude80${fragments.join("")}`)],
+    });
+    done("shrink\ud83d");
+    append("");
+    append("\ude80");
+    expect(capture.originalResponse()).toEqual({
+      output: [item("shrink\ud83d\ude80")],
+    });
+    replace("");
+    append("\ude80");
+    expect(capture.originalResponse()).toEqual({ output: [item("\ude80")] });
+    replace("new\ud83d");
+    append("\ude80");
+    expect(capture.originalResponse()).toEqual({
+      output: [item("new\ud83d\ude80")],
+    });
+
+    const bytes = (value: unknown) =>
+      Buffer.byteLength(JSON.stringify(value), "utf8");
+    const overhead =
+      2 * bytes({ output: [] }) +
+      bytes(item("")) +
+      bytes(0) +
+      1 +
+      bytes(["item_tail", 0]);
+    // A lone high surrogate costs six escaped bytes. Its low half reduces the
+    // retained representation by two bytes, even when already at the limit.
+    const full = `${"x".repeat(
+      RewriteStreamCapture.retentionLimit - overhead - 6,
+    )}\ud83d`;
+    done(full);
+    append("");
+    append("\ude80");
+    append("aa");
+    expect(() => append("x")).toThrow(
+      "Rewrite stream retention limit exceeded",
+    );
+    expect(capture.originalResponse()).toEqual({
+      output: [item(`${full}\ude80aa`)],
+    });
+  });
+
+  test("keeps exact Anthropic partial JSON limits after a reset and many tiny surrogate appends", () => {
+    const capture = new RewriteStreamCapture("anthropic:messages");
+    const block = {
+      type: "tool_use",
+      id: "call_tail",
+      name: "read",
+      input: {},
+    };
+    const start = () =>
+      capture.observeProviderChunk({
+        type: "content_block_start",
+        index: 0,
+        content_block: block,
+      });
+    const append = (partial: string) =>
+      capture.observeProviderChunk({
+        type: "content_block_delta",
+        index: 0,
+        delta: { type: "input_json_delta", partial_json: partial },
+      });
+    start();
+    append("discard\ud83d");
+    start();
+    append('{"text":"');
+    const fragments = Array.from({ length: 256 }, () => [
+      "a",
+      "\u00e9",
+      "\u6f22",
+      "\ud83d",
+      "",
+      "\ude80",
+      "\ud800",
+      "x",
+      "\udc00",
+    ]).flat();
+    for (const fragment of fragments) append(fragment);
+    const text = fragments.join("");
+    const bytes = (value: unknown) =>
+      Buffer.byteLength(JSON.stringify(value), "utf8");
+    const fixed =
+      2 * bytes({ content: [] }) +
+      bytes(block) +
+      bytes(0) +
+      1 +
+      bytes([0, `{"text":"${text}\ud83d\ude80"}`]);
+    const padding = "x".repeat(RewriteStreamCapture.retentionLimit - fixed);
+    append(`${padding}\ud83d`);
+    append("");
+    append("\ude80");
+    append('"}');
+    expect(() => append("x")).toThrow(
+      "Rewrite stream retention limit exceeded",
+    );
+    expect(capture.originalResponse()).toEqual({
+      content: [{ ...block, input: { text: `${text}${padding}\ud83d\ude80` } }],
+    });
+  });
+
+  test.each([
+    "provider",
+    "client",
+  ] as const)("preserves byte-split Unicode text and executable arguments on the %s boundary", (boundary) => {
+    const text = "\u00e9\u6f22\ud83d\ude80\ufeff\ufffd";
+    const argumentsText = `{ "text" : "${text}", "escape": "\\u0061" }`;
+    const cases = [
+      {
+        family: "anthropic:messages" as const,
+        events: [
+          {
+            type: "content_block_delta",
+            index: 0,
+            delta: { type: "text_delta", text },
+          },
+          {
+            type: "content_block_start",
+            index: 1,
+            content_block: {
+              type: "tool_use",
+              id: "toolu_unicode",
+              name: "read",
+              input: {},
+            },
+          },
+          {
+            type: "content_block_delta",
+            index: 1,
+            delta: { type: "input_json_delta", partial_json: argumentsText },
+          },
+        ],
+        response: {
+          content: [
+            { type: "text", text },
+            {
+              type: "tool_use",
+              id: "toolu_unicode",
+              name: "read",
+              input: { text, escape: "a" },
+            },
+          ],
+        },
+      },
+      {
+        family: "openai:chatCompletions" as const,
+        events: [
+          {
+            choices: [
+              {
+                index: 0,
+                delta: {
+                  content: text,
+                  tool_calls: [
+                    {
+                      index: 0,
+                      id: "call_unicode",
+                      type: "function",
+                      function: { name: "read", arguments: argumentsText },
+                    },
+                  ],
+                },
+              },
+            ],
+          },
+        ],
+        response: {
+          choices: [
+            {
+              message: {
+                role: "assistant",
+                content: text,
+                tool_calls: [
+                  {
+                    id: "call_unicode",
+                    type: "function",
+                    function: { name: "read", arguments: argumentsText },
+                  },
+                ],
+              },
+            },
+          ],
+        },
+      },
+      {
+        family: "openai:responses" as const,
+        events: [
+          { type: "response.output_text.delta", output_index: 0, delta: text },
+          {
+            type: "response.output_item.added",
+            output_index: 1,
+            item: {
+              type: "function_call",
+              call_id: "call_unicode",
+              name: "read",
+              arguments: "",
+            },
+          },
+          {
+            type: "response.function_call_arguments.delta",
+            output_index: 1,
+            delta: argumentsText,
+          },
+        ],
+        response: {
+          output: [
+            {
+              type: "message",
+              role: "assistant",
+              content: [{ type: "output_text", text }],
+            },
+            {
+              type: "function_call",
+              call_id: "call_unicode",
+              name: "read",
+              arguments: argumentsText,
+            },
+          ],
+        },
+      },
+    ];
+    for (const scenario of cases) {
+      const capture = new RewriteStreamCapture(scenario.family);
+      let firstEvent = true;
+      for (const event of scenario.events) {
+        const bytes = new TextEncoder().encode(
+          `${firstEvent ? "\ufeff" : ""}${sse(event)}`,
+        );
+        firstEvent = false;
+        for (let offset = 0; offset < bytes.length; offset++) {
+          const chunk = bytes.subarray(offset, offset + 1);
+          if (boundary === "provider") capture.observeProviderChunk(chunk);
+          else capture.observeClientEvent(chunk);
+        }
+      }
+      const response =
+        boundary === "provider"
+          ? capture.originalResponse()
+          : capture.clientResponse();
+      expect(response).toEqual(scenario.response);
+      expect(
+        captureRewriteCalls({ family: scenario.family, response }).size,
+      ).toBe(1);
+    }
+  });
+
+  test("keeps pending UTF-8 independent between provider and client boundaries", () => {
+    const capture = new RewriteStreamCapture("openai:chatCompletions");
+    const wire = (text: string) =>
+      new TextEncoder().encode(
+        sse({ choices: [{ index: 0, delta: { content: text } }] }),
+      );
+    const provider = wire("\u6f22");
+    const client = wire("\ud83d\ude80");
+    const providerSplit = provider.indexOf(0xe6) + 1;
+    const clientSplit = client.indexOf(0xf0) + 2;
+    capture.observeProviderChunk(provider.subarray(0, providerSplit));
+    capture.observeClientEvent(client.subarray(0, clientSplit));
+    expect(() => capture.originalResponse()).toThrow(
+      "Truncated rewrite stream UTF-8",
+    );
+    expect(() => capture.clientResponse()).toThrow(
+      "Truncated rewrite stream UTF-8",
+    );
+    capture.observeProviderChunk(provider.subarray(providerSplit));
+    expect(capture.originalResponse()).toMatchObject({
+      choices: [{ message: { content: "\u6f22" } }],
+    });
+    expect(() => capture.clientResponse()).toThrow(
+      "Truncated rewrite stream UTF-8",
+    );
+    capture.observeClientEvent(client.subarray(clientSplit));
+    expect(capture.clientResponse()).toMatchObject({
+      choices: [{ message: { content: "\ud83d\ude80" } }],
+    });
+  });
+
+  test.each([
+    "provider",
+    "client",
+  ] as const)("preserves raw and JSON-escaped surrogate splits with mixed chunks on the %s boundary", (boundary) => {
+    const capture = new RewriteStreamCapture("openai:chatCompletions");
+    const observe = (chunk: string | Uint8Array) =>
+      boundary === "provider"
+        ? capture.observeProviderChunk(chunk)
+        : capture.observeClientEvent(chunk);
+    const text = "\ud83d\ude80";
+    const argumentsText = `{"text":"${text}"}`;
+    const first = sse({
+      choices: [{ index: 0, delta: { content: text } }],
+    });
+    // Use individual UTF-16 code units, not code-point iteration.
+    for (let offset = 0; offset < first.length; offset++) {
+      const character = first[offset];
+      const code = first.charCodeAt(offset);
+      observe(
+        code >= 0xd800 && code <= 0xdfff
+          ? character
+          : new TextEncoder().encode(character),
+      );
+    }
+    for (const argumentsDelta of ['{"text":"\ud83d', '\ude80"}']) {
+      observe(
+        sse({
+          choices: [
+            {
+              index: 0,
+              delta: {
+                tool_calls: [
+                  {
+                    index: 0,
+                    id: "call_surrogates",
+                    type: "function",
+                    function: { name: "", arguments: argumentsDelta },
+                  },
+                ],
+              },
+            },
+          ],
+        }),
+      );
+    }
+    const response =
+      boundary === "provider"
+        ? capture.originalResponse()
+        : capture.clientResponse();
+    expect(response).toMatchObject({
+      choices: [
+        {
+          message: {
+            content: text,
+            tool_calls: [
+              {
+                id: "call_surrogates",
+                function: { arguments: argumentsText },
+              },
+            ],
+          },
+        },
+      ],
+    });
+  });
+
+  test.each([
+    "provider",
+    "client",
+  ] as const)("preserves lone surrogate code units in string chunks on the %s boundary", (boundary) => {
+    const capture = new RewriteStreamCapture("openai:chatCompletions");
+    const text = "\ud800\udc00\ud800x\udc00";
+    const wire = `data: {"choices":[{"index":0,"delta":{"content":"${text}"}}]}\n\n`;
+    for (let offset = 0; offset < wire.length; offset++) {
+      if (boundary === "provider") capture.observeProviderChunk(wire[offset]);
+      else capture.observeClientEvent(wire[offset]);
+    }
+    const response =
+      boundary === "provider"
+        ? capture.originalResponse()
+        : capture.clientResponse();
+    expect(response).toMatchObject({
+      choices: [{ message: { content: text } }],
+    });
+  });
+
+  test.each([
+    "provider",
+    "client",
+  ] as const)("rejects malformed bytes without repairing text or executable arguments on the %s boundary", (boundary) => {
+    for (const malformed of [
+      [0x80],
+      [0xc0, 0xaf],
+      [0xe2, 0x28, 0xa1],
+      [0xed, 0xa0, 0x80],
+      [0xf4, 0x90, 0x80, 0x80],
+      [0xff],
+    ]) {
+      const capture = new RewriteStreamCapture("openai:responses");
+      const observe = (chunk: string | Uint8Array) =>
+        boundary === "provider"
+          ? capture.observeProviderChunk(chunk)
+          : capture.observeClientEvent(chunk);
+      observe(
+        'data: {"type":"response.function_call_arguments.delta","output_index":0,"delta":"',
+      );
+      expect(() => observe(new Uint8Array(malformed))).toThrow(
+        "Invalid rewrite stream UTF-8",
+      );
+      expect(() => observe('"}\n\n')).toThrow("Invalid rewrite stream UTF-8");
+      expect(() =>
+        boundary === "provider"
+          ? capture.originalResponse()
+          : capture.clientResponse(),
+      ).toThrow("Invalid rewrite stream UTF-8");
+    }
+  });
+
+  test.each([
+    "provider",
+    "client",
+  ] as const)("rejects incomplete UTF-8 after a complete frame without flushing or repairing it on the %s boundary", (boundary) => {
+    for (const incomplete of [[0xc3], [0xe6, 0xbc], [0xf0, 0x9f, 0x9a]]) {
+      const capture = new RewriteStreamCapture("openai:chatCompletions");
+      const observe = (chunk: string | Uint8Array) =>
+        boundary === "provider"
+          ? capture.observeProviderChunk(chunk)
+          : capture.observeClientEvent(chunk);
+      observe(sse({ choices: [{ index: 0, delta: { content: "complete" } }] }));
+      observe(new Uint8Array(incomplete));
+      observe(new Uint8Array());
+      observe("");
+      const snapshot = () =>
+        boundary === "provider"
+          ? capture.originalResponse()
+          : capture.clientResponse();
+      expect(snapshot).toThrow("Truncated rewrite stream UTF-8");
+      expect(snapshot).toThrow("Truncated rewrite stream UTF-8");
+      // A decoded string cannot complete a byte sequence, even if it looks
+      // like the intended character. Do not silently discard pending bytes.
+      expect(() => observe(": keepalive\n\n")).toThrow(
+        "Invalid rewrite stream UTF-8",
+      );
+      expect(snapshot).toThrow("Invalid rewrite stream UTF-8");
+    }
+  });
+
+  test("counts pending decoder bytes against retained provider metadata", () => {
+    const capture = new RewriteStreamCapture("openai:responses");
+    const base = { type: "message", provider_extension: "" };
+    const overhead =
+      2 * Buffer.byteLength(JSON.stringify({ output: [] }), "utf8") +
+      Buffer.byteLength(JSON.stringify(base), "utf8");
+    capture.observeProviderChunk({
+      type: "response.completed",
+      response: {
+        output: [
+          {
+            ...base,
+            provider_extension: "x".repeat(
+              RewriteStreamCapture.retentionLimit - overhead - 2,
+            ),
+          },
+        ],
+      },
+    });
+    capture.observeClientEvent(new Uint8Array([0xf0, 0x9f]));
+    expect(() => capture.observeClientEvent(new Uint8Array([0x9a]))).toThrow(
+      "Rewrite stream retention limit exceeded",
+    );
+    expect(() => capture.clientResponse()).toThrow(
+      "Rewrite stream retention limit exceeded",
+    );
+    expect(() => capture.observeClientEvent(new Uint8Array([0x80]))).toThrow(
+      "Rewrite stream retention limit exceeded",
+    );
+  });
+
+  test("does not accumulate transient metadata or repeated done frames at the logical limit", () => {
+    const capture = new RewriteStreamCapture("openai:responses");
+    const item = {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "small" }],
+      provider_extension: "x".repeat(7 * 1024 * 1024),
+    };
+    const completed = {
+      type: "response.completed",
+      response: { output: [item] },
+    };
+    capture.observeProviderChunk(completed);
+    capture.observeClientEvent(sse(completed));
+    const transient = sse({
+      type: "response.in_progress",
+      response: { usage: { transient: "y".repeat(3 * 1024 * 1024) } },
+    });
+    for (let repeat = 0; repeat < 3; repeat++) {
+      capture.observeProviderChunk(new TextEncoder().encode(transient));
+      capture.observeClientEvent(transient);
+      capture.observeProviderChunk(completed);
+      capture.observeClientEvent(sse(completed));
+    }
+    expect(capture.originalResponse()).toEqual(completed.response);
+    expect(capture.clientResponse()).toEqual(completed.response);
+    expect(() => capture.observeClientEvent(transient.slice(0, -1))).toThrow(
+      "Rewrite stream retention limit exceeded",
+    );
+  });
+
   test("retains exact completed Responses output when terminal SSE waits for commit", () => {
     const capture = new RewriteStreamCapture("openai:responses");
     const created = {
@@ -691,22 +1434,207 @@ describe("RewriteStreamCapture", () => {
     expect(capture.clientResponse()).toMatchObject({ id: "resp_client" });
   });
 
-  test("stops retaining content past 16MiB", () => {
+  test("replaces mirrored 2MiB Responses lifecycle snapshots without accumulating done bytes", () => {
+    const capture = new RewriteStreamCapture("openai:responses");
+    const text = "x".repeat(2 * 1024 * 1024);
+    const item = {
+      id: "msg_large",
+      type: "message",
+      role: "assistant",
+      status: "completed",
+      content: [
+        { type: "output_text", text, annotations: [{ signed: "opaque" }] },
+      ],
+      provider_extension: { retained: true },
+    };
+    const mirror = (event: unknown) => {
+      capture.observeProviderChunk(event);
+      capture.observeClientEvent(sse(event));
+    };
+    mirror({
+      type: "response.output_item.added",
+      output_index: 0,
+      item: { ...item, status: "in_progress", content: [] },
+    });
+    for (let offset = 0; offset < text.length; offset += 256 * 1024) {
+      mirror({
+        type: "response.output_text.delta",
+        output_index: 0,
+        item_id: item.id,
+        content_index: 0,
+        delta: text.slice(offset, offset + 256 * 1024),
+      });
+    }
+    for (let repeat = 0; repeat < 4; repeat++) {
+      mirror({
+        type: "response.output_text.done",
+        output_index: 0,
+        content_index: 0,
+        text,
+      });
+      mirror({ type: "response.output_item.done", output_index: 0, item });
+    }
+    const completed = {
+      type: "response.completed",
+      response: { id: "resp_large", output: [item] },
+    };
+    for (let repeat = 0; repeat < 4; repeat++) mirror(completed);
+    expect(capture.originalResponse()).toEqual(completed.response);
+    expect(capture.clientResponse()).toEqual(completed.response);
+  });
+
+  test.each([
+    ["function_call", "function_call_arguments", "arguments"],
+    ["custom_tool_call", "custom_tool_call_input", "input"],
+  ] as const)("replaces mirrored %s done payloads instead of retaining superseded arguments", (type, eventType, field) => {
+    const capture = new RewriteStreamCapture("openai:responses");
+    const value = JSON.stringify({ text: "x".repeat(2 * 1024 * 1024) });
+    const item = {
+      type,
+      id: "item_large",
+      call_id: "call_large",
+      name: "execute",
+      [field]: "",
+      provider_extension: { signed: "opaque" },
+    };
+    const mirror = (event: unknown) => {
+      capture.observeProviderChunk(event);
+      capture.observeClientEvent(sse(event));
+    };
+    mirror({ type: "response.output_item.added", output_index: 0, item });
+    mirror({
+      type: `response.${eventType}.delta`,
+      output_index: 0,
+      delta: value,
+    });
+    for (let repeat = 0; repeat < 5; repeat++) {
+      mirror({
+        type: `response.${eventType}.done`,
+        output_index: 0,
+        [field]: value,
+      });
+    }
+    mirror({
+      type: `response.${eventType}.done`,
+      output_index: 0,
+      [field]: "{}",
+    });
+    const finalItem = {
+      ...item,
+      [field]: "{}",
+      status: "completed",
+      provider_extension: {
+        signed: "opaque",
+        payload: "x".repeat(6 * 1024 * 1024),
+      },
+    };
+    mirror({
+      type: "response.output_item.done",
+      output_index: 0,
+      item: finalItem,
+    });
+    const response = { output: [finalItem] };
+    mirror({ type: "response.completed", response });
+    expect(capture.originalResponse()).toEqual(response);
+    expect(capture.clientResponse()).toEqual(response);
+  });
+
+  test("bounds simultaneous provider and client metadata after completion replaces items", () => {
+    const capture = new RewriteStreamCapture("openai:responses");
+    const item = {
+      type: "message",
+      role: "assistant",
+      content: [{ type: "output_text", text: "small" }],
+      provider_extension: "x".repeat(7 * 1024 * 1024),
+    };
+    const completed = {
+      type: "response.completed",
+      response: { output: [item] },
+    };
+    capture.observeProviderChunk({
+      type: "response.output_item.done",
+      output_index: 0,
+      item,
+    });
+    capture.observeClientEvent(
+      sse({ type: "response.output_item.done", output_index: 0, item }),
+    );
+    capture.observeProviderChunk(completed);
+    capture.observeClientEvent(sse(completed));
+    expect(() =>
+      capture.observeProviderChunk({
+        ...completed,
+        response: {
+          output: [
+            { ...item, provider_extension: "x".repeat(9 * 1024 * 1024) },
+          ],
+        },
+      }),
+    ).toThrow("Rewrite stream retention limit exceeded");
+    expect(capture.originalResponse()).toEqual(completed.response);
+    expect(capture.clientResponse()).toEqual(completed.response);
+  });
+
+  test.each([
+    "provider",
+    "client",
+  ] as const)("reconstructs fragmented CRLF SSE and rejects a truncated executable frame on the %s boundary", (boundary) => {
+    const capture = new RewriteStreamCapture("openai:responses");
+    const item = {
+      type: "function_call",
+      call_id: "call_fragmented",
+      name: "read",
+      arguments: "{}",
+    };
+    const event = sse({
+      type: "response.output_item.done",
+      output_index: 0,
+      item,
+    }).replaceAll("\n", "\r\n");
+    const observe = (fragment: string) =>
+      boundary === "provider"
+        ? capture.observeProviderChunk(fragment)
+        : capture.observeClientEvent(fragment);
+    const snapshot = () =>
+      boundary === "provider"
+        ? capture.originalResponse()
+        : capture.clientResponse();
+    for (const character of `: keepalive\r\n\r\n${event.slice(0, -1)}`) {
+      observe(character);
+    }
+    expect(snapshot).toThrow("Truncated rewrite stream frame");
+    observe(event.slice(-1));
+    expect(snapshot()).toEqual({ output: [item] });
+  });
+
+  test("counts pending client SSE together with retained provider content", () => {
+    const capture = new RewriteStreamCapture("openai:responses");
+    capture.observeProviderChunk({
+      type: "response.output_text.delta",
+      output_index: 0,
+      delta: "x".repeat(8 * 1024 * 1024),
+    });
+    expect(() =>
+      capture.observeClientEvent(`data: ${"x".repeat(8 * 1024 * 1024)}`),
+    ).toThrow("Rewrite stream retention limit exceeded");
+  });
+
+  test("stops retaining content and metadata past 16MiB", () => {
     const capture = new RewriteStreamCapture("openai:chatCompletions");
     const chunk = "x".repeat(1024 * 1024);
-    for (let i = 0; i < 16; i++) {
+    for (let i = 0; i < 15; i++) {
       capture.observeProviderChunk({
         choices: [{ index: 0, delta: { content: chunk } }],
       });
     }
     expect(() =>
       capture.observeProviderChunk({
-        choices: [{ index: 0, delta: { content: "x" } }],
+        choices: [{ index: 0, delta: { content: chunk } }],
       }),
     ).toThrow("Rewrite stream retention limit exceeded");
     const response = capture.originalResponse() as {
       choices: Array<{ message: { content: string } }>;
     };
-    expect(response.choices[0].message.content).toHaveLength(16 * 1024 * 1024);
+    expect(response.choices[0].message.content).toHaveLength(15 * 1024 * 1024);
   });
 });

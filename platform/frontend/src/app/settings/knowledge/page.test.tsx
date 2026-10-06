@@ -1480,9 +1480,9 @@ describe("KnowledgeSettingsPage", () => {
 
       const links = screen.getAllByRole("link", { name: /Learn more/ });
       expect(links.map((link) => link.getAttribute("href"))).toEqual([
-        "https://archestra.ai/docs/knowledge/retrieval#reranking",
-        "https://archestra.ai/docs/knowledge/retrieval#keyword-ranking",
-        "https://archestra.ai/docs/knowledge/retrieval#contextual-retrieval",
+        "https://archestra.ai/docs/knowledge/settings#reranking",
+        "https://archestra.ai/docs/knowledge/settings#keyword-ranking",
+        "https://archestra.ai/docs/knowledge/settings#contextual-retrieval",
       ]);
     });
 

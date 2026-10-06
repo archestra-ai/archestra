@@ -48,7 +48,7 @@ test.each([
           : { parentID: id === "nested" ? "child" : "root" }),
       },
     }));
-    const hooks = await module.ArchestraRuntimeHandoff({
+    const hooks = await module.RuntimeHandoff({
       client: { session: { get } },
       directory: home,
     });
@@ -91,7 +91,7 @@ test("missing or unresolved native identity never gets root guidance", async () 
     await writeFile(path.join(home, "guard.prompt.md"), "Root only.");
     const module = await import(pathToFileURL(plugin).href);
     const get = vi.fn();
-    const hooks = await module.ArchestraRuntimeHandoff({
+    const hooks = await module.RuntimeHandoff({
       client: { session: { get } },
       directory: home,
     });
@@ -165,7 +165,7 @@ const fs = require("node:fs");
   const output = { args: process.argv.slice(2), config };
   if (config.plugin) {
     const module = await import(config.plugin[0]);
-    const hooks = await module.ArchestraRuntimeHandoff({ directory: process.env.HOME, client: { session: { get: async ({ path: { id } }) => ({ data: { id, ...(id === "root" ? {} : { parentID: "root" }) } }) } } });
+    const hooks = await module.RuntimeHandoff({ directory: process.env.HOME, client: { session: { get: async ({ path: { id } }) => ({ data: { id, ...(id === "root" ? {} : { parentID: "root" }) } }) } } });
     for (const sessionID of ["root", "child"]) {
       const system = { system: ["Keep existing rules."] };
       await hooks["experimental.chat.system.transform"]({ sessionID }, system);
@@ -228,27 +228,91 @@ const powershellAvailable =
 if (process.env.CI === "true" && !powershellAvailable)
   throw new Error("CI requires PowerShell for handoff launch tests");
 
-test.skipIf(!powershellAvailable)(
-  "PowerShell launches the root-only plugin and restores the caller environment",
-  async () => {
-    const home = await mkdtemp(path.join(tmpdir(), "opencode powershell "));
+test
+  .skipIf(!powershellAvailable)
+  .each([
+    "",
+    '{ "instructions": ["{env:__ROOT}/rules.md"], "plugin": ["./user-plugin.mjs"] }',
+  ])(
+  "PowerShell launches the root-only plugin and restores the caller environment (config=%j)",
+  async (configContent) => {
+    const home = await mkdtemp(
+      path.join(tmpdir(), "opencode powershell #percent% "),
+    );
+    const callerEnv = {
+      HOME: path.join(home, "other home"),
+      USERPROFILE: home,
+      __ROOT: path.join(home, "user root"),
+      OPENCODE_CONFIG: path.join(home, "user config.json"),
+      OPENCODE_CONFIG_DIR: path.join(home, "user config dir"),
+      XDG_CONFIG_HOME: path.join(home, "user config"),
+      XDG_DATA_HOME: path.join(home, "user data"),
+      XDG_STATE_HOME: path.join(home, "user state"),
+    };
     try {
-      const binary = path.join(home, "opencode");
+      const stub = `const fs = require("node:fs");
+(async () => {
+const result = {
+  args: process.argv.slice(2),
+  config: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || "{}"),
+  configContent: process.env.OPENCODE_CONFIG_CONTENT,
+  env: Object.fromEntries(${JSON.stringify(Object.keys(callerEnv))}.map(name => [name, process.env[name]])),
+};
+if (${JSON.stringify(!configContent)}) {
+  const module = await import(result.config.plugin[0]);
+  const hooks = await module.RuntimeHandoff({
+    directory: process.env.USERPROFILE,
+    client: { session: { get: async ({ path: { id } }) => ({ data: { id, ...(id === "root" ? {} : { parentID: "root" }) } }) } },
+  });
+  for (const sessionID of ["root", "child"]) {
+    const output = { system: ["User rules."] };
+    await hooks["experimental.chat.system.transform"]({ sessionID }, output);
+    result[sessionID] = output.system;
+  }
+}
+fs.writeFileSync(require("node:path").join(process.env.USERPROFILE, "result.json"), JSON.stringify(result));
+process.exit(23);
+})().catch(error => { console.error(error); process.exit(1); });`;
+      const binary = path.join(
+        home,
+        process.platform === "win32" ? "opencode.cmd" : "opencode",
+      );
+      await writeFile(path.join(home, "client.cjs"), stub);
       await writeFile(
         binary,
-        '#!/usr/bin/env node\nrequire("node:fs").writeFileSync(process.env.HOME + "/result.json", JSON.stringify({args: process.argv.slice(2), config: JSON.parse(process.env.OPENCODE_CONFIG_CONTENT || "{}")})); process.exit(23);',
+        process.platform === "win32"
+          ? '@node "%USERPROFILE%\\client.cjs" %*\r\n@exit /b %errorlevel%\r\n'
+          : `#!/usr/bin/env node\n${stub}`,
       );
       await chmod(binary, 0o755);
+      // Redirect OS profile discovery into the fixture, including on Windows
+      // where changing HOME does not change MyDocuments or PowerShell's $HOME.
+      const install = buildWindowsStartupGuardInstallSection(
+        ctx,
+        client,
+      ).replaceAll(
+        "[Environment]::GetFolderPath('MyDocuments')",
+        "$env:USERPROFILE",
+      );
       const script = path.join(home, "driver.ps1");
       await writeFile(
         script,
         `
 $ErrorActionPreference = 'Stop'
 function Say { }; function Ok { }
-${buildWindowsStartupGuardInstallSection(ctx, client)}
-opencode run 'two words'
+$PROFILE = [pscustomobject]@{ CurrentUserAllHosts = Join-Path $env:USERPROFILE 'profile.ps1' }
+$archCallerEnv = @{}
+foreach ($name in @('OPENCODE_CONFIG_CONTENT', ${Object.keys(callerEnv)
+          .map((name) => `'${name}'`)
+          .join(", ")})) {
+  $archCallerEnv[$name] = [Environment]::GetEnvironmentVariable($name)
+}
+${install}
+opencode run 'two words' '$literal'
 if ($LASTEXITCODE -ne 23) { throw 'Client exit status lost' }
-if ($env:OPENCODE_CONFIG_CONTENT) { throw 'Launch configuration leaked into caller' }
+foreach ($name in $archCallerEnv.Keys) {
+  if ([Environment]::GetEnvironmentVariable($name) -cne $archCallerEnv[$name]) { throw ('Caller environment changed: ' + $name) }
+}
 exit 0
 `,
       );
@@ -258,10 +322,9 @@ exit 0
         {
           env: {
             ...process.env,
-            HOME: home,
-            USERPROFILE: home,
-            PATH: `${home}:${process.env.PATH}`,
-            OPENCODE_CONFIG_CONTENT: "",
+            ...callerEnv,
+            PATH: `${home}${path.delimiter}${process.env.PATH}`,
+            OPENCODE_CONFIG_CONTENT: configContent,
             ARCHESTRA_OPENCODE_GUARD: "0",
           },
         },
@@ -269,31 +332,23 @@ exit 0
       const result = JSON.parse(
         await readFile(path.join(home, "result.json"), "utf8"),
       );
-      expect(result.args).toEqual(["run", "two words"]);
-      expect(result.config).not.toHaveProperty("instructions");
-      const module = await import(result.config.plugin[0]);
-      const hooks = await module.ArchestraRuntimeHandoff({
-        directory: home,
-        client: {
-          session: {
-            get: async ({ path: { id } }: { path: { id: string } }) => ({
-              data: { id, ...(id === "root" ? {} : { parentID: "root" }) },
-            }),
-          },
-        },
-      });
-      for (const sessionID of ["root", "child"]) {
-        const output = { system: ["User rules."] };
-        await hooks["experimental.chat.system.transform"](
-          { sessionID },
-          output,
-        );
-        expect(output.system).toEqual(
-          sessionID === "root"
-            ? ["User rules.", DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS]
-            : ["User rules."],
-        );
+      expect(result.args).toEqual(["run", "two words", "$literal"]);
+      expect(result.env).toEqual(callerEnv);
+      if (configContent) {
+        expect(result.configContent).toBe(configContent);
+        expect(result.config).toEqual(JSON.parse(configContent));
+        return;
       }
+      expect(result.config).not.toHaveProperty("instructions");
+      expect(result.config.plugin).toEqual([
+        pathToFileURL(path.join(home, `${client.psScriptRelpath}.handoff.mjs`))
+          .href,
+      ]);
+      expect(result.root).toEqual([
+        "User rules.",
+        DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS,
+      ]);
+      expect(result.child).toEqual(["User rules."]);
     } finally {
       await rm(home, { recursive: true, force: true });
     }

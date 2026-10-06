@@ -983,7 +983,7 @@ export function buildWindowsStartupGuardInstallSection(
       : client.clientId === "copilot-cli"
         ? `$archInstructionsDir = $archGuard + '.instructions'`
         : client.clientId === "opencode"
-          ? `if (Test-Path ($archGuard + '.handoff.mjs')) { $archOpencodeHandoff = ([Uri]($archGuard + '.handoff.mjs')).AbsoluteUri }`
+          ? `if (Test-Path ($archGuard + '.handoff.mjs')) { $archOpencodeHandoff = [Uri]::new(($archGuard + '.handoff.mjs'), [UriKind]::Absolute).AbsoluteUri }`
           : `$archLaunchArgs = @('--append-system-prompt-file', $archPromptPath) + $archLaunchArgs`;
   const promptArgs = handoffEnabled
     ? `

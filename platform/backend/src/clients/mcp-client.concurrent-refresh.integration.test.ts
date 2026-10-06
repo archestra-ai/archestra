@@ -9,6 +9,7 @@
 import { randomUUID } from "node:crypto";
 import http from "node:http";
 import type { AddressInfo } from "node:net";
+import { setTimeout as delay } from "node:timers/promises";
 import { Server as McpSdkServer } from "@modelcontextprotocol/sdk/server/index.js";
 import { StreamableHTTPServerTransport } from "@modelcontextprotocol/sdk/server/streamableHttp.js";
 import {
@@ -16,6 +17,7 @@ import {
   ListToolsRequestSchema,
 } from "@modelcontextprotocol/sdk/types.js";
 import { vi } from "vitest";
+import config from "@/config";
 import {
   AgentModel,
   AgentToolModel,
@@ -25,6 +27,7 @@ import {
 } from "@/models";
 import * as oauthRoutes from "@/routes/oauth";
 import { secretManager } from "@/secrets-manager";
+import { instanceAnalyticsService } from "@/services/instance-analytics";
 import { afterEach, describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
 import mcpClient from "./mcp-client";
@@ -33,6 +36,8 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
   let upstream: Awaited<ReturnType<typeof startSessionServer>> | undefined;
 
   afterEach(async () => {
+    instanceAnalyticsService.stop();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     await mcpClient.disconnectAll();
     await upstream?.close();
@@ -87,6 +92,82 @@ describe("parallel tool calls on one OAuth remote MCP server", () => {
     upstream.forgetSessions();
 
     expect(await fanOut({ agentId: agent.id, userId: user.id })).toEqual([]);
+  });
+
+  test("cold fan-out teardown leaves no SSE retry in later analytics fetches", async ({
+    makeUser,
+  }) => {
+    upstream = await startSessionServer({ initializationLatencyMs: 150 });
+    upstream.setValidToken("token-0");
+    const { agent, user } = await installOAuthServer({
+      makeUser,
+      url: upstream.url,
+      expiresAt: Date.now() + 8 * 3_600_000,
+    });
+    expect(await fanOut({ agentId: agent.id, userId: user.id })).toEqual([]);
+
+    vi.useFakeTimers();
+    await mcpClient.disconnectAll();
+    await upstream.close();
+    // Let real socket EOF reach the SDK's stream reader and schedule its retry
+    // before advancing the later consumer's fake clock.
+    await delay(50);
+
+    const calls: {
+      url: string;
+      method?: string;
+      body?: unknown;
+      stack?: string;
+    }[] = [];
+    const fetchMock = vi.fn<typeof fetch>(async (url, init) => {
+      calls.push({
+        url: String(url),
+        method: init?.method,
+        body: init?.body,
+        stack: new Error("fetch callsite").stack,
+      });
+      return new Response(null, { status: 200 });
+    });
+    vi.stubGlobal("fetch", fetchMock);
+    config.analytics.enabled = true;
+    config.analytics.posthog = {
+      key: "test-key",
+      host: "https://analytics.example.com",
+    };
+    await instanceAnalyticsService.start();
+    await vi.advanceTimersByTimeAsync(1_100);
+
+    expect(calls, JSON.stringify(calls, null, 2)).toHaveLength(2);
+    expect(
+      fetchMock.mock.calls.map(
+        ([, init]) => JSON.parse(String(init?.body)).event,
+      ),
+    ).toEqual(["instance_started", "instance_heartbeat"]);
+  });
+
+  test("cold calls preserve A/B/A passthrough header contexts", async ({
+    makeUser,
+  }) => {
+    upstream = await startSessionServer({ initializationLatencyMs: 150 });
+    upstream.setValidToken("token-0");
+    const { agent, user } = await installOAuthServer({
+      makeUser,
+      url: upstream.url,
+      expiresAt: Date.now() + 8 * 3_600_000,
+    });
+    expect(
+      await fanOut({
+        agentId: agent.id,
+        userId: user.id,
+        count: 3,
+        contexts: ["A", "B", "A"],
+      }),
+    ).toEqual([]);
+    expect(upstream.toolContexts.sort((a, b) => a.index - b.index)).toEqual([
+      { index: 0, context: "A" },
+      { index: 1, context: "B" },
+      { index: 2, context: "A" },
+    ]);
   });
 });
 
@@ -153,6 +234,7 @@ async function fanOut(params: {
   agentId: string;
   userId: string;
   count?: number;
+  contexts?: string[];
 }) {
   const results = await Promise.all(
     Array.from({ length: params.count ?? FAN_OUT }, async (_, index) => {
@@ -169,6 +251,9 @@ async function fanOut(params: {
           teamId: null,
           isOrganizationToken: false,
           userId: params.userId,
+          passthroughHeaders: params.contexts
+            ? { "X-Mcp-Context": params.contexts[index] }
+            : undefined,
         },
       );
     }),
@@ -191,9 +276,12 @@ const TOOL_LATENCY_MS = 400;
  * for any bearer other than the current valid token, and serves one slow tool
  * so parallel calls overlap.
  */
-async function startSessionServer() {
+async function startSessionServer(
+  options: { initializationLatencyMs?: number } = {},
+) {
   let validToken = "";
   const sessions = new Map<string, StreamableHTTPServerTransport>();
+  const toolContexts: { index: number; context: string | undefined }[] = [];
 
   const httpServer = http.createServer(async (req, res) => {
     try {
@@ -206,6 +294,12 @@ async function startSessionServer() {
       let body = "";
       for await (const chunk of req) body += chunk;
       const parsed = body ? JSON.parse(body) : undefined;
+      if (parsed?.method === "tools/call") {
+        toolContexts.push({
+          index: parsed.params.arguments.index,
+          context: req.headers["x-mcp-context"] as string | undefined,
+        });
+      }
       const sessionId = req.headers["mcp-session-id"];
       let transport =
         typeof sessionId === "string" ? sessions.get(sessionId) : undefined;
@@ -234,6 +328,7 @@ async function startSessionServer() {
         });
         await mcp.connect(created);
         transport = created;
+        await sleep(options.initializationLatencyMs ?? 0);
       }
       await transport.handleRequest(req, res, parsed);
     } catch {
@@ -248,6 +343,7 @@ async function startSessionServer() {
 
   return {
     url: `http://127.0.0.1:${port}/mcp`,
+    toolContexts,
     setValidToken: (token: string) => {
       validToken = token;
     },

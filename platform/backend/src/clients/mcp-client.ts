@@ -497,6 +497,7 @@ class McpClient {
   // with "Connection closed", which cannot be retried safely.
   private clientRequestsInFlight = new Map<Client, number>();
   private clientsClosingWhenIdle = new Set<Client>();
+  private connectionInitializationLocks = new Map<string, Promise<Client>>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -1504,11 +1505,41 @@ class McpClient {
     currentServerState: CachedServerState,
     elicitationHandler?: McpElicitationHandler,
   ): Promise<Client> {
+    // Snapshot this caller's headers before waiting: another transport for the
+    // same key can update the shared latest fingerprint during initialization.
     const effectiveServerState = this.withLatestCredentialFingerprint(
       connectionKey,
       currentServerState,
     );
+    // A cold handshake must have one owner. Otherwise concurrent connects
+    // overwrite the cache and leave the displaced SDK's SSE retries alive.
+    while (this.connectionInitializationLocks.has(connectionKey)) {
+      await this.connectionInitializationLocks
+        .get(connectionKey)
+        ?.catch(() => {});
+    }
+    const initialization = this.initializeClient(
+      connectionKey,
+      transport,
+      targetMcpServerId,
+      effectiveServerState,
+      elicitationHandler,
+    );
+    this.connectionInitializationLocks.set(connectionKey, initialization);
+    try {
+      return await initialization;
+    } finally {
+      this.connectionInitializationLocks.delete(connectionKey);
+    }
+  }
 
+  private async initializeClient(
+    connectionKey: string,
+    transport: Transport,
+    targetMcpServerId: string,
+    effectiveServerState: CachedServerState,
+    elicitationHandler?: McpElicitationHandler,
+  ): Promise<Client> {
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
@@ -1641,9 +1672,8 @@ class McpClient {
       }
     }
 
-    // Store the connection for reuse BEFORE persisting session ID.
-    // This prevents a race where a second request creates a duplicate connection
-    // while the upsert is in flight.
+    // Store the connection before releasing the initialization lock so waiting
+    // callers reuse it rather than starting another handshake.
     this.activeConnections.set(connectionKey, client);
     this.activeConnectionServerState.set(connectionKey, effectiveServerState);
     this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());

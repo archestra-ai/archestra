@@ -1,7 +1,7 @@
 /** Root-session guidance must not become a delegated child's output contract. */
 export const OPENCODE_HANDOFF_PLUGIN = `import { readFileSync } from "node:fs";
 
-export const ArchestraRuntimeHandoff = async ({ client, directory }) => ({
+export const RuntimeHandoff = async ({ client, directory }) => ({
   async "experimental.chat.system.transform"(input, output) {
     if (!input.sessionID) return;
     try {

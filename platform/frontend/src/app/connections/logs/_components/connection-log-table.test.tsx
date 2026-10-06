@@ -101,7 +101,7 @@ describe("ConnectionLogTable", () => {
 
     const [, disconnect, connect] = screen.getAllByRole("row");
     expect(within(disconnect).getByText("Disconnect")).toBeInTheDocument();
-    expect(within(disconnect).getByText("by Admin")).toBeInTheDocument();
+    expect(disconnect).toHaveTextContent("by Admin");
     expect(within(disconnect).getByText("Codex")).toBeInTheDocument();
     expect(within(connect).getByText("Connect")).toBeInTheDocument();
     expect(within(connect).getByText("Claude Code")).toBeInTheDocument();

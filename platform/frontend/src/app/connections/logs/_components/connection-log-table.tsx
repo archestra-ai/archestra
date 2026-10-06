@@ -6,7 +6,7 @@ import {
   isInstallerClientId,
 } from "@archestra/shared/connection-setup";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Plug, PlugZap, Unplug, User } from "lucide-react";
+import { Plug, PlugZap, Unplug } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo } from "react";
 import { ClientIcon } from "@/app/connection/client-icon";
@@ -266,27 +266,28 @@ export function ConnectionLogTable() {
 
 const columns: ColumnDef<ConnectionEvent>[] = [
   {
-    id: "action",
-    header: "Action",
-    size: 200,
-    minSize: 170,
+    id: "event",
+    header: "Event",
+    size: 190,
+    minSize: 160,
     cell: ({ row }) => {
-      const { action, disconnectedBy } = row.original;
+      const { action, disconnectedBy, occurredAt } = row.original;
       const Icon = action === "connected" ? Plug : Unplug;
       return (
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-            <Icon className="size-3.5" />
-          </span>
-          <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
-              {ACTION_LABEL[action]}
-            </div>
-            {disconnectedBy ? (
-              <div className="truncate text-xs text-muted-foreground">
-                by {disconnectedBy.name}
-              </div>
-            ) : null}
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5 text-sm">
+            <Icon className="size-3.5 shrink-0 text-muted-foreground" />
+            <span className="font-medium">{ACTION_LABEL[action]}</span>
+            <span className="truncate text-muted-foreground">
+              {formatRelativeTimeFromNow(occurredAt)}
+            </span>
+          </div>
+          <div className="truncate font-mono text-[11px] text-muted-foreground">
+            {formatDate({
+              date: occurredAt,
+              dateFormat: "MMM d, yyyy · HH:mm",
+            })}
+            {disconnectedBy ? ` · by ${disconnectedBy.name}` : ""}
           </div>
         </div>
       );
@@ -295,20 +296,15 @@ const columns: ColumnDef<ConnectionEvent>[] = [
   {
     id: "user",
     header: "User",
-    size: 240,
-    minSize: 190,
+    size: 220,
+    minSize: 170,
     cell: ({ row }) => (
-      <div className="flex min-w-0 items-center gap-2">
-        <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
-          <User className="size-3.5" />
-        </span>
-        <div className="min-w-0">
-          <div className="truncate text-sm font-medium">
-            {row.original.userName || row.original.userEmail}
-          </div>
-          <div className="truncate text-xs text-muted-foreground">
-            {row.original.userEmail}
-          </div>
+      <div className="min-w-0">
+        <div className="truncate text-sm font-medium">
+          {row.original.userName || row.original.userEmail}
+        </div>
+        <div className="truncate text-xs text-muted-foreground">
+          {row.original.userEmail}
         </div>
       </div>
     ),
@@ -316,8 +312,8 @@ const columns: ColumnDef<ConnectionEvent>[] = [
   {
     id: "agent",
     header: "Agent",
-    size: 220,
-    minSize: 180,
+    size: 200,
+    minSize: 160,
     cell: ({ row }) => {
       const { clientId, deviceName, platform } = row.original;
       const client = CLIENTS_BY_ID.get(clientId);
@@ -327,12 +323,12 @@ const columns: ColumnDef<ConnectionEvent>[] = [
       return (
         <div className="flex min-w-0 items-center gap-2">
           {client ? (
-            <ClientIcon client={client} size={28} />
+            <ClientIcon client={client} size={22} />
           ) : (
-            <span className="size-7 shrink-0 rounded-md bg-muted" />
+            <span className="size-[22px] shrink-0 rounded-md bg-muted" />
           )}
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium">
+            <div className="truncate text-sm">
               {INSTALLER_CLIENT_LABELS[clientId]}
             </div>
             {machine ? (
@@ -347,9 +343,9 @@ const columns: ColumnDef<ConnectionEvent>[] = [
   },
   {
     id: "setup",
-    header: "Connected to",
-    size: 260,
-    minSize: 180,
+    header: "Included",
+    size: 240,
+    minSize: 160,
     cell: ({ row }) => {
       const { mcpGateway, modelRouting, includeSkills } = row.original;
       const parts = [
@@ -373,24 +369,5 @@ const columns: ColumnDef<ConnectionEvent>[] = [
         </div>
       );
     },
-  },
-  {
-    id: "time",
-    header: "Time",
-    size: 175,
-    minSize: 160,
-    cell: ({ row }) => (
-      <div className="min-w-0">
-        <div className="text-sm">
-          {formatRelativeTimeFromNow(row.original.occurredAt)}
-        </div>
-        <div className="truncate font-mono text-[11px] text-muted-foreground">
-          {formatDate({
-            date: row.original.occurredAt,
-            dateFormat: "MMM d, yyyy · HH:mm:ss",
-          })}
-        </div>
-      </div>
-    ),
   },
 ];

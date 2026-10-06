@@ -2,7 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import { throwOnApiError } from "@/lib/utils/api";
 
-const { getConnectedClientLog } = archestraApiSdk;
+const { getAgentAdoption, getConnectedClientLog } = archestraApiSdk;
 
 type ConnectionLogQuery = NonNullable<
   archestraApiTypes.GetConnectedClientLogData["query"]
@@ -11,11 +11,15 @@ export type ConnectionLogPage =
   archestraApiTypes.GetConnectedClientLogResponses["200"];
 export type ConnectionEvent = ConnectionLogPage["data"][number];
 export type ConnectionEventAction = ConnectionEvent["action"];
+export type AgentAdoption = archestraApiTypes.GetAgentAdoptionResponses["200"];
+export type AgentAdoptionMember = AgentAdoption["members"][number];
+export type AgentAdoptionStatus = AgentAdoptionMember["status"];
 
 const connectedClientKeys = {
   all: ["connected-clients"] as const,
   log: (query: ConnectionLogQuery) =>
     [...connectedClientKeys.all, "log", query] as const,
+  adoption: () => [...connectedClientKeys.all, "adoption"] as const,
 };
 
 /** The organization's agent connect and disconnect events, newest first. */
@@ -24,6 +28,18 @@ export function useConnectionLog(query: ConnectionLogQuery) {
     queryKey: connectedClientKeys.log(query),
     queryFn: async () => {
       const response = await getConnectedClientLog({ query });
+      throwOnApiError(response.error, { toastOnError: false });
+      return response.data ?? null;
+    },
+  });
+}
+
+/** Every member with the agents they set up and their agents' last traffic. */
+export function useAgentAdoption() {
+  return useQuery({
+    queryKey: connectedClientKeys.adoption(),
+    queryFn: async () => {
+      const response = await getAgentAdoption();
       throwOnApiError(response.error, { toastOnError: false });
       return response.data ?? null;
     },

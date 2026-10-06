@@ -1415,7 +1415,7 @@ export const getAllDelegationConnections = <ThrowOnError extends boolean = false
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<AnthropicMessagesWithDefaultAgentResponses, AnthropicMessagesWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/anthropic/v1/messages',
@@ -1431,7 +1431,7 @@ export const anthropicMessagesWithDefaultAgent = <ThrowOnError extends boolean =
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicMessagesWithAgentData, ThrowOnError>) => (options.client ?? client).post<AnthropicMessagesWithAgentResponses, AnthropicMessagesWithAgentErrors, ThrowOnError>({
     url: '/v1/anthropic/{agentId}/v1/messages',
@@ -1447,7 +1447,7 @@ export const anthropicMessagesWithAgent = <ThrowOnError extends boolean = false>
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const anthropicListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<AnthropicListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<AnthropicListModelsWithDefaultAgentResponses, AnthropicListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/anthropic/v1/models', ...options });
 
@@ -1456,7 +1456,7 @@ export const anthropicListModelsWithDefaultAgent = <ThrowOnError extends boolean
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const anthropicListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<AnthropicListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<AnthropicListModelsWithAgentResponses, AnthropicListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/anthropic/{agentId}/v1/models', ...options });
 
@@ -2130,7 +2130,7 @@ export const assignToolToApp = <ThrowOnError extends boolean = false>(options: O
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const archestraChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ArchestraChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ArchestraChatCompletionsWithDefaultAgentResponses, ArchestraChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/archestra/chat/completions',
@@ -2146,7 +2146,7 @@ export const archestraChatCompletionsWithDefaultAgent = <ThrowOnError extends bo
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const archestraChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ArchestraChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ArchestraChatCompletionsWithAgentResponses, ArchestraChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/archestra/{agentId}/chat/completions',
@@ -2481,7 +2481,7 @@ export const bulkUpsertDefaultResultPolicy = <ThrowOnError extends boolean = fal
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const azureEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AzureEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<AzureEmbeddingsWithDefaultAgentResponses, AzureEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/azure/embeddings',
@@ -2497,7 +2497,7 @@ export const azureEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const azureEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<AzureEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<AzureEmbeddingsWithAgentResponses, AzureEmbeddingsWithAgentErrors, ThrowOnError>({
     url: '/v1/azure/{agentId}/embeddings',
@@ -2513,7 +2513,7 @@ export const azureEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(o
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const azureChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AzureChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<AzureChatCompletionsWithDefaultAgentResponses, AzureChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/azure/chat/completions',
@@ -2529,7 +2529,7 @@ export const azureChatCompletionsWithDefaultAgent = <ThrowOnError extends boolea
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const azureResponsesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<AzureResponsesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<AzureResponsesWithDefaultAgentResponses, AzureResponsesWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/azure/responses',
@@ -2545,7 +2545,7 @@ export const azureResponsesWithDefaultAgent = <ThrowOnError extends boolean = fa
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const azureResponsesWithAgent = <ThrowOnError extends boolean = false>(options: Options<AzureResponsesWithAgentData, ThrowOnError>) => (options.client ?? client).post<AzureResponsesWithAgentResponses, AzureResponsesWithAgentErrors, ThrowOnError>({
     url: '/v1/azure/{agentId}/responses',
@@ -2561,7 +2561,7 @@ export const azureResponsesWithAgent = <ThrowOnError extends boolean = false>(op
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const azureChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<AzureChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<AzureChatCompletionsWithAgentResponses, AzureChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/azure/{agentId}/chat/completions',
@@ -2577,7 +2577,7 @@ export const azureChatCompletionsWithAgent = <ThrowOnError extends boolean = fal
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockOpenaiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockOpenaiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockOpenaiChatCompletionsWithDefaultAgentResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/openai/chat/completions',
@@ -2593,7 +2593,7 @@ export const bedrockOpenaiChatCompletionsWithDefaultAgent = <ThrowOnError extend
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockOpenaiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockOpenaiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockOpenaiChatCompletionsWithAgentResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/openai/{agentId}/chat/completions',
@@ -2609,7 +2609,7 @@ export const bedrockOpenaiChatCompletionsWithAgent = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockOpenaiListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<BedrockOpenaiListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<BedrockOpenaiListModelsWithDefaultAgentResponses, BedrockOpenaiListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/bedrock/openai/models', ...options });
 
@@ -2618,7 +2618,7 @@ export const bedrockOpenaiListModelsWithDefaultAgent = <ThrowOnError extends boo
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockOpenaiListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockOpenaiListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<BedrockOpenaiListModelsWithAgentResponses, BedrockOpenaiListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/bedrock/openai/{agentId}/models', ...options });
 
@@ -2627,7 +2627,7 @@ export const bedrockOpenaiListModelsWithAgent = <ThrowOnError extends boolean = 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockConverseWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseWithDefaultAgentResponses, BedrockConverseWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/bedrock/converse',
@@ -2643,7 +2643,7 @@ export const bedrockConverseWithDefaultAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockConverseWithAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseWithAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseWithAgentResponses, BedrockConverseWithAgentErrors, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/converse',
@@ -2659,7 +2659,7 @@ export const bedrockConverseWithAgent = <ThrowOnError extends boolean = false>(o
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockConverseStreamWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseStreamWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseStreamWithDefaultAgentResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/converse-stream',
@@ -2675,7 +2675,7 @@ export const bedrockConverseStreamWithDefaultAgent = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockConverseStreamWithAgent = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseStreamWithAgentData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseStreamWithAgentResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/converse-stream',
@@ -2691,7 +2691,7 @@ export const bedrockConverseStreamWithAgent = <ThrowOnError extends boolean = fa
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockConverseWithAgentAndModel = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseWithAgentAndModelData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseWithAgentAndModelResponses, BedrockConverseWithAgentAndModelErrors, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/model/{modelId}/converse',
@@ -2707,7 +2707,7 @@ export const bedrockConverseWithAgentAndModel = <ThrowOnError extends boolean = 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockConverseStreamWithAgentAndModel = <ThrowOnError extends boolean = false>(options: Options<BedrockConverseStreamWithAgentAndModelData, ThrowOnError>) => (options.client ?? client).post<BedrockConverseStreamWithAgentAndModelResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/model/{modelId}/converse-stream',
@@ -2723,7 +2723,7 @@ export const bedrockConverseStreamWithAgentAndModel = <ThrowOnError extends bool
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockInvokeWithDefaultAgentAndModel = <ThrowOnError extends boolean = false>(options: Options<BedrockInvokeWithDefaultAgentAndModelData, ThrowOnError>) => (options.client ?? client).post<BedrockInvokeWithDefaultAgentAndModelResponses, BedrockInvokeWithDefaultAgentAndModelErrors, ThrowOnError>({
     url: '/v1/bedrock/model/{modelId}/invoke',
@@ -2739,7 +2739,7 @@ export const bedrockInvokeWithDefaultAgentAndModel = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockInvokeWithAgentAndModel = <ThrowOnError extends boolean = false>(options: Options<BedrockInvokeWithAgentAndModelData, ThrowOnError>) => (options.client ?? client).post<BedrockInvokeWithAgentAndModelResponses, BedrockInvokeWithAgentAndModelErrors, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/model/{modelId}/invoke',
@@ -2755,7 +2755,7 @@ export const bedrockInvokeWithAgentAndModel = <ThrowOnError extends boolean = fa
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockInvokeStreamWithDefaultAgentAndModel = <ThrowOnError extends boolean = false>(options: Options<BedrockInvokeStreamWithDefaultAgentAndModelData, ThrowOnError>) => (options.client ?? client).post<BedrockInvokeStreamWithDefaultAgentAndModelResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/model/{modelId}/invoke-with-response-stream',
@@ -2771,7 +2771,7 @@ export const bedrockInvokeStreamWithDefaultAgentAndModel = <ThrowOnError extends
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const bedrockInvokeStreamWithAgentAndModel = <ThrowOnError extends boolean = false>(options: Options<BedrockInvokeStreamWithAgentAndModelData, ThrowOnError>) => (options.client ?? client).post<BedrockInvokeStreamWithAgentAndModelResponses, unknown, ThrowOnError>({
     url: '/v1/bedrock/{agentId}/model/{modelId}/invoke-with-response-stream',
@@ -2787,7 +2787,7 @@ export const bedrockInvokeStreamWithAgentAndModel = <ThrowOnError extends boolea
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const cerebrasChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<CerebrasChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<CerebrasChatCompletionsWithDefaultAgentResponses, CerebrasChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/cerebras/chat/completions',
@@ -2803,7 +2803,7 @@ export const cerebrasChatCompletionsWithDefaultAgent = <ThrowOnError extends boo
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const cerebrasChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<CerebrasChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<CerebrasChatCompletionsWithAgentResponses, CerebrasChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/cerebras/{agentId}/chat/completions',
@@ -3671,7 +3671,7 @@ export const decideClientConnection = <ThrowOnError extends boolean = false>(opt
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const cohereChatWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<CohereChatWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<CohereChatWithDefaultAgentResponses, CohereChatWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/cohere/chat',
@@ -3687,7 +3687,7 @@ export const cohereChatWithDefaultAgent = <ThrowOnError extends boolean = false>
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const cohereChatWithAgent = <ThrowOnError extends boolean = false>(options: Options<CohereChatWithAgentData, ThrowOnError>) => (options.client ?? client).post<CohereChatWithAgentResponses, CohereChatWithAgentErrors, ThrowOnError>({
     url: '/v1/cohere/{agentId}/chat',
@@ -3827,7 +3827,7 @@ export const getConnectionSetupScript = <ThrowOnError extends boolean = false>(o
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const deepseekChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<DeepseekChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<DeepseekChatCompletionsWithDefaultAgentResponses, DeepseekChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/deepseek/chat/completions',
@@ -3843,7 +3843,7 @@ export const deepseekChatCompletionsWithDefaultAgent = <ThrowOnError extends boo
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const deepseekChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<DeepseekChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<DeepseekChatCompletionsWithAgentResponses, DeepseekChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/deepseek/{agentId}/chat/completions',
@@ -4099,7 +4099,7 @@ export const getExternalMcpSkill = <ThrowOnError extends boolean = false>(option
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const geminiEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<GeminiEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<GeminiEmbeddingsWithDefaultAgentResponses, GeminiEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/gemini/embeddings',
@@ -4115,7 +4115,7 @@ export const geminiEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const geminiEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<GeminiEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<GeminiEmbeddingsWithAgentResponses, GeminiEmbeddingsWithAgentErrors, ThrowOnError>({
     url: '/v1/gemini/{agentId}/embeddings',
@@ -4133,7 +4133,7 @@ export const geminiEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const postV1GeminiV1BetaModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiV1BetaModelsByModelGenerateContentData, ThrowOnError>) => (options.client ?? client).post<PostV1GeminiV1BetaModelsByModelGenerateContentResponses, PostV1GeminiV1BetaModelsByModelGenerateContentErrors, ThrowOnError>({
     url: '/v1/gemini/v1beta/models/{model}:generateContent',
@@ -4151,7 +4151,7 @@ export const postV1GeminiV1BetaModelsByModelGenerateContent = <ThrowOnError exte
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const postV1GeminiV1BetaModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiV1BetaModelsByModelStreamGenerateContentData, ThrowOnError>) => (options.client ?? client).post<unknown, PostV1GeminiV1BetaModelsByModelStreamGenerateContentErrors, ThrowOnError>({
     url: '/v1/gemini/v1beta/models/{model}:streamGenerateContent',
@@ -4169,7 +4169,7 @@ export const postV1GeminiV1BetaModelsByModelStreamGenerateContent = <ThrowOnErro
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const postV1GeminiByAgentIdV1BetaModelsByModelGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentData, ThrowOnError>) => (options.client ?? client).post<PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentResponses, PostV1GeminiByAgentIdV1BetaModelsByModelGenerateContentErrors, ThrowOnError>({
     url: '/v1/gemini/{agentId}/v1beta/models/{model}:generateContent',
@@ -4187,7 +4187,7 @@ export const postV1GeminiByAgentIdV1BetaModelsByModelGenerateContent = <ThrowOnE
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const postV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContent = <ThrowOnError extends boolean = false>(options: Options<PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentData, ThrowOnError>) => (options.client ?? client).post<unknown, PostV1GeminiByAgentIdV1BetaModelsByModelStreamGenerateContentErrors, ThrowOnError>({
     url: '/v1/gemini/{agentId}/v1beta/models/{model}:streamGenerateContent',
@@ -4315,7 +4315,7 @@ export const githubCopilotDeviceAuthPoll = <ThrowOnError extends boolean = false
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const githubCopilotChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<GithubCopilotChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<GithubCopilotChatCompletionsWithDefaultAgentResponses, GithubCopilotChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/github-copilot/chat/completions',
@@ -4331,7 +4331,7 @@ export const githubCopilotChatCompletionsWithDefaultAgent = <ThrowOnError extend
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const githubCopilotChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<GithubCopilotChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<GithubCopilotChatCompletionsWithAgentResponses, GithubCopilotChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/github-copilot/{agentId}/chat/completions',
@@ -4347,7 +4347,7 @@ export const githubCopilotChatCompletionsWithAgent = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const githubCopilotResponsesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<GithubCopilotResponsesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<GithubCopilotResponsesWithDefaultAgentResponses, GithubCopilotResponsesWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/github-copilot/responses',
@@ -4363,7 +4363,7 @@ export const githubCopilotResponsesWithDefaultAgent = <ThrowOnError extends bool
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const githubCopilotResponsesWithAgent = <ThrowOnError extends boolean = false>(options: Options<GithubCopilotResponsesWithAgentData, ThrowOnError>) => (options.client ?? client).post<GithubCopilotResponsesWithAgentResponses, GithubCopilotResponsesWithAgentErrors, ThrowOnError>({
     url: '/v1/github-copilot/{agentId}/responses',
@@ -4379,7 +4379,7 @@ export const githubCopilotResponsesWithAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const githubCopilotListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<GithubCopilotListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<GithubCopilotListModelsWithDefaultAgentResponses, GithubCopilotListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/github-copilot/models', ...options });
 
@@ -4388,7 +4388,7 @@ export const githubCopilotListModelsWithDefaultAgent = <ThrowOnError extends boo
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const githubCopilotListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<GithubCopilotListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<GithubCopilotListModelsWithAgentResponses, GithubCopilotListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/github-copilot/{agentId}/models', ...options });
 
@@ -4463,7 +4463,7 @@ export const updateGithubPat = <ThrowOnError extends boolean = false>(options: O
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const groqChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<GroqChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<GroqChatCompletionsWithDefaultAgentResponses, GroqChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/groq/chat/completions',
@@ -4479,7 +4479,7 @@ export const groqChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const groqChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<GroqChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<GroqChatCompletionsWithAgentResponses, GroqChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/groq/{agentId}/chat/completions',
@@ -5225,7 +5225,7 @@ export const getK8sCapabilities = <ThrowOnError extends boolean = false>(options
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const kimiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<KimiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<KimiChatCompletionsWithDefaultAgentResponses, KimiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/kimi/chat/completions',
@@ -5241,7 +5241,7 @@ export const kimiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const kimiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<KimiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<KimiChatCompletionsWithAgentResponses, KimiChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/kimi/{agentId}/chat/completions',
@@ -6665,7 +6665,7 @@ export const bulkDeleteLlmProviderApiKeys = <ThrowOnError extends boolean = fals
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  *
  * Authentication:
  *
@@ -6682,7 +6682,7 @@ export const getLlmProxy = <ThrowOnError extends boolean = false>(options?: Opti
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  *
  * Authentication:
  *
@@ -7285,7 +7285,7 @@ export const microsoft365CopilotDeviceAuthPoll = <ThrowOnError extends boolean =
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const microsoft365CopilotChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<Microsoft365CopilotChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<Microsoft365CopilotChatCompletionsWithDefaultAgentResponses, Microsoft365CopilotChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/microsoft-365-copilot/chat/completions',
@@ -7301,7 +7301,7 @@ export const microsoft365CopilotChatCompletionsWithDefaultAgent = <ThrowOnError 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const microsoft365CopilotChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<Microsoft365CopilotChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<Microsoft365CopilotChatCompletionsWithAgentResponses, Microsoft365CopilotChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/microsoft-365-copilot/{agentId}/chat/completions',
@@ -7317,7 +7317,7 @@ export const microsoft365CopilotChatCompletionsWithAgent = <ThrowOnError extends
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const microsoft365CopilotListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<Microsoft365CopilotListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<Microsoft365CopilotListModelsWithDefaultAgentResponses, Microsoft365CopilotListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/microsoft-365-copilot/models', ...options });
 
@@ -7326,7 +7326,7 @@ export const microsoft365CopilotListModelsWithDefaultAgent = <ThrowOnError exten
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const microsoft365CopilotListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<Microsoft365CopilotListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<Microsoft365CopilotListModelsWithAgentResponses, Microsoft365CopilotListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/microsoft-365-copilot/{agentId}/models', ...options });
 
@@ -7335,7 +7335,7 @@ export const microsoft365CopilotListModelsWithAgent = <ThrowOnError extends bool
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const minimaxChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<MinimaxChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<MinimaxChatCompletionsWithDefaultAgentResponses, MinimaxChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/minimax/chat/completions',
@@ -7351,7 +7351,7 @@ export const minimaxChatCompletionsWithDefaultAgent = <ThrowOnError extends bool
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const minimaxChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<MinimaxChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<MinimaxChatCompletionsWithAgentResponses, MinimaxChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/minimax/{agentId}/chat/completions',
@@ -7367,7 +7367,7 @@ export const minimaxChatCompletionsWithAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const mistralEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<MistralEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<MistralEmbeddingsWithDefaultAgentResponses, MistralEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/mistral/embeddings',
@@ -7383,7 +7383,7 @@ export const mistralEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean =
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const mistralEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<MistralEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<MistralEmbeddingsWithAgentResponses, MistralEmbeddingsWithAgentErrors, ThrowOnError>({
     url: '/v1/mistral/{agentId}/embeddings',
@@ -7399,7 +7399,7 @@ export const mistralEmbeddingsWithAgent = <ThrowOnError extends boolean = false>
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const mistralChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<MistralChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<MistralChatCompletionsWithDefaultAgentResponses, MistralChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/mistral/chat/completions',
@@ -7415,7 +7415,7 @@ export const mistralChatCompletionsWithDefaultAgent = <ThrowOnError extends bool
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const mistralChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<MistralChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<MistralChatCompletionsWithAgentResponses, MistralChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/mistral/{agentId}/chat/completions',
@@ -7431,7 +7431,7 @@ export const mistralChatCompletionsWithAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const modelRouterListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<ModelRouterListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<ModelRouterListModelsWithDefaultAgentResponses, ModelRouterListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/model-router/models', ...options });
 
@@ -7440,7 +7440,7 @@ export const modelRouterListModelsWithDefaultAgent = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const modelRouterListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<ModelRouterListModelsWithAgentResponses, ModelRouterListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/model-router/{agentId}/models', ...options });
 
@@ -7449,7 +7449,7 @@ export const modelRouterListModelsWithAgent = <ThrowOnError extends boolean = fa
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const modelRouterResponsesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterResponsesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterResponsesWithDefaultAgentResponses, ModelRouterResponsesWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/model-router/responses',
@@ -7465,7 +7465,7 @@ export const modelRouterResponsesWithDefaultAgent = <ThrowOnError extends boolea
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const modelRouterResponsesWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterResponsesWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterResponsesWithAgentResponses, ModelRouterResponsesWithAgentErrors, ThrowOnError>({
     url: '/v1/model-router/{agentId}/responses',
@@ -7481,7 +7481,7 @@ export const modelRouterResponsesWithAgent = <ThrowOnError extends boolean = fal
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const modelRouterEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterEmbeddingsWithDefaultAgentResponses, ModelRouterEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/model-router/embeddings',
@@ -7497,7 +7497,7 @@ export const modelRouterEmbeddingsWithDefaultAgent = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const modelRouterEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterEmbeddingsWithAgentResponses, ModelRouterEmbeddingsWithAgentErrors, ThrowOnError>({
     url: '/v1/model-router/{agentId}/embeddings',
@@ -7513,7 +7513,7 @@ export const modelRouterEmbeddingsWithAgent = <ThrowOnError extends boolean = fa
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const modelRouterChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterChatCompletionsWithDefaultAgentResponses, ModelRouterChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/model-router/chat/completions',
@@ -7529,7 +7529,7 @@ export const modelRouterChatCompletionsWithDefaultAgent = <ThrowOnError extends 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const modelRouterChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ModelRouterChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ModelRouterChatCompletionsWithAgentResponses, ModelRouterChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/model-router/{agentId}/chat/completions',
@@ -7589,7 +7589,7 @@ export const getWellKnownOauthAuthorizationServer = <ThrowOnError extends boolea
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const ollamaNativeChatWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaNativeChatWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaNativeChatWithDefaultAgentResponses, OllamaNativeChatWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/ollama-native/api/chat',
@@ -7605,7 +7605,7 @@ export const ollamaNativeChatWithDefaultAgent = <ThrowOnError extends boolean = 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const ollamaNativeChatWithAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaNativeChatWithAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaNativeChatWithAgentResponses, OllamaNativeChatWithAgentErrors, ThrowOnError>({
     url: '/v1/ollama-native/{agentId}/api/chat',
@@ -7621,7 +7621,7 @@ export const ollamaNativeChatWithAgent = <ThrowOnError extends boolean = false>(
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const ollamaEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaEmbeddingsWithDefaultAgentResponses, OllamaEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/ollama/embeddings',
@@ -7637,7 +7637,7 @@ export const ollamaEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const ollamaEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaEmbeddingsWithAgentResponses, OllamaEmbeddingsWithAgentErrors, ThrowOnError>({
     url: '/v1/ollama/{agentId}/embeddings',
@@ -7653,7 +7653,7 @@ export const ollamaEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const ollamaChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaChatCompletionsWithDefaultAgentResponses, OllamaChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/ollama/chat/completions',
@@ -7669,7 +7669,7 @@ export const ollamaChatCompletionsWithDefaultAgent = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const ollamaChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OllamaChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OllamaChatCompletionsWithAgentResponses, OllamaChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/ollama/{agentId}/chat/completions',
@@ -7764,7 +7764,7 @@ export const getFeedbackPopupActivation = <ThrowOnError extends boolean = false>
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiEmbeddingsWithDefaultAgentResponses, OpenAiEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/openai/embeddings',
@@ -7780,7 +7780,7 @@ export const openAiEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiEmbeddingsWithAgentResponses, OpenAiEmbeddingsWithAgentErrors, ThrowOnError>({
     url: '/v1/openai/{agentId}/embeddings',
@@ -7796,7 +7796,7 @@ export const openAiEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiResponsesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiResponsesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiResponsesWithDefaultAgentResponses, OpenAiResponsesWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/openai/responses',
@@ -7812,7 +7812,7 @@ export const openAiResponsesWithDefaultAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiResponsesWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiResponsesWithAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiResponsesWithAgentResponses, OpenAiResponsesWithAgentErrors, ThrowOnError>({
     url: '/v1/openai/{agentId}/responses',
@@ -7828,7 +7828,7 @@ export const openAiResponsesWithAgent = <ThrowOnError extends boolean = false>(o
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiResponsesCompactWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiResponsesCompactWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiResponsesCompactWithDefaultAgentResponses, OpenAiResponsesCompactWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/openai/responses/compact',
@@ -7844,7 +7844,7 @@ export const openAiResponsesCompactWithDefaultAgent = <ThrowOnError extends bool
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiResponsesCompactWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiResponsesCompactWithAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiResponsesCompactWithAgentResponses, OpenAiResponsesCompactWithAgentErrors, ThrowOnError>({
     url: '/v1/openai/{agentId}/responses/compact',
@@ -7860,7 +7860,7 @@ export const openAiResponsesCompactWithAgent = <ThrowOnError extends boolean = f
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiChatCompletionsWithDefaultAgentResponses, OpenAiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/openai/chat/completions',
@@ -7876,7 +7876,7 @@ export const openAiChatCompletionsWithDefaultAgent = <ThrowOnError extends boole
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OpenAiChatCompletionsWithAgentResponses, OpenAiChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/openai/{agentId}/chat/completions',
@@ -7892,7 +7892,7 @@ export const openAiChatCompletionsWithAgent = <ThrowOnError extends boolean = fa
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiListModelsWithDefaultAgent = <ThrowOnError extends boolean = false>(options?: Options<OpenAiListModelsWithDefaultAgentData, ThrowOnError>) => (options?.client ?? client).get<OpenAiListModelsWithDefaultAgentResponses, OpenAiListModelsWithDefaultAgentErrors, ThrowOnError>({ url: '/v1/openai/models', ...options });
 
@@ -7901,7 +7901,7 @@ export const openAiListModelsWithDefaultAgent = <ThrowOnError extends boolean = 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openAiListModelsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenAiListModelsWithAgentData, ThrowOnError>) => (options.client ?? client).get<OpenAiListModelsWithAgentResponses, OpenAiListModelsWithAgentErrors, ThrowOnError>({ url: '/v1/openai/{agentId}/models', ...options });
 
@@ -8319,7 +8319,7 @@ export const downloadOpenAppaYell = <ThrowOnError extends boolean = false>(optio
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openrouterChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<OpenrouterChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<OpenrouterChatCompletionsWithDefaultAgentResponses, OpenrouterChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/openrouter/chat/completions',
@@ -8335,7 +8335,7 @@ export const openrouterChatCompletionsWithDefaultAgent = <ThrowOnError extends b
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const openrouterChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<OpenrouterChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<OpenrouterChatCompletionsWithAgentResponses, OpenrouterChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/openrouter/{agentId}/chat/completions',
@@ -8827,7 +8827,7 @@ export const getOrganizationMember = <ThrowOnError extends boolean = false>(opti
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const perplexityChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<PerplexityChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<PerplexityChatCompletionsWithDefaultAgentResponses, PerplexityChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/perplexity/chat/completions',
@@ -8843,7 +8843,7 @@ export const perplexityChatCompletionsWithDefaultAgent = <ThrowOnError extends b
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<PerplexityChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<PerplexityChatCompletionsWithAgentResponses, PerplexityChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/perplexity/{agentId}/chat/completions',
@@ -8859,7 +8859,7 @@ export const perplexityChatCompletionsWithAgent = <ThrowOnError extends boolean 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const perplexityResponsesWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<PerplexityResponsesWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<PerplexityResponsesWithDefaultAgentResponses, PerplexityResponsesWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/perplexity/responses',
@@ -8875,7 +8875,7 @@ export const perplexityResponsesWithDefaultAgent = <ThrowOnError extends boolean
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const perplexityResponsesWithAgent = <ThrowOnError extends boolean = false>(options: Options<PerplexityResponsesWithAgentData, ThrowOnError>) => (options.client ?? client).post<PerplexityResponsesWithAgentResponses, PerplexityResponsesWithAgentErrors, ThrowOnError>({
     url: '/v1/perplexity/{agentId}/responses',
@@ -11435,7 +11435,7 @@ export const bulkDeleteVirtualApiKeys = <ThrowOnError extends boolean = false>(o
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const vllmEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<VllmEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<VllmEmbeddingsWithDefaultAgentResponses, VllmEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/vllm/embeddings',
@@ -11451,7 +11451,7 @@ export const vllmEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = fa
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const vllmEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<VllmEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<VllmEmbeddingsWithAgentResponses, VllmEmbeddingsWithAgentErrors, ThrowOnError>({
     url: '/v1/vllm/{agentId}/embeddings',
@@ -11467,7 +11467,7 @@ export const vllmEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(op
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const vllmChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<VllmChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<VllmChatCompletionsWithDefaultAgentResponses, VllmChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/vllm/chat/completions',
@@ -11483,7 +11483,7 @@ export const vllmChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const vllmChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<VllmChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<VllmChatCompletionsWithAgentResponses, VllmChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/vllm/{agentId}/chat/completions',
@@ -11499,7 +11499,7 @@ export const vllmChatCompletionsWithAgent = <ThrowOnError extends boolean = fals
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const xaiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<XaiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<XaiChatCompletionsWithDefaultAgentResponses, XaiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/xai/chat/completions',
@@ -11515,7 +11515,7 @@ export const xaiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean 
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const xaiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<XaiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<XaiChatCompletionsWithAgentResponses, XaiChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/xai/{agentId}/chat/completions',
@@ -11564,7 +11564,7 @@ export const xaiSubscriptionDeviceAuthPoll = <ThrowOnError extends boolean = fal
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const zhipuaiEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ZhipuaiEmbeddingsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ZhipuaiEmbeddingsWithDefaultAgentResponses, ZhipuaiEmbeddingsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/zhipuai/embeddings',
@@ -11580,7 +11580,7 @@ export const zhipuaiEmbeddingsWithDefaultAgent = <ThrowOnError extends boolean =
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const zhipuaiEmbeddingsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ZhipuaiEmbeddingsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ZhipuaiEmbeddingsWithAgentResponses, ZhipuaiEmbeddingsWithAgentErrors, ThrowOnError>({
     url: '/v1/zhipuai/{agentId}/embeddings',
@@ -11596,7 +11596,7 @@ export const zhipuaiEmbeddingsWithAgent = <ThrowOnError extends boolean = false>
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const zhipuaiChatCompletionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<ZhipuaiChatCompletionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<ZhipuaiChatCompletionsWithDefaultAgentResponses, ZhipuaiChatCompletionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/zhipuai/chat/completions',
@@ -11612,7 +11612,7 @@ export const zhipuaiChatCompletionsWithDefaultAgent = <ThrowOnError extends bool
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const zhipuaiChatCompletionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<ZhipuaiChatCompletionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<ZhipuaiChatCompletionsWithAgentResponses, ZhipuaiChatCompletionsWithAgentErrors, ThrowOnError>({
     url: '/v1/zhipuai/{agentId}/chat/completions',

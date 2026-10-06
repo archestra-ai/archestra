@@ -40632,7 +40632,6 @@ export type GetConfigResponses = {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             mcpIdleHibernationBetaEnabled: boolean;
-            mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
             agentRuntime: boolean;
             agentRuntimeCatalogImages: {

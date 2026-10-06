@@ -157,36 +157,6 @@ jobs:
           base-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           lockfiles: ai-labs/Cargo.lock
 
-  docs-image-policy:
-    name: Docs Image Policy
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Enforce docs asset format and size policy
-        run: python3 .github/scripts/check-docs-image-policy.py
-
-  docs-links:
-    name: Docs Link Check
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Check internal doc links and asset embeds resolve
-        run: python3 .github/scripts/check-docs-links.py
-
   migration-kit-checks:
     name: Migration Kit Checks
     if: github.event_name == 'merge_group'

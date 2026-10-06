@@ -525,7 +525,7 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
       {getConnectorTypeLabel(type)} user whose profile hides it.{" "}
       <ExternalDocsLink
         href={getFrontendDocsUrl(
-          DocsPage.PlatformKnowledge,
+          DocsPage.PlatformKnowledgeConnectors,
           ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR,
         )}
         className="underline"
@@ -562,7 +562,10 @@ export function AutoSyncCredentialRequirement({
     <span>
       {entry.requirement}{" "}
       <ExternalDocsLink
-        href={getFrontendDocsUrl(DocsPage.PlatformKnowledge, entry.docsAnchor)}
+        href={getFrontendDocsUrl(
+          DocsPage.PlatformKnowledgeConnectors,
+          entry.docsAnchor,
+        )}
         className="underline"
         showIcon={false}
       >
@@ -660,7 +663,7 @@ export function getConnectorUrlConfig(
 
 export function getConnectorDocsUrl(type: ConnectorType): string | null {
   return getFrontendDocsUrl(
-    DocsPage.PlatformKnowledge,
+    DocsPage.PlatformKnowledgeConnectors,
     CONNECTOR_DOC_ANCHORS[type] ?? type,
   );
 }

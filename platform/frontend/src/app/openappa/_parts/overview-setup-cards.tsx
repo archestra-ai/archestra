@@ -350,7 +350,7 @@ export function UnrecognizedClientsCard() {
                 Guardrails work with natively supported clients like {appName}{" "}
                 chat, Claude Code, Codex, and{" "}
               </span>
-              <GuardrailsDocsLink anchor="clients">more</GuardrailsDocsLink>
+              <GuardrailsDocsLink>more</GuardrailsDocsLink>
               <span>, and with any client that correctly sends </span>
               <GuardrailsDocsLink anchor="session-headers">
                 OpenAPPA session headers
@@ -419,11 +419,11 @@ function GuardrailsDocsLink({
   anchor,
   children,
 }: {
-  anchor: string;
+  anchor?: string;
   children: string;
 }) {
   const href = getVisibleDocsUrl(
-    getDocsUrl(DocsPage.PlatformAiToolGuardrails, anchor),
+    getDocsUrl(DocsPage.PlatformAiToolGuardrailsClients, anchor),
   );
   if (!href) return <span>{children}</span>;
   return (

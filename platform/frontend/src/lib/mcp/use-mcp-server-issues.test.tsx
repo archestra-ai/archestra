@@ -1,10 +1,7 @@
 import { renderHook } from "@testing-library/react";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import { useMcpServerIssues } from "./use-mcp-server-issues";
 
-const { useFeatureMock } = vi.hoisted(() => ({ useFeatureMock: vi.fn() }));
-
-vi.mock("@/lib/config/config.query", () => ({ useFeature: useFeatureMock }));
 vi.mock("@/lib/auth/auth.query", () => ({
   useSession: () => ({ data: { user: { id: "user-1" } } }),
   useHasPermissions: () => ({ data: true }),
@@ -51,22 +48,8 @@ vi.mock("@/lib/mcp/mcp-server.query", () => ({
   }),
 }));
 
-describe("useMcpServerIssues beta gate", () => {
-  beforeEach(() => vi.clearAllMocks());
-
-  it("returns no alerts or counts while the deployment flag is off", () => {
-    useFeatureMock.mockReturnValue(false);
-    const { result } = renderHook(() => useMcpServerIssues({}));
-    expect(result.current.issuesByCatalog.size).toBe(0);
-    expect(result.current.facetCounts).toEqual({
-      you: 0,
-      others: 0,
-      muted: 0,
-    });
-  });
-
-  it("derives alerts when the deployment flag is on", () => {
-    useFeatureMock.mockReturnValue(true);
+describe("useMcpServerIssues", () => {
+  it("derives alerts and counts from the server error payloads", () => {
     const { result } = renderHook(() => useMcpServerIssues({}));
     expect(result.current.issuesByCatalog.get("catalog-1")).toEqual([
       expect.objectContaining({ kind: "needs-reauth" }),

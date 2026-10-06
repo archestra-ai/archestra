@@ -32,7 +32,7 @@ export function getDocsBaseUrl(): string {
   return `${WEBSITE_URL}/docs`;
 }
 
-export const COMMUNITY_DOCS_URL = getDocsUrl("platform-quickstart");
+export const COMMUNITY_DOCS_URL = getDocsUrl("get-started");
 
 /**
  * All valid documentation page slugs.
@@ -40,61 +40,64 @@ export const COMMUNITY_DOCS_URL = getDocsUrl("platform-quickstart");
  */
 export const DocsPage = {
   Contributing: "contributing",
-  McpAuthentication: "mcp-authentication",
-  Security: "security",
+  McpAuthentication: "mcp/authentication",
+  Security: "contributing/security",
   // Platform
-  PlatformAccessControl: "platform-access-control",
-  PlatformAddingLlmProviders: "platform-adding-llm-providers",
-  PlatformAgentTriggersEmail: "platform-agent-triggers-email",
-  PlatformAgentTriggersWebhookA2a: "platform-agent-triggers-webhook-a2a",
-  PlatformAgentHooks: "platform-agent-hooks",
-  PlatformAgentRuntime: "platform-agent-runtime",
-  PlatformCredentials: "platform-credentials",
-  PlatformAgents: "platform-agents",
-  PlatformApps: "platform-apps",
-  PlatformArchestraMcpServer: "platform-archestra-mcp-server",
-  PlatformApiReference: "platform-api-reference",
-  PlatformBuiltInSubagents: "platform-built-in-subagents",
-  PlatformChat: "platform-chat",
-  PlatformClaudeCodeExample: "platform-claude-code-example",
-  PlatformClaudeDesktopExample: "platform-claude-desktop-example",
-  PlatformConnection: "platform-connection",
-  PlatformCostsAndLimits: "platform-costs-and-limits",
-  PlatformDeployment: "platform-deployment",
-  PlatformDeveloperQuickstart: "platform-developer-quickstart",
-  PlatformAiToolGuardrails: "platform-ai-tool-guardrails",
-  PlatformEnterpriseManagedAuth: "platform-enterprise-managed-auth",
-  PlatformEnvironments: "platform-environments",
-  PlatformFoundry: "platform-foundry",
-  PlatformIdentityProviders: "platform-identity-providers",
-  PlatformKnowledge: "platform-knowledge",
-  PlatformLlmProxyAuthentication: "platform-llm-proxy-authentication",
-  PlatformLlmProxy: "platform-llm-proxy",
-  PlatformMastraExample: "platform-mastra-example",
-  PlatformMcpGateway: "platform-mcp-gateway",
-  PlatformMigrateFromClaudeOpenclawHermes:
-    "platform-migrate-from-claude-openclaw-hermes",
-  PlatformMsTeams: "platform-ms-teams",
-  PlatformN8nExample: "platform-n8n-example",
-  PlatformObservability: "platform-observability",
-  PlatformOpenwebuiExample: "platform-openwebui-example",
-  PlatformOrchestrator: "platform-orchestrator",
-  PlatformOverview: "platform-overview",
-  PlatformPerformanceBenchmarks: "platform-performance-benchmarks",
-  PlatformPricingModel: "platform-pricing-model",
-  PlatformTwoFactorAuthentication: "platform-two-factor-authentication",
-  PlatformPrivateRegistry: "platform-private-registry",
-  PlatformProjects: "platform-projects",
-  PlatformPydanticExample: "platform-pydantic-example",
-  PlatformQuickstart: "platform-quickstart",
-  PlatformResetUserPassword: "platform-reset-user-password",
-  PlatformSecretsManagement: "platform-secrets-management",
-  PlatformSlack: "platform-slack",
-  PlatformSsoRoleMapping: "platform-sso-role-mapping",
-  PlatformSsoTeamSync: "platform-sso-team-sync",
-  PlatformTelegram: "platform-telegram",
-  PlatformSupportedLlmProviders: "platform-supported-llm-providers",
-  PlatformVercelAiExample: "platform-vercel-ai-example",
+  PlatformAccessControl: "admin/access-control",
+  PlatformAddingLlmProviders: "contributing/adding-llm-providers",
+  PlatformAgentTriggersEmail: "agents/triggers-and-channels/email",
+  PlatformAgentTriggersWebhookA2a: "agents/triggers-and-channels/webhook-a2a",
+  PlatformAgentHooks: "agents/hooks",
+  PlatformAgentRuntime: "agents/runtime",
+  PlatformCredentials: "admin/security/credentials",
+  PlatformAgents: "agents",
+  PlatformApps: "chat/apps",
+  PlatformArchestraMcpServer: "reference/archestra-mcp-server",
+  PlatformApiReference: "reference/api",
+  PlatformBuiltInSubagents: "agents/subagents/built-in",
+  PlatformChat: "chat",
+  PlatformClaudeCodeExample: "integrations/claude-code",
+  PlatformClaudeDesktopExample: "integrations/claude-desktop",
+  PlatformConnection: "get-started/connect",
+  PlatformCostsAndLimits: "llm-proxy/costs-and-limits",
+  PlatformDeployment: "admin/deployment",
+  PlatformDeveloperQuickstart: "contributing/developer-quickstart",
+  PlatformAiToolGuardrails: "agents/guardrails",
+  PlatformAiToolGuardrailsBatteries: "agents/guardrails/batteries",
+  PlatformAiToolGuardrailsClients: "agents/guardrails/clients",
+  PlatformEnterpriseManagedAuth: "admin/identity/enterprise-managed-auth",
+  PlatformEnvironments: "admin/environments",
+  PlatformFoundry: "integrations/foundry",
+  PlatformIdentityProviders: "admin/identity",
+  PlatformKnowledge: "knowledge",
+  PlatformKnowledgeConnectors: "knowledge/connectors",
+  PlatformKnowledgeRetrieval: "knowledge",
+  PlatformLlmProxyAuthentication: "llm-proxy/authentication",
+  PlatformLlmProxy: "llm-proxy",
+  PlatformMastraExample: "integrations/mastra",
+  PlatformMcpGateway: "mcp/gateway",
+  PlatformMigrateYourAgents: "get-started/migrate",
+  PlatformMsTeams: "agents/triggers-and-channels/ms-teams",
+  PlatformN8nExample: "integrations/n8n",
+  PlatformObservability: "admin/observability",
+  PlatformObservabilityMetrics: "admin/observability/metrics",
+  PlatformOpenwebuiExample: "integrations/openwebui",
+  PlatformOrchestrator: "mcp/servers",
+  PlatformOverview: "get-started",
+  PlatformPerformanceBenchmarks: "admin/observability/performance-benchmarks",
+  PlatformTwoFactorAuthentication: "admin/identity/two-factor-authentication",
+  PlatformPrivateRegistry: "mcp/servers",
+  PlatformProjects: "chat/projects",
+  PlatformPydanticExample: "integrations/pydantic",
+  PlatformQuickstart: "get-started",
+  PlatformResetUserPassword: "admin/identity/reset-user-password",
+  PlatformSecretsManagement: "admin/security/secrets-management",
+  PlatformSlack: "agents/triggers-and-channels/slack",
+  PlatformSsoRoleMapping: "admin/identity/sso-role-mapping",
+  PlatformSsoTeamSync: "admin/identity/sso-team-sync",
+  PlatformTelegram: "agents/triggers-and-channels/telegram",
+  PlatformSupportedLlmProviders: "llm-proxy/providers",
+  PlatformVercelAiExample: "integrations/vercel-ai",
 } as const;
 
 export type DocsPage = (typeof DocsPage)[keyof typeof DocsPage];
@@ -103,8 +106,8 @@ export type DocsPage = (typeof DocsPage)[keyof typeof DocsPage];
  * Construct a full documentation URL for a given page slug and optional anchor.
  *
  * @example
- * getDocsUrl(DocsPage.PlatformAgents) // "https://archestra.ai/docs/platform-agents"
- * getDocsUrl(DocsPage.PlatformSupportedLlmProviders, "using-vertex-ai") // "https://archestra.ai/docs/platform-supported-llm-providers#using-vertex-ai"
+ * getDocsUrl(DocsPage.PlatformAgents) // "https://archestra.ai/docs/agents"
+ * getDocsUrl(DocsPage.PlatformSupportedLlmProviders, "using-vertex-ai") // "https://archestra.ai/docs/llm-proxy/providers#using-vertex-ai"
  */
 export function getDocsUrl(page: DocsPage | string, anchor?: string): string {
   const url = `${getDocsBaseUrl()}/${page}`;

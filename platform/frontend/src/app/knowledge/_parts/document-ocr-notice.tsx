@@ -71,7 +71,10 @@ export function DocumentOcrNotice({
           Scanned or image-only PDF pages in this source are skipped, so their
           text is not searchable.{" "}
           <ExternalDocsLink
-            href={getDocsUrl(DocsPage.PlatformKnowledge, "document-ocr")}
+            href={getDocsUrl(
+              DocsPage.PlatformKnowledgeRetrieval,
+              "document-ocr",
+            )}
             className="text-foreground underline decoration-dotted underline-offset-4 hover:decoration-solid"
             showIcon={false}
           >

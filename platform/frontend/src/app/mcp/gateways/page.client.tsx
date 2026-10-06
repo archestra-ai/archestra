@@ -196,7 +196,7 @@ function McpGateways({
 }: {
   initialData?: McpGatewaysInitialData;
 }) {
-  const docsUrl = getFrontendDocsUrl("platform-mcp-gateway");
+  const docsUrl = getFrontendDocsUrl("mcp/gateway");
   const {
     searchParams,
     pageIndex,

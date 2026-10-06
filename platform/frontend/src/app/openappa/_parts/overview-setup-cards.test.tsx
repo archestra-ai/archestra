@@ -428,6 +428,6 @@ test("links 'more' to clients and 'OpenAPPA session headers' to session-headers"
   });
   expect(headersLink).toHaveAttribute(
     "href",
-    expect.stringContaining("platform-ai-tool-guardrails#session-headers"),
+    expect.stringContaining("agents/guardrails/clients#session-headers"),
   );
 });

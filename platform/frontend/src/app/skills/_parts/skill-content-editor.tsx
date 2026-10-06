@@ -830,7 +830,7 @@ function buildTree(
 function TemplatedManifestHint() {
   const docsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAgents,
-    "system-prompt-templating",
+    "prompt-templates",
   );
   return (
     <p className="text-xs text-muted-foreground">

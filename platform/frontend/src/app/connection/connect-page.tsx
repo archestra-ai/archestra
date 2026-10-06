@@ -617,11 +617,6 @@ function ConnectArea({
               onChange={onManual}
             />
           )}
-          {setup === "manual" && (
-            <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
-              Manual setup only
-            </span>
-          )}
         </div>
       </div>
 

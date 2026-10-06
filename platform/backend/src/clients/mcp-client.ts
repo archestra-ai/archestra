@@ -109,6 +109,7 @@ import type {
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
+  McpGatewayCallSource,
   McpServer,
   McpToolAssignment,
   ResourceVisibilityScope,
@@ -298,6 +299,8 @@ export type TokenAuthContext = {
   isSessionAuth?: boolean;
   /** OAuth client the caller signed in with, for OAuth tokens */
   oauthClientId?: string;
+  /** Who sent the request over the HTTP gateway; unset for in-process calls */
+  source?: McpGatewayCallSource;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
   passthroughHeaders?: Record<string, string>;
   /** Durable execution that issued this gateway request, when provided. */
@@ -325,6 +328,7 @@ type ToolCallAuthInfo = {
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
   oauthClientId?: string;
+  source?: McpGatewayCallSource;
   executedAs?: McpExecutedAs;
   runId?: string;
 };
@@ -623,6 +627,7 @@ class McpClient {
             userId: tokenAuth.userId,
             authMethod: deriveAuthMethod(tokenAuth),
             oauthClientId: tokenAuth.oauthClientId,
+            source: tokenAuth.source,
             executedAs: platformExecutedAs(tokenAuth.userId),
             runId: tokenAuth.runId,
           }
@@ -3775,6 +3780,7 @@ class McpClient {
           runId: authInfo?.runId ?? null,
           authMethod: authInfo?.authMethod ?? null,
           oauthClientId: authInfo?.oauthClientId ?? null,
+          source: authInfo?.source ?? null,
         },
         audit,
       );

@@ -1,5 +1,5 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { RouteId, RUN_ID_HEADER } from "@archestra/shared";
+import { RouteId, RUN_ID_HEADER, SOURCE_HEADER } from "@archestra/shared";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -27,6 +27,7 @@ import {
   type AgentRunRecord,
   ApiError,
   constructResponseSchema,
+  type McpGatewayCallSource,
   UuidOrSlugSchema,
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
@@ -190,6 +191,7 @@ async function logHandshake(params: {
       runId: runId ?? null,
       authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
       oauthClientId: tokenAuthContext?.oauthClientId ?? null,
+      source: tokenAuthContext?.source ?? null,
     });
     fastify.log.trace({ profileId, method }, "Saved handshake request");
   } catch (dbError) {
@@ -1203,6 +1205,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               ...(tokenAuth.oauthClientId && {
                 oauthClientId: tokenAuth.oauthClientId,
               }),
+              source: gatewayCallSource(request),
             },
             runId: readHeader(request, RUN_ID_HEADER),
           }),
@@ -1231,6 +1234,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.oauthClientId && {
           oauthClientId: tokenAuth.oauthClientId,
         }),
+        source: gatewayCallSource(request),
         ...(runId && { runId }),
       };
 
@@ -1263,6 +1267,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
   );
 };
+
+/**
+ * Who sent a gateway request: the built-in chat's loopback client marks
+ * itself; everything else is an outside agent.
+ */
+function gatewayCallSource(request: FastifyRequest): McpGatewayCallSource {
+  return readHeader(request, SOURCE_HEADER) === "chat" ? "chat" : "api";
+}
 
 function readHeader(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name.toLowerCase()];

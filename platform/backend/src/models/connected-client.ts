@@ -271,9 +271,8 @@ class ConnectedClientModel {
    * `lookbackDays`. Traffic, not tickets, decides whether a member counts as
    * connected, because a ticket is redeemed before its install runs.
    *
-   * Gateway traffic counts only OAuth sign-ins: that is how every agent set up
-   * from the Connect page reaches the gateway, and it leaves out the built-in
-   * chat and apps, which write to the same log with other credentials. LLM
+   * Gateway traffic counts calls any outside agent sent over the HTTP gateway,
+   * whatever it signed in with; the built-in chat marks its own calls. LLM
    * proxy traffic counts external API calls, attributed to the passthrough
    * key's owner when one was sent, since the user header alone is only a hint.
    * Both leave out Archestra's built-in agents (runs and agent-to-agent calls),
@@ -330,19 +329,21 @@ class ConnectedClientModel {
         WHERE k.user_id IS NOT NULL
         GROUP BY k.user_id, c.client_id, c.name, c.redirect_uris
       `),
-      db.execute<OAuthAgentRow & { last_seen_at: Date | string }>(sql`
+      db.execute<
+        OAuthAgentRow & { source: string | null; last_seen_at: Date | string }
+      >(sql`
         SELECT ${toolCalls.userId} AS user_id,
           ${toolCalls.oauthClientId} AS oauth_client_id, c.name,
-          c.redirect_uris, max(${toolCalls.createdAt}) AS last_seen_at
+          c.redirect_uris, ${toolCalls.source} AS source,
+          max(${toolCalls.createdAt}) AS last_seen_at
         FROM ${toolCalls}
         LEFT JOIN ${schema.oauthClientsTable} c
           ON c.client_id = ${toolCalls.oauthClientId}
         WHERE ${toolCalls.createdAt} >= ${sinceTs}
-          AND ${toolCalls.authMethod} = 'oauth'
-          AND ${toolCalls.runId} IS NULL
+          AND ${agentGatewayTraffic()}
           AND ${toolCalls.userId} IS NOT NULL
           AND ${toolCalls.agentId} IN (${orgAgents})
-        GROUP BY 1, 2, 3, 4
+        GROUP BY 1, 2, 3, 4, 5
       `),
       db.execute<{
         user_id: string;
@@ -431,9 +432,15 @@ class ConnectedClientModel {
       if (!member) continue;
       const lastSeen = toUtcDate(row.last_seen_at);
       member.gatewayLastSeenAt = latest(member.gatewayLastSeenAt, lastSeen);
-      // Calls from before the gateway recorded the OAuth client name no agent.
-      if (!row.oauth_client_id) continue;
-      const agent = agentOf(member, oauthAgentIdentity(row));
+      // Outside agents on a pasted token can't be told apart; older rows
+      // (no source) predate recording the OAuth client, so name no agent.
+      if (!row.oauth_client_id && row.source !== "api") continue;
+      const agent = agentOf(
+        member,
+        row.oauth_client_id
+          ? oauthAgentIdentity(row)
+          : { clientId: null, name: "Unknown agent" },
+      );
       agent.gatewayLastSeenAt = latest(agent.gatewayLastSeenAt, lastSeen);
     }
     for (const row of llm.rows) {
@@ -487,8 +494,7 @@ class ConnectedClientModel {
           count(*)::int AS calls
         FROM ${toolCalls}
         WHERE ${toolCalls.createdAt} >= ${sinceTs}
-          AND ${toolCalls.authMethod} = 'oauth'
-          AND ${toolCalls.runId} IS NULL
+          AND ${agentGatewayTraffic()}
           AND ${toolCalls.agentId} IN (${orgAgents})
           AND ${toolCalls.userId} IN (${orgMembers})
         GROUP BY 1
@@ -558,6 +564,19 @@ class ConnectedClientModel {
 }
 
 const DAY_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Gateway calls a member's own agent made: anything sent over the HTTP
+ * gateway except the built-in chat's loopback client and agent runs. Rows
+ * from before the gateway recorded the sender count only when signed in with
+ * OAuth, the one way outside agents could be told apart then.
+ */
+function agentGatewayTraffic() {
+  const toolCalls = schema.mcpToolCallsTable;
+  return sql`${toolCalls.runId} IS NULL
+    AND (${toolCalls.source} = 'api'
+      OR (${toolCalls.source} IS NULL AND ${toolCalls.authMethod} = 'oauth'))`;
+}
 
 /**
  * LLM proxy calls a member's own agent made: external API traffic, minus

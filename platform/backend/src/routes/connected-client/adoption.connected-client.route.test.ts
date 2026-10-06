@@ -358,6 +358,35 @@ describe("GET /api/connected-clients/adoption", () => {
     });
   });
 
+  test("an outside agent on a personal token counts; the built-in chat does not", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    const bob = await makeUser({ name: "Bob" });
+    await makeMember(ada.id, organizationId);
+    await makeMember(bob.id, organizationId);
+    await gatewayCall(ada.id, {
+      authMethod: "user_token",
+      daysAgo: 1,
+      source: "api",
+    });
+    await gatewayCall(bob.id, {
+      authMethod: "user_token",
+      daysAgo: 1,
+      source: "chat",
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "active",
+      agents: [{ clientId: null, name: "Unknown agent" }],
+    });
+    expect(await memberById(bob.id)).toMatchObject({
+      status: "notConnected",
+      gatewayLastSeenAt: null,
+    });
+  });
+
   test("usage counts calls per day, for one member or everyone", async ({
     makeUser,
     makeMember,
@@ -425,6 +454,7 @@ describe("GET /api/connected-clients/adoption", () => {
       daysAgo: number;
       agentId?: string;
       oauthClientId?: string;
+      source?: "api" | "chat";
     },
   ) {
     await db.insert(schema.mcpToolCallsTable).values({
@@ -434,6 +464,7 @@ describe("GET /api/connected-clients/adoption", () => {
       userId,
       authMethod: options.authMethod,
       oauthClientId: options.oauthClientId ?? null,
+      source: options.source ?? null,
       createdAt: new Date(Date.now() - options.daysAgo * DAY_MS),
     });
   }

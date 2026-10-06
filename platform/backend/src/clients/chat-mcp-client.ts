@@ -4,6 +4,7 @@ import {
   isBrowserMcpTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  SOURCE_HEADER,
   TimeInMs,
 } from "@archestra/shared";
 import type {
@@ -83,6 +84,9 @@ export function createLoopbackGatewayTransport(
       headers: new Headers({
         Authorization: `Bearer ${authToken}`,
         Accept: "application/json, text/event-stream",
+        // Tells the gateway's call log this is the built-in chat, not an
+        // outside agent holding the same personal token.
+        [SOURCE_HEADER]: "chat",
       }),
     },
   });

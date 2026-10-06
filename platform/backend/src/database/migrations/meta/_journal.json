@@ -3606,6 +3606,13 @@
       "when": 1791323117934,
       "tag": "0514_mcp_tool_calls_oauth_client_id",
       "breakpoints": true
+    },
+    {
+      "idx": 515,
+      "version": "7",
+      "when": 1791324007564,
+      "tag": "0515_mcp_tool_calls_source",
+      "breakpoints": true
     }
   ]
 }

@@ -10,6 +10,7 @@ import {
 import type {
   CommonToolCall,
   MCPGatewayAuthMethod,
+  McpGatewayCallSource,
   ToolOwnerType,
 } from "@/types";
 import agentsTable from "./agent";
@@ -72,6 +73,12 @@ const mcpToolCallsTable = pgTable(
      * keeps it after the client is deleted.
      */
     oauthClientId: text("oauth_client_id"),
+    /**
+     * Who sent the call over the HTTP gateway: "api" for any outside agent,
+     * "chat" for the built-in chat's loopback client. Null for calls the
+     * platform made in-process, and for rows from before this was recorded.
+     */
+    source: varchar("source", { length: 20 }).$type<McpGatewayCallSource>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

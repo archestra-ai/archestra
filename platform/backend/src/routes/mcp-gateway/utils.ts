@@ -701,6 +701,7 @@ export async function createAgentServer(params: {
         runId: runId ?? null,
         authMethod: deriveAuthMethod(tokenAuth) ?? null,
         oauthClientId: tokenAuth?.oauthClientId ?? null,
+        source: tokenAuth?.source ?? null,
       });
       logger.info(
         { agentId, toolsCount: toolsList.length },
@@ -1022,6 +1023,7 @@ export async function createAgentServer(params: {
               runId: runId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
               oauthClientId: tokenAuth?.oauthClientId ?? null,
+              source: tokenAuth?.source ?? null,
             });
           } catch (dbError) {
             logger.info(
@@ -1154,6 +1156,7 @@ export async function createAgentServer(params: {
               runId: runId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
               oauthClientId: tokenAuth?.oauthClientId ?? null,
+              source: tokenAuth?.source ?? null,
             });
           } catch (dbError) {
             logger.info(

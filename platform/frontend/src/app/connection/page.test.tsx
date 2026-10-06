@@ -300,12 +300,9 @@ describe("ConnectPage (no connect request)", () => {
     );
     render(<ConnectionPage />);
     expect(screen.getByText("LLM proxy ready to use")).toBeVisible();
-    expect(
-      screen.queryByRole("switch", { name: /Model routing/ }),
-    ).not.toBeInTheDocument();
   });
 
-  it("lets an app with an installer leave model routing out", async () => {
+  it("lets any agent leave model routing out", async () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -315,21 +312,31 @@ describe("ConnectPage (no connect request)", () => {
     } as unknown as ReturnType<typeof useLlmProxy>);
     mockOrganization({
       data: {
-        connectionShownClientIds: ["claude-code"],
+        connectionShownClientIds: ["claude-code", "amp"],
         connectionLlmProxyEnabled: true,
       },
     });
-    render(<ConnectionPage />);
-    await userEvent.click(
-      screen.getByRole("button", { name: /Choose what to include/ }),
-    );
-    await userEvent.click(
-      screen.getByRole("switch", { name: /Model routing/ }),
-    );
-    expect(screen.getByText("Off")).toBeVisible();
-    expect(
-      screen.getByText(/connect\.md\?client=claude-code&exclude=proxy/),
-    ).toBeVisible();
+    for (const id of ["claude-code", "amp"]) {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams(`clientId=${id}`) as ReturnType<
+          typeof useSearchParams
+        >,
+      );
+      const { unmount } = render(<ConnectionPage />);
+      await userEvent.click(
+        screen.getByRole("button", { name: /Choose what to include/ }),
+      );
+      await userEvent.click(
+        screen.getByRole("switch", { name: /Model routing/ }),
+      );
+      expect(screen.getByText("Off")).toBeVisible();
+      // Other agents' prompt is covered by the generic prompt tests.
+      if (id === "claude-code")
+        expect(
+          screen.getByText(/connect\.md\?client=claude-code&exclude=proxy/),
+        ).toBeVisible();
+      unmount();
+    }
   });
 
   it("gives other agents the generic prompt with the gateway to set up", () => {

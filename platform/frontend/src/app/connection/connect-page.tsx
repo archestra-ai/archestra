@@ -154,19 +154,16 @@ export function ConnectPage() {
     data.featuredClients[0] ??
     data.clients[0];
   const clientId = client?.id;
-  const routingOptional = client ? canChooseRouting(data, client) : false;
   useEffect(() => {
-    // Tools and plugins are always included. Skills can be left out, and
-    // model routing too for apps with an installer (Choose what to include).
+    // Tools and plugins are always included; skills and model routing can
+    // be left out (Choose what to include).
     if (!clientId) return;
-    const saved = readConnectChoices(clientId);
     setChoices({
-      ...saved,
+      ...readConnectChoices(clientId),
       tools: true,
-      proxy: routingOptional ? saved.proxy : true,
       plugins: true,
     });
-  }, [clientId, routingOptional]);
+  }, [clientId]);
 
   if (data.loading || !client) return <LoadingState />;
 
@@ -1002,15 +999,6 @@ function guardrailsStatus(
 
 // === Profile card ===
 
-/**
- * Only apps with an installer are known to take model routing, so only they
- * show it and let the user leave it out; other agents work it out from the
- * prompt, so the card makes no promise.
- */
-function canChooseRouting(data: ConnectPageData, client: ConnectClient) {
-  return data.partsFor(client).proxy && setupModeFor(client) === "prompt";
-}
-
 /** The card's one place to leave parts out; the prompt carries the result. */
 function IncludeMenu({
   skills,
@@ -1056,8 +1044,8 @@ function IncludeMenu({
       <PopoverTrigger asChild>
         <Button
           variant="ghost"
-          size="sm"
-          className="-mr-2 shrink-0 text-muted-foreground"
+          size="xs"
+          className="-mr-1.5 shrink-0 text-muted-foreground"
         >
           <SlidersHorizontal />
           Choose what to include
@@ -1134,12 +1122,11 @@ function ProfileCard({
 
   // Small status chips under the lists. A future capability is one entry.
   const statusChips: StatusChip[] = [];
-  // Only apps with an installer are known to take model routing; other
-  // agents work it out from the prompt, so the card makes no promise.
-  const routingOptional = canChooseRouting(data, client);
-  // Shown for every agent while the LLM proxy is on: apps with an installer
-  // take it (unless left out); others get it ready through the prompt.
-  if (data.partsFor(client).proxy)
+  // Shown for every agent while the LLM proxy is on. Apps with an installer
+  // are known to take it; others get it ready through the prompt.
+  const proxyOn = data.partsFor(client).proxy;
+  const installer = setupModeFor(client) === "prompt";
+  if (proxyOn)
     statusChips.push({
       id: "routing",
       icon: (
@@ -1151,7 +1138,7 @@ function ProfileCard({
         <span className="inline-flex items-center gap-1">
           Model routing
           <InfoTip label="What model routing does">
-            {routingOptional
+            {installer
               ? `${client.label} sends model requests through ${data.appName}'s LLM proxy instead of straight to the provider.`
               : `${data.appName}'s LLM proxy is ready for ${client.label}'s model requests, if it lets you set a custom endpoint.`}{" "}
             Same models; your org's limits, logging and cost tracking apply.
@@ -1160,7 +1147,7 @@ function ProfileCard({
       ),
       sub: !routed
         ? "Off"
-        : routingOptional
+        : installer
           ? "On, through the LLM proxy"
           : "LLM proxy ready to use",
     });
@@ -1209,10 +1196,10 @@ function ProfileCard({
         <div className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
           {client.label}
         </div>
-        {(skillsOn || routingOptional) && (
+        {(skillsOn || proxyOn) && (
           <IncludeMenu
             skills={skillsOn}
-            routing={routingOptional}
+            routing={proxyOn}
             choices={choices}
             onChoice={onChoice}
           />

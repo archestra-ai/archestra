@@ -211,17 +211,7 @@ function LevelBox({
         {batteries.length > 0 && (
           <span className="flex items-center gap-1">
             {batteries.map((battery) => (
-              <BatteryLink
-                key={battery}
-                battery={battery}
-                selectors={
-                  level.kind === "mapped"
-                    ? level.from
-                        .filter((ref) => ref.declaredBy?.battery === battery)
-                        .map((ref) => ref.selector)
-                    : []
-                }
-              />
+              <BatteryLink key={battery} battery={battery} />
             ))}
           </span>
         )}
@@ -232,13 +222,7 @@ function LevelBox({
 }
 
 /** A battery an audience reads members from, as its icon; it opens that battery. */
-function BatteryLink({
-  battery,
-  selectors,
-}: {
-  battery: string;
-  selectors: string[];
-}) {
+function BatteryLink({ battery }: { battery: string }) {
   const batteries = useBatteries();
   const catalog = useInternalMcpCatalog();
   const summary = batteries.data?.find((each) => each.name === battery);
@@ -262,9 +246,7 @@ function BatteryLink({
         </Link>
       </TooltipTrigger>
       <TooltipContent>
-        <span className="font-mono">
-          {selectors.map((selector) => `${battery}:${selector}`).join(", ")}
-        </span>
+        <span>Open the {battery} battery</span>
       </TooltipContent>
     </Tooltip>
   );

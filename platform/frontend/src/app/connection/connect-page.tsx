@@ -973,32 +973,29 @@ function guardrailsStatus(
   const { state } = data.guardrails;
   if (state === null) return null;
   if (state === "off")
-    return {
-      label: "Off",
-      detail:
-        "Your admin hasn't turned the guardrails on, so nothing is checked yet.",
-    };
+    return { label: "Off", detail: "Your admin hasn't turned guardrails on." };
   if (!routed)
     return {
-      label: "Not applied",
-      detail: `Guardrails check model requests that go through ${data.appName}. With model routing off, ${client.label}'s requests aren't checked.`,
+      label: "Inactive",
+      detail:
+        "Guardrails only see requests that go through the LLM proxy, and model routing is off.",
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
       tone: "ok",
       label: "Active",
-      detail: `${client.label} is supported, so its requests are checked.`,
+      detail: `${client.label} is supported, so its requests through the proxy are checked.`,
     };
   return state === "block"
     ? {
         tone: "block",
-        label: "Blocks this agent",
-        detail: `${client.label} isn't supported by the guardrails yet, and your org blocks unsupported agents, so its model requests will be rejected.`,
+        label: "Agent blocked",
+        detail: `${client.label} isn't supported. Your org blocks unsupported agents, so its model requests are rejected.`,
       }
     : {
         tone: "warn",
-        label: "Passes through unchecked",
-        detail: `${client.label} isn't supported by the guardrails yet. Your org lets unsupported agents through, so its requests run without checks.`,
+        label: "Unchecked",
+        detail: `${client.label} isn't supported. Your org lets unsupported agents through, so its requests aren't checked.`,
       };
 }
 
@@ -1143,20 +1140,24 @@ function ProfileCard({
         <span className="inline-flex items-center gap-1">
           Model routing
           <InfoTip label="What model routing does">
-            {!verified && routed
-              ? `Your admin turned on ${data.appName}'s LLM proxy, but it isn't verified with ${client.label}. It works only if ${client.label} lets you set a custom model endpoint, so there's no guarantee its requests go through it.`
-              : `${client.label} sends model requests through ${data.appName}'s LLM proxy instead of straight to the provider. Same models; your org's limits, logging and cost tracking apply.`}
+            <TipBody
+              reason={
+                !routed
+                  ? `You turned routing off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+                  : verified
+                    ? `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`
+                    : `Your admin turned on ${data.appName}'s LLM proxy, but we can't confirm it works with ${client.label}. It works only if ${client.label} lets you set a custom model endpoint.`
+              }
+            />
           </InfoTip>
         </span>
       ),
       sub: !routed ? (
         "Off"
       ) : verified ? (
-        "On, through the LLM proxy"
+        "On"
       ) : (
-        <span className="text-amber-600 dark:text-amber-400">
-          Not verified for this agent
-        </span>
+        <span className="text-amber-600 dark:text-amber-400">Unconfirmed</span>
       ),
     });
   const guard = guardrailsStatus(data, client, routed);
@@ -1172,10 +1173,10 @@ function ProfileCard({
         <span className="inline-flex items-center gap-1">
           Guardrails
           <InfoTip label="What the guardrails do">
-            Before a risky tool call runs (deleting data, sending messages
-            outside the org), the guardrails check it against your org's rules
-            and can ask you to approve it first. Powered by{" "}
-            {data.guardrails.name}. {guard.detail}
+            <TipBody
+              reason={guard.detail}
+              about={`Guardrails check risky tool calls (like deleting data) against your org's rules and can ask you to approve first. Powered by ${data.guardrails.name}.`}
+            />
           </InfoTip>
         </span>
       ),
@@ -1481,6 +1482,16 @@ function cardIntro(
   if (data.servers.length === 0)
     return "Your agent gets your company's tools here as soon as your admin adds them.";
   return "You left out every tool and skill, so your agent gets nothing yet.";
+}
+
+/** A status tooltip: why this state, then what the feature is. */
+function TipBody({ reason, about }: { reason: string; about?: string }) {
+  return (
+    <span className="block space-y-1.5">
+      <span className="block">{reason}</span>
+      {about && <span className="block opacity-75">{about}</span>}
+    </span>
+  );
 }
 
 function InfoTip({ label, children }: { label: string; children: ReactNode }) {

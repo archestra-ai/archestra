@@ -204,13 +204,13 @@ describe("ConnectPage guardrails chip", () => {
   it("says an unsupported agent passes through unchecked", () => {
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "bypass" }),
-    ).toHaveTextContent("Passes through unchecked");
+    ).toHaveTextContent("Unchecked");
   });
 
   it("says an unsupported agent is blocked", () => {
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "block" }),
-    ).toHaveTextContent("Blocks this agent");
+    ).toHaveTextContent("Agent blocked");
   });
 });
 
@@ -292,14 +292,14 @@ describe("ConnectPage (no connect request)", () => {
       },
     });
     const { unmount } = render(<ConnectionPage />);
-    expect(screen.getByText("On, through the LLM proxy")).toBeVisible();
+    expect(screen.getByText("On")).toBeVisible();
     unmount();
 
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams("clientId=amp") as ReturnType<typeof useSearchParams>,
     );
     render(<ConnectionPage />);
-    expect(screen.getByText("Not verified for this agent")).toBeVisible();
+    expect(screen.getByText("Unconfirmed")).toBeVisible();
   });
 
   it("lets any agent leave model routing out", async () => {

@@ -268,7 +268,15 @@ describe("guardrails policy authoring", () => {
         { ...draft, expectedRevision: 1 },
         context,
       ),
-    ).rejects.toThrow("The proposed policy has no changes");
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The proposed policy has no changes"),
+        },
+      ],
+    });
     expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
   });
 

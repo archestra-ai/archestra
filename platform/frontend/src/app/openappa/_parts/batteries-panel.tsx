@@ -1,12 +1,6 @@
 "use client";
 
-import {
-  ARCHESTRA_MCP_CATALOG_ID,
-  ARCHESTRA_MCP_SERVER_NAME,
-  DocsPage,
-  getDocsUrl,
-  matchBatteries,
-} from "@archestra/shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { useQueryClient } from "@tanstack/react-query";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
@@ -27,19 +21,6 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
-import {
-  siClaude,
-  siCloudflare,
-  siDatabricks,
-  siGithub,
-  siGoogle,
-  siHuggingface,
-  siLinear,
-  siNotion,
-  siPagerduty,
-  siPosthog,
-  siSentry,
-} from "simple-icons";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   openRowOnPlainClick,
@@ -110,6 +91,7 @@ import {
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
+import { BatteryIcon, type CatalogEntry } from "./battery-icon";
 import {
   BATTERY_STATUS,
   BATTERY_STATUS_GROUPS,
@@ -209,7 +191,10 @@ export function BatteriesPanel() {
   const search = searchParams.get("search") ?? "";
   const sourceFilter = knownFilter(SOURCE_OPTIONS, searchParams.get("source"));
   const statusFilter = knownFilter(STATUS_OPTIONS, searchParams.get("status"));
-  const [editing, setEditing] = useState<string | null>(null);
+  // `?battery=<name>` opens that battery, so other pages can link to it.
+  const [editing, setEditing] = useState<string | null>(
+    searchParams.get("battery"),
+  );
   const [removing, setRemoving] = useState<string | null>(null);
   const [deletingPackage, setDeletingPackage] = useState<BatterySummary | null>(
     null,
@@ -316,7 +301,9 @@ export function BatteriesPanel() {
         <AgentNameCell
           name={row.original.name}
           description={row.original.summary?.description}
-          icon={<BatteryIcon row={row.original} catalog={catalog.data ?? []} />}
+          icon={
+            <RowBatteryIcon row={row.original} catalog={catalog.data ?? []} />
+          }
         />
       ),
     },
@@ -462,7 +449,11 @@ export function BatteriesPanel() {
           enforced={enforced}
           writable={writable}
           bindable={bindable}
-          onClose={() => setEditing(null)}
+          onClose={() => {
+            setEditing(null);
+            if (searchParams.has("battery"))
+              updateQueryParams({ battery: null });
+          }}
         />
       )}
       {removing && (
@@ -507,31 +498,9 @@ type BatteryTableRow = {
   included: PolicyBattery | null;
 };
 
-const BUNDLED_PROVIDER_ICONS: Record<string, { path: string; hex: string }> = {
-  "claude-code": siClaude,
-  cloudflare: siCloudflare,
-  databricks: siDatabricks,
-  github: siGithub,
-  "google-workspace": siGoogle,
-  huggingface: siHuggingface,
-  linear: siLinear,
-  notion: siNotion,
-  pagerduty: siPagerduty,
-  posthog: siPosthog,
-  sentry: siSentry,
-};
-
 const UNBOUND = "__unbound__";
 
 type BatteryCredential = PolicyBattery["credentials"][number];
-
-type CatalogEntry = {
-  id: string;
-  name: string;
-  icon?: string | null;
-  serverUrl?: string | null;
-  localConfig?: { dockerImage?: string } | null;
-};
 
 function HeldPullNotice({
   heldPull,
@@ -572,58 +541,24 @@ function HeldPullNotice({
   );
 }
 
-/**
- * A row's mark: the icon of a catalog entry it is installed on, else of one it
- * matches the way "Fits your servers" does or that shares its name, else the
- * bundled provider's, else a battery.
- */
-function BatteryIcon({
+/** A row's mark, as the shared battery icon resolves it. */
+function RowBatteryIcon({
   row,
   catalog,
 }: {
   row: BatteryTableRow;
   catalog: CatalogEntry[];
 }) {
-  const match = catalog
-    .flatMap((entry) => {
-      if (!entry.icon) return [];
-      if (
-        row.summary?.installs.some((install) => install.catalogId === entry.id)
-      )
-        return [{ entry, rank: 0 }];
-      const evidence = matchBatteries(entry, new Set([row.name]))[0]?.evidence;
-      if (evidence) return [{ entry, rank: evidence === "name" ? 2 : 1 }];
-      // An uploaded battery has no match rule; its catalog entry may share its name.
-      return entry.name.toLowerCase() === row.name.toLowerCase()
-        ? [{ entry, rank: 3 }]
-        : [];
-    })
-    .sort((a, b) => a.rank - b.rank)[0]?.entry;
-  const providerIcon = BUNDLED_PROVIDER_ICONS[row.name];
-  if (match)
-    return <McpCatalogIcon icon={match.icon} catalogId={match.id} size={20} />;
-  // Archestra's own catalog entry has no icon; McpCatalogIcon draws the app logo for its id.
-  if (
-    row.summary?.source === "bundled" &&
-    row.name === ARCHESTRA_MCP_SERVER_NAME
-  )
-    return <McpCatalogIcon catalogId={ARCHESTRA_MCP_CATALOG_ID} size={20} />;
-  if (row.summary?.source === "bundled" && providerIcon)
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className="size-5 shrink-0"
-        fill={
-          providerIcon.hex === "000000" || providerIcon.hex === "181717"
-            ? "currentColor"
-            : `#${providerIcon.hex}`
-        }
-      >
-        <path d={providerIcon.path} />
-      </svg>
-    );
-  return <BatteryCharging className="size-5 shrink-0 text-muted-foreground" />;
+  return (
+    <BatteryIcon
+      name={row.name}
+      bundled={row.summary?.source === "bundled"}
+      catalogIds={
+        row.summary?.installs.map((install) => install.catalogId) ?? []
+      }
+      catalog={catalog}
+    />
+  );
 }
 
 function sourceLabel(row: BatteryTableRow) {
@@ -698,7 +633,7 @@ function BatteryDialog({
       size="medium"
       title={
         <span className="flex items-center gap-2.5">
-          <BatteryIcon row={row} catalog={catalog} />
+          <RowBatteryIcon row={row} catalog={catalog} />
           <span>{row.name}</span>
           {badge && (
             <Badge variant={badge.variant} className="font-normal">

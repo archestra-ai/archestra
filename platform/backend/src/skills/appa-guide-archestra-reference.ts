@@ -21,9 +21,9 @@ The supported format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, 
 A rule can use the name a client sends or the canonical ID \`<family>/<namespace>/<tool>\`. Names are case-sensitive; match the name Archestra evaluates, not another client's spelling.
 
 - MCP tools: \`<catalog>__<tool>\`, canonical \`mcp/<catalog>/<tool>\`.
-- Platform tools: \`archestra__<name>\`, canonical \`mcp/archestra/<name>\` or \`host/archestra/<name>\`. \`archestra__execute_remedy_plan\` is \`appa/execute_remedy_plan\`.
-- Native client tools never appear in an MCP inventory. Claude Code's are \`host/claude-code/<Name>\` (\`Bash\`, \`Read\`, \`Write\`, \`Edit\`, \`Grep\`, \`Task\`, \`Agent\`). OpenCode's spawn tool is lowercase \`host/archestra/task\`; Codex's is \`spawn_agent\`.
-- \`archestra__run_command\` runs a command in the Archestra chat sandbox. It is not a client's shell: a rule on it does not govern Claude Code's \`host/claude-code/Bash\`, and the reverse.
+- Platform tools: \`archestra__<name>\`, canonical \`mcp/archestra/<name>\`. \`archestra__execute_remedy_plan\` is \`appa/execute_remedy_plan\`.
+- A name without \`__\` is a native client tool, canonical \`host/archestra/<name>\`. Native tools never appear in an MCP inventory. Claude Code sends \`Bash\`, \`Read\`, \`Write\`, \`Edit\`, \`Grep\`, \`Task\`, and \`Agent\`; OpenCode's spawn tool is lowercase \`task\`; Codex sends \`exec_command\` and \`spawn_agent\`. OpenAPPA's own Claude Code install names them \`host/claude-code/<Name>\`; Archestra does not, so such a rule matches nothing here.
+- \`archestra__run_command\` runs a command in the Archestra chat sandbox. It is not a client's shell: a rule on it does not govern Claude Code's \`Bash\`, and the reverse.
 - Command tools such as \`Bash\`, \`shell\`, \`exec_command\`, and \`run_command\` may send the command as \`command\` or \`cmd\`; the proxy aliases the two, so a selector on \`command\` matches either.
 - \`archestra__run_tool\` needs no rule: a call is evaluated as the target tool it runs.
 

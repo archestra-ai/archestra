@@ -3,7 +3,7 @@ title: Code Sandbox
 category: Agents
 order: 6
 description: A private Linux container where an agent runs code during a chat
-lastUpdated: 2026-07-20
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,6 +25,18 @@ Other languages and command line tools can be installed by the agent when necess
 Files you attach to a chat land in the sandbox automatically, under `/home/sandbox/attachments/`. The agent works with them without any extra step from you.
 
 When the agent produces a file — a cleaned dataset or a chart, for example — it saves the file to the conversation's Files panel, where you can download it. Attachments above the size limit are skipped, and the agent is told which ones.
+
+## Public Links
+
+Some services only take a file as a URL they can fetch without logging in — a social media scheduler, for example. The agent publishes a sandbox file or a saved file with the `share_file_publicly` tool and gets back a public link. Anyone with the link can open the file.
+
+Public sharing is off by default. An admin turns it on under the organization's agent settings. Turning it off also stops every existing link.
+
+Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared. Archestra checks the file's bytes, not its name.
+
+A link stays live until an admin revokes it from the shared-files list in the same settings section. Deleting the file also removes its link. A revoked link returns 404, and shared caches may keep a copy for up to ten minutes.
+
+Links have the form `https://<host>/public-files/<token>/<filename>`. The token alone grants access, and `/public-files/` serves nothing else. To expose only this path, allow `/public-files/` at your ingress, WAF, or load balancer and keep everything else private. To serve links from a separate host, set `ARCHESTRA_PUBLIC_FILES_BASE_URL` — see [Deployment](./platform-deployment#application--api-configuration).
 
 ## Skills
 

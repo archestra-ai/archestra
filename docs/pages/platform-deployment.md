@@ -829,12 +829,18 @@ The following environment variables can be used to configure Archestra Platform.
   - Multiple URLs example: `http://archestra.default.svc:9000,https://api.archestra.example.com`
   - Use case: Set this when your external access URL differs from the internal service URL (common in Kubernetes with ingress/load balancers)
 
-- **`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`** - Dedicated TCP port for the publicly-exposable endpoints — currently the MS Teams incoming webhook (`/api/webhooks/chatops/ms-teams`).
+- **`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`** - Dedicated TCP port for the publicly-exposable endpoints — currently the MS Teams incoming webhook (`/api/webhooks/chatops/ms-teams`) and public file links (`/public-files/`).
   - Default: Not set (these endpoints are served on the main API port only)
   - When set, a second listener serves these endpoints on this port. The main API port keeps serving them too — the dedicated port is an alias.
   - Use case: expose only these endpoints to the Internet in a firewall or load balancer, without exposing the whole API
   - Must be an integer between `1` and `65535`; invalid values disable the listener with a warning
   - Helm: set `archestra.publicEndpointsPort` to inject this variable and expose the port on the Service
+
+- **`ARCHESTRA_PUBLIC_FILES_BASE_URL`** - Base URL for public file links that agents create with `share_file_publicly`. Links have the form `<base>/public-files/<token>/<filename>`.
+  - Default: `ARCHESTRA_FRONTEND_URL`
+  - Use case: serve public links from a separate host, such as `https://files.example.com`, that routes only `/public-files/` to Archestra
+  - The `/public-files/` prefix serves nothing else and needs no session, so it is safe to expose on its own at an ingress, WAF, or load balancer
+  - Must be an absolute `http` or `https` URL; invalid values fall back to the default with a warning
 
 - **`ARCHESTRA_TRUST_PROXY`** - Controls whether Archestra trusts the `X-Forwarded-*` headers a proxy sets. Set it when Archestra runs behind a TLS-terminating reverse proxy or load balancer (e.g. AWS ALB, nginx, Cloudflare).
   - Default: `false` (no proxy trust)

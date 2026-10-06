@@ -53,7 +53,6 @@ import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -149,12 +148,13 @@ export function ConnectPage() {
     data.clients[0];
   const clientId = client?.id;
   useEffect(() => {
-    // Tools and plugins are always included; only skills and model routing
-    // can be turned off.
+    // Tools, model routing and plugins are always included; only skills
+    // can be turned off (in See all, Skills).
     if (clientId)
       setChoices({
         ...readConnectChoices(clientId),
         tools: true,
+        proxy: true,
         plugins: true,
       });
   }, [clientId]);
@@ -251,7 +251,6 @@ export function ConnectPage() {
             skillCount={skillCount}
             skillsOff={parts.skills && !choices.skills}
             routed={routed}
-            onRouting={(on) => setChoice("proxy", on)}
             onOpen={(d, item) => {
               setFocus(item ?? null);
               setDialog(d);
@@ -1021,10 +1020,8 @@ interface StatusChip {
   icon: ReactNode;
   title: ReactNode;
   sub: ReactNode;
-  /** Opens its details; a chip with a control instead has none. */
+  /** Opens its details; a status-only chip has none. */
   onOpen?: () => void;
-  /** A switch on the chip itself. */
-  control?: ReactNode;
 }
 
 function ProfileCard({
@@ -1036,15 +1033,12 @@ function ProfileCard({
   skillCount,
   skillsOff,
   routed,
-  onRouting,
   onOpen,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
   /** This agent's model requests go through the LLM proxy. */
   routed: boolean;
-  /** Turns model routing on or off for this agent. */
-  onRouting: (on: boolean) => void;
   /** The user turned skills off (in See all, Skills). */
   skillsOff: boolean;
   servers: ConnectServer[];
@@ -1059,7 +1053,9 @@ function ProfileCard({
 
   // Small status chips under the lists. A future capability is one entry.
   const statusChips: StatusChip[] = [];
-  if (data.partsFor(client).proxy)
+  // Only apps with an installer are known to take model routing; other
+  // agents work it out from the prompt, so the card makes no promise.
+  if (data.partsFor(client).proxy && setupModeFor(client) === "prompt")
     statusChips.push({
       id: "routing",
       icon: (
@@ -1077,14 +1073,7 @@ function ProfileCard({
           </InfoTip>
         </span>
       ),
-      sub: routed ? "LLM proxy on" : "Off for this agent",
-      control: (
-        <Switch
-          checked={routed}
-          onCheckedChange={onRouting}
-          aria-label="Model routing"
-        />
-      ),
+      sub: "On, through the LLM proxy",
     });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)
@@ -1272,7 +1261,6 @@ function ProfileCard({
                           {c.sub}
                         </span>
                       </span>
-                      {c.control}
                     </>
                   );
                   const chip =
@@ -1356,9 +1344,7 @@ function ListBlock({
           <div className="mt-1.5 border-t pt-1 pl-1 text-xs">{children}</div>
         )}
       </div>
-      {footer && (
-        <div className="border-t bg-muted/40 px-3 py-2 text-xs">{footer}</div>
-      )}
+      {footer && <div className="border-t px-3 py-1.5 text-xs">{footer}</div>}
     </div>
   );
 }
@@ -1372,25 +1358,16 @@ function ToolLoadingNote({
   tools: number;
 }) {
   return (
-    <p className="flex items-start gap-2 text-muted-foreground">
-      <Gauge
-        className={cn(
-          "mt-px size-3.5 shrink-0",
-          progressive
-            ? "text-emerald-600 dark:text-emerald-400"
-            : "text-amber-600 dark:text-amber-400",
-        )}
-      />
-      <span>
-        <span className="font-semibold text-foreground">
-          {progressive
-            ? "Tools load on demand."
-            : `All ${fmt(tools)} ${plural(tools, "tool")} load at session start.`}
-        </span>{" "}
+    <p className="flex items-center gap-1.5 text-muted-foreground">
+      <Gauge className="size-3.5 shrink-0" />
+      {progressive
+        ? "Tools load on demand"
+        : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`}
+      <InfoTip label="How tools load">
         {progressive
-          ? "Your agent pulls each one in only when a task needs it."
-          : "Each one takes up some of your agent's context."}
-      </span>
+          ? "Your agent starts with a small fixed set of tools and finds the rest when a task needs them. Adding servers doesn't grow it."
+          : "Every included tool loads at the start of each session. More tools take more of your agent's working memory."}
+      </InfoTip>
     </p>
   );
 }

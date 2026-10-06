@@ -5,7 +5,6 @@ import {
   render as rtlRender,
   screen,
 } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -271,7 +270,7 @@ describe("ConnectPage (no connect request)", () => {
     ).toBeVisible();
   });
 
-  it("turns model routing off from the profile card", async () => {
+  it("shows model routing for an app with an installer, not for other agents", () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -281,20 +280,19 @@ describe("ConnectPage (no connect request)", () => {
     } as unknown as ReturnType<typeof useLlmProxy>);
     mockOrganization({
       data: {
-        connectionShownClientIds: ["cursor"],
+        connectionShownClientIds: ["claude-code", "amp"],
         connectionLlmProxyEnabled: true,
       },
     });
-    render(<ConnectionPage />);
+    const { unmount } = render(<ConnectionPage />);
+    expect(screen.getByText("On, through the LLM proxy")).toBeVisible();
+    unmount();
 
-    await userEvent.click(
-      screen.getByRole("switch", { name: "Model routing" }),
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=amp") as ReturnType<typeof useSearchParams>,
     );
-
-    expect(
-      screen.getByText(/connect\.md\?client=cursor&exclude=proxy/),
-    ).toBeVisible();
-    expect(screen.getByText("Off for this agent")).toBeVisible();
+    render(<ConnectionPage />);
+    expect(screen.queryByText("Model routing")).not.toBeInTheDocument();
   });
 
   it("gives other agents the generic prompt with the gateway to set up", () => {

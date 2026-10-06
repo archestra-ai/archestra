@@ -105,3 +105,17 @@ What to know:
 
 - Files stay between commands. Running processes do not.
 - The sandbox is on by default. To turn it off, set [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED). For setup, see [Code Sandbox deployment](/docs/admin/deployment#code-sandbox).
+
+### Share Files as Public Links
+
+When a service takes a file only as a URL, such as a social media scheduler, the agent publishes it with [`share_file_publicly`](/docs/reference/archestra-mcp-server#share_file_publicly). Anyone with the link can open the file without logging in.
+
+- **Off by default.** An admin turns it on in the organization's agent settings. While it is off, agents don't get the tool and existing links stop working.
+- **A frozen copy.** The link serves the file as it was when shared. Editing or deleting the original changes nothing.
+- **Revoking.** Everyone sees and revokes their own links in their personal settings. Admins see every link, through [`publicFileLink:admin`](/docs/reference/permissions#publicFileLink:admin).
+
+What to know:
+
+- Only PNG, JPEG, GIF, WebP, MP4, WebM, and PDF files can be shared. Archestra checks the file's bytes, not its name.
+- A revoked link returns 404. Shared caches can keep serving it for up to ten minutes.
+- Links look like `https://<host>/public-files/<token>/<filename>`. To expose only them, allow `/public-files/` at your ingress or set [`ARCHESTRA_PUBLIC_FILES_BASE_URL`](/docs/reference/configuration#ARCHESTRA_PUBLIC_FILES_BASE_URL).

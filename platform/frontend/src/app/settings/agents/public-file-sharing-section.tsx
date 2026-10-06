@@ -34,7 +34,10 @@ export function PublicFileSharingSection() {
           media scheduler, for example. Turning this off stops every existing
           link.{" "}
           <ExternalDocsLink
-            href={getDocsUrl(DocsPage.PlatformCodeSandbox, "public-links")}
+            href={getDocsUrl(
+              DocsPage.PlatformCodeSandbox,
+              "share-files-as-public-links",
+            )}
             className="whitespace-nowrap"
           >
             Learn more

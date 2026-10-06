@@ -2,7 +2,7 @@
 title: Configuration
 description: Every environment variable that configures an Archestra deployment
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -47,10 +47,14 @@ Archestra reads its configuration from environment variables. Pass them with `-e
   - Values: an origin, for example `https://archestra.example.com`
   - Set it in production. Users who open the app on a LAN IP need that URL here, for example `http://192.168.1.5:3000`.
 
-- **`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`** - Extra port that serves only the endpoints meant for the Internet: the Microsoft Teams webhook (`/api/webhooks/chatops/ms-teams`).
+- **`ARCHESTRA_PUBLIC_ENDPOINTS_PORT`** - Extra port that serves only the endpoints meant for the Internet: the Microsoft Teams webhook (`/api/webhooks/chatops/ms-teams`) and [public file links](/docs/agents#share-files-as-public-links) (`/public-files/`).
   - Default: unset (no extra port)
   - Values: `1`–`65535`. Any other value disables the extra port and logs a warning.
   - The main API port keeps serving these endpoints. In Helm, set `archestra.publicEndpointsPort`, which also exposes the port on the Service.
+
+- **`ARCHESTRA_PUBLIC_FILES_BASE_URL`** - Base URL of [public file links](/docs/agents#share-files-as-public-links). Set it to serve them from a separate host that routes only `/public-files/` to Archestra.
+  - Default: [`ARCHESTRA_FRONTEND_URL`](/docs/reference/configuration#ARCHESTRA_FRONTEND_URL)
+  - Values: an absolute `http` or `https` URL, for example `https://files.example.com`. Any other value falls back to the default and logs a warning.
 
 - **`ARCHESTRA_TRUST_PROXY`** - Trusts the `X-Forwarded-*` headers of a reverse proxy or load balancer. Rate limits and audit logs then see each client's IP.
   - Default: `false`

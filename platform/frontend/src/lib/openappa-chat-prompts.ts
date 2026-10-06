@@ -13,9 +13,6 @@ const POLICY_LAUNCH_PROMPTS = {
   /** Batteries card: included batteries not enforced, or ones that fit. */
   configureBatteries:
     "Help me configure my OpenAPPA batteries. First, for each included battery that is not enforced, tell me what is wrong and how to fix it. Then list the batteries that fit my MCP servers and are not included yet: the servers each fits, how many of their uncovered tools it would cover, and which of those tools its rules would let run, block, or send for approval. Ask me which ones to fix or include, then tell me what the change would do and ask me whether to apply it.",
-  /** Overview enforcement card. */
-  explainPolicy:
-    "Walk me through my current OpenAPPA policy in plain language: what it allows, denies, and sends for approval. Then ask me what I'd like to change.",
   /** Security label card: the trust levels, the audiences, and their batteries. */
   explainSecurityLabel:
     "Explain the security label my OpenAPPA policy gives an agent session, in plain language. List the trust levels it configures, from most to least trusted, and say what lowers a session's trust. Then list the audiences from widest to narrowest, including any groups and the audience each one sits within, and say what reading data at each audience stops the agent from doing. For each audience, name the batteries it reads its members from. Then ask me what I'd like to change.",

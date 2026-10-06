@@ -59,6 +59,7 @@ const AUTH_LABELS: Record<AuthType, string> = {
 };
 const ALL_AUTH_TYPES: AuthType[] = ["none", "bearer", "api_key"];
 const MAX_PREVIEW_SKILLS = 5;
+const DOTTED_VERSION = /^v?\d+(\.\d+)+([-+][0-9a-z.-]+)?$/i;
 const EMPTY_CARD_PREFILL: CardPrefill = { name: "", description: "" };
 
 export function A2aRemoteAgentForm({
@@ -692,9 +693,10 @@ export function A2aRemoteAgentForm({
 }
 
 function AgentCardPreview({ inspection }: { inspection: Inspection }) {
-  const card = agentCardPreviewFields(inspection.agentCard);
+  const card = agentCardPreviewFields(inspection);
   const shownSkills = card.skills.slice(0, MAX_PREVIEW_SKILLS);
   const hiddenSkillCount = card.skills.length - shownSkills.length;
+  // The card description is not repeated here: it fills the Description field.
   return (
     <output
       aria-label="Agent Card found"
@@ -706,23 +708,20 @@ function AgentCardPreview({ inspection }: { inspection: Inspection }) {
           <p className="break-words font-medium">{inspection.name}</p>
           <p className="text-muted-foreground">
             {[
-              card.version ? `Version ${card.version}` : null,
               card.provider ? `by ${card.provider}` : null,
-              `${inspection.selectedInterface.protocolBinding}, ${inspection.selectedInterface.protocolVersion}`,
+              card.version ? `v${card.version}` : null,
+              `A2A ${inspection.selectedInterface.protocolVersion} over ${inspection.selectedInterface.protocolBinding}`,
             ]
               .filter(Boolean)
               .join(" · ")}
           </p>
         </div>
-        {inspection.description ? (
-          <p className="line-clamp-3 break-words">{inspection.description}</p>
-        ) : null}
         {shownSkills.length > 0 ? (
           <div className="space-y-1">
-            <p className="text-xs font-medium uppercase text-muted-foreground">
-              Skills
+            <p className="text-xs font-medium text-muted-foreground">
+              What this agent can do
             </p>
-            <ul aria-label="Agent Card skills" className="space-y-1">
+            <ul aria-label="What this agent can do" className="space-y-1">
               {shownSkills.map((skill, index) => (
                 <li
                   // biome-ignore lint/suspicious/noArrayIndexKey: card skills may repeat names
@@ -990,19 +989,42 @@ function nextCardPrefill({
   }
   return { prefill, updatedFields };
 }
-function agentCardPreviewFields(agentCard: Inspection["agentCard"]) {
+function agentCardPreviewFields(inspection: Inspection) {
+  const { agentCard } = inspection;
   const provider = asRecord(agentCard.provider);
   const skills = Array.isArray(agentCard.skills) ? agentCard.skills : [];
+  const version = nonEmptyString(agentCard.version);
+  const agentName = comparable(inspection.name);
+  const agentDescription = comparable(inspection.description);
   return {
-    version: nonEmptyString(agentCard.version),
+    // Cards may carry a build number or timestamp as `version`; only a dotted
+    // release version (1.2, 2.1.0, v3.0.0-beta) is worth showing.
+    version:
+      version && DOTTED_VERSION.test(version)
+        ? version.replace(/^v/i, "")
+        : null,
     provider: nonEmptyString(provider?.organization),
     skills: skills.flatMap((value) => {
       const skill = asRecord(value);
       const name = nonEmptyString(skill?.name) ?? nonEmptyString(skill?.id);
-      if (!name) return [];
-      return [{ name, description: nonEmptyString(skill?.description) }];
+      // Single-skill cards often name the skill after the agent; that repeats
+      // the header instead of saying what the agent can do.
+      if (!name || comparable(name) === agentName) return [];
+      const description = nonEmptyString(skill?.description);
+      return [
+        {
+          name,
+          description:
+            description && comparable(description) !== agentDescription
+              ? description
+              : null,
+        },
+      ];
     }),
   };
+}
+function comparable(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
 }
 function asRecord(value: unknown): Record<string, unknown> | null {
   return value && typeof value === "object" && !Array.isArray(value)

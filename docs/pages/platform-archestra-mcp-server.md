@@ -64,7 +64,7 @@ This tool takes no arguments.
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | `openappaPolicy:read` |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | `openappaPolicy:read` |
 | `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | `openappaPolicy:read` |
-| `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | `openappaPolicy:update` |
+| `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | `openappaPolicy:read` |
 | `preview_guardrails_policy_change` | Validate and show a reviewable diff for a proposed organization.appa.toml. | `openappaPolicy:read` |
 | `update_guardrails_policy` | Publish a validated change to organization.appa.toml. | `openappaPolicy:update` |
 | `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | `openappaPolicy:read` |
@@ -163,7 +163,7 @@ Required RBAC permission: `openappaPolicy:read`
 
 #### validate_guardrails_policy
 
-Required RBAC permission: `openappaPolicy:update`
+Required RBAC permission: `openappaPolicy:read`
 
 ##### Input
 

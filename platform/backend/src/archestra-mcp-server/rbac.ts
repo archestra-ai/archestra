@@ -8,6 +8,7 @@ import {
   allAvailableActions,
   roleActionResourceFor,
 } from "@archestra/shared/access-control";
+import type { RequestLookups } from "@/auth/request-lookups";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
@@ -42,7 +43,7 @@ export const TOOL_PERMISSIONS: Record<
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   list_guardrails_battery_fits: { resource: "openappaPolicy", action: "read" },
   inspect_guardrails_server: { resource: "openappaPolicy", action: "read" },
-  validate_guardrails_policy: { resource: "openappaPolicy", action: "update" },
+  validate_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   preview_guardrails_policy_change: {
     resource: "openappaPolicy",
     action: "read",
@@ -451,6 +452,7 @@ export async function filterToolNamesByPermission(
   toolNames: string[],
   userId: string | undefined,
   organizationId: string | undefined,
+  lookups?: RequestLookups,
 ): Promise<Set<string>> {
   if (!userId || !organizationId) {
     // No user context — include tools with no permission requirement, plus
@@ -468,10 +470,9 @@ export async function filterToolNamesByPermission(
     );
   }
 
-  const permissions = await getPermissionsForUserContext({
-    userId,
-    organizationId,
-  });
+  const permissions = lookups
+    ? await lookups.permissions({ userId, organizationId })
+    : await getPermissionsForUserContext({ userId, organizationId });
   const scopedActions = new Set<ResourcePermissionAction>();
   const neededScopedActions = new Set(
     toolNames
@@ -492,6 +493,7 @@ export async function filterToolNamesByPermission(
           userId,
           organizationId,
           action,
+          lookups,
         })
       )
         scopedActions.add(action);
@@ -530,7 +532,7 @@ export async function filterToolNamesByPermission(
         archestraMcpBranding.getToolShortName(name) as ArchestraToolShortName
       ],
   )
-    ? await ResourcePermissions.resolveAll({ userId, organizationId })
+    ? await ResourcePermissions.resolveAll({ userId, organizationId, lookups })
     : [];
   // SPDX-SnippetEnd
 

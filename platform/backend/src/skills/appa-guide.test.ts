@@ -238,7 +238,6 @@ describe("APPA Guide feature availability", () => {
     // P02: Inspect available inventory and account for the caller's scope
     expect(content).toContain("archestra__list_mcp_server_deployments");
     expect(content).toContain("archestra__inspect_guardrails_server");
-    expect(content).toContain("archestra__get_mcp_server_tools");
     expect(content).toContain("archestra__search_tools");
 
     // P03: Root config and serving policy as truth

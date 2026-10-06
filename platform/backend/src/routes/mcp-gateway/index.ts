@@ -5,6 +5,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import { RequestLookups } from "@/auth/request-lookups";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -211,6 +212,7 @@ async function handleMcpPostRequest(
   resolution: ProtocolResolution,
   /** Rounds already spent on this call, from a verified requestState. */
   mrtrRound: number,
+  lookups?: RequestLookups,
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
@@ -444,6 +446,7 @@ async function handleMcpPostRequest(
       agentId: profileId,
       tokenAuth: tokenAuthContext,
       runId,
+      lookups,
       mrtr: {
         // Only a 2026-07-28 client can act on an InputRequiredResult. A legacy
         // client keeps the in-band elicitation it has always used.
@@ -939,9 +942,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
+      // Each stateless POST builds its server from scratch; these lookups let
+      // authentication and every tools/list helper share one caller and agent
+      // resolution for this request only.
+      const lookups = new RequestLookups();
       const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
         profileId,
         token,
+        lookups,
       );
       if (!tokenAuth) {
         setWWWAuthenticateHeader(request, reply);
@@ -1220,7 +1228,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist
-      const agent = await AgentModel.findGatewayAgentById(profileId);
+      const agent = await lookups.gatewayAgent(profileId);
       if (agent) {
         const passthroughHeaders = extractPassthroughHeaders(
           agent.passthroughHeaders,
@@ -1243,6 +1251,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenAuthContext,
         resolution,
         mrtrRound,
+        lookups,
       );
     },
   );

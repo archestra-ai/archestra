@@ -2,8 +2,7 @@
   "$schema": "https://biomejs.dev/schemas/2.4.6/schema.json",
   "plugins": [
     "./biome-plugins/icon-button-aria-label.grit",
-    "./biome-plugins/no-conditional-bare-jsx-text.grit",
-    "./biome-plugins/design-arena.grit"
+    "./biome-plugins/no-conditional-bare-jsx-text.grit"
   ],
   "vcs": {
     "enabled": true,

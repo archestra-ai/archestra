@@ -40,7 +40,8 @@ export function buildConnectionPrompt(params: {
   /** Parts the user turned off; the link carries them to connect.md. */
   exclude?: readonly ConnectSetupPart[];
 }): string {
-  const exclude = parseConnectExclude(params.exclude?.join(","));
+  const listed = new Set(params.exclude);
+  const exclude = CONNECT_SETUP_PARTS.filter((part) => listed.has(part));
   const excludeParam = exclude.length ? `&exclude=${exclude.join(",")}` : "";
   return `Read ${params.origin}/connect.md?client=${encodeURIComponent(params.clientId)}${excludeParam} and connect ${params.label}.`;
 }

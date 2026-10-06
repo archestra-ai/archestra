@@ -22,7 +22,6 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
-import { ConnectionFlow } from "./connection-flow";
 
 const {
   createSetupMock,
@@ -286,78 +285,6 @@ describe("ConnectCommandPanel", () => {
         }),
       ),
     );
-  });
-
-  it("switches between coding prompts and Desktop setup without preparing coding-client scripts", async () => {
-    vi.mocked(useRouter).mockReturnValue({
-      replace: vi.fn(),
-    } as unknown as ReturnType<typeof useRouter>);
-    vi.mocked(usePathname).mockReturnValue("/connection");
-    const server = setupServer(
-      http.get("http://localhost:9000/api/agents/all", () =>
-        HttpResponse.json([]),
-      ),
-    );
-    server.listen({ onUnhandledRequest: "error" });
-    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const user = userEvent.setup();
-    const view = render(
-      <QueryClientProvider client={queryClient}>
-        <ConnectionFlow llmProxyId="p1" />
-      </QueryClientProvider>,
-    );
-    try {
-      expect(
-        screen.getByRole("heading", { name: "Connect Claude Code" }),
-      ).toBeVisible();
-      for (const label of ["Cursor", "Codex", "OpenCode", "Copilot CLI"]) {
-        const selectedClient = CONNECT_CLIENTS.find(
-          (entry) => entry.label === label,
-        );
-        if (!selectedClient) throw new Error(`Missing client: ${label}`);
-        await pickApp(user, label);
-        expect(
-          screen.getByRole("heading", { name: `Connect ${label}` }),
-        ).toBeVisible();
-        expect(
-          screen.getByRole("heading", { name: "Review the setup" }),
-        ).toBeVisible();
-        const prompt = `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`;
-        expect(
-          screen.getByText(
-            (_content, node) =>
-              node?.tagName === "CODE" && node.textContent === prompt,
-          ),
-        ).toBeVisible();
-      }
-      expect(createSetupMock).not.toHaveBeenCalled();
-      await pickApp(user, "Claude Desktop");
-      expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
-      expect(
-        screen.getByRole("heading", { name: "Install the connection" }),
-      ).toBeVisible();
-      expect(
-        screen.queryByRole("heading", { name: "Review the setup" }),
-      ).toBeNull();
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenCalledWith(
-          expect.objectContaining({ clientId: "claude-desktop" }),
-        ),
-      );
-      expect(screen.queryByText(/requires the Claude Code CLI/)).toBeNull();
-      await pickApp(user, "Claude Code");
-      expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
-      expect(
-        screen.getByRole("heading", { name: "Review the setup" }),
-      ).toBeVisible();
-    } finally {
-      view.unmount();
-      queryClient.clear();
-      server.close();
-    }
   });
 
   it("offers Desktop subscription installation without a configured API key", async () => {
@@ -1778,14 +1705,3 @@ describe("ConnectCommandPanel", () => {
     });
   });
 });
-
-/** Opens the app dropdown and picks `label`. */
-async function pickApp(
-  user: ReturnType<typeof userEvent.setup>,
-  label: string,
-) {
-  await user.click(screen.getByRole("button", { name: "Choose your app" }));
-  await user.click(
-    screen.getByRole("button", { name: new RegExp(`^${label} logo ${label}`) }),
-  );
-}

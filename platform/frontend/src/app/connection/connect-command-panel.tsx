@@ -69,7 +69,11 @@ import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
-import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
+import {
+  type ConnectClient,
+  FINISH_OAUTH_FLOW_TITLE,
+  type ScriptClientId,
+} from "./clients";
 import type { ConnectionBaseUrl } from "./connection-flow.utils";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
@@ -90,7 +94,6 @@ import {
 } from "./skills-marketplace-step";
 import { TerminalBlock } from "./terminal-block";
 
-type ScriptClientId = CreateConnectionSetupBody["clientId"];
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
 type EditableRow =
   | "endpoint"
@@ -100,22 +103,6 @@ type EditableRow =
   | "skills"
   | "plugins"
   | "platform";
-
-const SCRIPT_CLIENT_IDS: readonly string[] = [
-  "claude-code",
-  "claude-desktop",
-  "codex",
-  "copilot-cli",
-  "cursor",
-  "opencode",
-] satisfies ScriptClientId[];
-
-/** Clients whose whole setup is delivered as a single `curl | bash` command. */
-export function isScriptClient(
-  clientId: string | null,
-): clientId is ScriptClientId {
-  return clientId !== null && SCRIPT_CLIENT_IDS.includes(clientId);
-}
 
 /**
  * Whether skills can ride along in the setup command: the caller can read
@@ -1598,7 +1585,7 @@ function ProviderKeyGate({
 }
 
 /** Bold, underlined link to the underlying resource (gateway/proxy/skills). */
-export function ResourceLink({
+function ResourceLink({
   href,
   children,
 }: {
@@ -1618,7 +1605,7 @@ export function ResourceLink({
 const SKILL_NAME_PREVIEW_LIMIT = 6;
 
 /** Names the skills the command will install, truncated past the limit. */
-export function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
+function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
   const shown = skills.slice(0, SKILL_NAME_PREVIEW_LIMIT);
   const more = skills.length - shown.length;
   return (

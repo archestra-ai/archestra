@@ -138,9 +138,9 @@ class ConnectedClientModel {
     userId: string;
     clientId: ConnectionSetupClientId;
     revokedByUserId: string;
-    tx?: Transaction;
+    tx: Transaction;
   }): Promise<{ count: number; skillShareLinkIds: string[] }> {
-    const rows = await (params.tx ?? db)
+    const rows = await params.tx
       .update(setups)
       .set({ revokedAt: new Date(), revokedByUserId: params.revokedByUserId })
       .where(

@@ -175,7 +175,7 @@ export function CopyLine({
 
 // === Copy prompt: the text gets the width, the copy is one icon ===
 
-export function CopyPrompt({ text }: { text: string }) {
+function CopyPrompt({ text }: { text: string }) {
   const [done, setDone] = useState(false);
   return (
     <div className="relative rounded-lg border bg-muted/40 py-2.5 pr-11 pl-3">

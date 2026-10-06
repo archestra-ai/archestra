@@ -9,11 +9,8 @@ import { WizardStep } from "@/components/wizard-step";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
-import { ClientPicker } from "./client-grid";
-import { CONNECT_CLIENTS, usesGenericInstructions } from "./clients";
-import { ALL_INCLUDED, type ConnectChoices } from "./connect-choices";
-import { ConnectCommandPanel, isScriptClient } from "./connect-command-panel";
-import { ConnectWithAi } from "./connect-with-ai";
+import { CONNECT_CLIENTS, isScriptClient } from "./clients";
+import { ConnectCommandPanel } from "./connect-command-panel";
 import {
   type ConnectionBaseUrl,
   resolveAdminDefaultBaseUrl,
@@ -21,13 +18,7 @@ import {
   resolveEffectiveId,
   resolveInitialClientId,
 } from "./connection-flow.utils";
-import { ConnectionPreview } from "./connection-preview";
 import { ConnectionUrlStep } from "./connection-url-step";
-import {
-  GenericConnectPrompt,
-  GenericModeSwitch,
-  useGenericMode,
-} from "./generic-connect-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import {
@@ -104,17 +95,7 @@ export function ConnectionFlow({
     adminDefaultClientId,
     visibleClientIds: visibleClients.map((c) => c.id),
   });
-  const [clientId, setClientId] = useState<string | null>(initialClientId);
-  const client = visibleClients.find((c) => c.id === clientId) ?? null;
-
-  const selectClient = (id: string) => {
-    setClientId(id);
-    // Providers vary per client, so clear any bookmarked provider on switch.
-    updateUrlParams({
-      clientId: id,
-      providerId: null,
-    });
-  };
+  const client = visibleClients.find((c) => c.id === initialClientId) ?? null;
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
 
@@ -166,41 +147,12 @@ export function ConnectionFlow({
   const urlProvider: SupportedProvider | null =
     urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
 
-  const promptClient =
-    !searchParams.get("connectRequest") &&
-    (client?.id === "claude-code" ||
-      client?.id === "cursor" ||
-      client?.id === "codex" ||
-      client?.id === "copilot-cli" ||
-      client?.id === "opencode");
-
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsVisible = skillsEnabled && marketplaceVisible;
 
-  // Apps on the generic instructions: a prompt by default, the manual
-  // instructions below on the Manual switch.
-  const genericMode = useGenericMode();
-  const genericClient =
-    client &&
-    !searchParams.get("connectRequest") &&
-    usesGenericInstructions(client)
-      ? client
-      : null;
-  const genericPromptClient = genericMode === "prompt" ? genericClient : null;
-  const [genericChoices, setGenericChoices] =
-    useState<ConnectChoices>(ALL_INCLUDED);
-  // What the prompt clients' review step left out; the prompt carries it.
-  const [promptChoices, setPromptChoices] =
-    useState<ConnectChoices>(ALL_INCLUDED);
-  const proxyAvailable =
-    llmProxyEnabled && canReadLlmProxy === true && !!llmProxyId;
-
   // Manual flow (n8n / Any client): one wizard-rail entry per instruction
   // block, numbered after the client step.
-  const manualClient =
-    client && !isScriptClient(client.id) && !genericPromptClient
-      ? client
-      : null;
+  const manualClient = client && !isScriptClient(client.id) ? client : null;
   const manualSteps: {
     key: string;
     title: string;
@@ -281,45 +233,9 @@ export function ConnectionFlow({
 
   return (
     <div className="flex flex-col">
-      {/* Step 1 — Client */}
-      {!searchParams.get("connectRequest") && (
-        <WizardStep
-          n={1}
-          title="Choose your app"
-          last={!client}
-          actions={genericClient ? <GenericModeSwitch /> : undefined}
-        >
-          <ClientPicker
-            clients={visibleClients}
-            selected={clientId}
-            onSelect={selectClient}
-          />
-        </WizardStep>
-      )}
-
       <div inert={isRevalidating} className="contents">
-        {client && promptClient && (
-          <>
-            <WizardStep n={2} title="Review the setup">
-              <ConnectionPreview
-                client={client}
-                gateway={canReadMcpGateway ? (selectedMcp ?? null) : null}
-                proxyAvailable={
-                  llmProxyEnabled && canReadLlmProxy === true && !!llmProxyId
-                }
-                skillsEnabled={skillsEnabled}
-                pluginsEnabled={pluginsEnabled}
-                onIncludedChange={setPromptChoices}
-              />
-            </WizardStep>
-            <WizardStep n={3} title={`Connect ${client.label}`} last>
-              <ConnectWithAi client={client} choices={promptChoices} />
-            </WizardStep>
-          </>
-        )}
-
         {/* Steps 2-3 (script clients) — review, then run the command */}
-        {client && !promptClient && isScriptClient(client.id) && (
+        {client && isScriptClient(client.id) && (
           <ConnectCommandPanel
             client={client}
             mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
@@ -338,41 +254,6 @@ export function ConnectionFlow({
             skillsEnabled={skillsEnabled}
             pluginsEnabled={pluginsEnabled}
           />
-        )}
-
-        {/* Steps 2-3 (generic apps, Prompt) — review, then copy the prompt */}
-        {genericPromptClient && (
-          <>
-            <WizardStep n={2} title="Review the setup">
-              <ConnectionPreview
-                client={genericPromptClient}
-                gateway={canReadMcpGateway ? (selectedMcp ?? null) : null}
-                proxyAvailable={proxyAvailable}
-                skillsEnabled={skillsVisible}
-                pluginsEnabled={false}
-                viaApproval={false}
-                onIncludedChange={setGenericChoices}
-              />
-            </WizardStep>
-            <WizardStep
-              n={3}
-              title={`Connect ${genericPromptClient.label}`}
-              last
-            >
-              <GenericConnectPrompt
-                client={genericPromptClient}
-                choices={genericChoices}
-                gatewaySlug={
-                  canReadMcpGateway && selectedMcp
-                    ? (selectedMcp.slug ?? selectedMcp.id)
-                    : null
-                }
-                proxyAvailable={proxyAvailable}
-                skillsAvailable={skillsVisible}
-                baseUrl={baseUrl}
-              />
-            </WizardStep>
-          </>
         )}
 
         {/* Steps 2..n (n8n / Any client) — manual instructions on the rail */}

@@ -12,11 +12,7 @@ import {
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
-import {
-  useDefaultMcpGateway,
-  useProfile,
-  useProfiles,
-} from "@/lib/agent.query";
+import { useDefaultMcpGateway, useProfile } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useConfig } from "@/lib/config/config.query";
@@ -100,14 +96,9 @@ export interface ConnectPageData {
   clients: ConnectClient[];
   /** The handful of apps with first-class setup, for hero rows and pickers. */
   featuredClients: ConnectClient[];
-  /** Deprecated: do not show a harness count. Say "other agents" instead. */
-  harnessCount: number;
   /** The instance's configured name ("Archestra" unless white-labeled). */
   appName: string;
   gateway: ConnectGateway | null;
-  /** Gateways the user can pick from; more than one shows a picker. */
-  gateways: ConnectGateway[];
-  selectGateway: (id: string) => void;
   /** Endpoints the admin offers; more than one shows a picker. */
   baseUrls: readonly string[];
   baseUrlMetadata: readonly ConnectionBaseUrl[] | null;
@@ -223,26 +214,8 @@ export function useConnectPageData(): ConnectPageData {
   );
   const { data: appConfig } = useConfig();
 
-  const { data: gatewayList } = useProfiles({
-    filters: {
-      agentTypes: ["profile", "mcp_gateway"],
-      excludeOtherPersonalAgents: true,
-    },
-    enabled: canReadGateways === true,
-  });
-  const gateways = useMemo<ConnectGateway[]>(
-    () => (gatewayList ?? []).map((g) => ({ ...g, slug: g.slug ?? g.id })),
-    [gatewayList],
-  );
   const { data: defaultGateway } = useDefaultMcpGateway();
-  const [pickedGatewayId, setPickedGatewayId] = useState<string | null>(null);
-  const gatewayId =
-    (pickedGatewayId && gateways.some((g) => g.id === pickedGatewayId)
-      ? pickedGatewayId
-      : null) ??
-    org?.connectionDefaultMcpGatewayId ??
-    defaultGateway?.id ??
-    gateways[0]?.id;
+  const gatewayId = org?.connectionDefaultMcpGatewayId ?? defaultGateway?.id;
   const { data: profile, isPending: profilePending } = useProfile(gatewayId);
   const { data: catalog } = useInternalMcpCatalog();
   const accessAll = profile?.accessAllTools ?? false;
@@ -385,11 +358,8 @@ export function useConnectPageData(): ConnectPageData {
     revalidating: orgQuery.isFetching,
     clients,
     featuredClients,
-    harnessCount: 300,
     appName,
     gateway,
-    gateways,
-    selectGateway: setPickedGatewayId,
     baseUrls,
     baseUrlMetadata: org?.connectionBaseUrls ?? null,
     baseUrl,

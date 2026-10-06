@@ -10,8 +10,7 @@ import config from "@/lib/config/config";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import { useOrganization } from "@/lib/organization.query";
 import type { ConnectClient } from "./clients";
-import { usesGenericInstructions } from "./clients";
-import { isScriptClient } from "./connect-command-panel";
+import { isScriptClient, usesGenericInstructions } from "./clients";
 import {
   getConnectableProviders,
   resolveAdminDefaultBaseUrl,
@@ -35,8 +34,7 @@ import {
 export type SetupMode = "prompt" | "prompt-or-manual" | "manual";
 
 export function setupModeFor(client: ConnectClient): SetupMode {
-  if (isScriptClient(client.id) || client.id === "claude-desktop")
-    return "prompt";
+  if (isScriptClient(client.id)) return "prompt";
   if (usesGenericInstructions(client)) return "prompt-or-manual";
   return "manual";
 }
@@ -154,24 +152,4 @@ export function useManualSteps(
     });
   }
   return steps;
-}
-
-/** Default rendering: numbered blocks, compact. */
-export function ManualSetup({ client }: { client: ConnectClient }) {
-  const steps = useManualSteps(client);
-  return (
-    <ol className="flex flex-col gap-6">
-      {steps.map((s, i) => (
-        <li key={s.key} className="flex flex-col gap-3">
-          <h3 className="flex items-center gap-2 text-sm font-medium">
-            <span className="grid size-5 place-items-center rounded-full border text-xs text-muted-foreground">
-              {i + 1}
-            </span>
-            {s.title}
-          </h3>
-          <div className="min-w-0">{s.content}</div>
-        </li>
-      ))}
-    </ol>
-  );
 }

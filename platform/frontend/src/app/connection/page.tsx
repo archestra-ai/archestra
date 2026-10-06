@@ -1,15 +1,11 @@
 "use client";
 
-import { Settings } from "lucide-react";
-import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect } from "react";
 import { LoadingState } from "@/components/loading";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
-import { Button } from "@/components/ui/button";
 import { useDefaultMcpGateway } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
@@ -29,15 +25,11 @@ export default function ConnectionPage() {
 function ConnectionApprovalPage() {
   const appName = useAppName();
   const searchParams = useSearchParams();
-  const { data: canReadConnectionSettings } = useHasPermissions({
-    organizationSettings: ["read"],
-  });
-  const isApproval = !!searchParams.get("connectRequest");
   const requestedClient = CONNECT_CLIENTS.find(
     (client) => client.id === searchParams.get("clientId"),
   );
   const approvalDocumentTitle = `Connect ${requestedClient?.label ?? "your app"}`;
-  usePageTitle(isApproval ? approvalDocumentTitle : "Connect");
+  usePageTitle(approvalDocumentTitle);
   const { data: defaultMcpGateway } = useDefaultMcpGateway();
   const organizationQuery = useOrganization(true, { fresh: true });
   useEffect(() => {
@@ -77,36 +69,16 @@ function ConnectionApprovalPage() {
   return (
     <PageLayout
       title={
-        isApproval ? (
-          <>
-            Connect{" "}
-            <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
-              {requestedClient?.label ?? "your app"}
-            </span>
-            {` to ${appName}`}
-          </>
-        ) : (
-          `Connect your tools to ${appName}`
-        )
+        <>
+          Connect{" "}
+          <span className="bg-gradient-to-r from-purple-600 to-indigo-600 bg-clip-text text-transparent">
+            {requestedClient?.label ?? "your app"}
+          </span>
+          {` to ${appName}`}
+        </>
       }
-      documentTitle={isApproval ? approvalDocumentTitle : "Connection"}
+      documentTitle={approvalDocumentTitle}
       maxWidth="wizard"
-      actionButton={
-        canReadConnectionSettings &&
-        !isApproval && (
-          <Button
-            variant="outline"
-            size="icon-sm"
-            className="md:w-auto md:px-3"
-            asChild
-          >
-            <Link href="/settings/connection" aria-label="Connection settings">
-              <Settings aria-hidden="true" />
-              <span className="hidden md:inline">Connection settings</span>
-            </Link>
-          </Button>
-        )
-      }
     >
       {(organizationQuery.isFetching && !organization) ||
       !organizationQuery.isFetchedAfterMount ? (

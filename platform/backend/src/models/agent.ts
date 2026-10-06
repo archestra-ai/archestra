@@ -90,6 +90,7 @@ import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type PrincipalSource,
 } from "./resource-permission-subject";
 import ToolModel from "./tool";
 
@@ -2667,6 +2668,7 @@ class AgentModel {
      * reachable from every environment.
      */
     environmentId: string | null;
+    lookups?: PrincipalSource;
   }): Promise<
     Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
   > {
@@ -2717,10 +2719,10 @@ class AgentModel {
         .orderBy(asc(schema.agentsTable.name));
     }
 
-    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
-      organizationId,
-      userId,
-    });
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      params.lookups,
+      { organizationId, userId },
+    );
     return db
       .select({
         id: schema.agentsTable.id,

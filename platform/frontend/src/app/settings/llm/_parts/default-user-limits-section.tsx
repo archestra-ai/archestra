@@ -213,6 +213,7 @@ export function DefaultUserLimitsSection() {
       control={
         <PermissionButton
           permissions={{ llmLimit: ["create"] }}
+          size="sm"
           onClick={handleAddOpen}
           disabled={nothingToAdd && !editing}
         >

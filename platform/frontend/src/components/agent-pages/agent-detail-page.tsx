@@ -549,7 +549,7 @@ function AgentDetails({
             </p>
           )}
           {chatAction.visible && chatAction.href && (
-            <Button variant="outline" asChild>
+            <Button variant="outline" size="sm" asChild>
               <Link href={chatAction.href}>
                 {chatAction.startsRun ? (
                   <TerminalSquare className="h-4 w-4" />
@@ -562,7 +562,7 @@ function AgentDetails({
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon-sm">
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">More actions</span>
               </Button>
@@ -704,6 +704,7 @@ function AgentDetails({
                     <WizardFooter className="sm:justify-end">
                       <Button
                         type="submit"
+                        size="sm"
                         form={formId}
                         disabled={
                           !canSubmit || isGone || isSaving || !formDirty

@@ -7,6 +7,7 @@ import {
   resolveMcpClientServerName,
   type SupportedProvider,
 } from "@archestra/shared";
+import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
 import { Download, KeyRound, RotateCcw, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
@@ -47,8 +48,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardStep } from "@/components/wizard-step";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useClientConnection } from "@/lib/client-connection.query";
 import { useConfig } from "@/lib/config/config.query";
 import {
   type CreateConnectionSetupBody,
@@ -63,11 +66,20 @@ import {
   useAvailableLlmProviderApiKeys,
   useCreateLlmProviderApiKey,
 } from "@/lib/llm-provider-api-keys.query";
-import { type PluginListItem, usePlugins } from "@/lib/plugins/plugin.query";
+import {
+  isDeliverablePlugin,
+  type PluginListItem,
+  usePlugins,
+} from "@/lib/plugins/plugin.query";
+import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
-import { type ConnectClient, FINISH_OAUTH_FLOW_TITLE } from "./clients";
+import {
+  type ConnectClient,
+  FINISH_OAUTH_FLOW_TITLE,
+  type InstallerClientId,
+} from "./clients";
 import type { ConnectionBaseUrl } from "./connection-flow.utils";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
@@ -81,14 +93,11 @@ import { ConnectionPlatformToggle } from "./platform-select";
 import { SetupCommandLine } from "./setup-command-line";
 import { SetupSummaryRow } from "./setup-summary-row";
 import {
-  type ConnectSkill,
   SkillsMarketplaceStep,
-  useAllSkills,
   useSkillsMarketplaceVisible,
 } from "./skills-marketplace-step";
 import { TerminalBlock } from "./terminal-block";
 
-type ScriptClientId = CreateConnectionSetupBody["clientId"];
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
 type EditableRow =
   | "endpoint"
@@ -98,22 +107,6 @@ type EditableRow =
   | "skills"
   | "plugins"
   | "platform";
-
-const SCRIPT_CLIENT_IDS: readonly string[] = [
-  "claude-code",
-  "claude-desktop",
-  "codex",
-  "copilot-cli",
-  "cursor",
-  "opencode",
-] satisfies ScriptClientId[];
-
-/** Clients whose whole setup is delivered as a single `curl | bash` command. */
-export function isScriptClient(
-  clientId: string | null,
-): clientId is ScriptClientId {
-  return clientId !== null && SCRIPT_CLIENT_IDS.includes(clientId);
-}
 
 /**
  * Whether skills can ride along in the setup command: the caller can read
@@ -177,6 +170,13 @@ interface ConnectCommandPanelProps {
   skillsEnabled?: boolean;
   /** When false, plugins are not offered in the setup. */
   pluginsEnabled?: boolean;
+  /** Parts the user left out on the Connect page; they stay off. */
+  exclude?: readonly ConnectSetupPart[];
+  /**
+   * "download": only the Claude Desktop installer download, for the Connect
+   * page's band. The full review flow is what the approval page shows.
+   */
+  variant?: "full" | "download";
 }
 
 /**
@@ -201,10 +201,17 @@ export function ConnectCommandPanel({
   onBaseUrlChange,
   skillsEnabled = true,
   pluginsEnabled = true,
+  exclude,
+  variant = "full",
 }: ConnectCommandPanelProps) {
   const searchParams = useSearchParams();
   const connectRequest = searchParams.get("connectRequest");
   const [customizing, setCustomizing] = useState(false);
+  // The gateway and the LLM Proxy join the setup unless the prompt flow's
+  // review step switched them off (only the approval page can be told that).
+  const [includeGateway, setIncludeGateway] = useState(true);
+  const [includeProxy, setIncludeProxy] = useState(true);
+  const activeLlmProxyId = includeProxy ? llmProxyId : null;
   const showSetupSummary = !connectRequest && client.id !== "claude-desktop";
   const setupStep = showSetupSummary ? 3 : 2;
   const requestedPlatform = searchParams.get("platform");
@@ -255,11 +262,8 @@ export function ConnectCommandPanel({
     usePlugins(pluginsQueryEnabled);
   const plugins = useMemo(
     () =>
-      (allPlugins ?? []).filter(
-        (plugin) =>
-          plugin.clientType === client.id &&
-          plugin.enabled &&
-          plugin.approvedContentHash === plugin.contentHash,
+      (allPlugins ?? []).filter((plugin) =>
+        isDeliverablePlugin(plugin, client.id),
       ),
     [allPlugins, client.id],
   );
@@ -284,6 +288,25 @@ export function ConnectCommandPanel({
         : toPlatformOption(detectPlatform()),
     );
   }, [requestedPlatform]);
+  // Parts the copied prompt left out. The deployment won't approve a setup
+  // that includes one, so they start off here and stay off.
+  const { data: connection } = useClientConnection(connectRequest ?? "");
+  const excludeKey = (connection?.exclude ?? exclude ?? []).join(",");
+  const excluded = useMemo(
+    () => new Set(excludeKey.split(",").filter(Boolean)),
+    [excludeKey],
+  );
+  useEffect(() => {
+    if (excluded.has("tools")) setIncludeGateway(false);
+    if (excluded.has("proxy")) setIncludeProxy(false);
+    if (excluded.has("skills")) setSelectedSkillIds(new Set());
+    if (excluded.has("plugins")) {
+      setPluginSelections((current) =>
+        new Map(current).set(client.id, new Set()),
+      );
+    }
+    if (excluded.size > 0) setCustomizing(true);
+  }, [excluded, client.id]);
   // Which summary line is currently expanded for inline editing (one at a time).
   const [editing, setEditing] = useState<EditableRow | null>(null);
   const toggleEdit = (row: EditableRow) =>
@@ -330,7 +353,9 @@ export function ConnectCommandPanel({
   const providerIsPerUser =
     !!provider && providerRequiresPerUserCredential(provider);
   const needsPerUserConnect =
-    !!llmProxyId && providerIsPerUser && !configuredProviders.has(provider);
+    !!activeLlmProxyId &&
+    providerIsPerUser &&
+    !configuredProviders.has(provider);
 
   // Clients that persist a model during setup surface it as a reviewable
   // choice instead of hard-wiring a default. null = the provider's default;
@@ -368,12 +393,14 @@ export function ConnectCommandPanel({
   const openCodeProviderPassthrough =
     client.id === "opencode" && effectiveProxyAuth === "provider-key";
 
-  const gateway = mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null;
+  const gateway = includeGateway
+    ? (mcpGateways?.find((g) => g.id === mcpGatewayId) ?? null)
+    : null;
   // The LLM Proxy may be available without a usable provider (e.g. virtual-key
   // mode with no configured providers); keep it for the row/editor, but it
   // only joins the command when a provider is also resolved.
-  const hasProxy = llmProxyId !== null;
-  const proxyActive = !!(llmProxyId && provider);
+  const hasProxy = activeLlmProxyId !== null;
+  const proxyActive = !!(activeLlmProxyId && provider);
   // Virtual-key auth was chosen, but nothing can back it: the client routes only
   // providers with no configured key (and none are per-user), so no virtual key
   // can be minted. Emitting the script anyway would silently drop the inference
@@ -496,7 +523,7 @@ export function ConnectCommandPanel({
     platform: setupPlatform,
     baseUrl,
     gatewayId: gateway?.id ?? null,
-    proxyId: proxyActive ? llmProxyId : null,
+    proxyId: proxyActive ? activeLlmProxyId : null,
     provider: proxyActive ? provider : null,
     proxyAuth: proxyActive ? effectiveProxyAuth : null,
     model: proxyActive ? effectiveModel : null,
@@ -512,7 +539,7 @@ export function ConnectCommandPanel({
   const runGeneration = useCallback(
     async (key: string) => {
       const inputs = JSON.parse(key) as {
-        clientId: ScriptClientId;
+        clientId: InstallerClientId;
         platform: NonNullable<CreateConnectionSetupBody["platform"]>;
         baseUrl: string;
         gatewayId: string | null;
@@ -763,14 +790,14 @@ export function ConnectCommandPanel({
               canCreateProviderKey ? (
                 <>
                   <span>{noVirtualKeyReason} </span>
-                  <button
+                  <UnstyledButton
                     type="button"
                     className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
                     onClick={() => setShowAddProviderKey(true)}
                     data-testid="connect-auth-add-provider-key"
                   >
                     Add {addKeyPhrase}
-                  </button>
+                  </UnstyledButton>
                   <span> or switch to your provider key.</span>
                 </>
               ) : (
@@ -836,6 +863,7 @@ export function ConnectCommandPanel({
       >
         <Checkbox
           id="connect-include-skills"
+          disabled={excluded.has("skills")}
           // All or nothing: the shared marketplace URL has no per-skill knob,
           // so "all" (null) and "none" (empty set) are the only honest states.
           checked={selectedSkills.length > 0}
@@ -861,6 +889,7 @@ export function ConnectCommandPanel({
         >
           <Checkbox
             id="connect-include-plugins"
+            disabled={excluded.has("plugins")}
             checked={
               selectedPlugins.length === compatiblePlugins.length
                 ? true
@@ -888,6 +917,7 @@ export function ConnectCommandPanel({
               >
                 <Checkbox
                   id={`connect-plugin-${plugin.id}`}
+                  disabled={excluded.has("plugins")}
                   checked={
                     selectedPluginIds === null ||
                     selectedPluginIds.has(plugin.id)
@@ -925,6 +955,26 @@ export function ConnectCommandPanel({
             : hasRunnableAnything
               ? "Generating setup command"
               : "No setup command selected";
+
+  if (variant === "download") {
+    return (
+      <DesktopDownload
+        installerUrl={result?.installerUrl ?? null}
+        command={result?.command ?? null}
+        pending={hasRunnableAnything && !result && !failed}
+        failed={failed}
+        onRetry={() => runGeneration(inputsKey)}
+        proxyActive={proxyActive}
+        gate={
+          !hasRunnableAnything
+            ? "Everything is left out. Choose at least one thing to include."
+            : needsPerUserConnect || virtualKeyUnbacked
+              ? `${commandStatus}. Use the Prompt option, or ask your admin.`
+              : null
+        }
+      />
+    );
+  }
 
   if (!hasAnything) {
     // Nothing to put in a setup command — but skills install from their own
@@ -1079,7 +1129,7 @@ export function ConnectCommandPanel({
                   <PluginsDetail
                     plugins={selectedPlugins}
                     incompatiblePlugins={incompatiblePlugins}
-                    clientId={client.id as ScriptClientId}
+                    clientId={client.id as InstallerClientId}
                     platform={platform}
                   />
                 }
@@ -1169,7 +1219,33 @@ export function ConnectCommandPanel({
               </Button>
             </CollapsibleTrigger>
             <CollapsibleContent className="mt-3 grid max-w-lg gap-4">
+              {excluded.size > 0 && (
+                <p className="text-xs text-muted-foreground">
+                  Your prompt left some parts out. They stay off for this
+                  connection.
+                </p>
+              )}
+              {connectRequest && mcpGatewayId && mcpGateways !== null && (
+                <IncludeCheckbox
+                  id="connect-include-gateway"
+                  disabled={excluded.has("tools")}
+                  checked={includeGateway}
+                  onCheckedChange={setIncludeGateway}
+                >
+                  Connect the MCP gateway
+                </IncludeCheckbox>
+              )}
               {gatewayEditor}
+              {connectRequest && llmProxyId && (
+                <IncludeCheckbox
+                  id="connect-include-proxy"
+                  disabled={excluded.has("proxy")}
+                  checked={includeProxy}
+                  onCheckedChange={setIncludeProxy}
+                >
+                  Route model requests through the LLM Proxy
+                </IncludeCheckbox>
+              )}
               {proxyEditor}
               {proxyActive && modelEditor}
               {skillsEligible && skillsEditor}
@@ -1385,7 +1461,7 @@ export function ConnectCommandPanel({
                   </span>
                 )}
               </span>
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={() => runGeneration(inputsKey)}
                 disabled={isPending}
@@ -1394,7 +1470,7 @@ export function ConnectCommandPanel({
               >
                 <RotateCcw className="size-3" />
                 Regenerate
-              </button>
+              </UnstyledButton>
             </div>
           )}
         </div>
@@ -1456,6 +1532,87 @@ export function ConnectCommandPanel({
 // ===================================================================
 // Internal pieces
 // ===================================================================
+
+/** The Connect page's Claude Desktop band: one installer download. */
+function DesktopDownload({
+  installerUrl,
+  command,
+  pending,
+  failed,
+  onRetry,
+  proxyActive,
+  gate,
+}: {
+  installerUrl: string | null;
+  command: string | null;
+  pending: boolean;
+  failed: boolean;
+  onRetry: () => void;
+  proxyActive: boolean;
+  /** Why no installer can be made here; null when one can. */
+  gate: string | null;
+}) {
+  if (gate)
+    return <p className="mt-2 px-1 text-sm text-muted-foreground">{gate}</p>;
+  return (
+    <div className="mt-2 space-y-3 px-1">
+      <p className="text-xs text-muted-foreground">
+        Open it in Claude Desktop and confirm Install. Your browser guides you
+        through subscription sign-in and restarting Desktop. Finish active
+        Desktop tasks first.
+        {proxyActive && (
+          <span>
+            {" "}
+            Model routing switches Desktop to third-party mode, with its own
+            conversation history; Settings, Import brings your Claude.ai
+            conversations over.
+          </span>
+        )}
+      </p>
+      {failed ? (
+        <div role="alert" className="flex items-center gap-3 text-sm">
+          <span>Could not prepare the installer.</span>
+          <Button variant="outline" size="sm" onClick={onRetry}>
+            <span>Try again</span>
+          </Button>
+        </div>
+      ) : installerUrl ? (
+        <Button asChild size="lg" className="h-12 rounded-xl px-6 text-base">
+          <a href={installerUrl} download>
+            <Download />
+            <span>Download installer</span>
+          </a>
+        </Button>
+      ) : (
+        <Button size="lg" disabled className="h-12 rounded-xl px-6 text-base">
+          <Download />
+          <span>{pending ? "Preparing installer" : "Download installer"}</span>
+        </Button>
+      )}
+      <p className="text-xs text-muted-foreground">
+        The installer expires in 15 minutes. Already using a third-party Desktop
+        profile? Use the terminal option.
+      </p>
+      {command && (
+        <details className="text-xs text-muted-foreground">
+          <summary className="cursor-pointer">Advanced: terminal setup</summary>
+          <p className="mt-2">
+            The terminal option requires Python 3.9+ and Claude Code for
+            subscription sign-in.
+          </p>
+          <TerminalCard className="mt-2">
+            <SetupCommandLine
+              command={command}
+              pending={false}
+              failed={false}
+              onRetry={onRetry}
+            />
+          </TerminalCard>
+        </details>
+      )}
+    </div>
+  );
+}
 
 /**
  * Shown in place of the command when a per-user provider (GitHub Copilot) is
@@ -1539,7 +1696,7 @@ function ProviderKeyGate({
 }
 
 /** Bold, underlined link to the underlying resource (gateway/proxy/skills). */
-export function ResourceLink({
+function ResourceLink({
   href,
   children,
 }: {
@@ -1559,7 +1716,7 @@ export function ResourceLink({
 const SKILL_NAME_PREVIEW_LIMIT = 6;
 
 /** Names the skills the command will install, truncated past the limit. */
-export function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
+function SkillNamesLine({ skills }: { skills: ConnectSkill[] }) {
   const shown = skills.slice(0, SKILL_NAME_PREVIEW_LIMIT);
   const more = skills.length - shown.length;
   return (
@@ -1578,7 +1735,7 @@ function PluginsDetail({
 }: {
   plugins: PluginListItem[];
   incompatiblePlugins: PluginListItem[];
-  clientId: ScriptClientId;
+  clientId: InstallerClientId;
   platform: ConnectPlatformOption;
 }) {
   const shown = plugins.slice(0, SKILL_NAME_PREVIEW_LIMIT);
@@ -1632,6 +1789,33 @@ function EditorField({
       <div className="text-xs font-medium text-muted-foreground">{label}</div>
       <div className="min-w-0">{children}</div>
     </div>
+  );
+}
+
+/** Same shape as the skills and plugins include checkboxes. */
+function IncludeCheckbox({
+  id,
+  disabled,
+  checked,
+  onCheckedChange,
+  children,
+}: {
+  id: string;
+  disabled?: boolean;
+  checked: boolean;
+  onCheckedChange: (checked: boolean) => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className="flex items-center gap-2 text-sm font-medium" htmlFor={id}>
+      <Checkbox
+        id={id}
+        disabled={disabled}
+        checked={checked}
+        onCheckedChange={(value) => onCheckedChange(value === true)}
+      />
+      {children}
+    </label>
   );
 }
 

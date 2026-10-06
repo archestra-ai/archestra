@@ -105,6 +105,16 @@ test("launch resolves the system agent from the chat roster rather than a user-c
   );
 });
 
+test("without a prompt the chat opens on the agent's suggested prompts", async () => {
+  server.use(
+    http.get(`${api}/api/agents/all`, () => HttpResponse.json([agent])),
+  );
+  show({ promptKey: undefined, children: "Ask about the policy" });
+  expect(
+    await screen.findByRole("link", { name: "Ask about the policy" }),
+  ).toHaveAttribute("href", "/chat?agentId=config-agent");
+});
+
 test("an unavailable agent does not fall back to the user's default chat", async () => {
   server.use(http.get(`${api}/api/agents/all`, () => HttpResponse.json([])));
   show();
@@ -142,16 +152,11 @@ test("a failed agent lookup can be retried from the CTA", async () => {
 });
 
 test.each([
-  { promptKey: "explainPolicy" as const, children: "Ask about the policy" },
+  { promptKey: undefined, children: "Ask about the policy" },
   {
     promptKey: "reviewCoverage" as const,
     children: "Ask",
     target: { kind: "mcp_gateway" as const, id: "gateway", name: "Research" },
-  },
-  {
-    promptKey: "explainPolicy" as const,
-    children: "Investigate in chat",
-    yellId: "report",
   },
 ])("$children lists only missing permissions and cannot navigate", async (props) => {
   server.use(

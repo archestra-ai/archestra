@@ -26,6 +26,7 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useSession } from "@/lib/auth/auth.query";
 import {
   getCompactToolState,
@@ -163,7 +164,7 @@ function CompactCircle({
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             onClick={onClick}
             disabled={!isExpandable}
@@ -198,7 +199,7 @@ function CompactCircle({
                 state === "denied" && "bg-orange-500",
               )}
             />
-          </button>
+          </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           <span>{parseFullToolName(toolName).toolName.replace(/_/g, " ")}</span>
@@ -308,7 +309,7 @@ function HookCircle({
     <TooltipProvider delayDuration={200}>
       <Tooltip>
         <TooltipTrigger asChild>
-          <button
+          <UnstyledButton
             type="button"
             onClick={onClick}
             disabled={!isExpandable}
@@ -334,7 +335,7 @@ function HookCircle({
                   "bg-destructive",
               )}
             />
-          </button>
+          </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
           {tooltip}

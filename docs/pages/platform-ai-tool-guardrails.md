@@ -51,7 +51,7 @@ The flag does not activate OpenAPPA checks. Turn on enforcement separately. Lega
 
 On a fresh install, click **Create my policy** to draft a policy from your tools. The starter covers selected Archestra tools and leaves the rest open. Review those gaps before approval. An administrator can enable enforcement with the first local save. Other policy editors must ask an administrator to enable it. Check **Enforce the policy** after saving. The chat then guides you through GitHub sync.
 
-From then on, administrators can turn enforcement off and on with the **Enforce the policy** switch on **Overview**. The policy stays as it is. **Ask about the policy** explains what it does.
+From then on, administrators can turn enforcement off and on with the **Enforce the policy** switch on **Overview**. The policy stays as it is. **Ask about the policy** opens a chat with suggested questions about it.
 
 Enforcement applies to [recognized clients](#clients):
 
@@ -78,7 +78,7 @@ Yells report confusing blocks or remedies. Archestra saves each report and its c
 
 Archestra also saves a local diagnostic when a blocked client cannot receive a remedy. These automatic reports stay in your deployment.
 
-The overview counts unresolved reports. You can search reports, download their diagnostic archive, and investigate them with the configuration agent. **Investigate in chat** attaches the archive to a new chat, where the agent can read its diagnostic contents. Opening a chat leaves the report unresolved. Mark it resolved after verifying the fix; you can reopen it later.
+The overview counts unresolved reports. You can search reports, download their diagnostic archive, and investigate them with the configuration agent. **Investigate in chat** attaches the archive to a new chat, where the agent can read its diagnostic contents. Opening a chat leaves the report unresolved. The list shows unresolved reports. Mark a report resolved after verifying the fix. Set the status filter to **Resolved** to see it again or reopen it. The link keeps that filter, so you can share it.
 
 ## Connect GitHub
 

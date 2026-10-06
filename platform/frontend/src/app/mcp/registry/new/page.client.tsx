@@ -16,6 +16,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { WizardFooter } from "@/components/wizard-footer";
 import {
   getCatalogMutationErrorCode,
@@ -132,7 +133,7 @@ export default function NewMcpCatalogItemPage() {
           <>
             {catalogEnabled && step === "source" && !browsingCatalog && (
               <div className="grid gap-4 sm:grid-cols-2">
-                <button
+                <UnstyledButton
                   type="button"
                   className="text-left"
                   onClick={() => {
@@ -152,8 +153,8 @@ export default function NewMcpCatalogItemPage() {
                       </CardDescription>
                     </CardHeader>
                   </Card>
-                </button>
-                <button
+                </UnstyledButton>
+                <UnstyledButton
                   type="button"
                   className="text-left"
                   onClick={() => setBrowsingCatalog(true)}
@@ -170,7 +171,7 @@ export default function NewMcpCatalogItemPage() {
                       </CardDescription>
                     </CardHeader>
                   </Card>
-                </button>
+                </UnstyledButton>
               </div>
             )}
 
@@ -215,12 +216,18 @@ export default function NewMcpCatalogItemPage() {
                   footer={({ hasBlockingErrors }) => (
                     <WizardFooter>
                       {cloneSourceId || !catalogEnabled ? (
-                        <Button variant="outline" type="button" asChild>
+                        <Button
+                          variant="outline"
+                          size="sm"
+                          type="button"
+                          asChild
+                        >
                           <Link href="/mcp/registry">Cancel</Link>
                         </Button>
                       ) : (
                         <Button
                           variant="outline"
+                          size="sm"
                           type="button"
                           onClick={() => setStep("source")}
                         >
@@ -230,6 +237,7 @@ export default function NewMcpCatalogItemPage() {
                       )}
                       <Button
                         type="submit"
+                        size="sm"
                         disabled={createMutation.isPending || hasBlockingErrors}
                       >
                         {createMutation.isPending ? "Adding..." : "Add Server"}

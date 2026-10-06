@@ -82,7 +82,7 @@ export default function MyUsagePage() {
       description="Review your own LLM activity, token mix, clients, models, sessions, and billed spend."
       actionButton={
         <Select value={timeframe} onValueChange={handleTimeframeChange}>
-          <SelectTrigger className="w-48" aria-label="Timeframe">
+          <SelectTrigger size="sm" className="w-48" aria-label="Timeframe">
             <SelectValue />
           </SelectTrigger>
           <SelectContent>

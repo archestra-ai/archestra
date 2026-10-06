@@ -203,8 +203,7 @@ function RunDetails({
               <TooltipTrigger asChild>
                 <Button
                   variant="ghost"
-                  size="icon"
-                  className="size-5"
+                  size="icon-xs"
                   aria-label="Who can access this run?"
                 >
                   <Info className="size-3.5" />

@@ -35,6 +35,7 @@ import {
   propagation,
 } from "@opentelemetry/api";
 import type { FastifyReply, FastifyRequest } from "fastify";
+import { RequestLookups } from "@/auth/request-lookups";
 import { isAnthropicKeylessAuthEnabled } from "@/clients/anthropic-keyless-auth";
 import { anthropicVertexClient } from "@/clients/anthropic-vertex";
 import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials";
@@ -877,6 +878,8 @@ export async function handleLLMProxy<
   // Resolve agent
   const resolvedAgent = await resolveAgent(agentId);
   const resolvedAgentId = resolvedAgent.id;
+  // Pre-call reads shared within this request only; never stored or reused.
+  const lookups = new RequestLookups();
   logger.debug(
     { resolvedAgentId, agentName: resolvedAgent.name, wasExplicit: !!agentId },
     `[${providerName}Proxy] Agent resolved`,
@@ -1321,6 +1324,8 @@ export async function handleLLMProxy<
         virtualKeyId,
         passthroughVirtualKeyId,
         environmentIdOverride: delegationBillingEnvironmentId,
+        agent: resolvedAgent,
+        teamSource: lookups,
       });
 
     if (limitViolation) {
@@ -1476,8 +1481,10 @@ export async function handleLLMProxy<
 
     // Fetch the agent's teams (with labels) once. Used both for policy
     // evaluation context (trusted data) and for trace span team attributes.
-    const teams =
-      await AgentTeamModel.getTeamLabelInfoForAgent(resolvedAgentId);
+    const teams = await AgentTeamModel.getTeamLabelInfoForAgent(
+      resolvedAgentId,
+      lookups,
+    );
     const teamIds = teams.map((team) => team.id);
 
     // Fetch the requesting user's teams (with labels) for trace span attributes.

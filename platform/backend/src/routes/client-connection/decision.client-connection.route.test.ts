@@ -37,11 +37,16 @@ describe("browser-approved client connection", () => {
     await app.close();
   });
 
-  async function start() {
+  async function start(exclude?: string[], deviceName?: string) {
     const response = await app.inject({
       method: "POST",
       url: "/api/client-connections",
-      payload: { clientId: "claude-code", platform: "linux" },
+      payload: {
+        clientId: "claude-code",
+        platform: "linux",
+        exclude,
+        deviceName,
+      },
     });
     expect(response.statusCode).toBe(200);
     expect(response.headers["cache-control"]).toBe("no-store");
@@ -56,6 +61,7 @@ describe("browser-approved client connection", () => {
       userId?: string;
       clientId?: "cursor";
       platform?: "windows";
+      includeSkills?: boolean;
     } = {},
   ) {
     return ConnectionSetupModel.create({
@@ -138,6 +144,45 @@ describe("browser-approved client connection", () => {
       });
       expect(JSON.stringify(rows)).not.toContain(pending.deviceCode);
     });
+  });
+
+  test("the installer's machine name is shown for approval and kept on the bound setup", async () => {
+    const pending = await start(undefined, "  work-laptop ");
+    const details = await app.inject({
+      url: `/api/client-connections/${pending.id}`,
+    });
+    expect(details.json()).toMatchObject({ deviceName: "work-laptop" });
+    const ticket = await setup();
+    expect((await decide(pending.id, ticket.setup.id)).statusCode).toBe(200);
+    const claimed = await ConnectionSetupModel.claimByToken({
+      rawToken: `archestra_con_${pending.deviceCode}`,
+    });
+    expect(claimed?.deviceName).toBe("work-laptop");
+
+    const legacy = await start();
+    const legacyDetails = await app.inject({
+      url: `/api/client-connections/${legacy.id}`,
+    });
+    expect(legacyDetails.json()).toMatchObject({ deviceName: null });
+  });
+
+  test("a setup with a part the prompt left out cannot be approved", async () => {
+    const refused = await start(["skills"]);
+    const details = await app.inject({
+      url: `/api/client-connections/${refused.id}`,
+    });
+    expect(details.json()).toMatchObject({ exclude: ["skills"] });
+    const withSkills = await setup({ includeSkills: true });
+    expect((await decide(refused.id, withSkills.setup.id)).statusCode).toBe(
+      400,
+    );
+
+    const pending = await start(["tools", "skills", "proxy", "plugins"]);
+    const withoutSkills = await setup();
+    expect((await decide(pending.id, withoutSkills.setup.id)).statusCode).toBe(
+      200,
+    );
+    expect(await poll(pending.deviceCode)).toBe("approved");
   });
 
   test("denial prevents binding and subsequent approval", async () => {

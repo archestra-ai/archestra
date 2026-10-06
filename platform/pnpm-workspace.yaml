@@ -127,6 +127,12 @@ overrides:
   # carried two postcss copies (8.5.11 and 8.5.17) under the old >=8.5.10
   # floor, so the floor has to clear the higher of the two fixes.
   postcss: '>=8.5.18'
+  # CVE-2026-90711 (CRITICAL, authentication bypass by spoofing) fixed in 2.0.8.
+  proxy-addr: '>=2.0.8 <3'
+  # CVE-2026-93749 (HIGH, improper validation of specified quantity) fixed in
+  # 1.2.2. Pinned exact while 1.2.2 is inside the release-age window; see
+  # minimumReleaseAgeExclude.
+  source-map-js: 1.2.2
   # CVE-2026-67213 (GHSA-2v37-7h3g-55p8, HIGH, custom generators loop forever
   # when size is 0): the 3.3.17 fix was incomplete, advisory now requires
   # 3.3.18 on the v3 line. Transitive via postcss and points-on-path; scoped
@@ -155,7 +161,9 @@ overrides:
   # GHSA-f88m-g3jw-g9cj (HIGH, dependency on vulnerable third-party component)
   # fixed in 0.35.0. Transitive-only (optional dep of next's image optimizer).
   # GHSA-rgj7-g3m4-5g8c: heap buffer overflow fixed in 0.35.4.
-  sharp: 0.35.4
+  # GHSA-wq5f-xc86-pv6w (HIGH, dependency on vulnerable third-party component)
+  # fixed in 0.35.5.
+  sharp: 0.35.5
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:
@@ -208,6 +216,11 @@ verifyDepsBeforeRun: false
 # 10080 minutes = 7 days.
 # https://daniakash.com/posts/simplest-supply-chain-defense/
 minimumReleaseAge: 10080
+minimumReleaseAgeExclude:
+  # TEMPORARY: source-map-js 1.2.2 (fix CVE-2026-93749, HIGH) was published
+  # 2026-09-30 and clears the 7-day window on 2026-10-07. Remove on/after that
+  # date and relax the override to a '>=1.2.2' floor.
+  - source-map-js
 
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare

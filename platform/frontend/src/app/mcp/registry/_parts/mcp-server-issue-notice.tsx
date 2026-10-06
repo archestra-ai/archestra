@@ -343,7 +343,7 @@ export function McpServerIssueNotice({
         <DropdownMenuTrigger asChild>
           <Button
             variant="ghost"
-            size="icon"
+            size="icon-sm"
             aria-label={`More actions for ${item.name}`}
           >
             <MoreHorizontal className="h-4 w-4" />
@@ -437,7 +437,7 @@ export function McpServerIssueNotice({
         <Button
           variant={action.variant ?? "outline"}
           size="sm"
-          className="flex-1 gap-1 px-2 text-xs"
+          className="flex-1"
           aria-label={action.label}
           data-testid={action.testId}
           onClick={action.onClick}
@@ -452,7 +452,7 @@ export function McpServerIssueNotice({
         <Button
           variant="outline"
           size="sm"
-          className="flex-1 gap-1 px-2 text-xs"
+          className="flex-1"
           disabled={restoreMutation.isPending}
           onClick={() =>
             restoreMutation.mutate(
@@ -472,7 +472,7 @@ export function McpServerIssueNotice({
       <Button
         variant="outline"
         size="sm"
-        className="flex-1 gap-1 px-2 text-xs"
+        className="flex-1"
         onClick={() => router.push(detailHref())}
       >
         Open

@@ -102,6 +102,7 @@ function McpRegistryListLayout({
         <div className="flex items-center gap-2">
           <PermissionButton
             permissions={{ mcpRegistry: ["create"] }}
+            size="sm"
             onClick={onAdd}
           >
             <Plus className="h-4 w-4" />

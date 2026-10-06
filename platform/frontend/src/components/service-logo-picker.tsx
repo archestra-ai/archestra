@@ -10,6 +10,7 @@ import {
   useState,
 } from "react";
 import { Input } from "@/components/ui/input";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { useServiceIcons } from "./service-logo-picker.hook";
 import { iconToDataUrl, type ServiceIcon } from "./service-logo-picker.utils";
@@ -106,7 +107,7 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
             */}
             <div className="grid grid-cols-4 gap-1">
               {icons.map((icon) => (
-                <button
+                <UnstyledButton
                   key={icon.slug}
                   type="button"
                   title={icon.title}
@@ -142,7 +143,7 @@ export function ServiceLogoPicker({ onSelect }: ServiceLogoPickerProps) {
                   <span className="text-[10px] leading-tight text-muted-foreground w-full text-center text-balance break-words">
                     {icon.title}
                   </span>
-                </button>
+                </UnstyledButton>
               ))}
             </div>
             {icons.length < total && (

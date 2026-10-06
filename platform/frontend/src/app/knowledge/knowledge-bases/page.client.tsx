@@ -61,6 +61,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { DEFAULT_TABLE_LIMIT } from "@/consts";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import {
@@ -941,8 +942,7 @@ function AddConnectorDialog({
             <div className="flex items-center gap-2">
               <Button
                 variant="ghost"
-                size="icon"
-                className="h-7 w-7"
+                size="icon-xs"
                 onClick={() => {
                   setStep("choose");
                   setSelectedIds(new Set());
@@ -987,7 +987,7 @@ function AddConnectorDialog({
       >
         {step === "choose" && (
           <div className="grid grid-cols-2 gap-3">
-            <button
+            <UnstyledButton
               type="button"
               onClick={() => setStep("reuse")}
               disabled={availableConnectors.length === 0}
@@ -1004,8 +1004,8 @@ function AddConnectorDialog({
                     : `${availableConnectors.length} available`}
                 </div>
               </div>
-            </button>
-            <button
+            </UnstyledButton>
+            <UnstyledButton
               type="button"
               onClick={() => setStep("create")}
               className="flex flex-col items-center gap-3 rounded-lg border p-5 text-center transition-colors hover:bg-muted/50 cursor-pointer"
@@ -1019,7 +1019,7 @@ function AddConnectorDialog({
                   Set up a new Connector
                 </div>
               </div>
-            </button>
+            </UnstyledButton>
           </div>
         )}
 
@@ -1039,7 +1039,7 @@ function AddConnectorDialog({
                 availableConnectors.map((connector) => {
                   const isSelected = selectedIds.has(connector.id);
                   return (
-                    <button
+                    <UnstyledButton
                       key={connector.id}
                       type="button"
                       onClick={() => toggleSelected(connector.id)}
@@ -1067,7 +1067,7 @@ function AddConnectorDialog({
                           {connector.connectorType}
                         </div>
                       </div>
-                    </button>
+                    </UnstyledButton>
                   );
                 })
               ) : (

@@ -157,7 +157,7 @@ function VirtualKeysTable() {
         {canCreate ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button>
+              <Button size="sm">
                 <Plus className="h-4 w-4" />
                 <span>Create Virtual Key</span>
                 <ChevronDown className="h-4 w-4" />

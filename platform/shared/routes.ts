@@ -308,6 +308,10 @@ export const RouteId = {
     "openrouterChatCompletionsWithDefaultAgent",
   OpenrouterChatCompletionsWithAgent: "openrouterChatCompletionsWithAgent",
 
+  // Proxy Routes - Jev
+  JevDecisionsWithDefaultAgent: "jevDecisionsWithDefaultAgent",
+  JevDecisionsWithAgent: "jevDecisionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
@@ -731,6 +735,7 @@ export const RouteId = {
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
+  UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
   GenerateTelegramLinkCode: "generateTelegramLinkCode",
   ConnectNgrok: "connectNgrok",
   DisconnectNgrok: "disconnectNgrok",
@@ -860,6 +865,7 @@ export const RouteId = {
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",
+  GetOpenappaTrustAudience: "getOpenappaTrustAudience",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",
@@ -952,6 +958,8 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionHealth: "getConnectionHealth",
+  GetConnectedClients: "getConnectedClients",
+  DisconnectConnectedClient: "disconnectConnectedClient",
 
   // MCP App Routes
   GetApps: "getApps",

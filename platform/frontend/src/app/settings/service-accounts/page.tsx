@@ -47,6 +47,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
 import { RoleSelect } from "@/components/ui/role-select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -161,6 +162,7 @@ export default function ServiceAccountsSettingsPage() {
       <div className="flex items-center gap-2">
         <PermissionButton
           permissions={{ serviceAccount: ["create"] }}
+          size="sm"
           onClick={() => {
             form.reset(DEFAULT_FORM_VALUES);
             setIsCreateDialogOpen(true);
@@ -294,14 +296,14 @@ export default function ServiceAccountsSettingsPage() {
         size: 128,
         cell: ({ row }) => (
           <div className="flex min-w-0 items-center gap-1.5">
-            <button
+            <UnstyledButton
               type="button"
               className="truncate font-medium hover:underline"
               onClick={() => setAccountToEdit(row.original)}
               title={row.original.name}
             >
               {row.original.name}
-            </button>
+            </UnstyledButton>
             <LabelTags labels={row.original.labels} />
           </div>
         ),

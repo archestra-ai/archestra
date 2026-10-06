@@ -161,7 +161,7 @@ export function ServiceAccountDialog({
     defaultValues: { name: account.name, role: account.role },
   });
 
-  const apiDocsUrl = getFrontendDocsUrl("platform-api-reference");
+  const apiDocsUrl = getFrontendDocsUrl("reference/api");
   const tokenForm = useForm<TokenFormValues>({
     defaultValues: DEFAULT_TOKEN_FORM_VALUES,
   });

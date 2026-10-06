@@ -29,8 +29,10 @@ integrations/m-files-vaf-add-on/obj
 
 # Tests
 coverage
-# E2E suites run from the checkout and are never copied into the runtime image.
+# E2E suites and the docs screenshot capture run from the checkout and are never
+# copied into the runtime image.
 e2e-tests
+docs-screenshots
 **/*.test.ts
 **/*.test.tsx
 

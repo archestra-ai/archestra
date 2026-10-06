@@ -2,7 +2,7 @@
 
 This repository is dual-licensed. The first matching rule below determines the license for a given file or region.
 
-Read about pricing model here: https://archestra.ai/docs/platform-pricing-model
+Read about pricing model here: https://archestra.ai/docs/get-started/pricing
 
 | File | Identifier | Scope |
 | --- | --- | --- |

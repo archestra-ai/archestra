@@ -413,18 +413,18 @@ test("hidden docs links keep the branded client coverage explanation", async () 
   expect(screen.queryByRole("link")).not.toBeInTheDocument();
 });
 
-test("links 'more' to clients and 'OpenAPPA session headers' to session-headers", async () => {
+test("links 'more' to the clients page and 'OpenAPPA session headers' to session-headers", async () => {
   show("unrecognized");
   const moreLink = await screen.findByRole("link", { name: /^more/ });
   expect(moreLink).toHaveAttribute(
     "href",
-    expect.stringContaining("platform-ai-tool-guardrails#clients"),
+    expect.stringMatching(/\/agents\/guardrails\/clients$/),
   );
   const headersLink = screen.getByRole("link", {
     name: /^OpenAPPA session headers/,
   });
   expect(headersLink).toHaveAttribute(
     "href",
-    expect.stringContaining("platform-ai-tool-guardrails#session-headers"),
+    expect.stringContaining("agents/guardrails/clients#session-headers"),
   );
 });

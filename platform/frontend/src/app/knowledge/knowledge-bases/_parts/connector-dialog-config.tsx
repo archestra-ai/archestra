@@ -340,6 +340,8 @@ export function getConnectorTypeLabel(type: ConnectorType): string {
 // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 type AutoSyncConnectorRequirement = {
+  /** Slug of this connector's page under the connectors docs. */
+  docsPage: string;
   /** Anchor of this connector's "… Auto-Sync Permissions" docs section. */
   docsAnchor: string;
   /**
@@ -386,36 +388,43 @@ const ATLASSIAN_API_TOKENS_URL =
  */
 const AUTO_SYNC_CONNECTOR_REQUIREMENTS = {
   jira: {
+    docsPage: "jira",
     docsAnchor: "jira-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a Jira Cloud admin account that can browse every synced project.",
   },
   confluence: {
+    docsPage: "confluence",
     docsAnchor: "confluence-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs an account that can view every synced space and its page restrictions.",
   },
   github: {
+    docsPage: "github",
     docsAnchor: "github-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs extra repository and organization read permissions on this credential.",
   },
   gitlab: {
+    docsPage: "gitlab",
     docsAnchor: "gitlab-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a read_api token with Reporter access on every private project.",
   },
   linear: {
+    docsPage: "linear",
     docsAnchor: "linear-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a read key from a member of every private team.",
   },
   servicenow: {
+    docsPage: "servicenow",
     docsAnchor: "servicenow-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs extra roles, plus read ACLs on the user-criteria tables.",
   },
   notion: {
+    docsPage: "notion",
     docsAnchor: "notion-auto-sync-permissions",
     // No console link here: this field's help text already links the Notion
     // Developer portal, and one description should not offer the same
@@ -424,11 +433,13 @@ const AUTO_SYNC_CONNECTOR_REQUIREMENTS = {
       "Auto-sync permissions needs the integration's capability to read user email addresses.",
   },
   sharepoint: {
+    docsPage: "sharepoint",
     docsAnchor: "sharepoint-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs extra admin-consented Microsoft Graph application permissions.",
   },
   gdrive: {
+    docsPage: "google-drive",
     docsAnchor: "google-drive-auto-sync-permissions",
     requirement: (
       <>
@@ -442,36 +453,43 @@ const AUTO_SYNC_CONNECTOR_REQUIREMENTS = {
     ),
   },
   dropbox: {
+    docsPage: "dropbox",
     docsAnchor: "dropbox-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs sharing scopes on the app, plus team scopes to expand groups.",
   },
   asana: {
+    docsPage: "asana",
     docsAnchor: "asana-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a token from a user with access to every synced private project and team.",
   },
   outline: {
+    docsPage: "outline",
     docsAnchor: "outline-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a key scoped to users, groups, collections and shares.",
   },
   onedrive: {
+    docsPage: "onedrive",
     docsAnchor: "onedrive-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs extra admin-consented Microsoft Graph application permissions.",
   },
   salesforce: {
+    docsPage: "salesforce",
     docsAnchor: "salesforce-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs view-all and share-table read permissions on this user.",
   },
   perforce: {
+    docsPage: "perforce",
     docsAnchor: "perforce-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs an account that can read the full protections table.",
   },
   mfiles: {
+    docsPage: "m-files",
     docsAnchor: "m-files-auto-sync-permissions",
     requirement:
       "Auto-sync permissions needs a vault account with full control of the vault.",
@@ -525,7 +543,7 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
       {getConnectorTypeLabel(type)} user whose profile hides it.{" "}
       <ExternalDocsLink
         href={getFrontendDocsUrl(
-          DocsPage.PlatformKnowledge,
+          `${DocsPage.PlatformKnowledgeConnectors}/${type}`,
           ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR,
         )}
         className="underline"
@@ -537,8 +555,8 @@ export function AdminApiKeyDescription({ type }: { type: ConnectorType }) {
   );
 }
 
-const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR =
-  "atlassian-organization-admin-api-key";
+/** Section of the Jira and Confluence pages on the organization admin API key. */
+const ATLASSIAN_ADMIN_API_KEY_DOC_ANCHOR = "organization-admin-api-key";
 
 /**
  * Points at the setup this connector's credential needs upstream, shown under
@@ -562,7 +580,10 @@ export function AutoSyncCredentialRequirement({
     <span>
       {entry.requirement}{" "}
       <ExternalDocsLink
-        href={getFrontendDocsUrl(DocsPage.PlatformKnowledge, entry.docsAnchor)}
+        href={getFrontendDocsUrl(
+          `${DocsPage.PlatformKnowledgeConnectors}/${entry.docsPage}`,
+          entry.docsAnchor,
+        )}
         className="underline"
         showIcon={false}
       >
@@ -660,7 +681,7 @@ export function getConnectorUrlConfig(
 
 export function getConnectorDocsUrl(type: ConnectorType): string | null {
   return getFrontendDocsUrl(
-    DocsPage.PlatformKnowledge,
+    DocsPage.PlatformKnowledgeConnectors,
     CONNECTOR_DOC_ANCHORS[type] ?? type,
   );
 }

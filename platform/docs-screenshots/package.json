@@ -1,0 +1,17 @@
+{
+  "name": "@archestra/docs-screenshots",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Seeds demo data into an Archestra instance and captures every docs screenshot in light and dark mode",
+  "scripts": {
+    "capture": "playwright test",
+    "seed": "playwright test --project=seed",
+    "type-check": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.58.2",
+    "@types/node": "^25.5.0",
+    "sharp": "0.35.5",
+    "typescript": "catalog:"
+  }
+}

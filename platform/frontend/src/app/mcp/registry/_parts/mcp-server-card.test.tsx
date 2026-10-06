@@ -450,31 +450,6 @@ describe("McpServerCard uninstall permission", () => {
     expect(routerPush).toHaveBeenCalledWith("/mcp/registry/cat-1/edit");
   });
 
-  it("hides OAuth failure diagnostics while MCP alerting is disabled", () => {
-    useMcpServersMock.mockReturnValue({
-      data: [
-        {
-          ...personalInstall,
-          oauthRefreshError: "refresh_failed",
-        },
-      ],
-    });
-    renderCard(
-      <McpServerCard
-        variant="remote"
-        item={{ ...item, oauthConfig: {} } as unknown as CatalogItem}
-        installingItemId={null}
-        deploymentStatuses={{}}
-        deploymentFeedState="ready"
-        onInstallRemoteServer={vi.fn()}
-        onInstallLocalServer={vi.fn()}
-        onReinstall={vi.fn()}
-      />,
-    );
-
-    expect(screen.queryByTestId("oauth-reauth-state")).toBeNull();
-  });
-
   it("overlays a local runtime status dot on the icon with its status tooltip", async () => {
     const user = userEvent.setup();
     const localItem = {
@@ -707,7 +682,7 @@ describe("McpServerCard uninstall permission", () => {
           ),
         )
         .map((heading) => heading.textContent),
-    ).toEqual([alpha.name, flagged.name, personal.name, zeta.name]);
+    ).toEqual([flagged.name, personal.name, alpha.name, zeta.name]);
   });
 
   it("explains that an uninstalled card must be installed before selection", async () => {

@@ -14,6 +14,7 @@ import {
   vi,
 } from "vitest";
 import { authClient } from "@/lib/clients/auth/auth-client";
+import { resolveOpenAppaLaunchPrompt } from "@/lib/openappa-chat-prompts";
 import { makeSession, makeUserPermissions } from "@/mocks/data/auth";
 import { CoverageCharts } from "./coverage-charts";
 
@@ -153,11 +154,8 @@ test("splits every tool by what judges it, with the share a rule covers and a ch
   );
   expect(coverage.getByText("no rule")).toBeVisible();
   expect(
-    coverage.getByRole("link", { name: "Improve with chat" }),
-  ).toHaveAttribute(
-    "href",
-    expect.stringContaining("user_prompt=Help+me+improve"),
-  );
+    chatPrompt(coverage.getByRole("link", { name: "Improve with chat" })),
+  ).toBe(resolveOpenAppaLaunchPrompt("improveCoverage"));
 });
 
 test("counts batteries by status, names them on hover, links each to its filter, and shows the coverage they would reach", async () => {
@@ -223,11 +221,8 @@ test("counts batteries by status, names them on hover, links each to its filter,
     }),
   ).toBeVisible();
   expect(
-    batteries.getByRole("link", { name: "Configure with chat" }),
-  ).toHaveAttribute(
-    "href",
-    expect.stringContaining("user_prompt=Help+me+configure"),
-  );
+    chatPrompt(batteries.getByRole("link", { name: "Configure with chat" })),
+  ).toBe(resolveOpenAppaLaunchPrompt("configureBatteries"));
   expect(screen.getByText("Client coverage")).toBeVisible();
 });
 
@@ -286,7 +281,7 @@ test("warns about tools no rule restricts, without buttons, and keeps one chat a
   ).toBeVisible();
 });
 
-test("only hints at tools a catch-all rule covers, and its chat asks about them", async () => {
+test("only hints at tools a catch-all rule covers, and its chat reviews coverage", async () => {
   renderCharts({ summary: totals({ tools: 3, catchAll: 3 }) });
 
   expect(
@@ -297,12 +292,14 @@ test("only hints at tools a catch-all rule covers, and its chat asks about them"
   expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   const chat = await screen.findByRole("link", { name: "Improve with chat" });
   expect(screen.getAllByRole("link")).toHaveLength(1);
-  expect(
-    new URL(chat.getAttribute("href") ?? "", origin).searchParams.get(
-      "user_prompt",
-    ),
-  ).toContain("tools covered by a non-noop catch-all");
+  expect(chatPrompt(chat)).toBe(resolveOpenAppaLaunchPrompt("improveCoverage"));
 });
+
+function chatPrompt(link: HTMLElement): string | null {
+  return new URL(link.getAttribute("href") ?? "", origin).searchParams.get(
+    "user_prompt",
+  );
+}
 
 test("says so instead of charting while there is no tool", async () => {
   renderCharts({ summary: totals({}) });

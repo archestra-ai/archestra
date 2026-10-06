@@ -1142,7 +1142,9 @@ function ProfileCard({
   // Only apps with an installer are known to take model routing; other
   // agents work it out from the prompt, so the card makes no promise.
   const routingOptional = canChooseRouting(data, client);
-  if (routingOptional)
+  // Shown for every agent while the LLM proxy is on: apps with an installer
+  // take it (unless left out); others get it ready through the prompt.
+  if (data.partsFor(client).proxy)
     statusChips.push({
       id: "routing",
       icon: (
@@ -1154,13 +1156,18 @@ function ProfileCard({
         <span className="inline-flex items-center gap-1">
           Model routing
           <InfoTip label="What model routing does">
-            {client.label} sends model requests through {data.appName}'s LLM
-            proxy instead of straight to the provider. Same models; your org's
-            limits, logging and cost tracking apply.
+            {routingOptional
+              ? `${client.label} sends model requests through ${data.appName}'s LLM proxy instead of straight to the provider.`
+              : `${data.appName}'s LLM proxy is ready for ${client.label}'s model requests, if it lets you set a custom endpoint.`}{" "}
+            Same models; your org's limits, logging and cost tracking apply.
           </InfoTip>
         </span>
       ),
-      sub: routed ? "On, through the LLM proxy" : "Off",
+      sub: !routed
+        ? "Off"
+        : routingOptional
+          ? "On, through the LLM proxy"
+          : "LLM proxy ready to use",
     });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)

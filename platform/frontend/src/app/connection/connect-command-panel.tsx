@@ -73,7 +73,6 @@ import {
 } from "@/lib/plugins/plugin.query";
 import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
-import { BaseUrlSelect } from "./base-url-select";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
 import {
@@ -81,7 +80,6 @@ import {
   FINISH_OAUTH_FLOW_TITLE,
   type InstallerClientId,
 } from "./clients";
-import type { ConnectionBaseUrl } from "./connection-flow.utils";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -101,7 +99,6 @@ import { TerminalBlock } from "./terminal-block";
 
 type ConnectProxyAuth = NonNullable<CreateConnectionSetupBody["proxyAuth"]>;
 type EditableRow =
-  | "endpoint"
   | "gateway"
   | "proxy"
   | "model"
@@ -164,9 +161,6 @@ interface ConnectCommandPanelProps {
   urlProvider: SupportedProvider | null;
   onProviderSelect: (provider: SupportedProvider) => void;
   baseUrl: string;
-  candidateBaseUrls: readonly string[];
-  baseUrlMetadata: readonly ConnectionBaseUrl[] | null | undefined;
-  onBaseUrlChange: (url: string) => void;
   /** When false, shared skills are not offered in the setup. */
   skillsEnabled?: boolean;
   /** When false, plugins are not offered in the setup. */
@@ -197,9 +191,6 @@ export function ConnectCommandPanel({
   urlProvider,
   onProviderSelect,
   baseUrl,
-  candidateBaseUrls,
-  baseUrlMetadata,
-  onBaseUrlChange,
   skillsEnabled = true,
   pluginsEnabled = true,
   exclude,
@@ -640,20 +631,6 @@ export function ConnectCommandPanel({
       )}
     </div>
   ) : null;
-
-  // The endpoint (base URL) is shared by both the MCP gateway and the LLM
-  // proxy, so it gets its own line/setting rather than living under either.
-  const showEndpoint = candidateBaseUrls.length > 1;
-  const endpointEditor = (
-    <EditorField label="Endpoint">
-      <BaseUrlSelect
-        candidateUrls={candidateBaseUrls}
-        metadata={baseUrlMetadata}
-        value={baseUrl}
-        onChange={onBaseUrlChange}
-      />
-    </EditorField>
-  );
 
   const platformEditor = (
     <EditorField label="Platform">
@@ -1162,18 +1139,6 @@ export function ConnectCommandPanel({
                 )}
               </SetupSummaryRow>
             )}
-            {showEndpoint && (
-              <SetupSummaryRow
-                editable
-                isEditing={editing === "endpoint"}
-                onToggle={() => toggleEdit("endpoint")}
-                editor={endpointEditor}
-                changeTestId="connect-change-endpoint"
-              >
-                Reach the gateway and proxy at{" "}
-                <span className="font-medium text-foreground">{baseUrl}</span>
-              </SetupSummaryRow>
-            )}
             <SetupSummaryRow
               editable
               isEditing={editing === "platform"}
@@ -1251,7 +1216,6 @@ export function ConnectCommandPanel({
               {proxyActive && modelEditor}
               {skillsEligible && skillsEditor}
               {pluginsEnabled && pluginsEditor}
-              {showEndpoint && endpointEditor}
               {platformEditor}
             </CollapsibleContent>
           </Collapsible>

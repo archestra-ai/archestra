@@ -28,7 +28,6 @@ import {
 } from "./clients";
 import type { ConnectChoices } from "./connect-choices";
 import {
-  type ConnectionBaseUrl,
   getConnectableProviders,
   useConnectionBaseUrl,
 } from "./connection-flow.utils";
@@ -76,11 +75,8 @@ export interface ConnectPageData {
   /** The instance's configured name ("Archestra" unless white-labeled). */
   appName: string;
   gateway: ConnectGateway | null;
-  /** Endpoints the admin offers; more than one shows a picker. */
-  baseUrls: readonly string[];
-  baseUrlMetadata: readonly ConnectionBaseUrl[] | null;
+  /** The admin's default endpoint; users don't pick one. */
   baseUrl: string;
-  selectBaseUrl: (url: string) => void;
   servers: ConnectServer[];
   totalTools: number;
   /** True when the gateway exposes every server in the org, incl. new ones. */
@@ -199,9 +195,7 @@ export function useConnectPageData(): ConnectPageData {
         description: p.description,
       }));
 
-  const { baseUrls, baseUrl, selectBaseUrl } = useConnectionBaseUrl(
-    org?.connectionBaseUrls,
-  );
+  const baseUrl = useConnectionBaseUrl(org?.connectionBaseUrls);
 
   const clients = useMemo(
     () => visibleClients(org?.connectionShownClientIds),
@@ -253,10 +247,7 @@ export function useConnectPageData(): ConnectPageData {
     defaultClientId: org?.connectionDefaultClientId ?? null,
     appName,
     gateway,
-    baseUrls,
-    baseUrlMetadata: org?.connectionBaseUrls ?? null,
     baseUrl,
-    selectBaseUrl,
     servers,
     totalTools,
     allServers: accessAll,

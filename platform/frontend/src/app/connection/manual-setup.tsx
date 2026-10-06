@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 import type { ConnectClient } from "./clients";
 import { isInstallerClientId, usesGenericInstructions } from "./clients";
 import type { ConnectPageData } from "./connect-page-data";
-import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import {
@@ -59,21 +58,6 @@ export function useManualSteps(
 
   if (!client) return [];
   const steps: ManualStep[] = [];
-  if (data.baseUrls.length > 1) {
-    steps.push({
-      key: "endpoint",
-      title: "Select an endpoint",
-      content: (
-        <ConnectionUrlStep
-          bare
-          candidateUrls={data.baseUrls}
-          metadata={data.baseUrlMetadata}
-          value={baseUrl}
-          onChange={data.selectBaseUrl}
-        />
-      ),
-    });
-  }
   if (data.partsFor(client).tools && gateway) {
     steps.push({
       key: "mcp",

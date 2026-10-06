@@ -70,7 +70,6 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
-import { BaseUrlSelect } from "./base-url-select";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -582,19 +581,6 @@ function ConnectArea({
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         <StepHeading step={step} />
         <div className="flex min-w-0 flex-wrap items-center gap-2">
-          {/* Other agents read the endpoint from the prompt (or the manual
-            steps), so its picker sits with them; apps with an installer pick
-            it on the approval page. */}
-          {generic && data.baseUrls.length > 1 && (
-            <BaseUrlSelect
-              size="sm"
-              className="w-auto max-w-80"
-              candidateUrls={data.baseUrls}
-              metadata={data.baseUrlMetadata}
-              value={data.baseUrl}
-              onChange={data.selectBaseUrl}
-            />
-          )}
           {setup === "prompt-or-manual" && (
             <ModeSwitch
               alt={manual}
@@ -638,9 +624,6 @@ function ConnectArea({
             urlProvider={null}
             onProviderSelect={() => {}}
             baseUrl={data.baseUrl}
-            candidateBaseUrls={data.baseUrls}
-            baseUrlMetadata={data.baseUrlMetadata}
-            onBaseUrlChange={data.selectBaseUrl}
             skillsEnabled={data.skillsEnabled}
             pluginsEnabled={data.pluginsEnabled}
           />

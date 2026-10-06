@@ -1,5 +1,26 @@
 # Changelog
 
+## [1.4.0-rc.33](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.32...platform-v1.4.0-rc.33) (2026-10-06)
+
+
+### Features
+
+* **connect:** redesigned Connect page with connected agents and disconnect ([#8467](https://github.com/archestra-ai/archestra/issues/8467)) ([308efd2](https://github.com/archestra-ai/archestra/commit/308efd22bd8392dc7b6dfb296d68e6388f151075))
+* **openappa:** ask for approval in the same turn as a policy preview ([#8487](https://github.com/archestra-ai/archestra/issues/8487)) ([a45ce91](https://github.com/archestra-ai/archestra/commit/a45ce91642fba1fb7d06a03ecb4ae3637f1632dd))
+* **openappa:** change a policy with edits instead of retyping it ([#8484](https://github.com/archestra-ai/archestra/issues/8484)) ([2474b79](https://github.com/archestra-ai/archestra/commit/2474b796d6b1da8b6beed717fac3417abfef30b0))
+* **openappa:** open Ask about the policy on the agent's suggested prompts ([#8481](https://github.com/archestra-ai/archestra/issues/8481)) ([105c465](https://github.com/archestra-ai/archestra/commit/105c4655059570bc0ca2b74b8c43ac9b83431f5a))
+
+
+### Bug Fixes
+
+* **chatops:** relay Bot Framework error status from the MS Teams webhook ([#8489](https://github.com/archestra-ai/archestra/issues/8489)) ([a10ecbe](https://github.com/archestra-ai/archestra/commit/a10ecbe2d5be71731e6cd86009dae921d97caf0f))
+* **frontend:** tidy the A2A Agent Card preview and fix stacked select icons ([#8483](https://github.com/archestra-ai/archestra/issues/8483)) ([39ca198](https://github.com/archestra-ai/archestra/commit/39ca198f6128ab46293d4893d471e4ce16c276e9))
+
+
+### Code Refactoring
+
+* **openappa:** keep the shared guide core as a verbatim copy of core.md ([#8488](https://github.com/archestra-ai/archestra/issues/8488)) ([17f0f2b](https://github.com/archestra-ai/archestra/commit/17f0f2bed7a25da57764cee02c514c36a096a483))
+
 ## [1.4.0-rc.32](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.31...platform-v1.4.0-rc.32) (2026-10-06)
 
 

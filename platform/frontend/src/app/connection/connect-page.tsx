@@ -227,8 +227,8 @@ export function ConnectPage() {
         )}
 
         <section className="grid items-start gap-10 @min-[66rem]:items-stretch @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16 [&>*]:max-w-2xl @min-[66rem]:[&>*]:max-w-none">
-          {/* Left: headline, then the picker, which sits on the card's
-              bottom edge so the setup below follows straight on. */}
+          {/* Left: headline, then the picker. Beside a taller card the tiles
+              grow a little, so the column ends level with the card. */}
           <div className="min-w-0 @min-[66rem]:flex @min-[66rem]:flex-col">
             <h1 className="max-w-[11em] text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @7xl:text-6xl">
               Connect your agent to {data.appName}
@@ -238,7 +238,7 @@ export function ConnectPage() {
               usable in your agent of choice.
             </p>
 
-            <div className="mt-6 @min-[66rem]:mt-auto @min-[66rem]:pt-6">
+            <div className="mt-6 @min-[66rem]:flex @min-[66rem]:flex-1 @min-[66rem]:flex-col">
               <h2 className="text-sm font-semibold">
                 {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
               </h2>
@@ -399,7 +399,7 @@ function AgentTiles({
         "mt-3 max-w-xl gap-2.5",
         row
           ? "flex min-h-[10.75rem] items-center justify-center [&>*]:w-36"
-          : "grid grid-cols-4",
+          : "grid grid-cols-4 @min-[66rem]:max-h-[16rem] @min-[66rem]:flex-1 @min-[66rem]:auto-rows-fr",
       )}
     >
       {data.featuredClients.map((c) => (
@@ -474,7 +474,7 @@ function Tile({
       aria-pressed={active}
       {...rest}
       className={cn(
-        "relative flex min-w-0 flex-col items-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,color] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        "relative flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,color] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
         roomy ? "pt-4 pb-3" : "pt-3.5 pb-3",
         active
           ? // The muted tint is layered over the card fill, so the page's

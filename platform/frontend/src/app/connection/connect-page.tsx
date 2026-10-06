@@ -53,13 +53,6 @@ import {
 import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import {
   Tooltip,
@@ -71,6 +64,7 @@ import { copyToClipboard } from "@/lib/clipboard";
 import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
+import { BaseUrlSelect } from "./base-url-select";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -630,35 +624,50 @@ function ConnectArea({
     <Band busy={data.revalidating}>
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         <StepHeading step={step} />
-        {setup === "prompt-or-manual" && (
-          <ModeSwitch
-            alt={manual}
-            altIcon={<ListOrdered />}
-            altLabel="Manual setup"
-            onChange={onManual}
-          />
-        )}
-        {client.id === "claude-desktop" && (
-          <ModeSwitch
-            alt={download}
-            altIcon={<Download />}
-            altLabel="Download"
-            onChange={(v) => onManual(!v)}
-          />
-        )}
-        {scriptable && (
-          <ModeSwitch
-            alt={script}
-            altIcon={<SquareTerminal />}
-            altLabel="Script"
-            onChange={onManual}
-          />
-        )}
-        {setup === "manual" && (
-          <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
-            Manual setup only
-          </span>
-        )}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {/* Other agents read the endpoint from the prompt (or the manual
+            steps), so its picker sits with them; apps with an installer pick
+            it on the approval page. */}
+          {generic && data.baseUrls.length > 1 && (
+            <BaseUrlSelect
+              size="sm"
+              className="w-auto max-w-80"
+              candidateUrls={data.baseUrls}
+              metadata={data.baseUrlMetadata}
+              value={data.baseUrl}
+              onChange={data.selectBaseUrl}
+            />
+          )}
+          {setup === "prompt-or-manual" && (
+            <ModeSwitch
+              alt={manual}
+              altIcon={<ListOrdered />}
+              altLabel="Manual setup"
+              onChange={onManual}
+            />
+          )}
+          {client.id === "claude-desktop" && (
+            <ModeSwitch
+              alt={download}
+              altIcon={<Download />}
+              altLabel="Download"
+              onChange={(v) => onManual(!v)}
+            />
+          )}
+          {scriptable && (
+            <ModeSwitch
+              alt={script}
+              altIcon={<SquareTerminal />}
+              altLabel="Script"
+              onChange={onManual}
+            />
+          )}
+          {setup === "manual" && (
+            <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
+              Manual setup only
+            </span>
+          )}
+        </div>
       </div>
 
       {download ? (
@@ -792,12 +801,6 @@ function ConnectArea({
             <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
               {includeLabel}
             </MetaButton>
-            {/* Other agents use the admin's default gateway and read the
-                endpoint from the prompt; apps with an installer pick both on
-                the approval page. */}
-            {generic && data.baseUrls.length > 1 && (
-              <EndpointPicker data={data} />
-            )}
             <span className="md:ml-auto">
               {footprintSummary(client, footprint, skillCount)}
             </span>
@@ -805,34 +808,6 @@ function ConnectArea({
         </>
       )}
     </Band>
-  );
-}
-
-/** Picks the endpoint other agents connect to, when the admin offers several. */
-function EndpointPicker({ data }: { data: ConnectPageData }) {
-  const describe = new Map(
-    (data.baseUrlMetadata ?? []).map((m) => [m.url, m.description] as const),
-  );
-  return (
-    <Select value={data.baseUrl} onValueChange={data.selectBaseUrl}>
-      <SelectTrigger
-        size="sm"
-        aria-label="Endpoint"
-        className="h-7 max-w-72 gap-1.5 text-xs"
-      >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {data.baseUrls.map((url) => (
-          <SelectItem key={url} value={url} className="text-xs">
-            <code className="font-mono">{url}</code>
-            {describe.get(url) && (
-              <span className="text-muted-foreground">{describe.get(url)}</span>
-            )}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
   );
 }
 

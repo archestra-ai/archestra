@@ -73,6 +73,7 @@ import {
 } from "@/lib/plugins/plugin.query";
 import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
+import { BaseUrlSelect } from "./base-url-select";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { ClientConnectionApproval } from "./client-connection-approval";
 import {
@@ -1816,44 +1817,6 @@ function IncludeCheckbox({
       />
       {children}
     </label>
-  );
-}
-
-function BaseUrlSelect({
-  candidateUrls,
-  metadata,
-  value,
-  onChange,
-}: {
-  candidateUrls: readonly string[];
-  metadata: readonly ConnectionBaseUrl[] | null | undefined;
-  value: string;
-  onChange: (url: string) => void;
-}) {
-  const metaByUrl = new Map((metadata ?? []).map((m) => [m.url, m] as const));
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger aria-label="Select an endpoint" className="w-full">
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent className="min-w-[var(--radix-select-trigger-width)]">
-        {candidateUrls.map((url) => {
-          const description = metaByUrl.get(url)?.description ?? "";
-          return (
-            <SelectItem key={url} value={url}>
-              <span className="flex min-w-0 items-center gap-2">
-                <code className="shrink-0 font-mono text-xs">{url}</code>
-                {description && (
-                  <span className="min-w-0 truncate text-xs text-muted-foreground">
-                    {description}
-                  </span>
-                )}
-              </span>
-            </SelectItem>
-          );
-        })}
-      </SelectContent>
-    </Select>
   );
 }
 

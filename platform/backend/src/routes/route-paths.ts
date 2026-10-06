@@ -30,6 +30,17 @@ export const SKILL_MARKETPLACE_PREFIX = "/skills/m";
 export const SKILL_MARKETPLACE_STATIC_PATH = "/skills/marketplace.git";
 
 /**
+ * Public, login-free file links created by the `share_file_publicly` tool:
+ * `/public-files/<token>[/<filename>]`. The random token in the path is the
+ * whole credential. Deliberately a top-level prefix shared with nothing else,
+ * so an operator can expose exactly this path at L7 (ingress, WAF, load
+ * balancer) and keep the rest of the deployment private. Allowlisted in the
+ * auth middleware and excluded from request logging. Keep it stable: links are
+ * posted to external services and must keep resolving.
+ */
+export const PUBLIC_FILES_PREFIX = "/public-files";
+
+/**
  * Public unauthenticated endpoint serving rendered connection-setup scripts.
  * The one-time setup token is embedded in the URL path; routes under this
  * prefix are allowlisted in the auth middleware and excluded from request

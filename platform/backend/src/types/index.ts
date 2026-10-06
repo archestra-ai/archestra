@@ -85,6 +85,7 @@ export * from "./plugin";
 export * from "./plugin-marketplace";
 export * from "./plugin-skill";
 export * from "./project";
+export * from "./public-file-link";
 export * from "./role";
 export * from "./runtime-credential-connection";
 export * from "./runtime-credential-definition";

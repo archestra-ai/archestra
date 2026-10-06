@@ -102620,6 +102620,8 @@
                 "skillShareLink.created",
                 "skillShareLink.rotated",
                 "skillShareLink.revoked",
+                "publicFileLink.created",
+                "publicFileLink.revoked",
                 "team.created",
                 "team.updated",
                 "team.deleted",
@@ -102966,6 +102968,8 @@
                                   "skillShareLink.created",
                                   "skillShareLink.rotated",
                                   "skillShareLink.revoked",
+                                  "publicFileLink.created",
+                                  "publicFileLink.revoked",
                                   "team.created",
                                   "team.updated",
                                   "team.deleted",
@@ -103623,6 +103627,8 @@
                             "skillShareLink.created",
                             "skillShareLink.rotated",
                             "skillShareLink.revoked",
+                            "publicFileLink.created",
+                            "publicFileLink.revoked",
                             "team.created",
                             "team.updated",
                             "team.deleted",
@@ -343999,6 +344005,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -344508,6 +344517,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -345102,6 +345112,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -345611,6 +345624,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -346298,7 +346312,7 @@
         "tags": [
           "Organization"
         ],
-        "description": "Update security settings (default tool guardrails, chat file uploads, Apps Hackathon recorder)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Update security settings (default tool guardrails, chat file uploads, public file sharing, Apps Hackathon recorder)\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
         "requestBody": {
           "required": true,
           "content": {
@@ -346325,6 +346339,9 @@
                     ]
                   },
                   "allowChatFileUploads": {
+                    "type": "boolean"
+                  },
+                  "allowPublicFileSharing": {
                     "type": "boolean"
                   },
                   "appsHackathonRecorderEnabled": {
@@ -346458,6 +346475,9 @@
                       ]
                     },
                     "allowChatFileUploads": {
+                      "type": "boolean"
+                    },
+                    "allowPublicFileSharing": {
                       "type": "boolean"
                     },
                     "allowToolAutoAssignment": {
@@ -346969,6 +346989,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -347415,6 +347436,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -347924,6 +347948,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -348370,6 +348395,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -348879,6 +348907,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -349337,6 +349366,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -349846,6 +349878,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -350367,6 +350400,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -350876,6 +350912,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -351412,6 +351449,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -351921,6 +351961,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -352437,6 +352478,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -352946,6 +352990,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -353406,6 +353451,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -353915,6 +353963,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -354406,6 +354455,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -354915,6 +354967,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -355343,6 +355396,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -355852,6 +355908,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -357468,6 +357525,9 @@
                     "allowChatFileUploads": {
                       "type": "boolean"
                     },
+                    "allowPublicFileSharing": {
+                      "type": "boolean"
+                    },
                     "allowToolAutoAssignment": {
                       "type": "boolean"
                     },
@@ -357977,6 +358037,7 @@
                     "defaultDiscoveredToolInvocationPolicy",
                     "defaultDiscoveredToolResultPolicy",
                     "allowChatFileUploads",
+                    "allowPublicFileSharing",
                     "allowToolAutoAssignment",
                     "embeddingModel",
                     "embeddingDimensions",
@@ -379398,6 +379459,799 @@
             "app:read",
             "project:read"
           ]
+        }
+      }
+    },
+    "/api/public-file-links": {
+      "get": {
+        "operationId": "getPublicFileLinks",
+        "tags": [
+          "Public File Links"
+        ],
+        "description": "List public file links, newest first, revoked ones included. `scope=mine` (the default) lists the caller's own links; `scope=organization` lists every link in the organization and needs publicFileLink:admin.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`publicFileLink:read`: View the public file links you created",
+        "parameters": [
+          {
+            "schema": {
+              "default": 20,
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 100
+            },
+            "in": "query",
+            "name": "limit",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": 0,
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 9007199254740991
+            },
+            "in": "query",
+            "name": "offset",
+            "required": false
+          },
+          {
+            "schema": {
+              "default": "mine",
+              "type": "string",
+              "enum": [
+                "mine",
+                "organization"
+              ]
+            },
+            "in": "query",
+            "name": "scope",
+            "required": false
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "id": {
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "organizationId": {
+                            "type": "string"
+                          },
+                          "token": {
+                            "type": "string"
+                          },
+                          "fileId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "createdByUserId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "agentId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "conversationId": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "uuid",
+                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                          },
+                          "filename": {
+                            "type": "string"
+                          },
+                          "mimeType": {
+                            "type": "string"
+                          },
+                          "sizeBytes": {
+                            "type": "integer",
+                            "minimum": -2147483648,
+                            "maximum": 2147483647
+                          },
+                          "createdAt": {
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "revokedAt": {
+                            "nullable": true,
+                            "type": "string",
+                            "format": "date-time"
+                          },
+                          "url": {
+                            "type": "string"
+                          },
+                          "createdBy": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "email": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "email"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "agent": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          }
+                        },
+                        "required": [
+                          "id",
+                          "organizationId",
+                          "token",
+                          "fileId",
+                          "createdByUserId",
+                          "agentId",
+                          "conversationId",
+                          "filename",
+                          "mimeType",
+                          "sizeBytes",
+                          "createdAt",
+                          "revokedAt",
+                          "url",
+                          "createdBy",
+                          "agent"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "pagination": {
+                      "type": "object",
+                      "properties": {
+                        "currentPage": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "limit": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "maximum": 9007199254740991
+                        },
+                        "total": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "totalPages": {
+                          "type": "integer",
+                          "minimum": 0,
+                          "maximum": 9007199254740991
+                        },
+                        "hasNext": {
+                          "type": "boolean"
+                        },
+                        "hasPrev": {
+                          "type": "boolean"
+                        }
+                      },
+                      "required": [
+                        "currentPage",
+                        "limit",
+                        "total",
+                        "totalPages",
+                        "hasNext",
+                        "hasPrev"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "pagination"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "publicFileLink:read"
+          ]
+        }
+      }
+    },
+    "/api/public-file-links/{id}": {
+      "delete": {
+        "operationId": "revokePublicFileLink",
+        "tags": [
+          "Public File Links"
+        ],
+        "description": "Revoke a public file link you created, or any link in the organization with publicFileLink:admin. The link stops serving immediately; revoking an already-revoked link is a no-op.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`publicFileLink:delete`: Revoke the public file links you created",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "uuid",
+              "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+            },
+            "in": "path",
+            "name": "id",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "success"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "publicFileLink:delete"
+          ]
+        }
+      }
+    },
+    "/public-files/{token}": {
+      "get": {
+        "operationId": "getPublicFile",
+        "tags": [
+          "Public File Links"
+        ],
+        "description": "Serve a publicly shared file. Unauthenticated: the token in the path authorizes the request. The trailing filename is optional and ignored.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "token",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
+        }
+      }
+    },
+    "/public-files/{token}/{filename}": {
+      "get": {
+        "operationId": "getPublicFileWithName",
+        "tags": [
+          "Public File Links"
+        ],
+        "description": "Serve a publicly shared file. Unauthenticated: the token in the path authorizes the request. The trailing filename is optional and ignored.",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "maxLength": 64
+            },
+            "in": "path",
+            "name": "token",
+            "required": true
+          },
+          {
+            "schema": {
+              "type": "string"
+            },
+            "in": "path",
+            "name": "filename",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response"
+          }
         }
       }
     },

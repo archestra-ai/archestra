@@ -254,7 +254,7 @@ class SkillSandboxRuntimeService {
         claimed: params.mimeType,
       });
       const filename = storageFilename({
-        originalName: null,
+        originalName: params.filename ?? null,
         path: resolvedPath,
       });
 

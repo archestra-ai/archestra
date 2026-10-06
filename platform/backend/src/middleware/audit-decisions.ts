@@ -31,6 +31,7 @@ import OrganizationModel from "@/models/organization";
 import OrganizationRoleModel from "@/models/organization-role";
 import PluginModel from "@/models/plugin";
 import ProjectModel from "@/models/project";
+import PublicFileLinkModel from "@/models/public-file-link";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
@@ -667,6 +668,12 @@ export const AUDIT_DECISIONS = {
   skillShareLinksTable: {
     audited: true,
     model: SkillShareLinkModel,
+  },
+  // Created by the share_file_publicly MCP tool (audited at the tool
+  // dispatch), revoked over /api/public-file-links/:id.
+  publicFileLinksTable: {
+    audited: true,
+    model: PublicFileLinkModel,
   },
   skillShareLinkSkillsTable: {
     audited: false,

@@ -215,6 +215,7 @@ export {
 export { default as projectAppsTable } from "./project-app";
 export { default as projectLabelsTable } from "./project-label";
 export { default as projectPinsTable } from "./project-pin";
+export { default as publicFileLinksTable } from "./public-file-link";
 export { default as resourcePermissionPoliciesTable } from "./resource-permission-policy";
 export { default as runtimeCredentialConnectionsTable } from "./runtime-credential-connection";
 export { default as runtimeCredentialDefinitionsTable } from "./runtime-credential-definition";

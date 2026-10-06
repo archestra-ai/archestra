@@ -18,6 +18,7 @@ import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import McpServerModel from "@/models/mcp-server";
 import PluginModel from "@/models/plugin";
+import PublicFileLinkModel from "@/models/public-file-link";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
 import TeamModel from "@/models/team";
@@ -402,6 +403,13 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
       // Do not retain messages, terminal content, or credentials in the audit.
       return { taskId: task.id, agentId: task.agentId, state: task.state };
     },
+  },
+  // Public file links: the only creation path is this tool.
+  share_file_publicly: {
+    resourceType: "publicFileLink",
+    action: "publicFileLink.created",
+    idFromResult: (s) => str(s?.linkId),
+    fetchById: (id, orgId) => PublicFileLinkModel.findByIdForAudit(id, orgId),
   },
   // Agents / MCP gateways (all rows in the agents table).
   create_agent: agentCreateSpec,

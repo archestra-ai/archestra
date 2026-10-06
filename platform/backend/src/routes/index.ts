@@ -93,6 +93,8 @@ export { default as perplexityProxyRoutes } from "./proxy/routes/perplexity";
 export { default as vllmProxyRoutes } from "./proxy/routes/vllm";
 export { default as xaiProxyRoutes } from "./proxy/routes/xai";
 export { default as zhipuaiProxyRoutes } from "./proxy/routes/zhipuai";
+export { default as publicFileLinkRoutes } from "./public-file-link/public-file-link.routes";
+export { default as publicFilesRoutes } from "./public-file-link/public-files.routes";
 export { default as runtimeCredentialRoutes } from "./runtime-credential/runtime-credential.routes";
 export { default as scheduleTriggerRoutes } from "./schedule-trigger";
 export { default as secretsRoutes } from "./secrets";

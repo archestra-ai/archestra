@@ -62,6 +62,7 @@ import {
   detectChanges,
   resolveInitialState,
 } from "./agent-settings-utils";
+import { PublicFileSharingSection } from "./public-file-sharing-section";
 
 type FileUploadsEnabled = "enabled" | "disabled";
 
@@ -100,6 +101,8 @@ export default function AgentSettingsPage() {
   // lingering as a switch that no longer changes anything.
   const hackathonOffered = useAppsHackathonOffered();
   const runtimeBackend = useFeature("agentRuntimeBackend");
+  // Agents publish from the code sandbox, so the switch only exists with it.
+  const sandboxEnabled = useFeature("sandbox") === true;
 
   const {
     data: allModels,
@@ -442,6 +445,7 @@ export default function AgentSettingsPage() {
           }
         />
       )}
+      {sandboxEnabled && <PublicFileSharingSection />}
       <SettingsSaveBar
         hasChanges={changes.hasChanges || securityHasChanges}
         disabledSave={selectedApiKeyId !== "" && defaultModel === ""}

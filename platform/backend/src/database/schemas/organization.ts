@@ -127,6 +127,16 @@ const organizationsTable = pgTable("organization", {
     .default(true),
 
   /**
+   * Whether agents may publish persistent files as public, login-free links
+   * (`share_file_publicly`). Off by default: a public link is reachable by
+   * anyone on the internet. Turning it off also stops every existing link from
+   * serving (they 404) until it is turned back on.
+   */
+  allowPublicFileSharing: boolean("allow_public_file_sharing")
+    .notNull()
+    .default(false),
+
+  /**
    * @deprecated No longer consulted. Dynamic tool access is now gated solely
    * by the per-agent `access_all_tools` setting. The column is retained (not
    * dropped) to avoid a backwards-incompatible migration and to keep the

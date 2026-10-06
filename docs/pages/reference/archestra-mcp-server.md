@@ -398,6 +398,7 @@ These tools are served only when the code runtime is enabled — set [`ARCHESTRA
 | `run_command` | Execute a shell command in the conversation's sandbox (Debian, working dir /home/sandbox). | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `download_file` | Copy a file that already exists at a path in the conversation's sandbox into the conversation's persistent files. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `upload_file` | Place a file into the conversation's sandbox at a path, from a chat attachment, inline base64, inline text, or one of your persistent files. | [`agent:read`](/docs/reference/permissions#agent:read) |
+| `share_file_publicly` | Publish a file as a PUBLIC link and return its URL — for handing an image, video, or PDF to an external service that needs a URL it can fetch without logging in, such as a social media scheduler. | [`publicFileLink:create`](/docs/reference/permissions#publicFileLink:create) |
 
 #### run_command
 
@@ -487,6 +488,31 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `uploadId` | `string` | Yes |  |
 | `sandboxId` | `string` | Yes |  |
 | `path` | `string` | Yes |  |
+| `mimeType` | `string` | Yes |  |
+| `sizeBytes` | `number` | Yes |  |
+
+#### share_file_publicly
+
+Required RBAC permission: [`publicFileLink:create`](/docs/reference/permissions#publicFileLink:create)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `path` | `string` | No | Path of the file in the sandbox — absolute, or relative to the sandbox's working directory (e.g. a staged attachment under /home/sandbox/attachments/). It is first saved to the conversation's persistent files. |
+| `fileId` | `string` | No | Id of an existing persistent file (from download_file, save_file, or search_files) instead of `path`. |
+| `target` | `object` | No | Which sandbox to use. Omit (or leave empty) for the conversation's default sandbox (created on first use). Pass `{ "fresh": true }` for a new isolated sandbox, or `{ "id": "<uuid>" }` to target a specific one. |
+| `target.fresh` | `boolean` | No | Set true for a brand-new isolated sandbox; its id is returned. |
+| `target.id` | `string` | No | An existing sandbox id (UUID) returned by an earlier call. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `url` | `string` | Yes | The public link. Anyone with it can fetch the file. |
+| `linkId` | `string` | Yes |  |
+| `fileId` | `string` | Yes |  |
+| `filename` | `string` | Yes |  |
 | `mimeType` | `string` | Yes |  |
 | `sizeBytes` | `number` | Yes |  |
 

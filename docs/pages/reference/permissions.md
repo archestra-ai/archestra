@@ -2,7 +2,7 @@
 title: "Permissions"
 description: "Built-in role grants, available permissions, and LLM API access requirements"
 order: 6
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-06
 ---
 <!--
 GENERATED FILE — edit codegen-access-control-docs.ts, not this page.
@@ -38,6 +38,7 @@ Full access to core resources, but cannot change organization settings or manage
 | Plugins | `read`, `create`, `update`, `delete` |
 | Apps | `read`, `create` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
+| Public File Links | `read`, `create`, `delete` |
 | LLM Proxy | `read`, `update` |
 | LLM Provider API Keys | `read`, `create` |
 | LLM Virtual Keys | `read`, `create` |
@@ -74,6 +75,7 @@ Can manage agents, tools, and chat, with read-only access to most other resource
 | Skills | `read`, `create`, `delete` |
 | Apps | `read`, `create` |
 | Scheduled Tasks | `read`, `create`, `update`, `delete` |
+| Public File Links | `read`, `create`, `delete` |
 | LLM Proxy | `read` |
 | LLM Provider API Keys | `read` |
 | LLM Virtual Keys | `read`, `create` |
@@ -186,6 +188,10 @@ These permissions can be selected in custom roles. Per-resource actions and scop
 | <span id="project:create"></span>`project:create` | Create projects |
 | <span id="project:update"></span>`project:update` | Edit project descriptions, instructions, and sharing |
 | <span id="project:delete"></span>`project:delete` | Delete projects |
+| <span id="publicFileLink:read"></span>`publicFileLink:read` | View the public file links you created |
+| <span id="publicFileLink:create"></span>`publicFileLink:create` | Let agents publish files as public links (when the organization allows it) |
+| <span id="publicFileLink:delete"></span>`publicFileLink:delete` | Revoke the public file links you created |
+| <span id="publicFileLink:admin"></span>`publicFileLink:admin` | View and revoke every public file link in your organization (also requires Read and Delete) |
 | <span id="scheduledTask:read"></span>`scheduledTask:read` | View scheduled tasks and their run history |
 | <span id="scheduledTask:create"></span>`scheduledTask:create` | Create new scheduled tasks and trigger runs |
 | <span id="scheduledTask:update"></span>`scheduledTask:update` | Modify scheduled task configuration |

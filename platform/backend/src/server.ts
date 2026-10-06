@@ -157,6 +157,7 @@ import {
   CONNECTION_SETUP_SCRIPT_PREFIX,
   HEALTH_PATH,
   MCP_GATEWAY_PREFIX,
+  PUBLIC_FILES_PREFIX,
   READY_PATH,
   SKILL_MARKETPLACE_PREFIX,
 } from "./routes/route-paths";
@@ -474,10 +475,12 @@ const startPublicEndpointsServer = async () => {
   server.get(HEALTH_PATH, () => ({ status: "ok" }));
 
   await server.register(msTeamsWebhookRoutes);
+  // Public file links: token-authorized, read-only, no session needed.
+  await server.register(routes.publicFilesRoutes);
 
   await server.listen({ port: publicEndpointsPort, host });
   server.log.info(
-    `Public-endpoints listener started on port ${publicEndpointsPort} (aliasing the main API port's MS Teams webhook endpoint)`,
+    `Public-endpoints listener started on port ${publicEndpointsPort} (aliasing the main API port's MS Teams webhook and public file link endpoints)`,
   );
 };
 
@@ -824,6 +827,8 @@ const startWebServer = async () => {
     if (url.startsWith(`${SKILL_MARKETPLACE_PREFIX}/`)) return true;
     // one-time setup token is embedded in the URL path; never log it
     if (url.startsWith(`${CONNECTION_SETUP_SCRIPT_PREFIX}/`)) return true;
+    // public file link token is embedded in the URL path; never log it
+    if (url.startsWith(`${PUBLIC_FILES_PREFIX}/`)) return true;
     return false;
   };
 

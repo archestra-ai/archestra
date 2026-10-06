@@ -1143,6 +1143,30 @@ describe("organization routes", () => {
       });
     });
 
+    test("public file sharing is off by default and enabling it is audited", async () => {
+      expect(
+        (await OrganizationModel.getById(organizationId))
+          ?.allowPublicFileSharing,
+      ).toBe(false);
+
+      const response = await app.inject({
+        method: "PATCH",
+        url: "/api/organization/security-settings",
+        payload: { allowPublicFileSharing: true },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.json()).toMatchObject({ allowPublicFileSharing: true });
+      await vi.waitFor(async () => {
+        const [audit] = await db
+          .select()
+          .from(schema.auditLogsTable)
+          .where(eq(schema.auditLogsTable.action, "organization.updated"));
+        expect(audit?.before).toMatchObject({ allowPublicFileSharing: false });
+        expect(audit?.after).toMatchObject({ allowPublicFileSharing: true });
+      });
+    });
+
     test("persists security settings across reads", async () => {
       await app.inject({
         method: "PATCH",

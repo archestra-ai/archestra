@@ -17,6 +17,11 @@ import { safeSegment } from "./file-path";
  * (`<email>/apps/<appId>/<filename>`) — the owner is still the user, so access
  * follows the personal-file rule unchanged, but no app can collide with another
  * app, with a chat, or with the headless bucket.
+ *
+ * Public-link copies (`publicLinks`) live in one fixed `_public-links/` folder
+ * that no owner folder can collide with: user folders are emails (always have
+ * an `@`) and project folders are URL slugs (never have an `_`). Nothing
+ * enumerates it, so the copies never surface as anyone's files.
  */
 export type OwnerScope =
   | {
@@ -26,7 +31,8 @@ export type OwnerScope =
       conversationId: string | null;
       appId?: string | null;
     }
-  | { kind: "project"; projectId: string; label: string };
+  | { kind: "project"; projectId: string; label: string }
+  | { kind: "publicLinks" };
 
 /** An object a backend holds — may or may not have a `files` row behind it. */
 export type StoredObject = {
@@ -78,10 +84,11 @@ export class FilePathConflictError extends Error {
 /**
  * The relative folder an owner scope's objects live under (each segment validated
  * by {@link safeSegment}): `<email>/<conversationId>` for a user's no-project
- * conversation files, `<email>` for a headless (no-conversation) user write, and
- * `<project-slug>` for project files.
+ * conversation files, `<email>` for a headless (no-conversation) user write,
+ * `<project-slug>` for project files, and `_public-links` for public-link copies.
  */
 export function scopeFolder(scope: OwnerScope): string {
+  if (scope.kind === "publicLinks") return PUBLIC_LINKS_FOLDER;
   const owner = safeSegment(scope.label);
   if (scope.kind === "user" && scope.appId) {
     // literal "apps" segment: a conversation folder is a bare UUID, so the two
@@ -93,3 +100,7 @@ export function scopeFolder(scope: OwnerScope): string {
   }
   return owner;
 }
+
+// === internal ===
+
+const PUBLIC_LINKS_FOLDER = "_public-links";

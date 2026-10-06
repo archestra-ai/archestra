@@ -75,6 +75,7 @@ import config, {
   parseOptionalPort,
   parseOtelCaptureContent,
   parseProcessType,
+  parsePublicFilesBaseUrl,
   parseRefreshTokenReuseGraceSeconds,
   parseRetentionDays,
   parseSampleRate,
@@ -415,6 +416,48 @@ describe("getRumOtlpAuthHeaders", () => {
     expect(logger.warn).toHaveBeenCalledWith(
       "OTEL authentication misconfigured: both ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_USERNAME and ARCHESTRA_RUM_EXPORTER_OTLP_AUTH_PASSWORD must be provided for basic auth",
     );
+  });
+});
+
+describe("parsePublicFilesBaseUrl", () => {
+  const fallback = "https://app.example.com";
+
+  test("falls back to the frontend URL when unset or blank", () => {
+    expect(parsePublicFilesBaseUrl({ value: undefined, fallback })).toBe(
+      fallback,
+    );
+    expect(parsePublicFilesBaseUrl({ value: "  ", fallback })).toBe(fallback);
+  });
+
+  test("uses a separate files host, without a trailing slash", () => {
+    expect(
+      parsePublicFilesBaseUrl({
+        value: "https://files.example.com/",
+        fallback,
+      }),
+    ).toBe("https://files.example.com");
+  });
+
+  test("keeps a path prefix for path-routing proxies", () => {
+    expect(
+      parsePublicFilesBaseUrl({
+        value: "https://example.com/archestra/",
+        fallback,
+      }),
+    ).toBe("https://example.com/archestra");
+  });
+
+  test("rejects values links cannot be built on, with a warning", () => {
+    for (const value of [
+      "files.example.com",
+      "ftp://files.example.com",
+      "https://files.example.com/?x=1",
+      "javascript:alert(1)",
+    ]) {
+      vi.mocked(logger.warn).mockClear();
+      expect(parsePublicFilesBaseUrl({ value, fallback })).toBe(fallback);
+      expect(logger.warn).toHaveBeenCalledTimes(1);
+    }
   });
 });
 

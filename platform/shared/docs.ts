@@ -58,6 +58,7 @@ export const DocsPage = {
   PlatformChat: "chat",
   PlatformClaudeCodeExample: "integrations/claude-code",
   PlatformClaudeDesktopExample: "integrations/claude-desktop",
+  PlatformCodeSandbox: "agents",
   PlatformConnection: "get-started/connect",
   PlatformCostsAndLimits: "llm-proxy/costs-and-limits",
   PlatformDeployment: "admin/deployment",

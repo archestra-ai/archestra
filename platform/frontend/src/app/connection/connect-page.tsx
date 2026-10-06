@@ -523,7 +523,9 @@ function Tile({
         "relative flex min-w-0 flex-col items-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,transform] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none motion-safe:hover:-translate-y-0.5",
         roomy ? "pt-4 pb-3 text-[13px]" : "pt-3 pb-2.5",
         active
-          ? "border-primary bg-muted/40 font-medium text-foreground ring-1 ring-primary"
+          ? // The muted tint is layered over the card fill, so the page's
+            // dots never show through a selected tile.
+            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-medium text-foreground ring-1 ring-primary"
           : "text-muted-foreground",
       )}
     >

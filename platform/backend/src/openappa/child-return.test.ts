@@ -6,6 +6,7 @@ import {
   mintChildReturnMarker,
 } from "./child-return";
 import { mintChildTrajectoryReceipt } from "./child-trajectory-receipt";
+import { captureRewriteRequest } from "./rewrite-projection";
 import { stampToolCallId } from "./trajectory-stamp";
 import { appendChildTrajectoryReceiptToResponse } from "./wire";
 
@@ -138,6 +139,74 @@ describe("OpenAPPA child-return markers", () => {
     expect(body.input[3].output).toBe(
       '{"message":"Wait completed.","timed_out":false}',
     );
+  });
+
+  test("keeps mailbox text provenance and drops the withheld payload", () => {
+    const header =
+      "Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n";
+    const secret = "REPORT-RAW-KOALA-0831";
+    const body = {
+      model: "gpt-5.5",
+      input: [
+        {
+          type: "function_call",
+          name: "spawn_agent",
+          namespace: "collaboration",
+          call_id: "spawn-call",
+          arguments: "{}",
+        },
+        {
+          type: "function_call_output",
+          call_id: "spawn-call",
+          output: '{"task_name":"/root/worker"}',
+        },
+        {
+          type: "agent_message",
+          id: "mail-1",
+          author: "/root/worker",
+          recipient: "/root",
+          content: [
+            {
+              type: "input_text",
+              text: header + carrier(requiredMarker(RETURN)),
+              withheld: secret,
+            },
+            {
+              type: "input_text",
+              text: "\nnot-a-marker",
+              withheld: secret,
+            },
+          ],
+        },
+      ],
+    };
+    const capture = captureRewriteRequest(body, "openai:responses");
+    collectAndStripChildReturns(body, { codexMailboxReturns: true });
+    const message = body.input[2];
+    const content = message.content;
+    if (!content?.[0]) throw new Error("missing mailbox content");
+    const replacement = content[0];
+    expect(replacement).toMatchObject({
+      type: "input_text",
+      text: expect.stringContaining(RETURN.value),
+    });
+    expect(replacement).not.toHaveProperty("withheld");
+    expect(
+      Object.getOwnPropertySymbols(replacement).some(
+        (symbol) => symbol.description === "openappa.rewriteOrigin",
+      ),
+    ).toBe(true);
+    expect(JSON.stringify(replacement)).not.toContain(secret);
+    const projected = capture.project(body, new Map(), { allowInitial: true });
+    const encoded = JSON.stringify(projected.request);
+    expect(encoded).toContain(RETURN.value);
+    expect(encoded).not.toContain(secret);
+    const projectedMessage = (
+      projected.request as {
+        input: Array<{ content?: Array<Record<string, unknown>> }>;
+      }
+    ).input[2];
+    expect(projectedMessage.content?.every((block) => block.type)).toBe(true);
   });
 
   test.each([
@@ -365,7 +434,12 @@ describe("OpenAPPA child-return markers", () => {
   });
 
   test("keeps flat and native Codex namespaces eligible for completion", () => {
-    for (const namespace of [undefined, "functions", "multi_agent_v1"]) {
+    for (const namespace of [
+      undefined,
+      "functions",
+      "collaboration",
+      "multi_agent_v1",
+    ]) {
       const body = {
         input: [
           {
@@ -752,6 +826,83 @@ describe("OpenAPPA child-return markers", () => {
     expect(body.messages[1].content).not.toContain("raw_output");
   });
 
+  test("does not record a fork launch acknowledgement as a child return", () => {
+    const launch = "Fork started \u2014 processing in background";
+    const boilerplate =
+      "<fork-boilerplate>\nYou are a worker fork.\n</fork-boilerplate>\n\nYour directive: read the marker.";
+    const handback = carrier(requiredMarker(RETURN));
+    const body = {
+      messages: [
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_fork",
+              name: "Agent",
+              input: { prompt: "read the marker", subagent_type: "fork" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_fork",
+              content: [{ type: "text", text: launch }],
+            },
+            {
+              type: "text",
+              text: boilerplate,
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_done",
+              name: "Agent",
+              input: { prompt: "earlier" },
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_done",
+              content: [{ type: "text", text: handback }],
+            },
+          ],
+        },
+      ],
+    };
+
+    const collected = collectAndStripChildReturns(body);
+
+    expect(collected.completions).toEqual([
+      expect.objectContaining({
+        envelopeId: "toolu_done",
+        value: RETURN.value,
+      }),
+    ]);
+    expect(body.messages[1].content[0]).toEqual({
+      type: "tool_result",
+      tool_use_id: "toolu_fork",
+      content: [{ type: "text", text: launch }],
+    });
+    expect(body.messages[1].content[1]).toEqual({
+      type: "text",
+      text: boilerplate,
+      cache_control: { type: "ephemeral" },
+    });
+  });
+
   test("rejects malformed marker carriers in genuine completed leaves", () => {
     const body = {
       messages: [
@@ -802,6 +953,36 @@ describe("OpenAPPA child-return markers", () => {
     ]);
   }, 30_000);
 
+  test("finish badge repeats the start receipt's spawn display code", () => {
+    const scope = {
+      organizationId: "org-1",
+      callerId: "user-1",
+      parentId: "root",
+      childId: "root:child",
+      childNativeId: "a1",
+      spawnerNativeId: "s1",
+      spawnCallId: "spawn-call",
+    };
+    const started = mintChildTrajectoryReceipt(scope);
+    const finished = mintChildReturnMarker({ ...scope, value: "one report" });
+    const otherValue = mintChildReturnMarker({
+      ...scope,
+      value: "another report",
+    });
+
+    expect(displayCode(started)).toBe(displayCode(finished));
+    expect(displayCode(finished)).toBe(displayCode(otherValue));
+    expect(displayCode(finished)).not.toBe(
+      displayCode(
+        mintChildReturnMarker({
+          ...scope,
+          spawnCallId: "other-spawn",
+          value: "one report",
+        }),
+      ),
+    );
+  });
+
   test("requires a signing key to mint", () => {
     config.openappa.offerSigningSecret = "";
 
@@ -809,6 +990,10 @@ describe("OpenAPPA child-return markers", () => {
     expect(mintChildReturnMarker(RETURN)).toBeUndefined();
   });
 });
+
+function displayCode(marker: string | undefined): string | undefined {
+  return marker?.match(/[0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}/)?.[0];
+}
 
 function requiredMarker(
   returned: Parameters<typeof mintChildReturnMarker>[0],

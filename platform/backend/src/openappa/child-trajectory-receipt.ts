@@ -126,6 +126,19 @@ export function mintChildTrajectoryReceipt(params: {
   return `${display}\n[appa] child trajectory ${token}.`;
 }
 
+/** Visual code for one retained spawn. Start and finish badges share it. */
+export function childTrajectoryDisplayCode(params: {
+  organizationId: string;
+  callerId: string | undefined;
+  parentId: string;
+  childId?: string;
+  childNativeId?: string;
+  spawnerNativeId: string;
+  spawnCallId?: string;
+}): string {
+  return mintDisplayCode(params);
+}
+
 export function verifyChildTrajectoryReceipt(params: {
   receipt: AppaChildTrajectoryReceipt;
   organizationId: string;

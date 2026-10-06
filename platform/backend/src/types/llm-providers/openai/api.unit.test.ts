@@ -2,8 +2,18 @@ import { describe, expect, test } from "vitest";
 import {
   ChatCompletionRequestSchema,
   ChatCompletionResponseSchema,
+  ResponsesCompactRequestSchema,
   ResponsesRequestSchema,
 } from "./api";
+
+function roundTrip(
+  schema: {
+    parse: (value: unknown) => unknown;
+  },
+  value: unknown,
+) {
+  return JSON.parse(JSON.stringify(schema.parse(value)));
+}
 
 describe("ChatCompletionRequestSchema", () => {
   test.each([
@@ -77,6 +87,31 @@ describe("ChatCompletionRequestSchema", () => {
       name: "ApplyPatch",
       format: { syntax: "lark" },
     });
+  });
+
+  test("keeps prompt cache key and retention and strips unsupported fields", () => {
+    const parsed = roundTrip(ChatCompletionRequestSchema, {
+      model: "gpt-5.2",
+      messages: [{ role: "user", content: "hi" }],
+      prompt_cache_key: "session-a",
+      prompt_cache_retention: "24h",
+      not_a_supported_field: "drop-me",
+    });
+
+    expect(parsed).toMatchObject({
+      prompt_cache_key: "session-a",
+      prompt_cache_retention: "24h",
+    });
+    expect(parsed).not.toHaveProperty("not_a_supported_field");
+  });
+
+  test("rejects a prompt_cache_retention value outside the SDK enum", () => {
+    const result = ChatCompletionRequestSchema.safeParse({
+      model: "gpt-5.2",
+      messages: [{ role: "user", content: "hi" }],
+      prompt_cache_retention: "forever",
+    });
+    expect(result.success).toBe(false);
   });
 
   test("rejects an unknown reasoning_effort value", () => {
@@ -164,6 +199,34 @@ describe("ResponsesRequestSchema", () => {
       input: [{ role: "user", content: [{ type: "input_text", text: "hi" }] }],
     });
     expect(result.success).toBe(true);
+  });
+
+  test("keeps prompt cache key and retention through validation", () => {
+    const parsed = roundTrip(ResponsesRequestSchema, {
+      model: "gpt-5.5-pro",
+      input: "hi",
+      prompt_cache_key: "session-a",
+      prompt_cache_retention: "in_memory",
+    });
+    expect(parsed).toMatchObject({
+      prompt_cache_key: "session-a",
+      prompt_cache_retention: "in_memory",
+    });
+  });
+
+  test("keeps compact prompt cache fields and strips unsupported fields", () => {
+    const parsed = roundTrip(ResponsesCompactRequestSchema, {
+      model: "gpt-5.5-pro",
+      input: "hi",
+      prompt_cache_key: "session-a",
+      prompt_cache_retention: "24h",
+      not_a_supported_field: "drop-me",
+    });
+    expect(parsed).toMatchObject({
+      prompt_cache_key: "session-a",
+      prompt_cache_retention: "24h",
+    });
+    expect(parsed).not.toHaveProperty("not_a_supported_field");
   });
 
   test("still accepts typed input items (function calls)", () => {

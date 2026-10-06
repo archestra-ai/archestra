@@ -1,3 +1,4 @@
+import { claudeCodeForkLaunchAcknowledgement } from "@/openappa/child-return";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
 import type { CommonToolResult } from "@/types/common-llm-format";
@@ -189,6 +190,14 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   teammateLaunches(requestBody: unknown): Map<string, AppaTeammateLaunch> {
     const launches = new Map<string, AppaTeammateLaunch>();
     for (const { text, callId, teammate } of spawnResultTexts(requestBody)) {
+      const child = childLaunchIdentifier(text);
+      if (child && isChildId(child.value)) {
+        launches.set(child.value, {
+          childNativeId: child.value,
+          spawnCallId: callId,
+        });
+        continue;
+      }
       if (!text.startsWith(TEAMMATE_LAUNCH_STATUS)) continue;
       const id = /^agent_id:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
       const name = /^name:[ \t]*(\S+)[ \t]*$/m.exec(text)?.[1];
@@ -211,6 +220,15 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 
   isChildHandbackTool(name: string): boolean {
     return HANDBACK_TOOLS.has(localToolName(name));
+  }
+
+  requiresNativeChildHandback(request: unknown): boolean {
+    const body = asRecord(request);
+    return body !== undefined && declaresNamedTool(body, "SubagentHandback");
+  }
+
+  nativeHandbackGuidance(): string {
+    return NATIVE_HANDBACK_GUIDANCE;
   }
 
   childHandbackValue(args: unknown): string | undefined {
@@ -380,6 +398,8 @@ function childLaunchIdentifier(
  * agent acknowledgement, so no other text crosses as a launch.
  */
 function launchAcknowledgement(content: unknown): string | undefined {
+  const forkLaunch = claudeCodeForkLaunchAcknowledgement(content);
+  if (forkLaunch) return forkLaunch;
   const text = launchText(content);
   const acknowledgement = LAUNCH_ACKNOWLEDGEMENTS.find(({ status }) =>
     text?.startsWith(status),
@@ -429,13 +449,8 @@ function spawnResultTexts(
         const id = stringField(part.id);
         const name = stringField(part.name);
         const teammate = stringField(asRecord(part.input)?.name);
-        if (
-          id &&
-          name &&
-          teammate &&
-          CHILD_SPAWN_TOOLS.has(localToolName(name))
-        )
-          spawns.set(id, teammate);
+        if (id && name && CHILD_SPAWN_TOOLS.has(localToolName(name)))
+          spawns.set(id, teammate ?? "");
         continue;
       }
       if (part?.type !== "tool_result") continue;
@@ -449,6 +464,24 @@ function spawnResultTexts(
     }
   }
   return results;
+}
+
+const NATIVE_HANDBACK_GUIDANCE = [
+  "SubagentHandback is the required native completion transport when it is declared.",
+  "A restriction on business or data tools does not forbid that transport.",
+  "When the work is complete, deliver the report by calling SubagentHandback.",
+  "Plain text is not delivery.",
+  "The parent return policy still admits or withholds that report.",
+  "Do not invent a tool call or treat a missing answer as consent.",
+].join(" ");
+
+function declaresNamedTool(
+  request: Record<string, unknown>,
+  name: string,
+): boolean {
+  const tools = request.tools;
+  if (!Array.isArray(tools)) return false;
+  return tools.some((tool) => asRecord(tool)?.name === name);
 }
 
 /** A conversation that declares no tools: an agent's own turns always do. */

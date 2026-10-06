@@ -1,4 +1,9 @@
 import { randomUUID } from "node:crypto";
+import {
+  PROXY_STAMPED_TOOL_ARGUMENTS,
+  TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+} from "@archestra/shared";
+import { tools as openappaMcpTools } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -42,6 +47,7 @@ import {
   canonicalJson,
   declaredToolEntries,
   sessionReceiptEvidence,
+  stripAppaTools,
   stripChildTrajectoryReceiptsFromRequest,
   stripSessionReceiptsFromRequest,
 } from "./wire";
@@ -1939,7 +1945,14 @@ describe("APPA request preflight", () => {
       identity: mode === "attested" ? await attestedIdentity(body) : identity,
     });
 
-    expect(body.tools).toEqual([{ name: CONTROL }, { name: "Bash" }]);
+    expect(body.tools).toEqual([
+      {
+        name: CONTROL,
+        description: canonicalControl().description,
+        input_schema: canonicalControl().schema,
+      },
+      { name: "Bash" },
+    ]);
     expect(prepared.tools).toMatchObject({
       control: { name: CONTROL },
       notice: { name: NOTICE },
@@ -2240,10 +2253,15 @@ describe("APPA request preflight", () => {
     expect(prepared.promptOperationId).toBeUndefined();
     expect(gemini.contents[0].parts[0].functionCall.name).toBe(NOTICE);
     // The model never sees the notice tool, in this shape either.
-    expect(gemini.tools[0].functionDeclarations.map((t) => t.name)).toEqual([
-      CONTROL,
-      "read",
+    expect(gemini.tools[0].functionDeclarations).toEqual([
+      {
+        name: CONTROL,
+        description: canonicalControl().description,
+        parameters: canonicalControl().schema,
+      },
+      { name: "read" },
     ]);
+    expect(JSON.stringify(gemini.tools)).not.toContain("input_schema");
 
     const bedrock = {
       toolConfig: {
@@ -2261,8 +2279,14 @@ describe("APPA request preflight", () => {
         identity,
       }).tools?.control,
     ).toEqual({ name: CONTROL });
-    expect(bedrock.toolConfig.tools.map((t) => t.toolSpec.name)).toEqual([
-      CONTROL,
+    expect(bedrock.toolConfig.tools).toEqual([
+      {
+        toolSpec: {
+          name: CONTROL,
+          description: canonicalControl().description,
+          inputSchema: { json: canonicalControl().schema },
+        },
+      },
     ]);
   });
 
@@ -2319,8 +2343,17 @@ describe("APPA request preflight", () => {
       }).tools?.control,
     ).toEqual({ name: CONTROL });
     expect(gemini.tools).toEqual([
-      { functionDeclarations: [{ name: CONTROL }] },
+      {
+        functionDeclarations: [
+          {
+            name: CONTROL,
+            description: canonicalControl().description,
+            parameters: canonicalControl().schema,
+          },
+        ],
+      },
     ]);
+    expect(JSON.stringify(gemini.tools)).not.toContain("input_schema");
 
     const chat = {
       tools: [
@@ -4262,6 +4295,431 @@ describe("canonicalJson", () => {
     expect(result).toContain("[depth-exceeded]");
   });
 });
+
+describe("stripAppaTools cache boundary", () => {
+  const hour = { type: "ephemeral", ttl: "1h" };
+  const fiveMinutes = { type: "ephemeral", ttl: "5m" };
+
+  function anthropicTool(
+    name: string,
+    cache?: Record<string, unknown>,
+    extra?: Record<string, unknown>,
+  ): Record<string, unknown> {
+    return {
+      name,
+      description: `${name} desc`,
+      input_schema: { type: "object", properties: { q: { type: "string" } } },
+      ...extra,
+      ...(cache ? { cache_control: cache } : {}),
+    };
+  }
+
+  test("moves a last-tool breakpoint onto the previous survivor", () => {
+    const read = anthropicTool("read_file");
+    const control = anthropicTool("control", undefined, {
+      eager_input_streaming: true,
+    });
+    const notice = anthropicTool(NOTICE, hour);
+    const system = [
+      { type: "text", text: "stable", cache_control: fiveMinutes },
+    ];
+    const messages = [{ role: "user", content: "hi" }];
+    const body = { system, tools: [read, control, notice], messages };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([read, control]);
+    expect(body.tools[0]).toBe(read);
+    expect(body.tools[1]).toBe(control);
+    expect(control.cache_control).toBe(hour);
+    expect(read.cache_control).toBeUndefined();
+    expect(notice.cache_control).toBe(hour);
+    expect(control.description).toBe("control desc");
+    expect(control.eager_input_streaming).toBe(true);
+    expect(body.system).toBe(system);
+    expect(body.messages).toBe(messages);
+    expect(system[0].cache_control).toBe(fiveMinutes);
+  });
+
+  test("moves a middle breakpoint backward and does not mark later tools", () => {
+    const read = anthropicTool("read_file");
+    const notice = anthropicTool(NOTICE, fiveMinutes);
+    const later = anthropicTool("later");
+    const body = { tools: [read, notice, later] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools.map((tool) => tool.name)).toEqual(["read_file", "later"]);
+    expect(read.cache_control).toBe(fiveMinutes);
+    expect(later.cache_control).toBeUndefined();
+    expect(later).toEqual(anthropicTool("later"));
+    expect(notice.cache_control).toBe(fiveMinutes);
+  });
+
+  test("does not move a first-tool breakpoint onto later tools", () => {
+    const sole = { type: "ephemeral", ttl: "1h" };
+    const notice = anthropicTool(NOTICE, sole);
+    const read = anthropicTool("read_file");
+    const later = anthropicTool("later");
+    const body = { tools: [notice, read, later] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([read, later]);
+    expect(read.cache_control).toBeUndefined();
+    expect(later.cache_control).toBeUndefined();
+    expect(notice.cache_control).toBe(sole);
+    expect("cache_control" in body).toBe(false);
+  });
+
+  test("drops the only tool's breakpoint instead of inventing an anchor", () => {
+    const sole = { type: "ephemeral" };
+    const notice = anthropicTool(NOTICE, sole);
+    const body = { tools: [notice], metadata: { user_id: "session" } };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([]);
+    expect(body.metadata).toEqual({ user_id: "session" });
+    expect("cache_control" in body).toBe(false);
+    expect(notice.cache_control).toBe(sole);
+    expect(sole).toEqual({ type: "ephemeral" });
+  });
+
+  test("keeps distinct ttls when a breakpoint moves between marked survivors", () => {
+    const laterHour = { type: "ephemeral", ttl: "1h" };
+    const first = anthropicTool("a", fiveMinutes);
+    const middle = anthropicTool("b");
+    const notice = anthropicTool(NOTICE, hour);
+    const last = anthropicTool("c", laterHour);
+    const body = { tools: [first, middle, notice, last] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([first, middle, last]);
+    expect(first.cache_control).toBe(fiveMinutes);
+    expect(middle.cache_control).toBe(hour);
+    expect(last.cache_control).toBe(laterHour);
+    expect(first.description).toBe("a desc");
+    expect(last.input_schema).toEqual({
+      type: "object",
+      properties: { q: { type: "string" } },
+    });
+  });
+
+  test("does not overwrite a survivor breakpoint or merge ttls", () => {
+    const first = anthropicTool("a", fiveMinutes);
+    const notice = anthropicTool(NOTICE, hour);
+    const body = { tools: [first, notice] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([first]);
+    expect(first.cache_control).toBe(fiveMinutes);
+    expect(hour).toEqual({ type: "ephemeral", ttl: "1h" });
+    expect(notice.cache_control).toBe(hour);
+  });
+
+  test("keeps the first relocated ttl when two removed markers share one anchor", () => {
+    const anchor = anthropicTool("a");
+    const firstNotice = anthropicTool(NOTICE, fiveMinutes);
+    const secondNotice = anthropicTool("other_notice", hour);
+    const body = { tools: [anchor, firstNotice, secondNotice] };
+
+    stripAppaTools({
+      body,
+      tools: [{ name: NOTICE }, { name: "other_notice" }],
+    });
+
+    expect(body.tools).toEqual([anchor]);
+    expect(anchor.cache_control).toBe(fiveMinutes);
+    expect(secondNotice.cache_control).toBe(hour);
+  });
+
+  test("leaves an existing survivor breakpoint untouched when the removed tool has none", () => {
+    const read = anthropicTool("read_file", fiveMinutes);
+    const notice = anthropicTool(NOTICE);
+    const body = { tools: [read, notice] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([read]);
+    expect(read.cache_control).toBe(fiveMinutes);
+  });
+
+  test("moves a namespace member breakpoint only within that member list", () => {
+    const read: Record<string, unknown> = {
+      type: "function",
+      name: "read",
+      parameters: { type: "object" },
+    };
+    const notice = {
+      type: "function",
+      name: ADVERTISED_NOTICE,
+      parameters: { type: "object" },
+      cache_control: hour,
+    };
+    const other: Record<string, unknown> = {
+      type: "function",
+      name: "exec",
+      parameters: { type: "object" },
+    };
+    const namespace = {
+      type: "namespace",
+      name: "mcp__gw",
+      tools: [read, notice, other],
+    };
+    const body = { tools: [namespace] };
+
+    stripAppaTools({
+      body,
+      tools: [{ name: ADVERTISED_NOTICE, namespace: "mcp__gw" }],
+    });
+
+    expect(namespace.tools).toEqual([read, other]);
+    expect(read.cache_control).toBe(hour);
+    expect(other.cache_control).toBeUndefined();
+    expect(namespace).not.toHaveProperty("cache_control");
+    expect(notice.cache_control).toBe(hour);
+  });
+
+  test("does not hoist a first namespace member breakpoint onto the container or a later member", () => {
+    const notice = {
+      type: "function",
+      name: ADVERTISED_NOTICE,
+      cache_control: hour,
+    };
+    const read = { type: "function", name: "read" };
+    const namespace = {
+      type: "namespace",
+      name: "mcp__gw",
+      cache_control: fiveMinutes,
+      tools: [notice, read],
+    };
+    const body = { tools: [namespace] };
+
+    stripAppaTools({
+      body,
+      tools: [{ name: ADVERTISED_NOTICE, namespace: "mcp__gw" }],
+    });
+
+    expect(namespace.tools).toEqual([read]);
+    expect(read).not.toHaveProperty("cache_control");
+    expect(namespace.cache_control).toBe(fiveMinutes);
+    expect(notice.cache_control).toBe(hour);
+  });
+
+  test("does not move a member breakpoint onto a tool outside its namespace", () => {
+    const outside = { name: "read" };
+    const notice = { name: ADVERTISED_NOTICE, cache_control: hour };
+    const namespace = { type: "namespace", name: "mcp__gw", tools: [notice] };
+    const body = { tools: [outside, namespace] };
+
+    stripAppaTools({
+      body,
+      tools: [{ name: ADVERTISED_NOTICE, namespace: "mcp__gw" }],
+    });
+
+    expect(outside).not.toHaveProperty("cache_control");
+    expect(namespace).not.toHaveProperty("cache_control");
+    expect(namespace.tools).toEqual([]);
+    expect(notice.cache_control).toBe(hour);
+  });
+
+  test("moves a Gemini declaration breakpoint onto the prior declaration, not the wrapper", () => {
+    const read: Record<string, unknown> = { name: "read", description: "r" };
+    const notice = { name: NOTICE, description: "n", cache_control: hour };
+    const later = { name: "later", description: "l" };
+    const wrapper = { functionDeclarations: [read, notice, later] };
+    const body = { tools: [wrapper] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(wrapper.functionDeclarations).toEqual([
+      { ...read, cache_control: hour },
+      later,
+    ]);
+    expect(read.cache_control).toBe(hour);
+    expect(later).not.toHaveProperty("cache_control");
+    expect(wrapper).not.toHaveProperty("cache_control");
+  });
+
+  test("does not mark a Gemini wrapper when the removed declaration is first", () => {
+    const notice = { name: NOTICE, cache_control: hour };
+    const read = { name: "read" };
+    const wrapper = { functionDeclarations: [notice, read] };
+    const body = { tools: [wrapper] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(wrapper.functionDeclarations).toEqual([read]);
+    expect(read).not.toHaveProperty("cache_control");
+    expect(wrapper).not.toHaveProperty("cache_control");
+    expect(notice.cache_control).toBe(hour);
+  });
+
+  test("uses an earlier tool in the same array when the nearest survivor is a namespace", () => {
+    const read = anthropicTool("read");
+    const namespace = {
+      type: "namespace",
+      name: "mcp__gw",
+      tools: [{ type: "function", name: "exec" }],
+    };
+    const notice = anthropicTool(NOTICE, hour);
+    const body = { tools: [read, namespace, notice] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([read, namespace]);
+    expect(read.cache_control).toBe(hour);
+    expect(namespace).not.toHaveProperty("cache_control");
+    expect(namespace.tools).toEqual([{ type: "function", name: "exec" }]);
+  });
+
+  test("drops the breakpoint when the only prior survivor is a namespace", () => {
+    const namespace = {
+      type: "namespace",
+      name: "mcp__gw",
+      tools: [{ name: "exec" }],
+    };
+    const notice = anthropicTool(NOTICE, hour);
+    const later = anthropicTool("later");
+    const body = { tools: [namespace, notice, later] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([namespace, later]);
+    expect(namespace).not.toHaveProperty("cache_control");
+    expect(later.cache_control).toBeUndefined();
+    expect(notice.cache_control).toBe(hour);
+  });
+
+  test("moves a Bedrock tool breakpoint onto the prior tool and leaves cachePoint bytes alone", () => {
+    const read: Record<string, unknown> = {
+      toolSpec: { name: "read", inputSchema: { json: { type: "object" } } },
+    };
+    const point = { cachePoint: { type: "default", ttl: "5m" } };
+    const notice = {
+      toolSpec: {
+        name: NOTICE,
+        inputSchema: { json: { type: "object" } },
+      },
+      cache_control: hour,
+    };
+    const body = { toolConfig: { tools: [read, point, notice] } };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.toolConfig.tools).toEqual([
+      { ...read, cache_control: hour },
+      point,
+    ]);
+    expect(read.cache_control).toBe(hour);
+    expect(read.toolSpec).toEqual({
+      name: "read",
+      inputSchema: { json: { type: "object" } },
+    });
+    expect(point).toEqual({ cachePoint: { type: "default", ttl: "5m" } });
+    expect(notice.cache_control).toBe(hour);
+  });
+
+  test("moves a nested Chat function breakpoint onto the nested function only", () => {
+    const readFunction: Record<string, unknown> = {
+      name: "read",
+      parameters: { type: "object", properties: {} },
+    };
+    const noticeFunction = {
+      name: NOTICE,
+      parameters: { type: "object", properties: {} },
+      cache_control: hour,
+    };
+    const read = { type: "function", function: readFunction };
+    const notice = { type: "function", function: noticeFunction };
+    const body = { tools: [read, notice] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([read]);
+    expect(readFunction.cache_control).toBe(hour);
+    expect(read).not.toHaveProperty("cache_control");
+    expect(noticeFunction.cache_control).toBe(hour);
+  });
+
+  test("does not invent a nested holder to receive a breakpoint", () => {
+    const read = { name: "read", input_schema: { type: "object" } };
+    const notice = {
+      type: "function",
+      function: { name: NOTICE, cache_control: hour },
+    };
+    const body = { tools: [read, notice] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([read]);
+    expect(read).not.toHaveProperty("cache_control");
+    expect(read).not.toHaveProperty("function");
+    expect(notice.function.cache_control).toBe(hour);
+  });
+
+  test("does not move a breakpoint across declaration containers", () => {
+    const read = anthropicTool("read");
+    const shell: Record<string, unknown> = {
+      type: "function",
+      name: "shell",
+    };
+    const notice = { type: "function", name: NOTICE, cache_control: hour };
+    const body = { tools: [read], additional_tools: [shell, notice] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(read.cache_control).toBeUndefined();
+    expect(shell.cache_control).toBe(hour);
+    expect(body.additional_tools).toEqual([shell]);
+    expect(body.tools).toEqual([read]);
+  });
+
+  test("does not copy a non-object cache_control onto another tool", () => {
+    const read = anthropicTool("read");
+    const notice = anthropicTool(NOTICE);
+    notice.cache_control = "ephemeral";
+    const body = { tools: [read, notice] };
+
+    stripAppaTools({ body, tools: [{ name: NOTICE }] });
+
+    expect(body.tools).toEqual([read]);
+    expect(read.cache_control).toBeUndefined();
+    expect(notice.cache_control).toBe("ephemeral");
+  });
+});
+
+function canonicalControl() {
+  const tool = openappaMcpTools.find((entry) =>
+    entry.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+  );
+  if (!tool?.description || !tool.inputSchema) {
+    throw new Error("missing execute_remedy_plan definition");
+  }
+  const schema = structuredClone(tool.inputSchema) as Record<string, unknown>;
+  const stamped = new Set<string>(
+    PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME],
+  );
+  const properties = schema.properties;
+  if (
+    properties &&
+    typeof properties === "object" &&
+    !Array.isArray(properties)
+  ) {
+    schema.properties = Object.fromEntries(
+      Object.entries(properties).filter(([name]) => !stamped.has(name)),
+    );
+  }
+  if (Array.isArray(schema.required)) {
+    schema.required = schema.required.filter(
+      (name) => typeof name !== "string" || !stamped.has(name),
+    );
+  }
+  return { description: tool.description, schema };
+}
 
 /**
  * A tool declaration as a client forwards it from the gateway's tools/list:

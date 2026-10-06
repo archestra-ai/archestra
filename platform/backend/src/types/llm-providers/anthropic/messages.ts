@@ -1,5 +1,11 @@
 import { z } from "zod";
 
+/**
+ * Cache breakpoint already accepted on message blocks. Request-level automatic
+ * caching uses the same value, including `ttl`.
+ */
+export const CacheControlSchema = z.any().nullable().optional();
+
 // "system" covers mid-conversation system messages (anthropic-beta:
 // mid-conversation-system-2026-04-07), which Claude Code injects into
 // `messages` for hook output and similar context — distinct from the

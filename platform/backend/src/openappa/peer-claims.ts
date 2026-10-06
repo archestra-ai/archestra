@@ -116,8 +116,29 @@ export function peerProofAuthorizes(params: {
   return params.proof.message_id === null;
 }
 
+/** True when a proxy-only proof is present. Does not remove it. */
+export function containsPeerProof(request: unknown): boolean {
+  let found = false;
+  visitPeerProofRecords(request, (record) => {
+    if (!Object.hasOwn(record, PEER_PROOF_ARGUMENT)) return false;
+    found = true;
+    return true;
+  });
+  return found;
+}
+
 /** Remove proxy-only proofs without recursing through untrusted request data. */
 export function stripPeerProofs(request: unknown): void {
+  visitPeerProofRecords(request, (record) => {
+    delete record[PEER_PROOF_ARGUMENT];
+    return false;
+  });
+}
+
+function visitPeerProofRecords(
+  request: unknown,
+  visit: (record: Record<string, unknown>) => boolean,
+): void {
   const pending: unknown[] = [request];
   const visited = new WeakSet<object>();
   while (pending.length > 0) {
@@ -125,7 +146,7 @@ export function stripPeerProofs(request: unknown): void {
     if (!value || typeof value !== "object" || visited.has(value)) continue;
     visited.add(value);
     const record = value as Record<string, unknown>;
-    delete record[PEER_PROOF_ARGUMENT];
+    if (visit(record)) return;
     for (const nested of Object.values(record)) pending.push(nested);
   }
 }

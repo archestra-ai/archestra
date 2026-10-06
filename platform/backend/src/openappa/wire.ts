@@ -33,6 +33,7 @@ import {
   readRemedyExecution,
 } from "./notice";
 import type { OfferJws } from "./offer-claims";
+import { copyOwnRecord, retainOmittedContent } from "./provenance";
 import { appendSessionReceipt, stripSessionReceipts } from "./session-token";
 import {
   parseTrajectoryStamp,
@@ -233,7 +234,7 @@ export function stripProxyArguments(params: {
     if (kept.length === Object.keys(argumentsValue).length) continue;
     call.restoreFunctionArguments({
       kind: "function",
-      arguments: Object.fromEntries(kept),
+      arguments: copyOwnRecord(argumentsValue, kept),
     });
     stripped++;
   }
@@ -257,7 +258,7 @@ export function stripDeclaredParameters(params: {
     ([name]) => !params.names.has(name),
   );
   if (kept.length === Object.keys(properties).length) return false;
-  schema.properties = Object.fromEntries(kept);
+  schema.properties = copyOwnRecord(properties, kept);
   // Strict function schemas list every property as required.
   if (Array.isArray(schema.required))
     schema.required = schema.required.filter(
@@ -540,6 +541,14 @@ export function appendChildTrajectoryReceiptToResponse(params: {
  * Removes tools from every declaration container, each by its exact wire name
  * and namespace: a namespace member only from the namespace it names, and a
  * tool with no namespace only outside every namespace.
+ *
+ * A removed tool's `cache_control` object moves, unchanged, onto the nearest
+ * prior tool in that same declaration sequence that can carry it. Later tools
+ * stay outside the breakpoint. A namespace or `functionDeclarations` container
+ * and a Bedrock `cachePoint` are not anchors. No such prior tool, or an anchor
+ * that already has `cache_control`, drops the marker: overwriting would merge
+ * TTLs, and a synthetic or forward anchor would inject a schema or grow the
+ * cached prefix.
  */
 export function stripAppaTools(params: {
   body: unknown;
@@ -558,19 +567,92 @@ export function stripAppaTools(params: {
     if (asRecord(holder[key])) holder[key] = [holder[key]];
     const declared = holder[key];
     if (!Array.isArray(declared)) continue;
-    holder[key] = declared.filter((tool) => {
+    holder[key] = filterDeclaredTools({
+      declared,
+      namespace: undefined,
+      isStripped,
+      descendGroups: true,
+    });
+  }
+}
+
+/**
+ * One ordered declaration list: a container's tools, or one group's members.
+ * Groups are descended only from a container, matching the previous filter.
+ */
+function filterDeclaredTools(params: {
+  declared: readonly unknown[];
+  namespace: string | undefined;
+  isStripped: (tool: unknown, namespace: string | undefined) => boolean;
+  descendGroups: boolean;
+}): unknown[] {
+  const kept: unknown[] = [];
+  let anchor: Record<string, unknown> | undefined;
+  for (const tool of params.declared) {
+    if (params.descendGroups) {
       const group = groupedMembers(tool);
       if (group) {
         // A group keeps its other tools; only the named one leaves.
-        const namespace = groupNamespace(tool);
-        group.holder[group.key] = group.members.filter(
-          (member) => !isStripped(member, namespace),
-        );
-        return true;
+        group.holder[group.key] = filterDeclaredTools({
+          declared: group.members,
+          namespace: groupNamespace(tool),
+          isStripped: params.isStripped,
+          descendGroups: false,
+        });
+        kept.push(tool);
+        continue;
       }
-      return !isStripped(tool, undefined);
-    });
+    }
+    if (params.isStripped(tool, params.namespace)) {
+      relocateCacheMarker(tool, anchor);
+      continue;
+    }
+    kept.push(tool);
+    const record = asRecord(tool);
+    if (record && !isCachePointBlock(record)) anchor = record;
   }
+  return kept;
+}
+
+const NESTED_DECLARATION_KEYS = ["function", "custom", "toolSpec"] as const;
+
+/**
+ * Moves each plain-object `cache_control` onto the anchor at the same level.
+ * Does not create a nested holder, overwrite an existing marker, or rewrite
+ * the marker's ttl/type bytes.
+ */
+function relocateCacheMarker(
+  stripped: unknown,
+  anchor: Record<string, unknown> | undefined,
+): void {
+  if (!anchor) return;
+  const record = asRecord(stripped);
+  if (!record) return;
+  assignCacheMarker(record, anchor);
+  for (const key of NESTED_DECLARATION_KEYS) {
+    const from = asRecord(record[key]);
+    const to = asRecord(anchor[key]);
+    if (from && to) assignCacheMarker(from, to);
+  }
+}
+
+function assignCacheMarker(
+  from: Record<string, unknown>,
+  to: Record<string, unknown>,
+): void {
+  const marker = from.cache_control;
+  if (marker === null || typeof marker !== "object" || Array.isArray(marker))
+    return;
+  if (to.cache_control != null) return;
+  to.cache_control = marker;
+}
+
+/** A Bedrock checkpoint block, not a tool that can carry `cache_control`. */
+function isCachePointBlock(record: Record<string, unknown>): boolean {
+  return (
+    asRecord(record.cachePoint) !== undefined &&
+    declaredToolName(record) === undefined
+  );
 }
 
 /**
@@ -1223,7 +1305,7 @@ function restoreResult(params: {
   if (params.family === "anthropic:messages") {
     for (const block of anthropicBlocks(params.body)) {
       if (block.type === "tool_result" && block.tool_use_id === params.callId) {
-        block.content = params.result;
+        block.content = retainOmittedContent(block.content, params.result);
         block.is_error = true;
         return;
       }

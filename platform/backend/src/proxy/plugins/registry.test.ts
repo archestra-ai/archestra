@@ -903,6 +903,7 @@ describe("runtime proof attachments", () => {
     { wrapped: true },
     { wrapped: "string" as const },
     { wrapped: true, stringInput: true },
+    { wrapped: "string" as const, stringInput: true },
   ])("releases the approved arguments with a signed proof: %j", async (params) => {
     await expect(finalize(params)).resolves.toMatchObject({
       decision: "allow",
@@ -923,8 +924,14 @@ describe("runtime proof attachments", () => {
     await expect(finalize({ sign })).rejects.toThrow("rewrote a call");
   });
 
-  test("rejects unreported proof insertion", async () => {
-    await expect(finalize({ report: false })).rejects.toThrow("rewrote a call");
+  test.each([
+    false,
+    true,
+    "string",
+  ] as const)("rejects unreported proof insertion, wrapped=%s", async (wrapped) => {
+    await expect(finalize({ wrapped, report: false })).rejects.toThrow(
+      "rewrote a call",
+    );
   });
   test("rejects malformed proof contents", async () => {
     await expect(
@@ -953,27 +960,73 @@ describe("runtime proof attachments", () => {
   test.each([
     false,
     true,
-  ])("rejects argument changes alongside a proof, wrapped=%s", async (wrapped) => {
+    "string",
+  ] as const)("rejects argument changes alongside a proof, wrapped=%s", async (wrapped) => {
     await expect(
       finalize({
         wrapped,
         change(call) {
           const outer = call.arguments as Record<string, unknown>;
-          const target = wrapped
-            ? (outer.tool_args as Record<string, unknown>)
-            : outer;
+          const target =
+            wrapped === "string"
+              ? JSON.parse(outer.tool_args as string)
+              : wrapped
+                ? (outer.tool_args as Record<string, unknown>)
+                : outer;
           target.nested = { path: "changed.txt" };
+          if (wrapped === "string") outer.tool_args = JSON.stringify(target);
         },
       }),
     ).rejects.toThrow("rewrote a call");
   });
-  test("rejects changing a wrapper's target alongside its proof", async () => {
+  test.each([
+    true,
+    "string",
+  ] as const)("rejects changing a wrapper's target alongside its proof, wrapped=%s", async (wrapped) => {
     await expect(
       finalize({
-        wrapped: true,
+        wrapped,
         change(call) {
           (call.arguments as Record<string, unknown>).tool_name =
             "archestra__write_workspace_file";
+        },
+      }),
+    ).rejects.toThrow("rewrote a call");
+  });
+
+  test("rejects changing a string wrapper's representation alongside its proof", async () => {
+    await expect(
+      finalize({
+        wrapped: "string",
+        change(call) {
+          const outer = call.arguments as Record<string, unknown>;
+          outer.tool_args = JSON.parse(outer.tool_args as string);
+        },
+      }),
+    ).rejects.toThrow("rewrote a call");
+  });
+
+  test("rejects unapproved wrapper metadata beside a valid string target proof", async () => {
+    await expect(
+      finalize({
+        wrapped: "string",
+        change(call) {
+          (call.arguments as Record<string, unknown>).control = "unapproved";
+        },
+      }),
+    ).rejects.toThrow("rewrote a call");
+  });
+
+  test.each([
+    "not JSON",
+    "[]",
+    '"{}"',
+  ])("rejects malformed or additional string dispatch layers: %s", async (toolArgs) => {
+    await expect(
+      finalize({
+        wrapped: "string",
+        change(call) {
+          (call.arguments as Record<string, unknown>).tool_args = toolArgs;
         },
       }),
     ).rejects.toThrow("rewrote a call");

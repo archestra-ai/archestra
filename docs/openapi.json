@@ -1104,6 +1104,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -3912,6 +3924,9 @@
           "max_tokens": {
             "type": "number"
           },
+          "cache_control": {
+            "nullable": true
+          },
           "container": {
             "nullable": true,
             "type": "string"
@@ -5601,6 +5616,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -7449,6 +7476,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -8717,6 +8756,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           },
           "stream_mode": {
             "type": "string",
@@ -9992,6 +10043,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -11260,6 +11323,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           },
           "response_format": {
             "type": "object",
@@ -16196,6 +16271,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -17465,6 +17552,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -20225,6 +20324,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -21757,6 +21868,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -24688,6 +24811,9 @@
           "max_tokens": {
             "type": "number"
           },
+          "cache_control": {
+            "nullable": true
+          },
           "container": {
             "nullable": true,
             "type": "string"
@@ -26441,6 +26567,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -28374,6 +28512,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -29699,6 +29849,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           },
           "stream_mode": {
             "type": "string",
@@ -31031,6 +31193,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -32356,6 +32530,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           },
           "response_format": {
             "type": "object",
@@ -37483,6 +37669,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -38808,6 +39006,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -41695,6 +41905,18 @@
           },
           "user": {
             "type": "string"
+          },
+          "prompt_cache_key": {
+            "nullable": true,
+            "type": "string"
+          },
+          "prompt_cache_retention": {
+            "nullable": true,
+            "type": "string",
+            "enum": [
+              "in_memory",
+              "24h"
+            ]
           }
         },
         "required": [
@@ -110313,6 +110535,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -110895,6 +111129,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -120376,6 +120622,9 @@
                   "max_tokens": {
                     "type": "number"
                   },
+                  "cache_control": {
+                    "nullable": true
+                  },
                   "container": {
                     "nullable": true,
                     "type": "string"
@@ -122016,6 +122265,9 @@
                   },
                   "max_tokens": {
                     "type": "number"
+                  },
+                  "cache_control": {
+                    "nullable": true
                   },
                   "container": {
                     "nullable": true,
@@ -123668,6 +123920,9 @@
                   "max_tokens": {
                     "type": "number"
                   },
+                  "cache_control": {
+                    "nullable": true
+                  },
                   "container": {
                     "nullable": true,
                     "type": "string"
@@ -125073,6 +125328,9 @@
                   },
                   "max_tokens": {
                     "type": "number"
+                  },
+                  "cache_control": {
+                    "nullable": true
                   },
                   "container": {
                     "nullable": true,
@@ -160792,6 +161050,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -162337,6 +162607,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -162976,6 +163258,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -163549,6 +163843,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -172229,6 +172535,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -172360,6 +172678,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -181182,6 +181512,9 @@
                                       "max_tokens": {
                                         "type": "number"
                                       },
+                                      "cache_control": {
+                                        "nullable": true
+                                      },
                                       "container": {
                                         "nullable": true,
                                         "type": "string"
@@ -182591,6 +182924,9 @@
                                       },
                                       "max_tokens": {
                                         "type": "number"
+                                      },
+                                      "cache_control": {
+                                        "nullable": true
                                       },
                                       "container": {
                                         "nullable": true,
@@ -192461,6 +192797,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -193556,6 +193904,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -195498,6 +195858,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -196593,6 +196965,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -198530,6 +198914,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -199625,6 +200021,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -202109,6 +202517,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -202240,6 +202660,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -203165,6 +203597,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -203296,6 +203740,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -204221,6 +204677,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -204351,6 +204819,18 @@
                                       },
                                       "user": {
                                         "type": "string"
+                                      },
+                                      "prompt_cache_key": {
+                                        "nullable": true,
+                                        "type": "string"
+                                      },
+                                      "prompt_cache_retention": {
+                                        "nullable": true,
+                                        "type": "string",
+                                        "enum": [
+                                          "in_memory",
+                                          "24h"
+                                        ]
                                       }
                                     },
                                     "required": [
@@ -208963,6 +209443,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -209094,6 +209586,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -217916,6 +218420,9 @@
                                 "max_tokens": {
                                   "type": "number"
                                 },
+                                "cache_control": {
+                                  "nullable": true
+                                },
                                 "container": {
                                   "nullable": true,
                                   "type": "string"
@@ -219325,6 +219832,9 @@
                                 },
                                 "max_tokens": {
                                   "type": "number"
+                                },
+                                "cache_control": {
+                                  "nullable": true
                                 },
                                 "container": {
                                   "nullable": true,
@@ -229195,6 +229705,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -230290,6 +230812,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -232232,6 +232766,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -233327,6 +233873,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -235264,6 +235822,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -236359,6 +236929,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -238843,6 +239425,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -238974,6 +239568,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -239899,6 +240505,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -240030,6 +240648,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -240955,6 +241585,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -241085,6 +241727,18 @@
                                 },
                                 "user": {
                                   "type": "string"
+                                },
+                                "prompt_cache_key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "prompt_cache_retention": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "in_memory",
+                                    "24h"
+                                  ]
                                 }
                               },
                               "required": [
@@ -256622,6 +257276,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -258172,6 +258838,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -314006,6 +314684,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -315556,6 +316246,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -319282,6 +319984,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -319864,6 +320578,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -326569,6 +327295,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -327151,6 +327889,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -327666,6 +328416,14 @@
                   "prompt_cache_key": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -328160,6 +328918,14 @@
                   "prompt_cache_key": {
                     "nullable": true,
                     "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -359314,6 +360080,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [
@@ -359896,6 +360674,18 @@
                   },
                   "user": {
                     "type": "string"
+                  },
+                  "prompt_cache_key": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "prompt_cache_retention": {
+                    "nullable": true,
+                    "type": "string",
+                    "enum": [
+                      "in_memory",
+                      "24h"
+                    ]
                   }
                 },
                 "required": [

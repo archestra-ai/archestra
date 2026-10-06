@@ -1,6 +1,7 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test, vi } from "vitest";
+import { captureRewriteRequest } from "@/openappa/rewrite-projection";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
 
@@ -225,6 +226,72 @@ describe("declared tools vs called tools", () => {
 });
 
 describe("AnthropicRequestAdapter", () => {
+  test.each([
+    false,
+    true,
+  ])("drops only the empty compaction system holder and preserves the appended prefix (recorded=%s)", (recorded) => {
+    const original = createMockRequest(
+      [
+        { role: "user", content: "Compacted history" },
+        { role: "system", content: [] },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "text",
+              text: "REPORT",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        },
+        { role: "user", content: "Continue after compaction" },
+        {
+          role: "system",
+          content: [
+            {
+              type: "text",
+              text: "Available agent types",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        },
+      ],
+      { system: "Base instructions", thinking: { type: "adaptive" } },
+    );
+    const expected = {
+      ...structuredClone(original),
+      messages: original.messages.filter(
+        (message) => message.role !== "system" || message.content.length > 0,
+      ),
+    };
+    const body = structuredClone(original);
+    const capture = recorded
+      ? captureRewriteRequest(body, "anthropic:messages")
+      : undefined;
+    const rendered = anthropicAdapterFactory
+      .createRequestAdapter(body)
+      .toProviderRequest();
+    const first = capture?.project(rendered, new Map(), { allowInitial: true });
+    expect(first?.request ?? rendered).toEqual(expected);
+    expect(original.messages[1]).toEqual({ role: "system", content: [] });
+    if (first) {
+      const next = structuredClone(original);
+      next.messages.push({ role: "user", content: "Repeat without tools" });
+      const secondCapture = captureRewriteRequest(next, "anthropic:messages");
+      const second = secondCapture.project(
+        anthropicAdapterFactory.createRequestAdapter(next).toProviderRequest(),
+        new Map(first.records.map((entry) => [entry.key, entry])),
+        { heads: first.heads },
+      );
+      expect(
+        (second.request as typeof original).messages.slice(
+          0,
+          expected.messages.length,
+        ),
+      ).toEqual(expected.messages);
+    }
+  });
+
   describe("declared tools", () => {
     const messages = [
       { role: "user", content: "Hello" },
@@ -829,6 +896,30 @@ describe("AnthropicStreamAdapter content block forwarding", () => {
       typeof anthropicAdapterFactory.createStreamAdapter
     >["processChunk"]
   >[0];
+
+  test("rejects executable message_start content before returning any SSE", () => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    expect(() =>
+      adapter.processChunk({
+        type: "message_start",
+        message: {
+          id: "msg_seeded_call",
+          model: "claude-3-5-sonnet-20241022",
+          content: [
+            { type: "text", text: "Initial text" },
+            {
+              type: "tool_use",
+              id: "toolu_seeded",
+              name: "do_thing",
+              input: { executable: "must not escape" },
+            },
+          ],
+        },
+      } as Chunk),
+    ).toThrow("Anthropic stream start contains executable content");
+    expect(adapter.state.responseId).toBe("");
+    expect(adapter.getRawToolCallEvents()).toEqual([]);
+  });
 
   // Claude Code streams with interleaved thinking; thinking events must reach
   // the client immediately (it replays them, signed, on the next turn), while

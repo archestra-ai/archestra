@@ -1,5 +1,9 @@
 import { z } from "zod";
-import { MessageContentBlockSchema, MessageParamSchema } from "./messages";
+import {
+  CacheControlSchema,
+  MessageContentBlockSchema,
+  MessageParamSchema,
+} from "./messages";
 import { ToolSchema } from "./tools";
 
 const ToolChoiceAutoSchema = z.object({
@@ -86,6 +90,9 @@ export const MessagesRequestSchema = z.object({
   model: z.string(),
   messages: z.array(MessageParamSchema),
   max_tokens: z.number(),
+  // Automatic caching. Fastify replaces the body with the parse result, so an
+  // undeclared top-level breakpoint is stripped before OpenAPPA capture.
+  cache_control: CacheControlSchema,
   container: z.string().nullable().optional(),
   context_management: z.object().nullable().optional(),
   mcp_servers: z.array(z.any()).optional(),

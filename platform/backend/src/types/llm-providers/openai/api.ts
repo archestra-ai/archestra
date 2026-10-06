@@ -105,6 +105,10 @@ export const ChatCompletionRequestSchema = z
     // extraction reads it as the lowest-priority session-id signal
     // (sessionSource "openai_user"), so it must survive validation.
     user: z.string().optional(),
+    // Prompt-cache routing and retention. Undeclared fields are stripped
+    // before OpenAPPA capture. Retention is the SDK enum, not a free string.
+    prompt_cache_key: z.string().nullable().optional(),
+    prompt_cache_retention: z.enum(["in_memory", "24h"]).nullable().optional(),
   })
   .describe(
     `https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1487`,
@@ -177,6 +181,8 @@ export const ResponsesRequestSchema = z
       .optional(),
     top_p: z.number().nullable().optional(),
     user: z.string().optional(),
+    prompt_cache_key: z.string().nullable().optional(),
+    prompt_cache_retention: z.enum(["in_memory", "24h"]).nullable().optional(),
   })
   .passthrough()
   .describe(
@@ -189,6 +195,7 @@ export const ResponsesCompactRequestSchema = z.object({
   instructions: z.string().nullable().optional(),
   previous_response_id: z.string().nullable().optional(),
   prompt_cache_key: z.string().nullable().optional(),
+  prompt_cache_retention: z.enum(["in_memory", "24h"]).nullable().optional(),
 });
 
 export const ResponsesUsageSchema = z

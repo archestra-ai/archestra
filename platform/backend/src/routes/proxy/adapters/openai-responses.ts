@@ -390,15 +390,16 @@ class OpenAiResponsesRequestAdapter
   }
 
   toProviderRequest(): OpenAiResponsesRequest {
+    const isolated = isolateCarrierMetadata(this.request);
     if (!Array.isArray(this.request.input)) {
       return {
-        ...this.request,
+        ...isolated,
         model: this.getModel(),
       };
     }
 
     return {
-      ...this.request,
+      ...isolated,
       model: this.getModel(),
       input: this.request.input.map((item) => {
         if (!isFunctionCallOutputItem(item)) {
@@ -741,10 +742,10 @@ class OpenAiResponsesStreamAdapter
   // refusal, so toProviderResponse persists the refusal — not the captured
   // upstream completion or the blocked tool calls.
   private replacedText: string | null = null;
-  private toolCallsByItemId = new Map<
-    string,
-    { id: string; name: string; arguments: string; namespace?: string }
-  >();
+  private toolCallsByItemId = new Map<string, ResponsesCallSlot>();
+  private pendingCallEventIndexes = new Map<string, Set<number>>();
+  private heldCallEvents = this.state.rawToolCallEvents;
+  private heldCallEventsShared = false;
   private withholdsHosted = false;
   /**
    * Namespaces declared on this request, by tool name, when that name belongs
@@ -757,6 +758,19 @@ class OpenAiResponsesStreamAdapter
 
   constructor(declaredNamespaces?: ReadonlyMap<string, string>) {
     this.declaredNamespaces = declaredNamespaces ?? new Map();
+    // Only a caller-retained snapshot needs a copy when late identity arrives.
+    Object.defineProperty(this.state, "rawToolCallEvents", {
+      enumerable: true,
+      get: () => {
+        this.heldCallEventsShared = true;
+        return this.heldCallEvents;
+      },
+      set: (events: unknown[]) => {
+        this.heldCallEvents = events;
+        this.heldCallEventsShared = false;
+        this.pendingCallEventIndexes.clear();
+      },
+    });
   }
   /**
    * Set from the first hosted call on. What the model wrote after it rests on
@@ -880,7 +894,7 @@ class OpenAiResponsesStreamAdapter
           this.state.text = prefix;
         }
       }
-      this.state.rawToolCallEvents.push(chunk);
+      this.holdToolCallEvent(chunk);
       return {
         sseData: null,
         isToolCallChunk: true,
@@ -901,7 +915,7 @@ class OpenAiResponsesStreamAdapter
       // calls are released. Buffer the terminal envelope with those fragments
       // so the client observes function calls first and completion last.
       if (this.state.toolCalls.length > 0) {
-        this.state.rawToolCallEvents.push(chunk);
+        this.holdToolCallEvent(chunk);
         return {
           sseData: pending || null,
           isToolCallChunk: true,
@@ -1127,6 +1141,7 @@ class OpenAiResponsesStreamAdapter
     this.state.text = "";
     this.state.toolCalls = [];
     this.state.rawToolCallEvents = [];
+    this.toolCallsByItemId.clear();
     this.customCallIds.clear();
     this.hosted = null;
     this.completedResponse = null;
@@ -1153,6 +1168,21 @@ class OpenAiResponsesStreamAdapter
       (item) =>
         item.type === "function_call" || item.type === "custom_tool_call",
     );
+    // Match the first duplicate, as the former find() lookups did.
+    const rewrittenByCallId = new Map<
+      string,
+      StreamAccumulatorState["toolCalls"][number]
+    >();
+    for (const call of toolCalls) {
+      if (!rewrittenByCallId.has(call.id)) rewrittenByCallId.set(call.id, call);
+    }
+    const streamedByCallId = new Map<
+      string,
+      StreamAccumulatorState["toolCalls"][number]
+    >();
+    for (const call of this.state.toolCalls) {
+      if (!streamedByCallId.has(call.id)) streamedByCallId.set(call.id, call);
+    }
     const itemIdByCallId = new Map(
       callItems.flatMap((item) => {
         const callId = (item as { call_id?: unknown }).call_id;
@@ -1165,7 +1195,10 @@ class OpenAiResponsesStreamAdapter
     const customCallIds = new Set(
       callItems.flatMap((item) => {
         const callId = (item as { call_id?: unknown }).call_id;
-        const rewritten = toolCalls.find((call) => call.id === callId);
+        const rewritten =
+          typeof callId === "string"
+            ? rewrittenByCallId.get(callId)
+            : undefined;
         // Only a call this rewrite left alone: one replaced by the denial
         // notice is a function call now, because the notice tool is one.
         return item.type === "custom_tool_call" &&
@@ -1177,9 +1210,7 @@ class OpenAiResponsesStreamAdapter
     );
     // A call the envelope did not carry is still known by what was streamed.
     for (const call of toolCalls) {
-      const streamed = this.state.toolCalls.find(
-        (candidate) => candidate.id === call.id,
-      );
+      const streamed = streamedByCallId.get(call.id);
       if (this.customCallIds.has(call.id) && streamed?.name === call.name)
         customCallIds.add(call.id);
     }
@@ -1211,7 +1242,10 @@ class OpenAiResponsesStreamAdapter
         // Codex routes a namespaced call by the namespace its item names.
         namespaceByCallId: namespacesByCallId({
           items: callItems,
-          streamed: this.toolCallsByItemId.values(),
+          streamed: Array.from(
+            this.toolCallsByItemId.values(),
+            (slot) => slot.call,
+          ),
         }),
         customCallIds,
       }),
@@ -1431,9 +1465,9 @@ class OpenAiResponsesStreamAdapter
     // them so it still reaches the client last.
     if (isResponsesToolCallChunk(chunk)) {
       this.captureToolCallChunk(chunk);
-      this.state.rawToolCallEvents.push(chunk);
+      this.holdToolCallEvent(chunk);
     } else if (isFinal) {
-      this.state.rawToolCallEvents.push(chunk);
+      this.holdToolCallEvent(chunk);
     } else {
       hosted.events.push(chunk);
     }
@@ -1447,7 +1481,7 @@ class OpenAiResponsesStreamAdapter
         this.rememberCall(item.id ?? item.call_id, {
           id: item.call_id,
           name: item.name,
-          arguments: JSON.stringify({ input: item.input ?? "" }),
+          input: item.input ?? "",
           ...namespaceOf(item),
         });
         this.customCallIds.add(item.call_id);
@@ -1472,7 +1506,7 @@ class OpenAiResponsesStreamAdapter
         this.rememberCall(item.id ?? item.call_id, {
           id: item.call_id,
           name: item.name,
-          arguments: item.input ? JSON.stringify({ input: item.input }) : "",
+          ...(item.input ? { input: item.input } : {}),
           ...namespaceOf(item),
         });
         this.customCallIds.add(item.call_id);
@@ -1480,15 +1514,11 @@ class OpenAiResponsesStreamAdapter
       }
       if (!isResponseFunctionCall(item)) return;
       const key = item.id ?? item.call_id;
-      const existing = this.toolCallsByItemId.get(key);
       this.rememberCall(key, {
         id: item.call_id,
-        name: item.name || existing?.name || "",
-        arguments: item.arguments || existing?.arguments || "",
+        name: item.name,
+        arguments: item.arguments,
         ...namespaceOf(item),
-        ...(existing?.namespace && !namespaceOf(item).namespace
-          ? { namespace: existing.namespace }
-          : {}),
       });
       return;
     }
@@ -1498,27 +1528,21 @@ class OpenAiResponsesStreamAdapter
       chunk.type === "response.custom_tool_call_input.delta" ||
       chunk.type === "response.custom_tool_call_input.done"
     ) {
-      const toolCall = this.toolCallsByItemId.get(chunk.item_id);
-      if (!toolCall) return;
-      const input =
-        chunk.type === "response.custom_tool_call_input.done"
-          ? chunk.input
-          : (customToolInput(toolCall.arguments) ?? "") + chunk.delta;
-      toolCall.arguments = JSON.stringify({ input });
-      this.toolCallsByItemId.set(chunk.item_id, toolCall);
-      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+      const slot = this.toolCallsByItemId.get(chunk.item_id);
+      if (!slot) return;
+      if (chunk.type === "response.custom_tool_call_input.done") {
+        slot.inputParts = [chunk.input];
+      } else {
+        slot.inputParts ??= [customToolInput(slot.arguments) ?? ""];
+        slot.inputParts.push(chunk.delta);
+      }
+      slot.materializedInput = null;
       return;
     }
 
     if (chunk.type === "response.function_call_arguments.delta") {
-      const toolCall = this.toolCallsByItemId.get(chunk.item_id) ?? {
-        id: chunk.item_id,
-        name: "",
-        arguments: "",
-      };
-      toolCall.arguments += chunk.delta;
-      this.toolCallsByItemId.set(chunk.item_id, toolCall);
-      this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+      const slot = this.callSlot(chunk.item_id);
+      slot.call.arguments += chunk.delta;
 
       return;
     }
@@ -1533,18 +1557,17 @@ class OpenAiResponsesStreamAdapter
       | ResponseFunctionCallArgumentsDoneEvent
       | ResponseFunctionCallArgumentsDeltaEvent,
   ): void {
-    const toolCall = this.toolCallsByItemId.get(chunk.item_id) ?? {
-      id: chunk.item_id,
-      name: "name" in chunk ? chunk.name : "",
-      arguments: "",
-    };
+    const slot = this.callSlot(chunk.item_id);
 
     if ("name" in chunk) {
-      toolCall.name = chunk.name;
-      toolCall.arguments = chunk.arguments;
+      slot.call.name = chunk.name;
+      slot.call.arguments = chunk.arguments;
     }
 
-    this.rememberCall(chunk.item_id, toolCall);
+    this.rememberCall(chunk.item_id, {
+      id: slot.call.id,
+      name: slot.call.name,
+    });
   }
 
   /**
@@ -1610,32 +1633,100 @@ class OpenAiResponsesStreamAdapter
 
   private rememberCall(
     key: string,
-    call: { id: string; name: string; arguments: string; namespace?: string },
+    call: {
+      id: string;
+      name: string;
+      arguments?: string;
+      input?: string;
+      namespace?: string;
+    },
   ): void {
-    const existing = this.toolCallsByItemId.get(key);
+    const slot = this.callSlot(key);
+    const existing = slot.call;
     const namespace =
       call.namespace ||
-      existing?.namespace ||
-      this.namespaceFor(call.name || existing?.name);
-    const next = {
-      id: call.id || existing?.id || key,
-      name: call.name || existing?.name || "",
-      arguments: call.arguments || existing?.arguments || "",
-      ...(namespace ? { namespace } : {}),
-    };
-    this.toolCallsByItemId.set(key, next);
-    this.backfillHeldItem(key, next.name, namespace);
-    this.state.toolCalls = Array.from(this.toolCallsByItemId.values());
+      existing.namespace ||
+      this.namespaceFor(call.name || existing.name);
+    existing.id = call.id || existing.id || key;
+    existing.name = call.name || existing.name || "";
+    if (call.input !== undefined) {
+      slot.inputParts = [call.input];
+      slot.materializedInput = null;
+    } else if (call.arguments) {
+      existing.arguments = call.arguments;
+    }
+    if (namespace) existing.namespace = namespace;
+    this.backfillHeldItem({ key, name: existing.name, namespace });
   }
 
-  private backfillHeldItem(
-    key: string,
-    name: string,
-    namespace: string | undefined,
-  ): void {
+  private callSlot(key: string): ResponsesCallSlot {
+    const existing = this.toolCallsByItemId.get(key);
+    if (existing) return existing;
+    const slot: ResponsesCallSlot = {
+      arguments: "",
+      inputParts: null,
+      materializedInput: null,
+      call: {
+        id: key,
+        name: "",
+        // Reading arguments is the policy/release boundary for custom input.
+        get arguments() {
+          if (slot.inputParts === null) return slot.arguments;
+          slot.materializedInput ??= JSON.stringify({
+            input: slot.inputParts.join(""),
+          });
+          return slot.materializedInput;
+        },
+        set arguments(value: string) {
+          slot.arguments = value;
+          slot.inputParts = null;
+          slot.materializedInput = null;
+        },
+      },
+    };
+    this.toolCallsByItemId.set(key, slot);
+    this.state.toolCalls.push(slot.call);
+    return slot;
+  }
+
+  private holdToolCallEvent(chunk: OpenAiResponsesStreamChunk): void {
+    const index = this.heldCallEvents.length;
+    this.heldCallEvents.push(chunk);
+    if (
+      chunk.type !== "response.output_item.added" &&
+      chunk.type !== "response.output_item.done"
+    ) {
+      return;
+    }
+    const item = chunk.item as {
+      id?: string;
+      call_id?: string;
+      name?: string;
+      namespace?: string;
+    };
+    if (item.namespace && item.name) return;
+    for (const key of new Set([item.id, item.call_id])) {
+      if (typeof key !== "string") continue;
+      let indexes = this.pendingCallEventIndexes.get(key);
+      if (!indexes) {
+        indexes = new Set();
+        this.pendingCallEventIndexes.set(key, indexes);
+      }
+      indexes.add(index);
+    }
+  }
+
+  private backfillHeldItem(params: {
+    key: string;
+    name: string;
+    namespace: string | undefined;
+  }): void {
+    const { key, name, namespace } = params;
     if (!namespace) return;
-    let events: unknown[] | undefined;
-    for (const [index, event] of this.state.rawToolCallEvents.entries()) {
+    const indexes = this.pendingCallEventIndexes.get(key);
+    if (!indexes) return;
+    for (const index of indexes) {
+      const event = this.heldCallEvents[index];
       if (
         !isRecord(event) ||
         !isRecord(event.item) ||
@@ -1650,10 +1741,12 @@ class OpenAiResponsesStreamAdapter
         name?: string;
         namespace?: string;
       };
-      if (item.id !== key && item.call_id !== key) continue;
       if (item.namespace && (item.name || !name)) continue;
-      events ??= [...this.state.rawToolCallEvents];
-      events[index] = {
+      if (this.heldCallEventsShared) {
+        this.heldCallEvents = [...this.heldCallEvents];
+        this.heldCallEventsShared = false;
+      }
+      this.heldCallEvents[index] = {
         ...event,
         item: {
           ...item,
@@ -1661,10 +1754,24 @@ class OpenAiResponsesStreamAdapter
           ...(!item.name && name ? { name } : {}),
         },
       };
+      if (item.name || name) {
+        for (const alias of [item.id, item.call_id]) {
+          if (typeof alias !== "string") continue;
+          const pending = this.pendingCallEventIndexes.get(alias);
+          pending?.delete(index);
+          if (pending?.size === 0) this.pendingCallEventIndexes.delete(alias);
+        }
+      }
     }
-    if (events) this.state.rawToolCallEvents = events;
   }
 }
+
+type ResponsesCallSlot = {
+  call: StreamAccumulatorState["toolCalls"][number];
+  arguments: string;
+  inputParts: string[] | null;
+  materializedInput: string | null;
+};
 
 function stampDeclaredNamespace<T>(
   item: T,
@@ -1690,6 +1797,24 @@ function stampDeclaredNamespace<T>(
           : {}),
       }
     : item;
+}
+
+function isolateCarrierMetadata(
+  request: OpenAiResponsesRequest,
+): OpenAiResponsesRequest {
+  const record = request as OpenAiResponsesRequest & {
+    client_metadata?: unknown;
+    metadata?: unknown;
+  };
+  return {
+    ...request,
+    ...(record.client_metadata !== undefined
+      ? { client_metadata: structuredClone(record.client_metadata) }
+      : {}),
+    ...(record.metadata !== undefined
+      ? { metadata: structuredClone(record.metadata) }
+      : {}),
+  } as OpenAiResponsesRequest;
 }
 
 /**

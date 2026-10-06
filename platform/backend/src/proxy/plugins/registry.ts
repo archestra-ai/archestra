@@ -815,10 +815,10 @@ function addsOnlyRuntimeProof(params: {
   if (!before || !after) return false;
   const { attachment } = params;
   const originalArgs = attachment.wrapped
-    ? argumentRecord(canonicalJson(before.tool_args))
+    ? runtimeArgumentRecord(before.tool_args)
     : before;
   const signedArgs = attachment.wrapped
-    ? argumentRecord(canonicalJson(after.tool_args))
+    ? runtimeArgumentRecord(after.tool_args)
     : after;
   if (
     !originalArgs ||
@@ -854,4 +854,22 @@ function addsOnlyRuntimeProof(params: {
     verified.session.session_id === attachment.session.session_id &&
     verified.session.parent_id === attachment.session.parent_id
   );
+}
+
+/** Decode one dispatch layer for comparison only; never rewrite wire arguments. */
+function runtimeArgumentRecord(
+  value: unknown,
+): Record<string, unknown> | undefined {
+  if (typeof value === "string") {
+    if (Buffer.byteLength(value, "utf8") > config.api.bodyLimit)
+      return undefined;
+    try {
+      value = JSON.parse(value);
+    } catch {
+      return undefined;
+    }
+  }
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
 }

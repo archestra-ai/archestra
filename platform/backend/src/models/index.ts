@@ -121,6 +121,8 @@ export { default as OAuthAccessTokenModel } from "./oauth-access-token";
 export { default as OAuthClientModel } from "./oauth-client";
 export { default as OAuthRefreshTokenModel } from "./oauth-refresh-token";
 export { default as OpenappaExternalConsultModel } from "./openappa-external-consult";
+/** @public — protocol integration imports the durable OpenAPPA rewrite store. */
+export { default as OpenAppaRewriteModel } from "./openappa-rewrite";
 export { default as OpenAppaSessionModel } from "./openappa-session";
 export { default as OrganizationModel } from "./organization";
 export { default as OrganizationRoleModel } from "./organization-role";

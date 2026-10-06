@@ -14,6 +14,11 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import { metrics } from "@/observability";
+import {
+  hasCapturedOrigin,
+  markOmitted,
+  retainOmittedContent,
+} from "@/openappa/provenance";
 import type {
   Anthropic,
   ChunkProcessingResult,
@@ -30,9 +35,11 @@ import type {
   UsageView,
 } from "@/types";
 import {
+  ApiError,
   extractCommonMessageText,
   extractCommonToolCallArguments,
 } from "@/types";
+import { MessageParamSchema } from "@/types/llm-providers/anthropic/messages";
 import { isAnthropicBillingBlock } from "@/utils/anthropic-billing-error";
 import {
   hasImageContent,
@@ -395,7 +402,10 @@ class AnthropicRequestAdapter
             );
             return {
               ...contentBlock,
-              content: updates[contentBlock.tool_use_id],
+              content: anthropicToolResultContent(
+                contentBlock.content,
+                updates[contentBlock.tool_use_id],
+              ),
             };
           }
           return contentBlock;
@@ -765,6 +775,12 @@ class AnthropicStreamAdapter
 
     switch (chunk.type) {
       case "message_start":
+        if (chunk.message.content?.some((block) => block.type === "tool_use")) {
+          throw new ApiError(
+            502,
+            "Anthropic stream start contains executable content",
+          );
+        }
         this.state.responseId = chunk.message.id;
         this.state.model = chunk.message.model;
         if (chunk.message.usage) {
@@ -1649,24 +1665,82 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
  * Removes empty text blocks so Anthropic API does not reject the request
  * with "messages: text content blocks must be non-empty" (HTTP 400).
  */
+type AnthropicContentBlock = Extract<
+  AnthropicMessages[number]["content"],
+  readonly unknown[]
+>[number];
+type AnthropicToolResultBlock = Extract<
+  AnthropicContentBlock,
+  { type: "tool_result" }
+>;
+type AnthropicToolResultContent = AnthropicToolResultBlock["content"];
+
+function anthropicToolResultContent(
+  previous: AnthropicToolResultContent,
+  next: string,
+): AnthropicToolResultContent {
+  const retained = retainOmittedContent(previous, next);
+  if (retained === undefined || typeof retained === "string") return retained;
+  if (isAnthropicToolResultContent(retained)) return retained;
+  const holder: { content: AnthropicToolResultContent } = {
+    content: previous,
+  };
+  Object.assign(holder, { content: retained });
+  return holder.content;
+}
+
+function isAnthropicToolResultContent(
+  value: unknown,
+): value is AnthropicToolResultContent {
+  const parsed = MessageParamSchema.safeParse({
+    role: "user",
+    content: [{ type: "tool_result", tool_use_id: "probe", content: value }],
+  });
+  return (
+    parsed.success &&
+    Array.isArray(parsed.data.content) &&
+    parsed.data.content[0]?.type === "tool_result"
+  );
+}
+
 function stripEmptyTextBlocks(messages: AnthropicMessages): AnthropicMessages {
   if (!Array.isArray(messages)) return messages;
-  return messages.map((message) => {
-    if (!Array.isArray(message.content)) return message;
-    const filtered = message.content.filter((part) => {
+  return messages.flatMap((message) => {
+    // Claude Code compaction can leave an empty mid-conversation system turn.
+    if (
+      message.role === "system" &&
+      Array.isArray(message.content) &&
+      message.content.length === 0 &&
+      Object.keys(message).every((key) => key === "role" || key === "content")
+    ) {
+      if (hasCapturedOrigin(message)) {
+        markOmitted(message);
+        return [message];
+      }
+      return [];
+    }
+    if (!Array.isArray(message.content)) return [message];
+    let dropped = false;
+    const content = message.content.filter((part) => {
       const record = part as Record<string, unknown>;
-      if (
+      const empty =
         record.type === "text" &&
         typeof record.text === "string" &&
-        record.text.trim().length === 0
-      ) {
-        return false;
+        record.text.trim().length === 0;
+      if (!empty) return true;
+      if (hasCapturedOrigin(record)) {
+        markOmitted(record);
+        return true;
       }
-      return true;
+      dropped = true;
+      return false;
     });
-    return {
-      ...message,
-      content: filtered.length > 0 ? filtered : [{ type: "text", text: " " }],
-    };
+    if (!dropped) return [message];
+    return [
+      {
+        ...message,
+        content: content.length > 0 ? content : [{ type: "text", text: " " }],
+      },
+    ];
   });
 }

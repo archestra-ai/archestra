@@ -1,6 +1,7 @@
 /** Native decisions at the existing buffered proxy seam. The real native +
  * PostgreSQL engine is exercised separately by openappa-rs/smoke.test.cjs. */
 
+import { createHash } from "node:crypto";
 import { CONNECTION_SETUP_WINDOW_MS } from "@archestra/shared/connection-setup";
 import { eq } from "drizzle-orm";
 import Fastify, { type FastifyInstance } from "fastify";
@@ -28,10 +29,17 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import OpenAppaUnenforcedModel from "@/models/openappa-unenforced";
 import { openappaActor } from "@/openappa/actor";
 import { mintChildReturnMarker } from "@/openappa/child-return";
-import { mintDelegationMarker } from "@/openappa/delegation";
 import { stageHitlReview } from "@/openappa/hitl-review";
 import { buildNoticeArguments } from "@/openappa/notice";
-import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import {
+  offerIdFromJws,
+  signOfferClaims,
+  unsignedOfferClaims,
+} from "@/openappa/offer-claims";
+import {
+  AppaRewriteReplay,
+  captureAppaReplayRequest,
+} from "@/openappa/rewrite-replay";
 import * as appaService from "@/openappa/service";
 import { appendSessionReceipt } from "@/openappa/session-token";
 import {
@@ -48,6 +56,7 @@ import {
   rewriteConnectionProxySetupUrl,
 } from "@/services/connection-proxy-setup-context";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+
 import {
   type AnthropicStubOptions,
   createAnthropicTestClient,
@@ -60,45 +69,95 @@ import { openAiResponsesAdapterFactory } from "./adapters/openai-responses";
 import anthropicProxyRoutes from "./routes/anthropic";
 import openAiProxyRoutes from "./routes/openai";
 
-const native = vi.hoisted(() => ({
-  initializeOpenappa: vi.fn(),
-  dispatchHook: vi.fn(),
-  loadChildReturns: vi.fn(
-    async (
-      _organizationId: string,
-      _parentSessionId: string,
-    ): Promise<
-      Array<{
-        childSessionId: string;
-        spawnCallId?: string;
-        childNativeId?: string;
-        value: string;
-      }>
-    > => [],
-  ),
-  loadChildAddresses: vi.fn(
-    async (
-      _organizationId: string,
-      _childSessionId: string,
-    ): Promise<Array<{ parentSessionId: string; value: string }>> => [],
-  ),
-  // No batteries declared: the composed policy is the root alone.
-  listBundledOpenappaBatteries: vi.fn(async () => []),
-  parseOpenappaDeclarations: vi.fn(async () => ({
-    include: [],
-    serverAliases: [],
-    credentials: [],
-    routedAnnotators: [],
-    runtimeCredentials: [],
-    errors: [],
-  })),
-  composeOpenappaPolicy: vi.fn(async (input: { root: string }) => ({
-    content: input.root,
-    errors: [],
-  })),
+const native = await vi.hoisted(async () => {
+  const { createRuntimeModule } = await import(
+    "@/test/openappa-runtime-module"
+  );
+  return createRuntimeModule();
+});
+vi.mock("@archestra/openappa-rs", () => ({
+  ...native,
+  dispatchHook: async (...args: Parameters<typeof native.dispatchHook>) => {
+    // These policy tests have no completed receipts. Keep the readonly probe
+    // out of their callbacks/counts, but preserve every other native event.
+    if (JSON.parse(args[0]).event === "replay_completed_results") {
+      return JSON.stringify({
+        decision: "replay_completed_results",
+        results: [],
+      });
+    }
+    return native.dispatchHook(...args);
+  },
 }));
-vi.mock("@archestra/openappa-rs", () => native);
 vi.mock("@/cache-manager");
+
+const originalReplayEncryptionConfig = config.secretsManager;
+beforeEach(() => {
+  config.secretsManager = {
+    ...originalReplayEncryptionConfig,
+    encryptionSecret: "test-durable-replay-encryption-secret",
+  };
+});
+afterEach(() => {
+  config.secretsManager = originalReplayEncryptionConfig;
+});
+
+async function retainExactText(params: {
+  organizationId: string;
+  callerId: string;
+  sessionId: string;
+  family: "anthropic:messages" | "openai:chatCompletions" | "openai:responses";
+  original: string;
+  rewritten: string;
+}) {
+  const replay = await AppaRewriteReplay.open({
+    session: {
+      organization_id: params.organizationId,
+      caller_id: params.callerId,
+      session_id: params.sessionId,
+    },
+    capture: captureAppaReplayRequest({
+      family: params.family,
+      body: {
+        messages: [{ role: "user", content: "retain" }],
+        tools: [{ name: "retain" }],
+      },
+    }),
+    encryptedChat: { kind: "none" },
+  });
+  const response =
+    params.family === "openai:chatCompletions"
+      ? { choices: [{ message: { content: params.rewritten } }] }
+      : params.family === "openai:responses"
+        ? {
+            output: [
+              {
+                type: "message",
+                content: [{ type: "output_text", text: params.rewritten }],
+              },
+            ],
+          }
+        : { content: [{ type: "text", text: params.rewritten }] };
+  await replay.recordResponse({
+    source: replay.captureResponse(
+      params.family === "openai:chatCompletions"
+        ? { choices: [{ message: { content: params.original } }] }
+        : params.family === "openai:responses"
+          ? {
+              output: [
+                {
+                  type: "message",
+                  content: [{ type: "output_text", text: params.original }],
+                },
+              ],
+            }
+          : { content: [{ type: "text", text: params.original }] },
+    ),
+    response,
+    emitted: [],
+    approvedText: params.original,
+  });
+}
 
 describe("OpenAPPA on the existing LLM proxy", () => {
   let app: FastifyInstance;
@@ -113,8 +172,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
   let fail: boolean;
   let failure: string;
   let unregisterAppaPlugin: () => void;
+  let clientWrites: MockInstance[] | undefined;
 
   beforeEach(async ({ makeAgent, makeConversation, makeMember, makeUser }) => {
+    clientWrites = undefined;
     config.openappa = parseOpenAppaConfig("true");
     // The server flag alone no longer enforces: the deployment-wide switch has
     // to be on too, and every case here is about APPA actually enforcing.
@@ -148,6 +209,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           },
         });
     });
+    app.addHook("onRequest", async (_request, reply) => {
+      clientWrites?.push(vi.spyOn(reply.raw, "write"));
+    });
     await app.register(anthropicProxyRoutes);
     agent = await makeAgent({ name: "Native proxy test" });
     userId = (await makeUser()).id;
@@ -177,25 +241,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
-      if (event.event === "session_start") {
-        const runtimeSessionId = String(event.session_id);
-        await db
-          .insert(database.schema.openappaSessionsTable)
-          .values({
-            actor: openappaActor(runtimeSessionId),
-            root: openappaActor(runtimeSessionId),
-            organizationId: String(event.organization_id),
-            callerId:
-              typeof event.caller_id === "string" ? event.caller_id : null,
-            sessionId: runtimeSessionId,
-            parentId:
-              typeof event.parent_id === "string" ? event.parent_id : null,
-            forkedFrom:
-              typeof event.fork_of === "string" ? event.fork_of : null,
-            startDecision: { decision: "ack" },
-          })
-          .onConflictDoNothing();
-      }
       if (event.event === "tool_call") {
         if (fail) throw new Error(failure);
         if (!block || event.tool === "allowed_first")
@@ -232,12 +277,23 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }
       return JSON.stringify({ decision: "ack" });
     });
+    let providerTurn = 0;
     vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(() => {
       const client = createAnthropicTestClient(options);
-      const create = client.messages.create;
       client.messages.create = async (params) => {
+        const turn = providerTurn;
+        providerTurn += 1;
+        const turnClient = createAnthropicTestClient({
+          ...options,
+          messageId:
+            options.messageId ??
+            (turn === 0 ? "msg-test-anthropic" : `msg-test-anthropic-${turn}`),
+          toolUseId:
+            options.toolUseId ??
+            (turn === 0 ? "toolu_test_weather" : `toolu_test_${turn}`),
+        });
         providerRequests.push(structuredClone(params));
-        const response = await create(params);
+        const response = await turnClient.messages.create(params);
         providerResponses.push(response);
         return response;
       };
@@ -311,6 +367,168 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       headers: { ...headers(), ...extraHeaders },
       payload: payloadBody as Record<string, unknown>,
     });
+
+  const observeClientWrites = () => {
+    const writes: MockInstance[] = [];
+    clientWrites = writes;
+    return () =>
+      writes
+        .flatMap((write) => write.mock.calls.map(([data]) => String(data)))
+        .join("");
+  };
+
+  test.each([
+    true,
+    false,
+  ])("rejects executable Anthropic message_start without releasing its content (enforcement=%s)", async (enforcement) => {
+    if (!enforcement) await GuardrailsDeploymentModel.setEnabled(false);
+    let providerReached = false;
+    vi.spyOn(anthropicAdapterFactory, "createClient").mockReturnValue({
+      messages: {
+        create: async () => ({
+          async *[Symbol.asyncIterator]() {
+            providerReached = true;
+            yield {
+              type: "message_start",
+              message: {
+                id: "msg_executable_start",
+                model: "claude-3-5-sonnet-20241022",
+                content: [
+                  {
+                    type: "tool_use",
+                    id: "toolu_executable_start",
+                    name: "get_weather",
+                    input: { command: "executable-start-payload" },
+                  },
+                ],
+              },
+            };
+            yield { type: "message_stop" };
+          },
+        }),
+      },
+    } as never);
+    const response = await post(payload(true));
+    expect(providerReached, response.body).toBe(true);
+    expect(response.statusCode).toBeGreaterThanOrEqual(400);
+    expect(response.body).not.toContain("executable-start-payload");
+    expect(response.body).not.toContain("toolu_executable_start");
+    expect(response.body).not.toContain("event: message_start");
+    expect(events.filter((event) => event.event === "tool_call")).toEqual([]);
+  });
+
+  test("commits a root receipt inverse before releasing rewritten text or completion", async () => {
+    config.openappa.offerSigningSecret =
+      "test-context-secret-with-32-characters";
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    const written = observeClientWrites();
+    const record = AppaRewriteReplay.prototype.recordResponse;
+    let committed = false;
+    let recorded:
+      | Parameters<AppaRewriteReplay["recordResponse"]>[0]
+      | undefined;
+    let writesBeforeCommit: string | undefined;
+    vi.spyOn(AppaRewriteReplay.prototype, "recordResponse").mockImplementation(
+      async function (this: AppaRewriteReplay, params) {
+        recorded = params;
+        writesBeforeCommit = written();
+        await record.call(this, params);
+        committed = true;
+      },
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "claude-cli/2.1.278 (external, cli)",
+        "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
+      },
+      payload: payload(true),
+    });
+    expect(providerRequests, response.body).toHaveLength(1);
+    expect(response.statusCode, response.body).toBe(200);
+    expect(committed, response.body).toBe(true);
+    expect(recorded?.source.texts).toEqual([
+      "Hello! How can I help you today?",
+    ]);
+    expect(writesBeforeCommit).not.toContain("Hello!");
+    expect(writesBeforeCommit).not.toContain("protected session");
+    expect(writesBeforeCommit).not.toContain("event: message_stop");
+    expect(response.body).toContain("Hello!");
+    expect(response.body).toContain("protected session");
+    expect(response.body).toContain("event: message_stop");
+  });
+
+  test.each([
+    "persistence",
+    "truncation",
+    "interruption",
+    "buffer-limit",
+  ] as const)("does not release root receipt text or successful completion after %s failure", async (failureKind) => {
+    config.openappa.offerSigningSecret =
+      "test-context-secret-with-32-characters";
+    options = { includeToolUse: false, streamStopReason: "end_turn" };
+    let providerReached = false;
+    let interruptionInjected = false;
+    const record = vi.spyOn(AppaRewriteReplay.prototype, "recordResponse");
+    if (failureKind === "persistence") {
+      record.mockRejectedValue(
+        new Error("Injected inverse persistence failure"),
+      );
+    } else if (failureKind === "truncation") {
+      options.interruptAtChunk = 4;
+    } else if (failureKind === "buffer-limit") {
+      options.responseText = "x".repeat(10 * 1024 * 1024);
+    } else {
+      vi.spyOn(anthropicAdapterFactory, "createClient").mockImplementation(
+        () => {
+          const client = createAnthropicTestClient(options);
+          return {
+            messages: {
+              create: async () => ({
+                async *[Symbol.asyncIterator]() {
+                  providerReached = true;
+                  for await (const chunk of client.messages.stream()) {
+                    yield chunk;
+                    if (chunk?.type === "content_block_delta") {
+                      interruptionInjected = true;
+                      throw new Error("Injected upstream interruption");
+                    }
+                  }
+                },
+              }),
+            },
+          } as never;
+        },
+      );
+    }
+    const response = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "user-agent": "claude-cli/2.1.278 (external, cli)",
+        "x-claude-code-session-id": "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
+      },
+      payload: payload(true),
+    });
+    expect(providerRequests.length > 0 || providerReached, response.body).toBe(
+      true,
+    );
+    if (failureKind === "persistence") {
+      expect(record).toHaveBeenCalledTimes(1);
+    } else {
+      expect(record).not.toHaveBeenCalled();
+    }
+    expect(interruptionInjected).toBe(failureKind === "interruption");
+    expect(response.body).not.toContain("Hello!");
+    expect(response.body).not.toContain("protected session");
+    expect(response.body).not.toContain("event: message_stop");
+    expect(response.body).toContain("error");
+  });
 
   /** The notice call the client received, arguments included. */
   const noticeFrom = (body: string, stream: boolean) => {
@@ -517,13 +735,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     const sent = providerRequests.at(-1) as {
       messages: { role: string; content: Record<string, unknown>[] }[];
     };
-    // History shows a direct call to the target with APPA's ruling as its
-    // result — the wrapper never enters the transcript the model reads.
+    // Replay restores the original run_tool wrapper, not the unwrapped target.
+    // The ruling stays the native refusal, not the client's rendered text.
     expect(sent.messages[1].content[0]).toEqual({
       type: "tool_use",
       id: notice.id,
-      name: "grain__list_meetings",
-      input: { limit: 5 },
+      name: "archestra__run_tool",
+      input: dispatchCall.input,
     });
     expect(sent.messages[2].content[0]).toMatchObject({
       type: "tool_result",
@@ -583,6 +801,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         },
       ]),
     );
+    expect(remedyResponse.statusCode, remedyResponse.body).toBe(200);
     const remedy = noticeFrom(remedyResponse.body, false);
     expect(remedy.name).toBe("archestra__execute_remedy_plan");
 
@@ -648,6 +867,24 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         .filter((event) => event.event === "tool_call")
         .map((event) => event.tool),
     ).toEqual(["grain__list_meetings", "grain__list_meetings"]);
+  });
+
+  test("rejects a later provider call that reuses an earlier call id", async () => {
+    block = true;
+    const first = await post(payload(false));
+    expect(first.statusCode, first.body).toBe(200);
+    options = {
+      includeToolUse: true,
+      streamStopReason: "tool_use",
+      toolUseId: "toolu_test_weather",
+      messageId: "msg-reused-id",
+      nonStreamingToolUse: {
+        name: "archestra__execute_remedy_plan",
+        input: { offer_id: "test-offer" },
+      },
+    };
+    const second = await post(payload(false));
+    expect(second.statusCode, second.body).toBe(409);
   });
 
   test("restores the denied call and its ruling on the client's next request", async () => {
@@ -1201,7 +1438,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         caller_id: callerId,
         session_id: explicitRoot,
         tool: "get_weather",
-        operation_id: "call:toolu_test_weather",
+        operation_id: "call:toolu_test_1",
       }),
     ]);
     expect(toolCalls.map((event) => event.namespace)).toEqual([
@@ -1376,17 +1613,67 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     };
     const claudeSession = "a3f81c2e-4b17-4d9a-9c08-7e2f1b6a4d90";
     const runtimeSession = `user:${userId}|${claudeSession}`;
-    const offerId = "offer-hitl";
     const modelCopy = "Model-authored copy must not appear.";
-    const offer = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: agent.organizationId,
-        callerId: `user:${userId}`,
-        sessionId: runtimeSession,
-        offerId,
-      }),
-      config.openappa.offerSigningSecret,
-    );
+    const claudeHeaders = {
+      ...externalClientHeaders(),
+      "user-agent": "claude-code/2.1.258",
+      "x-claude-code-session-id": claudeSession,
+    };
+    const withQuestionTools = (messages: unknown[]) => {
+      const body = payload(stream, messages);
+      body.tools.push(
+        {
+          name: "archestra__ask_user",
+          description: "Ask the user",
+          input_schema: { type: "object", properties: {} },
+        },
+        {
+          name: "AskUserQuestion",
+          description: "Ask the user a question",
+          input_schema: { type: "object", properties: {} },
+        },
+      );
+      return body;
+    };
+    block = true;
+    const defaultDispatch = native.dispatchHook.getMockImplementation();
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] Blocked: this call cannot run yet.",
+          offers: [{ offer_id: "offer-hitl" }],
+        });
+      return defaultDispatch?.(raw) ?? JSON.stringify({ decision: "ack" });
+    });
+    const denied = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: claudeHeaders,
+      payload: withQuestionTools([
+        { role: "user", content: "Check the weather" },
+      ]) as Record<string, unknown>,
+    });
+    expect(denied.statusCode, denied.body).toBe(200);
+    const notice = noticeFrom(denied.body, stream);
+    const offer = (
+      notice.input as {
+        offers?: Array<{
+          protected: string;
+          payload: string;
+          signature: string;
+        }>;
+      }
+    ).offers?.[0];
+    if (!offer) throw new Error("denied notice omitted its signed offer");
+    const offerId = offerIdFromJws(offer);
+    if (!offerId) throw new Error("denied notice offer has no id");
+    block = false;
+    if (defaultDispatch)
+      native.dispatchHook.mockImplementation(defaultDispatch);
     await stageHitlReview({
       session: {
         organization_id: agent.organizationId,
@@ -1394,14 +1681,6 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         session_id: runtimeSession,
       },
       review: { offerId, text: "Canonical HITL review." },
-    });
-    const noticeId = "toolu_denied_weather";
-    const noticeInput = buildNoticeArguments({
-      id: noticeId,
-      tool: "get_weather",
-      arguments: { location: "SF" },
-      result: "[appa] Blocked",
-      offers: [offer],
     });
     const askUser = {
       name: "archestra__ask_user",
@@ -1418,53 +1697,35 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       nonStreamingToolUse: askUser,
       streamingToolUse: askUser,
     };
-    const body = payload(stream, [
-      { role: "user", content: "Check the weather" },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool_use",
-            id: noticeId,
-            name: "archestra__get_remedy_plans",
-            input: noticeInput,
-          },
-        ],
-      },
-      {
-        role: "user",
-        content: [
-          {
-            type: "tool_result",
-            tool_use_id: noticeId,
-            content: "rendered for the user",
-          },
-        ],
-      },
-    ]);
-    body.tools.push(
-      {
-        name: "archestra__ask_user",
-        description: "Ask the user",
-        input_schema: { type: "object", properties: {} },
-      },
-      {
-        name: "AskUserQuestion",
-        description: "Ask the user a question",
-        input_schema: { type: "object", properties: {} },
-      },
-    );
-
     const response = await app.inject({
       method: "POST",
       url: url(),
       remoteAddress: "127.0.0.1",
-      headers: {
-        ...externalClientHeaders(),
-        "user-agent": "claude-code/2.1.258",
-        "x-claude-code-session-id": claudeSession,
-      },
-      payload: body as Record<string, unknown>,
+      headers: claudeHeaders,
+      payload: withQuestionTools([
+        { role: "user", content: "Check the weather" },
+        {
+          role: "assistant",
+          content: [
+            {
+              type: "tool_use",
+              id: notice.id,
+              name: notice.name,
+              input: notice.input,
+            },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: notice.id,
+              content: "rendered for the user",
+            },
+          ],
+        },
+      ]) as Record<string, unknown>,
     });
 
     expect(response.statusCode, response.body).toBe(200);
@@ -1794,6 +2055,12 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       payload: body as Record<string, unknown>,
     });
 
+    if (switchedOff) {
+      expect(response.statusCode, response.body).toBe(409);
+      expect(response.json().error.message).toContain("enforcement is off");
+      expect(providerRequests).toEqual([]);
+      return;
+    }
     expect(response.statusCode, response.body).toBe(200);
     expect(events).toEqual([]);
     const sent = providerRequests.at(-1) as {
@@ -1836,23 +2103,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     options = { includeToolUse: false, streamStopReason: "end_turn" };
 
     const governed = await post(history);
-    expect(governed.statusCode, governed.body).toBe(200);
+    expect(governed.statusCode, governed.body).toBe(409);
+    expect(governed.body).toContain("cannot verify exact replay");
+    expect(providerRequests).toEqual([]);
     await GuardrailsDeploymentModel.setEnabled(false);
     const ungoverned = await post(history);
-    expect(ungoverned.statusCode, ungoverned.body).toBe(200);
-
-    // A governed turn's results pass the runtime and its notice tool goes
-    // undeclared, so those differ by design. The calls the model reads back
-    // are the same either way.
-    expect(providerRequests).toHaveLength(2);
-    expect(assistantTurns(providerRequests[0])).toEqual([
-      { role: "assistant", content: [restoredCalls.notice] },
-      { role: "assistant", content: [restoredCalls.remedy] },
-    ]);
-    expect(assistantTurns(providerRequests[1])).toEqual(
-      assistantTurns(providerRequests[0]),
-    );
-    expect(JSON.stringify(providerRequests)).not.toMatch(PROXY_PAYLOAD);
+    expect(ungoverned.statusCode, ungoverned.body).toBe(409);
+    expect(ungoverned.body).toContain("enforcement is off");
   });
 
   test("drops what restoration cannot put back on a governed turn", async () => {
@@ -1934,37 +2191,9 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ]),
     );
 
-    expect(response.statusCode, response.body).toBe(200);
-    const sent = providerRequests.at(-1);
-    expect(assistantTurns(sent)).toEqual([
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool_use",
-            id: "toolu_denied_patch",
-            name: "archestra__get_remedy_plans",
-            input: {
-              tool: "apply_patch",
-              arguments: { input: patch },
-              ruling: "[appa] Blocked",
-            },
-          },
-        ],
-      },
-      {
-        role: "assistant",
-        content: [
-          {
-            type: "tool_use",
-            id: "toolu_remedy",
-            name: "archestra__execute_remedy_plan",
-            input: { offer_id: "edited" },
-          },
-        ],
-      },
-    ]);
-    expect(JSON.stringify(sent)).not.toMatch(PROXY_PAYLOAD);
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.body).toContain("cannot verify exact replay");
+    expect(providerRequests).toEqual([]);
   });
 
   test.each([
@@ -2144,7 +2373,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     );
   });
 
-  test("strips receipts even with OpenAPPA off: providers and logs never see the mark", async () => {
+  test("refuses a receipt while enforcement is off because stripping it would change the request", async () => {
     await GuardrailsDeploymentModel.setEnabled(false);
     providerRequests.length = 0;
     const response = await app.inject({
@@ -2165,26 +2394,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         },
       ]),
     });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(providerRequests).toHaveLength(1);
-    const forwarded = JSON.stringify(providerRequests);
-    expect(forwarded).toContain("summary from a protected session");
-    expect(forwarded).not.toContain("protected session  AAA-AAAA");
-    expect(forwarded).not.toContain("▄█▄▄▄█▄");
-    const logged = await db
-      .select()
-      .from(database.schema.interactionsTable)
-      .where(
-        eq(
-          database.schema.interactionsTable.sessionId,
-          "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f6",
-        ),
-      );
-    expect(logged.length).toBeGreaterThan(0);
-    expect(JSON.stringify(logged)).not.toContain("▄█▄▄▄█▄");
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json().error.message).toContain("enforcement is off");
+    expect(response.headers["x-should-retry"]).toBe("false");
+    expect(providerRequests).toEqual([]);
   });
 
-  test("strips delegation markers even with OpenAPPA off: providers and logs never see them", async () => {
+  test("refuses a delegation marker while enforcement is off because stripping it would change the request", async () => {
     await GuardrailsDeploymentModel.setEnabled(false);
     providerRequests.length = 0;
     const response = await app.inject({
@@ -2202,22 +2418,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         },
       ]),
     });
-    expect(response.statusCode, response.body).toBe(200);
-    expect(providerRequests).toHaveLength(1);
-    const forwarded = JSON.stringify(providerRequests);
-    expect(forwarded).toContain("summary from a delegated child");
-    expect(forwarded).not.toContain("delegated trajectory");
-    const logged = await db
-      .select()
-      .from(database.schema.interactionsTable)
-      .where(
-        eq(
-          database.schema.interactionsTable.sessionId,
-          "68c625e3-1b2c-4d3e-8f90-a1b2c3d4e5f7",
-        ),
-      );
-    expect(logged.length).toBeGreaterThan(0);
-    expect(JSON.stringify(logged)).not.toContain("delegated trajectory");
+    expect(response.statusCode, response.body).toBe(409);
+    expect(response.json().error.message).toContain("enforcement is off");
+    expect(response.headers["x-should-retry"]).toBe("false");
+    expect(providerRequests).toEqual([]);
   });
 
   test("Archestra Chat never receives the session mark, even on a first turn", async () => {
@@ -2650,18 +2854,37 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         payload: payload(false, historyWith(id)) as Record<string, unknown>,
       });
 
-      expect(response.statusCode, response.body).toBe(200);
-      expect(events).toContainEqual(
-        expect.objectContaining({ session_id: `user:${caller}|${replaying}` }),
-      );
+      expect(response.statusCode, response.body).toBe(409);
+      expect(response.body).toContain("cannot verify exact replay");
+      expect(providerRequests).toHaveLength(0);
       expect(events).not.toContainEqual(
         expect.objectContaining({ fork_of: expect.anything() }),
       );
-      // Unverified or not, a stamp never reaches the provider.
-      const sent = JSON.stringify(providerRequests);
-      expect(sent).toContain("toolu_test_weather");
-      expect(sent).not.toContain("appat1");
+      expect(JSON.stringify(events)).not.toContain("appat1");
     }
+
+    events.length = 0;
+    providerRequests.length = 0;
+    const retained = await app.inject({
+      method: "POST",
+      url: url(),
+      remoteAddress: "127.0.0.1",
+      headers: {
+        ...externalClientHeaders(),
+        "x-claude-code-session-id": parent,
+      },
+      payload: payload(false, historyWith(stamped)) as Record<string, unknown>,
+    });
+    expect(retained.statusCode, retained.body).toBe(200);
+    expect(events).toContainEqual(
+      expect.objectContaining({ session_id: `user:${userId}|${parent}` }),
+    );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ fork_of: expect.anything() }),
+    );
+    const sent = JSON.stringify(providerRequests);
+    expect(sent).toContain("toolu_test_weather");
+    expect(sent).not.toContain("appat1");
   });
 
   test("a history mixing two unrelated sessions of the caller is refused before the provider", async () => {
@@ -4528,6 +4751,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       const client = createAnthropicTestClient({
         includeToolUse: false,
         streamStopReason: "end_turn",
+        messageId: "msg-test-anthropic-followup",
       });
       const create = client.messages.create;
       client.messages.create = async (params) => {
@@ -4576,6 +4800,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     expect(sent.messages[1].content).toContainEqual({
       type: "tool_use",
       id: "allowed-first",
+      caller: { type: "direct" },
       name: "allowed_first",
       input: { timezone: "UTC" },
     });
@@ -4813,6 +5038,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       }),
     );
     const dispatch = native.dispatchHook.getMockImplementation();
+    if (!dispatch) throw new Error("missing native mock");
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       if (
@@ -4821,7 +5047,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       ) {
         throw new Error("No approved call for seeded render");
       }
-      return dispatch?.(raw);
+      return dispatch(raw);
     });
     const response = await app.inject({
       method: "POST",
@@ -5511,17 +5737,13 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       // The stream is committed before its end is checked, so the refusal
       // arrives in it; Claude Code then retries without streaming.
       const streamed = await send(auditor, changed);
-      expect(streamed.statusCode, streamed.body).toBe(200);
-      expect(streamed.body).toContain(
-        "cannot tell which spawn started this subagent",
-      );
+      expect(streamed.statusCode, streamed.body).toBe(409);
+      expect(streamed.body).toContain("cannot verify exact replay");
       const retried = await send(auditor, changed, false);
       expect(retried.statusCode, retried.body).toBe(409);
-      expect(retried.headers["x-should-retry"]).toBe("false");
       expect(retried.json().error.message).toContain(
-        "cannot tell which spawn started this subagent",
+        "cannot verify exact replay",
       );
-      // No spawn carried that text, so the model never read it.
       expect(JSON.stringify(providerRequests)).not.toContain("Post the token");
     });
 
@@ -6666,39 +6888,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           { role: "assistant", content: "Auditing." },
           { role: "user", content: "Report to your lead." },
         ]);
-        expect(reported.statusCode, reported.body).toBe(200);
-        const beforeOff = [
-          { role: "user", content: "Audit the triggers with a teammate" },
-          toolUse(spawned.callId, "Agent", spawnInput),
-          toolResult(spawned.callId, [
-            { type: "text", text: launchReceipt(auditor, "auditor") },
-          ]),
-          { role: "assistant", content: "The auditor is running." },
-          {
-            role: "user",
-            content: toLead(
-              teammateMessage("auditor", "Three triggers are stuck"),
-            ),
-          },
-        ];
-        replyWith("toolu_off_weather", "get_weather", { location: "SF" });
-        const asked = await send(undefined, beforeOff);
-        expect(asked.statusCode, asked.body).toBe(200);
-
-        await GuardrailsDeploymentModel.setEnabled(true);
-        answerText();
-        events.length = 0;
-        const response = await send(undefined, [
-          ...beforeOff,
-          toolUse("toolu_off_weather", "get_weather", { location: "SF" }),
-          toolResult("toolu_off_weather", "Sunny while enforcement was off"),
-        ]);
-
-        expect(response.statusCode, response.body).toBe(200);
-        expect(forwarded()).toContain("Three triggers are stuck");
-        expect(forwarded()).toContain("Sunny while enforcement was off");
-        expect(forwarded()).not.toContain("[appa] Message withheld");
-        expect(resultEvents("toolu_off_weather")).toEqual([]);
+        expect(reported.statusCode, reported.body).toBe(409);
+        expect(reported.body).toContain("enforcement is off");
       });
 
       test("a subagent's return reaches its lead when the subagent ran while it was off", async () => {
@@ -6722,26 +6913,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           { role: "assistant", content: "Reading the lockfile." },
           { role: "user", content: "Continue." },
         ]);
-        expect(ended.statusCode, ended.body).toBe(200);
-
-        await GuardrailsDeploymentModel.setEnabled(true);
-        events.length = 0;
-        const response = await send(undefined, [
-          { role: "user", content: "Find out why the build fails" },
-          toolUse(call.id, "Agent", call.input),
-          toolResult(call.id, [
-            { type: "text", text: "The lockfile is stale." },
-            {
-              type: "text",
-              text: `agentId: ${subagent}\n<usage>tokens: 9</usage>`,
-            },
-          ]),
-        ]);
-
-        // Not refused as a subagent result with no record.
-        expect(response.statusCode, response.body).toBe(200);
-        expect(forwarded()).toContain("The lockfile is stale.");
-        expect(resultEvents(call.id)).toEqual([]);
+        expect(ended.statusCode, ended.body).toBe(409);
+        expect(ended.body).toContain("enforcement is off");
       });
 
       test("a background subagent's return reaches its lead when the lead started it while it was off", async () => {
@@ -6882,51 +7055,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         const first = await send(auditor, [
           { role: "user", content: opening(spawned.prompt) },
         ]);
-        expect(first.statusCode, first.body).toBe(200);
-
-        await GuardrailsDeploymentModel.setEnabled(true);
-        events.length = 0;
-        const teammate = await send(auditor, [
-          { role: "user", content: opening(spawned.prompt) },
-          { role: "assistant", content: "Auditing." },
-          { role: "user", content: "Continue." },
-        ]);
-        expect(teammate.statusCode, teammate.body).toBe(200);
-        expect(
-          events.filter((event) => String(event.session_id).includes(auditor)),
-        ).toEqual([]);
-
-        const history = [
-          { role: "user", content: "Audit the triggers with a teammate" },
-          toolUse(spawned.callId, "Agent", spawnInput),
-          toolResult(spawned.callId, [
-            { type: "text", text: launchReceipt(auditor, "auditor") },
-          ]),
-          { role: "assistant", content: "The auditor is running." },
-          {
-            role: "user",
-            content: toLead(
-              teammateMessage("auditor", "Three triggers are stuck"),
-            ),
-          },
-        ];
-        answerText();
-        const read = await send(undefined, history);
-        expect(read.statusCode, read.body).toBe(200);
-        expect(forwarded()).toContain("Three triggers are stuck");
-        expect(forwarded()).not.toContain("[appa] Message withheld");
-
-        reply("SendMessage", { to: "auditor", message: "Report again" });
-        const told = await send(undefined, history);
-        expect(told.statusCode, told.body).toBe(200);
-        const notice = noticeFrom(told.body, true);
-        expect(notice.name).toBe("archestra__get_remedy_plans");
-        expect(JSON.stringify(notice.input)).toContain(
-          "started while Guardrails enforcement was off",
-        );
-        expect(
-          events.filter((event) => event.event === "child_address"),
-        ).toEqual([]);
+        expect(first.statusCode, first.body).toBe(409);
+        expect(first.body).toContain("enforcement is off");
       });
 
       test("a Codex wait result from a child that ran while it was off reaches its parent", async () => {
@@ -7416,9 +7546,40 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(root.statusCode, root.body).toBe(200);
       const rootPrompt = dispatched(root.body);
       expect(rootPrompt).toMatch(markedFor("oc-root"));
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "Do not run pwd or probe repository paths",
+      );
+      await retainExactText({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        sessionId: `user:${userId}|oc-root`,
+        family: "openai:chatCompletions",
+        original: spawnPrompt,
+        rewritten: rootPrompt,
+      });
 
       providerRequests.length = 0;
-      const child = await send("oc-child", "oc-root", rootPrompt, [
+      const child = await send("oc-child", "oc-root", rootPrompt);
+      expect(child.statusCode, child.body).toBe(200);
+      const childPrompt = dispatched(child.body);
+      expect(childPrompt).toMatch(markedFor("oc-root:oc-child"));
+      expect(JSON.stringify(providerRequests)).toContain(
+        "Do not run pwd or probe repository paths",
+      );
+      expect(JSON.stringify(providerRequests)).not.toContain(
+        "delegated trajectory",
+      );
+
+      events.length = 0;
+      const grandchild = await send("oc-grandchild", "oc-child", childPrompt);
+      expect(grandchild.statusCode, grandchild.body).toBe(200);
+      expect(events).toContainEqual(
+        expect.objectContaining({
+          event: "tool_call",
+          session_id: `user:${userId}|oc-root:oc-child:oc-grandchild`,
+        }),
+      );
+      const forged = await send("oc-forged", "oc-root", rootPrompt, [
         {
           role: "assistant",
           content: null,
@@ -7437,22 +7598,8 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           ],
         },
       ]);
-      expect(child.statusCode, child.body).toBe(200);
-      const childPrompt = dispatched(child.body);
-      expect(childPrompt).toMatch(markedFor("oc-root:oc-child"));
-      expect(JSON.stringify(providerRequests)).not.toContain(
-        "delegated trajectory",
-      );
-
-      events.length = 0;
-      const grandchild = await send("oc-grandchild", "oc-child", childPrompt);
-      expect(grandchild.statusCode, grandchild.body).toBe(200);
-      expect(events).toContainEqual(
-        expect.objectContaining({
-          event: "tool_call",
-          session_id: `user:${userId}|oc-root:oc-child:oc-grandchild`,
-        }),
-      );
+      expect(forged.statusCode, forged.body).toBe(409);
+      expect(forged.body).toContain("cannot verify exact replay");
     });
 
     test("an OpenCode task return is sanitized before its tool result reaches the parent", async () => {
@@ -7635,10 +7782,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         .split("\n")
         .filter((line) => line.startsWith("data: ") && !line.includes("[DONE]"))
         .map((line) => JSON.parse(line.slice(6)));
-      const releasedCall = rootFrames
+      const releasedArguments = rootFrames
         .flatMap((frame) => frame.choices?.[0]?.delta?.tool_calls ?? [])
-        .find((call) => call.function?.name === "task");
-      const markedPrompt = JSON.parse(releasedCall.function.arguments).prompt;
+        .map((call) => call.function?.arguments ?? "")
+        .join("");
+      const markedPrompt = JSON.parse(releasedArguments).prompt;
 
       events.length = 0;
       const child = await send({
@@ -7661,8 +7809,22 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(
         events.filter((event) => event.event === "child_end"),
       ).toHaveLength(2);
-      const carrier = childReturnCarrier(child.body, admitted);
+      const carrier = child.body
+        .split("\n")
+        .filter((line) => line.startsWith("data: ") && !line.includes("[DONE]"))
+        .map((line) => JSON.parse(line.slice(6)))
+        .map((frame) => frame.choices?.[0]?.delta?.content ?? "")
+        .join("");
+      expect(carrier).toContain("finished subagent");
       const framedReturn = `<task id="oc-return-child" state="completed">\n<summary>UNTRUSTED SUMMARY</summary>\n<task_result>\n${carrier}\n</task_result>\n</task>`;
+      await retainExactText({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        sessionId: `user:${userId}|oc-return-root`,
+        family: "openai:chatCompletions",
+        original: framedReturn.replace(carrier, admitted),
+        rewritten: framedReturn,
+      });
 
       providerRequests.length = 0;
       const parent = await send({
@@ -7677,7 +7839,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 ...spawnCall,
                 function: {
                   ...spawnCall.function,
-                  arguments: JSON.stringify({ prompt: markedPrompt }),
+                  arguments: releasedArguments,
                 },
               },
             ],
@@ -7748,9 +7910,27 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       false,
     ])("a tool-calling child emits no root session receipt (stream=%s)", async (stream) => {
       config.openappa.offerSigningSecret = "child-receipt-separation-test";
+      const parentSession = `pending-root-receipt-${stream}`;
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
+      const parent = await app.inject({
+        method: "POST",
+        url: url(),
+        remoteAddress: "127.0.0.1",
+        headers: {
+          ...externalClientHeaders(),
+          "user-agent": "claude-cli/2.1.0 (external, cli)",
+          "x-claude-code-session-id": parentSession,
+        },
+        payload: payload(false, [
+          { role: "user", content: "Start the parent session" },
+        ]),
+      });
+      expect(parent.statusCode, parent.body).toBe(200);
       options = {
         includeToolUse: true,
+        streamStopReason: "tool_use",
         nonStreamingToolUse: { name: "Bash", input: { command: "pwd" } },
+        streamingToolUse: { name: "Bash", input: { command: "pwd" } },
       };
       const body = payload(stream);
       body.tools.push({
@@ -7765,7 +7945,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         headers: {
           ...externalClientHeaders(),
           "user-agent": "claude-cli/2.1.0 (external, cli)",
-          "x-claude-code-session-id": "pending-root-receipt",
+          "x-claude-code-session-id": parentSession,
           "x-claude-code-agent-id": "receipt-child",
         },
         payload: body,
@@ -7881,13 +8061,14 @@ describe("OpenAPPA on the existing LLM proxy", () => {
 
     test("refuses a Claude child spawn when the native runtime did not prepare its fork", async () => {
       const originalDispatch = native.dispatchHook.getMockImplementation();
+      if (!originalDispatch) throw new Error("missing native mock");
       native.dispatchHook.mockImplementation(async (raw: string) => {
         const event = JSON.parse(raw);
         if (event.event === "tool_call" && event.spawn) {
           events.push(event);
           return JSON.stringify({ decision: "allow_call" });
         }
-        return originalDispatch?.(raw);
+        return originalDispatch(raw);
       });
       options = {
         includeToolUse: true,
@@ -8174,6 +8355,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(child.body).toContain(admitted);
       expect(child.body).toContain("started subagent");
       expect(child.body).toContain("finished subagent");
+      expect(child.body).toContain("SubagentHandback");
       expect(child.body).not.toContain(rawMarker);
       expect(child.body).not.toContain("protected session");
       expect(child.body).toContain("appact2-");
@@ -8196,13 +8378,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             .filter((event) => event.delta?.type === "text_delta")
             .map((event) => event.delta.text as string)
             .join("")
-        : `${
-            (child.json().content as Array<{ type: string; text?: string }>)
-              .find((block) => block.text?.includes("started subagent"))
-              ?.text?.split("\n\n", 1)[0]
-          }\n\n${childReturnCarrier(child.body, admitted)}`;
+        : (child.json().content as Array<{ type: string; text?: string }>)
+            .map((block) => block.text ?? "")
+            .join("");
       expect(carrier).toContain("started subagent");
-      expect(carrier).toContain("finished subagent");
+      const finishCode = child.body.match(
+        /finished subagent [0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4}/,
+      )?.[0];
+      const startedCode = child.body.match(
+        /started subagent ([0-9A-HJKMNP-TV-Z]{3}-[0-9A-HJKMNP-TV-Z]{4})/,
+      )?.[1];
+      expect(finishCode).toBe(`finished subagent ${startedCode}`);
+      const completed = `${admitted}\n\n${finishCode}`;
 
       providerRequests.length = 0;
       options = { includeToolUse: false, streamStopReason: "end_turn" };
@@ -8219,23 +8406,24 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         streamStopReason: "end_turn",
         responseText: rawMarker,
       };
-      const toolFreeChild = await send(
-        "a1",
-        [
-          { role: "user", content: String(call.input.prompt) },
-          { role: "assistant", content: admitted },
-          { role: "user", content: "Synthesize the report without tools" },
-        ],
-        false,
-      );
-      expect(toolFreeChild.statusCode, toolFreeChild.body).toBe(200);
-      expect(toolFreeChild.body).toContain(admitted);
-      expect(toolFreeChild.body).not.toContain(rawMarker);
-      expect(toolFreeChild.body).toContain("started subagent");
-      expect(events.filter((event) => event.event === "child_end")).toEqual([
-        expect.objectContaining({ output: expect.stringContaining(rawMarker) }),
-        expect.objectContaining({ output: admitted }),
+      const toolFreeChild = await send("a1", [
+        { role: "user", content: String(call.input.prompt) },
+        { role: "assistant", content: admitted },
+        { role: "user", content: "Synthesize the report without tools" },
       ]);
+      expect(toolFreeChild.statusCode, toolFreeChild.body).toBe(200);
+      expect(toolFreeChild.body).toContain(rawMarker);
+      expect(toolFreeChild.body).not.toContain("finished subagent");
+      expect(toolFreeChild.body).not.toContain(admitted);
+      expect(events.filter((event) => event.event === "child_end")).toEqual([]);
+      await retainExactText({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        sessionId: `user:${userId}|${session}`,
+        family: "anthropic:messages",
+        original: admitted,
+        rewritten: completed,
+      });
 
       providerRequests.length = 0;
       options = { includeToolUse: false, streamStopReason: "end_turn" };
@@ -8265,7 +8453,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         {
           role: "user",
           content: [
-            { type: "tool_result", tool_use_id: call.id, content: carrier },
+            { type: "tool_result", tool_use_id: call.id, content: completed },
           ],
         },
       ]);
@@ -8292,7 +8480,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
               type: "tool_result",
               tool_use_id: call.id,
               content: [
-                { type: "text", text: carrier },
+                { type: "text", text: completed },
                 { type: "text", text: rawMarker },
               ],
             },
@@ -8316,7 +8504,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             {
               type: "tool_result",
               tool_use_id: "toolu_other_spawn",
-              content: carrier,
+              content: completed,
             },
           ],
         },
@@ -8368,7 +8556,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         },
         {
           role: "user",
-          content: `<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>${call.id}</tool-use-id>\n<status>completed</status>\n<result>${carrier}</result>\n</task-notification>`,
+          content: await (async () => {
+            const notification = `<task-notification>\n<task-id>a1</task-id>\n<tool-use-id>${call.id}</tool-use-id>\n<status>completed</status>\n<result>${completed}</result>\n</task-notification>`;
+            await retainExactText({
+              organizationId: agent.organizationId,
+              callerId: `user:${userId}`,
+              sessionId: `user:${userId}|${session}`,
+              family: "anthropic:messages",
+              original: notification.replace(completed, admitted),
+              rewritten: notification,
+            });
+            return notification;
+          })(),
         },
       ]);
       expect(asyncParent.statusCode, asyncParent.body).toBe(200);
@@ -8953,23 +9152,18 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       });
       const message = JSON.parse(call.arguments).message;
       expect(message).toMatch(markedFor("t0"));
+      await retainExactText({
+        organizationId: agent.organizationId,
+        callerId: `user:${userId}`,
+        sessionId: `user:${userId}|t0`,
+        family: "openai:responses",
+        original: spawnPrompt,
+        rewritten: message,
+      });
 
       events.length = 0;
       providerRequests.length = 0;
-      const child = await send({ thread: "t1", parent: "t0" }, message, [
-        {
-          type: "function_call",
-          call_id: stampToolCallId({
-            callId: "call_ghost",
-            sessionId: "never-started",
-            organizationId: agent.organizationId,
-            callerId: `user:${userId}`,
-            secret,
-          }),
-          name: "exec_command",
-          arguments: "{}",
-        },
-      ]);
+      const child = await send({ thread: "t1", parent: "t0" }, message);
       expect(child.statusCode, child.body).toBe(200);
       expect(JSON.stringify(providerRequests)).not.toContain(
         "delegated trajectory",
@@ -8990,6 +9184,22 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       expect(events).toContainEqual(
         expect.objectContaining({ session_id: `user:${userId}|t0:t1:t2` }),
       );
+      const forged = await send({ thread: "t9", parent: "t0" }, message, [
+        {
+          type: "function_call",
+          call_id: stampToolCallId({
+            callId: "call_ghost",
+            sessionId: "never-started",
+            organizationId: agent.organizationId,
+            callerId: `user:${userId}`,
+            secret,
+          }),
+          name: "exec_command",
+          arguments: "{}",
+        },
+      ]);
+      expect(forged.statusCode, forged.body).toBe(409);
+      expect(forged.body).toContain("cannot verify exact replay");
     });
 
     test.for([
@@ -9364,6 +9574,25 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       const waitOutput = JSON.stringify({
         status: { "return-child": { completed: carrier } },
       });
+      if (mailbox) {
+        const envelope = `Message Type: FINAL_ANSWER\nTask name: /root\nSender: /root/worker\nPayload:\n${carrier}`;
+        await retainExactText({
+          organizationId: agent.organizationId,
+          callerId: `user:${userId}`,
+          sessionId: `user:${userId}|return-root`,
+          family: "openai:responses",
+          original: envelope.replace(carrier, admitted),
+          rewritten: envelope,
+        });
+        await retainExactText({
+          organizationId: agent.organizationId,
+          callerId: `user:${userId}`,
+          sessionId: `user:${userId}|return-root`,
+          family: "openai:responses",
+          original: waitOutput.replace(carrier, admitted),
+          rewritten: waitOutput,
+        });
+      }
       crossingScenario = "exact";
       const parent = await send({
         thread: "return-root",
@@ -9635,7 +9864,11 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         },
       };
       vi.mocked(anthropicAdapterFactory.createClient).mockImplementation(() => {
-        const client = createAnthropicTestClient(options);
+        const client = createAnthropicTestClient({
+          ...options,
+          messageId: "msg-test-anthropic-spawn",
+          toolUseId: "toolu_test_spawn",
+        });
         const create = client.messages.create;
         client.messages.create = async (params) => {
           providerRequests.push(structuredClone(params));
@@ -9713,7 +9946,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           .filter((event) => event.event === "cancel_call")
           .map((event) => event.tool_call_id)
           .sort(),
-      ).toEqual(["toolu_test_time", "toolu_test_weather"]);
+      ).toEqual(["toolu_test_spawn", "toolu_test_time"]);
       // The client receives neither call.
       expect(providerRequests).toHaveLength(1);
       expect(nested.body).not.toContain('"name":"get_time"');
@@ -9756,22 +9989,26 @@ describe("OpenAPPA on the existing LLM proxy", () => {
           return originalDispatch?.(raw) ?? JSON.stringify({ decision: "ack" });
         });
         const prompt = "Check the weather";
-        const marker = mintDelegationMarker({
-          organizationId: agent.organizationId,
-          callerId: `user:${userId}`,
-          parentId: "refusal-root",
-          spawnerNativeId: "refusal-root",
+        const session = "refusal-root";
+        const spawn = {
+          description: "Check",
           prompt,
-          spawnCallId: "spawn-refusal",
-        });
-        const send = (messages: unknown[]) => {
-          const body = payload(true);
-          body.messages = messages as typeof body.messages;
-          body.tools.push({
-            name: "Bash",
-            description: "Run a command",
-            input_schema: { type: "object", properties: {} },
-          });
+          subagent_type: "general-purpose",
+        };
+        const sendAs = (agentId: string | undefined, messages: unknown[]) => {
+          const body = payload(true, messages);
+          body.tools.push(
+            {
+              name: "Bash",
+              description: "Run a command",
+              input_schema: { type: "object", properties: {} },
+            },
+            {
+              name: "Agent",
+              description: "Launch a subagent",
+              input_schema: { type: "object", properties: {} },
+            },
+          );
           return app.inject({
             method: "POST",
             url: url(),
@@ -9779,26 +10016,35 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             headers: {
               ...externalClientHeaders(),
               "user-agent": "claude-cli/2.1.0 (external, cli)",
-              "x-claude-code-session-id": "refusal-root",
-              "x-claude-code-agent-id": "a1",
+              "x-claude-code-session-id": session,
+              ...(agentId ? { "x-claude-code-agent-id": agentId } : {}),
             },
             payload: body,
           });
         };
+        const send = (messages: unknown[]) => sendAs("a1", messages);
+        options = {
+          includeToolUse: true,
+          streamStopReason: "tool_use",
+          streamingToolUse: { name: "Agent", input: spawn },
+        };
+        const root = await sendAs(undefined, [
+          { role: "user", content: "Start the child" },
+        ]);
+        expect(root.statusCode, root.body).toBe(200);
+        const marked = noticeFrom(root.body, true);
+        const opening = String(marked.input.prompt);
+        expect(opening).toContain(prompt);
         options = { includeToolUse: true, streamStopReason: "tool_use" };
-        const opening = `${prompt}\n\n${marker}`;
         const first = await send([{ role: "user", content: opening }]);
         expect(first.statusCode, first.body).toBe(200);
         const firstEvents = first.body
           .split("\n")
           .filter((line) => line.startsWith("data: "))
           .map((line) => JSON.parse(line.slice(6)));
-        const firstCall = firstEvents.find(
-          (event) =>
-            event.type === "content_block_start" &&
-            event.content_block?.type === "tool_use",
-        )?.content_block;
-        if (!firstCall) throw new Error("expected the initial child tool call");
+        const firstCall = noticeFrom(first.body, true);
+        if (!firstCall.id)
+          throw new Error("expected the initial child tool call");
         const firstText = firstEvents
           .filter((event) => event.delta?.type === "text_delta")
           .map((event) => event.delta.text)
@@ -9820,7 +10066,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
                 type: "tool_use",
                 id: firstCall.id,
                 name: firstCall.name,
-                input: { location: "SF" },
+                input: firstCall.input,
               },
             ],
           },
@@ -9852,12 +10098,22 @@ describe("OpenAPPA on the existing LLM proxy", () => {
     test("preserves a grandchild through compaction without completing its return", async () => {
       config.openappa.offerSigningSecret = secret;
       const session = "5b0d2c63-9f0f-4d7e-8f3e-0d3c5b8a1a11";
-      options = {
-        includeToolUse: false,
-        nonStreamingToolUse: { name: "get_weather", input: { location: "SF" } },
+      const spawn = {
+        description: "Investigate",
+        prompt: spawnPrompt,
+        subagent_type: "general-purpose",
       };
-      const send = (agentId: string, messages: unknown[]) => {
-        const body = payload(false, messages);
+      const send = (
+        agentId: string | undefined,
+        messages: unknown[],
+        stream = false,
+      ) => {
+        const body = payload(stream, messages);
+        body.tools.push({
+          name: "Agent",
+          description: "Launch a subagent",
+          input_schema: { type: "object", properties: {} },
+        });
         return app.inject({
           method: "POST",
           url: url(),
@@ -9866,21 +10122,39 @@ describe("OpenAPPA on the existing LLM proxy", () => {
             ...externalClientHeaders(),
             "user-agent": "claude-cli/2.1.0 (external, cli)",
             "x-claude-code-session-id": session,
-            "x-claude-code-agent-id": agentId,
+            ...(agentId ? { "x-claude-code-agent-id": agentId } : {}),
           },
           payload: body,
         });
       };
-      const marker = mintDelegationMarker({
-        organizationId: agent.organizationId,
-        callerId: `user:${userId}`,
-        parentId: `${session}:a1`,
-        spawnerNativeId: session,
-        prompt: spawnPrompt,
-      });
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        streamingToolUse: { name: "Agent", input: spawn },
+      };
+      const root = await send(
+        undefined,
+        [{ role: "user", content: "Fix the build" }],
+        true,
+      );
+      expect(root.statusCode, root.body).toBe(200);
+      const rootCall = noticeFrom(root.body, true);
+      options = {
+        includeToolUse: true,
+        streamStopReason: "tool_use",
+        streamingToolUse: { name: "Agent", input: spawn },
+      };
+      const child = await send(
+        "a1",
+        [{ role: "user", content: String(rootCall.input.prompt) }],
+        true,
+      );
+      expect(child.statusCode, child.body).toBe(200);
+      const childCall = noticeFrom(child.body, true);
+      options = { includeToolUse: false, streamStopReason: "end_turn" };
       events.length = 0;
       const first = await send("g1", [
-        { role: "user", content: `${spawnPrompt}\n\n${marker}` },
+        { role: "user", content: String(childCall.input.prompt) },
       ]);
       expect(first.statusCode, first.body).toBe(200);
       expect(events).toContainEqual(
@@ -9899,7 +10173,7 @@ describe("OpenAPPA on the existing LLM proxy", () => {
       };
       events.length = 0;
       const maintenance = await send("g1", [
-        { role: "assistant", content: `${footer}\n\nPrior child context` },
+        { role: "assistant", content: text },
         {
           role: "user",
           content:
@@ -10515,7 +10789,10 @@ describe("OpenAPPA on the existing LLM proxy", () => {
         omitSession: true,
         deferred: false,
       });
-      expectStillGoverned(governed);
+      expect(governed.statusCode, governed.body).toBe(400);
+      expect(governed.body).toContain(
+        "OpenAPPA requires valid X-Appa-Session-ID and optional X-Appa-Parent-ID headers",
+      );
     });
 
     test("tampered, cross-key, cross-proxy, and cross-org tokens do not bypass APPA", async () => {
@@ -10821,8 +11098,10 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   let providerCalls: number;
   let providerBodies: unknown[];
   let unregisterAppaPlugin: () => void;
+  let clientWrites: MockInstance[] | undefined;
 
   beforeEach(async ({ makeAgent, makeMember, makeUser }) => {
+    clientWrites = undefined;
     config.openappa = parseOpenAppaConfig("true");
     await GuardrailsDeploymentModel.setEnabled(true);
     config.llmProxy.plugins = parseLlmProxyPlugins(
@@ -10849,6 +11128,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         },
       }),
     );
+    app.addHook("onRequest", async (_request, reply) => {
+      clientWrites?.push(vi.spyOn(reply.raw, "write"));
+    });
     await app.register(openAiProxyRoutes);
     agent = await makeAgent({ name: "Native proxy OpenAI test" });
     userId = (await makeUser()).id;
@@ -10860,25 +11142,6 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
-      if (event.event === "session_start") {
-        const runtimeSessionId = String(event.session_id);
-        await db
-          .insert(database.schema.openappaSessionsTable)
-          .values({
-            actor: openappaActor(runtimeSessionId),
-            root: openappaActor(runtimeSessionId),
-            organizationId: String(event.organization_id),
-            callerId:
-              typeof event.caller_id === "string" ? event.caller_id : null,
-            sessionId: runtimeSessionId,
-            parentId:
-              typeof event.parent_id === "string" ? event.parent_id : null,
-            forkedFrom:
-              typeof event.fork_of === "string" ? event.fork_of : null,
-            startDecision: { decision: "ack" },
-          })
-          .onConflictDoNothing();
-      }
       if (event.event === "tool_call")
         return JSON.stringify({
           decision: "allow_call",
@@ -10981,6 +11244,342 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     originator: "codex_cli_rs",
   });
 
+  test.each([
+    { receipt: true, failure: "none" },
+    { receipt: true, failure: "persistence" },
+    { receipt: true, failure: "interruption" },
+    { receipt: true, failure: "truncation" },
+    { receipt: false, failure: "none" },
+    { receipt: false, failure: "persistence" },
+  ] as const)("gates Responses receipt text and completion on inverse commit (receipt=$receipt, failure=$failure)", async ({
+    receipt,
+    failure,
+  }) => {
+    config.openappa.offerSigningSecret = receipt
+      ? "test-context-secret-with-32-characters"
+      : "";
+    const writes: MockInstance[] = [];
+    clientWrites = writes;
+    const completedOutput = [
+      {
+        id: "msg_release_order",
+        type: "message",
+        role: "assistant",
+        status: "completed",
+        content: [
+          {
+            type: "output_text",
+            text: "provider-answer",
+            annotations: [],
+          },
+        ],
+      },
+    ];
+    const written = () =>
+      writes
+        .flatMap((write) => write.mock.calls.map(([data]) => String(data)))
+        .join("");
+    const openReplay = vi.spyOn(AppaRewriteReplay, "open");
+    const executeStream = vi.spyOn(
+      openAiResponsesAdapterFactory,
+      "executeStream",
+    );
+    const capture = AppaRewriteReplay.prototype.captureResponse;
+    let providerSnapshot: unknown;
+    // The real capture returns replay metadata, not the original snapshot.
+    const captureResponse = vi
+      .spyOn(AppaRewriteReplay.prototype, "captureResponse")
+      .mockImplementation(function (this: AppaRewriteReplay, original) {
+        providerSnapshot = structuredClone(original);
+        return capture.call(this, original);
+      });
+    const record = AppaRewriteReplay.prototype.recordResponse;
+    let providerReached = false;
+    let textYielded = false;
+    let terminalYielded = false;
+    let recordReached = false;
+    let failureInjected = false;
+    let committed = false;
+    let recorded:
+      | Parameters<AppaRewriteReplay["recordResponse"]>[0]
+      | undefined;
+    let writesBeforeTerminal: string | undefined;
+    let writesBeforeRecord: string | undefined;
+    let writesBeforeRelease: string | undefined;
+    vi.spyOn(AppaRewriteReplay.prototype, "recordResponse").mockImplementation(
+      async function (this: AppaRewriteReplay, params) {
+        recordReached = true;
+        recorded = params;
+        writesBeforeRecord = written();
+        if (failure === "persistence") {
+          failureInjected = true;
+          throw new Error("Injected inverse persistence failure");
+        }
+        await record.call(this, params);
+        writesBeforeRelease = written();
+        committed = true;
+      },
+    );
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue({
+      responses: {
+        create: async () => ({
+          async *[Symbol.asyncIterator]() {
+            providerReached = true;
+            const response = {
+              id: "resp_release_order",
+              object: "response",
+              model: "gpt-5.5",
+              status: "in_progress",
+              output: [],
+            };
+            yield {
+              type: "response.created",
+              sequence_number: 0,
+              response,
+            };
+            yield {
+              type: "response.output_item.added",
+              sequence_number: 1,
+              output_index: 0,
+              item: {
+                id: "msg_release_order",
+                type: "message",
+                role: "assistant",
+                content: [],
+              },
+            };
+            textYielded = true;
+            yield {
+              type: "response.output_text.delta",
+              sequence_number: 2,
+              item_id: "msg_release_order",
+              output_index: 0,
+              content_index: 0,
+              delta: "provider-answer",
+              logprobs: [],
+            };
+            // This runs while upstream is still producing the turn, before
+            // persistence. Only unchanged text may already be on the wire.
+            writesBeforeTerminal = written();
+            if (failure === "interruption") {
+              failureInjected = true;
+              throw new Error("Injected upstream interruption");
+            }
+            if (failure === "truncation") {
+              failureInjected = true;
+              return;
+            }
+            terminalYielded = true;
+            yield {
+              type: "response.completed",
+              sequence_number: 3,
+              response: {
+                ...response,
+                status: "completed",
+                output: completedOutput,
+                usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+              },
+            };
+          },
+        }),
+      },
+    } as never);
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+      }),
+    });
+    expect(providerReached, response.body).toBe(true);
+    expect(textYielded, response.body).toBe(true);
+    expect(executeStream).toHaveBeenCalledTimes(1);
+    expect(openReplay).toHaveBeenCalledTimes(1);
+    expect(terminalYielded, response.body).toBe(
+      failure !== "interruption" && failure !== "truncation",
+    );
+    expect(recordReached, response.body).toBe(terminalYielded);
+    expect(failureInjected, response.body).toBe(failure !== "none");
+    expect(writesBeforeTerminal).not.toContain("protected session");
+    if (receipt) expect(writesBeforeTerminal).not.toContain("provider-answer");
+    else expect(writesBeforeTerminal).toContain("provider-answer");
+    if (terminalYielded) {
+      expect(captureResponse).toHaveBeenCalledTimes(1);
+      expect(providerSnapshot).toEqual({
+        id: "resp_release_order",
+        output: completedOutput,
+      });
+      expect(recorded?.source).toEqual(captureResponse.mock.results[0].value);
+      expect(recorded?.source.identity).toBe(
+        createHash("sha256")
+          .update(JSON.stringify(providerSnapshot))
+          .digest("hex"),
+      );
+      expect(recorded?.source.texts).toEqual(["provider-answer"]);
+      expect(recorded?.source.calls.size).toBe(0);
+      expect(recorded?.response).toEqual({
+        id: "resp_release_order",
+        output: [
+          {
+            ...completedOutput[0],
+            content: [
+              {
+                ...completedOutput[0].content[0],
+                text: receipt
+                  ? expect.stringContaining("protected session")
+                  : "provider-answer",
+              },
+            ],
+          },
+        ],
+      });
+      expect(writesBeforeRecord).not.toContain("response.completed");
+      expect(writesBeforeRecord).not.toContain("[DONE]");
+      if (receipt) {
+        expect(writesBeforeRecord).not.toContain("provider-answer");
+        expect(writesBeforeRecord).not.toContain("protected session");
+      }
+    } else {
+      expect(captureResponse).not.toHaveBeenCalled();
+    }
+    if (failure === "none") {
+      expect(response.statusCode, response.body).toBe(200);
+      expect(committed, response.body).toBe(true);
+      expect(writesBeforeRelease).not.toContain("response.completed");
+      expect(writesBeforeRelease).not.toContain("[DONE]");
+      if (receipt) {
+        expect(writesBeforeRelease).not.toContain("provider-answer");
+        expect(writesBeforeRelease).not.toContain("protected session");
+      }
+      expect(response.body).toContain("provider-answer");
+      expect(response.body).toContain("response.completed");
+      expect(response.body).toContain("[DONE]");
+      if (receipt) expect(response.body).toContain("protected session");
+      const terminal = response.body
+        .split("\n")
+        .filter(
+          (line) =>
+            line.startsWith("data: {") && line.includes("response.completed"),
+        )
+        .map((line) => JSON.parse(line.slice(6)))[0];
+      expect(recorded?.response).toEqual({
+        id: terminal.response.id,
+        output: terminal.response.output,
+      });
+    } else {
+      expect(committed).toBe(false);
+      expect(response.body).not.toContain("response.completed");
+      expect(response.body).not.toContain("[DONE]");
+      expect(response.body).not.toContain("protected session");
+      if (receipt) expect(response.body).not.toContain("provider-answer");
+      expect(response.body).toContain("error");
+    }
+  });
+
+  test.each([
+    false,
+    true,
+  ])("keeps tool-less Responses unmodified without a receipt (compaction=%s)", async (compaction) => {
+    config.openappa.offerSigningSecret =
+      "test-context-secret-with-32-characters";
+    const openReplay = vi.spyOn(AppaRewriteReplay, "open");
+    const recordResponse = vi.spyOn(
+      AppaRewriteReplay.prototype,
+      "recordResponse",
+    );
+    const executeStream = vi.spyOn(
+      openAiResponsesAdapterFactory,
+      "executeStream",
+    );
+    const item = {
+      id: "msg_no_tools",
+      type: "message",
+      role: "assistant",
+      status: "in_progress",
+      content: [],
+    };
+    const client = {
+      responses: {
+        create: async (_params: unknown) => ({
+          async *[Symbol.asyncIterator]() {
+            yield {
+              type: "response.created",
+              response: { id: "resp_no_tools", output: [] },
+            };
+            yield {
+              type: "response.output_item.added",
+              output_index: 0,
+              item,
+            };
+            yield {
+              type: "response.output_text.delta",
+              item_id: item.id,
+              output_index: 0,
+              content_index: 0,
+              delta: "plain no tools",
+            };
+            yield {
+              type: "response.completed",
+              response: {
+                id: "resp_no_tools",
+                output: [
+                  {
+                    ...item,
+                    status: "completed",
+                    content: [
+                      {
+                        type: "output_text",
+                        text: "plain no tools",
+                        annotations: [],
+                      },
+                    ],
+                  },
+                ],
+                usage: { input_tokens: 10, output_tokens: 5 },
+              },
+            };
+          },
+        }),
+      },
+    };
+    const create = vi.spyOn(client.responses, "create");
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockReturnValue(
+      client as never,
+    );
+    const request = {
+      ...codexPayload({
+        session_id: CODEX_SESSION,
+        thread_id: CODEX_THREAD,
+        ...(compaction ? { request_kind: "compaction" } : {}),
+      }),
+      tools: [],
+    };
+    const response = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: request,
+    });
+    expect(openReplay).not.toHaveBeenCalled();
+    expect(recordResponse).not.toHaveBeenCalled();
+    expect(response.body).not.toContain("protected session");
+    expect(response.statusCode, response.body).toBe(200);
+    expect(executeStream).toHaveBeenCalledTimes(1);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0][0]).toMatchObject({
+      stream: true,
+      input: request.input,
+      tools: [],
+    });
+    expect(response.body).toContain("plain no tools");
+    expect(response.body).toContain("response.completed");
+    expect(response.body).toContain("[DONE]");
+  });
+
   const openCodePayload = () => ({
     model: "gpt-4.1",
     messages: [{ role: "user", content: "Check the weather" }],
@@ -11026,13 +11625,14 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     ["blocked", true],
   ])("serves a proxy-only OpenCode client when a tool is %s", async (_label, blocked) => {
     const dispatch = native.dispatchHook.getMockImplementation();
+    if (!dispatch) throw new Error("missing native mock");
     native.dispatchHook.mockImplementation(async (raw: string) => {
       if (blocked && JSON.parse(raw).event === "tool_call")
         return JSON.stringify({
           decision: "deny_call",
           feedback: "[appa] This tool is blocked by policy",
         });
-      return dispatch?.(raw);
+      return dispatch(raw);
     });
     vi.spyOn(openaiAdapterFactory, "createClient").mockImplementation(() => {
       const client = createOpenAiTestClient({
@@ -11185,8 +11785,9 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
     );
 
     const defaultDispatch = native.dispatchHook.getMockImplementation();
+    if (!defaultDispatch) throw new Error("missing native mock");
     native.dispatchHook.mockImplementation(async (raw: string) => {
-      const decision = await defaultDispatch?.(raw);
+      const decision = await defaultDispatch(raw);
       if (JSON.parse(raw).event === "tool_call" && JSON.parse(raw).spawn)
         return JSON.stringify({ decision: "allow_call" });
       return decision;
@@ -11920,68 +12521,176 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
   });
 
   test("an out-of-band compaction whose history carries no trajectory stamp binds its own root and still restores notices", async () => {
-    // A notice's session field is unsigned lineage evidence: a summarizer
-    // that compresses thread A's denied history under a new thread id, with
-    // no stamp the proxy signed for this caller, must not attach to A's root
-    // on that claim alone. It still restores the notices, so the provider
-    // sees the original call and the ruling, never the envelope.
-    const noticeArguments = buildNoticeArguments({
-      id: "call_1",
-      tool: "shell",
-      arguments: { command: "rm -rf build" },
-      result: "[appa] Blocked: this call cannot run yet.",
-    });
-    const payload = {
-      ...codexPayload({
-        session_id: CODEX_RESUMED_SESSION,
-        thread_id: CODEX_FORK_THREAD,
-        request_kind: "compaction",
-      }),
-      input: [
-        { role: "user", content: "clean the build dir" },
-        {
-          type: "function_call",
-          id: "fc_1",
-          call_id: "call_1",
-          name: "archestra__get_remedy_plans",
-          status: "completed",
-          arguments: JSON.stringify({
-            ...noticeArguments,
-            notice: { ...noticeArguments.notice, session: CODEX_THREAD },
-          }),
-        },
-        {
-          type: "function_call_output",
-          call_id: "call_1",
-          output: "client text",
-        },
-      ],
+    const denied = {
+      type: "function_call",
+      id: "fc_shell",
+      call_id: "call_shell",
+      name: "shell",
+      arguments: JSON.stringify({ command: "rm -rf build" }),
+      status: "completed",
     };
-
-    const response = await app.inject({
+    native.dispatchHook.mockImplementation(async (raw: string) => {
+      const event = JSON.parse(raw);
+      events.push(event);
+      if (event.event === "tool_call")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] Blocked: this call cannot run yet.",
+        });
+      if (event.event === "tool_result")
+        return JSON.stringify({
+          decision: "deny_call",
+          feedback: "[appa] Blocked: this call cannot run yet.",
+          approved_output: "[appa] Blocked: this call cannot run yet.",
+          output_source: "runtime",
+        });
+      return JSON.stringify({ decision: "ack" });
+    });
+    let providerTurn = 0;
+    vi.spyOn(openAiResponsesAdapterFactory, "createClient").mockImplementation(
+      () =>
+        ({
+          responses: {
+            create: async (params: unknown) => {
+              providerTurn += 1;
+              providerBodies.push(structuredClone(params));
+              const summary = providerTurn > 1;
+              return {
+                id: summary ? "resp_compaction" : "resp_denied_shell",
+                object: "response",
+                created_at: 1,
+                status: "completed",
+                model: "gpt-5.5",
+                output: summary
+                  ? [
+                      {
+                        type: "message",
+                        role: "assistant",
+                        status: "completed",
+                        content: [
+                          {
+                            type: "output_text",
+                            text: "Condensed the blocked shell call.",
+                          },
+                        ],
+                      },
+                    ]
+                  : [denied],
+                usage: { input_tokens: 3, output_tokens: 2, total_tokens: 5 },
+              };
+            },
+          },
+        }) as never,
+    );
+    const first = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: codexHeaders(),
+      payload: {
+        ...codexPayload({ session_id: CODEX_SESSION, thread_id: CODEX_THREAD }),
+        stream: false,
+        tools: [
+          ...codexPayload({}).tools,
+          {
+            type: "function",
+            name: "shell",
+            parameters: { type: "object", properties: {} },
+          },
+        ],
+      } as Record<string, unknown>,
+    });
+    expect(first.statusCode, first.body).toBe(200);
+    const notice = first
+      .json()
+      .output.find((item: { type?: string }) => item.type === "function_call");
+    expect(notice.name).toBe("archestra__get_remedy_plans");
+    providerBodies.length = 0;
+    events.length = 0;
+    const retained = await app.inject({
       method: "POST",
       url: `/v1/openai/${agent.id}/responses`,
       remoteAddress: "127.0.0.1",
       headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
-      payload: payload as Record<string, unknown>,
+      payload: {
+        ...codexPayload({
+          session_id: CODEX_SESSION,
+          thread_id: CODEX_THREAD,
+          request_kind: "compaction",
+        }),
+        stream: false,
+        input: [
+          { role: "user", content: "clean the build dir" },
+          notice,
+          {
+            type: "function_call_output",
+            call_id: notice.call_id,
+            output: "client text",
+          },
+        ],
+      } as Record<string, unknown>,
     });
-
-    expect(response.statusCode, response.body).toBe(200);
+    expect(retained.statusCode, retained.body).toBe(200);
     expect(events).toContainEqual(
       expect.objectContaining({
-        session_id: `user:${userId}|${CODEX_FORK_THREAD}`,
+        session_id: `user:${userId}|${CODEX_THREAD}`,
       }),
     );
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ fork_of: expect.anything() }),
+    );
+    const retainedSent = JSON.stringify(providerBodies);
+    expect(retainedSent).toContain('"name":"shell"');
+    expect(retainedSent).toContain("Blocked: this call cannot run yet.");
+    expect(retainedSent).not.toContain("client text");
+    expect(retainedSent).not.toContain("archestra__get_remedy_plans");
+
+    providerBodies.length = 0;
+    events.length = 0;
+    const unsigned = await app.inject({
+      method: "POST",
+      url: `/v1/openai/${agent.id}/responses`,
+      remoteAddress: "127.0.0.1",
+      headers: { ...codexHeaders(), "x-openai-subagent": "compact" },
+      payload: {
+        ...codexPayload({
+          session_id: CODEX_RESUMED_SESSION,
+          thread_id: CODEX_FORK_THREAD,
+          request_kind: "compaction",
+        }),
+        stream: false,
+        input: [
+          { role: "user", content: "clean the build dir" },
+          {
+            ...notice,
+            call_id: "call_1",
+            arguments: JSON.stringify({
+              ...JSON.parse(notice.arguments),
+              notice: {
+                ...(JSON.parse(notice.arguments).notice ?? {}),
+                session: CODEX_THREAD,
+              },
+            }),
+          },
+          {
+            type: "function_call_output",
+            call_id: "call_1",
+            output: "client text",
+          },
+        ],
+      } as Record<string, unknown>,
+    });
+    expect(unsigned.statusCode, unsigned.body).toBe(409);
+    expect(unsigned.body).toContain("cannot verify exact replay");
+    expect(providerBodies).toHaveLength(0);
     expect(events).not.toContainEqual(
       expect.objectContaining({
         session_id: `user:${userId}|${CODEX_THREAD}`,
       }),
     );
-    const sent = JSON.stringify(providerBodies);
-    expect(sent).toContain('"name":"shell"');
-    expect(sent).toContain("APPROVED REPLACEMENT");
-    expect(sent).not.toContain("client text");
-    expect(sent).not.toContain("archestra__get_remedy_plans");
+    expect(events).not.toContainEqual(
+      expect.objectContaining({ fork_of: expect.anything() }),
+    );
   });
 
   test.each([
@@ -12110,7 +12819,7 @@ describe("OpenAPPA client trajectory binding on the OpenAI families", () => {
         stream: false,
         input: [
           { role: "user", content: "Check the weather" },
-          { ...call, call_id: given.call_id },
+          given,
           {
             type: "function_call_output",
             call_id: given.call_id,
@@ -12409,25 +13118,6 @@ describe("OpenAPPA parallel call matrix on the OpenAI families", () => {
     native.dispatchHook.mockImplementation(async (raw: string) => {
       const event = JSON.parse(raw);
       events.push(event);
-      if (event.event === "session_start") {
-        const runtimeSessionId = String(event.session_id);
-        await db
-          .insert(database.schema.openappaSessionsTable)
-          .values({
-            actor: openappaActor(runtimeSessionId),
-            root: openappaActor(runtimeSessionId),
-            organizationId: String(event.organization_id),
-            callerId:
-              typeof event.caller_id === "string" ? event.caller_id : null,
-            sessionId: runtimeSessionId,
-            parentId:
-              typeof event.parent_id === "string" ? event.parent_id : null,
-            forkedFrom:
-              typeof event.fork_of === "string" ? event.fork_of : null,
-            startDecision: { decision: "ack" },
-          })
-          .onConflictDoNothing();
-      }
       if (event.event === "tool_call")
         return JSON.stringify(
           denyTools.has(String(event.tool))

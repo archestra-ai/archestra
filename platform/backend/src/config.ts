@@ -2034,6 +2034,7 @@ export function parseOpenAppaConfig(
   offerSigningSecret?: string,
   postgresMaxConnections?: string,
   authSecret?: string,
+  rewrite?: OpenAppaRewriteSettings,
 ) {
   const dedicated = offerSigningSecret ?? "";
   if (
@@ -2060,6 +2061,7 @@ export function parseOpenAppaConfig(
     postgresMaxConnections: parseOpenAppaPostgresMaxConnections(
       postgresMaxConnections,
     ),
+    rewrite: parseOpenAppaRewriteLimits(rewrite),
   };
 }
 
@@ -2080,6 +2082,83 @@ function parseOpenAppaPostgresMaxConnections(envValue?: string): number {
     defaultValue: DEFAULT_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
     maxValue: MAX_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
   });
+}
+
+const OPENAPPA_REWRITE_HOUR_MS = 3_600_000;
+const DEFAULT_OPENAPPA_REWRITE_IDLE_TTL_HOURS = 24;
+const MIN_OPENAPPA_REWRITE_IDLE_TTL_HOURS = 1;
+const MAX_OPENAPPA_REWRITE_IDLE_TTL_HOURS = 168;
+const DEFAULT_OPENAPPA_REWRITE_MAX_ENTRIES = 4096;
+const MAX_OPENAPPA_REWRITE_MAX_ENTRIES = 65_536;
+const DEFAULT_OPENAPPA_REWRITE_MAX_BYTES = 16 * 1024 * 1024;
+const MAX_OPENAPPA_REWRITE_MAX_BYTES = 256 * 1024 * 1024;
+
+type OpenAppaRewriteSettings = {
+  idleTtlHours?: string;
+  maxEntries?: string;
+  maxBytes?: string;
+};
+
+/**
+ * Stable-replay bounds. Unset uses the defaults. A malformed value fails boot
+ * instead of becoming unlimited. There is no switch to turn replay off.
+ *
+ * @public — exported for testability
+ */
+export function parseOpenAppaRewriteLimits(
+  settings?: OpenAppaRewriteSettings,
+): { idleTtlMs: number; maxEntries: number; maxBytes: number } {
+  const idleTtlHours = parseStrictBoundedInteger({
+    raw: settings?.idleTtlHours,
+    envName: "ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS",
+    defaultValue: DEFAULT_OPENAPPA_REWRITE_IDLE_TTL_HOURS,
+    min: MIN_OPENAPPA_REWRITE_IDLE_TTL_HOURS,
+    max: MAX_OPENAPPA_REWRITE_IDLE_TTL_HOURS,
+  });
+  return {
+    idleTtlMs: idleTtlHours * OPENAPPA_REWRITE_HOUR_MS,
+    maxEntries: parseStrictBoundedInteger({
+      raw: settings?.maxEntries,
+      envName: "ARCHESTRA_OPENAPPA_REWRITE_MAX_ENTRIES",
+      defaultValue: DEFAULT_OPENAPPA_REWRITE_MAX_ENTRIES,
+      min: 1,
+      max: MAX_OPENAPPA_REWRITE_MAX_ENTRIES,
+    }),
+    maxBytes: parseStrictBoundedInteger({
+      raw: settings?.maxBytes,
+      envName: "ARCHESTRA_OPENAPPA_REWRITE_MAX_BYTES",
+      defaultValue: DEFAULT_OPENAPPA_REWRITE_MAX_BYTES,
+      min: 1,
+      max: MAX_OPENAPPA_REWRITE_MAX_BYTES,
+    }),
+  };
+}
+
+function parseStrictBoundedInteger(params: {
+  raw: string | undefined;
+  envName: string;
+  defaultValue: number;
+  min: number;
+  max: number;
+}): number {
+  const trimmed = params.raw?.trim() ?? "";
+  if (trimmed.length === 0) return params.defaultValue;
+  const parsed = Number(trimmed);
+  if (!/^[0-9]+$/.test(trimmed) || String(parsed) !== trimmed) {
+    throw new Error(
+      `${params.envName} must be a positive decimal integer, got "${trimmed}"`,
+    );
+  }
+  if (
+    !Number.isSafeInteger(parsed) ||
+    parsed < params.min ||
+    parsed > params.max
+  ) {
+    throw new Error(
+      `${params.envName} must be an integer from ${params.min} to ${params.max}, got "${trimmed}"`,
+    );
+  }
+  return parsed;
 }
 
 /**
@@ -2279,6 +2358,11 @@ const openappa = parseOpenAppaConfig(
   process.env.ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET,
   process.env.ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS,
   authSessionSecret,
+  {
+    idleTtlHours: process.env.ARCHESTRA_OPENAPPA_REWRITE_IDLE_TTL_HOURS,
+    maxEntries: process.env.ARCHESTRA_OPENAPPA_REWRITE_MAX_ENTRIES,
+    maxBytes: process.env.ARCHESTRA_OPENAPPA_REWRITE_MAX_BYTES,
+  },
 );
 const llmProxyPlugins = parseLlmProxyPlugins(
   process.env.ARCHESTRA_LLM_PROXY_PLUGINS,

@@ -11,10 +11,15 @@ import {
   getHitlAskUserArguments,
   hitlRulingFromLabels,
   recordHitlRuling,
+  stageLoadedHitlReview,
 } from "@/openappa/hitl-review";
 import { OfferJwsSchema, verifyOfferClaims } from "@/openappa/offer-claims";
 import { awaitRuntimeHitlReview } from "@/openappa/runtime-hitl-review";
-import { chatOpenAppaSession, type OpenAppaSession } from "@/openappa/service";
+import {
+  chatOpenAppaSession,
+  loadOfferReview,
+  type OpenAppaSession,
+} from "@/openappa/service";
 import {
   authenticatedRuntimeSpender,
   parseWorkloadPrincipal,
@@ -131,6 +136,9 @@ const NO_VIEWER_MESSAGE =
 const HITL_NO_VIEWER_MESSAGE =
   "This client cannot show the HITL review. Keep the tool call blocked. Do not ask for approval in plain text and do not retry it.";
 
+const HITL_REVIEW_UNUSABLE_MESSAGE =
+  "The approval review cannot be shown. Keep the tool call blocked. Do not ask for approval in plain text and do not retry it.";
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_TODO_WRITE_SHORT_NAME,
@@ -178,12 +186,6 @@ const registry = defineArchestraTools([
       );
       const liveOffers = verifiedOffers?.ids ?? [];
       const session = verifiedOffers?.session;
-      const hitlArgs = session
-        ? await getHitlAskUserArguments({
-            session,
-            offerIds: liveOffers,
-          })
-        : undefined;
       if (session && liveOffers.length === 1) {
         const ruling = await awaitRuntimeHitlReview({
           session,
@@ -217,6 +219,15 @@ const registry = defineArchestraTools([
               : "The authenticated run reviewer denied this offer. The original call remains blocked.",
           );
         }
+      }
+      const hitlArgs = await hitlArgumentsForOffers({ session, liveOffers });
+      if (hitlArgs === "unusable") {
+        return errorResult(HITL_REVIEW_UNUSABLE_MESSAGE);
+      }
+      if (hitlArgs && parseWorkloadPrincipal(session?.caller_id)) {
+        return errorResult(
+          "This runtime has no eligible human reviewer. Keep the call blocked; a native form or a plain-text answer cannot approve it.",
+        );
       }
       // A staged HITL review owns its copy and fixed choices. The model can
       // route the offer to ask_user, but it cannot soften or replace the review.
@@ -362,8 +373,35 @@ function optionKey(index: number) {
   return `option_${index}`;
 }
 
+async function hitlArgumentsForOffers(params: {
+  session: OpenAppaSession | undefined;
+  liveOffers: string[];
+}) {
+  const { session, liveOffers } = params;
+  if (!session) return undefined;
+  const staged = await getHitlAskUserArguments({
+    session,
+    offerIds: liveOffers,
+  });
+  if (staged || liveOffers.length !== 1) return staged;
+  const loaded = await loadOfferReview({
+    organizationId: session.organization_id,
+    sessionId: session.session_id,
+    offerId: liveOffers[0],
+  });
+  if (loaded?.offer_id !== liveOffers[0]) return undefined;
+  const stored = await stageLoadedHitlReview({ session, review: loaded });
+  if (stored === "unusable") return "unusable" as const;
+  return (
+    (await getHitlAskUserArguments({
+      session,
+      offerIds: liveOffers,
+    })) ?? ("unusable" as const)
+  );
+}
+
 /**
- * Uses the offer's signed child scope to locate the staged review. Gateway
+ * Uses the offer's signed scope to locate the staged review. Gateway
  * calls may have only the parent's session header, or no session header at all.
  */
 async function verifiedRemedyOffers(
@@ -390,7 +428,8 @@ async function verifiedRemedyOffers(
   for (const envelope of envelopes) {
     const claims = verifyOfferClaims(envelope, secret);
     if (!claims || claims.organization_id !== context.organizationId) continue;
-    if (!offerOwnerIsSpender(claims.caller_id, spender)) continue;
+    const owner = claims.caller_id;
+    if (!owner || !offerOwnerIsSpender(owner, spender)) continue;
     if (gatewayId) {
       if (
         claims.session_id !== gatewayId &&
@@ -401,28 +440,24 @@ async function verifiedRemedyOffers(
         const recorded = await OpenAppaSessionModel.familySession({
           organizationId: context.organizationId,
           sessionId: claims.session_id,
-          callerId: spender,
+          callerId: owner,
         });
         if (
           recorded?.parentId !== claims.parent_id ||
           !(await OpenAppaSessionModel.hasAncestor({
             organizationId: context.organizationId,
-            callerId: spender,
+            callerId: owner,
             sessionId: claims.session_id,
             ancestorSessionId: normalizedGatewayId ?? gatewayId,
           }))
         )
           continue;
       }
-    } else if (!claims.parent_id || claims.caller_id !== spender) {
-      // Without a gateway session header, only this user's child offers can
-      // supply the missing session scope.
-      continue;
     }
     const scope: OpenAppaSession = {
       organization_id: claims.organization_id,
       session_id: claims.session_id,
-      caller_id: claims.caller_id ?? undefined,
+      caller_id: owner,
       parent_id: claims.parent_id ?? undefined,
     };
     if (
@@ -471,13 +506,14 @@ function offerOwnerIsSpender(owner: string | null, spender: string): boolean {
   if (!owner) {
     return false;
   }
+  if (parseWorkloadPrincipal(spender)) return owner === spender;
   if (owner.startsWith("user:")) {
     return owner.length > "user:".length && owner === spender;
   }
-  if (parseWorkloadPrincipal(owner)) {
-    return owner === spender;
+  if (owner.startsWith("agent-workspace:")) {
+    return parseWorkloadPrincipal(owner) !== null && owner === spender;
   }
-  return !owner.startsWith("app:") && !owner.startsWith("virtual-key:");
+  return owner !== "app:" && owner !== "virtual-key:";
 }
 
 function buildMultiChoiceSchema(

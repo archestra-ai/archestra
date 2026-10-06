@@ -2,13 +2,13 @@
 
 OpenAPPA evaluates tool calls and tool results at the LLM proxy. The proxy identifies sessions from client headers or an explicit `X-Appa-Session-ID`. External client sessions scope to the authenticated credential (`user:<id>`, `app:<id>`, or `virtual-key:<id>`). This prevents callers from guessing another user's session ID. Two MCP tools manage policy remedies: `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`.
 
-The runtime keys session state by session ID. Internal requests over loopback share session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback forms the platform trust boundary. Requests without a session ID fall back to a shared identity per credential and agent (`<caller-id>@<agent-id>`), which couples their histories and turn approvals.
+The runtime keys state by session ID and verified caller identity. Chat verifies conversation ownership. Agent Runtime requests bind to the authenticated workspace and stored parent. Requests without a resumable client identity use a request-local session, not a shared fallback.
 
-This guide explains Archestra's integration rather than OpenAPPA policy syntax. The source baseline is Archestra `3aa876d1`, with [OpenAPPA pinned at `c7c1e1ef`](https://github.com/archestra-ai/OpenAPPA/tree/c7c1e1ef36aa07604b421c48be266d7397557656). Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
+This guide explains Archestra's integration rather than OpenAPPA policy syntax. Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
 
 Protocol jump links: [call rewriting](#tool-calls-and-results), [remedy execution](#remedies), [user questions](#ask_user-and-native-elicitation), [session and child markers](#protected-session-markers), and [yell reporting](#yell-and-diagnostic-tools).
 
-The baseline records the version examined, not a promise about later releases. Check [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml) for the current OpenAPPA pin. Review this guide when that pin or the host protocols change.
+Check [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml) for the current OpenAPPA pin. Review this guide when that pin or the host protocols change.
 
 ```mermaid
 flowchart LR
@@ -16,6 +16,7 @@ flowchart LR
   Proxy <--> Provider[Model provider]
   Client <--> Gateway[MCP gateway and tool executors]
   Proxy <--> Host[TypeScript OpenAPPA service]
+  Proxy <--> Replay[(Encrypted provider replay)]
   Gateway --> Host
   Host <--> Native[NAPI addon and pinned Rust runtime]
   Native <--> Ledger[(PostgreSQL events and receipts)]
@@ -231,6 +232,8 @@ The `buildNoticeArguments` helper builds the client envelope below. It preserves
 | `notice` | `{v: 1, call_id, namespace?, custom?}`. Records how to restore the original call. |
 | `offers` | Signed routing claims for the offer IDs. The model does not author these. |
 
+On later requests, the proxy restores notices from immutable, encrypted replay fragments in PostgreSQL. Restoration returns the recorded provider-content bytes or fails closed. Missing, expired, or contradictory records are not reconstructed. The runtime withholds results for call IDs it never released.
+
 The following example shows a provider-neutral projection. Values in angle brackets represent illustrative data rather than real signatures:
 
 ```json
@@ -254,7 +257,9 @@ assistant: call_send -> mail__send({to: "reader@example.net", body: "report"})
 tool:      call_send -> <runtime feedback and offered plans>
 ```
 
-The proxy restores the original call using the embedded ruling, avoiding a database lookup. Restoration depends on declared tool identity and host metadata. The native runtime separately checks actual tool-result admission against released calls and retained records.
+The proxy restores the original call from retained byte pairs. Embedded routing claims do not reconstruct missing originals. The native runtime separately checks tool-result admission against released calls and retained records.
+
+Append-only requests retain earlier provider-content bytes and stable guidance anchors. Policy-required replacements use recorded splices; they do not relocate earlier content. This contract does not cover HTTP/SSE framing or provider cache eviction. When enforcement is off, a request needing protected-history inversion is rejected rather than approximately sanitized.
 
 If the client did not declare the notice tool, the proxy cannot deliver this protocol. It refuses the call, attempts to cancel sibling calls, and writes a client failure report. A missing notice tool does not authorize releasing the denied call.
 
@@ -264,19 +269,19 @@ Sources: [`notice.ts`](../platform/backend/src/openappa/notice.ts), [`request.ts
 
 ### Streaming boundary
 
-The intended streaming boundary holds tool calls until the stream completes. Stream adapters hold calls by omitting `sseData`. Parent text normally streams immediately. Child runs and marked client-compaction requests buffer responses up to 10 MiB (returning 413 on overflow). The compaction flag does not cover every internal chat compaction request.
+The streaming boundary holds governed tool calls until policy evaluation and inverse persistence complete. Stream adapters hold calls by omitting `sseData`. Unchanged parent text normally streams immediately. Child responses and known receipt or compaction rewrites buffer up to 10 MiB, returning 413 on overflow. Rewritten content and terminal completion wait for their retained inverse.
 
-On unbuffered streams, mixed text/tool chunks can release calls before policy validation. The handler identifies `gemini.ts`, `minimax.ts`, and `openai.ts` as affected adapters. Terminal frames on Responses can do the same. Audit your adapter before relying on pre-execution guarantees ([`llm-proxy-handler.ts`](../platform/backend/src/routes/proxy/llm-proxy-handler.ts#L2823-L2837)).
+Mixed text/tool chunks need the same release boundary. Audit provider adapters before claiming coverage outside the three restoring protocol families. Responses terminal frames remain held until inverse persistence succeeds. Executable Anthropic content inside `message_start` is refused before release.
 
 Provider-hosted tools (like server-side web search) run inside the model provider before Archestra receives the request. The proxy can modify or withhold their outputs, but cannot prevent their execution.
 
 ### What reaches the provider
 
-Provider cleanup removes host carriers before sending requests upstream. It runs even when enforcement is bypassed. On supported wire formats, the proxy restores notices, control calls, and gateway questions. It strips `notice`, `offers`, JWS fields, execution frames, and `remedy_offers` from tool calls and schemas. It also collects session and delegation carriers, restoring trajectory stamps to original provider IDs.
+With enforcement enabled, supported wire formats restore notices, control calls, and gateway questions from retained records. Host carriers, execution frames, and signed proofs remain outside provider content. Quoted transcripts are data, not live carriers. With enforcement off, a request that needs protected-history inversion is rejected. Unchanged requests can pass through.
 
 A call is rewritten when gateway identity resolves it to a platform tool, or when its envelope matches cleanup recognition rules (such as notice records naming their own call or deployment-signed JWS). A notice record is not a signature. Catch-all routes (`/v1/messages/count_tokens` and similar) recognize these carriers without normal gateway resolution. Cleanup recognition does not grant authorization to execute or admit a result.
 
-Restoration keeps prior turns stable, including protocols with signed reasoning history. However, it does not guarantee universal byte stability. Turn-specific question and remedy guidance still alters `system`. Test the relevant model provider when modifying this code.
+Restoration keeps committed prior content and guidance stable, including protocols with signed reasoning history. Missing retained records, unsupported versions, and altered echoes fail explicitly. This does not promise stable HTTP framing or provider cache eviction.
 
 Native questions use signed `aq1` IDs (`<prefix>_aq1_<nonce>_<tag>`). These IDs stay in conversation history so earlier turns maintain byte consistency.
 
@@ -317,7 +322,25 @@ The gateway maintains separate public and execution schemas. The model sees `off
 
 The JWS authenticates routing claims rather than every field in the outer JSON object. The gateway validates the frame and compares its parsed arguments with the submitted values. It removes the echoed `plan` field from native arguments, but keeps the submitted arguments for receipt matching. Native execution uses `offer_id` and structured options. A model-authored plan name does not constitute independent authorization.
 
-The logical call ID originates from the execution frame or `_meta["com.archestra/logicalToolCallId"]`. The MCP JSON-RPC ID is not a durable execution identity. With a logical ID, native execution is tracked. Without it, the host uses the untracked receipt path. Reusing an ID with altered arguments fails.
+Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. An offer-bound question can load and stage its authoritative review before executing a plan. The review discloses persistent trust and reader restrictions. Headerless gateways route verified offers under the authenticated owner's signed session. Approval in a parent session does not authorize a separate child offer.
+
+Pending review results have bounded, encrypted receipts; they grant no permission. Codex's numeric `Wall time`/`Output` frame is recognized only around exact retained receipt bytes. Changed bodies or extra text are refused. Client permission checks remain independent.
+
+### Client completion and compaction
+
+Claude children declaring `SubagentHandback` complete only through that tool, not a plain-text stop. Streaming preserves the admitted tool call. Current `agent-message` handbacks match the retained spawn and exact report, including unnamed async agents. Start and finish badges use the same spawn identity. Guidance does not force tool choice or disable thinking.
+
+Codex `collaboration.wait_agent` results cross only through the retained child-return record. Waiting still requires a declared policy rule. Quoted JSONL and numbered review transcripts are data, not live transport metadata; executable calls remain governed.
+
+Verified OpenCode children receive constant guidance against unrelated shell or file probes before MCP reads. Native **Hide tool details** changes only terminal presentation; stored arguments and results remain intact. Pending/error rows and assistant-text receipts remain subject to the stock renderer.
+
+Compaction preserves populated system messages and cache markers. Claude's empty mid-conversation `{role: "system", content: []}` holder is omitted through recorded projection. Required empty Responses fields, such as `additional_tools.tools: []`, remain present. Subsequent appended turns replay the same normalized prefix.
+
+Chat history reload uses each tool's live `toModelOutput` converter. UI-only metadata and `rawContent` do not replace previously admitted model content. Approval presentation removes the decorative question-mark column without changing the reviewed call or stored review.
+
+The logical call ID originates from the execution frame or `_meta["com.archestra/logicalToolCallId"]`. The MCP JSON-RPC ID is not a durable execution identity. A retained remedy outcome requires this logical ID. Missing identities and conflicting receipt reservations fail before review consumption or native execution.
+
+Reservations bind the authenticated spender, signed owner, exact request identity, encryption key, and storage allowance. Exact outcome bytes commit before release. This is not an atomic transaction with native grants: a crash or later storage failure can leave an approved native change without a proxy receipt. The request fails without exposing unretained bytes or re-executing the operation.
 
 Before forwarding history to the provider, the proxy strips the execution frame and restores `original_arguments`. The client must echo the tool call it received rather than reconstructing it from the public schema.
 
@@ -709,7 +732,6 @@ Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. Thi
 Receipt readers stream PostgreSQL rows and refuse histories exceeding 10,000 records or 8 MiB; they do not return partial authority. Runtime output lookups filter by child and task and request only the latest admitted operation.
 
 Runtime human reviews use the run page rather than native forms that may auto-decline. Shared-cache entries retain separate offers for ten minutes. Only the run's user owner can record a ruling for its exact signed session and offer. Native-form callers also atomically claim their pending stage; duplicate approvals cannot grant twice, while an unspent approval remains revocable by genuine denial. Exact review context remains readable for native continuation only while approval is unspent; it does not reopen the pending claim. `ask_user` waits without consuming approval; the remedy retry spends it. Denial, timeout, disconnection, or the absence of an eligible reviewer leaves the call blocked. Native delivered/returned values are bounded to 8 MiB, and model-facing crossing refusals omit internal diagnostics. Existing non-runtime elicitation is unchanged.
-
 ## Persistence and current limits
 
 The Rust binding stores event batches, policy snapshots, sessions, operations, and receipts in PostgreSQL.
@@ -721,6 +743,16 @@ Completed receipts return saved decisions without re-running the engine. Reusing
 The host acquires an in-process root lock before leasing a database connection. PostgreSQL advisory locks (`pg_advisory_lock`) serialize operations across instances. Root sessions run concurrently, while sibling sessions within a root run sequentially.
 
 The connection pool defaults to 4 connections (capped at 64). Calls wait up to 30 seconds for a connection. Connections enforce 30-second lock timeouts and 60-second statement timeouts. Pool exhaustion typically stems from slow external consults. Stale connections are replaced automatically. Modifying pool limits requires a backend restart.
+
+### Encrypted provider replay
+
+Provider projections and echo inverses use immutable encrypted fragments, not a transcript snapshot on every turn. Keys bind organization, session, protocol family, and operation. Mutable heads use compare-and-swap revisions. Independent initialization records make a missing committed head fail closed.
+
+Verified child and fork ancestry can read retained source-owned inverses. Each owner keeps its own head. Tree activity extends shared retention; terminal expiry prevents late requests from recreating the group. Cleanup deletes bounded payload batches without holding a request open.
+
+The ciphertext cache keeps fragment-level TTL and recency. Indexed reads load bounded batches and enforce the cache budget once per batch. Missing rows, corrupt ciphertext, conflicting immutable records, and incomplete ancestry fail explicitly.
+
+Idle retention defaults to 24 hours. A tree holds at most 4,096 records and 16 MiB by default. See the [deployment reference](pages/platform-deployment.md#openappa-tool-guardrails-experimental) for limits and encryption settings.
 
 OpenAPPA administration uses `openappaPolicy`, `openappaDiagnostics`, and `organizationSettings`. These are distinct resources in [`access-control.ts`](../platform/shared/access-control.ts). Legacy `toolPolicy` permissions still exist for other features, but do not authorize OpenAPPA administration. This guide does not prescribe a role migration.
 
@@ -746,7 +778,7 @@ There is no automated cleanup API for pending receipts. Do not delete pending ro
 
 ## Build and deployment
 
-The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` (`c7c1e1ef36aa07604b421c48be266d7397557656`) and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
+The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads the OpenAPPA commit pinned in `openappa-rs/Cargo.toml` and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
 
 | Setting | Default | Notes |
 | --- | --- | --- |

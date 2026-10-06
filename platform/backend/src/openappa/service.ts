@@ -26,11 +26,17 @@ import {
   expandCommandExecutionPolicyRules,
   normalizeCommandExecutionArguments,
 } from "@/openappa/command-normalization";
+import {
+  controlEchoMatches,
+  readControlReceipts,
+} from "@/openappa/control-outcome";
 import { openappaDeclarations } from "@/openappa/declarations";
 import { declareExistingInstalls } from "@/openappa/declare-installs";
 import { openappaFailure } from "@/openappa/failure";
+import type { AppaRewriteReplay } from "@/openappa/rewrite-replay";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
+import type { EncryptedChatAuditDisposition } from "@/routes/proxy/utils/encrypted-chat-session";
 import type { ToolNameCanonicalizer } from "@/routes/proxy/utils/gateway-tool-names";
 import {
   type GuardrailsV2Activation,
@@ -91,6 +97,17 @@ const NativeDecisionSchema = z
       spawn_binding: z.string().min(1).optional(),
     }),
     z.object({ decision: z.literal("pass_control") }),
+    z.object({
+      decision: z.literal("replay_completed_results"),
+      results: z
+        .array(
+          z.object({
+            tool_call_id: z.string().min(1).max(1024),
+            decision: z.unknown(),
+          }),
+        )
+        .max(256),
+    }),
     z.object({
       decision: z.literal("deny_call"),
       feedback: z.string(),
@@ -647,7 +664,14 @@ async function approveToolResult(params: {
     },
     params.policy,
   );
-  const content = extractApprovedOutput(decision, params.output);
+  return processedToolResult(decision, params.output);
+}
+
+function processedToolResult(
+  decision: NativeDecision,
+  fallbackOutput: string,
+): ProcessedToolResult {
+  const content = extractApprovedOutput(decision, fallbackOutput);
   const outputSource =
     ("output_source" in decision ? decision.output_source : undefined) ??
     ("reason" in decision && decision.reason ? "runtime" : "tool");
@@ -716,7 +740,50 @@ function truncated(text: string, limit: number): string {
 
 /** The runtime's code for a result that matches no released call. */
 const UNRELEASED_CALL_CODE = "unreleased_call";
+const UNRELEASED_CALL_TEXT =
+  "[appa] Tool output withheld: this result has no record of releasing a call.";
 const MAX_UNEXECUTED_RESULT_CHARS = 4000;
+const MAX_COMPLETED_RESULT_BATCH = 256;
+
+async function replayCompletedResults(params: {
+  session: OpenAppaSession;
+  toolCallIds: string[];
+  policy: DispatchPolicy;
+}): Promise<Map<string, NativeDecision>> {
+  try {
+    const replay = await dispatch(
+      params.session,
+      { event: "replay_completed_results", tool_call_ids: params.toolCallIds },
+      params.policy,
+    );
+    if (replay.decision !== "replay_completed_results") {
+      throw new Error("OpenAPPA returned an unexpected replay response");
+    }
+    const completed = new Map<string, NativeDecision>();
+    let position = 0;
+    for (const result of replay.results) {
+      // A sparse batch must still be an ordered subset of this exact request.
+      while (params.toolCallIds[position] !== result.tool_call_id) {
+        if (position >= params.toolCallIds.length) {
+          throw new Error("OpenAPPA returned an unrelated replay receipt");
+        }
+        position++;
+      }
+      position++;
+      const decision = NativeDecisionSchema.parse(result.decision);
+      if (
+        !isOutputDecision(decision) ||
+        decision.approved_output === undefined
+      ) {
+        throw new Error("OpenAPPA replay receipt lacks retained output");
+      }
+      completed.set(result.tool_call_id, decision);
+    }
+    return completed;
+  } catch (error) {
+    throw openappaFailure(error);
+  }
+}
 
 function isOutputDecision(
   decision: NativeDecision,
@@ -744,8 +811,8 @@ export async function processProxyResults(params: {
   controlToolName?: string;
   /**
    * Whether a result answers this request's own remedy call, and is not a
-   * pending review. When the runtime has no record of such a result, its
-   * remedy never ran, and the model reads what the client returned.
+   * pending review. Without a retained execution result, the echo cannot
+   * prove that its remedy ran.
    */
   isControlResult?: (result: CommonToolResult) => boolean;
   trustedChat?: boolean;
@@ -755,6 +822,10 @@ export async function processProxyResults(params: {
   classifySpawnResult?: (
     result: CommonToolResult,
   ) => "pending" | "failed" | undefined;
+  /** Already-opened rewrite facade for this request, when the proxy has one. */
+  replay?: AppaRewriteReplay;
+  /** Verified request key for reads before the main replay facade is opened. */
+  encryptedChat?: EncryptedChatAuditDisposition;
 }) {
   // The results dispatch one after another; one policy read serves them all.
   const policy = await effectivePolicy(params.session.organization_id);
@@ -763,14 +834,75 @@ export async function processProxyResults(params: {
     policy,
     deliverReturnContract: params.deliverReturnContract,
   });
+  const receipts = await readControlReceipts({
+    session: params.session,
+    toolCallIds: params.results.map((result) => result.id),
+    ...(params.replay ? { replay: params.replay } : {}),
+    encryptedChat: params.encryptedChat,
+  });
   const updates: Record<string, ProcessedToolResult> = {};
-  for (const result of params.results) {
+  let completed = new Map<string, NativeDecision>();
+  // Candidate IDs survive invalidation only as hints, never as release authority.
+  let completedCandidates = new Set<string>();
+  let batchEnd = 0;
+  for (const [index, result] of params.results.entries()) {
     if (params.trustedChat && isSeededAppRenderToolResult(result.content))
       continue;
     // The runtime released no question call, so it would withhold the answer.
     if (params.isUserQuestion?.(result) === true) continue;
     const spawn = params.classifySpawnResult?.(result);
     if (spawn === "pending") continue;
+    // A gateway-produced control result has no native release record. The
+    // echo is shown only when it matches the stored bytes for this call.
+    // A pending match is not a grant, and a forged echo is not dispatched.
+    const receipt = receipts.get(result.id);
+    if (receipt) {
+      completed.clear();
+      const echoed = toolResultText(result.content);
+      if (controlEchoMatches(receipt.bytes, echoed) === "match") {
+        updates[result.id] = {
+          content: receipt.bytes,
+          outputSource: "runtime",
+          code: "control_outcome",
+        };
+        continue;
+      }
+      updates[result.id] = {
+        content: UNRELEASED_CALL_TEXT,
+        outputSource: "runtime",
+        code: UNRELEASED_CALL_CODE,
+      };
+      continue;
+    }
+    if (
+      index >= batchEnd ||
+      (completedCandidates.has(result.id) && !completed.has(result.id))
+    ) {
+      if (index >= batchEnd) {
+        batchEnd = Math.min(
+          index + MAX_COMPLETED_RESULT_BATCH,
+          params.results.length,
+        );
+      }
+      completed = await replayCompletedResults({
+        session: params.session,
+        toolCallIds: params.results.slice(index, batchEnd).map(({ id }) => id),
+        policy,
+      });
+      completedCandidates = new Set(completed.keys());
+    }
+    const retained = completed.get(result.id);
+    if (retained) {
+      const approved = processedToolResult(retained, "");
+      const unexecutedControl =
+        approved.code === UNRELEASED_CALL_CODE &&
+        params.isControlResult?.(result) === true;
+      updates[result.id] = unexecutedControl
+        ? unexecutedControlResult(result.content)
+        : approved;
+      if (unexecutedControl) completed.clear();
+      continue;
+    }
     const error =
       extractMcpToolError(result) ?? extractMcpToolError(result.content);
     const outcome: ExecutionOutcome =
@@ -779,6 +911,9 @@ export async function processProxyResults(params: {
         : spawn === "failed" || result.isError
           ? "failure"
           : "success";
+    // Keep window/miss knowledge, but discard every decision before awaited work.
+    // The ordinary dispatch already performs its own fresh native guards.
+    completed.clear();
     const approved = await approveToolResult({
       session: params.session,
       toolCallId: result.id,
@@ -1257,7 +1392,7 @@ function decisionMessage(decision: NativeDecision): string {
  */
 export async function executeRemedyByOffer(params: {
   organizationId: string;
-  /** The principal the gateway authenticated, in the proxy's `user:<id>` form. */
+  /** The authenticated user or exact workspace principal, not the signed owner. */
   callerId?: string;
   /** Minted session the signed offer claims name. */
   sessionId: string;
@@ -1610,6 +1745,31 @@ export async function readPeerMessage(params: {
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
  * Session routing comes from the verified offer claims.
  */
+function verifiedOfferRestrictions(
+  value:
+    | Array<{ dimension: string; before: string; after: string }>
+    | undefined,
+):
+  | {
+      restrictions: Array<{ dimension: string; before: string; after: string }>;
+    }
+  | undefined {
+  if (!value || value.length === 0) return undefined;
+  const verified = value.filter(
+    (item) =>
+      !!item &&
+      (item.dimension === "trust" || item.dimension === "readers") &&
+      typeof item.before === "string" &&
+      item.before.length > 0 &&
+      typeof item.after === "string" &&
+      item.after.length > 0,
+  );
+  if (verified.length !== value.length) {
+    throw new Error("OpenAPPA offer review contains invalid restrictions");
+  }
+  return { restrictions: verified };
+}
+
 export async function loadOfferReview(params: {
   organizationId: string;
   sessionId: string;
@@ -1622,6 +1782,8 @@ export async function loadOfferReview(params: {
   tool?: string;
   /** The reviewed call's arguments as JSON text. */
   arguments?: string;
+  /** Narrowing recorded on the retained offer. Absent is not a grant. */
+  restrictions?: Array<{ dimension: string; before: string; after: string }>;
 } | null> {
   try {
     if (
@@ -1642,6 +1804,7 @@ export async function loadOfferReview(params: {
       session_id: result.sessionId,
       ...(result.tool ? { tool: result.tool } : {}),
       ...(result.arguments ? { arguments: result.arguments } : {}),
+      ...verifiedOfferRestrictions(result.restrictions),
     };
   } catch (error) {
     logger.warn(

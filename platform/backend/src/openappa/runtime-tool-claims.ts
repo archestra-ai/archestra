@@ -99,44 +99,63 @@ export function verifyRuntimeToolProof(params: {
   }
 }
 
-/** The provider sees the original arguments, never reusable host credentials. */
-export function stripRuntimeToolProofs(request: unknown): void {
-  const pending: unknown[] = [request];
-  const visited = new WeakSet<object>();
-  while (pending.length > 0) {
-    const value = pending.pop();
-    if (!value || typeof value !== "object" || visited.has(value)) continue;
-    visited.add(value);
-    const record = value as Record<string, unknown>;
-    delete record[RUNTIME_TOOL_PROOF_ARGUMENT];
-    for (const [key, nested] of Object.entries(record)) {
-      if (key === "arguments" && typeof nested === "string") {
-        try {
-          const parsed: unknown = JSON.parse(nested);
-          if (parsed && typeof parsed === "object" && !Array.isArray(parsed)) {
-            const args = parsed as Record<string, unknown>;
-            const target = args.tool_args;
-            let changed = Object.hasOwn(args, RUNTIME_TOOL_PROOF_ARGUMENT);
-            delete args[RUNTIME_TOOL_PROOF_ARGUMENT];
-            if (
-              target &&
-              typeof target === "object" &&
-              !Array.isArray(target)
-            ) {
-              changed ||= Object.hasOwn(target, RUNTIME_TOOL_PROOF_ARGUMENT);
-              delete (target as Record<string, unknown>)[
-                RUNTIME_TOOL_PROOF_ARGUMENT
-              ];
-            }
-            if (changed) record[key] = JSON.stringify(args);
-          }
-        } catch {
-          // Custom tools may carry non-JSON arguments; preserve them verbatim.
-        }
-      } else {
-        pending.push(nested);
-      }
+/**
+ * @public Provider-boundary assertion for a known released runtime call.
+ * The caller supplies its wire role and the whole retained provider fragment,
+ * never an original reconstructed by deleting a proof. Historical restoration
+ * is not live execution authorization and must not reverify the proof's TTL.
+ */
+export function assertRuntimeToolProofReplay(params: {
+  role: string;
+  original: Buffer | undefined;
+  restored: Buffer;
+}): void {
+  if (
+    params.role !== "assistant" ||
+    !params.original?.equals(params.restored)
+  ) {
+    throw new Error(
+      "Runtime tool proof replay does not match retained provider bytes",
+    );
+  }
+}
+
+/**
+ * @public Identifies a credential that must not survive provider-bound replay.
+ * Inspect only the proof slot of an assistant's resolved runtime target. This
+ * is not authorization: expired, foreign-owner, and action-mismatched proofs
+ * still belong to the issuer. No claims or replay values are returned.
+ * An unavailable/rotated key or an unknown proof version cannot be recognized.
+ */
+export function isIssuedRuntimeToolProof(params: {
+  proof: unknown;
+  secret: string;
+}): boolean {
+  if (
+    !params.secret ||
+    typeof params.proof !== "string" ||
+    params.proof.length > 16_384
+  ) {
+    return false;
+  }
+  try {
+    const parts = params.proof.split(".");
+    if (parts.length !== 2) return false;
+    const [payload, mac] = parts;
+    if (!/^[A-Za-z0-9_-]+$/.test(payload)) return false;
+    const actual = Buffer.from(mac, "utf8");
+    const expected = Buffer.from(signature(payload, params.secret), "utf8");
+    if (
+      actual.length !== expected.length ||
+      !timingSafeEqual(actual, expected)
+    ) {
+      return false;
     }
+    return ClaimsSchema.safeParse(
+      JSON.parse(Buffer.from(payload, "base64url").toString("utf8")),
+    ).success;
+  } catch {
+    return false;
   }
 }
 

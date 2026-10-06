@@ -13,6 +13,7 @@ import {
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
 } from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { tools as openappaMcpTools } from "@/archestra-mcp-server/openappa";
 import config from "@/config";
 import type { GatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { ApiError } from "@/types";
@@ -29,6 +30,7 @@ import {
 } from "./delegation";
 import { readNotice, readRemedyExecution } from "./notice";
 import { type OfferJws, verifyOfferClaims } from "./offer-claims";
+import { copyOwnRecord } from "./provenance";
 import { mayHoldTrajectoryStamp } from "./trajectory-stamp";
 import {
   type AppaSessionIdentity,
@@ -376,11 +378,22 @@ export function prepareAppaRequest(params: {
       }
       if (!notice) {
         notice = { name: `${prefix}${TOOL_GET_REMEDY_PLANS_SHORT_NAME}` };
-        appendDeclaredTool(params.body, family, notice.name);
+        appendDeclaredTool(
+          params.body,
+          family,
+          notice.name,
+          params.interactionType,
+        );
       }
       if (!control) {
         control = { name: `${prefix}${TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME}` };
-        appendDeclaredTool(params.body, family, control.name);
+        appendDeclaredTool(
+          params.body,
+          family,
+          control.name,
+          params.interactionType,
+          providerVisibleControlDeclaration(),
+        );
       }
     } else {
       const missing = [
@@ -417,6 +430,13 @@ export function prepareAppaRequest(params: {
         : undefined;
     if (proxyArguments)
       stripDeclaredParameters({ tool, names: new Set(proxyArguments) });
+  }
+  if (control) {
+    applyCanonicalControlDeclaration({
+      body: params.body,
+      control,
+      interactionType: params.interactionType,
+    });
   }
 
   // Read before the strip: a denied call's notice records the namespace its
@@ -837,10 +857,9 @@ function withoutMembers(
   args: Record<string, unknown>,
   members: ReadonlySet<string>,
 ): Record<string, unknown> {
-  if (!Object.keys(args).some((key) => members.has(key))) return args;
-  return Object.fromEntries(
-    Object.entries(args).filter(([key]) => !members.has(key)),
-  );
+  const kept = Object.entries(args).filter(([key]) => !members.has(key));
+  if (kept.length === Object.keys(args).length) return args;
+  return copyOwnRecord(args, kept);
 }
 
 /** The wire a forwarded body is shaped as, read from the body alone. */
@@ -1014,9 +1033,30 @@ function appendDeclaredTool(
   body: unknown,
   family: AppaWireFamily | undefined,
   name: string,
+  interactionType: string,
+  declaration?: ProviderVisibleControlDeclaration,
 ): void {
   const holder = asRecord(body);
   if (!holder) return;
+  const view = controlSchemaView(interactionType);
+  const schema = declaration
+    ? structuredClone(declaration.inputSchema)
+    : { type: "object", properties: {} };
+  const described = declaration ? { description: declaration.description } : {};
+  if (view === "gemini") {
+    appendGeminiDeclaration(holder, { name, ...described, parameters: schema });
+    return;
+  }
+  if (view === "bedrock") {
+    appendBedrockDeclaration(holder, {
+      toolSpec: {
+        name,
+        ...described,
+        inputSchema: { json: schema },
+      },
+    });
+    return;
+  }
   const declared = asArray(holder.tools);
   if (!declared) {
     // Codex can declare its existing tools only in additional_tools input
@@ -1034,7 +1074,8 @@ function appendDeclaredTool(
       {
         type: "function",
         name,
-        parameters: { type: "object", properties: {} },
+        ...described,
+        parameters: schema,
       },
     ];
     return;
@@ -1047,7 +1088,8 @@ function appendDeclaredTool(
       {
         type: "function",
         name,
-        parameters: { type: "object", properties: {} },
+        ...described,
+        parameters: schema,
       },
     ];
     return;
@@ -1057,15 +1099,197 @@ function appendDeclaredTool(
       ...declared,
       {
         type: "function",
-        function: { name, parameters: { type: "object", properties: {} } },
+        function: { name, ...described, parameters: schema },
       },
     ];
     return;
   }
-  holder.tools = [
-    ...declared,
-    { name, input_schema: { type: "object", properties: {} } },
-  ];
+  holder.tools = [...declared, { name, ...described, input_schema: schema }];
+}
+
+type ProviderVisibleControlDeclaration = {
+  description: string;
+  inputSchema: Record<string, unknown>;
+};
+
+let cachedControlDeclaration: ProviderVisibleControlDeclaration | undefined;
+
+/** The MCP control tool the provider sees, without proxy-stamped parameters. */
+function providerVisibleControlDeclaration(): ProviderVisibleControlDeclaration {
+  if (cachedControlDeclaration) return cachedControlDeclaration;
+  const tool = openappaMcpTools.find((entry) =>
+    entry.name.endsWith(TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME),
+  );
+  const inputSchema = tool?.inputSchema;
+  if (
+    !tool?.description ||
+    !inputSchema ||
+    typeof inputSchema !== "object" ||
+    Array.isArray(inputSchema)
+  ) {
+    throw new ApiError(
+      500,
+      "OpenAPPA cannot declare execute_remedy_plan without its canonical schema.",
+    );
+  }
+  const schema = structuredClone(inputSchema) as Record<string, unknown>;
+  const stamped = new Set<string>(
+    PROXY_STAMPED_TOOL_ARGUMENTS[TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME],
+  );
+  const properties = asRecord(schema.properties);
+  if (properties) {
+    schema.properties = copyOwnRecord(
+      properties,
+      Object.entries(properties).filter(([name]) => !stamped.has(name)),
+    );
+  }
+  if (Array.isArray(schema.required)) {
+    schema.required = schema.required.filter(
+      (name) => typeof name !== "string" || !stamped.has(name),
+    );
+  }
+  cachedControlDeclaration = {
+    description: tool.description,
+    inputSchema: schema,
+  };
+  return cachedControlDeclaration;
+}
+
+function applyCanonicalControlDeclaration(params: {
+  body: unknown;
+  control: DeclaredToolSpelling;
+  interactionType: string;
+}): void {
+  const canonical = providerVisibleControlDeclaration();
+  const view = controlSchemaView(params.interactionType);
+  for (const entry of declaredToolEntries(params.body)) {
+    if (entry.name !== params.control.name) continue;
+    if (entry.namespace !== params.control.namespace) continue;
+    const tool = asRecord(entry.tool);
+    if (!tool) continue;
+    const nested =
+      asRecord(tool.function) ??
+      asRecord(tool.custom) ??
+      asRecord(tool.toolSpec);
+    if (nested && typeof nested.name === "string") {
+      nested.description = canonical.description;
+    } else if (entry.holder) {
+      entry.holder.description = canonical.description;
+    } else {
+      tool.description = canonical.description;
+    }
+    writeCanonicalControlSchema(tool, canonical.inputSchema, view);
+  }
+}
+
+type ControlSchemaView =
+  | "anthropic"
+  | "responses"
+  | "chat"
+  | "gemini"
+  | "bedrock";
+
+function controlSchemaView(interactionType: string): ControlSchemaView {
+  if (interactionType === "gemini:generateContent") return "gemini";
+  if (interactionType === "bedrock:converse") return "bedrock";
+  const family = appaWireFamily(interactionType);
+  if (family === "openai:responses") return "responses";
+  if (family === "openai:chatCompletions") return "chat";
+  return "anthropic";
+}
+
+function appendGeminiDeclaration(
+  holder: Record<string, unknown>,
+  declaration: Record<string, unknown>,
+): void {
+  const tools = holder.tools;
+  const list = Array.isArray(tools)
+    ? tools
+    : asRecord(tools)
+      ? [tools]
+      : undefined;
+  if (!list) return;
+  const group = list.find((tool) =>
+    Array.isArray(asRecord(tool)?.functionDeclarations),
+  );
+  const record = asRecord(group);
+  if (record && Array.isArray(record.functionDeclarations)) {
+    record.functionDeclarations = [...record.functionDeclarations, declaration];
+    return;
+  }
+  const created = { functionDeclarations: [declaration] };
+  holder.tools = Array.isArray(tools) ? [...list, created] : created;
+}
+
+function appendBedrockDeclaration(
+  holder: Record<string, unknown>,
+  declaration: Record<string, unknown>,
+): void {
+  const toolConfig = asRecord(holder.toolConfig) ?? {};
+  const tools = Array.isArray(toolConfig.tools) ? toolConfig.tools : [];
+  toolConfig.tools = [...tools, declaration];
+  holder.toolConfig = toolConfig;
+}
+
+function writeCanonicalControlSchema(
+  tool: Record<string, unknown>,
+  schema: Record<string, unknown>,
+  view: ControlSchemaView,
+): void {
+  const assign = (parent: Record<string, unknown>, key: string) => {
+    parent[key] = structuredClone(schema);
+  };
+  if (view === "gemini") delete tool.input_schema;
+  let wrote = false;
+  if ("input_schema" in tool) {
+    assign(tool, "input_schema");
+    wrote = true;
+  }
+  if ("parameters" in tool) {
+    assign(tool, "parameters");
+    wrote = true;
+  }
+  if ("parametersJsonSchema" in tool) {
+    assign(tool, "parametersJsonSchema");
+    wrote = true;
+  }
+  const fn = asRecord(tool.function);
+  if (fn && "parameters" in fn) {
+    assign(fn, "parameters");
+    wrote = true;
+  }
+  const spec = asRecord(tool.toolSpec);
+  const input = asRecord(spec?.inputSchema);
+  if (input && "json" in input) {
+    assign(input, "json");
+    wrote = true;
+  }
+  if (wrote) return;
+  if (fn) {
+    assign(fn, "parameters");
+    return;
+  }
+  if (spec) {
+    const created = asRecord(spec.inputSchema) ?? {};
+    spec.inputSchema = created;
+    assign(created, "json");
+    return;
+  }
+  if (tool.type === "function" || view === "responses") {
+    assign(tool, "parameters");
+    return;
+  }
+  if (view === "gemini") {
+    assign(tool, "parameters");
+    return;
+  }
+  if (view === "bedrock") {
+    const created = {};
+    tool.toolSpec = { name: tool.name, inputSchema: created };
+    assign(created, "json");
+    return;
+  }
+  assign(tool, "input_schema");
 }
 
 /** Refuses sessions where tools are deferred to a provider tool search. */

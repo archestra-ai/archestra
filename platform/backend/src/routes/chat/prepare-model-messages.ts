@@ -9,6 +9,7 @@ import {
   type ModelMessage,
   type ToolCallPart,
   type ToolResultPart,
+  type ToolSet,
   type UIMessage,
 } from "ai";
 import config from "@/config";
@@ -94,7 +95,7 @@ export async function buildModelMessages(params: {
   agentLlmApiKeyId?: string | null;
   systemPrompt?: string;
   /** AI SDK tool definitions included in the main model request. */
-  tools?: Record<string, unknown>;
+  tools?: ToolSet;
   abortSignal?: AbortSignal;
   emit: (event: CompactionStreamEvent) => void;
   /**
@@ -208,6 +209,7 @@ export async function buildModelMessages(params: {
       anthropicNativeEndpoint,
       sandboxAvailable,
       conversationKey,
+      tools: compaction.tools,
     });
 
   return {
@@ -236,6 +238,7 @@ async function buildModelMessagesForProvider(params: {
   anthropicNativeEndpoint?: boolean;
   sandboxAvailable: boolean;
   conversationKey?: ConversationContentKey | null;
+  tools?: ToolSet;
 }) {
   const anthropicNativeEndpoint = params.anthropicNativeEndpoint ?? true;
   // `cache_control` is inert for non-Anthropic SDKs, so keep emitting it there;
@@ -290,6 +293,9 @@ async function buildModelMessagesForProvider(params: {
   // Cast to UIMessage[] - ChatMessage is structurally compatible at runtime.
   const modelMessages = await convertToModelMessages(
     providerPreparedMessages as unknown as Omit<UIMessage, "id">[],
+    // Use the live tool-result converters on reload too, rather than serializing
+    // UI-only metadata and rawContent into previously admitted model history.
+    { tools: params.tools },
   );
 
   // convertToModelMessages can split an assistant turn at `step-start` and drop

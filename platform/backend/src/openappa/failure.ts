@@ -72,7 +72,7 @@ const POLICY_REFUSALS = [
 ];
 
 function classify(error: unknown): {
-  statusCode: 409 | 500 | 503;
+  statusCode: 409 | 410 | 500 | 503;
   detail: string;
 } {
   if (error instanceof OpenappaCredentialError)
@@ -90,6 +90,12 @@ function classify(error: unknown): {
     return {
       statusCode: 503,
       detail: "the policy runtime has no free database connection.",
+    };
+  if (message.startsWith("OpenAPPA replay retention expired"))
+    return {
+      statusCode: 410,
+      detail:
+        "replay retention expired. Start a new session instead of continuing this one.",
     };
   // Every later request of the subagent fails the same way: no fork exists
   // for it to open, whatever the retry.

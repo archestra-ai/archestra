@@ -1,21 +1,34 @@
 import { afterEach, beforeEach, describe, vi } from "vitest";
 import config from "@/config";
+import db, { schema } from "@/database";
+import { openappaActor } from "@/openappa/actor";
+import {
+  AppaRewriteReplay,
+  captureAppaReplayRequest,
+} from "@/openappa/rewrite-replay";
 import { verifyRuntimeToolProof } from "@/openappa/runtime-tool-claims";
 import * as service from "@/openappa/service";
 import { expect, test } from "@/test";
 import { setupTestCacheManager } from "@/test/cache-manager";
 import { AgentRuntimeSchema } from "@/types/agent-runtime";
 import { AppaPluginArchestra } from "./plugin";
-import { APPA_PLUGIN_TRUSTED_CONTEXT, type AppaTrustedContext } from "./types";
+import {
+  APPA_PLUGIN_TRUSTED_CONTEXT,
+  APPA_REPLAY_APPROVED_TEXT,
+  APPA_REPLAY_ENVELOPE,
+  type AppaTrustedContext,
+} from "./types";
 
 setupTestCacheManager();
 const secret = "runtime-protocol-regression-test-secret";
 const priorSecret = config.openappa.offerSigningSecret;
+const priorEncryptionSecret = config.secretsManager.encryptionSecret;
 beforeEach(() => {
   config.openappa.offerSigningSecret = secret;
 });
 afterEach(() => {
   config.openappa.offerSigningSecret = priorSecret;
+  config.secretsManager.encryptionSecret = priorEncryptionSecret;
   vi.restoreAllMocks();
 });
 
@@ -130,7 +143,34 @@ describe("protected runtime protocol", () => {
     makeOrganization,
   }) => {
     const org = await makeOrganization();
-    const context = request(org.id, true);
+    const body = { messages: [{ role: "user", content: "Do the work" }] };
+    const context = { ...request(org.id, true), requestBody: body };
+    const trusted = context.resources.get(
+      APPA_PLUGIN_TRUSTED_CONTEXT,
+    ) as AppaTrustedContext;
+    const parentId = trusted.session.parent_id;
+    if (!parentId) throw new Error("Expected a runtime parent");
+    await db.insert(schema.openappaSessionsTable).values(
+      [parentId, trusted.session.session_id].map((sessionId) => ({
+        actor: openappaActor(sessionId),
+        root: openappaActor(parentId),
+        organizationId: org.id,
+        callerId: trusted.session.caller_id,
+        sessionId,
+        ...(sessionId === trusted.session.session_id ? { parentId } : {}),
+        startDecision: { decision: "ack" },
+      })),
+    );
+    config.secretsManager.encryptionSecret = secret;
+    const replay = await AppaRewriteReplay.open({
+      session: trusted.session,
+      capture: captureAppaReplayRequest({
+        family: "anthropic:messages",
+        body,
+      }),
+      encryptedChat: { kind: "none" },
+    });
+    context.resources.set(APPA_REPLAY_ENVELOPE, replay);
     const plugin = new AppaPluginArchestra([]);
     const start = vi
       .spyOn(service, "startRuntimeChild")
@@ -140,13 +180,20 @@ describe("protected runtime protocol", () => {
       .mockResolvedValue({ kind: "admitted", value: "Approved summary" });
     const ended = vi.spyOn(service, "endChild");
     await plugin.onSessionInit(context);
-    const body = { messages: [{ role: "user", content: "Do the work" }] };
     await plugin.onBeforeModel({ ...context, request: body });
-    expect(JSON.stringify(body)).toContain("Only return an approved summary.");
+    const prepared = await replay.prepareRequest(body);
+    expect(JSON.stringify(prepared)).toContain(
+      "Only return an approved summary.",
+    );
     expect(start).toHaveBeenCalledOnce();
+    const sourceResponse = {
+      role: "assistant",
+      content: [{ type: "text", text: "Unapproved report" }],
+    };
+    const source = replay.captureResponse(sourceResponse);
     const outcome = await plugin.onBufferedModelResponse({
       ...context,
-      response: {},
+      response: sourceResponse,
       responseText: "Unapproved report",
     });
     expect(outcome).toEqual({
@@ -159,6 +206,20 @@ describe("protected runtime protocol", () => {
       value: "Unapproved report",
     });
     expect(ended).not.toHaveBeenCalled();
+    const approvedText = context.resources.get(APPA_REPLAY_APPROVED_TEXT);
+    expect(approvedText).toBe("Approved summary");
+    if (outcome?.decision !== "replace" || typeof approvedText !== "string")
+      throw new Error("Expected an admitted runtime text replacement");
+    await replay.recordResponse({
+      source,
+      response: {
+        ...sourceResponse,
+        content: [{ type: "text", text: outcome.responseText }],
+      },
+      emitted: [],
+      approvedText,
+    });
+    await plugin.onCleanup(context);
   });
 });
 

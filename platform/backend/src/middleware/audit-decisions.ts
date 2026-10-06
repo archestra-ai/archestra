@@ -1021,6 +1021,22 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "external consult dataset the native runtime appends",
   },
+  openappaRewriteGroupsTable: {
+    audited: false,
+    reason: "operational replay retention and expiry tombstones",
+  },
+  openappaRewriteRootsTable: {
+    audited: false,
+    reason: "native trajectory retention-group mapping",
+  },
+  openappaRewritePairsTable: {
+    audited: false,
+    reason: "encrypted immutable wire replay fragments",
+  },
+  openappaRewriteHeadsTable: {
+    audited: false,
+    reason: "operational replay compare-and-swap cursors",
+  },
 } satisfies Record<keyof typeof schema, AuditDecision>;
 
 /**

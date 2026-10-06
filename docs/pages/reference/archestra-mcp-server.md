@@ -3119,8 +3119,8 @@ Required RBAC permission: [`toolPolicy:delete`](/docs/reference/permissions#tool
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `preview_guardrails_policy_change` | Validate and show a reviewable diff for a proposed organization.appa.toml. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `update_guardrails_policy` | Publish a validated change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
+| `preview_guardrails_policy_change` | Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `update_guardrails_policy` | Publish a change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `get_remedy_plans` | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None (no additional RBAC permission required) |
@@ -3248,8 +3248,9 @@ Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#op
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `content` | `string` | Yes |  |
-| `expectedRevision` | `integer` | Yes |  |
+| `content` | `string \| null` | No | The complete policy text. Use it only for a first policy or a full rewrite. Leave it empty when you send edits. |
+| `edits` | `object[] \| null` | No | Exact-text replacements applied in order to the current policy, each to the result of the one before. Use them to change an existing policy. To insert rules, replace an anchor line with the new rules followed by that same anchor line. |
+| `expectedRevision` | `integer` | Yes | The revision get_guardrails_policy returned. |
 
 
 #### update_guardrails_policy
@@ -3260,8 +3261,9 @@ Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `content` | `string` | Yes |  |
-| `expectedRevision` | `integer` | Yes |  |
+| `content` | `string \| null` | No | The complete policy text. Use it only for a first policy or a full rewrite. Leave it empty when you send edits. |
+| `edits` | `object[] \| null` | No | Exact-text replacements applied in order to the current policy, each to the result of the one before. Use them to change an existing policy. To insert rules, replace an anchor line with the new rules followed by that same anchor line. |
+| `expectedRevision` | `integer` | Yes | The revision get_guardrails_policy returned. |
 | `title` | `string` | No |  |
 | `summary` | `string` | No |  |
 

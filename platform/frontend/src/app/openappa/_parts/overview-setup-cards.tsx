@@ -187,11 +187,7 @@ function EnforcementCard({ next }: { next: boolean }) {
               Enforce the policy
             </Label>
           </div>
-          <OpenAppaChatButton
-            size="sm"
-            variant="outline"
-            promptKey="explainPolicy"
-          >
+          <OpenAppaChatButton size="sm" variant="outline">
             <MessageCircle />
             <span>Ask about the policy</span>
           </OpenAppaChatButton>

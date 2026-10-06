@@ -79,7 +79,12 @@ export function renderStartupGuardPowerShell(
 # blocks the launch: the profile wrapper runs the real ${client.binary} no matter how
 # this script exits. Disable with ${client.disableEnvVar}=0.
 
-if ($env:${client.disableEnvVar} -eq '0') { return }
+# ARCHESTRA_GUARD_ACTION=disconnect is set only by the /disconnect.md steps,
+# which run this file directly: reverse every connected remote without the
+# pre-loader, then remove the guard. An env var rather than a flag, because the
+# profile wrapper forwards every ${client.binary} argument to this script.
+$ArchDisconnectAll = $env:ARCHESTRA_GUARD_ACTION -eq 'disconnect'
+if (-not $ArchDisconnectAll) { if ($env:${client.disableEnvVar} -eq '0') { return } }
 if ($args.Count -gt 0 -and $args[0] -in @(${client.utilitySubcommands.map(psq).join(", ")}, '--help', '-h', '--version', '-v')) { return }
 $ErrorActionPreference = 'Continue'
 # Invoke-WebRequest paints its progress banner across the TOP console rows —
@@ -152,6 +157,8 @@ function Remove-ArchGuard {
   }
   $Script:GuardUninstalled = $true
   Remove-Item -Force -ErrorAction SilentlyContinue $GuardPath, $SkipFile
+  Remove-Item -Force -ErrorAction SilentlyContinue ($GuardPath + '.prompt.md')
+  Remove-Item -Recurse -Force -ErrorAction SilentlyContinue ($GuardPath + '.instructions')
   $profilePaths = @()
   $docs = [Environment]::GetFolderPath('MyDocuments')
   if ($docs) {
@@ -173,6 +180,7 @@ function Remove-ArchGuard {
   }
 }
 
+if ($ArchDisconnectAll -and $ActiveRemotes.Count -eq 0) { Write-Output 'Nothing left to disconnect. Removing the ${client.label} startup check.' }
 if ($ActiveRemotes.Count -eq 0) { Remove-ArchGuard; return }
 
 # Retry budget for the single health request when the platform is
@@ -291,7 +299,7 @@ function Test-ArchVersionStale {
   return ([int]$Matches[1] -gt $GuardFormatVersion)
 }
 
-if (-not $Interactive) {
+if (-not $Interactive -and -not $ArchDisconnectAll) {
   if ($HealthUrl) {
     if (-not (Invoke-ArchHealthFetch)) { $Script:HealthState = 'down' }
   }
@@ -475,6 +483,36 @@ function Disconnect-ArchRemotes($remotes) { # reverse connect, then skip on late
       $Script:ArchDisconnectFailed = $true
     }
   }
+}
+
+# The /disconnect.md mode (see $ArchDisconnectAll): plain output for an agent
+# reading it, every connected remote reversed and verified, then the guard
+# removes itself — or stays, so a failed removal can be retried. It returns
+# rather than exits, like every other path, so it never closes the caller's shell.
+if ($ArchDisconnectAll) {
+  $archFailed = $false
+  foreach ($r in $ActiveRemotes) {
+    $Script:ArchDisconnectReason = ''
+    if (Invoke-ArchDisconnectActions $r.Kind) {
+      Write-Output ('Disconnected ' + $r.Label)${
+        ctx.proxy && client.windows.proxyDisconnectNote(ctx)
+          ? `
+      if ($r.Kind -eq 'proxy') { Write-Output ${psq(`  ${client.windows.proxyDisconnectNote(ctx)}`)} }`
+          : ""
+      }
+      Add-ArchDisconnected $r.Kind
+    } else {
+      Write-Output ('Could not disconnect ' + $r.Label + $(if ($Script:ArchDisconnectReason) { ': ' + $Script:ArchDisconnectReason } else { '' }))
+      $archFailed = $true
+    }
+  }
+  if (-not $archFailed) { Remove-ArchGuard }
+  if ($Script:GuardUninstalled) {
+    Write-Output 'Removed the ${client.label} startup check and its profile blocks.'
+    return
+  }
+  Write-Output 'Kept the ${client.label} startup check so the failed steps can be retried.'
+  return
 }
 
 # ---- Reconfigure menu -------------------------------------------------

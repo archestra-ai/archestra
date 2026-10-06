@@ -326,8 +326,17 @@ case "\${1:-}" in
 esac
 set -u
 
-[ "\${${client.disableEnvVar}:-1}" = "0" ] && exit 0
-command -v curl >/dev/null 2>&1 || exit 0
+# ARCHESTRA_GUARD_ACTION=disconnect is set only by the /disconnect.md steps,
+# which run this file directly: reverse every connected remote without the
+# pre-loader, then remove the guard. An env var rather than a flag, because the
+# shell wrapper forwards every ${client.binary} argument to this script.
+ARCH_DISCONNECT_ALL=0
+[ "\${ARCHESTRA_GUARD_ACTION:-}" = "disconnect" ] && ARCH_DISCONNECT_ALL=1
+
+if [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
+  [ "\${${client.disableEnvVar}:-1}" = "0" ] && exit 0
+  command -v curl >/dev/null 2>&1 || exit 0
+fi
 
 APP_NAME=${sh(ctx.appName)}
 GUARD_PATH="$HOME/${client.scriptRelpath}"
@@ -404,7 +413,8 @@ uninstall_guard() {
       : ""
   }
   GUARD_UNINSTALLED=1
-  rm -f "$GUARD_PATH" "$SKIP_FILE" 2>/dev/null || true
+  rm -f "$GUARD_PATH" "$SKIP_FILE" "$GUARD_PATH.prompt.md" 2>/dev/null || true
+  rm -rf "$GUARD_PATH.instructions" 2>/dev/null || true
   for profile in "$HOME/.zshrc" "$HOME/.bashrc" "$HOME/.bash_profile" "$HOME/.bash_login" "$HOME/.profile"; do
     [ -f "$profile" ] || continue
     awk -v start=${sh(client.markerStart)} -v end=${sh(client.markerEnd)} '
@@ -433,6 +443,7 @@ while [ "$i" -lt "\${#GUARD_URLS[@]}" ]; do
 done
 if [ "$ACTIVE_TOTAL" -eq 0 ]; then
   uninstall_guard
+  [ "$ARCH_DISCONNECT_ALL" = "1" ] && printf 'Nothing left to disconnect. Removed the ${client.label} startup check.\\n'
   exit 0
 fi
 
@@ -489,7 +500,7 @@ version_is_stale() {
   [ "$arch_ver_num" -gt "$GUARD_FORMAT_VERSION" ]
 }
 
-if [ "$INTERACTIVE" = "0" ]; then
+if [ "$INTERACTIVE" = "0" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
   if [ -n "$HEALTH_URL" ]; then
     fetch_health || HEALTH_STATE='down'
   fi
@@ -506,7 +517,7 @@ if [ "$INTERACTIVE" = "0" ]; then
   exit 0
 fi
 
-if [ -z "\${NO_COLOR:-}" ]; then
+if [ -z "\${NO_COLOR:-}" ] && [ "$ARCH_DISCONNECT_ALL" = "0" ]; then
   C_TITLE=$'\\033[1;36m'; C_ACCENT=$'\\033[95m'; C_ERR=$'\\033[1;31m'
   C_WARN=$'\\033[33m'; C_DIM=$'\\033[2m'; C_RESET=$'\\033[0m'; C_LOGO=$'\\033[1m'
 else
@@ -746,6 +757,35 @@ disconnect_and_forget() { # $@ = resource indices: reverse connect, then skip on
     fi
   done
 }
+
+# The /disconnect.md mode (see ARCH_DISCONNECT_ALL): plain output for an agent
+# reading it, every connected remote reversed and verified, then the guard
+# removes itself — or stays, exit 1, so a failed removal can be retried.
+if [ "$ARCH_DISCONNECT_ALL" = "1" ]; then
+  line_reset() { :; }
+  for i in $ACTIVE_IDXS; do
+    ( disconnect_actions "\${GUARD_KINDS[$i]}" ) >/dev/null 2>&1
+    if disconnect_verify "\${GUARD_KINDS[$i]}"; then
+      printf 'Disconnected %s\\n' "\${GUARD_LABELS[$i]}"${
+        ctx.proxy
+          ? `
+      [ "\${GUARD_KINDS[$i]}" = "proxy" ] && proxy_disconnect_notes`
+          : ""
+      }
+      remember_disconnected "\${GUARD_KINDS[$i]}"
+    else
+      printf 'Could not disconnect %s\\n' "\${GUARD_LABELS[$i]}"
+      DISCONNECT_FAILED=1
+    fi
+  done
+  [ "$DISCONNECT_FAILED" = "0" ] && uninstall_guard
+  if [ "$GUARD_UNINSTALLED" = "1" ]; then
+    printf 'Removed the ${client.label} startup check and its shell profile blocks.\\n'
+    exit 0
+  fi
+  printf 'Kept the ${client.label} startup check so the failed steps can be retried.\\n'
+  exit 1
+fi
 
 # ---- Reconfigure menu -------------------------------------------------
 # Opened with [C] from the prompt under the rows. Every remote is already on

@@ -70,6 +70,10 @@ import {
 } from "@/services/guardrails-deployment";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
+  policyDiff,
+  resolveProposedPolicy,
+} from "@/services/guardrails-policy-proposal";
+import {
   externalConsultAccess,
   listExternalConsults,
 } from "@/services/openappa-external-consults";
@@ -84,10 +88,8 @@ import {
 import { getOpenAppaYell } from "@/services/openappa-yells";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
-import {
-  UpdateGuardrailsPolicySchema,
-  ValidateGuardrailsPolicySchema,
-} from "@/types/guardrails-policy";
+import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
+import { ProposedGuardrailsPolicySchema } from "@/types/guardrails-policy-proposal";
 import {
   type ExternalConsult,
   ExternalConsultOutcomeSchema,
@@ -96,7 +98,11 @@ import {
 import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
-import { defineArchestraTool, defineArchestraTools } from "./helpers";
+import {
+  defineArchestraTool,
+  defineArchestraTools,
+  errorResult,
+} from "./helpers";
 import { filterToolNamesByPermission } from "./rbac";
 import type { ArchestraContext } from "./types";
 
@@ -562,48 +568,61 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA policy change",
     annotations: { readOnlyHint: true },
     description:
-      "Validate and show a reviewable diff for a proposed organization.appa.toml. Read the current policy and pass its revision. This changes nothing. Explain what the change does and its warnings to the user before publishing with update_guardrails_policy; show the diff when the user asks.",
-    schema: UpdateGuardrailsPolicySchema,
-    async handler({ args, context }) {
-      if (!context.organizationId)
-        throw new ApiError(401, "Organization context is required");
-      const before = await guardrailsPolicyService.get(context.organizationId);
-      if (before.revision !== args.expectedRevision)
-        throw new ApiError(
-          409,
-          "The policy changed. Read it again before previewing.",
+      "Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. This saves nothing. Read the current policy and pass its revision as expectedRevision. To change an existing policy, send `edits`: only the text being replaced and its replacement. To insert rules, replace an anchor line with the new rules followed by that same anchor line. Send `content` only for a first policy or a full rewrite. Check `diff` and `changed` to confirm only the intended lines change. Explain what the change does and its warnings to the user, then publish with update_guardrails_policy using the same edits or content and expectedRevision; show the diff when the user asks.",
+    schema: ProposedGuardrailsPolicySchema,
+    handler: ({ args, context }) =>
+      refusalAsResult(async () => {
+        if (!context.organizationId)
+          throw new ApiError(401, "Organization context is required");
+        const before = await guardrailsPolicyService.get(
+          context.organizationId,
         );
-      const validation = await guardrailsPolicyService.validate(args.content, {
-        organizationId: context.organizationId,
-        previous: before.content,
-      });
-      const sync = await getAppaGithubSync(context.organizationId);
-      const delivery = sync.source?.interval ? "pull_request" : "revision";
-      return result({
-        stage: "preview",
-        delivery,
-        // Whether publishing this turns enforcement on: only the first saved
-        // policy does, and only for an administrator (see turnOnForFirstPolicy).
-        turnsOnEnforcement:
-          delivery === "revision" &&
-          !(await firstPolicyRefusal(
-            context.organizationId,
-            context.userId,
-            before.revision + 1,
-          )),
-        path: sync.source?.path ?? "organization.appa.toml",
-        before: before.content,
-        after: args.content,
-        ...validation,
-      });
-    },
+        if (before.revision !== args.expectedRevision)
+          throw new ApiError(
+            409,
+            "The policy changed. Read it again before previewing.",
+          );
+        const after = resolveProposedPolicy({
+          current: before,
+          proposal: args,
+        });
+        const validation = await guardrailsPolicyService.validate(after, {
+          organizationId: context.organizationId,
+          previous: before.content,
+        });
+        const sync = await getAppaGithubSync(context.organizationId);
+        const delivery = sync.source?.interval ? "pull_request" : "revision";
+        return policyChangeResult({
+          stage: "preview",
+          delivery,
+          // Whether publishing this turns enforcement on: only the first saved
+          // policy does, and only for an administrator (see turnOnForFirstPolicy).
+          turnsOnEnforcement:
+            delivery === "revision" &&
+            !(await firstPolicyRefusal(
+              context.organizationId,
+              context.userId,
+              before.revision + 1,
+            )),
+          path: sync.source?.path ?? "organization.appa.toml",
+          before: before.content,
+          after,
+          ...validation,
+          // A model that only read the skill ends its turn on the preview;
+          // the next step is repeated here, where it decides what to do next.
+          ...(validation.valid &&
+          (after !== before.content || before.revision === 0)
+            ? { instruction: PREVIEW_APPROVAL_INSTRUCTION }
+            : {}),
+        });
+      }),
   }),
   defineArchestraTool({
     shortName: "update_guardrails_policy",
     title: "Publish OpenAPPA policy change",
     description:
-      "Publish a validated change to organization.appa.toml. Read the current policy first, preserve unrelated rules, and use its revision as expectedRevision. Call preview_guardrails_policy_change first and explain what the change does and its warnings. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
-    schema: UpdateGuardrailsPolicySchema.extend({
+      "Publish a change to organization.appa.toml. Call preview_guardrails_policy_change first, explain what the change does and its warnings, then send the same `edits` or `content` and the same expectedRevision that were previewed. Use `edits` to change an existing policy and `content` only for a first policy or a full rewrite. The result carries the published `diff` and `changed` line counts. When GitHub sync is configured, this creates a pull request using the configured GitHub App; the policy takes effect after merge and sync. Otherwise it saves a local revision immediately. On conflict, re-read and reconcile. A local revision affects new conversations only. The organization's first saved policy also turns enforcement on when the caller is an administrator; later saves leave it unchanged. Report `enforcement` to the user. Report any inactive effective battery.",
+    schema: ProposedGuardrailsPolicySchema.extend({
       title: z
         .string()
         .trim()
@@ -616,28 +635,29 @@ const registry = defineArchestraTools([
         .max(4000)
         .default("OpenAPPA policy change proposed in chat."),
     }),
-    async handler({ args, context }) {
-      if (!context.organizationId || !context.userId)
-        throw new ApiError(
-          401,
-          "Authenticated organization context is required",
-        );
-      const saved = await publishOpenAppaPolicyChange({
-        ...args,
-        organizationId: context.organizationId,
-        userId: context.userId,
-      });
-      if (saved.delivery !== "revision") return result(saved);
-      return result({
-        ...saved,
-        effective: await enforced(context.organizationId),
-        enforcement: await turnOnForFirstPolicy({
+    handler: ({ args, context }) =>
+      refusalAsResult(async () => {
+        if (!context.organizationId || !context.userId)
+          throw new ApiError(
+            401,
+            "Authenticated organization context is required",
+          );
+        const saved = await publishOpenAppaPolicyChange({
+          ...args,
           organizationId: context.organizationId,
           userId: context.userId,
-          revision: saved.revision,
-        }),
-      });
-    },
+        });
+        if (saved.delivery !== "revision") return policyChangeResult(saved);
+        return policyChangeResult({
+          ...saved,
+          effective: await enforced(context.organizationId),
+          enforcement: await turnOnForFirstPolicy({
+            organizationId: context.organizationId,
+            userId: context.userId,
+            revision: saved.revision,
+          }),
+        });
+      }),
   }),
   defineArchestraTool({
     shortName: "get_guardrails_policy_change_status",
@@ -913,6 +933,9 @@ async function enforced(organizationId: string) {
   };
 }
 
+const PREVIEW_APPROVAL_INSTRUCTION =
+  "Nothing is saved yet. In this same turn, explain the change and ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
+
 const CONSULT_LIST_LIMIT = 50;
 const CONSULT_TEXT_LIMIT = 2000;
 
@@ -951,6 +974,50 @@ function result(value: object) {
     content: [{ type: "text" as const, text: JSON.stringify(value) }],
     structuredContent: { ...value },
   };
+}
+
+/**
+ * A policy change result. The UI renders `before` and `after` from
+ * structuredContent; the model reads only the text, so it gets the diff instead
+ * of two copies of the whole policy.
+ */
+function policyChangeResult<
+  T extends { before: string; after: string; path?: string },
+>(value: T) {
+  const { before, after, ...rest } = value;
+  return {
+    content: [
+      {
+        type: "text" as const,
+        text: JSON.stringify({
+          ...rest,
+          ...policyDiff({
+            before,
+            after,
+            path: value.path ?? "organization.appa.toml",
+          }),
+        }),
+      },
+    ],
+    structuredContent: { ...value },
+  };
+}
+
+/**
+ * A refused policy proposal (an edit that does not match, no changes, an
+ * invalid policy) goes back to the model as a tool result it can fix and retry.
+ * A thrown error would make the chat report a provider failure.
+ */
+async function refusalAsResult(
+  run: () => Promise<CallToolResult>,
+): Promise<CallToolResult> {
+  try {
+    return await run();
+  } catch (error) {
+    if (error instanceof ApiError && error.statusCode === 400)
+      return errorResult(error.message);
+    throw error;
+  }
 }
 
 function unknownOfferResult() {

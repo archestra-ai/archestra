@@ -248,10 +248,7 @@ test("an enforced policy makes GitHub step 2 of 2", async () => {
   ).toBeInTheDocument();
   expect(
     screen.getByRole("link", { name: "Ask about the policy" }),
-  ).toHaveAttribute(
-    "href",
-    expect.stringContaining("/chat?agentId=appa-agent&user_prompt="),
-  );
+  ).toHaveAttribute("href", "/chat?agentId=appa-agent");
   expect(
     screen.getByRole("switch", { name: "Enforce the policy" }),
   ).toBeChecked();

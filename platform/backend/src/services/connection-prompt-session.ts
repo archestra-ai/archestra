@@ -126,7 +126,11 @@ function matchesPrompt(
     clientId: pending.clientId,
     label: NATIVE_SESSION_CLIENT_LABELS[pending.clientId],
   });
-  return userTexts(body).some((text) => text.includes(prompt));
+  // The copied prompt can also name parts the user left out; any such list
+  // still belongs to the same prompt.
+  return userTexts(body).some((text) =>
+    text.replace(/&exclude=[a-z,]*/g, "").includes(prompt),
+  );
 }
 
 function userTexts(body: unknown): string[] {

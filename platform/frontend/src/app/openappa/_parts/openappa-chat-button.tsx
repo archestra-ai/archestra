@@ -29,7 +29,9 @@ export type OpenAppaChatSubject =
       promptKey: OpenAppaLaunchPromptKey;
       target?: OpenAppaChatTarget;
     }
-  | { kind: "yell"; yellId: string };
+  | { kind: "yell"; yellId: string }
+  /** Sends nothing: the chat opens on the agent's suggested prompts. */
+  | { kind: "suggestedPrompts" };
 
 export function OpenAppaChatButton({
   promptKey,
@@ -39,7 +41,8 @@ export function OpenAppaChatButton({
   ...props
 }: Omit<ButtonProps, "asChild"> & {
   permissions?: Permissions;
-  promptKey: OpenAppaLaunchPromptKey;
+  /** Omit to open the chat on the agent's suggested prompts. */
+  promptKey?: OpenAppaLaunchPromptKey;
   target?: OpenAppaChatTarget;
 }) {
   const {
@@ -47,7 +50,9 @@ export function OpenAppaChatButton({
     href,
     permissions: launchPermissions,
   } = useOpenAppaChatLaunch({
-    subject: { kind: "prompt", promptKey, target },
+    subject: promptKey
+      ? { kind: "prompt", promptKey, target }
+      : { kind: "suggestedPrompts" },
     permissions,
   });
   const canLaunch = !!href;
@@ -88,7 +93,9 @@ export function useOpenAppaChatLaunch({
   const prompt =
     subject.kind === "yell"
       ? openAppaYellInvestigationPrompt(subject.yellId)
-      : resolveOpenAppaLaunchPrompt(subject.promptKey, subject.target);
+      : subject.kind === "prompt"
+        ? resolveOpenAppaLaunchPrompt(subject.promptKey, subject.target)
+        : undefined;
   const target = subject.kind === "prompt" ? subject.target : undefined;
 
   const launchPermissions: Permissions = {
@@ -109,6 +116,9 @@ export function useOpenAppaChatLaunch({
   return {
     permissions: launchPermissions,
     agents,
-    href: agent && prompt ? openAppaChatHref(agent.id, prompt) : null,
+    href:
+      agent && (prompt || subject.kind === "suggestedPrompts")
+        ? openAppaChatHref(agent.id, prompt)
+        : null,
   };
 }

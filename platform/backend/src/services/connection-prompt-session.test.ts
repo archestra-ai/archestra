@@ -653,6 +653,32 @@ describe("connection prompt session", () => {
     ).toBe(false);
   });
 
+  test("binds a prompt that names parts the user left out", async () => {
+    await beginConnectionPromptSession({
+      userId: USER,
+      organizationId: ORG,
+      clientId: CLIENT,
+      origin: ORIGIN,
+    });
+    expect(
+      await recognizeConnectionSetup({
+        userId: USER,
+        organizationId: ORG,
+        sessionId: "native-exclude",
+        clientId: CLIENT,
+        requestBody: {
+          messages: [
+            {
+              role: "user",
+              content:
+                "Read https://ai.example.com/connect.md?client=claude-code&exclude=proxy,skills and connect Claude Code.",
+            },
+          ],
+        },
+      }),
+    ).toBe(true);
+  });
+
   test("refuses an anonymous caller, a non-origin, and an unsupported client", async () => {
     await expect(
       beginConnectionPromptSession({

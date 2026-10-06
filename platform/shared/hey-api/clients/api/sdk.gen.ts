@@ -5206,7 +5206,7 @@ export const checkInvitation = <ThrowOnError extends boolean = false>(options: O
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const jevDecisionsWithDefaultAgent = <ThrowOnError extends boolean = false>(options: Options<JevDecisionsWithDefaultAgentData, ThrowOnError>) => (options.client ?? client).post<JevDecisionsWithDefaultAgentResponses, JevDecisionsWithDefaultAgentErrors, ThrowOnError>({
     url: '/v1/jev/decisions',
@@ -5222,7 +5222,7 @@ export const jevDecisionsWithDefaultAgent = <ThrowOnError extends boolean = fals
  *
  * Authentication:
  *
- * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/platform-llm-proxy-authentication).
+ * This route accepts either an LLM provider API key or a Virtual API Key. See [LLM Proxy Authentication](/docs/llm-proxy/authentication).
  */
 export const jevDecisionsWithAgent = <ThrowOnError extends boolean = false>(options: Options<JevDecisionsWithAgentData, ThrowOnError>) => (options.client ?? client).post<JevDecisionsWithAgentResponses, JevDecisionsWithAgentErrors, ThrowOnError>({
     url: '/v1/jev/{agentId}/decisions',

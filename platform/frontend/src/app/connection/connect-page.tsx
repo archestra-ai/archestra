@@ -208,7 +208,8 @@ export function ConnectPage() {
       <style>{MOTION_CSS}</style>
       <DotField />
 
-      <div className="relative mx-auto w-full max-w-7xl px-6 pt-10 pb-16 md:px-10 lg:px-14 lg:pt-12">
+      {/* The layout follows the room left by the sidebar, not the window. */}
+      <div className="@container relative mx-auto w-full max-w-7xl px-6 pt-10 pb-16 md:px-10 lg:px-14 lg:pt-12">
         {data.canManage && (
           <div className="absolute top-4 right-6 md:right-10 lg:right-14">
             <Button
@@ -225,10 +226,10 @@ export function ConnectPage() {
           </div>
         )}
 
-        <section className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] lg:gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] xl:gap-16">
+        <section className="grid items-start gap-10 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16 [&>*]:max-w-2xl @min-[66rem]:[&>*]:max-w-none">
           {/* Left: headline, picker */}
           <div className="min-w-0">
-            <h1 className="text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl xl:text-6xl">
+            <h1 className="text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @7xl:text-6xl">
               Connect your agent to {data.appName}
             </h1>
             <p className="mt-4 max-w-[34rem] text-sm leading-relaxed text-muted-foreground">
@@ -1190,7 +1191,7 @@ function ProfileCard({
   return (
     <aside
       aria-label={`What ${client.label} gets`}
-      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm lg:mt-2"
+      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm @min-[66rem]:mt-2"
     >
       <div className="flex items-center gap-3.5">
         <div key={`icon-${client.id}`} className="connect-icon">
@@ -1524,8 +1525,8 @@ function ChipIcon({
 
 function LoadingState() {
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 pt-12 md:px-10 lg:px-14">
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] lg:gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] xl:gap-16">
+    <div className="@container mx-auto w-full max-w-7xl px-6 pt-12 md:px-10 lg:px-14">
+      <div className="grid gap-10 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16">
         <div className="space-y-5">
           <Skeleton className="h-16 w-80 max-w-full" />
           <Skeleton className="h-16 w-64 max-w-full" />

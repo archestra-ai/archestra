@@ -183,19 +183,11 @@ describe("terminal surface contrast", () => {
       ).toBeGreaterThanOrEqual(4.5);
     } else {
       const lightness = (c: Rgb) => toOklab(c)[0];
-      const track = mix(
-        parse(tokens["--muted"]),
-        parse(tokens["--foreground"]),
-        mixPercent("--terminal-track"),
-      );
       // The block is a raised card: never darker than the page it sits on
       // (a hair of slack for a pure-white page with a tinted card).
       expect(lightness(palette.surface)).toBeGreaterThanOrEqual(
         lightness(parse(tokens["--background"])) - 0.005,
       );
-      // A tab strip's track steps below the card, and the raised (card
-      // coloured) selected tab stands out on it.
-      expect(contrast(track, palette.surface)).toBeGreaterThanOrEqual(1.05);
       expect(
         contrast(parse(tokens["--foreground"]), palette.surface),
       ).toBeGreaterThanOrEqual(4.5);

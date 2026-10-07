@@ -44,7 +44,7 @@ function RadioGroupItem({
 
 /**
  * Surface and state styling for a selectable option card (a "radio card"):
- * a raised card on the page, a primary edge and faint tint when selected, a
+ * a raised card on the page, a 2px primary edge when selected, a
  * flat dashed card when unavailable. Callers keep their own layout (flex,
  * padding, radius).
  *
@@ -60,14 +60,15 @@ function radioCardClass({
   disabled?: boolean;
 } = {}) {
   return cn(
-    "border border-border bg-raised transition-colors hover:border-primary/40 hover:bg-primary/[0.03]",
+    "border border-border bg-raised transition-colors hover:border-primary/40",
     "has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-    "has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[[data-state=checked]]:hover:bg-primary/5",
-    "has-[:disabled]:cursor-not-allowed has-[:disabled]:border-dashed has-[:disabled]:bg-transparent has-[:disabled]:text-muted-foreground has-[:disabled]:hover:border-border has-[:disabled]:hover:bg-transparent",
-    checked &&
-      "border-primary bg-primary/5 hover:border-primary hover:bg-primary/5",
+    // Selected: a 2px primary edge (border + 1px ring, so nothing shifts) on
+    // the same white fill. A tint read as greyed out next to white cards.
+    "has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:ring-1 has-[[data-state=checked]]:ring-primary has-[[data-state=checked]]:hover:border-primary",
+    "has-[:disabled]:cursor-not-allowed has-[:disabled]:border-dashed has-[:disabled]:bg-transparent has-[:disabled]:text-muted-foreground has-[:disabled]:hover:border-border",
+    checked && "border-primary ring-1 ring-primary hover:border-primary",
     disabled &&
-      "cursor-not-allowed border-dashed bg-transparent text-muted-foreground hover:border-border hover:bg-transparent",
+      "cursor-not-allowed border-dashed bg-transparent text-muted-foreground hover:border-border",
   );
 }
 

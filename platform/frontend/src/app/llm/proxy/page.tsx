@@ -164,7 +164,7 @@ function endpointTabClass(active: boolean) {
     "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors",
     active
       ? cn("border font-semibold", terminalRaisedClass)
-      : "border border-transparent text-terminal-muted hover:text-terminal-emphasis",
+      : "border border-transparent text-terminal-muted hover:bg-terminal-elevated hover:text-terminal-emphasis",
   );
 }
 
@@ -231,7 +231,7 @@ function ProxyEndpointCard({
     <TerminalBlock
       rows={rows}
       header={
-        <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge bg-terminal-track p-1.5">
+        <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge p-1.5">
           <UnstyledButton
             type="button"
             onClick={() => onSelect("model-router")}

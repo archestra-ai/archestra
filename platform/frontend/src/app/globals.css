@@ -96,7 +96,6 @@
   --color-terminal-muted: var(--terminal-muted);
   --color-terminal-comment: var(--terminal-comment);
   --color-terminal-edge: var(--terminal-edge);
-  --color-terminal-track: var(--terminal-track);
   --color-terminal-emphasis: var(--terminal-emphasis);
   --color-terminal-success: var(--terminal-success);
   --color-terminal-destructive: var(--terminal-destructive);
@@ -156,9 +155,6 @@
      every theme and mode, close enough that the text still clears 4.5:1. */
   --terminal-selected: color-mix(in oklab, var(--terminal) 80%, var(--terminal-foreground));
   --terminal-edge: var(--border);
-  /* Track behind a tab strip on the block (a segmented control): a subtle
-     muted step below the card so the raised selected tab reads as raised. */
-  --terminal-track: color-mix(in oklab, var(--muted) 94%, var(--foreground));
   --terminal-muted: color-mix(in oklab, var(--terminal-foreground) 85%, var(--terminal));
   --terminal-comment: color-mix(in oklab, var(--terminal-foreground) 78%, var(--terminal));
   --terminal-emphasis: var(--terminal-anchor);
@@ -190,7 +186,6 @@ html.dark {
   --terminal-anchor: white;
   --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
   --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
-  --terminal-track: transparent;
   --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, white);
   --sidebar-attention-foreground: color-mix(in oklab, var(--destructive) 55%, white);
 }

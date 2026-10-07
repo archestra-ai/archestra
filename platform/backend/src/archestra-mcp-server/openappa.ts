@@ -483,21 +483,19 @@ const registry = defineArchestraTools([
         catalogId: catalog.id,
       });
       const named = args.tools && new Set(args.tools);
-      const rows = tools
+      const entries = tools
         .filter(
           (tool) =>
             !named ||
             named.has(tool.name) ||
             named.has(tool.name.slice(tool.name.lastIndexOf("__") + 2)),
         )
-        .map((tool) =>
-          inspectedToolRow(
-            tool,
-            coverage.filter((row) => row.toolId === tool.id),
-            args.detail,
-          ),
-        );
-      const page = pageWithinBudget(rows, args.offset);
+        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
+        .map((tool) => ({
+          tool,
+          coverage: coverage.filter((row) => row.toolId === tool.id),
+        }));
+      const page = pageWithinBudget(entries, args.offset, args.detail);
       return result({
         scope,
         mcpServer: {
@@ -505,7 +503,7 @@ const registry = defineArchestraTools([
           name: catalog.name,
           environmentId: catalog.environmentId,
         },
-        total: rows.length,
+        total: entries.length,
         offset: args.offset,
         nextOffset: page.nextOffset,
         tools: page.rows,
@@ -971,37 +969,48 @@ function consultText(bytes: Uint8Array | null): {
     : { text, cut: false };
 }
 
-/** Leaves room under OpenAPPA's 64 KiB tool-result cap for the envelope and JSON escaping. */
-const INSPECT_PAGE_BUDGET_CHARS = 40_000;
+/** Leaves room under OpenAPPA's 64 KiB tool-result cap, measured after the result is JSON-encoded twice on its way there. */
+const INSPECT_PAGE_BUDGET_BYTES = 48_000;
 const INSPECT_SUMMARY_DESCRIPTION_CHARS = 160;
 
-function inspectedToolRow(
+type InspectedTool = {
   tool: {
     id: string;
     name: string;
     description: string | null;
     parameters: unknown;
-  },
-  coverage: CoverageTool[],
+  };
+  coverage: CoverageTool[];
+};
+
+function inspectedToolRow(
+  { tool, coverage }: InspectedTool,
   detail: "summary" | "full",
 ) {
+  const primary =
+    coverage.find((row) => !row.rule?.selector) ?? coverage[0] ?? null;
   const row = {
     id: tool.id,
     name: tool.name,
-    readOnly: coverage[0]?.readOnly ?? null,
-    kind: coverage[0]?.kind ?? null,
+    readOnly: primary?.readOnly ?? null,
+    kind: primary?.kind ?? null,
   };
   if (detail === "full")
     return {
       ...row,
       description: tool.description,
       parameters: tool.parameters,
-      rules: coverage.map(({ rule, policySource }) => ({ policySource, rule })),
+      rules: coverage.map(({ kind, rule, policySource }) => ({
+        kind,
+        policySource,
+        rule,
+      })),
     };
   return {
     ...row,
     description: firstSentence(tool.description),
-    rules: coverage.map(({ rule, policySource }) => ({
+    rules: coverage.map(({ kind, rule, policySource }) => ({
+      kind,
       policySource,
       rule: rule && {
         source: rule.source,
@@ -1024,18 +1033,37 @@ function firstSentence(text: string | null): string | null {
     : sentence;
 }
 
-/** Rows from `offset` while they fit the budget, always at least one. */
-function pageWithinBudget<T>(rows: T[], offset: number) {
-  const page: T[] = [];
+function encodedBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(JSON.stringify(value)), "utf8");
+}
+
+/**
+ * Rows from `offset` while they fit the budget, always at least one. A full
+ * row too large to return on its own falls back to its summary.
+ */
+function pageWithinBudget(
+  entries: InspectedTool[],
+  offset: number,
+  detail: "summary" | "full",
+) {
+  const page: object[] = [];
   let used = 0;
-  for (const row of rows.slice(offset)) {
-    const size = JSON.stringify(row).length;
-    if (page.length > 0 && used + size > INSPECT_PAGE_BUDGET_CHARS) break;
+  for (const entry of entries.slice(offset)) {
+    let row: object = inspectedToolRow(entry, detail);
+    let size = encodedBytes(row);
+    if (size > INSPECT_PAGE_BUDGET_BYTES) {
+      row = {
+        ...inspectedToolRow(entry, "summary"),
+        fullDetail: "omitted: larger than the tool-result size limit",
+      };
+      size = encodedBytes(row);
+    }
+    if (page.length > 0 && used + size > INSPECT_PAGE_BUDGET_BYTES) break;
     page.push(row);
     used += size;
   }
   const next = offset + page.length;
-  return { rows: page, nextOffset: next < rows.length ? next : null };
+  return { rows: page, nextOffset: next < entries.length ? next : null };
 }
 
 function result(value: object) {

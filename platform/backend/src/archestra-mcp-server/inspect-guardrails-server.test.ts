@@ -126,6 +126,7 @@ describe("inspect_guardrails_server", () => {
           description: "Reads one record.",
           rules: [
             {
+              kind: "unlisted",
               policySource: "not_covered",
               rule: expect.objectContaining({ source: "catchall", name: "*" }),
             },
@@ -192,7 +193,7 @@ describe("inspect_guardrails_server", () => {
       await makeTool({
         catalogId,
         name,
-        parameters: { type: "object", description: "x".repeat(4000) },
+        parameters: { type: "object", description: `"ж"\n`.repeat(1000) },
       });
     }
     const seen: string[] = [];
@@ -207,13 +208,40 @@ describe("inspect_guardrails_server", () => {
         tools: { name: string }[];
         nextOffset: number | null;
       };
-      expect(JSON.stringify(page).length).toBeLessThan(64 * 1024);
+      expect(
+        Buffer.byteLength(JSON.stringify(JSON.stringify(page)), "utf8"),
+      ).toBeLessThan(64 * 1024);
       seen.push(...page.tools.map((tool) => tool.name));
       offset = page.nextOffset;
       pages++;
     }
     expect(pages).toBeGreaterThan(1);
-    expect(seen.sort()).toEqual(names.sort());
+    expect(seen).toEqual([...names].sort());
+  });
+
+  test("a tool too large for one result comes back as its summary", async ({
+    makeTool,
+  }) => {
+    await makeTool({
+      catalogId,
+      name: "huge__schema",
+      description: "Huge. Schema.",
+      parameters: { type: "object", description: "x".repeat(100_000) },
+    });
+    const { structuredContent } = await inspect(context, catalogId, {
+      detail: "full",
+    });
+    expect(structuredContent).toMatchObject({
+      nextOffset: null,
+      tools: [
+        {
+          name: "huge__schema",
+          description: "Huge.",
+          fullDetail: expect.any(String),
+        },
+      ],
+    });
+    expect(JSON.stringify(structuredContent)).not.toContain("xxxx");
   });
 
   test("includes current declared-battery and selector rules, without unrelated catalog metadata", async ({
@@ -236,9 +264,20 @@ describe("inspect_guardrails_server", () => {
       environmentId,
     });
     const result = await inspect(context, fixture.catalogIds.docs);
-    const rules = (
-      result.structuredContent as { tools: { rules: unknown[] }[] }
-    ).tools.flatMap((tool) => tool.rules);
+    const tools = (
+      result.structuredContent as {
+        tools: {
+          kind: string | null;
+          rules: { kind: string; rule: { selector: string | null } | null }[];
+        }[];
+      }
+    ).tools;
+    for (const tool of tools)
+      expect(tool.kind).toBe(
+        (tool.rules.find((row) => !row.rule?.selector) ?? tool.rules[0])
+          ?.kind ?? null,
+      );
+    const rules = tools.flatMap((tool) => tool.rules);
     expect(rules).toEqual(
       expect.arrayContaining([
         expect.objectContaining({

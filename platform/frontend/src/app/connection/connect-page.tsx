@@ -103,7 +103,6 @@ import {
 } from "./connected-agents";
 import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
-import { TerminalBlock } from "./terminal-block";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 // The approval panel is large; the page only needs it for Claude Desktop's
@@ -724,9 +723,12 @@ function ConnectArea({
           </div>
 
           {script && command ? (
-            <div className="mt-2">
-              <TerminalBlock prompt code={command} />
-            </div>
+            <ScriptBlock
+              command={command}
+              copied={copied}
+              disabled={!origin || data.revalidating}
+              onCopy={copy}
+            />
           ) : (
             <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
               <code
@@ -780,6 +782,60 @@ function ConnectArea({
         </>
       )}
     </Band>
+  );
+}
+
+/** Words the installer command runs, shown in the command colour. */
+const SHELL_COMMANDS = new Set(["curl", "irm", "node"]);
+
+/**
+ * The installer command as a terminal: always dark, a dim prompt, and the
+ * command and its flags tinted. Copy takes the text exactly as shown.
+ */
+function ScriptBlock({
+  command,
+  copied,
+  disabled,
+  onCopy,
+}: {
+  command: string;
+  copied: boolean;
+  disabled: boolean;
+  onCopy: () => void;
+}) {
+  return (
+    <div className="relative mt-2 rounded-xl border border-zinc-800 bg-zinc-950 shadow-sm">
+      <Button
+        size="xs"
+        variant="ghost"
+        onClick={onCopy}
+        disabled={disabled}
+        className="absolute top-2.5 right-2.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+      >
+        {copied ? <Check /> : <Copy />}
+        {copied ? "Copied" : "Copy"}
+      </Button>
+      <pre className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-[13px] leading-relaxed text-zinc-100">
+        {command.split("\n").map((line, i) => (
+          <div key={line}>
+            {i === 0 && <span className="text-zinc-500 select-none">$ </span>}
+            {line.split(/(\s+)/).map((word, j) => (
+              <span
+                // biome-ignore lint/suspicious/noArrayIndexKey: words repeat
+                key={j}
+                className={cn(
+                  SHELL_COMMANDS.has(word) && "text-emerald-400",
+                  word.startsWith("-") && "text-sky-300",
+                  /^[|\\`]$/.test(word) && "text-zinc-500",
+                )}
+              >
+                {word}
+              </span>
+            ))}
+          </div>
+        ))}
+      </pre>
+    </div>
   );
 }
 

@@ -37,16 +37,9 @@ interface TerminalBlockProps {
    * toggler tabs used by the setup-script and proxy-endpoint cards.
    */
   header?: React.ReactNode;
-  /** Show a `$` shell prompt before the code; it isn't copied. */
-  prompt?: boolean;
 }
 
-export function TerminalBlock({
-  code,
-  rows,
-  header,
-  prompt,
-}: TerminalBlockProps) {
+export function TerminalBlock({ code, rows, header }: TerminalBlockProps) {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const effectiveRows = rows ?? (code !== undefined ? [{ code }] : []);
@@ -112,9 +105,6 @@ export function TerminalBlock({
               <span className="mr-3 select-none rounded bg-green-100 px-1.5 py-0.5 text-[11px] font-semibold text-green-800 dark:bg-green-950 dark:text-green-300">
                 {row.badge}
               </span>
-            )}
-            {prompt && (
-              <span className="select-none text-terminal-muted">$ </span>
             )}
             {row.code}
           </pre>

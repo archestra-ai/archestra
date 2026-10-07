@@ -422,6 +422,33 @@ describe("GET /api/openappa/coverage/entities", () => {
     });
     await makeAgentTool(agent.id, builtInTool.id);
 
+    const serverList = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/coverage/entities?type=mcp_server&limit=100",
+    });
+    expect(serverList.statusCode).toBe(200);
+    expect(serverList.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: ARCHESTRA_MCP_CATALOG_ID,
+          name: "Archestra",
+          type: "mcp_server",
+          toolCount: 1,
+        }),
+        expect.objectContaining({ id: catalogIds.docs }),
+      ]),
+    );
+    expect(
+      serverList
+        .json()
+        .data.every((entity: { type: string }) => entity.type === "mcp_server"),
+    ).toBe(true);
+    const listedIds = serverList
+      .json()
+      .data.map((entity: { id: string }) => entity.id);
+    expect(listedIds).not.toContain(agent.id);
+    expect(listedIds).not.toContain(gateway.id);
+
     const appCatalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,
       name: "Private dashboard",

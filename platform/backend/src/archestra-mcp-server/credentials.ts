@@ -24,6 +24,7 @@ import {
   InsertRuntimeCredentialDefinitionSchema,
   UpdateRuntimeCredentialDefinitionSchema,
 } from "@/types";
+import { archestraMcpBranding } from "./branding";
 import {
   agentCredentialSetupUrl,
   catchError,
@@ -213,8 +214,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
     title: "Open battery credentials",
-    description:
-      'Show the person one card in Archestra chat for the tokens these batteries need: what each battery adds, how to make its token, and a picker of the organization\'s credentials with an option to add a new one or skip. Pass every battery that needs a step in one call, by the names list_guardrails_battery_fits returns. This returns at once. The person answers with a message that starts with "Battery credentials:" and names the credential key for each variable, or says it was skipped. Secrets stay outside the conversation.',
+    description: `Show the person one card in ${archestraMcpBranding.appName} chat for the tokens these batteries need: what each battery adds, how to make its token, and a picker of the organization's credentials with an option to add a new one or skip. Pass every battery that needs a step in one call, by the names list_guardrails_battery_fits returns. This returns at once. The person answers with a message that starts with "Battery credentials:" and names the credential key for each variable, or says it was skipped. Secrets stay outside the conversation.`,
     schema: z.strictObject({
       batteries: z
         .array(z.string().min(1))

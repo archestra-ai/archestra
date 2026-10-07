@@ -124,7 +124,14 @@ export function verifySubagentBinding(
 }
 
 function sign(payload: string): string {
-  return createHmac("sha256", config.openappa.offerSigningSecret)
-    .update(`${DOMAIN}.${payload}`)
+  return createHmac("sha256", bindingKey())
+    .update(`${DOMAIN}\n${payload}`)
     .digest("base64url");
+}
+
+/** A key of this binding's own, derived from the deployment's signing secret. */
+function bindingKey(): Buffer {
+  return createHmac("sha256", config.openappa.offerSigningSecret)
+    .update(DOMAIN)
+    .digest();
 }

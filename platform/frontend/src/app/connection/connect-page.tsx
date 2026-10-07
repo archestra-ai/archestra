@@ -979,30 +979,35 @@ function guardrailsStatus(
 } | null {
   const { state } = data.guardrails;
   if (state === null) return null;
+  // The Guardrails page's terms: enforcement is on or off, and requests from
+  // a client Guardrails don't recognize are Allowed or Blocked.
   if (state === "off")
-    return { label: "Off", detail: "Your admin hasn't turned guardrails on." };
+    return {
+      label: "Not enforced",
+      detail: "Your admin hasn't turned on guardrail enforcement.",
+    };
   if (!routed)
     return {
-      label: "Inactive",
+      label: "Not enforced",
       detail:
         "Guardrails only see requests that go through the LLM proxy, and it's off for this agent.",
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
       tone: "ok",
-      label: "Active",
-      detail: `${client.label} is supported, so its requests through the proxy are checked.`,
+      label: "Enforced",
+      detail: `Guardrails recognize ${client.label}, so its tool calls are checked against your org's policy.`,
     };
   return state === "block"
     ? {
         tone: "block",
-        label: "Agent blocked",
-        detail: `${client.label} isn't supported. Your org blocks unsupported agents, so its model requests are rejected.`,
+        label: "Blocked",
+        detail: `Guardrails don't recognize ${client.label}, and your org blocks unrecognized clients, so the LLM proxy rejects its model requests.`,
       }
     : {
         tone: "warn",
-        label: "Unchecked",
-        detail: `${client.label} isn't supported. Your org lets unsupported agents through, so its requests aren't checked.`,
+        label: "Allowed",
+        detail: `Guardrails don't recognize ${client.label}, and your org allows unrecognized clients, so its requests run without checks.`,
       };
 }
 
@@ -1131,36 +1136,45 @@ function ProfileCard({
 
   // Small status chips under the lists. A future capability is one entry.
   const statusChips: StatusChip[] = [];
-  // Shown for every agent while the LLM proxy is on. Apps with an installer
-  // are known to take it; for others it's set up but not guaranteed.
+  // The LLM proxy's real state for this agent: the admin setting, whether
+  // the agent can use a custom model endpoint, then the user's choice.
   const proxyOn = data.partsFor(client).proxy;
-  const verified = setupModeFor(client) === "prompt";
-  if (proxyOn)
-    statusChips.push({
-      id: "routing",
-      icon: (
-        <ChipIcon tone={routed && verified ? "ok" : undefined}>
-          <Cpu />
-        </ChipIcon>
-      ),
-      title: (
-        <span className="inline-flex items-center gap-1">
-          LLM proxy
-          <InfoTip label="What the LLM proxy does">
-            <TipBody
-              reason={
-                !routed
-                  ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
-                  : verified
-                    ? `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`
-                    : `${client.label} isn't supported by ${data.appName}'s LLM proxy yet. It can still work if ${client.label} lets you set a custom model endpoint.`
-              }
-            />
-          </InfoTip>
-        </span>
-      ),
-      sub: !routed ? "Off" : verified ? "On" : "Not supported",
-    });
+  const proxy = !data.llmProxyEnabled
+    ? {
+        label: "Not active",
+        reason: `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`,
+      }
+    : client.proxy.kind === "unsupported"
+      ? {
+          label: "Not supported",
+          reason: `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`,
+        }
+      : !routed
+        ? {
+            label: "Off",
+            reason: `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`,
+          }
+        : {
+            label: "On",
+            reason: `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`,
+          };
+  statusChips.push({
+    id: "routing",
+    icon: (
+      <ChipIcon tone={proxy.label === "On" ? "ok" : undefined}>
+        <Cpu />
+      </ChipIcon>
+    ),
+    title: (
+      <span className="inline-flex items-center gap-1">
+        LLM proxy
+        <InfoTip label="What the LLM proxy does">
+          <TipBody reason={proxy.reason} />
+        </InfoTip>
+      </span>
+    ),
+    sub: proxy.label,
+  });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)
     statusChips.push({

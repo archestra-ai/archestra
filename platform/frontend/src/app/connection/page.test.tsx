@@ -189,28 +189,28 @@ describe("ConnectPage guardrails chip", () => {
     return chip as HTMLElement;
   }
 
-  it("says the guardrails are off when the deployment is off", () => {
+  it("says the guardrails are not enforced when enforcement is off", () => {
     expect(
       setup("claude-code", { active: false, unsupportedClientAction: "block" }),
-    ).toHaveTextContent("Off");
+    ).toHaveTextContent("Not enforced");
   });
 
-  it("is active for an agent the guardrails support", () => {
+  it("is enforced for an agent the guardrails recognize", () => {
     expect(
       setup("claude-code", { active: true, unsupportedClientAction: "block" }),
-    ).toHaveTextContent("Active");
+    ).toHaveTextContent("Enforced");
   });
 
-  it("says an unsupported agent passes through unchecked", () => {
+  it("says an unrecognized agent is allowed", () => {
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "bypass" }),
-    ).toHaveTextContent("Unchecked");
+    ).toHaveTextContent("Allowed");
   });
 
-  it("says an unsupported agent is blocked", () => {
+  it("says an unrecognized agent is blocked", () => {
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "block" }),
-    ).toHaveTextContent("Agent blocked");
+    ).toHaveTextContent("Blocked");
   });
 });
 
@@ -297,7 +297,7 @@ describe("ConnectPage (no connect request)", () => {
     ).toBeVisible();
   });
 
-  it("shows the LLM proxy as on for an app with an installer, not supported for other agents", () => {
+  it("shows the LLM proxy as on for supported agents, not active when the admin turned it off", () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -320,8 +320,18 @@ describe("ConnectPage (no connect request)", () => {
         typeof useSearchParams
       >,
     );
+    const other = render(<ConnectionPage />);
+    expect(screen.getByText("On")).toBeVisible();
+    other.unmount();
+
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["claude-code", "hermes-agent"],
+        connectionLlmProxyEnabled: false,
+      },
+    });
     render(<ConnectionPage />);
-    expect(screen.getByText("Not supported")).toBeVisible();
+    expect(screen.getByText("Not active")).toBeVisible();
   });
 
   it("lets any agent leave the LLM proxy out", async () => {

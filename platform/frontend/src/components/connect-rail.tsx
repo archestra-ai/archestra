@@ -126,14 +126,18 @@ export function AuthMethodPicker<T extends string>({
           <div
             key={method.value}
             className={cn(
-              "flex flex-col gap-2 rounded-md p-3",
+              "flex flex-col rounded-md",
               radioCardClass({ checked, disabled: !!reason }),
             )}
           >
+            {/* The label carries the card's padding and grows to fill it, so
+                anywhere on the card selects the method except the manage link,
+                which sits beside the label (not inside it) and is only as wide
+                as its text. */}
             <Label
               htmlFor={`${id}-${method.value}`}
               className={cn(
-                "flex items-start gap-3 font-normal",
+                "flex flex-1 items-start gap-3 p-3 font-normal",
                 reason ? "cursor-not-allowed" : "cursor-pointer",
               )}
             >
@@ -155,7 +159,8 @@ export function AuthMethodPicker<T extends string>({
             {method.manage && (
               <Link
                 href={method.manage.href}
-                className="ml-7 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
+                // Text-wide, 24px tall (WCAG 2.5.8), aligned under the title.
+                className="-mt-2 mb-2 ml-10 self-start py-1 text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
               >
                 {method.manage.label} →
               </Link>

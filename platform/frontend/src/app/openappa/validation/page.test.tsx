@@ -24,6 +24,7 @@ import {
 } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { ListReturnUrlTracker } from "@/lib/hooks/use-list-return-url";
 import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaPageActionSlotContext } from "../_parts/openappa-page-action";
 import { ValidationProvider } from "./_parts/validation-context";
@@ -134,6 +135,7 @@ let currentHref = "/openappa/validation";
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   currentHref = "/openappa/validation";
+  sessionStorage.clear();
   vi.mocked(useSession).mockReturnValue({
     data: {
       session: {
@@ -1332,6 +1334,16 @@ test("last-run summary links to paginated history and returns to the filtered co
   expect(new URLSearchParams(currentHref.split("?")[1]).get("search")).toBe(
     "scenario",
   );
+  fireEvent.click(screen.getByRole("link", { name: scenario.path }));
+  fireEvent.click(
+    await screen.findByRole("link", { name: "Back to validation" }),
+  );
+  expect(currentHref).toBe("/openappa/validation?search=scenario");
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Add validation" }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Cancel" }));
+  expect(currentHref).toBe("/openappa/validation?search=scenario");
 });
 
 test("empty history remains accessible from the summary", async () => {
@@ -1810,6 +1822,7 @@ function showPage(
     } as ReturnType<typeof useRouter>);
     return (
       <>
+        <ListReturnUrlTracker />
         <section aria-label="Validation page actions">
           <div ref={setActionSlot} />
         </section>

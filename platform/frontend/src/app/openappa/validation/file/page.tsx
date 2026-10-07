@@ -19,6 +19,7 @@ import {
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { useGuardrailsPolicy } from "@/lib/guardrails-policy.query";
+import { useListReturnHref } from "@/lib/hooks/use-list-return-url";
 import { useEffectivePolicy } from "@/lib/openappa-batteries.query";
 import {
   type PolicyTestCollection,
@@ -37,11 +38,12 @@ import {
   getValidationDraft,
   retainValidationDraft,
 } from "../_parts/validation-draft";
-import { exportValidationFile } from "../_parts/validation-file";
 import {
+  exportValidationFile,
   StepResults,
   statusLabel,
   ValidationNotices,
+  ValidationRunDiagnostics,
   ValidationStatusBadge,
 } from "../_parts/validation-parts";
 
@@ -52,6 +54,7 @@ export default function ValidationFilePage() {
 
 function ValidationFileEditor({ path }: { path: string }) {
   const suite = useValidation();
+  const listHref = useListReturnHref("/openappa/validation");
   const route = `file:${path}`;
   const [restored] = useState(() =>
     getValidationDraft(suite.sessionKey, route),
@@ -102,7 +105,7 @@ function ValidationFileEditor({ path }: { path: string }) {
       mounted.current = false;
     };
   }, []);
-  const nextHref = useRef(suite.listHref);
+  const nextHref = useRef(listHref);
   const guard = useUnsavedChangesGuard({
     isDirty: fileDirty,
     onOpenChange: (open) => {
@@ -188,7 +191,7 @@ function ValidationFileEditor({ path }: { path: string }) {
   }
   return (
     <div className="space-y-4">
-      <PageBackLink href={suite.listHref}>
+      <PageBackLink href={listHref}>
         <span>Back to validation</span>
       </PageBackLink>
       <ValidationNotices sourceChanged={sourceChanged} />
@@ -322,24 +325,7 @@ function ValidationFileEditor({ path }: { path: string }) {
               </InlineNoticeText>
             </InlineNotice>
           )}
-          {previewRun && previewRun.validation.errors.length > 0 && (
-            <InlineNotice variant="error">
-              <TriangleAlert />
-              <span className="font-medium">Policy validation failed</span>
-              <InlineNoticeText>
-                {previewRun.validation.errors.join("\n")}
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
-          {previewRun && previewRun.validation.warnings.length > 0 && (
-            <InlineNotice>
-              <TriangleAlert />
-              <span className="font-medium">Policy warnings</span>
-              <InlineNoticeText>
-                {previewRun.validation.warnings.join("\n")}
-              </InlineNoticeText>
-            </InlineNotice>
-          )}
+          {previewRun && <ValidationRunDiagnostics run={previewRun} />}
           {result && (
             <div className="space-y-3">
               <p className="text-xs text-muted-foreground">{`${result.steps.length} of ${result.assertionCount} assertions evaluated`}</p>
@@ -384,7 +370,7 @@ function ValidationFileEditor({ path }: { path: string }) {
         onConfirm={() =>
           suite.deleteFiles([path], () => {
             clearDraft();
-            router.push(suite.listHref);
+            router.push(listHref);
           })
         }
       />

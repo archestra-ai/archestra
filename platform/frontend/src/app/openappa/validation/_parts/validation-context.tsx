@@ -111,7 +111,6 @@ function useSuite({
   const router = useRouter();
   const [baseline, setBaseline] = useState(collection);
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [listHref, setListHref] = useState("/openappa/validation");
   const history = useOpenAppaPolicyTestRuns(true);
   const saveMutation = useSaveOpenAppaPolicyTests((next, submitted) => {
     if (next) {
@@ -234,8 +233,6 @@ function useSuite({
     add,
     createFile,
     deleteFiles,
-    listHref,
-    setListHref,
     summaries: inspection.summaries,
     inspectionError: inspection.error,
     loadError,

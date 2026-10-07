@@ -3,8 +3,8 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import { Download, Eye, Info, Pencil, Trash2 } from "lucide-react";
 import Link from "next/link";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useState } from "react";
 import {
   openRowOnPlainClick,
   RowClickShield,
@@ -32,8 +32,8 @@ import {
 import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaPageAction } from "../_parts/openappa-page-action";
 import { useValidation, validationFileHref } from "./_parts/validation-context";
-import { exportValidationFile } from "./_parts/validation-file";
 import {
+  exportValidationFile,
   ValidationActions,
   ValidationLastRun,
   ValidationNotices,
@@ -58,8 +58,6 @@ export default function ValidationPage() {
   const suite = useValidation();
   const router = useRouter();
   const params = useSearchParams();
-  const pathname = usePathname();
-  const queryString = params.toString();
   const [deleteIds, setDeleteIds] = useState<string[]>([]);
   const [pageIds, setPageIds] = useState<string[]>([]);
   const search = params.get("search") ?? "";
@@ -139,9 +137,6 @@ export default function ValidationPage() {
   function fileHref(row: ValidationRow) {
     return validationFileHref(row.file.path);
   }
-  useEffect(() => {
-    suite.setListHref(`${pathname}${queryString ? `?${queryString}` : ""}`);
-  }, [pathname, queryString, suite.setListHref]);
 
   const columns: ColumnDef<ValidationRow>[] = [
     ...(!suite.github && suite.canWrite

@@ -17,6 +17,7 @@ import {
   useGuardedInAppNavigation,
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
+import { useListReturnHref } from "@/lib/hooks/use-list-return-url";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
 import { useValidationHistoryGuard } from "../_parts/use-validation-history-guard";
 import {
@@ -32,6 +33,7 @@ import { ValidationNotices } from "../_parts/validation-parts";
 
 export default function NewValidationPage() {
   const suite = useValidation();
+  const listHref = useListReturnHref("/openappa/validation");
   const router = useRouter();
   const [restored] = useState(() =>
     getValidationDraft(suite.sessionKey, "new"),
@@ -69,7 +71,7 @@ export default function NewValidationPage() {
     clearDraft();
     form.reset();
   }
-  const nextHref = useRef(suite.listHref);
+  const nextHref = useRef(listHref);
   const guard = useUnsavedChangesGuard({
     isDirty: form.formState.isDirty,
     onOpenChange: (open) => {
@@ -96,12 +98,12 @@ export default function NewValidationPage() {
     Boolean(suite.loadError || suite.collection.error) ||
     suite.baseline.files.length >= 32;
   function cancel() {
-    nextHref.current = suite.listHref;
+    nextHref.current = listHref;
     guard.requestClose();
   }
   return (
     <div className="space-y-4">
-      <PageBackLink href={suite.listHref} onNavigate={cancel}>
+      <PageBackLink href={listHref} onNavigate={cancel}>
         <span>Back to validation</span>
       </PageBackLink>
       <ValidationNotices sourceChanged={sourceChanged} />

@@ -185,31 +185,7 @@ export function ValidationLastRun() {
           </Button>
         </InlineNotice>
       )}
-      {currentRun && currentRun.validation.errors.length > 0 && (
-        <InlineNotice variant="error">
-          <TriangleAlert />
-          <span className="font-medium">Policy validation failed</span>
-          <InlineNoticeText>
-            {currentRun.validation.errors.join("\n")}
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
-      {currentRun?.executionError && (
-        <InlineNotice variant="warning">
-          <TriangleAlert />
-          <span className="font-medium">Validation could not run</span>
-          <InlineNoticeText>{currentRun.executionError}</InlineNoticeText>
-        </InlineNotice>
-      )}
-      {currentRun && currentRun.validation.warnings.length > 0 && (
-        <InlineNotice>
-          <TriangleAlert />
-          <span className="font-medium">Policy warnings</span>
-          <InlineNoticeText>
-            {currentRun.validation.warnings.join("\n")}
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
+      {currentRun && <ValidationRunDiagnostics run={currentRun} />}
     </div>
   );
 }
@@ -317,4 +293,48 @@ export function statusLabel(status: string) {
           : status === "not_run"
             ? "Not run"
             : status;
+}
+
+export function ValidationRunDiagnostics({
+  run,
+}: {
+  run: Pick<PolicyTestRun, "validation" | "executionError">;
+}) {
+  const notices = [
+    {
+      title: "Policy validation failed",
+      message: run.validation.errors.join("\n"),
+      variant: "error",
+    },
+    {
+      title: "Validation could not run",
+      message: run.executionError,
+      variant: "warning",
+    },
+    {
+      title: "Policy warnings",
+      message: run.validation.warnings.join("\n"),
+      variant: undefined,
+    },
+  ] as const;
+  return notices.map(({ title, message, variant }) =>
+    message ? (
+      <InlineNotice key={title} variant={variant}>
+        <TriangleAlert />
+        <span className="font-medium">{title}</span>
+        <InlineNoticeText>{message}</InlineNoticeText>
+      </InlineNotice>
+    ) : null,
+  );
+}
+
+export function exportValidationFile(file: { path: string; content: string }) {
+  const url = URL.createObjectURL(
+    new Blob([file.content], { type: "text/plain;charset=utf-8" }),
+  );
+  const anchor = document.createElement("a");
+  anchor.href = url;
+  anchor.download = file.path.split("/").pop() ?? "scenario.appa";
+  anchor.click();
+  setTimeout(() => URL.revokeObjectURL(url), 10000);
 }

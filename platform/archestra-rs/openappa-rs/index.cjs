@@ -1,5 +1,5 @@
 "use strict";
-const { loadNativeBinding, wrapAsync } = require("@archestra/napi-loader");
+const { loadNativeBinding, wrapAsync, wrapSync } = require("@archestra/napi-loader");
 const binding = loadNativeBinding({ dir: __dirname, crateName: "openappa_rs", packageName: "@archestra/openappa-rs" });
 module.exports.initializeOpenappa = wrapAsync(binding, "initializeOpenappa");
 module.exports.getOpenappaStatus = wrapAsync(binding, "getOpenappaStatus");
@@ -13,6 +13,9 @@ module.exports.admitPeerMessage = wrapAsync(binding, "admitPeerMessage");
 module.exports.listPeerMessages = wrapAsync(binding, "listPeerMessages");
 module.exports.readPeerMessage = wrapAsync(binding, "readPeerMessage");
 module.exports.validateOpenappaPolicy = wrapAsync(binding, "validateOpenappaPolicy");
+module.exports.replayOpenappaPolicy = wrapAsync(binding, "replayOpenappaPolicy");
+module.exports.inspectOpenappaPolicyTests = wrapAsync(binding, "inspectOpenappaPolicyTests");
+module.exports.getOpenappaReplayEngineVersion = wrapSync(binding, "getOpenappaReplayEngineVersion");
 module.exports.composeOpenappaPolicy = wrapAsync(binding, "composeOpenappaPolicy");
 module.exports.parseOpenappaDeclarations = wrapAsync(binding, "parseOpenappaDeclarations");
 module.exports.editOpenappaPolicy = wrapAsync(binding, "editOpenappaPolicy");

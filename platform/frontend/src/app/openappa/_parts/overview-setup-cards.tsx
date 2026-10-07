@@ -6,6 +6,7 @@ import {
   CircleCheck,
   CircleDashed,
   CircleX,
+  ClipboardCheck,
   Github,
   MessageCircle,
   ShieldCheck,
@@ -26,6 +27,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import { InlineNotice } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -34,6 +36,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { getVisibleDocsUrl } from "@/lib/docs/docs";
@@ -44,8 +47,11 @@ import {
 } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { useOpenAppaPolicyTestRuns } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
+import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
+import { ValidationStatusBadge } from "../validation/validation-parts";
 import {
   OpenAppaCreateRepositoryDialog,
   OpenAppaSourceForm,
@@ -57,7 +63,7 @@ import { useOpenAppaSetupState } from "./use-openappa-setup-state";
 /**
  * Where OpenAPPA setup stands. A fresh organization sees only the first step,
  * saving a policy in the policy chat (which turns enforcement on). After that,
- * three compact cards report enforcement, GitHub sync, and unresolved yells.
+ * compact cards report enforcement, GitHub sync, validation, and unresolved yells.
  * The first unfinished one is highlighted as the next step.
  */
 export function OverviewSetupCards() {
@@ -69,6 +75,9 @@ export function OverviewSetupCards() {
   const { data: canReadSettings } = useHasPermissions({
     organizationSettings: ["read"],
   });
+  const { data: canReadPolicy } = useHasPermissions({
+    openappaPolicy: ["read"],
+  });
   if (isFresh === undefined) return null;
   if (isFresh) return <PolicyStep />;
   const source = sync.data?.source;
@@ -78,17 +87,27 @@ export function OverviewSetupCards() {
     : sync.data?.enabled && !synced
       ? "github"
       : null;
+  const cardCount =
+    Number(Boolean(canReadSettings)) * 2 +
+    Number(Boolean(canReadPolicy)) +
+    Number(Boolean(canReadYells));
   return (
     <div className="space-y-4">
       {source?.lastSyncError && <GithubManagedPolicyNotice />}
       <div
         className={cn(
           "grid gap-4",
-          canReadYells ? "xl:grid-cols-3" : "lg:grid-cols-2",
+          cardCount > 1 && "md:grid-cols-2",
+          cardCount === 4
+            ? "2xl:grid-cols-4"
+            : cardCount === 3
+              ? "xl:grid-cols-3"
+              : undefined,
         )}
       >
         {canReadSettings && <EnforcementCard next={next === "enforcement"} />}
         {canReadSettings && <GithubSyncCard next={next === "github"} />}
+        {canReadPolicy && <ValidationCard />}
         {canReadYells && <YellsCard />}
       </div>
     </div>
@@ -271,7 +290,11 @@ function GithubSyncCard({ next }: { next: boolean }) {
         }
       />
       {editing && (
-        <OpenAppaSourceForm source={source} onOpenChange={setEditing} />
+        <OpenAppaSourceForm
+          source={source}
+          validationDirectory={sync.data?.validationDirectory}
+          onOpenChange={setEditing}
+        />
       )}
       {creating && (
         <OpenAppaCreateRepositoryDialog
@@ -283,6 +306,75 @@ function GithubSyncCard({ next }: { next: boolean }) {
         />
       )}
     </>
+  );
+}
+
+function ValidationCard() {
+  const history = useOpenAppaPolicyTestRuns(true);
+  const run = history.data?.[0];
+  const status = run
+    ? run.executionError || !run.validation.valid || !run.files.length
+      ? "cannot_run"
+      : run.files.some((file) => file.status === "failed")
+        ? "failed"
+        : run.files.some((file) => file.status === "cannot_run")
+          ? "cannot_run"
+          : "passed"
+    : null;
+  const statusLabel = status
+    ? { passed: "Passed", failed: "Failed", cannot_run: "Cannot run" }[status]
+    : "";
+  const qualifiers = [run?.draft && "draft", run?.stale && "outdated"].filter(
+    Boolean,
+  );
+  const validationNoun = run?.files.length === 1 ? "validation" : "validations";
+  return (
+    <StatusCard
+      icon={<ClipboardCheck />}
+      title="Validations"
+      status={
+        !history.isError && status ? (
+          <ValidationStatusBadge status={status}>
+            <span>{`${statusLabel}${qualifiers.length ? ` (${qualifiers.join(", ")})` : ""}`}</span>
+          </ValidationStatusBadge>
+        ) : undefined
+      }
+      action={
+        <Button size="sm" variant="outline" asChild>
+          <Link href="/openappa/validation">
+            <span>View Validations</span>
+            <ArrowRight />
+          </Link>
+        </Button>
+      }
+    >
+      {history.isError ? (
+        <InlineNotice variant="error">
+          <CircleX />
+          <span className="font-medium">Could not load validation</span>
+          <Button size="xs" variant="outline" onClick={() => history.refetch()}>
+            <span>Retry</span>
+          </Button>
+        </InlineNotice>
+      ) : history.isPending ? (
+        <Skeleton className="h-12 w-full" />
+      ) : run ? (
+        <section
+          className="space-y-3"
+          aria-label="Last validation run"
+          aria-live="polite"
+        >
+          <CardDescription className="leading-relaxed">
+            {`Last run executed on ${formatDate({ date: run.createdAt })}.`}
+          </CardDescription>
+          <CardDescription className="leading-relaxed">
+            {`${run.files.length} ${validationNoun} in this run.`}
+          </CardDescription>
+        </section>
+      ) : (
+        <p className="text-sm text-muted-foreground">No runs yet.</p>
+      )}
+    </StatusCard>
   );
 }
 
@@ -447,7 +539,7 @@ function StatusCard({
   icon: ReactNode;
   title: string;
   status?: ReactNode;
-  description: ReactNode;
+  description?: ReactNode;
   children?: ReactNode;
   learnMore?: { href: string; label: string };
   action: ReactNode;
@@ -465,9 +557,11 @@ function StatusCard({
         {status}
       </CardHeader>
       <CardContent className="flex-1 px-4 space-y-3">
-        <CardDescription className="leading-relaxed">
-          {description}
-        </CardDescription>
+        {description && (
+          <CardDescription className="leading-relaxed">
+            {description}
+          </CardDescription>
+        )}
         {children}
       </CardContent>
       {(action || learnMore) && (

@@ -2000,12 +2000,19 @@ const MessageTool = memo(
     // Use the text content string when available; fall back to the raw output for non-MCP tools.
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
+    const policyToolName = parseFullToolName(mcpAppToolName).toolName;
+    const validationChange = [
+      "preview_openappa_validation_change",
+      "publish_openappa_validation_change",
+    ].includes(getToolShortName(mcpAppToolName) ?? "");
     const policyChange =
-      ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
-        parseFullToolName(mcpAppToolName).toolName,
-      ) &&
+      (validationChange ||
+        [
+          "preview_guardrails_policy_change",
+          "update_guardrails_policy",
+        ].includes(policyToolName)) &&
       !errorText &&
-      isOpenAppaPolicyChange(rawOutput);
+      isOpenAppaPolicyChange(rawOutput, validationChange);
 
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
@@ -2267,7 +2274,10 @@ const MessageTool = memo(
             <ToolOutput label="Error" output={output} errorText={errorText} />
           )}
           {!authToolBody && policyChange && (
-            <OpenAppaPolicyChange output={rawOutput} />
+            <OpenAppaPolicyChange
+              output={rawOutput}
+              validationChange={validationChange}
+            />
           )}
           {/* Show text output when NOT rendering a UI resource */}
           {!authToolBody &&

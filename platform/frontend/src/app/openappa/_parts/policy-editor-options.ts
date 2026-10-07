@@ -10,4 +10,5 @@ export const POLICY_EDITOR_OPTIONS = {
   wordWrap: "on",
   padding: { top: 16, bottom: 16 },
   automaticLayout: true,
+  scrollbar: { alwaysConsumeMouseWheel: false },
 } satisfies ComponentProps<typeof Editor>["options"];

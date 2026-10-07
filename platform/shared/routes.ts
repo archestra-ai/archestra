@@ -1,5 +1,11 @@
 export const RouteId = {
   AnnotateGuardrailsTool: "annotateGuardrailsTool",
+  GetOpenAppaPolicyTests: "getOpenAppaPolicyTests",
+  InspectOpenAppaPolicyTests: "inspectOpenAppaPolicyTests",
+  UpdateOpenAppaPolicyTests: "updateOpenAppaPolicyTests",
+  RunOpenAppaPolicyTests: "runOpenAppaPolicyTests",
+  PreviewOpenAppaPolicyTest: "previewOpenAppaPolicyTest",
+  GetOpenAppaPolicyTestRuns: "getOpenAppaPolicyTestRuns",
   GetGuardrailsPolicy: "getGuardrailsPolicy",
   ValidateGuardrailsPolicy: "validateGuardrailsPolicy",
   UpdateGuardrailsPolicy: "updateGuardrailsPolicy",

@@ -53,6 +53,7 @@ import {
   isOpenAppaPolicyChange,
   OpenAppaPolicyChange,
   OpenAppaPolicyCompletion,
+  OpenAppaValidationCompletion,
 } from "./openappa-policy-change";
 import { withoutProxyTransportArguments } from "./proxy-transport-arguments";
 import { RuntimeCredentialSetupTool } from "./runtime-credential-setup-tool";
@@ -550,6 +551,16 @@ export function CompactToolGroup({
         const name = resolveRunToolTargetName(entry.part, entry.toolName, {
           getToolShortName,
         });
+        if (getToolShortName(name) === "publish_openappa_validation_change") {
+          if (entry.part.state !== "output-available" && !entry.toolResultPart)
+            return null;
+          return (
+            <OpenAppaValidationCompletion
+              key={entry.key}
+              output={entry.toolResultPart?.output ?? entry.part.output}
+            />
+          );
+        }
         if (getToolShortName(name) !== "update_guardrails_policy") return null;
         return (
           <OpenAppaPolicyCompletion
@@ -658,14 +669,21 @@ function ExpandedToolCard({
   const hasInput = part.input && Object.keys(part.input).length > 0;
   const toolShortName = getToolShortName(toolName);
   const policyOutput = toolResultPart?.output ?? part.output;
+  const resolvedPolicyToolName = resolveRunToolTargetName(part, toolName, {
+    getToolShortName,
+  });
+  const policyToolName = parseFullToolName(resolvedPolicyToolName).toolName;
+  const validationChange = [
+    "preview_openappa_validation_change",
+    "publish_openappa_validation_change",
+  ].includes(getToolShortName(resolvedPolicyToolName) ?? "");
   const policyChange =
-    ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
-      parseFullToolName(
-        resolveRunToolTargetName(part, toolName, { getToolShortName }),
-      ).toolName,
-    ) &&
+    (validationChange ||
+      ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
+        policyToolName,
+      )) &&
     !errorText &&
-    isOpenAppaPolicyChange(policyOutput);
+    isOpenAppaPolicyChange(policyOutput, validationChange);
   const input = withoutProxyTransportArguments({
     shortName: toolShortName,
     input:
@@ -757,7 +775,12 @@ function ExpandedToolCard({
             />
           )}
         {errorText ? <ToolErrorDetails errorText={errorText} /> : null}
-        {policyChange && <OpenAppaPolicyChange output={policyOutput} />}
+        {policyChange && (
+          <OpenAppaPolicyChange
+            output={policyOutput}
+            validationChange={validationChange}
+          />
+        )}
         {toolResultPart && !policyChange && (
           <ToolOutput
             label={errorText ? "Error" : "Result"}

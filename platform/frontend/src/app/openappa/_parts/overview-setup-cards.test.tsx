@@ -1,6 +1,7 @@
 import { archestraApiClient, type archestraApiTypes } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
+  act,
   fireEvent,
   render,
   screen,
@@ -21,6 +22,8 @@ import {
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import appConfig from "@/lib/config/config";
 import { useAppName } from "@/lib/hooks/use-app-name";
+import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
+import { formatDate } from "@/lib/utils/date-time";
 import {
   OverviewSetupCards,
   UnrecognizedClientsCard,
@@ -67,6 +70,30 @@ const source = {
   heldSourceCommit: null,
   heldReasons: [],
 };
+const validationRun: PolicyTestRun = {
+  id: "latest-run",
+  createdAt: "2026-10-06T12:00:00Z",
+  createdBy: null,
+  source: "github",
+  sourceVersion: "tests-v1",
+  sourceCommit: source.sourceCommit,
+  definitionHash: "definitions-v1",
+  policyRevision: 1,
+  policyHash: "policy-v1",
+  effectivePolicyHash: "effective-v1",
+  engineVersion: "engine-v1",
+  draft: false,
+  stale: false,
+  trigger: "github_sync",
+  validation: { valid: true, errors: [], warnings: [] },
+  files: ["passed", "failed", "cannot_run"].map((status, index) => ({
+    path: `scenario-${index}.appa`,
+    contentHash: `content-${index}`,
+    assertionCount: 1,
+    status: status as "passed" | "failed" | "cannot_run",
+    steps: [],
+  })),
+};
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn();
@@ -82,7 +109,12 @@ beforeEach(() => {
   featureEnabled = true;
   clientAction = "bypass";
   revision = 0;
-  sync = { enabled: true, hasPolicy: false, source: null };
+  sync = {
+    validationDirectory: "",
+    enabled: true,
+    hasPolicy: false,
+    source: null,
+  };
   server.use(
     http.get(`${api}/guardrails-deployment`, () =>
       HttpResponse.json({
@@ -107,6 +139,7 @@ beforeEach(() => {
     http.get(`${api}/openappa/yells/summary`, () =>
       HttpResponse.json({ unresolved: 0 }),
     ),
+    http.get(`${api}/openappa/policy-tests/runs`, () => HttpResponse.json([])),
   );
 });
 afterEach(() => {
@@ -121,11 +154,18 @@ function show(card: "setup" | "unrecognized" = "setup") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
-  return render(
-    <QueryClientProvider client={client}>
-      {card === "setup" ? <OverviewSetupCards /> : <UnrecognizedClientsCard />}
-    </QueryClientProvider>,
-  );
+  return {
+    client,
+    ...render(
+      <QueryClientProvider client={client}>
+        {card === "setup" ? (
+          <OverviewSetupCards />
+        ) : (
+          <UnrecognizedClientsCard />
+        )}
+      </QueryClientProvider>,
+    ),
+  };
 }
 test("a fresh instance shows only the policy step", async () => {
   show();
@@ -283,6 +323,7 @@ test("a failed sync shows its error", async () => {
   revision = 1;
   enabled = true;
   sync = {
+    validationDirectory: "",
     enabled: true,
     hasPolicy: true,
     source: { ...source, lastSyncError: "appa.toml was not found" },
@@ -304,7 +345,7 @@ test("a failed sync shows its error", async () => {
 test("once sync is connected the cards stay as status with no next step", async () => {
   revision = 1;
   enabled = true;
-  sync = { enabled: true, hasPolicy: true, source };
+  sync = { validationDirectory: "", enabled: true, hasPolicy: true, source };
   const { container } = show();
   expect(await screen.findByText("Connected")).toBeInTheDocument();
   expect(screen.getByText("example/policies")).toBeInTheDocument();
@@ -427,4 +468,158 @@ test("links 'more' to clients and 'OpenAPPA session headers' to session-headers"
     "href",
     expect.stringContaining("platform-ai-tool-guardrails#session-headers"),
   );
+});
+
+test("the dashboard summarizes the latest run time and validation count with a direct link", async () => {
+  revision = 1;
+  server.use(
+    http.get(`${api}/openappa/policy-tests/runs`, () =>
+      HttpResponse.json([
+        validationRun,
+        { ...validationRun, id: "older", files: [] },
+      ]),
+    ),
+  );
+  show();
+  const summary = await screen.findByRole("region", {
+    name: "Last validation run",
+  });
+  expect(summary).not.toHaveTextContent("1 passed");
+  expect(summary).not.toHaveTextContent("1 failed");
+  expect(summary).not.toHaveTextContent("1 cannot run");
+  expect(summary).toHaveTextContent(
+    `Last run executed on ${formatDate({ date: validationRun.createdAt })}.`,
+  );
+  expect(summary).toHaveTextContent("3 validations in this run.");
+  expect(summary).not.toHaveTextContent("Git sync run");
+  expect(screen.getByText("Failed")).toBeVisible();
+  expect(
+    screen.getByRole("link", { name: "View Validations" }),
+  ).toHaveAttribute("href", "/openappa/validation");
+});
+
+test.each([
+  {
+    name: "all passing",
+    run: { ...validationRun, files: [validationRun.files[0]] },
+    status: "Passed",
+  },
+  {
+    name: "incomplete",
+    run: { ...validationRun, files: [validationRun.files[2]] },
+    status: "Cannot run",
+  },
+  { name: "empty", run: { ...validationRun, files: [] }, status: "Cannot run" },
+  {
+    name: "invalid policy",
+    run: {
+      ...validationRun,
+      validation: {
+        valid: false,
+        errors: ["Invalid configuration"],
+        warnings: [],
+      },
+    },
+    status: "Cannot run",
+  },
+])("the dashboard reports $name runs accurately", async ({ run, status }) => {
+  revision = 1;
+  server.use(
+    http.get(`${api}/openappa/policy-tests/runs`, () =>
+      HttpResponse.json([run]),
+    ),
+  );
+  show();
+  expect(await screen.findByText(status)).toBeVisible();
+});
+
+test("draft and stale results are visibly qualified", async () => {
+  revision = 1;
+  server.use(
+    http.get(`${api}/openappa/policy-tests/runs`, () =>
+      HttpResponse.json([{ ...validationRun, draft: true, stale: true }]),
+    ),
+  );
+  show();
+  const summary = await screen.findByRole("region", {
+    name: "Last validation run",
+  });
+  expect(await screen.findByText("Failed (draft, outdated)")).toBeVisible();
+  expect(summary).toHaveTextContent(
+    formatDate({ date: validationRun.createdAt }),
+  );
+  expect(summary).not.toHaveTextContent("Draft run");
+});
+
+test("unavailable runs show cannot run without detailed errors or invented counts", async () => {
+  revision = 1;
+  server.use(
+    http.get(`${api}/openappa/policy-tests/runs`, () =>
+      HttpResponse.json([
+        {
+          ...validationRun,
+          executionError: "GitHub denied access to validation files",
+          files: [],
+        },
+      ]),
+    ),
+  );
+  show();
+  const summary = await screen.findByRole("region", {
+    name: "Last validation run",
+  });
+  expect(await screen.findByText("Cannot run")).toBeVisible();
+  expect(summary).not.toHaveTextContent(
+    "GitHub denied access to validation files",
+  );
+  expect(summary).not.toHaveTextContent("0 passed");
+});
+
+test("no saved runs is distinguished from a history-loading failure", async () => {
+  revision = 1;
+  show();
+  expect(await screen.findByText("No runs yet.")).toBeVisible();
+  expect(screen.queryByText("Passed")).not.toBeInTheDocument();
+});
+
+test("failed history loading is retryable rather than presented as empty or passing", async () => {
+  revision = 1;
+  let unavailable = true;
+  server.use(
+    http.get(`${api}/openappa/policy-tests/runs`, () =>
+      unavailable
+        ? new HttpResponse(null, { status: 503 })
+        : HttpResponse.json([validationRun]),
+    ),
+  );
+  show();
+  expect(await screen.findByText("Could not load validation")).toBeVisible();
+  expect(screen.queryByText("No runs yet.")).not.toBeInTheDocument();
+  expect(screen.queryByText("Passed")).not.toBeInTheDocument();
+  unavailable = false;
+  fireEvent.click(screen.getByRole("button", { name: "Retry" }));
+  expect(await screen.findByText("Failed")).toBeVisible();
+});
+
+test("the dashboard adopts a newer result when history refreshes", async () => {
+  revision = 1;
+  let latest = validationRun;
+  server.use(
+    http.get(`${api}/openappa/policy-tests/runs`, () =>
+      HttpResponse.json([latest]),
+    ),
+  );
+  const { client } = show();
+  await screen.findByRole("region", { name: "Last validation run" });
+  latest = { ...validationRun, id: "newer", files: [validationRun.files[0]] };
+  await act(() =>
+    client.invalidateQueries({ queryKey: ["openappa-policy-test-runs"] }),
+  );
+  await waitFor(() => {
+    expect(screen.getByText("Passed")).toBeVisible();
+    expect(screen.queryByText("Failed")).not.toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Last validation run" }),
+    ).toHaveTextContent("1 validation in this run.");
+  });
 });

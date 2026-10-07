@@ -493,6 +493,12 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
+  [RouteId.GetOpenAppaPolicyTests]: { openappaPolicy: ["read"] },
+  [RouteId.InspectOpenAppaPolicyTests]: { openappaPolicy: ["read"] },
+  [RouteId.UpdateOpenAppaPolicyTests]: { openappaPolicy: ["update"] },
+  [RouteId.RunOpenAppaPolicyTests]: { openappaPolicy: ["update"] },
+  [RouteId.PreviewOpenAppaPolicyTest]: { openappaPolicy: ["update"] },
+  [RouteId.GetOpenAppaPolicyTestRuns]: { openappaPolicy: ["read"] },
   [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },

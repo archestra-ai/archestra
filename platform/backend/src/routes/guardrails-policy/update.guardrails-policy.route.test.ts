@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import {
   executeArchestraTool,
@@ -8,6 +9,7 @@ import {
 import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -16,9 +18,11 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { initialPolicy } from "@/services/guardrails-policy";
+import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-policy.routes";
@@ -120,6 +124,57 @@ describe("guardrails policy authoring", () => {
       content: winner.content,
       revision: 1,
     });
+  });
+
+  test("local policy changes queue validation, while identical saves and rejected edits do not", async () => {
+    const localPolicy = content.replace('"read"', '"files__read"');
+    await OpenAppaPolicyTestsModel.saveLocal({
+      organizationId: orgId,
+      files: [
+        { path: "read.appa", content: "mcp/files/read {}\nexpect allow\n" },
+      ],
+      expectedVersion: "empty",
+    });
+    const jobs = () =>
+      db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_policy_validation"));
+    const save = (content: string, expectedRevision: number) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/guardrails-policy",
+        payload: { content, expectedRevision },
+      });
+    expect((await save(localPolicy, 0)).statusCode).toBe(200);
+    expect(await jobs()).toHaveLength(1);
+    const [first] = await jobs();
+    expect((await save(localPolicy, 1)).statusCode).toBe(200);
+    expect(await jobs()).toHaveLength(1);
+    await runAutomaticOpenAppaPolicyTests(first.payload);
+    expect(
+      (await OpenAppaPolicyTestsModel.listRuns(orgId))[0].result,
+    ).toMatchObject({
+      trigger: "policy_change",
+      source: "local",
+      policyRevision: 2,
+      policyHash: first.payload.policyHash,
+      files: [{ status: "passed" }],
+    });
+    expect((await save("[invalid", 2)).statusCode).toBe(400);
+    expect(await jobs()).toHaveLength(1);
+    const changed = localPolicy.replace(
+      "delta = {}",
+      'delta = { trust = "suspicious" }',
+    );
+    const updated = await save(changed, 2);
+    expect(updated.statusCode).toBe(200);
+    expect(await jobs()).toHaveLength(2);
+    expect(
+      (await jobs()).some(
+        (job) => job.payload.policyHash === updated.json().contentHash,
+      ),
+    ).toBe(true);
   });
 
   test("organization policies are stored separately", async ({

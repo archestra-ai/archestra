@@ -3,7 +3,7 @@ title: Guardrails
 category: LLM Proxy
 order: 5
 description: Enable and operate OpenAPPA tool guardrails in Archestra
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -72,6 +72,38 @@ Claude Code teammates can send messages without finishing their tasks. Sending b
 
 A structured message appears directly only when that same send adds no restrictions. Otherwise, read its held body through the inbox. Messages without a recorded release stay withheld.
 
+## Validations
+
+The Overview shows the latest saved validation status, execution time and file count. Open **View Validations** to review the results.
+
+The Validations table shows each file's last recorded result and run time. Its outcomes are **Passed** and **Failed**. A check that could not run appears as **Failed**, with its reason. The displayed result belongs to the recorded run, even after inputs change. Files without a recorded run have no outcome badge.
+
+Validation replays `.appa` files against your current effective policy, including batteries. Each file describes ordered tool calls and their expected decisions. Calls within a file share a trajectory; separate files start fresh. Business tools and external helpers do not run. Policies requiring live model calls or helpers report **Cannot run**.
+
+Set an optional validation directory in **Settings → OpenAPPA → GitHub source**. Saving checks the folder in your selected repository and branch. Leave it empty to disable Git-backed validation. Files load from the same accepted commit as the policy.
+
+Without Git sync, you can save validation files locally. With sync enabled, files come from the policy repository's accepted commit. Git remains their authoritative source. Editor changes are drafts you can run and export for a repository commit.
+
+**Run all** runs every saved validation file and saves the result in run history. Search filters, row selection and unsaved edits do not change the run. While editing a file, **Run file** tests only that file's current text. Its temporary result stays in the editor. It does not change the suite results or run history.
+
+Accepted policy changes automatically queue a full validation run, from local saves or GitHub sync. Results appear in history as **Policy change run**. Unchanged syncs and validation-only edits do not trigger runs. Each result records the policy hash, version and validation files used. Failed assertions do not block or roll back the accepted policy. An empty Git validation directory disables automatic runs. Use repository CI checks to block merges when tests fail.
+
+If Archestra cannot load the files or execute the run, history shows **Cannot run** and explains the problem. Open the run to see its details. The policy stays active while Archestra retries the validation.
+
+Yells report unexpected blocks or confusing remedies. Reports can inform new regression tests. They do not become validation files automatically.
+
+**Ask About Validations** starts a guided conversation about your policy. The agent briefly explains what it protects and why a validation helps preserve that behavior. With no existing checks, it helps brainstorm one or two useful starting checks. Otherwise, it summarizes existing coverage and offers to review, edit or add a check. It gives that context before asking what you want to do. Specific requests can proceed directly. Each scenario has a short intent comment. Validation-only requests leave the policy unchanged. Initial policy setup skips tests unless you request them.
+
+Choosing a behavior creates a draft and replays it for review. The agent saves it when you ask. Saved changes link to Validations or the repository pull request.
+
+For a specific policy requirement, the agent also proposes focused checks. It replays the complete suite against the proposed policy before publication. Existing expectations remain intact when a proposal conflicts with them. Preview results stay temporary.
+
+Without Git sync, publication saves the policy and validation changes together. With sync, both go into one repository pull request. Repository publication uses the configured GitHub App or PAT. A PAT needs Contents and Pull requests read/write permissions. Read-only tokens support sync but cannot publish changes.
+
+Saved suite runs retain the policy and validation versions used. Changed inputs make earlier results stale. A passing run applies to those captured inputs, not subsequent policy edits.
+
+The [OpenAPPA validation guide](https://www.openappa.com/validation) describes the file format.
+
 ## Yells
 
 Yells report confusing blocks or remedies. Archestra saves each report and its compressed diagnostic archive locally. When analytics is enabled, reports also go to the shared OpenAPPA reporting service. Set `ARCHESTRA_ANALYTICS=disabled` to keep reports in your deployment. Set `ARCHESTRA_OPENAPPA_YELL_ENABLED=false` to disable reporting entirely.
@@ -79,6 +111,8 @@ Yells report confusing blocks or remedies. Archestra saves each report and its c
 Archestra also saves a local diagnostic when a blocked client cannot receive a remedy. These automatic reports stay in your deployment.
 
 The overview counts unresolved reports. You can search reports, download their diagnostic archive, and investigate them with the configuration agent. **Investigate in chat** attaches the archive to a new chat, where the agent can read its diagnostic contents. Opening a chat leaves the report unresolved. The list shows unresolved reports. Mark a report resolved after verifying the fix. Set the status filter to **Resolved** to see it again or reopen it. The link keeps that filter, so you can share it.
+
+The agent compares report evidence with the current policy and validations. Policy fixes include a focused regression scenario where offline replay can represent the issue. Client integration failures receive a client diagnosis instead of a weaker policy.
 
 ## Connect GitHub
 

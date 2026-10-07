@@ -43,6 +43,7 @@ import {
   TerminalCard,
   terminalActionClass,
   terminalCodeClass,
+  terminalRaisedClass,
 } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -162,8 +163,8 @@ function endpointTabClass(active: boolean) {
   return cn(
     "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors",
     active
-      ? "bg-terminal-emphasis/10 font-semibold text-terminal-foreground shadow-sm"
-      : "text-terminal-muted hover:text-terminal-emphasis",
+      ? cn("border font-semibold", terminalRaisedClass)
+      : "border border-transparent text-terminal-muted hover:bg-terminal-elevated hover:text-terminal-emphasis",
   );
 }
 
@@ -249,7 +250,7 @@ function ProxyEndpointCard({
               <img
                 src={PROVIDER_CONFIG[provider].icon}
                 alt=""
-                className="size-3.5 rounded-sm"
+                className="size-3.5 rounded-sm dark:invert"
               />
               {providerCatalog.label(provider)}
             </UnstyledButton>
@@ -758,6 +759,7 @@ function KeyField({
             type="button"
             disabled={isRevealing}
             aria-label={revealed ? "Hide key" : "Show key"}
+            aria-pressed={revealed !== null}
             className={cn(terminalActionClass, "size-7")}
             onClick={async () => {
               if (revealed) {
@@ -773,11 +775,11 @@ function KeyField({
             }}
           >
             {isRevealing ? (
-              <Loader2 className="size-3.5 animate-spin" />
+              <Loader2 className="animate-spin" />
             ) : revealed ? (
-              <EyeOff className="size-3.5" />
+              <EyeOff />
             ) : (
-              <Eye className="size-3.5" />
+              <Eye />
             )}
           </UnstyledButton>
           <SecretCopyButton

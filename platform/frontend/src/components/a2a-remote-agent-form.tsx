@@ -25,7 +25,11 @@ import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import { SecretInput } from "@/components/ui/secret-input";
 import { Textarea } from "@/components/ui/textarea";
 import type {
@@ -36,6 +40,7 @@ import type {
 import { useInspectA2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { getApiErrorMessage } from "@/lib/utils/api";
+import { cn } from "@/lib/utils/tailwind";
 
 type AuthType = "none" | "bearer" | "api_key";
 type Source = NonNullable<UpdateA2aRemoteAgentBody["source"]>;
@@ -464,7 +469,10 @@ export function A2aRemoteAgentForm({
                   <Label
                     key={authType}
                     htmlFor={`a2a-auth-${authType}`}
-                    className="flex cursor-pointer items-start gap-2 rounded-md border p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-50"
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2 rounded-md p-3",
+                      radioCardClass(),
+                    )}
                   >
                     <RadioGroupItem
                       id={`a2a-auth-${authType}`}

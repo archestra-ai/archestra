@@ -57,6 +57,17 @@ describe("getAllArchestraMcpTools", () => {
       expect(served).not.toContain(shortName);
     }
   });
+
+  test("advertises no pattern a provider refuses as a regex", () => {
+    // OpenAI rejects a function schema whose pattern uses a Unicode property
+    // escape such as \p{Cc}, which fails every request from an agent holding
+    // that tool, not just the call.
+    const offenders = getAllArchestraMcpTools().filter((tool) =>
+      /\\[pP]\{/.test(JSON.stringify(tool.inputSchema)),
+    );
+
+    expect(offenders.map((tool) => tool.name)).toEqual([]);
+  });
 });
 
 describe("executeArchestraTool", () => {

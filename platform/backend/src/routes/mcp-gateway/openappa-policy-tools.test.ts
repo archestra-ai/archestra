@@ -33,6 +33,7 @@ const UPDATE_POLICY = archestraMcpBranding.getToolName(
 const WRITE = [
   UPDATE_POLICY,
   archestraMcpBranding.getToolName("create_guardrails_repository"),
+  archestraMcpBranding.getToolName("connect_guardrails_repository"),
 ];
 
 beforeEach(() => {

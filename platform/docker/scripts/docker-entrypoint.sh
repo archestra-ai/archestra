@@ -384,8 +384,10 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
     POSTGRES_DB=${POSTGRES_DB:-archestra_dev}
     EFFECTIVE_DATABASE_URL="postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@localhost:5432/${POSTGRES_DB}?schema=public"
 
-    # Append postgres program to supervisord config
-    cat /etc/supervisord.postgres.conf >> /etc/supervisord.conf
+    # Append postgres program to supervisord config. /etc survives a container
+    # restart, so append only once.
+    grep -q '^\[program:postgres\]' /etc/supervisord.conf \
+        || cat /etc/supervisord.postgres.conf >> /etc/supervisord.conf
 
     # The setup below prints several screens of initdb and server output on a
     # healthy start. Keep it out of `docker logs` unless a step fails, and send
@@ -405,13 +407,16 @@ if [ "$USE_EXTERNAL_DB" = "false" ]; then
             exit 1
         fi
     }
+    # Crash recovery fsyncs the whole data directory first, which can take
+    # minutes on a slow disk; pg_ctl's 60s default would fail the start.
+    PG_CTL_TIMEOUT=${PGCTLTIMEOUT:-600}
     pg_temp_start() {
         pg_setup su-exec postgres pg_ctl -D /var/lib/postgresql/data \
             -o "-c listen_addresses='' -c log_checkpoints=off" \
-            -l "$PG_SETUP_LOG" -s -w start
+            -l "$PG_SETUP_LOG" -s -w -t "$PG_CTL_TIMEOUT" start
     }
     pg_temp_stop() {
-        pg_setup su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -s -w stop
+        pg_setup su-exec postgres pg_ctl -D /var/lib/postgresql/data -m fast -s -w -t "$PG_CTL_TIMEOUT" stop
     }
     # CREATE EXTENSION IF NOT EXISTS reports "already exists" as a NOTICE.
     export PGOPTIONS="-c client_min_messages=warning"

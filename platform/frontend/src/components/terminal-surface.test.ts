@@ -169,14 +169,21 @@ describe("terminal surface contrast", () => {
     expect(contrast(palette.emphasis, palette.elevated)).toBeGreaterThanOrEqual(
       4.5,
     );
-    // A selected tab has to stand apart from the strip, and its label stays
-    // legible on the selected fill.
-    expect(contrast(palette.selected, palette.surface)).toBeGreaterThanOrEqual(
-      1.3,
-    );
-    expect(
-      contrast(palette.foreground, palette.selected),
-    ).toBeGreaterThanOrEqual(4.5);
+    // Actions and the selected tab are raised keys: in dark mode a fill that
+    // stands apart from the strip, in light mode the white page colour with an
+    // edge and shadow. Either way their label stays legible on it.
+    if (name.endsWith("dark")) {
+      expect(
+        contrast(palette.selected, palette.surface),
+      ).toBeGreaterThanOrEqual(1.3);
+      expect(
+        contrast(palette.foreground, palette.selected),
+      ).toBeGreaterThanOrEqual(4.5);
+    } else {
+      expect(
+        contrast(parse(tokens["--foreground"]), parse(tokens["--background"])),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
     // The copied tick is a state graphic, so the 3:1 non-text bar applies.
     expect(contrast(palette.success, palette.elevated)).toBeGreaterThanOrEqual(
       3,

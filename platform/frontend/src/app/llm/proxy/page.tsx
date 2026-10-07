@@ -162,7 +162,7 @@ function endpointTabClass(active: boolean) {
   return cn(
     "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors",
     active
-      ? "bg-terminal-elevated font-semibold text-terminal-foreground shadow-sm"
+      ? "bg-terminal-selected font-semibold text-terminal-foreground shadow-sm"
       : "text-terminal-muted hover:text-terminal-emphasis",
   );
 }
@@ -249,7 +249,7 @@ function ProxyEndpointCard({
               <img
                 src={PROVIDER_CONFIG[provider].icon}
                 alt=""
-                className="size-3.5 rounded-sm"
+                className="size-3.5 rounded-sm dark:invert"
               />
               {providerCatalog.label(provider)}
             </UnstyledButton>

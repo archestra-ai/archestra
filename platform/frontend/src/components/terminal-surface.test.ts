@@ -125,6 +125,7 @@ function terminalPalette(theme: Record<string, string>, dark: boolean) {
     foreground,
     emphasis: anchor,
     elevated: mix(surface, foreground, mixPercent("--terminal-elevated")),
+    selected: mix(surface, foreground, mixPercent("--terminal-selected")),
     muted: mix(foreground, surface, mixPercent("--terminal-muted")),
     comment: mix(foreground, surface, mixPercent("--terminal-comment")),
     success: mix(
@@ -168,6 +169,14 @@ describe("terminal surface contrast", () => {
     expect(contrast(palette.emphasis, palette.elevated)).toBeGreaterThanOrEqual(
       4.5,
     );
+    // A selected tab has to stand apart from the strip, and its label stays
+    // legible on the selected fill.
+    expect(contrast(palette.selected, palette.surface)).toBeGreaterThanOrEqual(
+      1.3,
+    );
+    expect(
+      contrast(palette.foreground, palette.selected),
+    ).toBeGreaterThanOrEqual(4.5);
     // The copied tick is a state graphic, so the 3:1 non-text bar applies.
     expect(contrast(palette.success, palette.elevated)).toBeGreaterThanOrEqual(
       3,

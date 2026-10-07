@@ -90,6 +90,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-terminal: var(--terminal);
   --color-terminal-elevated: var(--terminal-elevated);
+  --color-terminal-selected: var(--terminal-selected);
   --color-terminal-foreground: var(--terminal-foreground);
   --color-terminal-muted: var(--terminal-muted);
   --color-terminal-comment: var(--terminal-comment);
@@ -142,6 +143,9 @@
   --terminal-foreground: color-mix(in oklab, var(--foreground) 74%, var(--terminal-anchor));
   /* Raised fill so controls on the surface read as buttons. */
   --terminal-elevated: color-mix(in oklab, var(--terminal) 93%, var(--terminal-foreground));
+  /* Selected tab on the surface: far enough from it to read as selected in
+     every theme and mode, close enough that the text still clears 4.5:1. */
+  --terminal-selected: color-mix(in oklab, var(--terminal) 80%, var(--terminal-foreground));
   --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
   --terminal-muted: color-mix(in oklab, var(--terminal-foreground) 85%, var(--terminal));
   --terminal-comment: color-mix(in oklab, var(--terminal-foreground) 78%, var(--terminal));

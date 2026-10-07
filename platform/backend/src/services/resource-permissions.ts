@@ -37,7 +37,18 @@ import { ApiError } from "@/types";
 import { CredentialResourcePermissions } from "./credential-resource-permissions";
 
 export class ResourcePermissions {
-  /** Assigning a role or team also delegates every scoped grant it carries. */
+  /**
+   * Assigning a role or team also delegates every scoped grant it carries.
+   *
+   * Grants on an object only its owner can share are the exception. No
+   * organization-wide grant reaches another member's session, their own
+   * provider key, or their encrypted chat or app, so nobody else can ever
+   * hold the authority this rule asks for. The owner chose the role or team
+   * as the audience, and whoever administers that audience decides who is in
+   * it. Without this, one member sharing a chat with the Member role would
+   * stop every administrator from assigning Member to anyone. Grants kept on
+   * a deleted object are skipped too: they reach nothing.
+   */
   static async validateSubjectAssignment(params: {
     organizationId: string;
     userId: string;
@@ -51,6 +62,8 @@ export class ResourcePermissions {
     for (const policy of policies) {
       if (!ManagedResourceSchema.safeParse(policy.resource).success) continue;
       if (policy.scope === "*" && canManageGlobal) continue;
+      if (isSessionObject({ resource: policy.resource, scope: policy.scope }))
+        continue;
       const requested = policy.grants
         .filter((grant) => keys.has(subjectKey(grant.subject)))
         .flatMap((grant) =>
@@ -61,11 +74,22 @@ export class ResourcePermissions {
             action,
           })),
         );
-      const { grants } = await ResourcePermissions.getEffective({
+      const context = {
         ...params,
         resource: policy.resource,
         scope: policy.scope,
-      });
+      };
+      const target =
+        policy.scope === "*"
+          ? null
+          : await ResourcePermissionTargetModel.find({
+              ...context,
+              id: policy.scope,
+            });
+      // A deleted object reaches nobody, so its grants hand out nothing.
+      if (policy.scope !== "*" && !target) continue;
+      if (reservedToAuthor({ ...context, target })) continue;
+      const grants = await ResourcePermissions.resolve(context);
       if (!canDelegateScopedPermissions({ grants, requested })) {
         throw new ApiError(
           403,
@@ -334,19 +358,7 @@ export class ResourcePermissions {
           });
     if (params.scope !== "*" && !target)
       throw new ApiError(404, "Resource not found");
-    if (
-      (params.resource === "app" || params.resource === "conversation") &&
-      target?.enabled === false &&
-      target.authorId !== params.userId
-    )
-      return { target, grants: [] as ScopedPermission[] };
-    // A provider key with an owner is that person's own key. Nobody else
-    // reaches it or its sharing, whatever `*` grants they hold.
-    if (
-      params.resource === "llmProviderApiKey" &&
-      target?.authorId &&
-      target.authorId !== params.userId
-    )
+    if (reservedToAuthor({ ...params, target }))
       return { target, grants: [] as ScopedPermission[] };
     // Stored grants are authoritative. `resolve` answers nothing for a
     // disabled service account or a user whose membership has been removed.
@@ -797,6 +809,37 @@ type PermissionContext = {
  */
 function sessionOversightOnly(params: PermissionContext): boolean {
   return params.resource === "conversation" && params.scope !== "*";
+}
+
+/** A single chat or agent run. Only its owner holds authority over it. */
+function isSessionObject(params: {
+  resource: string;
+  scope: ResourcePermissionScope;
+}): boolean {
+  return (
+    (params.resource === "conversation" || params.resource === "agentRun") &&
+    params.scope !== "*"
+  );
+}
+
+/**
+ * An object only its author reaches, whatever `*` grants anyone else holds: an
+ * encrypted chat or a disabled app, and a provider key with an owner, which is
+ * that person's own key.
+ */
+function reservedToAuthor(params: {
+  userId: string;
+  resource: ScopedResource;
+  target: Awaited<ReturnType<typeof ResourcePermissionTargetModel.find>>;
+}): boolean {
+  const { target } = params;
+  if (!target || target.authorId === params.userId) return false;
+  if (
+    (params.resource === "app" || params.resource === "conversation") &&
+    target.enabled === false
+  )
+    return true;
+  return params.resource === "llmProviderApiKey" && !!target.authorId;
 }
 
 function subjectKey(subject: PermissionSubject): string {

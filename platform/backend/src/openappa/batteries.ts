@@ -11,6 +11,7 @@ import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaEffectivePolicyModel, {
   type EffectivePolicyValues,
 } from "@/models/openappa-effective-policy";
@@ -515,6 +516,48 @@ class OpenAppaBatteriesService {
       name: existing.batteryName,
       catalogId: existing.catalogId,
     });
+  }
+
+  /**
+   * Bind a helper variable to an organization credential, or unbind it, for
+   * every battery that reads it. The binding is stored beside the policy text,
+   * so it needs no text write and is open while the repository owns the text;
+   * a variable the text binds itself is the text's, since its line wins.
+   */
+  async setCredentialBinding(params: {
+    userId: string;
+    organizationId: string;
+    variable: string;
+    key: string | null;
+  }): Promise<PolicyDeclarationsView> {
+    const { userId, organizationId, variable, key } = params;
+    const root = await guardrailsPolicyService.get(organizationId);
+    const { credentials } = await openappaDeclarations.resolve({
+      organizationId,
+      content: root.content,
+    });
+    if (variable in credentials)
+      throw new ApiError(
+        409,
+        `${variable} is set by a [credentials] line in the policy text. Remove its line there to manage it here.`,
+      );
+    if (key === null)
+      await OpenAppaCredentialBindingModel.delete({ organizationId, variable });
+    else {
+      if (!(await this.bindableKeys(organizationId)).has(key))
+        throw new ApiError(
+          400,
+          `${key} is not a credential with an organization value`,
+        );
+      await OpenAppaCredentialBindingModel.upsert({
+        organizationId,
+        variable,
+        credentialKey: key,
+        updatedBy: userId,
+      });
+    }
+    await this.recompose(organizationId);
+    return this.policyDeclarations(organizationId);
   }
 
   /**

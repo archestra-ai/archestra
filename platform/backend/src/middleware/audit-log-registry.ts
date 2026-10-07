@@ -28,6 +28,7 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
@@ -873,6 +874,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     actionByMethod: { PUT: "openappaBatteryPackage.updated" },
     fetchById: (name, orgId) =>
       OpenAppaBatteryPackageModel.findNewestByNameForAudit(name, orgId),
+  },
+  "/api/openappa/credential-bindings/:variable": {
+    resourceType: "openappaCredentialBinding",
+    resourceIdParam: "variable",
+    fetchById: (variable, orgId) =>
+      OpenAppaCredentialBindingModel.findByIdForAudit(variable, orgId),
   },
   "/api/openappa/battery-packages/:contentHash": {
     resourceType: "openappaBatteryPackage",

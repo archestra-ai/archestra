@@ -102633,6 +102633,7 @@
                 "openappaBatteryInstall.deleted",
                 "openappaBatteryPackage.updated",
                 "openappaBatteryPackage.deleted",
+                "openappaCredentialBinding.updated",
                 "toolInvocationPolicy.created",
                 "toolInvocationPolicy.updated",
                 "toolInvocationPolicy.deleted",
@@ -102979,6 +102980,7 @@
                                   "openappaBatteryInstall.deleted",
                                   "openappaBatteryPackage.updated",
                                   "openappaBatteryPackage.deleted",
+                                  "openappaCredentialBinding.updated",
                                   "toolInvocationPolicy.created",
                                   "toolInvocationPolicy.updated",
                                   "toolInvocationPolicy.deleted",
@@ -103636,6 +103638,7 @@
                             "openappaBatteryInstall.deleted",
                             "openappaBatteryPackage.updated",
                             "openappaBatteryPackage.deleted",
+                            "openappaCredentialBinding.updated",
                             "toolInvocationPolicy.created",
                             "toolInvocationPolicy.updated",
                             "toolInvocationPolicy.deleted",
@@ -333166,6 +333169,14 @@
                                   "nullable": true,
                                   "type": "string"
                                 },
+                                "source": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "policy",
+                                    "binding"
+                                  ]
+                                },
                                 "readers": {
                                   "type": "array",
                                   "items": {
@@ -333176,6 +333187,7 @@
                               "required": [
                                 "variable",
                                 "key",
+                                "source",
                                 "readers"
                               ],
                               "additionalProperties": false
@@ -334605,6 +334617,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "source": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "policy",
+                              "binding"
+                            ]
+                          },
                           "readers": {
                             "type": "array",
                             "items": {
@@ -334615,6 +334635,7 @@
                         "required": [
                           "variable",
                           "key",
+                          "source",
                           "readers"
                         ],
                         "additionalProperties": false
@@ -335007,6 +335028,14 @@
                             "nullable": true,
                             "type": "string"
                           },
+                          "source": {
+                            "nullable": true,
+                            "type": "string",
+                            "enum": [
+                              "policy",
+                              "binding"
+                            ]
+                          },
                           "readers": {
                             "type": "array",
                             "items": {
@@ -335017,6 +335046,7 @@
                         "required": [
                           "variable",
                           "key",
+                          "source",
                           "readers"
                         ],
                         "additionalProperties": false
@@ -335840,6 +335870,496 @@
           ]
         },
         "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
+      }
+    },
+    "/api/openappa/credential-bindings/{variable}": {
+      "put": {
+        "operationId": "setOpenappaCredentialBinding",
+        "tags": [
+          "OpenAPPA"
+        ],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "key": {
+                    "nullable": true,
+                    "type": "string",
+                    "minLength": 1,
+                    "maxLength": 200
+                  }
+                },
+                "required": [
+                  "key"
+                ],
+                "additionalProperties": false
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "pattern": "^APPA_PROVIDER_[A-Z0-9_]+$"
+            },
+            "in": "path",
+            "name": "variable",
+            "required": true
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "batteries": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "entry": {
+                            "type": "string"
+                          },
+                          "name": {
+                            "type": "string"
+                          },
+                          "source": {
+                            "type": "string",
+                            "enum": [
+                              "bundled",
+                              "upload"
+                            ]
+                          },
+                          "packageHash": {
+                            "nullable": true,
+                            "type": "string"
+                          },
+                          "status": {
+                            "type": "string",
+                            "enum": [
+                              "unavailable",
+                              "missing_credentials",
+                              "naming_conflict",
+                              "server_missing",
+                              "unrouted",
+                              "refused",
+                              "active"
+                            ]
+                          },
+                          "scope": {
+                            "type": "string",
+                            "enum": [
+                              "catalogs",
+                              "organization"
+                            ]
+                          },
+                          "composed": {
+                            "type": "boolean"
+                          },
+                          "line": {
+                            "type": "number"
+                          },
+                          "servers": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "target": {
+                                  "type": "string"
+                                },
+                                "catalogId": {
+                                  "nullable": true,
+                                  "type": "string"
+                                }
+                              },
+                              "required": [
+                                "target",
+                                "catalogId"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "credentials": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "variable": {
+                                  "type": "string"
+                                },
+                                "key": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "source": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "enum": [
+                                    "policy",
+                                    "binding"
+                                  ]
+                                },
+                                "readers": {
+                                  "type": "array",
+                                  "items": {
+                                    "type": "string"
+                                  }
+                                }
+                              },
+                              "required": [
+                                "variable",
+                                "key",
+                                "source",
+                                "readers"
+                              ],
+                              "additionalProperties": false
+                            }
+                          },
+                          "helpers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          }
+                        },
+                        "required": [
+                          "entry",
+                          "name",
+                          "source",
+                          "packageHash",
+                          "status",
+                          "scope",
+                          "composed",
+                          "line",
+                          "servers",
+                          "credentials",
+                          "helpers"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "unusedAliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "servers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "line": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "namespace",
+                          "servers",
+                          "line"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
+                    "rootRevision": {
+                      "type": "number"
+                    },
+                    "lastError": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "managedInGithub": {
+                      "type": "boolean"
+                    },
+                    "heldPull": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "contentHash": {
+                          "type": "string"
+                        },
+                        "sourceCommit": {
+                          "type": "string"
+                        },
+                        "reasons": {
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "drops_batteries",
+                              "changes_credentials"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "contentHash",
+                        "sourceCommit",
+                        "reasons"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "batteries",
+                    "unusedAliases",
+                    "rootRevision",
+                    "lastError",
+                    "managedInGithub",
+                    "heldPull"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_validation_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authentication_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "403": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_authorization_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_not_found_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_conflict_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Default Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "error": {
+                      "type": "object",
+                      "properties": {
+                        "message": {
+                          "type": "string"
+                        },
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "api_internal_server_error"
+                          ]
+                        },
+                        "internal_code": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "message",
+                        "type"
+                      ],
+                      "additionalProperties": false
+                    }
+                  },
+                  "required": [
+                    "error"
+                  ],
+                  "additionalProperties": false
+                }
+              }
+            }
+          }
+        },
+        "x-required-permissions": {
+          "kind": "static",
+          "permissions": [
+            "credential:update",
+            "openappaPolicy:update"
+          ]
+        },
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`credential:update`: Modify saved credentials\n`openappaPolicy:update`: Validate and edit OpenAPPA policy and manage batteries"
       }
     },
     "/api/openappa/battery-packages/{name}": {

@@ -132,8 +132,11 @@ jobs:
         run: pnpm --filter @archestra/docs-screenshots exec playwright install --with-deps chromium
 
       # Reuses the platform image CI built for this tree when there is one,
-      # otherwise builds it.
+      # otherwise builds it. The docs show beta features (Plugins, OpenAPPA),
+      # whose routes 404 unless the beta master switch is on.
       - name: Start Archestra (e2e-lite stack)
+        env:
+          ARCHESTRA_BETA: "true"
         run: ./platform/scripts/e2e-lite.sh up
 
       - name: Seed demo data and capture screenshots

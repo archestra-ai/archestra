@@ -135,7 +135,9 @@ describe("AgentAdoptionOverview", () => {
     render(<AgentAdoptionOverview />);
 
     const tile = (label: string) =>
-      screen.getByText(label).closest("[data-slot=card]") as HTMLElement;
+      screen
+        .getByText(label, { exact: false })
+        .closest("[data-slot=card]") as HTMLElement;
     expect(tile("Members using MCP gateway")).toHaveTextContent("1of 3 · 33%");
     expect(tile("Members using LLM proxy")).toHaveTextContent("1of 3 · 33%");
     expect(tile("Active members")).toHaveTextContent("1of 3 · 33%");

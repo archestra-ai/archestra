@@ -128,27 +128,24 @@ function SummaryTiles({ adoption }: { adoption: AgentAdoption }) {
   const active = adoption.members.filter((m) => m.status === "active").length;
   const gateway = adoption.members.filter((m) => m.gatewayLastSeenAt).length;
   const llm = adoption.members.filter((m) => m.llmLastSeenAt).length;
-  const window = `in the last ${adoption.lookbackDays} days`;
+  const window = `last ${adoption.lookbackDays} days`;
 
   return (
     <div className="grid gap-4 sm:grid-cols-3">
       <SummaryTile
-        label="Active members"
+        label={`Active members, ${window}`}
         value={active}
         total={total}
-        description={`Their coding agents used the MCP gateway or LLM proxy ${window}`}
       />
       <SummaryTile
-        label="Members using MCP gateway"
+        label={`Members using MCP gateway, ${window}`}
         value={gateway}
         total={total}
-        description={`Their coding agents made tool calls ${window}`}
       />
       <SummaryTile
-        label="Members using LLM proxy"
+        label={`Members using LLM proxy, ${window}`}
         value={llm}
         total={total}
-        description={`Their coding agents made model calls ${window}`}
       />
     </div>
   );
@@ -159,12 +156,10 @@ function SummaryTile({
   label,
   value,
   total,
-  description,
 }: {
   label: string;
   value: number;
   total: number;
-  description: string;
 }) {
   return (
     <Card>
@@ -176,7 +171,6 @@ function SummaryTile({
             {`of ${total.toLocaleString()} · ${formatShare(value, total)}`}
           </span>
         </CardTitle>
-        <p className="text-muted-foreground text-xs">{description}</p>
       </CardHeader>
     </Card>
   );
@@ -326,10 +320,8 @@ function AgentChart({ adoption }: { adoption: AgentAdoption }) {
   return (
     <Card className="min-w-0">
       <CardHeader>
-        <CardTitle>Members per agent</CardTitle>
-        <CardDescription>
-          {`Agents that called the MCP gateway or LLM proxy in the last ${adoption.lookbackDays} days. A member with two agents counts twice; Inactive counts members with no calls.`}
-        </CardDescription>
+        <CardTitle>{`Members per agent, last ${adoption.lookbackDays} days`}</CardTitle>
+        <CardDescription>Members with two agents count twice.</CardDescription>
       </CardHeader>
       <CardContent>
         <ChartContainer

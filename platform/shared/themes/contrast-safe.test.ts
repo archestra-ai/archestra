@@ -15,6 +15,30 @@ describe("withAccessibleLightTokens", () => {
     expect(out.input).toMatch(/0\.01 264\.53\)$/);
   });
 
+  test("keeps a tinted input outline in the theme's colour instead of greying it", () => {
+    const out = withAccessibleLightTokens({
+      background: "oklch(0.97 0.01 286.15)",
+      primary: "oklch(0.54 0.18 288.03)",
+      input: "oklch(0.91 0.02 285.96)", // pale lavender, ~1.2:1
+    });
+    expect(
+      contrastRatio(out.input, "oklch(0.97 0.01 286.15)") as number,
+    ).toBeGreaterThanOrEqual(3);
+    // Hue is kept and chroma borrowed from the accent, so it stays purple.
+    const [, chroma, hue] = out.input.slice(6, -1).split(" ");
+    expect(Number(hue)).toBeCloseTo(285.96);
+    expect(Number(chroma)).toBeGreaterThan(0.04);
+  });
+
+  test("keeps a neutral input outline neutral", () => {
+    const out = withAccessibleLightTokens({
+      background: "oklch(1 0 0)",
+      primary: "oklch(0.54 0.18 288.03)",
+      input: "oklch(0.92 0 0)",
+    });
+    expect(out.input).toMatch(/ 0 0\)$/);
+  });
+
   test("raises a faint focus ring to the 3:1 non-text minimum", () => {
     const out = withAccessibleLightTokens({
       background: "oklch(1 0 0)",

@@ -38,7 +38,13 @@ export function withAccessibleLightTokens(
       .map((key) => result[key])
       .filter((value): value is string => Boolean(value));
     if (against.length === 0) continue;
-    result[rule.token] = ensureMinContrast(color, against, rule.ratio);
+    const tintSource = rule.tintFrom ? result[rule.tintFrom] : undefined;
+    result[rule.token] = ensureMinContrast({
+      color,
+      against,
+      ratio: rule.ratio,
+      accentChroma: tintSource ? chromaOf(tintSource) : null,
+    });
   }
   return result;
 }
@@ -79,6 +85,13 @@ interface ContrastRule {
   against: string[];
   /** Minimum WCAG contrast ratio to reach. */
   ratio: number;
+  /**
+   * Token whose chroma a tinted value borrows when it has to be darkened. A
+   * pale lavender outline darkened to 3:1 at its own tiny chroma reads as
+   * plain grey; borrowing a share of the theme's accent chroma keeps it
+   * recognisably the theme's colour. Neutral (grey) tokens stay neutral.
+   */
+  tintFrom?: string;
 }
 
 /**
@@ -97,7 +110,12 @@ const CONTRAST_RULES: ContrastRule[] = [
     against: ["sidebar", "background"],
     ratio: DECORATIVE_BORDER_FLOOR,
   },
-  { token: "input", against: ["background"], ratio: NON_TEXT_MINIMUM },
+  {
+    token: "input",
+    against: ["background"],
+    ratio: NON_TEXT_MINIMUM,
+    tintFrom: "primary",
+  },
   { token: "ring", against: ["background"], ratio: NON_TEXT_MINIMUM },
   { token: "sidebar-ring", against: ["sidebar"], ratio: NON_TEXT_MINIMUM },
   {
@@ -113,30 +131,46 @@ const CONTRAST_RULES: ContrastRule[] = [
  */
 const CONTRAST_MARGIN = 0.03;
 
+/** At or below this chroma a token counts as neutral (incl. cool slate greys). */
+const NEUTRAL_CHROMA = 0.012;
+/** Share of the accent's chroma a darkened tinted token takes on. */
+const ACCENT_CHROMA_SHARE = 0.3;
+/** Upper bound on borrowed chroma, so an outline never turns into an accent. */
+const MAX_BORROWED_CHROMA = 0.06;
+
 interface Oklch {
   L: number;
   /** Original chroma/hue (and any alpha) tokens, preserved verbatim on output. */
   rest: string[];
 }
 
-function ensureMinContrast(
-  color: string,
-  against: string[],
-  ratio: number,
-): string {
-  const parsed = parseOklch(color);
-  if (!parsed) return color; // not a plain oklch() value — leave it alone
+function ensureMinContrast({
+  color,
+  against,
+  ratio,
+  accentChroma,
+}: {
+  color: string;
+  against: string[];
+  ratio: number;
+  accentChroma: number | null;
+}): string {
+  const original = parseOklch(color);
+  if (!original) return color; // not a plain oklch() value — leave it alone
   const refLums = against
     .map(relativeLuminance)
     .filter((value): value is number => value !== null);
   if (refLums.length === 0) return color;
 
   const target = ratio + CONTRAST_MARGIN;
-  const worst = (L: number) => {
-    const lum = luminanceFromLightness(L, parsed);
+  const worstFor = (oklch: Oklch) => (L: number) => {
+    const lum = luminanceFromLightness(L, oklch);
     return Math.min(...refLums.map((ref) => ratioFromLuminance(lum, ref)));
   };
-  if (worst(parsed.L) >= target) return color; // already compliant
+  if (worstFor(original)(original.L) >= target) return color; // already compliant
+
+  const parsed = withBorrowedChroma(original, accentChroma);
+  const worst = worstFor(parsed);
 
   // Increase contrast by moving lightness away from the reference(s). Try both
   // directions and keep whichever reaches the target with the smaller change;
@@ -207,6 +241,26 @@ function ratioFromLuminance(a: number, b: number): number {
   const hi = Math.max(a, b);
   const lo = Math.min(a, b);
   return (hi + 0.05) / (lo + 0.05);
+}
+
+/**
+ * Raise a tinted value's chroma to a share of the accent's, keeping its hue.
+ * Neutral values, and values already that colourful, are returned unchanged.
+ */
+function withBorrowedChroma(parsed: Oklch, accentChroma: number | null): Oklch {
+  const [C] = readChromaHue(parsed);
+  if (accentChroma === null || C <= NEUTRAL_CHROMA) return parsed;
+  const borrowed = Math.min(
+    accentChroma * ACCENT_CHROMA_SHARE,
+    MAX_BORROWED_CHROMA,
+  );
+  if (borrowed <= C) return parsed;
+  return { ...parsed, rest: [formatNumber(borrowed), ...parsed.rest.slice(1)] };
+}
+
+function chromaOf(color: string): number | null {
+  const parsed = parseOklch(color);
+  return parsed ? readChromaHue(parsed)[0] : null;
 }
 
 function readChromaHue(parsed: Oklch): [number, number] {

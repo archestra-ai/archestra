@@ -67,7 +67,7 @@ export type PolicyResolution = {
  * bindings applied for every variable an included battery reads and the text
  * itself does not bind. The content is never saved.
  */
-export type BoundPolicy = {
+type BoundPolicy = {
   content: string;
   resolution: PolicyResolution;
   credentialSource: Record<string, CredentialSource>;

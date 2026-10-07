@@ -15,6 +15,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type { ChatMessage, ConversationContentKey } from "@/types";
+import { projectCappedToolOutputs } from "@/utils/tool-result-cap";
 import {
   buildContextCompactionStreamData,
   type ContextCompactionResult,
@@ -133,8 +134,12 @@ export async function buildModelMessages(params: {
     disableCompaction = false,
     anthropicNativeEndpoint = true,
     conversationKey = null,
-    ...compaction
+    ...rest
   } = params;
+  const compaction = {
+    ...rest,
+    messages: projectCappedToolOutputs(rest.messages),
+  };
 
   let compactionStarted = false;
   // Encrypted chats skip auto-compaction outright: a summary is

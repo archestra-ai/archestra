@@ -50,6 +50,7 @@ import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import { capChatToolResult } from "@/clients/tool-result-spill";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import {
   legacyTrustedDataActive,
@@ -415,8 +416,8 @@ export function buildMcpGatewayTool(params: {
             });
           }
 
-          // PostToolUse lifecycle hook: append any block feedback to the
-          // tool result the model sees, preserving its shape.
+          // PostToolUse lifecycle hook sees the full result; its block
+          // feedback is appended to the (size-capped) text the model sees.
           const postFeedback = await firePostToolUseHook({
             ctx,
             toolName: mcpTool.name,
@@ -424,9 +425,12 @@ export function buildMcpGatewayTool(params: {
             toolResponse: toolResultText(toolResult),
             toolCallId: options.toolCallId,
           });
-          return postFeedback
-            ? appendHookFeedbackToToolResult(toolResult, postFeedback)
-            : toolResult;
+          return capChatToolResult({
+            result: toolResult,
+            hookFeedback: postFeedback,
+            context: ctx,
+            toolCallId: options.toolCallId,
+          });
         },
       });
     },
@@ -554,19 +558,27 @@ export function buildAgentDelegationTool(params: {
           // Internal subagents retain their established trust behavior. Only
           // an external A2A descriptor carries an exact policy-bearing tool ID
           // and therefore introduces this explicit opaque-data boundary.
-          if (!resolvedToolId) return content;
-          const boundaryResult = await buildUnsafeContextBoundaryResult({
-            resultMeta: response._meta as Record<string, unknown> | undefined,
+          const boundaryResult = resolvedToolId
+            ? await buildUnsafeContextBoundaryResult({
+                resultMeta: response._meta as
+                  | Record<string, unknown>
+                  | undefined,
+                toolCallId: options.toolCallId,
+                toolName: agentTool.name,
+                toolOutput: content,
+                agentId: ctx.agentId,
+                considerContextUntrusted: ctx.considerContextUntrusted,
+                resolvedToolId,
+              })
+            : null;
+          return capChatToolResult({
+            result: boundaryResult?.unsafeContextBoundary
+              ? { content, ...boundaryResult }
+              : content,
+            hookFeedback: null,
+            context: ctx,
             toolCallId: options.toolCallId,
-            toolName: agentTool.name,
-            toolOutput: content,
-            agentId: ctx.agentId,
-            considerContextUntrusted: ctx.considerContextUntrusted,
-            resolvedToolId,
           });
-          return boundaryResult.unsafeContextBoundary
-            ? { content, ...boundaryResult }
-            : content;
         },
       }),
   };
@@ -870,7 +882,6 @@ export const __test = {
   // Hook helpers — exposed for focused unit tests
   firePreToolUseHook,
   firePostToolUseHook,
-  appendHookFeedbackToToolResult,
   buildPreToolUseBlockedResult,
   toolResultText,
   collectKbChunksForVerification,
@@ -2159,24 +2170,6 @@ function toolResultText(
   result: string | { content: string; [key: string]: unknown },
 ): string {
   return typeof result === "string" ? result : result.content;
-}
-
-/**
- * Appends PostToolUse hook feedback to a tool result, preserving its shape: a
- * string stays a string; a rich `{ content }` object keeps its other fields.
- */
-function appendHookFeedbackToToolResult<
-  T extends string | { content: string; [key: string]: unknown },
->(result: T, feedback: string): T {
-  const suffix = `\n\n[hook feedback] ${feedback}`;
-  if (typeof result === "string") {
-    return (result + suffix) as T;
-  }
-  const objectResult = result as { content: string; [key: string]: unknown };
-  return {
-    ...objectResult,
-    content: objectResult.content + suffix,
-  } as T;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

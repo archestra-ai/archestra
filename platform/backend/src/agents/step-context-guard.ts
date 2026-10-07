@@ -35,6 +35,7 @@ import {
   composeCompactionPrompt,
   summarizeCompactionTranscript,
 } from "@/services/context-compaction";
+import { MAX_TOOL_RESULT_CONTEXT_CHARS } from "@/utils/tool-result-cap";
 
 interface SummarizeParams {
   transcript: string;
@@ -361,11 +362,6 @@ function safeJson(value: unknown): string {
     return String(value);
   }
 }
-
-// ~25k tokens at typical densities — generous enough for legitimate large
-// outputs (file reads, API listings) while keeping a single result from
-// consuming a meaningful fraction of the context window.
-const MAX_TOOL_RESULT_CONTEXT_CHARS = 100_000;
 
 // Share of the char budget preserved verbatim as the recent suffix when
 // compacting — the rest of the prefix goes into the summary.

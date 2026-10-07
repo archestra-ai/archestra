@@ -352,6 +352,7 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const id = context.sessionId ?? context.conversationId;
       const known =
+        context.openappaSubagent?.session ??
         context.openappaSession ??
         (context.organizationId && context.userId && id
           ? chatOpenAppaSession(context.organizationId, context.userId, id)
@@ -742,7 +743,12 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const { execution, trajectory, ...submittedArguments } = args;
       const stamp = parseCurrentTrajectory(trajectory);
-      if (!context.organizationId || !stamp) {
+      if (
+        !context.organizationId ||
+        !stamp ||
+        (context.openappaSubagent &&
+          stamp.session_id !== context.openappaSubagent.session.session_id)
+      ) {
         return unknownOfferResult();
       }
       const submittedSemantic =

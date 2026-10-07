@@ -48,6 +48,7 @@ import {
   UserTokenModel,
 } from "@/models";
 import { isAppaDelegatedRun } from "@/openappa/service";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
@@ -855,6 +856,7 @@ export async function getChatMcpTools({
   suppressContentLogging,
   encryptedChatAudit,
   modelAcceptsImageToolResults,
+  appaSubagent,
 }: {
   agentName: string;
   agentId: string;
@@ -937,6 +939,12 @@ export async function getChatMcpTools({
    * Omitted by headless/legacy callers to preserve their current behavior.
    */
   modelAcceptsImageToolResults?: boolean;
+  /**
+   * The child trajectory an OpenAPPA spawn bound this delegated run to. The
+   * run then governs its own calls, remedies included. Never cached: it is
+   * one spawn's.
+   */
+  appaSubagent?: SubagentBinding;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -945,7 +953,7 @@ export async function getChatMcpTools({
     scopeKey,
     delegationChain,
   );
-  const shouldUseToolCache = !abortSignal;
+  const shouldUseToolCache = !abortSignal && !appaSubagent;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -1030,8 +1038,10 @@ export async function getChatMcpTools({
     // Tools with _meta.ui.visibility that does not include "model" are intended
     // for app-iframe use only and must not appear in the LLM's tool list.
     // Default (no visibility field) = visible to both model and app.
-    // A2A-delegated runs cannot execute OpenAPPA tools, so do not offer them.
-    const delegatedRun = isAppaDelegatedRun(agentId, delegationChain);
+    // A2A-delegated runs cannot execute OpenAPPA tools, so do not offer them,
+    // unless a spawn bound the run to a child trajectory of its own.
+    const delegatedRun =
+      !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
       if (isAgentTool(tool.name)) return false;
       if (
@@ -1101,6 +1111,7 @@ export async function getChatMcpTools({
       // otherwise a fresh one. On a cache hit it is rebound (see above) so
       // repeat counts never carry across runs.
       repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
+      appaSubagent,
     };
     const aiTools: Record<string, Tool> = {};
 

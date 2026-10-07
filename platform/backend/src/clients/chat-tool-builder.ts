@@ -73,6 +73,7 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import type {
@@ -143,6 +144,8 @@ export interface ChatToolContext {
    * delegation call that spawned them.
    */
   subagentToolStream?: SubagentToolStreamBridge;
+  /** The child trajectory an OpenAPPA spawn bound this delegated run to. */
+  appaSubagent?: SubagentBinding;
   /**
    * Bridge that detaches a long-running tool call into a durable, cancellable
    * MCP task and surfaces it as a live card (chat path only). Absent in
@@ -300,6 +303,7 @@ export function buildMcpGatewayTool(params: {
                 // `run_tool` can dispatch a delegation tool, so this context
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
+                openappaSubagent: ctx.appaSubagent,
                 approvalRequiredPoliciesHandled: true,
                 // Every runner that drives an agent lands here — web
                 // chat, A2A, ChatOps, schedule triggers, incoming email
@@ -473,6 +477,7 @@ export function buildAgentDelegationTool(params: {
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
     delegationChain: ctx.delegationChain,
+    openappaSubagent: ctx.appaSubagent,
     abortSignal: ctx.abortSignal,
     tokenAuth: buildTokenAuthContext({
       mcpGwToken: ctx.mcpGwToken,

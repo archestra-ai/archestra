@@ -7,6 +7,7 @@ import {
   isAgentTool,
   OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   PROXY_STAMPED_TOOL_ARGUMENTS,
+  SELF_FORK_TOOL_NAME,
   slugify,
   TimeInMs,
   TOOL_ASK_USER_SHORT_NAME,
@@ -77,12 +78,17 @@ import {
   type OpenAppaSession,
   processProxyResults,
   returnRuntimeValue,
+  type SpawnReturnDeclaration,
   sendPeerMessage,
   sharedPolicy,
   startRuntimeChild,
   UNDELIVERABLE_RETURN_CONTRACT,
   withCapturedGuardrailsActivation,
 } from "@/openappa/service";
+import {
+  subagentChildSession,
+  subagentReturnPrefix,
+} from "@/openappa/subagent-binding";
 import {
   stampToolCallId,
   withoutTrajectoryStamp,
@@ -374,6 +380,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       session: this.governedSession(binding),
       toolResults,
     });
+    const subagentReturns = await admitSubagentReturns({
+      session: this.governedSession(binding),
+      spawnIds: runtimeSpawns,
+    });
     const nonHandbackResults = results
       .filter(
         (result) =>
@@ -385,6 +395,13 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       // An answer to an issued question is recognized as the very result the
       // client sent, so a result nothing rewrote goes on as that object.
       .map((result) => {
+        const subagentReturn = subagentReturns.get(
+          withoutTrajectoryStamp(result.id),
+        );
+        if (subagentReturn !== undefined) {
+          childResultUpdates[result.id] = subagentReturn;
+          return { ...result, content: subagentReturn };
+        }
         if (runtimeSpawns.has(withoutTrajectoryStamp(result.id))) {
           const content = runtimeLaunchHandle(result.content);
           childResultUpdates[result.id] = content;
@@ -400,6 +417,10 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
         this.canonicalize(binding, { name, namespace }),
       isUserQuestion: (answer) => isUserQuestionResult({ binding, answer }),
       classifySpawnResult: (answer) => {
+        // Recorded above as the spawn's result: nothing more to approve.
+        if (subagentReturns.has(withoutTrajectoryStamp(answer.id))) {
+          return "pending";
+        }
         if (runtimeSpawns.has(withoutTrajectoryStamp(answer.id))) {
           return answer.isError ? "failed" : "pending";
         }
@@ -925,6 +946,8 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
       spawnCallIds: new Set(
         [...runtimeCalls].filter(([, call]) => call.spawn).map(([id]) => id),
       ),
+      declareSpawnReturn: (call: { id: string }) =>
+        delegationReturnDeclaration(runtimeCalls.get(call.id)),
       ...this.resolution(binding),
       isUserQuestion: (name: string, namespace?: string) => {
         const tools = binding.request.tools;
@@ -1746,13 +1769,20 @@ async function resolveRuntimeCalls(params: {
         call.action === TOOL_START_RUN_SHORT_NAME || isAgentTool(call.action),
     )
   ) {
-    const targets = await AgentModel.findRuntimeTargets(
-      params.binding.session.organization_id,
-    );
-    const ids = new Set(targets.map((target) => target.id));
-    const names = new Set(
-      targets.map((target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`),
-    );
+    const organizationId = params.binding.session.organization_id;
+    const [runtimeTargets, spawnTargets] = await Promise.all([
+      AgentModel.findRuntimeTargets(organizationId),
+      AgentModel.findSpawnTargets(organizationId),
+    ]);
+    const ids = new Set(runtimeTargets.map((target) => target.id));
+    // Delegating to one of the organization's own agents, in a runtime or in
+    // this process, starts a child trajectory. Built-in subagents do not.
+    const names = new Set([
+      SELF_FORK_TOOL_NAME,
+      ...[...runtimeTargets, ...spawnTargets].map(
+        (target) => `${AGENT_TOOL_PREFIX}${slugify(target.name)}`,
+      ),
+    ]);
     for (const call of result.values()) {
       call.spawn =
         call.action === TOOL_START_RUN_SHORT_NAME
@@ -1762,6 +1792,59 @@ async function resolveRuntimeCalls(params: {
     }
   }
   return result;
+}
+
+/**
+ * The results of released spawns whose in-process child already returned. The
+ * child's turn crossed its value at its end; the parent receives exactly those
+ * bytes, recorded as the spawn's result. A spawn with no crossed return is a
+ * runtime launch, or a child that failed or was withheld.
+ */
+async function admitSubagentReturns(params: {
+  session: OpenAppaSession;
+  spawnIds: ReadonlySet<string>;
+}): Promise<Map<string, string>> {
+  const returns = await withCapturedGuardrailsActivation("active", () =>
+    Promise.all(
+      [...params.spawnIds].map(async (spawnCallId) => {
+        const child = subagentChildSession(params.session, spawnCallId);
+        const [latest] = await loadChildReturns({
+          organizationId: params.session.organization_id,
+          parentSessionId: params.session.session_id,
+          childSessionId: child.session_id,
+          operationPrefix: subagentReturnPrefix(spawnCallId),
+        });
+        return { spawnCallId, childId: child.session_id, latest };
+      }),
+    ),
+  );
+  const admitted = new Map<string, string>();
+  for (const { spawnCallId, childId, latest } of returns) {
+    if (!latest) continue;
+    await approveSpawnReturn({
+      session: params.session,
+      toolCallId: spawnCallId,
+      childId,
+      value: latest.value,
+    });
+    admitted.set(spawnCallId, latest.value);
+  }
+  return admitted;
+}
+
+/**
+ * An Archestra delegation call declares its own child's return: as spoken by
+ * default, schema-attested when it names a `return_schema`. A runtime launch
+ * through `start_run` keeps the explicit declaration flow.
+ */
+function delegationReturnDeclaration(
+  call: RuntimeCall | undefined,
+): SpawnReturnDeclaration | undefined {
+  if (!call?.spawn || !isAgentTool(call.action)) return undefined;
+  const schema = call.args.return_schema;
+  return isRecord(schema)
+    ? { kind: "attested", schema }
+    : { kind: "as_spoken" };
 }
 
 async function releasedRuntimeSpawns(params: {

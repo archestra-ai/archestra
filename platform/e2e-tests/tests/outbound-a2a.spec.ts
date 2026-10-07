@@ -1,4 +1,8 @@
-import { E2eTestId } from "@archestra/shared";
+import {
+  AGENT_TOOL_PREFIX,
+  E2eTestId,
+  SELF_FORK_TOOL_NAME,
+} from "@archestra/shared";
 import { type APIRequestContext, mergeTests } from "@playwright/test";
 import { A2A_FIXTURE_BASE_URL, WIREMOCK_BASE_URL } from "../consts";
 import { expect, test as uiTest } from "../fixtures";
@@ -127,8 +131,10 @@ test("delegates from a parent agent to an external A2A agent", async ({
       description: string;
       parameters: unknown;
     }>;
-    const delegationTool = tools.find((tool) =>
-      tool.name.startsWith("agent__"),
+    const delegationTool = tools.find(
+      (tool) =>
+        tool.name.startsWith(AGENT_TOOL_PREFIX) &&
+        tool.name !== SELF_FORK_TOOL_NAME,
     );
     expect(delegationTool).toMatchObject({
       parameters: expect.objectContaining({ type: "object" }),

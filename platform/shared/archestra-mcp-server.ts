@@ -29,6 +29,7 @@ export const TOOL_WHOAMI_SHORT_NAME = "whoami";
 export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";
 export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
 export const TOOL_LIST_AGENTS_SHORT_NAME = "list_agents";
+export const TOOL_LIST_LLM_MODELS_SHORT_NAME = "list_llm_models";
 export const TOOL_EDIT_AGENT_SHORT_NAME = "edit_agent";
 export const TOOL_LIST_HOOKS_SHORT_NAME = "list_hooks";
 export const TOOL_CREATE_HOOK_SHORT_NAME = "create_hook";
@@ -281,6 +282,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
   TOOL_LIST_HOOKS_SHORT_NAME,
   TOOL_CREATE_HOOK_SHORT_NAME,
@@ -506,6 +508,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   create_agent: "agents",
   get_agent: "agents",
   list_agents: "agents",
+  list_llm_models: "agents",
   edit_agent: "agents",
   list_hooks: "agents",
   create_hook: "agents",

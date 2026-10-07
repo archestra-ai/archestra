@@ -96,11 +96,34 @@ vi.mock("@/lib/teams/team.query");
 vi.mock("sonner");
 // The shared permission editors have their own tests. Here they only need to
 // show up, and the create form's one to hand back a starting grant.
-vi.mock("@/components/resource-permissions", () => ({
-  ResourcePermissions: ({ resource }: { resource: string }) => (
-    <section aria-label={`Permissions for ${resource}`}>Permissions</section>
-  ),
-}));
+const savePermissions = vi.fn(async () => {});
+vi.mock("@/components/resource-permissions", async () => {
+  const { useEffect } = await import("react");
+  return {
+    ResourcePermissions: ({
+      resource,
+      onDirtyChange,
+      registerSave,
+    }: {
+      resource: string;
+      onDirtyChange?: (dirty: boolean) => void;
+      registerSave?: (save: (() => Promise<void>) | null) => void;
+    }) => {
+      useEffect(() => {
+        registerSave?.(savePermissions);
+        return () => registerSave?.(null);
+      }, [registerSave]);
+      return (
+        <section aria-label={`Permissions for ${resource}`}>
+          <button type="button" onClick={() => onDirtyChange?.(true)}>
+            Change a grant
+          </button>
+          {!registerSave && <button type="button">Save permissions</button>}
+        </section>
+      );
+    },
+  };
+});
 vi.mock("@/components/initial-resource-permissions", () => ({
   InitialResourcePermissions: ({
     resource,
@@ -627,6 +650,36 @@ describe("external A2A agent routed pages", () => {
         ],
       }),
     );
+  });
+
+  it("commits permission edits with the page's one Save", async () => {
+    const user = userEvent.setup();
+    let updated = false;
+    server.use(
+      http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
+      http.put(`${REGISTRY_URL}/:id`, () => {
+        updated = true;
+        return HttpResponse.json(remoteAgent);
+      }),
+    );
+
+    renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
+    const permissions = await screen.findByRole("region", {
+      name: "Permissions for externalAgent",
+    });
+    expect(
+      within(permissions).queryByRole("button", { name: "Save permissions" }),
+    ).toBeNull();
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expect(save).toBeDisabled();
+
+    await user.click(
+      within(permissions).getByRole("button", { name: "Change a grant" }),
+    );
+    await user.click(save);
+
+    await waitFor(() => expect(savePermissions).toHaveBeenCalledTimes(1));
+    expect(updated).toBe(false);
   });
 
   it("lets a reader without edit grants view the agent but not change it", async () => {

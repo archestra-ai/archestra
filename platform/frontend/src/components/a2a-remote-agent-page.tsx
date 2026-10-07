@@ -120,14 +120,21 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
   const [permissionsDirty, setPermissionsDirty] = useState(false);
-  const navigationGuard = usePageUnsavedChangesGuard(
-    formDirty || permissionsDirty,
+  // The Permissions section keeps its own edits. The form's Save commits them.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
   );
+  const hasUnsavedChanges = formDirty || permissionsDirty;
+  const navigationGuard = usePageUnsavedChangesGuard(hasUnsavedChanges);
   const agent = query.data;
   const ownership = useResourceOwnershipTransfer({
     kind: "remoteAgent",
     resource: agent,
-    disabledReason: formDirty
+    disabledReason: hasUnsavedChanges
       ? "Save or discard your changes first"
       : undefined,
     onTransferred: () => router.push("/agents"),
@@ -227,8 +234,9 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
                                 tooltip: agent.connection.enabled
                                   ? "Pause this connection everywhere without removing its agent assignments."
                                   : "Make this connection available to its assigned agents again.",
-                                disabled: updateMutation.isPending || formDirty,
-                                disabledTooltip: formDirty
+                                disabled:
+                                  updateMutation.isPending || hasUnsavedChanges,
+                                disabledTooltip: hasUnsavedChanges
                                   ? "Save or discard your changes before changing delegation availability."
                                   : undefined,
                                 onClick: () =>
@@ -244,8 +252,9 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
                                 icon: <Trash2 className="h-4 w-4" />,
                                 label: "Delete",
                                 variant: "destructive" as const,
-                                disabled: deleteMutation.isPending || formDirty,
-                                disabledTooltip: formDirty
+                                disabled:
+                                  deleteMutation.isPending || hasUnsavedChanges,
+                                disabledTooltip: hasUnsavedChanges
                                   ? "Save or discard your changes before deleting this external agent."
                                   : undefined,
                                 onClick: () => setDeleteOpen(true),
@@ -270,13 +279,30 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
           onSubmit={(submission: A2aRemoteAgentFormSubmission) => {
             updateMutation.mutate(submission);
           }}
+          permissions={{
+            section: (
+              <ResourcePermissions
+                layout="settings"
+                resource="externalAgent"
+                scope={agent.id}
+                onDirtyChange={setPermissionsDirty}
+                registerSave={registerPermissionsSave}
+              />
+            ),
+            dirty: permissionsDirty,
+            save: async () => {
+              await permissionsSave.current?.();
+            },
+          }}
         />
-        <ResourcePermissions
-          layout="settings"
-          resource="externalAgent"
-          scope={agent.id}
-          onDirtyChange={setPermissionsDirty}
-        />
+        {!canUpdate && (
+          <ResourcePermissions
+            layout="settings"
+            resource="externalAgent"
+            scope={agent.id}
+            onDirtyChange={setPermissionsDirty}
+          />
+        )}
       </AgentPageShell>
       <DeleteConfirmDialog
         open={deleteOpen}

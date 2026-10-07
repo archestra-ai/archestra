@@ -2,7 +2,14 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { useForm } from "react-hook-form";
 import {
   type InitialPermissionGrant,
@@ -63,12 +70,22 @@ export function A2aRemoteAgentForm({
   isSaving,
   onSubmit,
   onDirtyChange,
+  permissions,
 }: {
   agent?: A2aRemoteAgent;
   readOnly?: boolean;
   isSaving: boolean;
   onSubmit: (submission: A2aRemoteAgentFormSubmission) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * An existing agent's Permissions section. It keeps its own edits, and this
+   * form's Save commits them, so the page shows one Save.
+   */
+  permissions?: {
+    section: ReactNode;
+    dirty: boolean;
+    save: () => Promise<void>;
+  };
 }) {
   const formId = useId();
   const initial = valuesFromAgent(agent);
@@ -102,12 +119,13 @@ export function A2aRemoteAgentForm({
     connectionStamp(values, agent) !== compatibleStamp;
   const inspectionNeedsPersistence =
     !!agent && !!inspection && inspection.cardHash !== agent.cardHash;
-  const isDirty =
+  const formDirty =
     form.formState.isDirty ||
     inspectionNeedsPersistence ||
     initialGrants.length > 0;
+  const isDirty = formDirty || !!permissions?.dirty;
 
-  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
+  useEffect(() => onDirtyChange?.(formDirty), [formDirty, onDirtyChange]);
   useEffect(
     () => () => {
       requestRef.current += 1;
@@ -326,11 +344,23 @@ export function A2aRemoteAgentForm({
       verifiedStamp,
     });
     if (!submission) return;
-    if (agent && Object.keys(submission).length === 0) {
+    const hasFieldChanges = !agent || Object.keys(submission).length > 0;
+    if (!hasFieldChanges && !permissions?.dirty) {
       discardChanges();
       return;
     }
-    onSubmit(submission);
+    void (async () => {
+      if (permissions?.dirty) {
+        try {
+          await permissions.save();
+        } catch {
+          // The Permissions section reports its own error.
+          return;
+        }
+      }
+      if (hasFieldChanges) onSubmit(submission);
+      else discardChanges();
+    })();
   };
   const submit = form.handleSubmit(() => {
     if (!validateCredential()) return;
@@ -594,6 +624,7 @@ export function A2aRemoteAgentForm({
               onChange={setInitialGrants}
             />
           )}
+          {agent && permissions?.section}
         </SettingsSectionGroup>
       </form>
       <FloatingActionBar>

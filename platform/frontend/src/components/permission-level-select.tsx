@@ -83,14 +83,15 @@ export function PermissionLevelSelect({
         title={title}
       >
         <SelectValue>
-          {valueLabel ?? (
-            <span className="flex min-w-0 items-center gap-2">
-              {SelectedIcon && (
-                <SelectedIcon className="size-4 text-muted-foreground" />
-              )}
-              <span className="truncate">{selected?.label}</span>
-            </span>
-          )}
+          <span className="flex min-w-0 items-center gap-2">
+            {SelectedIcon && !valueLabel ? (
+              <SelectedIcon className="size-4 text-muted-foreground" />
+            ) : (
+              // Holds the icon's place, so a custom set lines up too.
+              <span className="size-4 shrink-0" />
+            )}
+            <span className="truncate">{valueLabel ?? selected?.label}</span>
+          </span>
         </SelectValue>
       </SelectTrigger>
       <SelectContent
@@ -121,6 +122,40 @@ export function PermissionLevelSelect({
         {shown && <LevelDetail option={shown} options={options} />}
       </SelectContent>
     </Select>
+  );
+}
+
+/**
+ * A level shown without a dropdown, for grants this list cannot change. It
+ * takes the trigger's width, padding, and icon, so read-only and editable rows
+ * share one permission column.
+ */
+export function PermissionLevelLabel({
+  label,
+  actions,
+  title,
+  className,
+}: {
+  label: ReactNode;
+  actions: readonly ResourcePermissionAction[];
+  title?: string;
+  className?: string;
+}) {
+  const Icon = levelIcon({ actions });
+  return (
+    <span
+      className={cn(
+        "flex w-56 shrink-0 items-center gap-2 border border-transparent px-3 text-sm",
+        className,
+      )}
+      title={title}
+    >
+      <Icon
+        className="size-4 shrink-0 text-muted-foreground"
+        aria-hidden="true"
+      />
+      <span className="truncate">{label}</span>
+    </span>
   );
 }
 
@@ -179,7 +214,7 @@ function LevelDetail({
   );
 }
 
-function levelIcon(option: PermissionLevelOption): LucideIcon {
+function levelIcon(option: Pick<PermissionLevelOption, "actions">): LucideIcon {
   const has = (action: ResourcePermissionAction) =>
     option.actions.includes(action);
   if (has("configure-deployment-spec")) return Server;

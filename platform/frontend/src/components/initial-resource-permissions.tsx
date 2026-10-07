@@ -10,7 +10,10 @@ import {
 import { Info, Plus, Trash2, UserRound } from "lucide-react";
 import { useState } from "react";
 import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
-import { PermissionLevelSelect } from "@/components/permission-level-select";
+import {
+  PermissionLevelLabel,
+  PermissionLevelSelect,
+} from "@/components/permission-level-select";
 import {
   PermissionsSettingsSection,
   permissionsSettingsDescription,
@@ -144,9 +147,11 @@ export function InitialResourcePermissions({
               {/* Same width and padding as the editable rows' permission
                   select, plus the trash column's spacer, so every row in the
                   list shares one permission column. */}
-              <span className="w-48 shrink-0 px-3 text-sm text-muted-foreground">
-                Full access
-              </span>
+              <PermissionLevelLabel
+                label={resourcePermissionPresets.manage.label}
+                actions={resourcePermissionPresets.manage.actions}
+                className="text-muted-foreground"
+              />
               <span className="size-8 shrink-0" />
             </div>
           )}
@@ -253,9 +258,11 @@ export function InitialResourcePermissions({
                   </PopoverContent>
                 </Popover>
               </div>
-              <span className="w-48 shrink-0 px-3 text-sm text-muted-foreground">
-                {actionSummary(grant.actions, resource)}
-              </span>
+              <PermissionLevelLabel
+                label={actionSummary(grant.actions, resource)}
+                actions={grant.actions}
+                className="text-muted-foreground"
+              />
               <span className="size-8 shrink-0" />
             </div>
           ))}

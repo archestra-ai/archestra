@@ -37,7 +37,10 @@ import {
   AddResourceAccessDialog,
   ResourceAccessPicker,
 } from "@/components/add-resource-access-dialog";
-import { PermissionLevelSelect } from "@/components/permission-level-select";
+import {
+  PermissionLevelLabel,
+  PermissionLevelSelect,
+} from "@/components/permission-level-select";
 import { PermissionsSettingsSection } from "@/components/permissions-settings-section";
 import { QueryLoadError } from "@/components/query-load-error";
 import { getPermissionSafetyPreview } from "@/components/resource-permission-safety-preview";
@@ -544,7 +547,11 @@ function PermissionsEditor({
             options={levelOptions}
             ariaLabel={`Permission for ${grant.name}`}
             title={actionDetail(grant.actions, policy.resource)}
-            valueLabel={actionSummary(grant.actions, policy.resource)}
+            valueLabel={
+              presetFor(grant.actions, policy.resource) === "custom"
+                ? actionSummary(grant.actions, policy.resource)
+                : undefined
+            }
             extraOption={
               presetFor(grant.actions, policy.resource) === "custom"
                 ? {
@@ -616,12 +623,12 @@ function PermissionsEditor({
               </PopoverContent>
             </Popover>
           </div>
-          <p
-            className="min-w-0 text-sm sm:w-48 sm:shrink-0 sm:truncate sm:border sm:border-transparent sm:px-3"
+          <PermissionLevelLabel
+            label={actionSummary(grant.actions, policy.resource)}
+            actions={grant.actions}
             title={actionDetail(grant.actions, policy.resource)}
-          >
-            {actionSummary(grant.actions, policy.resource)}
-          </p>
+            className="w-auto min-w-0 px-0 sm:w-56 sm:px-3"
+          />
           <span className="hidden size-8 shrink-0 sm:block" />
         </div>
       ))}

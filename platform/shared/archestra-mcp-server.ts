@@ -132,6 +132,13 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
   "unassign_knowledge_connector_from_agent";
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_ASK_USER_SHORT_NAME = "ask_user";
+/**
+ * The property `ask_user` adds to its requested schema for a typed answer.
+ * Chat renders only this property as an "Other" alternative to the options.
+ */
+export const ASK_USER_OTHER_ANSWER_FIELD = "archestra_other_answer";
+export const TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME =
+  "request_battery_credentials";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
@@ -268,6 +275,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "update_runtime_credential",
   "delete_runtime_credential",
   "request_runtime_credential_setup",
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   "create_guardrails_repository",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
@@ -491,6 +499,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   update_runtime_credential: "openappa",
   delete_runtime_credential: "openappa",
   request_runtime_credential_setup: "openappa",
+  request_battery_credentials: "openappa",
 
   create_agent: "agents",
   get_agent: "agents",

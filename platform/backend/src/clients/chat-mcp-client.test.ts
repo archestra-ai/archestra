@@ -2016,6 +2016,39 @@ describe("buildArchestraToolOutput", () => {
     });
   });
 
+  test("keeps the battery credential card's batteries for the card, not the model", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const batteries = [
+      {
+        name: "slack",
+        title: "Slack",
+        benefit: null,
+        setup: [],
+        credentials: ["APPA_PROVIDER_SLACK_TOKEN"],
+      },
+    ];
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "Opened the card." }],
+        structuredContent: { batteries },
+      },
+      toolName: "archestra__request_battery_credentials",
+      toolArguments: { batteries: ["slack"] },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "Opened the card.",
+      structuredContent: { batteries },
+    });
+    expect(mcpToolToModelOutput({ output: result })).toEqual({
+      type: "text",
+      value: "Opened the card.",
+    });
+  });
+
   test("shows a reviewed remedy's ruling on the card, never to the model", async ({
     makeAgent,
   }) => {

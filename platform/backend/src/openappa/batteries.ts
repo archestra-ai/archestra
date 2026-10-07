@@ -99,6 +99,23 @@ class OpenAppaBatteriesService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** What each battery this organization can include asks of the person setting it up. */
+  async batterySetups(
+    organizationId: string,
+  ): Promise<Map<string, BatterySetup>> {
+    const available = await this.availableBatteries(organizationId);
+    return new Map(
+      [...available].map(([name, { package: battery }]) => [
+        name,
+        {
+          benefit: battery.benefit ?? null,
+          setup: batterySetupSteps(battery),
+          credentials: battery.credentials,
+        },
+      ]),
+    );
+  }
+
   /**
    * The battery each catalog has, or could have: its install when one exists
    * (an active one first), otherwise the strongest available match, as
@@ -149,6 +166,8 @@ class OpenAppaBatteriesService {
           description: found.package.description,
           namespaces: found.package.namespaces,
           credentials: found.package.credentials,
+          benefit: found.package.benefit ?? null,
+          setup: batterySetupSteps(found.package),
           policy: found.package.policy,
         });
     }
@@ -1585,6 +1604,12 @@ type AvailableBatteries = Map<
   }
 >;
 
+type BatterySetup = {
+  benefit: string | null;
+  setup: string[];
+  credentials: string[];
+};
+
 /** A catalog's battery: its install, or the match it could install. */
 type CatalogBattery =
   | { battery: string; status: BatteryInstallStatus }
@@ -1598,6 +1623,8 @@ type CatalogBattery =
       namespaces: string[];
       /** Credential variables `[credentials]` must bind to a runtime credential key. */
       credentials: string[];
+      benefit: string | null;
+      setup: string[];
       policy: string;
     };
 
@@ -1696,6 +1723,11 @@ function composes(battery: {
     case "refused":
       return false;
   }
+}
+
+/** The native package joins its one-line setup steps with newlines. */
+function batterySetupSteps(battery: NativeBatteryPackage): string[] {
+  return battery.setup?.split("\n") ?? [];
 }
 
 /** A battery with no tool namespace and at least one annotator governs the organization. */

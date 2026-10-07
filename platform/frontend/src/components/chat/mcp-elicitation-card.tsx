@@ -32,6 +32,7 @@ import {
   getDefaultValues,
   getElicitationFields,
   hasChoiceSelection,
+  isOtherTextField,
   isSingleChoiceForm,
   normalizeValues,
 } from "./mcp-elicitation-fields";
@@ -341,14 +342,29 @@ export function McpElicitationCard({
     value: unknown;
   }) => {
     const { request, fields } = question;
+    const other = fields.find(isOtherTextField);
+    const typed = other?.name === fieldName;
+    // A single pick and "Other" are alternatives: choosing one clears the other.
+    const cleared =
+      other && isSingleChoiceForm(fields) && (!typed || value !== "")
+        ? Object.fromEntries(
+            fields
+              .filter((field) => field.name !== fieldName)
+              .map((field) => [field.name, ""]),
+          )
+        : {};
     setValuesById((current) => ({
       ...current,
       [request.id]: {
         ...(current[request.id] ?? getDefaultValues(fields)),
+        ...cleared,
         [fieldName]: value,
       },
     }));
-    advanceOnPick(question);
+    // Typing never advances, and stops an advance a pick just scheduled;
+    // Next or Submit sends the text.
+    if (typed) cancelAutoAdvance();
+    else advanceOnPick(question);
   };
 
   const respondToAll = async (
@@ -431,13 +447,16 @@ export function McpElicitationCard({
   const renderFields = (question: CardQuestion) => {
     const questionId = questionMessageId(question.request.id);
     const singlePick = isSingleChoiceForm(question.fields);
+    const choiceCount = question.fields.filter(
+      (field) => !isOtherTextField(field),
+    ).length;
     const inputs = question.fields.map((field) => (
       <ElicitationFieldInput
         key={field.name}
         idPrefix={question.request.id}
         field={field}
         choiceStyle
-        hideLabel={question.fields.length === 1}
+        hideLabel={!isOtherTextField(field) && choiceCount === 1}
         labelledBy={singlePick ? questionId : undefined}
         value={question.values[field.name]}
         disabled={isSubmitting || !question.isPending}
@@ -445,6 +464,7 @@ export function McpElicitationCard({
           setFieldValue({ question, fieldName: field.name, value })
         }
         onPick={() => advanceOnPick(question)}
+        onFocus={isOtherTextField(field) ? cancelAutoAdvance : undefined}
       />
     ));
     return singlePick ? (
@@ -770,7 +790,8 @@ function AnswerSummary({
 
 function getOutcomeSummary(member: AskUserGroupMember) {
   if (member.outcome?.status === "answered") {
-    return member.outcome.selected.join(", ");
+    const { selected, text } = member.outcome;
+    return (text === undefined ? selected : [...selected, text]).join(", ");
   }
   switch (member.outcome?.status) {
     case "declined":

@@ -252,6 +252,8 @@ class OpenAppaCoverageService {
         include: battery.include,
         namespaces: battery.namespaces,
         credentials: battery.credentials,
+        benefit: battery.benefit,
+        setup: battery.setup,
         newlyCovered: wouldGovern(battery.policy, serverTools),
         rules: batteryRules(battery.policy, serverTools),
       });

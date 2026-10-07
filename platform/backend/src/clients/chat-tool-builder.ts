@@ -18,6 +18,7 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -776,7 +777,8 @@ export async function buildArchestraToolOutput(params: {
     // Not a run_tool dispatch — no UI resource to attach, but the card still
     // names who the platform ran this for and, on a reviewed remedy, the
     // ruling the viewer gave. ask_user keeps the user's recorded answer,
-    // which its card reads back after a reload.
+    // which its card reads back after a reload; the battery credential card
+    // reads its batteries the same way.
     const humanRuling = extractMcpHumanRuling(response);
     return {
       content: text,
@@ -784,7 +786,8 @@ export async function buildArchestraToolOutput(params: {
         ...executedAsMeta,
         ...(humanRuling ? { [MCP_HUMAN_RULING_META_KEY]: humanRuling } : {}),
       },
-      ...(targetShortName === TOOL_ASK_USER_SHORT_NAME &&
+      ...((targetShortName === TOOL_ASK_USER_SHORT_NAME ||
+        targetShortName === TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME) &&
       isRecord(response.structuredContent)
         ? { structuredContent: response.structuredContent }
         : {}),

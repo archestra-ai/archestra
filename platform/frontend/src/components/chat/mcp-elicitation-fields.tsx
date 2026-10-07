@@ -1,5 +1,6 @@
 "use client";
 
+import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
 import { z } from "zod";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -91,26 +92,36 @@ export function getElicitationFields(schema: unknown): ElicitationField[] {
     }));
 }
 
-function isChoiceForm(fields: ElicitationField[]) {
+/**
+ * `ask_user`'s "Other" field: a typed answer instead of a pick. Only the
+ * property it names counts; another server's optional text field is its own
+ * question, and its form keeps the dialog.
+ */
+export function isOtherTextField(field: ElicitationField) {
   return (
-    fields.length > 0 &&
-    fields.every((field) => {
-      const options = field.schema.enum;
-      return (
-        field.schema.type === "boolean" ||
-        (!!options?.length &&
-          options.every((option) => typeof option === "string"))
-      );
-    })
+    field.name === ASK_USER_OTHER_ANSWER_FIELD &&
+    field.schema.type === "string" &&
+    !field.schema.enum?.length &&
+    !field.required
+  );
+}
+
+function isChoiceForm(fields: ElicitationField[]) {
+  const choices = fields.filter(isChoiceField);
+  return (
+    choices.length > 0 &&
+    fields.length - choices.length <= 1 &&
+    fields.every((field) => isChoiceField(field) || isOtherTextField(field))
   );
 }
 
 /** One enum field: picking an option answers the whole question. */
 export function isSingleChoiceForm(fields: ElicitationField[]) {
+  const choices = fields.filter((field) => !isOtherTextField(field));
   return (
-    fields.length === 1 &&
-    fields[0].schema.type !== "boolean" &&
-    (fields[0].schema.enum?.length ?? 0) > 0
+    choices.length === 1 &&
+    choices[0].schema.type !== "boolean" &&
+    (choices[0].schema.enum?.length ?? 0) > 0
   );
 }
 
@@ -176,13 +187,24 @@ export function validateValues(
 
 /**
  * Checks whether a choice form has required selections before submitting.
- * Required fields must have a value. An all-optional form is complete even with nothing selected.
+ * Required fields must have a value. An all-optional form is complete even with
+ * nothing selected, unless it offers "Other": then it needs a pick or text.
  */
 export function hasChoiceSelection(
   fields: ElicitationField[],
   values: Record<string, unknown>,
 ) {
-  return Object.keys(validateValues(fields, values)).length === 0;
+  if (Object.keys(validateValues(fields, values)).length > 0) return false;
+  // With an "Other" field, a pick or a typed answer is what answers it.
+  return (
+    !fields.some(isOtherTextField) ||
+    fields.some((field) => {
+      const value = values[field.name];
+      return field.schema.type === "boolean"
+        ? value === true
+        : typeof value === "string" && value.trim() !== "";
+    })
+  );
 }
 
 export function normalizeValues(
@@ -236,6 +258,7 @@ export function ElicitationFieldInput({
   disabled = false,
   onChange,
   onPick,
+  onFocus,
 }: {
   /** Keeps control ids unique when several requests render at once. */
   idPrefix: string;
@@ -256,6 +279,8 @@ export function ElicitationFieldInput({
    * which changes nothing and so never reaches `onChange`.
    */
   onPick?: (value: string) => void;
+  /** Focus on a text field; choice controls ignore it. */
+  onFocus?: () => void;
 }) {
   const id = `mcp-elicitation-${idPrefix}-${field.name}`;
   const errorId = `${id}-error`;
@@ -405,6 +430,7 @@ export function ElicitationFieldInput({
           value={String(value ?? "")}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
+          onFocus={onFocus}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           className={String(value ?? "").length > 120 ? "min-h-24" : "min-h-10"}
@@ -437,6 +463,14 @@ export function ElicitationFieldInput({
 }
 
 // === Internal helpers ===
+
+function isChoiceField(field: ElicitationField) {
+  const options = field.schema.enum;
+  return (
+    field.schema.type === "boolean" ||
+    (!!options?.length && options.every((option) => typeof option === "string"))
+  );
+}
 
 type FieldSchema = {
   title?: string;

@@ -17,6 +17,7 @@ import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import McpServerModel from "@/models/mcp-server";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import PluginModel from "@/models/plugin";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
@@ -348,6 +349,12 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     }),
   },
 
+  resolve_openappa_yell: {
+    resourceType: "openappaYell",
+    action: "openappaYell.updated",
+    idFromArgs: (args) => str(args.id),
+    fetchById: (id, orgId) => OpenAppaYellModel.findByIdForAudit(id, orgId),
+  },
   update_guardrails_policy: {
     resourceType: "guardrailsPolicy",
     action: "guardrailsPolicy.updated",

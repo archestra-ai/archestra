@@ -13,6 +13,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import ConversationModel from "@/models/conversation";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
@@ -253,6 +254,153 @@ describe("OpenAPPA yells", () => {
         })
       ).statusCode,
     ).toBe(403);
+  });
+
+  test("lists the viewer's live chats that read a yell, newest first", async ({
+    makeAgent,
+    makeConversation,
+    makeOrganization,
+  }) => {
+    const yell = await record("Investigated report");
+    const untouched = await record("Unread report");
+    const agent = await makeAgent({ organizationId, accessAllTools: true });
+    const chat = (title: string | null, overrides = {}) =>
+      makeConversation(agent.id, {
+        userId: user.id,
+        organizationId,
+        title,
+        ...overrides,
+      });
+    const first = await chat("First investigation");
+    const second = await chat(null);
+    const deleted = await chat("Deleted investigation");
+    const colleagues = await chat("Colleague's investigation", {
+      userId: "another-user",
+    });
+    const foreign = await chat("Other organization", {
+      organizationId: (await makeOrganization()).id,
+    });
+    const read = async (conversationId?: string) => {
+      const result = await executeArchestraTool(
+        "archestra__get_openappa_yell",
+        { id: yell.id },
+        {
+          agent,
+          agentId: agent.id,
+          organizationId,
+          userId: user.id,
+          conversationId,
+        },
+      );
+      expect(result.isError, JSON.stringify(result.content)).toBeFalsy();
+    };
+    await read();
+    await read(first.id);
+    await read(first.id);
+    await read(randomUUID());
+    for (const conversation of [second, deleted, colleagues, foreign])
+      await read(conversation.id);
+    await ConversationModel.delete(deleted.id, user.id, organizationId);
+
+    const links = await db
+      .select()
+      .from(schema.openappaYellConversationsTable)
+      .where(eq(schema.openappaYellConversationsTable.yellId, yell.id));
+    expect(links.map((link) => link.conversationId).sort()).toEqual(
+      [first.id, second.id, deleted.id, colleagues.id].sort(),
+    );
+
+    const detail = (
+      await app.inject({ url: `/api/openappa/yells/${yell.id}` })
+    ).json();
+    expect(detail.conversations).toEqual([
+      { id: second.id, title: null, createdAt: expect.any(String) },
+      {
+        id: first.id,
+        title: "First investigation",
+        createdAt: expect.any(String),
+      },
+    ]);
+    const list = (await app.inject({ url: "/api/openappa/yells" })).json().data;
+    expect(
+      list.find((row: { id: string }) => row.id === yell.id).conversations,
+    ).toEqual(detail.conversations);
+    expect(
+      list.find((row: { id: string }) => row.id === untouched.id).conversations,
+    ).toEqual([]);
+  });
+
+  test("resolves and reopens a yell from chat with an audit record", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const yell = await record("Report fixed in chat");
+    const agent = await makeAgent({ organizationId, accessAllTools: true });
+    const resolve = (args: Record<string, unknown>, userId = user.id) =>
+      executeArchestraTool("archestra__resolve_openappa_yell", args, {
+        agent,
+        agentId: agent.id,
+        organizationId,
+        userId,
+      });
+
+    const resolved = await resolve({ id: yell.id });
+    expect(resolved.isError, JSON.stringify(resolved.content)).toBeFalsy();
+    expect(JSON.stringify(resolved.content)).toContain(yell.message);
+    expect(
+      await OpenAppaYellModel.find({ id: yell.id, organizationId }),
+    ).toMatchObject({
+      id: yell.id,
+      resolvedBy: user.id,
+    });
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 0 });
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceId, yell.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        action: "openappaYell.updated",
+        resourceType: "openappaYell",
+        before: { resolvedAt: null, resolvedBy: null },
+        after: { resolvedAt: expect.any(String), resolvedBy: user.id },
+      });
+      expect(JSON.stringify(rows)).not.toContain(yell.message);
+    });
+
+    await resolve({ id: yell.id, resolved: false });
+    expect(
+      await OpenAppaYellModel.find({ id: yell.id, organizationId }),
+    ).toMatchObject({
+      resolvedAt: null,
+      resolvedBy: null,
+    });
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 1 });
+
+    const memberWith = async (permission: "read" | "update") => {
+      const role = await makeCustomRole(organizationId, {
+        permission: { openappaDiagnostics: [permission] },
+      });
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: role.role });
+      return member.id;
+    };
+    expect(
+      (await resolve({ id: yell.id }, await memberWith("read"))).isError,
+    ).toBe(true);
+    await expect(
+      resolve({ id: yell.id }, await memberWith("update")),
+    ).rejects.toThrow("permission to read yells");
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 1 });
   });
 
   test("keeps reports with missing users and non-user callers visible", async () => {

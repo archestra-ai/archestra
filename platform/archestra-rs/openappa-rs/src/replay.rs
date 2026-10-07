@@ -225,8 +225,8 @@ fn offline_runtime(content: &str) -> Result<Runtime, String> {
         || externals
             .authorities
             .values()
+            .chain(externals.sanitizers.values())
             .any(|binding| !stock(binding))
-        || externals.sanitizers.values().any(|binding| !stock(binding))
         || externals
             .audience
             .values()
@@ -298,39 +298,28 @@ pub(crate) async fn run(request: Request) -> Response {
             }
         };
         assertions += trace.steps.len();
-        if trace.steps.is_empty() || assertions > MAX_ASSERTIONS {
-            files.push(cannot_run(
-                file.path,
-                trace.steps.len(),
-                "Scenarios need at least one assertion and at most 1000 assertions per run".into(),
-            ));
-            continue;
-        }
-        if let Some(step) = trace
+        let runtime = if trace.steps.is_empty() || assertions > MAX_ASSERTIONS {
+            Err("Scenarios need at least one assertion and at most 1000 assertions per run".into())
+        } else if let Some(step) = trace
             .steps
             .iter()
             .find(|step| (crate::adapter::adapter().spell)(&step.tool).is_none())
         {
-            files.push(cannot_run(
-                file.path,
-                trace.steps.len(),
-                format!(
-                    "Line {}: {} cannot be dispatched through the Archestra adapter",
-                    step.line, step.tool
-                ),
-            ));
-            continue;
-        }
-        let runtime = match &runtime {
-            Ok(runtime) => runtime,
-            Err(error) => {
-                files.push(cannot_run(file.path, trace.steps.len(), error.clone()));
-                continue;
-            }
+            Err(format!(
+                "Line {}: {} cannot be dispatched through the Archestra adapter",
+                step.line, step.tool
+            ))
+        } else {
+            runtime.as_ref().map_err(Clone::clone)
         };
-        // Sequential files cap work and memory; each unique path opens a fresh root.
-        for report in replay::run(runtime, std::slice::from_ref(&trace)).await {
-            files.push(result(&trace, report));
+        match runtime {
+            Ok(runtime) => {
+                // Sequential files cap work and memory; each unique path opens a fresh root.
+                for report in replay::run(runtime, std::slice::from_ref(&trace)).await {
+                    files.push(result(&trace, report));
+                }
+            }
+            Err(error) => files.push(cannot_run(file.path, trace.steps.len(), error)),
         }
     }
     Response {

@@ -10,9 +10,9 @@ import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
-import { useValidation } from "../validation-context";
-import { ValidationRunOutcome } from "../validation-parts";
-import { RunDetailsDialog } from "./run-details-dialog";
+import { RunDetailsDialog } from "../_parts/run-details-dialog";
+import { useValidation } from "../_parts/validation-context";
+import { ValidationRunOutcome } from "../_parts/validation-parts";
 
 export default function ValidationHistoryPage() {
   const { history, listHref } = useValidation();

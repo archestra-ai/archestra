@@ -18,8 +18,11 @@ import {
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
-import { useValidation, validationFileHref } from "../validation-context";
-import { ValidationNotices } from "../validation-parts";
+import {
+  useValidation,
+  validationFileHref,
+} from "../_parts/validation-context";
+import { ValidationNotices } from "../_parts/validation-parts";
 
 export default function NewValidationPage() {
   const suite = useValidation();
@@ -49,7 +52,6 @@ export default function NewValidationPage() {
     suite.github ||
     !suite.canWrite ||
     suite.busy ||
-    suite.dirty ||
     suite.sourceChanged ||
     Boolean(suite.loadError || suite.collection.error) ||
     suite.baseline.files.length >= 32;
@@ -63,16 +65,6 @@ export default function NewValidationPage() {
         <span>Back to validation</span>
       </PageBackLink>
       <ValidationNotices />
-      {suite.dirty && (
-        <InlineNotice>
-          <TriangleAlert />
-          <span className="font-medium">Existing unsaved edits</span>
-          <InlineNoticeText>
-            Save or discard your existing file edits before creating a
-            validation.
-          </InlineNoticeText>
-        </InlineNotice>
-      )}
       {suite.baseline.files.length >= 32 && (
         <InlineNotice>
           <TriangleAlert />

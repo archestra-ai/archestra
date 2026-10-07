@@ -31,15 +31,15 @@ import {
 } from "@/components/ui/popover";
 import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaPageAction } from "../_parts/openappa-page-action";
-import { useValidation, validationFileHref } from "./validation-context";
-import { exportValidationFile } from "./validation-file";
+import { useValidation, validationFileHref } from "./_parts/validation-context";
+import { exportValidationFile } from "./_parts/validation-file";
 import {
   ValidationActions,
   ValidationLastRun,
   ValidationNotices,
   ValidationRunAction,
   ValidationStatusBadge,
-} from "./validation-parts";
+} from "./_parts/validation-parts";
 
 const statuses = [
   { value: "all", label: "All statuses" },
@@ -72,7 +72,7 @@ export default function ValidationPage() {
     ? Number(params.get("pageSize"))
     : 10;
   const filtered = suite.files
-    .map((file, index) => {
+    .map((file) => {
       const lastRun = [suite.currentRun, ...(suite.history.data ?? [])].find(
         (run) =>
           run &&
@@ -85,7 +85,7 @@ export default function ValidationPage() {
       );
       return {
         file,
-        id: suite.fields[index].id,
+        id: file.path,
         status:
           failedToRun || (result && result.status !== "passed")
             ? "failed"
@@ -137,12 +137,7 @@ export default function ValidationPage() {
     updateQuery({ search: null, status: null, page: null });
   }
   function fileHref(row: ValidationRow) {
-    return validationFileHref(
-      row.file.path,
-      suite.files.filter((file) => file.path === row.file.path).length > 1
-        ? row.id
-        : undefined,
-    );
+    return validationFileHref(row.file.path);
   }
   useEffect(() => {
     suite.setListHref(`${pathname}${queryString ? `?${queryString}` : ""}`);
@@ -163,20 +158,13 @@ export default function ValidationPage() {
       id: "filename",
       header: "Filename",
       cell: ({ row }) => {
-        const { file, id, error } = row.original;
+        const { file, error } = row.original;
         return (
           <div className="max-w-xs">
             <RowClickShield>
               <Link
                 className="block truncate font-mono text-sm"
-                href={validationFileHref(
-                  file.path,
-                  suite.files.filter(
-                    (candidate) => candidate.path === file.path,
-                  ).length > 1
-                    ? id
-                    : undefined,
-                )}
+                href={validationFileHref(file.path)}
                 title={file.path}
               >
                 {file.path}
@@ -403,7 +391,7 @@ export default function ValidationPage() {
           if (!open) setDeleteIds([]);
         }}
         title={`Delete ${deleteIds.length} validation ${deleteIds.length === 1 ? "file" : "files"}?`}
-        description="These validation files will be deleted. Other unsaved edits will be kept."
+        description="These validation files will be deleted."
         isPending={suite.busy}
         confirmDisabled={!canDelete}
         onConfirm={() => {

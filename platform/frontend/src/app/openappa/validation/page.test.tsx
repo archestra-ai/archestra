@@ -26,11 +26,11 @@ import { TooltipProvider } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaPageActionSlotContext } from "../_parts/openappa-page-action";
+import { ValidationProvider } from "./_parts/validation-context";
 import FilePage from "./file/page";
 import HistoryPage from "./history/page";
 import NewPage from "./new/page";
 import ValidationPage from "./page";
-import { ValidationProvider } from "./validation-context";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("sonner");
@@ -223,7 +223,7 @@ test("list starts without editors and displays parser-derived tools", async () =
   expect(await screen.findByText("mcp/calendar/create")).toBeVisible();
 });
 
-test("drafts survive list/detail navigation and local saves bind the loaded version", async () => {
+test("file navigation protects unsaved changes and saves bind the loaded version", async () => {
   let saved: unknown;
   server.use(
     http.put(endpoint, async ({ request }) => {
@@ -244,15 +244,9 @@ test("drafts survive list/detail navigation and local saves bind the loaded vers
     { target: { value: "mcp/files/read {}\nexpect deny\n" } },
   );
   fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  fireEvent.click(await screen.findByRole("button", { name: "Keep editing" }));
   expect(
-    await screen.findByRole("link", { name: scenario.path }),
-  ).toBeVisible();
-  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("link", { name: scenario.path }));
-  expect(
-    await screen.findByRole("textbox", {
-      name: "Policy validation scenario.appa",
-    }),
+    screen.getByRole("textbox", { name: "Policy validation scenario.appa" }),
   ).toHaveValue("mcp/files/read {}\nexpect deny\n");
   fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
   await waitFor(() =>
@@ -265,6 +259,148 @@ test("drafts survive list/detail navigation and local saves bind the loaded vers
     expect(
       screen.getByRole("button", { name: "Save validation" }),
     ).toBeDisabled(),
+  );
+});
+
+test("a source refresh preserves the active draft and prevents saving against the new version", async () => {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  showPage(client);
+  fireEvent.click(await screen.findByRole("link", { name: scenario.path }));
+  const editor = await screen.findByRole("textbox", {
+    name: "Policy validation scenario.appa",
+  });
+  fireEvent.change(editor, { target: { value: "unsaved change" } });
+  act(() =>
+    client.setQueryData(["openappa-policy-tests", "active"], {
+      ...collection,
+      version: "new-version",
+      files: [{ ...scenario, content: "external change" }],
+    }),
+  );
+  expect(await screen.findByText("Validation source changed")).toBeVisible();
+  expect(editor).toHaveValue("unsaved change");
+  expect(
+    screen.getByRole("button", { name: "Save validation" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Run file" })).toBeDisabled();
+});
+
+test("a rename save completing after leaving the editor does not navigate back into it", async () => {
+  let finish: () => void = () => undefined;
+  let began: () => void = () => undefined;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    began = resolve;
+  });
+  const next = {
+    ...collection,
+    files: [{ ...scenario, path: "renamed.appa" }],
+    version: "v2",
+  };
+  server.use(
+    http.put(endpoint, async () => {
+      began();
+      await pending;
+      return HttpResponse.json(next);
+    }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  showPage(client);
+  fireEvent.click(await screen.findByRole("link", { name: scenario.path }));
+  fireEvent.change(
+    await screen.findByRole("textbox", { name: "Validation filename" }),
+    { target: { value: "renamed.appa" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  await started;
+  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard changes" }),
+  );
+  server.use(http.get(endpoint, () => HttpResponse.json(next)));
+  finish();
+  await waitFor(() =>
+    expect(client.getQueryData(["openappa-policy-tests", "active"])).toEqual(
+      next,
+    ),
+  );
+  expect(
+    await screen.findByRole("link", { name: "renamed.appa" }),
+  ).toBeVisible();
+  expect(currentHref).toBe("/openappa/validation");
+});
+
+test("a clean editor reopened during a pending save adopts its completed version before another edit", async () => {
+  let finish: () => void = () => undefined;
+  let began: () => void = () => undefined;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    began = resolve;
+  });
+  const submissions: {
+    files: typeof collection.files;
+    expectedVersion: string;
+  }[] = [];
+  const next = {
+    ...collection,
+    files: [{ ...scenario, content: "saved change" }],
+    version: "v2",
+  };
+  server.use(
+    http.put(endpoint, async ({ request }) => {
+      const submitted = (await request.json()) as (typeof submissions)[number];
+      submissions.push(submitted);
+      if (submissions.length === 1) {
+        began();
+        await pending;
+        return HttpResponse.json(next);
+      }
+      return HttpResponse.json({
+        ...next,
+        files: submitted.files,
+        version: "v3",
+      });
+    }),
+  );
+  showPage();
+  fireEvent.click(await screen.findByRole("link", { name: scenario.path }));
+  fireEvent.change(
+    await screen.findByRole("textbox", {
+      name: "Policy validation scenario.appa",
+    }),
+    { target: { value: "saved change" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  await started;
+  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard changes" }),
+  );
+  fireEvent.click(await screen.findByRole("link", { name: scenario.path }));
+  const reopened = await screen.findByRole("textbox", {
+    name: "Policy validation scenario.appa",
+  });
+  expect(reopened).toHaveValue(scenario.content);
+  finish();
+  await waitFor(() => expect(reopened).toHaveValue("saved change"));
+  expect(
+    screen.getByRole("button", { name: "Save validation" }),
+  ).toBeDisabled();
+  fireEvent.change(reopened, { target: { value: "newer change" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  await waitFor(() =>
+    expect(submissions[1]).toEqual({
+      files: [{ ...scenario, content: "newer change" }],
+      expectedVersion: "v2",
+    }),
   );
 });
 
@@ -366,6 +502,9 @@ test("file previews show draft diagnostics without changing suite results or his
   expect(savedRuns).toBe(0);
   expect(historyReads).toBe(readsBeforePreview);
   fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard changes" }),
+  );
   const unchangedSummary = await screen.findByRole("status", {
     name: "Last validation run",
   });
@@ -433,18 +572,13 @@ test.each([
   expect(screen.getByText("Stale inputs")).toBeVisible();
 });
 
-test("Run all ignores unsaved edits while a file preview uses the selected draft", async () => {
+test("file preview uses the editor draft and Run all uses persisted files after discard", async () => {
   let submitted: unknown;
   let suiteSubmitted: unknown;
   const files = [scenario, { ...scenario, path: "other.appa" }];
   const draft = { ...scenario, content: "mcp/files/read {}\nexpect deny\n" };
   server.use(
-    http.get(endpoint, () =>
-      HttpResponse.json({
-        ...collection,
-        files,
-      }),
-    ),
+    http.get(endpoint, () => HttpResponse.json({ ...collection, files })),
     http.post(`${endpoint}/run`, async ({ request }) => {
       suiteSubmitted = await request.json();
       return HttpResponse.json(run);
@@ -455,20 +589,25 @@ test("Run all ignores unsaved edits while a file preview uses the selected draft
     }),
   );
   showPage();
-  fireEvent.click(await screen.findByRole("link", { name: "other.appa" }));
+  fireEvent.click(await screen.findByRole("link", { name: scenario.path }));
   fireEvent.change(
-    await screen.findByRole("textbox", { name: "Validation filename" }),
-    {
-      target: { value: scenario.path },
-    },
-  );
-  fireEvent.change(
-    screen.getByRole("textbox", { name: "Policy validation scenario.appa" }),
+    await screen.findByRole("textbox", {
+      name: "Policy validation scenario.appa",
+    }),
     { target: { value: draft.content } },
   );
+  fireEvent.click(screen.getByRole("button", { name: "Run file" }));
+  await screen.findByText("Editor test");
+  expect(submitted).toEqual({
+    files: [draft],
+    sourceVersion: collection.version,
+    directory: "traces",
+  });
   fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
-  expect(screen.getByRole("button", { name: "Run all" })).toBeEnabled();
-  fireEvent.click(screen.getByRole("button", { name: "Run all" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard changes" }),
+  );
+  fireEvent.click(await screen.findByRole("button", { name: "Run all" }));
   await waitFor(() =>
     expect(suiteSubmitted).toEqual({
       files,
@@ -479,20 +618,12 @@ test("Run all ignores unsaved edits while a file preview uses the selected draft
   await waitFor(() =>
     expect(screen.getByRole("button", { name: "Run all" })).toBeEnabled(),
   );
-  fireEvent.click(screen.getAllByRole("link", { name: scenario.path })[1]);
+  fireEvent.click(screen.getByRole("link", { name: scenario.path }));
   expect(
     await screen.findByRole("textbox", {
       name: "Policy validation scenario.appa",
     }),
-  ).toHaveValue(draft.content);
-  expect(screen.getByRole("button", { name: "Run file" })).toBeEnabled();
-  fireEvent.click(screen.getByRole("button", { name: "Run file" }));
-  await screen.findByText("Editor test");
-  expect(submitted).toEqual({
-    files: [draft],
-    sourceVersion: collection.version,
-    directory: "traces",
-  });
+  ).toHaveValue(scenario.content);
 });
 
 test("invalid files have honest summary and syntax diagnostics before a run", async () => {
@@ -515,40 +646,6 @@ test("invalid files have honest summary and syntax diagnostics before a run", as
   expect(screen.queryByText("mcp/files/read")).not.toBeInTheDocument();
   fireEvent.click(screen.getByRole("link", { name: scenario.path }));
   expect(await screen.findByText("Invalid tool at line 1")).toBeVisible();
-});
-
-test("content edits hide old tool summaries while the next inspection is pending", async () => {
-  let inspections = 0;
-  server.use(
-    http.post(`${endpoint}/inspect`, async () => {
-      inspections++;
-      if (inspections > 1)
-        await new Promise((resolve) => setTimeout(resolve, 500));
-      return HttpResponse.json({
-        files: [
-          {
-            path: scenario.path,
-            tools: [inspections === 1 ? "mcp/files/read" : "mcp/mail/send"],
-            assertionCount: 1,
-            error: null,
-          },
-        ],
-      });
-    }),
-  );
-  showPage();
-  expect(await screen.findByText("mcp/files/read")).toBeVisible();
-  fireEvent.click(screen.getByRole("link", { name: scenario.path }));
-  fireEvent.change(
-    await screen.findByRole("textbox", {
-      name: "Policy validation scenario.appa",
-    }),
-    { target: { value: "mcp/mail/send {}\nexpect allow\n" } },
-  );
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
-  expect(await screen.findByText("Parsing…")).toBeVisible();
-  expect(screen.queryByText("mcp/files/read")).not.toBeInTheDocument();
-  expect(await screen.findByText("mcp/mail/send")).toBeVisible();
 });
 
 test("repository errors disable inspection and replay without local fallback", async () => {
@@ -593,7 +690,13 @@ test("Git directory configuration lives in source settings; browser refresh stil
     }),
     { target: { value: "draft" } },
   );
+  const beforeUnload = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(beforeUnload);
+  expect(beforeUnload.defaultPrevented).toBe(true);
   fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard changes" }),
+  );
   expect(
     await screen.findByRole("link", { name: /repository/ }),
   ).toHaveAttribute(
@@ -609,9 +712,9 @@ test("Git directory configuration lives in source settings; browser refresh stil
   expect(
     screen.queryByRole("button", { name: "Reload" }),
   ).not.toBeInTheDocument();
-  const beforeUnload = new Event("beforeunload", { cancelable: true });
-  window.dispatchEvent(beforeUnload);
-  expect(beforeUnload.defaultPrevented).toBe(true);
+  const afterDiscard = new Event("beforeunload", { cancelable: true });
+  window.dispatchEvent(afterDiscard);
+  expect(afterDiscard.defaultPrevented).toBe(false);
 });
 
 test("Git sync with no validation directory disables runs and points to source settings", async () => {
@@ -634,14 +737,19 @@ test("Git sync with no validation directory disables runs and points to source s
   ).not.toBeInTheDocument();
 });
 
-test("a duplicate draft path reopens the correct file for repair", async () => {
+test("duplicate filenames block saving until repaired, and a saved rename updates the route", async () => {
+  const files = [scenario, { path: "other.appa", content: "second contents" }];
+  let submitted: unknown;
   server.use(
-    http.get(endpoint, () =>
-      HttpResponse.json({
+    http.get(endpoint, () => HttpResponse.json({ ...collection, files })),
+    http.put(endpoint, async ({ request }) => {
+      submitted = await request.json();
+      return HttpResponse.json({
         ...collection,
-        files: [scenario, { path: "other.appa", content: "second contents" }],
-      }),
-    ),
+        files: [scenario, { ...files[1], path: "repaired.appa" }],
+        version: "v2",
+      });
+    }),
   );
   showPage();
   fireEvent.click(await screen.findByRole("link", { name: "other.appa" }));
@@ -649,25 +757,23 @@ test("a duplicate draft path reopens the correct file for repair", async () => {
     name: "Validation filename",
   });
   fireEvent.change(filename, { target: { value: scenario.path } });
-  fireEvent.blur(filename);
-  expect(currentHref).toContain("other.appa");
   expect(
-    screen.getByRole("textbox", { name: "Policy validation scenario.appa" }),
-  ).toHaveValue("second contents");
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
-  const links = await screen.findAllByRole("link", { name: scenario.path });
-  fireEvent.click(links[1]);
+    screen.getByRole("button", { name: "Save validation" }),
+  ).toBeDisabled();
+  expect(currentHref).toContain("other.appa");
+  fireEvent.change(filename, { target: { value: "repaired.appa" } });
+  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  await waitFor(() =>
+    expect(currentHref).toBe("/openappa/validation/file?path=repaired.appa"),
+  );
+  expect(submitted).toEqual({
+    files: [scenario, { ...files[1], path: "repaired.appa" }],
+    expectedVersion: collection.version,
+  });
   expect(
     await screen.findByRole("textbox", {
-      name: "Policy validation scenario.appa",
+      name: "Policy validation repaired.appa",
     }),
-  ).toHaveValue("second contents");
-  const repair = screen.getByRole("textbox", { name: "Validation filename" });
-  fireEvent.change(repair, { target: { value: "repaired.appa" } });
-  fireEvent.blur(repair);
-  expect(currentHref).toBe("/openappa/validation/file?path=repaired.appa");
-  expect(
-    screen.getByRole("textbox", { name: "Policy validation repaired.appa" }),
   ).toHaveValue("second contents");
 });
 
@@ -1141,30 +1247,6 @@ test.each([
     ).toBeVisible();
 });
 
-test("draft edits survive a visit to run history", async () => {
-  showPage();
-  fireEvent.click(await screen.findByRole("link", { name: scenario.path }));
-  fireEvent.change(
-    await screen.findByRole("textbox", {
-      name: "Policy validation scenario.appa",
-    }),
-    { target: { value: "# preserved history draft" } },
-  );
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
-  fireEvent.click(await screen.findByRole("link", { name: "Run history" }));
-  expect(await screen.findByText("No runs yet.")).toBeVisible();
-  expect(
-    screen.queryByRole("button", { name: "Discard changes" }),
-  ).not.toBeInTheDocument();
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
-  fireEvent.click(await screen.findByRole("link", { name: scenario.path }));
-  expect(
-    await screen.findByRole("textbox", {
-      name: "Policy validation scenario.appa",
-    }),
-  ).toHaveValue("# preserved history draft");
-});
-
 test("Add opens an independent form and creates only after submission", async () => {
   let submitted:
     | { files: typeof collection.files; expectedVersion: string }
@@ -1278,7 +1360,7 @@ test("a failed create preserves form values for retry", async () => {
   expect(currentHref).toBe("/openappa/validation/new");
 });
 
-test("file save and deletion keep unrelated drafts out of persisted changes", async () => {
+test("file save and deletion preserve the other persisted files", async () => {
   const files = [scenario, { ...scenario, path: "keep.appa" }];
   const submissions: unknown[] = [];
   server.use(
@@ -1301,14 +1383,6 @@ test("file save and deletion keep unrelated drafts out of persisted changes", as
     }),
     { target: { value: "saved change" } },
   );
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
-  fireEvent.click(await screen.findByRole("link", { name: "keep.appa" }));
-  fireEvent.change(
-    await screen.findByRole("textbox", { name: "Policy validation keep.appa" }),
-    { target: { value: "unrelated draft" } },
-  );
-  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
-  fireEvent.click(await screen.findByRole("link", { name: scenario.path }));
   fireEvent.click(
     await screen.findByRole("button", { name: "Save validation" }),
   );
@@ -1347,8 +1421,10 @@ test("file save and deletion keep unrelated drafts out of persisted changes", as
   fireEvent.click(screen.getByRole("link", { name: "keep.appa" }));
   expect(
     await screen.findByRole("textbox", { name: "Policy validation keep.appa" }),
-  ).toHaveValue("unrelated draft");
-  expect(screen.getByRole("button", { name: "Save validation" })).toBeEnabled();
+  ).toHaveValue(files[1].content);
+  expect(
+    screen.getByRole("button", { name: "Save validation" }),
+  ).toBeDisabled();
 });
 
 test("history opens the chosen saved run's explanations by row and keyboard", async () => {

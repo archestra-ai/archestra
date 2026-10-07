@@ -23,13 +23,23 @@ import {
 } from "@/components/ui/table";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
-import { GithubManagedPolicyNotice } from "../_parts/github-managed-policy-notice";
-import { OpenAppaChatButton } from "../_parts/openappa-chat-button";
+import { GithubManagedPolicyNotice } from "../../_parts/github-managed-policy-notice";
+import { OpenAppaChatButton } from "../../_parts/openappa-chat-button";
 import { useValidation } from "./validation-context";
 
-export function ValidationNotices() {
-  const { github, collection, sourceChanged, validPaths, loadError } =
-    useValidation();
+export function ValidationNotices({
+  sourceChanged: editorSourceChanged = false,
+}: {
+  sourceChanged?: boolean;
+} = {}) {
+  const {
+    github,
+    collection,
+    sourceChanged: collectionChanged,
+    validPaths,
+    loadError,
+  } = useValidation();
+  const sourceChanged = collectionChanged || editorSourceChanged;
   if (
     !github &&
     !collection.error &&
@@ -45,7 +55,7 @@ export function ValidationNotices() {
           <Info />
           <span className="font-medium">Could not refresh validation</span>
           <InlineNoticeText>
-            {loadError.message} Your draft is still available. Export it before
+            {loadError.message} If you have unsaved edits, export them before
             refreshing the page.
           </InlineNoticeText>
         </InlineNotice>
@@ -86,10 +96,9 @@ export function ValidationNotices() {
 }
 
 export function ValidationActions() {
-  const { files, dirty, busy, github, canWrite, add } = useValidation();
+  const { files, busy, github, canWrite, add } = useValidation();
   return (
     <div className="flex flex-wrap items-center justify-end gap-2">
-      {dirty && <Badge variant="secondary">Unsaved draft</Badge>}
       <OpenAppaChatButton
         size="sm"
         variant="outline"

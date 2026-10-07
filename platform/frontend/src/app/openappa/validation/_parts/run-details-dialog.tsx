@@ -12,7 +12,7 @@ import {
   statusLabel,
   ValidationRunOutcome,
   ValidationStatusBadge,
-} from "../validation-parts";
+} from "./validation-parts";
 
 export function RunDetailsDialog({
   run,

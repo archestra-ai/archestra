@@ -50,7 +50,7 @@ import { useOpenAppaPolicyTestRuns } from "@/lib/openappa-policy-tests.query";
 import { useOpenAppaYellsSummary } from "@/lib/openappa-yells.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { cn } from "@/lib/utils/tailwind";
-import { ValidationStatusBadge } from "../validation/validation-parts";
+import { ValidationStatusBadge } from "../validation/_parts/validation-parts";
 import {
   OpenAppaCreateRepositoryDialog,
   OpenAppaSourceForm,

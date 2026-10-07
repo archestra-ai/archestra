@@ -172,16 +172,18 @@ export function useCreateBatteryInstall() {
   );
 }
 
-export function useUpdateBatteryInstall() {
+/**
+ * Bind a helper variable to an organization credential, or unbind it with a
+ * null key, for every battery that reads it. Included or not, and whether or
+ * not the repository owns the policy text.
+ */
+export function useSetCredentialBinding() {
   return useBatteryMutation(
-    async (params: {
-      id: string;
-      body: archestraApiTypes.UpdateOpenappaBatteryInstallData["body"];
-    }) =>
+    async (params: { variable: string; key: string | null }) =>
       settled(
-        await archestraApiSdk.updateOpenappaBatteryInstall({
-          path: { id: params.id },
-          body: params.body,
+        await archestraApiSdk.setOpenappaCredentialBinding({
+          path: { variable: params.variable },
+          body: { key: params.key },
         }),
       ),
   );

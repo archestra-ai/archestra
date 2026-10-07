@@ -2,6 +2,7 @@ import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
 import { eq } from "drizzle-orm";
 import type { ArchestraContext } from "@/archestra-mcp-server/types";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { A2aConnectionModel, A2aRemoteAgentModel, ToolModel } from "@/models";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
@@ -180,6 +181,45 @@ test("authenticates SDK requests with bearer and API-key credentials", async ({
       },
     );
   }
+});
+
+test("delegates in production to an agent at a plain-http, non-public address", async ({
+  makeAgent,
+  makeOrganization,
+}) => {
+  // Stands in for an internal agent (a cluster Service) with no public IP or
+  // TLS that an admin registered by URL.
+  await withFixture({ authMode: "bearer" }, async ({ baseUrl }) => {
+    const organization = await makeOrganization();
+    const parent = await makeAgent({
+      name: "Production parent",
+      organizationId: organization.id,
+    });
+    const original = {
+      production: config.production,
+      enableE2eTestEndpoints: config.test.enableE2eTestEndpoints,
+    };
+    config.production = true;
+    config.test.enableE2eTestEndpoints = false;
+    try {
+      const target = await createTarget({
+        baseUrl,
+        organizationId: organization.id,
+        auth: { type: "bearer", credential: DEFAULT_BEARER_TOKEN },
+      });
+
+      const result = await executeOutboundA2aDelegation({
+        target,
+        message: "[fixture:immediate] internal",
+        context: makeContext({ parent, organizationId: organization.id }),
+      });
+
+      expect(result).toBe("Fixture response: internal");
+    } finally {
+      config.production = original.production;
+      config.test.enableE2eTestEndpoints = original.enableE2eTestEndpoints;
+    }
+  });
 });
 
 test("persists failed remote task state and identifiers", async ({

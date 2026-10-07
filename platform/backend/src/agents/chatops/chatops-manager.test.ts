@@ -25,6 +25,7 @@ import { ChatErrorCode, ChatErrorMessages } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { A2AManager } from "@/agents/a2a/a2a-manager";
 import * as a2aExecutor from "@/agents/a2a-executor";
+import config from "@/config";
 import db, { schema } from "@/database";
 import {
   A2AMessageModel,
@@ -2893,6 +2894,80 @@ describe("ChatOpsManager attachment passthrough", () => {
       ...overrides,
     };
   }
+
+  test("runs an Agent Runtime agent in its runtime, not as a plain LLM call", async ({
+    makeUser,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const previousFeatureEnabled = config.agentRuntime.enabled;
+    config.agentRuntime.enabled = true;
+    try {
+      const executorSpy = vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockResolvedValue({
+          text: "answered by the LLM API",
+          messageId: "msg-1",
+          finishReason: "stop",
+          responseUiMessage: {
+            id: "msg-1",
+            role: "assistant",
+            parts: [{ type: "text", text: "answered by the LLM API" }],
+          },
+        });
+
+      const user = await makeUser({ email: "runtime-user@example.com" });
+      const org = await makeOrganization();
+      const team = await makeTeam(org.id, user.id);
+      await makeTeamMember(team.id, user.id);
+      const agent = await makeInternalAgent({
+        organizationId: org.id,
+        runtime: {
+          image: "example.invalid/claude-code:test",
+          command: null,
+          inferenceProtocol: "openai_responses",
+          backend: "kubernetes",
+          steerMode: "tmux_keys",
+          privileged: false,
+          resources: null,
+          environment: null,
+          credentials: null,
+          ttlHours: null,
+          idleTimeoutMinutes: null,
+        },
+      });
+      await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+      await ChatOpsChannelBindingModel.create({
+        organizationId: org.id,
+        provider: "ms-teams",
+        channelId: "test-channel-id",
+        workspaceId: "test-workspace-id",
+        agentId: agent.id,
+      });
+
+      const mockProvider = createMockProvider({
+        getUserEmail: async () => "runtime-user@example.com",
+      });
+      const manager = new ChatOpsManager();
+      (
+        manager as unknown as { msTeamsProvider: ChatOpsProvider }
+      ).msTeamsProvider = mockProvider;
+
+      await manager.processMessage({
+        message: createMockMessage({ attachments: undefined }),
+        provider: mockProvider,
+      });
+
+      // The agent has a runtime, so the turn must go to the runtime (as the
+      // A2A endpoint, web chat, email, and schedules do) — never to the
+      // plain LLM executor.
+      expect(executorSpy).not.toHaveBeenCalled();
+    } finally {
+      config.agentRuntime.enabled = previousFeatureEnabled;
+    }
+  });
 
   test("passes attachments from message to executeA2AMessage", async ({
     makeUser,

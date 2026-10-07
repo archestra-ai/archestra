@@ -482,6 +482,12 @@ const registry = defineArchestraTools([
         organizationId,
         catalogId: catalog.id,
       });
+      const coverageByTool = new Map<string, CoverageTool[]>();
+      for (const row of coverage)
+        coverageByTool.set(row.toolId, [
+          ...(coverageByTool.get(row.toolId) ?? []),
+          row,
+        ]);
       const named = args.tools && new Set(args.tools);
       const entries = tools
         .filter(
@@ -490,11 +496,12 @@ const registry = defineArchestraTools([
             named.has(tool.name) ||
             named.has(tool.name.slice(tool.name.lastIndexOf("__") + 2)),
         )
-        .sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0))
-        .map((tool) => ({
-          tool,
-          coverage: coverage.filter((row) => row.toolId === tool.id),
-        }));
+        .sort((a, b) =>
+          a.name === b.name
+            ? a.id.localeCompare(b.id)
+            : a.name.localeCompare(b.name),
+        )
+        .map((tool) => ({ tool, coverage: coverageByTool.get(tool.id) ?? [] }));
       const page = pageWithinBudget(entries, args.offset, args.detail);
       return result({
         scope,
@@ -1054,6 +1061,14 @@ function pageWithinBudget(
     if (size > INSPECT_PAGE_BUDGET_BYTES) {
       row = {
         ...inspectedToolRow(entry, "summary"),
+        fullDetail: "omitted: larger than the tool-result size limit",
+      };
+      size = encodedBytes(row);
+    }
+    if (size > INSPECT_PAGE_BUDGET_BYTES) {
+      row = {
+        id: entry.tool.id,
+        name: entry.tool.name,
         fullDetail: "omitted: larger than the tool-result size limit",
       };
       size = encodedBytes(row);

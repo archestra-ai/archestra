@@ -31,7 +31,6 @@ describe("POST /api/a2a/remote-agents/:id/transfer-ownership", () => {
         authorId: ownerId,
         input: {
           name,
-          scope: "personal",
           source: { type: "inline_card", agentCard: makeAgentCard() },
           auth: { type: "none" },
         },
@@ -130,7 +129,8 @@ describe("POST /api/a2a/remote-agents/:id/transfer-ownership", () => {
   }) => {
     const resource = await create();
     organizationId = (await makeOrganization()).id;
-    expect((await transfer(resource.id)).statusCode).toBe(403);
+    // The scoped check answers 404, so a foreign agent's existence is hidden.
+    expect((await transfer(resource.id)).statusCode).toBe(404);
   });
 
   test("rejects an unknown resource", async () => {

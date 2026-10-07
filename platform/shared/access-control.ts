@@ -326,6 +326,7 @@ const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
     knowledgeConnector: "knowledgeSource",
     knowledgeFile: "knowledgeSource",
     mcpGateway: "mcpGateway",
+    externalAgent: "agent",
   };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -502,13 +503,14 @@ export const requiredEndpointPermissionsMap: Partial<
   // visibility-filtered unless the caller can update Agent settings. Run
   // history includes caller and conversation identifiers, so it requires
   // Agent-settings read and intentionally permits organization-wide access.
-  [RouteId.InspectA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.InspectA2aRemoteAgent]: { agent: ["create"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
-  [RouteId.ListA2aRemoteAgentRuns]: { organizationSettings: ["read"] },
-  [RouteId.CreateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.UpdateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.DeleteA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
+  [RouteId.CreateA2aRemoteAgent]: { agent: ["create"] },
+  // Each external agent's own permission policy decides who may change it.
+  [RouteId.UpdateA2aRemoteAgent]: { agent: ["read"] },
+  [RouteId.DeleteA2aRemoteAgent]: { agent: ["read"] },
 
   /**
    * Getting basic info about the organization requires the user to be
@@ -627,7 +629,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
   [RouteId.TransferAppOwnership]: {},
   [RouteId.TransferMcpCatalogOwnership]: {},
-  [RouteId.TransferRemoteAgentOwnership]: { organizationSettings: ["update"] },
+  // The external agent's own permission policy decides who may transfer it.
+  [RouteId.TransferRemoteAgentOwnership]: { agent: ["read"] },
   [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.BulkDeleteAgents]: {},

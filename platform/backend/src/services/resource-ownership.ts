@@ -15,7 +15,6 @@ import {
   ProjectModel,
   SkillModel,
 } from "@/models";
-import A2aRemoteAgentTeamModel from "@/models/a2a-remote-agent-team";
 import SkillTeamModel from "@/models/skill-team";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
 import { ApiError } from "@/types";
@@ -47,7 +46,7 @@ export async function transferResourceOwnership(params: {
     });
     // SPDX-SnippetEnd
   } else {
-    const resource = LEGACY_RESOURCE_FOR_KIND[kind];
+    const resource = LEGACY_RESOURCE_FOR_KIND[kind as LegacyKind];
     const permissions = await getPermissionsForUserContext({
       userId,
       organizationId,
@@ -69,21 +68,13 @@ export async function transferResourceOwnership(params: {
     throw new ApiError(404, "Resource not found");
   const { row, authorId, teamIds, scope } = entry;
   if (!scoped) {
-    const permissions = await getPermissionsForUserContext({
-      userId,
-      organizationId,
-    });
-    const resource = LEGACY_RESOURCE_FOR_KIND[kind];
-    const actions = permissions[resource] ?? [];
     if (
       authorId !== userId &&
-      !(kind === "remoteAgent"
-        ? actions.includes("update")
-        : await managesEveryObject({
-            kind: kind as "plugin" | "project",
-            userId,
-            organizationId,
-          }))
+      !(await managesEveryObject({
+        kind: kind as "plugin" | "project",
+        userId,
+        organizationId,
+      }))
     )
       throw new ApiError(
         403,
@@ -105,7 +96,7 @@ export async function transferResourceOwnership(params: {
       "The new owner must be a user in this organization",
     );
   if (!scoped) {
-    const resource = LEGACY_RESOURCE_FOR_KIND[kind];
+    const resource = LEGACY_RESOURCE_FOR_KIND[kind as LegacyKind];
     const recipientPermissions = await getPermissionsForUserContext({
       userId: ownerId,
       organizationId,
@@ -168,16 +159,13 @@ export async function transferResourceOwnership(params: {
 }
 
 /** Kinds still authorized by role permissions alone. */
-const LEGACY_RESOURCE_FOR_KIND: Record<
-  "skill" | "plugin" | "project" | "app" | "catalog" | "remoteAgent",
-  Resource
-> = {
+type LegacyKind = "skill" | "plugin" | "project" | "app" | "catalog";
+const LEGACY_RESOURCE_FOR_KIND: Record<LegacyKind, Resource> = {
   skill: "skill",
   app: "app",
   catalog: "mcpRegistry",
   plugin: "plugin",
   project: "project",
-  remoteAgent: "organizationSettings",
 };
 
 /**
@@ -214,7 +202,7 @@ const SCOPED_RESOURCE_KINDS: Record<
   // A project's owner holds a direct grant on it like any scoped object, so
   // a transfer moves that grant rather than leaving it with the old owner.
   project: "project",
-  remoteAgent: null,
+  remoteAgent: "externalAgent",
 };
 
 async function loadResource(params: {
@@ -298,15 +286,12 @@ async function loadResource(params: {
         organizationId,
       });
       const row = result?.remoteAgent;
-      const teams = await A2aRemoteAgentTeamModel.getDetailsForRemoteAgents([
-        id,
-      ]);
       return (
         row && {
           row,
           authorId: row.authorId,
           scope: row.scope,
-          teamIds: (teams.get(id) ?? []).map((t) => t.id),
+          teamIds: [],
           managed: false,
           transfer: A2aRemoteAgentModel.transferOwnership,
         }

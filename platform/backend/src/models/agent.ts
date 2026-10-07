@@ -8,7 +8,6 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
-  RESOURCE_ACCESS_RELATIONS,
   type ResourceAccessRelation,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -31,7 +30,6 @@ import {
   isNotNull,
   isNull,
   max,
-  min,
   ne,
   not,
   notInArray,
@@ -1546,8 +1544,11 @@ class AgentModel {
     filters?: AgentListFilters;
     userId: string;
     isAgentAdmin: boolean;
-    canManageExternalAgents: boolean;
-    includeExternalAgents?: boolean;
+    /**
+     * The grant an external agent row needs. A bulk selection asks for
+     * `delete`, the only bulk action, so it lists only rows it can act on.
+     */
+    externalAgentAction?: "read" | "delete";
     excludeOtherPersonalExternalAgents?: boolean;
   }): Promise<AgentCatalogCandidatePage> {
     const regularWhereClause = await AgentModel.buildListWhereClause({
@@ -1559,7 +1560,6 @@ class AgentModel {
       isAgentAdmin: params.isAgentAdmin,
     });
     const includeExternalAgents =
-      (params.includeExternalAgents ?? true) &&
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
       !params.filters?.providerApiKeyId &&
@@ -1585,28 +1585,17 @@ class AgentModel {
       params.filters?.scope === "org"
     ) {
       externalWhereConditions.push(
-        eq(schema.a2aRemoteAgentsTable.scope, params.filters.scope),
+        externalAgentAudienceIs(params.filters.scope),
       );
     }
     if (params.filters?.teamIds?.length) {
       externalWhereConditions.push(
-        exists(
-          db
-            .select({ value: sql`1` })
-            .from(schema.a2aRemoteAgentTeamsTable)
-            .where(
-              and(
-                eq(
-                  schema.a2aRemoteAgentTeamsTable.remoteAgentId,
-                  schema.a2aRemoteAgentsTable.id,
-                ),
-                inArray(
-                  schema.a2aRemoteAgentTeamsTable.teamId,
-                  params.filters.teamIds,
-                ),
-              ),
-            ),
-        ),
+        ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+          organizationId: schema.a2aRemoteAgentsTable.organizationId,
+          resource: "externalAgent",
+          scopeColumn: schema.a2aRemoteAgentsTable.id,
+          teamIds: params.filters.teamIds,
+        }),
       );
     }
     if (params.filters?.authorIds?.length) {
@@ -1637,18 +1626,20 @@ class AgentModel {
     }
     if (params.excludeOtherPersonalExternalAgents) {
       const ownPersonalOnlyCondition = or(
-        ne(schema.a2aRemoteAgentsTable.scope, "personal"),
+        not(externalAgentAudienceIs("personal")),
         eq(schema.a2aRemoteAgentsTable.authorId, params.userId),
       );
       if (ownPersonalOnlyCondition) {
         externalWhereConditions.push(ownPersonalOnlyCondition);
       }
     }
-    if (!params.canManageExternalAgents) {
-      externalWhereConditions.push(
-        A2aRemoteAgentModel.visibilityCondition(params.userId),
-      );
-    }
+    externalWhereConditions.push(
+      await A2aRemoteAgentModel.accessCondition({
+        organizationId: params.filters?.organizationId ?? "",
+        userId: params.userId,
+        action: params.externalAgentAction ?? "read",
+      }),
+    );
     externalWhereConditions.push(
       exists(
         db
@@ -1670,18 +1661,6 @@ class AgentModel {
       ),
     );
 
-    const externalTeamNames = db
-      .select({
-        agentId: schema.a2aRemoteAgentTeamsTable.remoteAgentId,
-        teamName: min(schema.teamsTable.name).as("team_name"),
-      })
-      .from(schema.a2aRemoteAgentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.teamsTable.id, schema.a2aRemoteAgentTeamsTable.teamId),
-      )
-      .groupBy(schema.a2aRemoteAgentTeamsTable.remoteAgentId)
-      .as("external_catalog_team_names");
     const regularCandidates = db
       .select({
         resourceType: sql<"agent" | "external">`'agent'`.as("resource_type"),
@@ -1710,20 +1689,17 @@ class AgentModel {
         id: schema.a2aRemoteAgentsTable.id,
         name: schema.a2aRemoteAgentsTable.name,
         createdAt: schema.a2aRemoteAgentsTable.createdAt,
-        teamName: sql<string>`COALESCE(${externalTeamNames.teamName}, '')`.as(
-          "team_name",
-        ),
+        teamName:
+          sql<string>`COALESCE(${externalAgentFirstGrantedTeamName()}, '')`.as(
+            "team_name",
+          ),
         personalPriority: sql<number>`CASE
-          WHEN ${schema.a2aRemoteAgentsTable.scope} = 'personal'
+          WHEN ${externalAgentAudienceIs("personal")}
             AND ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
       })
       .from(schema.a2aRemoteAgentsTable)
-      .leftJoin(
-        externalTeamNames,
-        eq(externalTeamNames.agentId, schema.a2aRemoteAgentsTable.id),
-      )
       .where(and(...externalWhereConditions));
     const candidates = unionAll(regularCandidates, externalCandidates).as(
       "agent_catalog_candidates",
@@ -4980,53 +4956,65 @@ function agentAccessCondition(params: {
 }
 
 /**
- * The "Show" filter for external A2A agents, which still carry the retired
- * visibility column and team assignments instead of grants.
+ * The "Show" filter for external A2A agents, read from their own policies like
+ * internal agents.
  */
 async function externalAgentAccessCondition(params: {
   userId: string;
   organizationId?: string;
   relations: ResourceAccessRelation[];
 }): Promise<SQL | undefined> {
-  const selected = new Set(params.relations);
-  if (RESOURCE_ACCESS_RELATIONS.every((relation) => selected.has(relation)))
-    return undefined;
   const table = schema.a2aRemoteAgentsTable;
   const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
     userId: params.userId,
     organizationId: params.organizationId,
   });
-  const teamIds = principals.flatMap((principal) =>
-    principal.subjects
-      .filter((subject) => subject.type === "team")
-      .map((subject) => subject.id),
-  );
-  const mine = sql<boolean>`coalesce(${table.authorId} = ${params.userId}, false)`;
-  const org = sql<boolean>`${table.scope} = 'org'`;
-  const shared =
-    teamIds.length > 0
-      ? sql<boolean>`(${table.scope} = 'team' AND ${exists(
-          db
-            .select({ value: sql`1` })
-            .from(schema.a2aRemoteAgentTeamsTable)
-            .where(
-              and(
-                eq(schema.a2aRemoteAgentTeamsTable.remoteAgentId, table.id),
-                inArray(schema.a2aRemoteAgentTeamsTable.teamId, teamIds),
-              ),
-            ),
-        )})`
-      : sql<boolean>`false`;
-  const byRelation: Record<ResourceAccessRelation, SQL> = {
-    mine,
-    shared,
-    org,
-    others: sql`NOT (${mine} OR ${shared} OR ${org})`,
-  };
-  return sql`(${sql.join(
-    [...selected].map((relation) => byRelation[relation]),
-    sql` OR `,
-  )})`;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissionPolicyModel.accessRelationCondition({
+    organizationId: table.organizationId,
+    resource: "externalAgent",
+    scopeColumn: table.id,
+    ownerColumn: table.authorId,
+    userId: params.userId,
+    subjects: principals.flatMap((principal) => principal.subjects),
+    relations: params.relations,
+  });
+  // SPDX-SnippetEnd
+}
+
+/** An external agent's audience, read from its own policy. */
+function externalAgentAudienceIs(audience: "personal" | "team" | "org"): SQL {
+  const table = schema.a2aRemoteAgentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissionPolicyModel.audienceIs({
+    organizationId: table.organizationId,
+    resource: "externalAgent",
+    scopeColumn: table.id,
+    ownerColumn: table.authorId,
+    audience,
+  });
+  // SPDX-SnippetEnd
+}
+
+/** The alphabetically first team an external agent's policy grants read to. */
+function externalAgentFirstGrantedTeamName() {
+  const table = schema.a2aRemoteAgentsTable;
+  return sql<string | null>`(
+    SELECT min(granted_team.name)
+    FROM resource_permission_policies team_policy,
+      jsonb_array_elements(team_policy.grants) team_entry,
+      team granted_team
+    WHERE team_policy.organization_id = ${table.organizationId}
+      AND team_policy.resource = 'externalAgent'
+      AND team_policy.scope = ${table.id}::text
+      AND (team_entry->'actions') ? 'read'
+      AND team_entry->'subject'->>'type' = 'team'
+      AND granted_team.id = team_entry->'subject'->>'id'
+  )`;
 }
 
 /** Agents whose own policy grants read to any of `teamIds`. */

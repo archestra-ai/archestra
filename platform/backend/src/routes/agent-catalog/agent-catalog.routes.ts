@@ -7,7 +7,7 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAgentTypePermissionChecker, userHasPermission } from "@/auth";
+import { getAgentTypePermissionChecker } from "@/auth";
 import { AgentModel } from "@/models";
 import { listA2aRemoteAgents } from "@/services/a2a-outbound-registry";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
@@ -111,12 +111,6 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       checker.require("agent", query.status === "deleted" ? "delete" : "read");
       const isAgentAdmin = checker.isAdmin("agent");
-      const canManageExternalAgents = await userHasPermission(
-        user.id,
-        organizationId,
-        "organizationSettings",
-        "update",
-      );
       const filters = {
         organizationId,
         name: query.name,
@@ -144,8 +138,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         filters,
         userId: user.id,
         isAgentAdmin,
-        canManageExternalAgents,
-        includeExternalAgents: !query.selectableOnly || canManageExternalAgents,
+        externalAgentAction: query.selectableOnly ? "delete" : "read",
         excludeOtherPersonalExternalAgents: query.excludeOtherPersonalAgents,
       });
       const agentIds = candidates.rows.flatMap((row) =>
@@ -167,7 +160,6 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         listA2aRemoteAgents({
           organizationId,
           userId: user.id,
-          canManage: canManageExternalAgents,
           ids: externalAgentIds,
         }),
       ]);

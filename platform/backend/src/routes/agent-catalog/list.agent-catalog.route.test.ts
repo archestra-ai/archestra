@@ -78,7 +78,12 @@ describe("GET /api/agent-catalog", () => {
             agentCard: makeAgentCard("none", { name }),
           },
           auth: { type: "none" },
-          scope: "org",
+          initialGrants: [
+            {
+              subject: { type: "organization", id: "*" },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
     }
@@ -151,6 +156,55 @@ describe("GET /api/agent-catalog", () => {
     });
   });
 
+  test("splits external agents by how the caller reaches them, from their grants", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, { role: "member" });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const createExternal = (name: string, authorId?: string) =>
+      createA2aRemoteAgent({
+        organizationId: ctx.organizationId,
+        authorId,
+        input: {
+          name: `${name} ${suffix}`,
+          source: { type: "inline_card", agentCard: makeAgentCard() },
+          auth: { type: "none" },
+        },
+      });
+    // An authored external agent starts personal; one without an author is
+    // shared with the organization.
+    await createExternal("Mine", ctx.user.id);
+    await createExternal("Theirs", otherUser.id);
+    await createExternal("Org");
+
+    const list = async (access: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?limit=50&offset=0&name=${suffix}&access=${access}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .data.map((row: { value: { name: string } }) =>
+          row.value.name.replace(` ${suffix}`, ""),
+        )
+        .sort();
+    };
+
+    // The admin reads every external agent through a `*` grant, which must
+    // not count as "shared".
+    expect(await list("mine")).toEqual(["Mine"]);
+    expect(await list("org")).toEqual(["Org"]);
+    expect(await list("shared")).toEqual([]);
+    expect(await list("others")).toEqual(["Theirs"]);
+    expect(await list("mine,shared,org")).toEqual(["Mine", "Org"]);
+  });
+
   test("keeps external agents out of regular-only filtered views", async ({
     makeAgent,
     makeMember,
@@ -173,7 +227,12 @@ describe("GET /api/agent-catalog", () => {
           agentCard: makeAgentCard(),
         },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -218,7 +277,12 @@ describe("GET /api/agent-catalog", () => {
         name: "External agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -280,6 +344,7 @@ describe("GET /api/agent-catalog", () => {
     makeAgent,
     makeCustomRole,
     makeMember,
+    makeUser,
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
       permission: { agent: ["read"] },
@@ -290,14 +355,22 @@ describe("GET /api/agent-catalog", () => {
       agentType: "agent",
       name: "Selectable regular agent",
     });
+    // Someone else owns it, so the caller can use it but not delete it.
+    const owner = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
     await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
+      authorId: owner.id,
       input: {
         name: "Visible but unselectable external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -313,17 +386,14 @@ describe("GET /api/agent-catalog", () => {
     });
   });
 
-  test("scopes the personal-owner filter to external agents for non-agent-admin managers", async ({
+  test("scopes the personal-owner filter to external agents for non-agent-admins", async ({
     makeAgent,
     makeCustomRole,
     makeMember,
     makeUser,
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
-      permission: {
-        agent: ["read"],
-        organizationSettings: ["update"],
-      },
+      permission: { agent: ["read"] },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: role.role });
     const otherUser = await makeUser();
@@ -363,7 +433,6 @@ describe("GET /api/agent-catalog", () => {
         name: "Own external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     await createA2aRemoteAgent({
@@ -373,7 +442,6 @@ describe("GET /api/agent-catalog", () => {
         name: "Other external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
 

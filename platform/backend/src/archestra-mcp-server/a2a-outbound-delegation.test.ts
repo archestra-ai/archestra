@@ -1,6 +1,6 @@
 import type { Server } from "node:http";
 import type { AddressInfo } from "node:net";
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { MEMBER_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { ToolModel } from "@/models";
@@ -138,7 +138,9 @@ test("hides and rejects an inaccessible external target for a real user while pr
     const owner = await makeUser();
     const viewer = await makeUser();
     await makeMember(owner.id, organization.id);
-    await makeMember(viewer.id, organization.id, { role: ADMIN_ROLE_NAME });
+    // Not an administrator: administrators hold Full access on every
+    // external agent through the organization-wide grant.
+    await makeMember(viewer.id, organization.id, { role: MEMBER_ROLE_NAME });
     const parent = await makeAgent({
       name: "Visibility parent",
       organizationId: organization.id,
@@ -149,7 +151,6 @@ test("hides and rejects an inaccessible external target for a real user while pr
       input: {
         source: { type: "inline_card", agentCard: makeAgentCard(baseUrl) },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     await syncA2aDelegations({

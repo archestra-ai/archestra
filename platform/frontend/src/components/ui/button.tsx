@@ -20,8 +20,11 @@ const buttonVariants = cva(
           "bg-primary text-primary-foreground hover:bg-primary/90 aria-disabled:hover:bg-primary",
         destructive:
           "bg-destructive text-white hover:bg-destructive/90 focus-visible:ring-destructive/20 dark:focus-visible:ring-destructive/40 dark:bg-destructive/60 aria-disabled:hover:bg-destructive dark:aria-disabled:hover:bg-destructive/60",
+        // A combobox trigger is a form field, so its edge takes the 3:1
+        // `--input` boundary; a plain outline button is identified by its
+        // label and keeps the soft decorative `--border`.
         outline:
-          "border bg-background hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-disabled:hover:bg-background aria-disabled:hover:text-inherit dark:aria-disabled:hover:bg-input/30",
+          "border bg-background [&[role=combobox]]:border-input hover:bg-accent hover:text-accent-foreground dark:bg-input/30 dark:border-input dark:hover:bg-input/50 aria-disabled:hover:bg-background aria-disabled:hover:text-inherit dark:aria-disabled:hover:bg-input/30",
         "outline-transparent":
           "border bg-transparent hover:bg-accent/50 hover:text-accent-foreground aria-disabled:hover:bg-transparent aria-disabled:hover:text-inherit",
         secondary:

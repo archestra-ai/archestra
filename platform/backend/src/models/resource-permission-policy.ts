@@ -13,7 +13,10 @@ import {
   topResourcePermissionPreset,
   widenToPreset,
 } from "@archestra/shared";
-import { predefinedRolesWithReadAccess } from "@archestra/shared/access-control";
+import {
+  predefinedRolesWithReadAccess,
+  roleActionResourceFor,
+} from "@archestra/shared/access-control";
 import {
   and,
   eq,
@@ -331,7 +334,7 @@ export default class ResourcePermissionPolicyModel {
                 schema.organizationRolesTable.organizationId,
                 params.organizationId,
               ),
-              sql`coalesce(${schema.organizationRolesTable.permission}::jsonb -> ${params.resource}, '[]'::jsonb) ? 'read'`,
+              sql`coalesce(${schema.organizationRolesTable.permission}::jsonb -> ${roleActionResourceFor(params.resource)}, '[]'::jsonb) ? 'read'`,
             ),
           ),
       ]);

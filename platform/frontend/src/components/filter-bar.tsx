@@ -344,6 +344,10 @@ export function filterControlClass({
     // `min-h-8` matters as much as `h-8`: AgentSelector's trigger sets
     // `h-auto min-h-9` for its two-line rows, and a bare `h-8` would lose to it.
     "h-8 min-h-8 w-auto min-w-0 max-w-[15rem] gap-1.5 px-2.5 text-sm font-normal",
+    // Every filter control picks a value, so all of them — Select, popover,
+    // dropdown or button-built — share the Select/Input `--input` edge rather
+    // than an outline button's softer decorative border.
+    "border-input",
     active && "border-primary/50 bg-primary/10 font-medium",
     className,
   );

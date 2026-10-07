@@ -89,6 +89,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
 import { ProposedGuardrailsPolicySchema } from "@/types/guardrails-policy-proposal";
+import type { CoverageTool } from "@/types/openappa-coverage";
 import {
   type ExternalConsult,
   ExternalConsultOutcomeSchema,
@@ -382,11 +383,29 @@ const registry = defineArchestraTools([
     title: "Inspect MCP server policy",
     annotations: { readOnlyHint: true },
     description:
-      "Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. Pass its exact catalog ID. The built-in OpenAPPA configuration agent sees the whole readable catalog across environments (scope: organization); other agents see only their normally accessible tools (scope: agent), which may be a subset. This reads metadata only: it does not connect to the server, execute its tools, reveal credentials, or change configuration. Coverage describes stored policy rules, not a guarantee about a particular runtime call.",
+      "Inspect one caller-readable MCP catalog's stored tools and current policy coverage. Pass its exact catalog ID. By default each tool row gives its name, readOnly hint, the first sentence of its description, its coverage kind, and the rules that judge it. Set detail to `full`, ideally with `tools`, to also get full descriptions, input schemas and each rule's delta, requires and annotator. Rows come in pages: when `nextOffset` is not null, call again with that offset. The built-in OpenAPPA configuration agent sees the whole readable catalog across environments (scope: organization); other agents see only their normally accessible tools (scope: agent), which may be a subset. This reads metadata only: it does not connect to the server, execute its tools, reveal credentials, or change configuration. Coverage describes stored policy rules, not a guarantee about a particular runtime call.",
     schema: z.strictObject({
       mcpServerId: UuidIdSchema.describe(
         "The exact MCP catalog ID to inspect.",
       ),
+      detail: z
+        .enum(["summary", "full"])
+        .default("summary")
+        .describe(
+          "`summary` for a coverage overview; `full` adds input schemas, full descriptions and rule details.",
+        ),
+      tools: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Only these tools, by name or full name (`<prefix>__<name>`).",
+        ),
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .default(0)
+        .describe("The first row to return; pass the previous `nextOffset`."),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = context;
@@ -457,13 +476,28 @@ const registry = defineArchestraTools([
           404,
           "MCP server not found or you don't have access",
         );
-      const inspectedToolIds = new Set(tools.map((tool) => tool.id));
       const visibility = await coverageVisibility(userId, organizationId);
       const coverage = await openappaCoverageService.toolsForCatalog({
         ...visibility,
         organizationId,
         catalogId: catalog.id,
       });
+      const named = args.tools && new Set(args.tools);
+      const rows = tools
+        .filter(
+          (tool) =>
+            !named ||
+            named.has(tool.name) ||
+            named.has(tool.name.slice(tool.name.lastIndexOf("__") + 2)),
+        )
+        .map((tool) =>
+          inspectedToolRow(
+            tool,
+            coverage.filter((row) => row.toolId === tool.id),
+            args.detail,
+          ),
+        );
+      const page = pageWithinBudget(rows, args.offset);
       return result({
         scope,
         mcpServer: {
@@ -471,37 +505,10 @@ const registry = defineArchestraTools([
           name: catalog.name,
           environmentId: catalog.environmentId,
         },
-        tools: tools.map(({ id, name, description, parameters }) => ({
-          id,
-          name,
-          description,
-          parameters,
-        })),
-        coverage: coverage
-          .filter((tool) => inspectedToolIds.has(tool.toolId))
-          .map(
-            ({
-              toolId,
-              fullName,
-              readOnly,
-              kind,
-              policySource,
-              rule,
-              fallbackLine,
-              unlisted,
-              enforced,
-            }) => ({
-              toolId,
-              fullName,
-              readOnly,
-              kind,
-              policySource,
-              rule,
-              fallbackLine,
-              unlisted,
-              enforced,
-            }),
-          ),
+        total: rows.length,
+        offset: args.offset,
+        nextOffset: page.nextOffset,
+        tools: page.rows,
         note: "Stored metadata and policy coverage only; coverage does not guarantee the outcome of a runtime call.",
       });
     },
@@ -962,6 +969,73 @@ function consultText(bytes: Uint8Array | null): {
   return text.length > CONSULT_TEXT_LIMIT
     ? { text: text.slice(0, CONSULT_TEXT_LIMIT), cut: true }
     : { text, cut: false };
+}
+
+/** Leaves room under OpenAPPA's 64 KiB tool-result cap for the envelope and JSON escaping. */
+const INSPECT_PAGE_BUDGET_CHARS = 40_000;
+const INSPECT_SUMMARY_DESCRIPTION_CHARS = 160;
+
+function inspectedToolRow(
+  tool: {
+    id: string;
+    name: string;
+    description: string | null;
+    parameters: unknown;
+  },
+  coverage: CoverageTool[],
+  detail: "summary" | "full",
+) {
+  const row = {
+    id: tool.id,
+    name: tool.name,
+    readOnly: coverage[0]?.readOnly ?? null,
+    kind: coverage[0]?.kind ?? null,
+  };
+  if (detail === "full")
+    return {
+      ...row,
+      description: tool.description,
+      parameters: tool.parameters,
+      rules: coverage.map(({ rule, policySource }) => ({ policySource, rule })),
+    };
+  return {
+    ...row,
+    description: firstSentence(tool.description),
+    rules: coverage.map(({ rule, policySource }) => ({
+      policySource,
+      rule: rule && {
+        source: rule.source,
+        battery: rule.battery,
+        line: rule.line,
+        name: rule.name,
+        selector: rule.selector,
+        enforced: rule.enforced,
+      },
+    })),
+  };
+}
+
+function firstSentence(text: string | null): string | null {
+  if (!text) return text;
+  const end = text.search(/[.!?](\s|$)|\n/);
+  const sentence = (end === -1 ? text : text.slice(0, end + 1)).trim();
+  return sentence.length > INSPECT_SUMMARY_DESCRIPTION_CHARS
+    ? `${sentence.slice(0, INSPECT_SUMMARY_DESCRIPTION_CHARS)}…`
+    : sentence;
+}
+
+/** Rows from `offset` while they fit the budget, always at least one. */
+function pageWithinBudget<T>(rows: T[], offset: number) {
+  const page: T[] = [];
+  let used = 0;
+  for (const row of rows.slice(offset)) {
+    const size = JSON.stringify(row).length;
+    if (page.length > 0 && used + size > INSPECT_PAGE_BUDGET_CHARS) break;
+    page.push(row);
+    used += size;
+  }
+  const next = offset + page.length;
+  return { rows: page, nextOffset: next < rows.length ? next : null };
 }
 
 function result(value: object) {

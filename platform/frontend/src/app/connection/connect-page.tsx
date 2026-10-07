@@ -722,10 +722,17 @@ function ConnectArea({
             )}
           </div>
 
-          <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+          <div
+            className={cn(
+              "mt-2 flex items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm",
+              // The script is never cut off: it wraps beside the button.
+              script ? "min-h-16 py-2" : "h-16",
+            )}
+          >
             <code
               className={cn(
-                "min-w-0 flex-1 truncate font-mono text-sm",
+                "min-w-0 flex-1 font-mono text-sm",
+                script ? "whitespace-pre-wrap wrap-anywhere" : "truncate",
                 !text && "font-sans text-muted-foreground",
               )}
               title={text ?? undefined}

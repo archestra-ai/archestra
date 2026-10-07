@@ -342,6 +342,76 @@ describe("chat tool execution", () => {
     ]);
   });
 
+  test("ask_user with allowText returns what the user typed instead of a pick", async () => {
+    const asked: Array<{ requestedSchema?: unknown }> = [];
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async (params) => {
+          asked.push(params);
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: { choice: "", text: "  acme/openappa-policy " },
+            },
+          };
+        },
+      },
+    };
+
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      {
+        question: "Which owner and repository?",
+        options: [{ label: "My account" }, { label: "The organization" }],
+        allowText: true,
+      },
+      mockContext,
+    );
+
+    expect(result.isError).toBe(false);
+    expect(asked[0]?.requestedSchema).toMatchObject({
+      properties: {
+        choice: { enum: ["My account", "The organization"] },
+        text: { type: "string" },
+      },
+      required: [],
+    });
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: [],
+      text: "acme/openappa-policy",
+    });
+  });
+
+  test("ask_user without allowText ignores typed text", async () => {
+    mockContext = {
+      ...mockContext,
+      elicitation: {
+        elicit: async () => {
+          return {
+            status: "answered" as const,
+            result: {
+              action: "accept" as const,
+              content: { choice: "Yes", text: "something else" },
+            },
+          };
+        },
+      },
+    };
+
+    const result = await executeArchestraTool(
+      TOOL_ASK_USER_FULL_NAME,
+      { question: "Continue?", options: [{ label: "Yes" }, { label: "No" }] },
+      mockContext,
+    );
+    expect(result.structuredContent).toEqual({
+      action: "accept",
+      selected: ["Yes"],
+    });
+  });
+
   test("ask_user rejects a header too long for a tab", async () => {
     mockContext = { ...mockContext, elicitation: acceptingElicitation };
 

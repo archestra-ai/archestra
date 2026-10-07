@@ -71,6 +71,7 @@ export const TOOL_PERMISSIONS: Record<
     resource: "credential",
     action: "create",
   },
+  request_battery_credentials: { resource: "credential", action: "create" },
 
   // Agents
   create_agent: { resource: "agent", action: "create" },

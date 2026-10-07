@@ -1,6 +1,12 @@
-import { TOOL_TRANSFER_CREDENTIAL_SHORT_NAME } from "@archestra/shared";
+import {
+  type BatteryCredentialRequest,
+  BatteryCredentialRequestSchema,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
+  TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
+} from "@archestra/shared";
 import { z } from "zod";
 import { AgentModel } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   declarePersonalRuntimeCredential,
   transferPersonalRuntimeCredential,
@@ -205,6 +211,41 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
+    title: "Open battery credentials",
+    description:
+      'Show the person one card in Archestra chat for the tokens these batteries need: what each battery adds, how to make its token, and a picker of the organization\'s credentials with an option to add a new one or skip. Pass every battery that needs a step in one call, by the names list_guardrails_battery_fits returns. This returns at once. The person answers with a message that starts with "Battery credentials:" and names the credential key for each variable, or says it was skipped. Secrets stay outside the conversation.',
+    schema: z.strictObject({
+      batteries: z
+        .array(z.string().min(1))
+        .min(1)
+        .describe("The battery names, e.g. slack or github."),
+    }),
+    outputSchema: BatteryCredentialRequestSchema,
+    async handler({ args, context }) {
+      const actor = requireActor(context);
+      const setups = await openappaBatteriesService.batterySetups(
+        actor.organizationId,
+      );
+      const names = [...new Set(args.batteries)];
+      const unknown = names.filter((name) => !setups.has(name));
+      if (unknown.length > 0)
+        return errorResult(
+          `No battery is named ${unknown.join(", ")}. Use the names list_guardrails_battery_fits returns.`,
+        );
+      const request: BatteryCredentialRequest = {
+        batteries: names.flatMap((name) => {
+          const setup = setups.get(name);
+          return setup ? [{ name, title: batteryTitle(name), ...setup }] : [];
+        }),
+      };
+      return structuredSuccessResult(
+        request,
+        `Opened the credential card for ${request.batteries.map((battery) => battery.title).join(", ")}. Wait for the person's "Battery credentials: ..." reply.`,
+      );
+    },
+  }),
+  defineArchestraTool({
     shortName: TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
     title: "Transfer Credential",
     description:
@@ -364,4 +405,12 @@ function credentialSummary(
 ) {
   const { icon: _icon, ...summary } = definition;
   return summary;
+}
+
+function batteryTitle(name: string): string {
+  if (name === "github") return "GitHub";
+  return name
+    .split("-")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join(" ");
 }

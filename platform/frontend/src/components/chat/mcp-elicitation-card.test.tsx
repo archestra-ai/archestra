@@ -269,6 +269,111 @@ describe("McpElicitationCard", () => {
     });
   });
 
+  it("takes a typed Other answer inline without auto-advancing, and sends it on Submit", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    const owner = {
+      ...singleChoice({
+        id: "q-owner",
+        header: "Owner",
+        message: "Which GitHub account owns the repository?",
+        options: ["my-user", "my-org"],
+      }),
+      requestedSchema: {
+        type: "object",
+        properties: {
+          choice: {
+            type: "string",
+            title: "Choice",
+            enum: ["my-user", "my-org"],
+          },
+          text: { type: "string", title: "Other" },
+        },
+        required: [],
+      },
+    };
+    expect(isChoiceElicitationRequest(owner)).toBe(true);
+
+    render(
+      <McpElicitationCard
+        requests={[
+          owner,
+          singleChoice({
+            id: "q-name",
+            message: "Repository name?",
+            options: ["openappa-policy", "guardrails"],
+          }),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "acme");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveTextContent(
+      "(answered)",
+    );
+
+    await user.click(screen.getByTestId("mcp-elicitation-next"));
+    await user.click(screen.getByRole("radio", { name: "guardrails" }));
+    await user.click(screen.getByTestId("mcp-elicitation-submit"));
+
+    expect(onRespond).toHaveBeenCalledWith({
+      id: "q-owner",
+      action: "accept",
+      content: { choice: "", text: "acme" },
+    });
+    expect(onRespond).toHaveBeenCalledWith({
+      id: "q-name",
+      action: "accept",
+      content: { choice: "guardrails" },
+    });
+  });
+
+  it("clears a typed Other answer when an option is picked instead", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    render(
+      <McpElicitationCard
+        requests={[
+          {
+            ...singleChoice({
+              id: "q-owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+            requestedSchema: {
+              type: "object",
+              properties: {
+                choice: { type: "string", enum: ["my-user", "my-org"] },
+                text: { type: "string", title: "Other" },
+              },
+              required: [],
+            },
+          },
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    const submit = screen.getByRole("button", { name: "Submit" });
+    expect(submit).toBeDisabled();
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "acme");
+    await user.click(screen.getByRole("radio", { name: "my-org" }));
+    await user.click(submit);
+
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "q-owner",
+      action: "accept",
+      content: { choice: "my-org", text: "" },
+    });
+  });
+
   it("shows only navigation in the footer of every tab but the last", async () => {
     const user = userEvent.setup();
 

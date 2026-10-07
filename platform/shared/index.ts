@@ -47,6 +47,7 @@ export * from "./model-constants";
 export * from "./model-resolution";
 export * from "./oauth";
 export * from "./openai-models";
+export * from "./openappa-battery-credentials";
 export * from "./openappa-battery-match";
 export * from "./opencode-provider-routes";
 export * from "./organization-appearance";

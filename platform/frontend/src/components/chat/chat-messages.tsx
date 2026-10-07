@@ -17,6 +17,7 @@ import {
   type ResourceVisibilityScope,
   TOOL_ASK_USER_FULL_NAME,
   TOOL_ASK_USER_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
@@ -57,6 +58,10 @@ import {
   ToolInput,
   ToolOutput,
 } from "@/components/ai-elements/tool";
+import {
+  BatteryCredentialsTool,
+  parseBatteryCredentialRequest,
+} from "@/components/chat/battery-credentials-tool";
 import {
   HookRunChip,
   type HookRunChipData,
@@ -2034,8 +2039,16 @@ const MessageTool = memo(
       getToolShortName(toolName) === "request_runtime_credential_setup" &&
       !errorText &&
       (part.state === "output-available" || Boolean(toolResultPart));
+    const batteryCredentials =
+      getToolShortName(toolName) ===
+        TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME && !errorText
+        ? parseBatteryCredentialRequest(rawOutput)
+        : null;
     const shouldDefaultOpen =
-      isApprovalRequested || policyChange || credentialSetup;
+      isApprovalRequested ||
+      policyChange ||
+      credentialSetup ||
+      batteryCredentials !== null;
 
     // Hooks must be called before any early returns
     const { data: session } = useSession();
@@ -2229,6 +2242,13 @@ const MessageTool = memo(
           {credentialSetup && (
             <RuntimeCredentialSetupTool
               ready
+              toolCallId={part.toolCallId}
+              onSendMessage={onSendMessage}
+            />
+          )}
+          {batteryCredentials && (
+            <BatteryCredentialsTool
+              request={batteryCredentials}
               toolCallId={part.toolCallId}
               onSendMessage={onSendMessage}
             />

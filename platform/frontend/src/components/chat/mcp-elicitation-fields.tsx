@@ -91,26 +91,34 @@ export function getElicitationFields(schema: unknown): ElicitationField[] {
     }));
 }
 
-function isChoiceForm(fields: ElicitationField[]) {
+/**
+ * An optional free-text field beside the options, such as `ask_user`'s
+ * "Other": the user may type an answer instead of picking one.
+ */
+export function isOtherTextField(field: ElicitationField) {
   return (
-    fields.length > 0 &&
-    fields.every((field) => {
-      const options = field.schema.enum;
-      return (
-        field.schema.type === "boolean" ||
-        (!!options?.length &&
-          options.every((option) => typeof option === "string"))
-      );
-    })
+    field.schema.type === "string" &&
+    !field.schema.enum?.length &&
+    !field.required
+  );
+}
+
+function isChoiceForm(fields: ElicitationField[]) {
+  const choices = fields.filter(isChoiceField);
+  return (
+    choices.length > 0 &&
+    fields.length - choices.length <= 1 &&
+    fields.every((field) => isChoiceField(field) || isOtherTextField(field))
   );
 }
 
 /** One enum field: picking an option answers the whole question. */
 export function isSingleChoiceForm(fields: ElicitationField[]) {
+  const choices = fields.filter((field) => !isOtherTextField(field));
   return (
-    fields.length === 1 &&
-    fields[0].schema.type !== "boolean" &&
-    (fields[0].schema.enum?.length ?? 0) > 0
+    choices.length === 1 &&
+    choices[0].schema.type !== "boolean" &&
+    (choices[0].schema.enum?.length ?? 0) > 0
   );
 }
 
@@ -176,13 +184,24 @@ export function validateValues(
 
 /**
  * Checks whether a choice form has required selections before submitting.
- * Required fields must have a value. An all-optional form is complete even with nothing selected.
+ * Required fields must have a value. An all-optional form is complete even with
+ * nothing selected, unless it offers "Other": then it needs a pick or text.
  */
 export function hasChoiceSelection(
   fields: ElicitationField[],
   values: Record<string, unknown>,
 ) {
-  return Object.keys(validateValues(fields, values)).length === 0;
+  if (Object.keys(validateValues(fields, values)).length > 0) return false;
+  // With an "Other" field, a pick or a typed answer is what answers it.
+  return (
+    !fields.some(isOtherTextField) ||
+    fields.some((field) => {
+      const value = values[field.name];
+      return field.schema.type === "boolean"
+        ? value === true
+        : typeof value === "string" && value.trim() !== "";
+    })
+  );
 }
 
 export function normalizeValues(
@@ -437,6 +456,14 @@ export function ElicitationFieldInput({
 }
 
 // === Internal helpers ===
+
+function isChoiceField(field: ElicitationField) {
+  const options = field.schema.enum;
+  return (
+    field.schema.type === "boolean" ||
+    (!!options?.length && options.every((option) => typeof option === "string"))
+  );
+}
 
 type FieldSchema = {
   title?: string;

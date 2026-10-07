@@ -72,6 +72,12 @@ const AskUserOutputSchema = z.object({
   selected: z
     .array(z.string())
     .describe("The labels the user selected. Empty when declined or canceled."),
+  text: z
+    .string()
+    .optional()
+    .describe(
+      "What the user typed, when allowText offered a free-text answer.",
+    ),
   timedOut: z
     .boolean()
     .optional()
@@ -104,6 +110,12 @@ const AskUserSchema = z.object({
     .describe(
       "When true, the user may select more than one option. Defaults to false (exactly one).",
     ),
+  allowText: z
+    .boolean()
+    .optional()
+    .describe(
+      "When true, the user may type an answer of their own instead of picking, returned as `text`. Defaults to false. Not for secrets: never use it to collect a password, token, or key.",
+    ),
   remedy_offer_ids: z
     .array(z.string().min(1).max(128))
     .max(12)
@@ -116,6 +128,8 @@ const AskUserSchema = z.object({
 const AskUserExecutionSchema = AskUserSchema.extend({
   trajectory: CurrentTrajectorySchema.optional(),
 });
+
+const TEXT_FIELD = "text";
 
 const NO_CHOICE_FORM_MESSAGE =
   "This client did not answer the choice form. If it has its own question tool (AskUserQuestion, Codex, OpenCode), use that instead. Do not ask this as a plain-text chat question.";
@@ -163,7 +177,7 @@ const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_ASK_USER_SHORT_NAME,
     title: "Ask User",
-    description: `Ask the user to pick from a short list of options. For Agent Runtime guardrail reviews, use this tool with the offer IDs: the authorized reviewer answers on the run page. Do not substitute a native question or a plain-text answer for that review. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Do not use this for open questions. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
+    description: `Ask the user to pick from a short list of options. For Agent Runtime guardrail reviews, use this tool with the offer IDs: the authorized reviewer answers on the run page. Do not substitute a native question or a plain-text answer for that review. For ordinary questions, use the client's own question tool when it has one (Claude Code AskUserQuestion, Codex, OpenCode). If it has none, call this tool: ${archestraMcpBranding.appName} chat shows the options as a form, and MCP clients get them with elicitation/create. Ask multiple-choice questions, including yes or no, with a question tool rather than in plain text. Set allowText when the user may type their own answer, such as a name; it is not for secrets, so never ask for a password, token, or key this way. To ask several questions at once, call this tool once per question in the same turn and give each a short header.`,
     schema: AskUserExecutionSchema,
     publicSchema: AskUserSchema,
     outputSchema: AskUserOutputSchema,
@@ -218,6 +232,7 @@ const registry = defineArchestraTools([
       if (new Set(labels).size !== labels.length) {
         return errorResult("Give each option a different label.");
       }
+      const allowText = !hitlArgs && args.allowText === true;
 
       const elicitation = context.elicitation;
       if (!elicitation) {
@@ -229,9 +244,12 @@ const registry = defineArchestraTools([
       const outcome = await elicitation.elicit({
         toolName,
         message: effectiveArgs.question,
-        requestedSchema: effectiveArgs.allowMultiple
-          ? buildMultiChoiceSchema(effectiveArgs.options)
-          : buildSingleChoiceSchema(effectiveArgs.options),
+        requestedSchema: withTextField({
+          schema: effectiveArgs.allowMultiple
+            ? buildMultiChoiceSchema(effectiveArgs.options)
+            : buildSingleChoiceSchema(effectiveArgs.options),
+          allowText,
+        }),
         toolCallId: context.currentToolCallId,
         header: effectiveArgs.header,
       });
@@ -288,10 +306,15 @@ const registry = defineArchestraTools([
         options: effectiveArgs.options,
         allowMultiple: effectiveArgs.allowMultiple === true,
       });
-      if (selected.length === 0) {
-        return errorResult("The user sent the form with no option selected.");
+      const text = allowText ? typedText(result.content) : undefined;
+      if (selected.length === 0 && text === undefined) {
+        return errorResult(
+          allowText
+            ? "The user sent the form with no option selected and no text."
+            : "The user sent the form with no option selected.",
+        );
       }
-      if (!effectiveArgs.allowMultiple && selected.length !== 1) {
+      if (!effectiveArgs.allowMultiple && selected.length > 1) {
         return errorResult("The user selected more than one option.");
       }
       const hitlRuling = hitlArgs ? hitlRulingFromLabels(selected) : undefined;
@@ -312,9 +335,14 @@ const registry = defineArchestraTools([
       }
 
       return structuredSuccessResult(
-        { action: "accept", selected },
+        { action: "accept", selected, ...(text === undefined ? {} : { text }) },
         [
-          `The user picked: ${selected.join(", ")}. Act on this choice.`,
+          selected.length > 0
+            ? `The user picked: ${selected.join(", ")}. Act on this choice.`
+            : "",
+          text === undefined
+            ? ""
+            : `The user typed: ${JSON.stringify(text)}. Act on this answer.`,
           hitlRuling === "deny"
             ? "The user denied the remedy. Keep the blocked call blocked. Do not ask again and do not call execute_remedy_plan."
             : liveOffers.length > 0
@@ -354,6 +382,37 @@ function buildSingleChoiceSchema(
     },
     required: ["choice"],
   };
+}
+
+/**
+ * Adds an optional "Other" text field. The pick turns optional too, so a
+ * typed answer stands on its own.
+ */
+function withTextField(params: {
+  schema:
+    | ReturnType<typeof buildSingleChoiceSchema>
+    | ReturnType<typeof buildMultiChoiceSchema>;
+  allowText: boolean;
+}) {
+  const { schema, allowText } = params;
+  if (!allowText) return schema;
+  return {
+    type: "object" as const,
+    properties: {
+      ...schema.properties,
+      [TEXT_FIELD]: { type: "string" as const, title: "Other" },
+    },
+    required: [],
+  };
+}
+
+function typedText(content: unknown): string | undefined {
+  if (!content || typeof content !== "object" || Array.isArray(content)) {
+    return undefined;
+  }
+  const value = (content as Record<string, unknown>)[TEXT_FIELD];
+  const text = typeof value === "string" ? value.trim() : "";
+  return text.length > 0 ? text : undefined;
 }
 
 function optionKey(index: number) {

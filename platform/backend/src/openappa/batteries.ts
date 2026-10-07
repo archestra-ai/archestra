@@ -99,6 +99,23 @@ class OpenAppaBatteriesService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** What each battery this organization can include asks of the person setting it up. */
+  async batterySetups(
+    organizationId: string,
+  ): Promise<Map<string, BatterySetup>> {
+    const available = await this.availableBatteries(organizationId);
+    return new Map(
+      [...available].map(([name, { package: battery }]) => [
+        name,
+        {
+          benefit: battery.benefit ?? null,
+          setup: batterySetupSteps(battery),
+          credentials: battery.credentials,
+        },
+      ]),
+    );
+  }
+
   /**
    * The battery each catalog has, or could have: its install when one exists
    * (an active one first), otherwise the strongest available match, as
@@ -1586,6 +1603,12 @@ type AvailableBatteries = Map<
     package: NativeBatteryPackage;
   }
 >;
+
+type BatterySetup = {
+  benefit: string | null;
+  setup: string[];
+  credentials: string[];
+};
 
 /** A catalog's battery: its install, or the match it could install. */
 type CatalogBattery =

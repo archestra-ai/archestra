@@ -11,6 +11,7 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import { OpenappaCredentialError } from "@/openappa/failure";
 import {
   OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
@@ -21,6 +22,7 @@ import { ApiError } from "@/types";
 import type {
   BatteryPackageFile,
   BatterySource,
+  CredentialSource,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
@@ -58,6 +60,17 @@ export type PolicyResolution = {
    * not make sense of, and an entry spelled outside the two admitted forms.
    */
   errors: string[];
+};
+
+/**
+ * A root document as the host composes it: the stored text with the stored
+ * bindings applied for every variable an included battery reads and the text
+ * itself does not bind. The content is never saved.
+ */
+type BoundPolicy = {
+  content: string;
+  resolution: PolicyResolution;
+  credentialSource: Record<string, CredentialSource>;
 };
 
 /**
@@ -207,6 +220,72 @@ class OpenAppaDeclarations {
       ),
       routedAnnotators: declarations.routedAnnotators,
       errors,
+    };
+  }
+
+  /**
+   * Resolve a root document with the organization's stored bindings applied.
+   * A `[credentials]` line in the text wins; a stored binding fills a variable
+   * the text leaves out, and only when an included battery reads it, since the
+   * runtime refuses a `[credentials]` variable no helper reads.
+   */
+  async resolveWithBindings(params: {
+    organizationId: string;
+    content: string;
+  }): Promise<BoundPolicy> {
+    const { organizationId, content } = params;
+    const [resolution, bindings] = await Promise.all([
+      this.resolve(params),
+      OpenAppaCredentialBindingModel.list(organizationId),
+    ]);
+    const credentialSource: Record<string, CredentialSource> =
+      Object.fromEntries(
+        Object.keys(resolution.credentials).map((variable) => [
+          variable,
+          "policy",
+        ]),
+      );
+    const read = new Set(
+      resolution.entries.flatMap((entry) => entry.battery?.credentials ?? []),
+    );
+    const filling = bindings.filter(
+      (binding) =>
+        read.has(binding.variable) && !(binding.variable in credentialSource),
+    );
+    if (filling.length === 0) return { content, resolution, credentialSource };
+    const native = await loadNative();
+    const edited = await native.editOpenappaPolicy(
+      content,
+      filling.map((binding) => ({
+        kind: "setCredential",
+        variable: binding.variable,
+        key: binding.credentialKey,
+      })),
+    );
+    if (edited.content === undefined || edited.content === null) {
+      logger.warn(
+        { organizationId, errors: edited.errors },
+        "OpenAPPA credential bindings could not be applied to the policy",
+      );
+      return { content, resolution, credentialSource };
+    }
+    return {
+      content: edited.content,
+      resolution: {
+        ...resolution,
+        credentials: {
+          ...resolution.credentials,
+          ...Object.fromEntries(
+            filling.map((binding) => [binding.variable, binding.credentialKey]),
+          ),
+        },
+      },
+      credentialSource: {
+        ...credentialSource,
+        ...Object.fromEntries(
+          filling.map((binding) => [binding.variable, "binding" as const]),
+        ),
+      },
     };
   }
 

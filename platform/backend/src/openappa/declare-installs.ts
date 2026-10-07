@@ -6,6 +6,8 @@ import type {
 import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
+import OrganizationModel from "@/models/organization";
 import { initialPolicy } from "@/services/guardrails-policy";
 import {
   BATTERY_CREDENTIAL_VARIABLE,
@@ -36,11 +38,13 @@ type DeclareInstallsSummary = {
  * Composition now reads the organization's policy text, and every recompose
  * rewrites the install rows from it: a row the text does not declare is deleted
  * at the first recompose after the deploy. This step is what carries the legacy
- * rows into the text, so it runs once at startup before anything composes, and
- * as a standalone script for operators who migrate out of band. It is idempotent
- * — a second run finds the text already saying what the rows say and writes
- * nothing — and it never composes, recomposes or validates through the grant
- * gate: every binding it carries was created under `credential:update` already.
+ * rows into the text, and their credential bindings into the binding table, so
+ * it runs once at startup before anything composes, and as a standalone script
+ * for operators who migrate out of band. It is idempotent — a second run finds
+ * the text already saying what the rows say, and every binding already stored,
+ * and writes nothing — and it never composes, recomposes or validates through
+ * the grant gate: every binding it carries was created under `credential:update`
+ * already.
  *
  * Every row it cannot carry is logged, structured, before the first recompose
  * takes it: a disabled install, an install whose battery resolves to neither an
@@ -83,7 +87,6 @@ const SAVE_ATTEMPTS = 3;
 /** Organizations declared at once; the same bound a recompile fan-out uses. */
 const DECLARE_CONCURRENCY = 4;
 
-/** The variables a `[credentials]` table admits; the editor refuses the rest. */
 type Outcome = keyof DeclareInstallsSummary;
 
 /** Why a row, or one of its bindings, is not carried into the declarations. */
@@ -92,6 +95,8 @@ type DroppedReason = "disabled" | "unresolved" | "not_helper_owner";
 /** The edits one organization's rows imply, and the batteries they declare. */
 type Plan = {
   edits: PolicyEditInput[];
+  /** The credential bindings the helper owners agree on, for the binding table. */
+  bindings: Array<{ variable: string; credentialKey: string }>;
   batteries: string[];
   /** Rows the declarations do not carry: an organization holding one has not migrated. */
   dropped: number;
@@ -101,7 +106,7 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
   const rows = await OpenAppaBatteryInstallModel.list(organizationId);
   if (rows.length === 0) return "unchanged";
   const native = await import("@archestra/openappa-rs");
-  let planned: Plan = { edits: [], batteries: [], dropped: 0 };
+  let planned: Plan = { edits: [], bindings: [], batteries: [], dropped: 0 };
   for (let attempt = 0; attempt < SAVE_ATTEMPTS; attempt++) {
     const latest = await latestRevision(organizationId);
     // What a row does not carry is lost once, not once per attempt.
@@ -110,6 +115,10 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
       rows,
       content: latest.content,
       log: attempt === 0,
+    });
+    await OpenAppaCredentialBindingModel.insertMissing({
+      organizationId,
+      bindings: planned.bindings,
     });
     if (planned.edits.length === 0) return settled(planned);
     const edited = await native.editOpenappaPolicy(
@@ -161,9 +170,9 @@ async function declareOrganization(organizationId: string): Promise<Outcome> {
 
 /**
  * The edits that make the text declare what the enabled rows serve: one include
- * entry per battery, the catalogs' current tool prefixes merged into the alias of
- * every namespace the battery declares, and the credential variables the helper
- * owners agree on.
+ * entry per battery and the catalogs' current tool prefixes merged into the alias
+ * of every namespace the battery declares; beside them, the credential variables
+ * the helper owners agree on.
  */
 async function planFor(params: {
   organizationId: string;
@@ -247,8 +256,8 @@ async function planFor(params: {
         namespace,
         servers,
       })),
-      ...credentialEdits({ organizationId, owners, log }),
     ],
+    bindings: agreedBindings({ organizationId, owners, log }),
     batteries,
     dropped,
   };
@@ -260,16 +269,44 @@ function settled(plan: Plan): Outcome {
 }
 
 /**
- * The credential variables the step writes: one key per variable, agreed on by
+ * Seed the binding table from every `[credentials]` line of each organization's
+ * stored policy whose variable has no row yet. The text still wins over a row,
+ * so composition is unchanged; the row is what keeps the variable bound once
+ * the line is removed from the text. Idempotent: an existing row is kept.
+ */
+export async function seedCredentialBindings(): Promise<void> {
+  const native = await import("@archestra/openappa-rs");
+  for (const organizationId of await OrganizationModel.findAllIds()) {
+    const latest = await GuardrailsPolicyModel.findLatest(organizationId);
+    if (!latest) continue;
+    const { credentials } = await native.parseOpenappaDeclarations(
+      latest.content,
+    );
+    const inserted = await OpenAppaCredentialBindingModel.insertMissing({
+      organizationId,
+      bindings: credentials
+        .filter(({ variable }) => BATTERY_CREDENTIAL_VARIABLE.test(variable))
+        .map(({ variable, key }) => ({ variable, credentialKey: key })),
+    });
+    if (inserted > 0)
+      logger.info(
+        { organizationId, inserted },
+        "Seeded OpenAPPA credential bindings from the policy's [credentials] table",
+      );
+  }
+}
+
+/**
+ * The credential bindings the step stores: one key per variable, agreed on by
  * every helper owner that binds it. A variable two owners bind to different keys
  * is left unbound — the batteries reading it show `missing_credentials` until an
  * operator binds one key in the panel — and never resolved by last writer.
  */
-function credentialEdits(params: {
+function agreedBindings(params: {
   organizationId: string;
   owners: readonly BatteryInstall[];
   log: boolean;
-}): PolicyEditInput[] {
+}): Plan["bindings"] {
   const { organizationId, owners, log } = params;
   /** Variable → the key each owner binds it to → the batteries binding that key. */
   const bound = new Map<string, Map<string, string[]>>();
@@ -279,7 +316,7 @@ function credentialEdits(params: {
       keys.set(key, [...(keys.get(key) ?? []), owner.batteryName]);
       bound.set(variable, keys);
     }
-  const edits: PolicyEditInput[] = [];
+  const bindings: Plan["bindings"] = [];
   for (const [variable, keys] of bound) {
     if (!BATTERY_CREDENTIAL_VARIABLE.test(variable)) {
       if (log)
@@ -304,10 +341,10 @@ function credentialEdits(params: {
         );
       continue;
     }
-    const [key] = [...keys.keys()];
-    edits.push({ kind: "setCredential", variable, key });
+    const [credentialKey] = [...keys.keys()];
+    bindings.push({ variable, credentialKey });
   }
-  return edits;
+  return bindings;
 }
 
 /**

@@ -418,7 +418,10 @@ function heldChanges(params: {
   return { reasons, granted, dropped };
 }
 
-/** The local text and the pulled one, resolved together: neither answers for the other. */
+/**
+ * The local text and the pulled one, resolved together with the stored
+ * credential bindings applied: neither answers for the other.
+ */
 async function resolvePair(params: {
   organizationId: string;
   local: string;
@@ -426,10 +429,16 @@ async function resolvePair(params: {
 }): Promise<{ local: PolicyResolution; pulled: PolicyResolution }> {
   const { organizationId } = params;
   const [local, pulled] = await Promise.all([
-    openappaDeclarations.resolve({ organizationId, content: params.local }),
-    openappaDeclarations.resolve({ organizationId, content: params.pulled }),
+    openappaDeclarations.resolveWithBindings({
+      organizationId,
+      content: params.local,
+    }),
+    openappaDeclarations.resolveWithBindings({
+      organizationId,
+      content: params.pulled,
+    }),
   ]);
-  return { local, pulled };
+  return { local: local.resolution, pulled: pulled.resolution };
 }
 
 function holdMessage(changes: {

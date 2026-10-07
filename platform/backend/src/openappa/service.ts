@@ -28,7 +28,10 @@ import {
 } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
-import { declareExistingInstalls } from "@/openappa/declare-installs";
+import {
+  declareExistingInstalls,
+  seedCredentialBindings,
+} from "@/openappa/declare-installs";
 import { openappaFailure } from "@/openappa/failure";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
@@ -239,7 +242,8 @@ export async function getOpenappaStatus(params: {
 
 /**
  * Carry the legacy `openappa_battery_installs` rows into the policy text every
- * composition now reads from. Runs before the runtime opens and before the
+ * composition now reads from, and seed the credential binding table from the
+ * text's `[credentials]` lines. Runs before the runtime opens and before the
  * periodic recompile is registered, because a recompose rewrites the rows from
  * the text and deletes every row the text does not declare.
  *
@@ -257,6 +261,14 @@ export async function declareOpenappaInstalls(): Promise<void> {
     logger.error(
       { err: error },
       "Declaring the legacy OpenAPPA battery installs failed; the periodic recompile will delete every install row the policy text does not declare",
+    );
+  }
+  try {
+    await seedCredentialBindings();
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Seeding the OpenAPPA credential bindings from the policy text failed; the text still binds its own variables",
     );
   }
 }

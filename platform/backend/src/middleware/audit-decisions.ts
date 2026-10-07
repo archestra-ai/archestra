@@ -25,6 +25,7 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
@@ -971,6 +972,10 @@ export const AUDIT_DECISIONS = {
   openappaBatteryPackagesTable: {
     audited: true,
     model: OpenAppaBatteryPackageModel,
+  },
+  openappaCredentialBindingsTable: {
+    audited: true,
+    model: OpenAppaCredentialBindingModel,
   },
   openappaEffectivePoliciesTable: {
     audited: false,

@@ -26,7 +26,6 @@ import {
   openRowOnPlainClick,
   RowClickShield,
 } from "@/components/agent-pages/row-click-shield";
-import { CopyableCode } from "@/components/copyable-code";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { FileDropInput } from "@/components/files/file-drop-input";
 import {
@@ -87,7 +86,7 @@ import {
   useDeleteBatteryPackage,
   usePolicyDeclarations,
   useRemoveBatteryInclude,
-  useUpdateBatteryInstall,
+  useSetCredentialBinding,
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
 import { useCoverageSummary } from "@/lib/openappa-coverage.query";
@@ -97,6 +96,10 @@ import {
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
+import {
+  type BatteryCredential,
+  batteryCredentials,
+} from "./battery-credentials";
 import { BatteryIcon, type CatalogEntry } from "./battery-icon";
 import {
   BATTERY_STATUS,
@@ -242,9 +245,10 @@ export function BatteriesPanel() {
   // entry resolved to, so no entry may claim to be active.
   const enforced = lastError === null;
   // The repository owns the text while it syncs: an edit here would be undone
-  // by the next pull, so the panel only reads.
+  // by the next pull, so the panel only reads it. Bindings live beside the
+  // text, so they stay open.
   const writable = canManage === true && !managedInGithub;
-  const bindable = canBind === true && !managedInGithub;
+  const bindable = canBind === true;
   // Unknown while the catalog loads; only a loaded catalog can say a server is gone.
   const catalogName = (catalogId: string) =>
     catalog.data
@@ -268,14 +272,6 @@ export function BatteriesPanel() {
     if (!rows.some((row) => row.name === entry.name))
       rows.push({ name: entry.name, summary: null, included: entry });
   }
-  const boundCredentials = new Map(
-    included.flatMap((battery) =>
-      battery.credentials.map((credential) => [
-        credential.variable,
-        credential,
-      ]),
-    ),
-  );
   const fitting = new Set(
     summary.data?.batteries.available.map((battery) => battery.name),
   );
@@ -453,7 +449,11 @@ export function BatteriesPanel() {
           row={editingRow}
           catalog={catalog.data ?? []}
           installedCatalogIds={installedCatalogIds}
-          boundCredentials={boundCredentials}
+          credentials={batteryCredentials({
+            declarations: declarations.data,
+            name: editingRow.name,
+            variables: editingRow.summary?.credentials ?? [],
+          })}
           catalogName={catalogName}
           enforced={enforced}
           writable={writable}
@@ -509,8 +509,6 @@ type BatteryTableRow = {
 };
 
 const UNBOUND = "__unbound__";
-
-type BatteryCredential = PolicyBattery["credentials"][number];
 
 function HeldPullNotice({
   heldPull,
@@ -587,7 +585,7 @@ function BatteryDialog({
   row,
   catalog,
   installedCatalogIds,
-  boundCredentials,
+  credentials,
   catalogName,
   enforced,
   writable,
@@ -598,7 +596,7 @@ function BatteryDialog({
   row: BatteryTableRow;
   catalog: CatalogEntry[];
   installedCatalogIds: Set<string> | null;
-  boundCredentials: Map<string, BatteryCredential>;
+  credentials: BatteryCredential[];
   catalogName: (catalogId: string) => string;
   enforced: boolean;
   writable: boolean;
@@ -608,14 +606,11 @@ function BatteryDialog({
 }) {
   const { summary, included } = row;
   const create = useCreateBatteryInstall();
-  const update = useUpdateBatteryInstall();
+  const bind = useSetCredentialBinding();
   const detach = useDeleteBatteryInstall();
   const remove = useRemoveBatteryInclude();
   const pending =
-    create.isPending ||
-    update.isPending ||
-    detach.isPending ||
-    remove.isPending;
+    create.isPending || bind.isPending || detach.isPending || remove.isPending;
   const organizationWide =
     (included?.scope ?? summary?.scope) === "organization";
   const status = included ? (enforced ? included.status : "refused") : null;
@@ -627,15 +622,6 @@ function BatteryDialog({
       .map((server) => server.catalogId)
       .filter((id): id is string => id !== null),
   );
-  // An entry not in the policy yet reads the organization's credential table
-  // like any other: a variable another battery binds already has its key.
-  const credentials: BatteryCredential[] =
-    included?.credentials ??
-    (summary?.credentials ?? []).map(
-      (variable) =>
-        boundCredentials.get(variable) ?? { variable, key: null, readers: [] },
-    );
-  const bindingInstall = installs[0];
   return (
     <StandardDialog
       open
@@ -687,6 +673,17 @@ function BatteryDialog({
               }
             />
           </div>
+          {managedInGithub && (
+            <p className="text-xs text-muted-foreground">
+              <span>
+                The policy repository decides which batteries are included. Add
+                it to{" "}
+              </span>
+              <code className="font-mono">include</code>
+              <span> there. </span>
+              <PolicyFileLink />
+            </p>
+          )}
           {status === "unrouted" && (
             <p className="text-xs text-muted-foreground">
               No policy rule routes a tool to its annotators yet. Add one to the
@@ -772,28 +769,8 @@ function BatteryDialog({
         <CredentialsSection
           batteryName={row.name}
           credentials={credentials}
-          onChange={(variable, key) => {
-            if (!bindingInstall) return;
-            update.mutate({
-              id: bindingInstall.id,
-              body: {
-                credentialBindings: Object.fromEntries(
-                  credentials
-                    .map((credential) => [
-                      credential.variable,
-                      credential.variable === variable ? key : credential.key,
-                    ])
-                    .filter(([, value]) => value !== null && value !== UNBOUND),
-                ),
-              },
-            });
-          }}
-          disabledReason={
-            bindingInstall
-              ? null
-              : organizationWide
-                ? "Include the battery to bind the keys its helpers read."
-                : "Attach the battery to a server to bind the keys its helpers read."
+          onChange={(variable, key) =>
+            bind.mutate({ variable, key: key === UNBOUND ? null : key })
           }
           bindable={bindable}
           managedInGithub={managedInGithub}
@@ -996,7 +973,6 @@ function CredentialsSection({
   batteryName,
   credentials,
   onChange,
-  disabledReason,
   bindable,
   managedInGithub,
   pending,
@@ -1004,7 +980,6 @@ function CredentialsSection({
   batteryName: string;
   credentials: BatteryCredential[];
   onChange: (variable: string, key: string) => void;
-  disabledReason: string | null;
   bindable: boolean;
   managedInGithub: boolean;
   pending: boolean;
@@ -1020,25 +995,13 @@ function CredentialsSection({
     return () => window.removeEventListener("focus", reload);
   }, [listable, refetch]);
   const options = available.data ?? [];
-  const drafting =
-    managedInGithub && available.isSuccess && disabledReason === null;
-  const [drafts, setDrafts] = useState<Record<string, string>>({});
-  const changed = credentials.flatMap((credential) => {
-    const draft = drafts[credential.variable];
-    return draft === undefined || draft === (credential.key ?? UNBOUND)
-      ? []
-      : [{ variable: credential.variable, key: draft }];
-  });
   return (
     <DialogSection
       title="Credentials"
       description={
-        disabledReason ??
-        (managedInGithub
-          ? "The policy repository sets these keys. Pick a key to see the line to change there."
-          : bindable
-            ? "Keys its helpers read when they run."
-            : "Changing a key takes permission to update guardrails and credentials.")
+        bindable
+          ? "Which saved credential fills each key this battery's helpers read."
+          : "Changing a key takes permission to update guardrails and credentials."
       }
       action={
         <Button asChild variant="link" size="sm" className="h-auto p-0">
@@ -1049,113 +1012,31 @@ function CredentialsSection({
         </Button>
       }
     >
-      {(bindable || drafting) &&
-        available.isSuccess &&
-        options.length === 0 && (
-          <InlineNotice variant="info">
-            <KeyRound />
-            <span className="font-medium">No credentials yet</span>
-            <InlineNoticeText>
-              Add one in Credentials, then pick it here.
-            </InlineNoticeText>
-          </InlineNotice>
-        )}
+      {bindable && available.isSuccess && options.length === 0 && (
+        <InlineNotice variant="info">
+          <KeyRound />
+          <span className="font-medium">No credentials yet</span>
+          <InlineNoticeText>
+            Add one in Credentials, then pick it here.
+          </InlineNoticeText>
+        </InlineNotice>
+      )}
       <div className="space-y-4">
         {credentials.map((credential) => (
           <CredentialRow
             key={credential.variable}
             batteryName={batteryName}
             credential={credential}
-            value={drafts[credential.variable] ?? credential.key ?? UNBOUND}
+            value={credential.key ?? UNBOUND}
             options={options}
             listed={available.isSuccess}
-            disabled={
-              drafting ? false : !bindable || pending || disabledReason !== null
-            }
-            onChange={(key) =>
-              drafting
-                ? setDrafts((current) => ({
-                    ...current,
-                    [credential.variable]: key,
-                  }))
-                : onChange(credential.variable, key)
-            }
+            managedInGithub={managedInGithub}
+            disabled={!bindable || pending || credential.source === "policy"}
+            onChange={(key) => onChange(credential.variable, key)}
           />
         ))}
       </div>
-      {changed.length > 0 && <RepositoryChangeNotice changes={changed} />}
     </DialogSection>
-  );
-}
-
-/**
- * What to change in the synced policy file to bind the picked keys: this
- * deployment cannot write a policy the repository owns, so the reader takes
- * the lines there.
- */
-function RepositoryChangeNotice({
-  changes,
-}: {
-  changes: { variable: string; key: string }[];
-}) {
-  const { data } = useAppaGithubSync();
-  const href = githubPolicyFileUrl(data?.source, "edit");
-  const set = changes.filter((change) => change.key !== UNBOUND);
-  const unset = changes.filter((change) => change.key === UNBOUND);
-  const lines = set
-    .map((change) => `${change.variable} = "${change.key}"`)
-    .join("\n");
-  return (
-    <InlineNotice variant="info" role="status">
-      <GitPullRequestArrow />
-      <span className="font-medium">Change this in the repository</span>
-      <InlineNoticeText className="w-full space-y-2">
-        <p>
-          <span>Nothing is saved here. In </span>
-          {href ? (
-            <a
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="inline-flex items-center gap-1 underline underline-offset-2 hover:no-underline"
-            >
-              <span>the policy file</span>
-              <ExternalLink className="size-3" aria-hidden />
-              <span className="sr-only">(opens in new tab)</span>
-            </a>
-          ) : (
-            <span>the policy file</span>
-          )}
-          <span>, under </span>
-          <code className="font-mono">[credentials]</code>
-          {set.length > 0 && <span>, set:</span>}
-          {set.length === 0 && <span>:</span>}
-        </p>
-        {set.length > 0 && (
-          <CopyableCode value={lines} className="border bg-background">
-            <pre className="overflow-x-auto font-mono text-xs">{lines}</pre>
-          </CopyableCode>
-        )}
-        {unset.length > 0 && (
-          <p>
-            <span>Delete the line for </span>
-            {unset.map((change, index) => (
-              <span key={change.variable}>
-                {index > 0 && <span>, </span>}
-                <code className="font-mono">{change.variable}</code>
-              </span>
-            ))}
-            <span>.</span>
-          </p>
-        )}
-        <p>
-          After the change merges, it waits until someone who can update
-          credentials clicks{" "}
-          <span className="font-medium">Accept repository text</span> on this
-          page.
-        </p>
-      </InlineNoticeText>
-    </InlineNotice>
   );
 }
 
@@ -1165,6 +1046,7 @@ function CredentialRow({
   value,
   options,
   listed,
+  managedInGithub,
   disabled,
   onChange,
 }: {
@@ -1174,6 +1056,7 @@ function CredentialRow({
   options: RuntimeCredentialDefinition[];
   /** The organization's credentials loaded, so a key missing from them is gone. */
   listed: boolean;
+  managedInGithub: boolean;
   disabled: boolean;
   onChange: (key: string) => void;
 }) {
@@ -1197,7 +1080,7 @@ function CredentialRow({
         value={value}
         disabled={disabled}
         onValueChange={(next) => {
-          // The table is one per openappaSettings: letting go of a variable the
+          // The table is one per organization: letting go of a variable the
           // other entries read would take the key from them too, so the
           // unset is refused and the row says why.
           if (next === UNBOUND && others.length > 0) return setKept(true);
@@ -1252,6 +1135,20 @@ function CredentialRow({
           ))}
         </SelectContent>
       </Select>
+      {credential.source === "policy" && (
+        <p className="text-xs text-muted-foreground">
+          <span>
+            Set in the policy repository. Remove its line there to manage it
+            here.
+          </span>
+          {managedInGithub && (
+            <>
+              <span> </span>
+              <PolicyFileLink />
+            </>
+          )}
+        </p>
+      )}
       {others.length > 0 && (
         <p className="text-xs text-muted-foreground">
           Also read by: {others.join(", ")}
@@ -1267,6 +1164,25 @@ function CredentialRow({
         </InlineNotice>
       )}
     </div>
+  );
+}
+
+/** The synced policy file on GitHub, when the sync names one. */
+function PolicyFileLink() {
+  const { data } = useAppaGithubSync();
+  const href = githubPolicyFileUrl(data?.source, "blob");
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 underline underline-offset-2 hover:no-underline"
+    >
+      <span>Open the policy file</span>
+      <ExternalLink className="size-3" aria-hidden />
+      <span className="sr-only">(opens in new tab)</span>
+    </a>
   );
 }
 

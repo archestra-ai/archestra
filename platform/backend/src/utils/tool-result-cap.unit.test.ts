@@ -21,6 +21,17 @@ describe("capToolResultText", () => {
     expect(capped.slice(0, 300)).toContain("/home/sandbox/tool-results/a.txt");
     expect(capped.endsWith("\n\n[hook feedback] stop")).toBe(true);
   });
+
+  test("stays within the cap when the suffix alone exceeds it", () => {
+    const capped = capToolResultText({
+      text: "x".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 2),
+      path: null,
+      suffix: "f".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 2),
+    });
+
+    expect(capped.length).toBe(MAX_TOOL_RESULT_CONTEXT_CHARS);
+    expect(capped.startsWith("[Tool result too large")).toBe(true);
+  });
 });
 
 describe("projectCappedToolOutputs", () => {

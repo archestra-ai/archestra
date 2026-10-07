@@ -25,11 +25,13 @@ export function capToolResultText(params: {
   const notice = path
     ? `[Tool result too large: ${text.length} chars. The full result is saved in the sandbox at ${path} — inspect it with run_command (e.g. grep -n, sed -n 'START,ENDp', jq). Beginning of the result:]\n\n`
     : `[Tool result too large: ${text.length} chars. Only the beginning is shown:]\n\n`;
-  const headBudget = Math.max(
+  const keptSuffix = suffix.slice(
     0,
-    MAX_TOOL_RESULT_CONTEXT_CHARS - notice.length - suffix.length,
+    MAX_TOOL_RESULT_CONTEXT_CHARS - notice.length,
   );
-  return `${notice}${text.slice(0, headBudget)}${suffix}`;
+  const headBudget =
+    MAX_TOOL_RESULT_CONTEXT_CHARS - notice.length - keptSuffix.length;
+  return `${notice}${text.slice(0, headBudget)}${keptSuffix}`;
 }
 
 /** Marker `_meta` key on a rich tool result whose `content` was capped. */

@@ -200,7 +200,13 @@ describe("AuthViewWithErrorHandling", () => {
       within(alert).getByRole("link", {
         name: /learn how to reset admin password/i,
       }),
-    ).toHaveAttribute("href", getDocsUrl(DocsPage.PlatformResetUserPassword));
+    ).toHaveAttribute(
+      "href",
+      getDocsUrl(
+        DocsPage.PlatformResetUserPassword,
+        "reset-a-password-from-the-cli",
+      ),
+    );
   });
 
   it("keeps the generic failed SSO message visible under React Strict Mode", async () => {

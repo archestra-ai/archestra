@@ -691,22 +691,39 @@ function ConnectArea({
           {/* What happens next, right above the prompt it's about. */}
           <div className="mt-2 space-y-1 px-1 text-xs text-muted-foreground">
             {script ? (
-              <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-1">
-                <p className="min-w-0 flex-1">
+              <>
+                <p>
                   Run it in a terminal on the computer where you use{" "}
                   {nameOf(client)}. It needs Node.js 18 or newer, opens a
                   browser page, and changes nothing until you approve.
                 </p>
-                <UnstyledButton
-                  type="button"
-                  onClick={() => setWindows(!windows)}
-                  className="shrink-0 rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                >
-                  {windows
-                    ? "Use the macOS / Linux command"
-                    : "Use the Windows command"}
-                </UnstyledButton>
-              </div>
+                {/* Both labels always show, so switching never moves the text. */}
+                <div className="flex justify-end pt-1">
+                  <div className="inline-flex rounded-lg border bg-muted/60 p-0.5">
+                    {(
+                      [
+                        [false, "macOS / Linux"],
+                        [true, "Windows"],
+                      ] as const
+                    ).map(([value, label]) => (
+                      <UnstyledButton
+                        key={label}
+                        type="button"
+                        onClick={() => setWindows(value)}
+                        aria-pressed={windows === value}
+                        className={cn(
+                          "rounded-md px-2.5 py-1 text-xs transition-colors",
+                          windows === value
+                            ? "bg-background font-semibold text-foreground shadow-sm"
+                            : "text-muted-foreground hover:text-foreground",
+                        )}
+                      >
+                        {label}
+                      </UnstyledButton>
+                    ))}
+                  </div>
+                </div>
+              </>
             ) : (
               <p>
                 {nameOf(client) === "your agent"

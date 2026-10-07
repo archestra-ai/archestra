@@ -52,7 +52,7 @@ for (const width of [1280, 390]) {
           reportFailed: false,
           resolvedAt: null,
           resolvedBy: null,
-          conversations: [],
+          conversation: null,
         };
         const resolvedYell = {
           ...yell,
@@ -335,7 +335,7 @@ test("a diagnostics-only reader reaches Yells without fetching policy or setting
             reportFailed: false,
             resolvedAt: null,
             resolvedBy: null,
-            conversations: [],
+            conversation: null,
           },
         ],
         pagination: { limit: 20, hasNext: false, nextCursor: null },

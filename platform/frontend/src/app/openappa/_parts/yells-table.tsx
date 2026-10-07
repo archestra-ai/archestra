@@ -75,7 +75,7 @@ export function YellsTable() {
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
             {row.original.message}
           </p>
-          <YellConversations yell={row.original} />
+          <YellConversation yell={row.original} />
           {isMobile && (
             <span className="block space-y-1 text-xs font-normal text-muted-foreground">
               <YellCaller yell={row.original} />
@@ -224,10 +224,17 @@ function useYellInvestigation(yell: OpenAppaYell) {
     subject: { kind: "yell", yellId: yell.id },
   });
   const archive = useOpenAppaYellArchive();
+  const { conversation } = yell;
   return {
     permissions,
-    disabled: archive.isPending || (!href && !agents.isError),
+    label: conversation ? "Open investigation" : "Investigate in chat",
+    disabled:
+      !conversation && (archive.isPending || (!href && !agents.isError)),
     launch: () => {
+      if (conversation) {
+        router.push(`/chat/${conversation.id}`);
+        return;
+      }
       if (!href) {
         void agents.refetch();
         return;
@@ -268,7 +275,7 @@ function YellRowActions({
       actions={[
         {
           icon: <MessageCircle className="size-4" />,
-          label: "Investigate in chat",
+          label: investigation.label,
           permissions: investigation.permissions,
           disabled: investigation.disabled,
           onClick: investigation.launch,
@@ -302,30 +309,25 @@ function YellRowActions({
   );
 }
 
-function YellConversations({ yell }: { yell: OpenAppaYell }) {
-  if (yell.conversations.length === 0) return null;
+function YellConversation({ yell }: { yell: OpenAppaYell }) {
+  const { conversation } = yell;
+  if (!conversation) return null;
   return (
-    <ul aria-label="Investigation chats" className="space-y-0.5">
-      {yell.conversations.map((conversation) => (
-        <li key={conversation.id} className="min-w-0 text-xs">
-          <Link
-            href={`/chat/${conversation.id}`}
-            className="inline-flex max-w-full items-center gap-1.5 text-muted-foreground hover:text-foreground hover:underline"
-          >
-            <MessageCircle className="size-3 shrink-0" />
-            <span className="truncate">
-              {getConversationDisplayTitle(conversation.title)}
-            </span>
-            <span
-              className="shrink-0"
-              title={formatDate({ date: conversation.createdAt })}
-            >
-              {formatRelativeTimeFromNow(conversation.createdAt)}
-            </span>
-          </Link>
-        </li>
-      ))}
-    </ul>
+    <Link
+      href={`/chat/${conversation.id}`}
+      className="flex w-fit max-w-full items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:underline"
+    >
+      <MessageCircle className="size-3 shrink-0" />
+      <span className="truncate">
+        {getConversationDisplayTitle(conversation.title)}
+      </span>
+      <span
+        className="shrink-0"
+        title={formatDate({ date: conversation.createdAt })}
+      >
+        {formatRelativeTimeFromNow(conversation.createdAt)}
+      </span>
+    </Link>
   );
 }
 

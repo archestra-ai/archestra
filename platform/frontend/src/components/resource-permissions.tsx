@@ -168,6 +168,7 @@ export function ResourcePermissionsDialog({
   scope = "*",
   title,
   description,
+  lead,
   children,
   open,
   onOpenChange,
@@ -176,6 +177,8 @@ export function ResourcePermissionsDialog({
   scope?: string;
   title?: string;
   description?: string;
+  /** Shown above the access list, such as the shared object's link. */
+  lead?: ReactNode;
   children?: ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -253,6 +256,7 @@ export function ResourcePermissionsDialog({
           setCanManage,
         }}
       >
+        {!accessOpen && lead}
         {open && (
           // The dialog's own title and description already say whose access
           // this is, so the editor contributes only the list.
@@ -872,13 +876,35 @@ function PermissionsEditor({
             ),
           }))}
           onAdd={(grants) => {
-            const hadDraft = form.formState.isDirty;
-            append(grants);
             // In a permissions dialog, the picker's "Add access" commits, so
             // sharing takes one click rather than a second Save on the list.
+            // It saves straight from the saved grants, never staging a draft,
+            // so the Save bar does not flash while the request is in flight.
             // Unsaved edits made beforehand are not saved behind the user's
-            // back: the addition joins that draft and its Save bar instead.
-            if (dialog && !hadDraft) void submit();
+            // back: the addition joins that draft and its Save bar instead,
+            // as it does when the save fails.
+            if (!dialog || form.formState.isDirty) {
+              append(grants);
+              return;
+            }
+            const { revision, grants: current } = form.getValues();
+            mutation.mutate(
+              {
+                revision,
+                grants: [...current, ...grants].map(({ subject, actions }) => ({
+                  subject,
+                  actions,
+                })),
+              },
+              {
+                onSuccess: (saved) =>
+                  form.reset({
+                    revision: saved.revision,
+                    grants: saved.grants,
+                  }),
+                onError: () => append(grants),
+              },
+            );
           }}
         />
       )}

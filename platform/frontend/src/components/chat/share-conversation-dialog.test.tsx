@@ -43,6 +43,10 @@ it.each([
     effectiveActions: ["read", "manage-permissions"],
   };
   let saved: unknown;
+  let releaseSave = () => {};
+  const saveHeld = new Promise<void>((resolve) => {
+    releaseSave = resolve;
+  });
   server.use(
     http.get(`${origin}/api/resource-permissions/${resource}/${scope}`, () =>
       HttpResponse.json(policy),
@@ -58,6 +62,7 @@ it.each([
       `${origin}/api/resource-permissions/${resource}/${scope}`,
       async ({ request }) => {
         saved = await request.json();
+        await saveHeld;
         policy = {
           ...policy,
           revision: 2,
@@ -105,6 +110,14 @@ it.each([
   expect(screen.queryByText("Can edit")).not.toBeInTheDocument();
   expect(screen.queryByText("Full access")).not.toBeInTheDocument();
   await user.click(within(dialog).getByRole("button", { name: "Add access" }));
+  // While the save is in flight, the list never offers its own Save: a
+  // staged draft would flash Discard and Save in the footer.
+  await waitFor(() => expect(saved).toBeDefined());
+  expect(
+    within(dialog).queryByRole("button", { name: "Save permissions" }),
+  ).not.toBeInTheDocument();
+  expect(within(dialog).getByRole("button", { name: "Done" })).toBeVisible();
+  releaseSave();
   await waitFor(() =>
     expect(saved).toEqual({
       revision: 1,

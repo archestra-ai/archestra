@@ -1529,7 +1529,7 @@ function DesktopDownload({
         {proxyActive && (
           <span>
             {" "}
-            With model routing, Desktop switches to third-party mode with its
+            With the LLM proxy, Desktop switches to third-party mode with its
             own history; Settings, Import brings your Claude.ai conversations
             over.
           </span>

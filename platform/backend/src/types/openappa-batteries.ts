@@ -231,6 +231,13 @@ export const PolicyDeclarationsViewSchema = z.object({
   lastError: z.string().nullable(),
   managedInGithub: z.boolean(),
   heldPull: HeldPullViewSchema.nullable(),
+  /**
+   * The stored bindings, including those of variables no included battery
+   * reads yet; a battery's own `credentials` say which key it composes with.
+   */
+  credentialBindings: z.array(
+    z.object({ variable: z.string(), key: z.string() }),
+  ),
 });
 export type PolicyDeclarationsView = z.infer<
   typeof PolicyDeclarationsViewSchema

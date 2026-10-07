@@ -267,7 +267,10 @@ describe("binding a battery credential", () => {
 
     const bound = await bind("github-token");
     expect(bound.statusCode, bound.body).toBe(200);
-    expect(bound.json()).toMatchObject({ managedInGithub: true });
+    expect(bound.json()).toMatchObject({
+      managedInGithub: true,
+      credentialBindings: [{ variable: GITHUB_TOKEN, key: "github-token" }],
+    });
     expect(githubView(bound.json())).toBeUndefined();
     expect((await guardrailsPolicyService.get(organizationId)).revision).toBe(
       root.revision,

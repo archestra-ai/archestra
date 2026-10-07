@@ -191,7 +191,10 @@ class OpenAppaBatteriesService {
   ): Promise<PolicyDeclarationsView> {
     const { policy, batteries, unusedAliases } =
       await this.current(organizationId);
-    const sync = await OpenAppaGithubSyncModel.find(organizationId);
+    const [sync, bindings] = await Promise.all([
+      OpenAppaGithubSyncModel.find(organizationId),
+      OpenAppaCredentialBindingModel.list(organizationId),
+    ]);
     return {
       batteries,
       unusedAliases,
@@ -206,6 +209,10 @@ class OpenAppaBatteriesService {
               reasons: sync.heldReasons,
             }
           : null,
+      credentialBindings: bindings.map(({ variable, credentialKey }) => ({
+        variable,
+        key: credentialKey,
+      })),
     };
   }
 

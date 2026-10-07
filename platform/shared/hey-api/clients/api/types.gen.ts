@@ -86356,6 +86356,10 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             sourceCommit: string;
             reasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
+        credentialBindings: Array<{
+            variable: string;
+            key: string;
+        }>;
     };
 };
 
@@ -87140,6 +87144,10 @@ export type SetOpenappaCredentialBindingResponses = {
             sourceCommit: string;
             reasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
+        credentialBindings: Array<{
+            variable: string;
+            key: string;
+        }>;
     };
 };
 

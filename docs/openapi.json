@@ -333279,6 +333279,25 @@
                         "reasons"
                       ],
                       "additionalProperties": false
+                    },
+                    "credentialBindings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "variable": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "variable",
+                          "key"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -333287,7 +333306,8 @@
                     "rootRevision",
                     "lastError",
                     "managedInGithub",
-                    "heldPull"
+                    "heldPull",
+                    "credentialBindings"
                   ],
                   "additionalProperties": false
                 }
@@ -336108,6 +336128,25 @@
                         "reasons"
                       ],
                       "additionalProperties": false
+                    },
+                    "credentialBindings": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "variable": {
+                            "type": "string"
+                          },
+                          "key": {
+                            "type": "string"
+                          }
+                        },
+                        "required": [
+                          "variable",
+                          "key"
+                        ],
+                        "additionalProperties": false
+                      }
                     }
                   },
                   "required": [
@@ -336116,7 +336155,8 @@
                     "rootRevision",
                     "lastError",
                     "managedInGithub",
-                    "heldPull"
+                    "heldPull",
+                    "credentialBindings"
                   ],
                   "additionalProperties": false
                 }

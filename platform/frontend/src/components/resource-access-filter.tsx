@@ -31,6 +31,7 @@ import {
 } from "@/components/ui/popover";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -355,6 +356,7 @@ function BuiltInOption({
   listedWithout: CountQuery;
   onToggle: () => void;
 }) {
+  const appName = useAppName();
   const { data: withBuiltIn } = useQuery(count);
   const { data: without } = useQuery(listedWithout);
   const total =
@@ -382,7 +384,7 @@ function BuiltInOption({
             Built-in
           </span>
           <span className="text-muted-foreground truncate text-xs">
-            System agents that Archestra runs for you.
+            System agents that {appName} runs for you.
           </span>
         </span>
         <span className="text-muted-foreground text-sm font-semibold tabular-nums">

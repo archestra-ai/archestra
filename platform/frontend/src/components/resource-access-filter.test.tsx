@@ -6,6 +6,7 @@ import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import {
   type ResourceAccessCountParams,
   ResourceAccessFilter,
@@ -15,6 +16,7 @@ import { useScopeFilterParams } from "./resource-scope-filter";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/agent.query", () => ({
   useLabelKeys: () => ({ data: [] }),
   useLabelValues: () => ({ data: [] }),
@@ -34,6 +36,7 @@ beforeEach(() => {
   vi.mocked(usePathname).mockReturnValue("/agents");
   setQuery("");
   setReadsEveryObject(true);
+  vi.mocked(useAppName).mockReturnValue("Acme AI");
 });
 
 function setReadsEveryObject(value: boolean) {
@@ -150,6 +153,10 @@ describe("resource access filter", () => {
     const user = userEvent.setup();
     await openFilter(user);
     await waitFor(() => expect(option(/Built-in/)).toHaveTextContent("5"));
+    // White-labeled deployments name themselves, not the vendor.
+    expect(option(/Built-in/)).toHaveTextContent(
+      "System agents that Acme AI runs for you.",
+    );
     await user.click(option(/Built-in/));
     expect(push).toHaveBeenCalledWith("/agents?builtIn=true", {
       scroll: false,

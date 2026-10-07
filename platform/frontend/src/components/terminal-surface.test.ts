@@ -213,3 +213,27 @@ describe("sidebar emphasis contrast", () => {
     );
   });
 });
+
+describe("sidebar attention contrast", () => {
+  const themes = themeTokens();
+
+  it.each(
+    themes,
+  )("keeps the %s attention count and dot legible", (name, tokens) => {
+    const sidebar = parse(tokens["--sidebar"]);
+    const ink = mix(
+      parse(tokens["--destructive"]),
+      parse(name.endsWith("dark") ? "white" : "black"),
+      mixPercent("--sidebar-attention-foreground"),
+    );
+    const fill = mix(
+      parse(tokens["--destructive"]),
+      sidebar,
+      mixPercent("--sidebar-attention"),
+    );
+
+    // The count is text on its tinted fill; the dot is a 3:1 state graphic.
+    expect(contrast(ink, fill)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(ink, sidebar)).toBeGreaterThanOrEqual(3);
+  });
+});

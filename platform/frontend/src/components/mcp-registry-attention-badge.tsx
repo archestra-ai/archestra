@@ -37,7 +37,9 @@ export function McpRegistryAttentionBadge() {
       // the number gets wider, so a three-digit count outgrew the 20px row.
       // Fixing the height and rounding it fully gives a circle at one digit and
       // a pill beyond that, which is what every other count here does.
-      className="aspect-auto h-5 w-auto min-w-5 rounded-full bg-destructive px-1 text-[11px] font-semibold tabular-nums text-destructive-foreground hover:bg-destructive hover:text-destructive-foreground"
+      // Colours come from the theme's destructive hue as a soft tinted chip,
+      // matching the sidebar's other chips rather than a solid red disc.
+      className="aspect-auto h-5 w-auto min-w-5 rounded-full bg-sidebar-attention px-1 text-[11px] font-semibold tabular-nums text-sidebar-attention-foreground hover:bg-sidebar-attention hover:text-sidebar-attention-foreground"
     >
       <Link
         href="/mcp/registry?status=needs-my-action"

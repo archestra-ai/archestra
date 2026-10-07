@@ -199,8 +199,16 @@ const EditAgentToolArgsSchema = z
           ),
         llmApiKeyId: AgentModelToolInputSchemas.llmApiKeyId
           .nullable()
-          .optional(),
-        modelId: AgentModelToolInputSchemas.modelId.nullable().optional(),
+          .optional()
+          .describe(
+            `${AgentModelToolInputSchemas.llmApiKeyId.description} Pass null for both to use the default model.`,
+          ),
+        modelId: AgentModelToolInputSchemas.modelId
+          .nullable()
+          .optional()
+          .describe(
+            `${AgentModelToolInputSchemas.modelId.description} Pass null for both to use the default model.`,
+          ),
       })
       .strict(),
   )

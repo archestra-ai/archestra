@@ -130,7 +130,6 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         filters,
         userId: user.id,
         isAgentAdmin,
-        canManageExternalAgents,
         includeExternalAgents: !query.selectableOnly || canManageExternalAgents,
         excludeOtherPersonalExternalAgents: query.excludeOtherPersonalAgents,
       });
@@ -153,7 +152,6 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         listA2aRemoteAgents({
           organizationId,
           userId: user.id,
-          canManage: canManageExternalAgents,
           ids: externalAgentIds,
         }),
       ]);

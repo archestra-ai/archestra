@@ -13124,7 +13124,6 @@ export type ListA2aRemoteAgentsData = {
         scope?: 'personal' | 'team' | 'org';
         teamId?: string;
         authorId?: string;
-        accessibleOnly?: boolean;
     };
     url: '/api/a2a/remote-agents';
 };
@@ -13202,7 +13201,6 @@ export type ListA2aRemoteAgentsResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13247,15 +13245,6 @@ export type ListA2aRemoteAgentsResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     }>;
 };
 
@@ -13287,9 +13276,25 @@ export type CreateA2aRemoteAgentData = {
         };
         name?: string;
         description?: string | null;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
-        users?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -13369,7 +13374,6 @@ export type CreateA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13414,15 +13418,6 @@ export type CreateA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -13595,7 +13590,6 @@ export type GetA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13640,15 +13634,6 @@ export type GetA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -13681,9 +13666,6 @@ export type UpdateA2aRemoteAgentData = {
             credential: string;
         };
         enabled?: boolean;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
-        users?: Array<string>;
     };
     path: {
         id: string;
@@ -13765,7 +13747,6 @@ export type UpdateA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13810,15 +13791,6 @@ export type UpdateA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -14418,7 +14390,6 @@ export type GetAgentCatalogResponses = {
                 id: string;
                 organizationId: string;
                 authorId: string | null;
-                scope: 'personal' | 'team' | 'org';
                 name: string;
                 description: string | null;
                 discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -14463,15 +14434,6 @@ export type GetAgentCatalogResponses = {
                     name: string | null;
                     email: string | null;
                 } | null;
-                teams: Array<{
-                    id: string;
-                    name: string;
-                }>;
-                users: Array<{
-                    id: string;
-                    name: string;
-                    email: string;
-                }>;
             };
         }>;
         pagination: {
@@ -113657,7 +113619,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
     };
     query?: {
         query?: string;
@@ -113836,7 +113798,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
@@ -113847,7 +113809,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: {
@@ -113952,7 +113914,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -114029,7 +113991,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -114104,7 +114066,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -114181,7 +114143,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;

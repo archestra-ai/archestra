@@ -78,7 +78,12 @@ describe("GET /api/agent-catalog", () => {
             agentCard: makeAgentCard("none", { name }),
           },
           auth: { type: "none" },
-          scope: "org",
+          initialGrants: [
+            {
+              subject: { type: "organization", id: "*" },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
     }
@@ -106,7 +111,12 @@ describe("GET /api/agent-catalog", () => {
           agentCard: makeAgentCard(),
         },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -151,7 +161,12 @@ describe("GET /api/agent-catalog", () => {
         name: "External agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -230,7 +245,12 @@ describe("GET /api/agent-catalog", () => {
         name: "Visible but unselectable external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -296,7 +316,6 @@ describe("GET /api/agent-catalog", () => {
         name: "Own external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     await createA2aRemoteAgent({
@@ -306,7 +325,6 @@ describe("GET /api/agent-catalog", () => {
         name: "Other external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
 

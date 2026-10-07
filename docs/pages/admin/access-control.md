@@ -111,6 +111,12 @@ Deploying into an [environment](/docs/admin/environments#deploy-permissions) req
 
 MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management; tokens reach only what the client configuration allows.
 
+### External Agents
+
+Connecting an [external agent](/docs/agents/subagents/external) requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update). After that, each external agent has its own grants. **Can use** permits assigning it as a subagent. **Can edit** permits changing its connection. **Full access** also permits deletion and sharing.
+
+Upgrades keep existing access. Roles with `organizationSettings:update` get Full access to every external agent.
+
 ### Visibility-Scoped Credentials
 
 Provider keys and virtual keys can have personal, team, or organization scope. Personal records are limited to their owner. Team records require membership; team admins can manage their team's records. Organization records require an update grant on `*` for that kind.

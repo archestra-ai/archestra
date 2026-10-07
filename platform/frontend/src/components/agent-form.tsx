@@ -1082,7 +1082,6 @@ export function AgentForm({
   } = useAgentA2aDelegations(supportsSubagents ? agent?.id : undefined);
   const a2aRemoteAgents = useA2aRemoteAgents({
     enabled: supportsSubagents && Boolean(agent?.id) && !agent?.builtIn,
-    accessibleOnly: true,
   });
   const syncA2aDelegations = useSyncAgentA2aDelegations();
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();

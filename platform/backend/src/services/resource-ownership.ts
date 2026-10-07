@@ -15,7 +15,6 @@ import {
   ProjectModel,
   SkillModel,
 } from "@/models";
-import A2aRemoteAgentTeamModel from "@/models/a2a-remote-agent-team";
 import SkillTeamModel from "@/models/skill-team";
 import { isBuiltInSkillSourceRef } from "@/skills/built-in-skills";
 import { ApiError } from "@/types";
@@ -214,7 +213,7 @@ const SCOPED_RESOURCE_KINDS: Record<
   // A project's owner holds a direct grant on it like any scoped object, so
   // a transfer moves that grant rather than leaving it with the old owner.
   project: "project",
-  remoteAgent: null,
+  remoteAgent: "externalAgent",
 };
 
 async function loadResource(params: {
@@ -298,15 +297,12 @@ async function loadResource(params: {
         organizationId,
       });
       const row = result?.remoteAgent;
-      const teams = await A2aRemoteAgentTeamModel.getDetailsForRemoteAgents([
-        id,
-      ]);
       return (
         row && {
           row,
           authorId: row.authorId,
           scope: row.scope,
-          teamIds: (teams.get(id) ?? []).map((t) => t.id),
+          teamIds: [],
           managed: false,
           transfer: A2aRemoteAgentModel.transferOwnership,
         }

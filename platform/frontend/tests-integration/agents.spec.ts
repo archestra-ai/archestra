@@ -124,8 +124,8 @@ test.describe("Agents", () => {
     await regularCheckbox.click();
     await externalCheckbox.click();
     await expect(bulkCount).toBeVisible();
-    // Internal agents are shared through grants on each agent's Permissions
-    // tab, so a selection that includes one offers no bulk visibility edit.
+    // Every agent, external ones included, is shared through grants on its
+    // own Permissions section, so a selection offers no bulk sharing.
     await expect(
       page.getByRole("button", { name: "Share", exact: true }),
     ).toHaveCount(0);
@@ -133,42 +133,6 @@ test.describe("Agents", () => {
       page.getByRole("button", { name: "Delete", exact: true }),
     ).toBeEnabled();
 
-    const singleCount = page
-      .locator('[data-slot="bulk-actions-bar"]')
-      .getByText("1 agent selected");
-    await regularCheckbox.click();
-    await expect(singleCount).toBeVisible();
-    await mswControl.use({
-      method: "put",
-      url: "/api/a2a/remote-agents/:id",
-      body: externalAgent,
-    });
-    await page.getByRole("button", { name: "Share", exact: true }).click();
-    const visibilityDialog = page.getByRole("dialog", {
-      name: "Share remote agents",
-    });
-    await expect(
-      visibilityDialog.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    ).toHaveText("Everyone in the organization");
-    await visibilityDialog
-      .getByRole("combobox", { name: "Who can discover this remote agent" })
-      .click();
-    await page.getByRole("option", { name: "Only you" }).click();
-    const externalVisibilityRequest = page.waitForRequest(
-      (request) =>
-        request.url().endsWith("/api/a2a/remote-agents/external-agent") &&
-        request.method() === "PUT",
-    );
-    await visibilityDialog.getByRole("button", { name: "Apply" }).click();
-    expect(
-      JSON.parse((await externalVisibilityRequest).postData() ?? "{}"),
-    ).toEqual({ scope: "personal", teams: [], users: [] });
-    await expect(singleCount).toBeHidden();
-
-    await regularCheckbox.click();
-    await externalCheckbox.click();
     await mswControl.use({
       method: "delete",
       url: "/api/agents/bulk",
@@ -339,143 +303,6 @@ test.describe("Agents", () => {
     await expect(confirm).toBeDisabled();
   });
 
-  test("seeds bulk visibility from the refreshed all-matching rows", async ({
-    page,
-    agentsPage,
-    mswControl,
-  }) => {
-    const externalAgent = makeExternalAgent({ scope: "personal" });
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { pinned: "false" },
-      body: makeAgentCatalog({
-        externalAgents: [externalAgent],
-        total: 2,
-        agentTotal: 0,
-        externalAgentTotal: 2,
-      }),
-    });
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { pinned: "true" },
-      body: makeAgentCatalog(),
-    });
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { selectableOnly: "true" },
-      body: makeAgentCatalog({
-        externalAgents: [externalAgent],
-        total: 2,
-        agentTotal: 0,
-        externalAgentTotal: 2,
-      }),
-    });
-    await agentsPage.goto();
-
-    await page.getByRole("checkbox", { name: "Select Partner Agent" }).click();
-    await page
-      .getByRole("button", {
-        name: "Select all 2 agents that match the current filters.",
-      })
-      .click();
-    await expect(
-      page.getByRole("button", { name: "Share", exact: true }),
-    ).toBeEnabled();
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { selectableOnly: "true" },
-      body: makeAgentCatalog({
-        externalAgents: [{ ...externalAgent, scope: "org" }],
-      }),
-    });
-    await page.getByRole("button", { name: "Share", exact: true }).click();
-
-    const visibilityDialog = page.getByRole("dialog", {
-      name: "Share remote agents",
-    });
-    await expect(
-      visibilityDialog.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    ).toHaveText("Everyone in the organization");
-  });
-
-  test("does not open bulk visibility for filters that changed during refresh", async ({
-    page,
-    agentsPage,
-    mswControl,
-  }) => {
-    const externalAgent = makeExternalAgent();
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { pinned: "false" },
-      body: makeAgentCatalog({
-        externalAgents: [externalAgent],
-        total: 2,
-        agentTotal: 0,
-        externalAgentTotal: 2,
-      }),
-    });
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { pinned: "true" },
-      body: makeAgentCatalog(),
-    });
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { selectableOnly: "true" },
-      body: makeAgentCatalog({
-        externalAgents: [externalAgent],
-        total: 2,
-        agentTotal: 0,
-        externalAgentTotal: 2,
-      }),
-    });
-    await agentsPage.goto();
-    await page.getByRole("checkbox", { name: "Select Partner Agent" }).click();
-    await page
-      .getByRole("button", {
-        name: "Select all 2 agents that match the current filters.",
-      })
-      .click();
-    await expect(
-      page.getByRole("button", { name: "Share", exact: true }),
-    ).toBeEnabled();
-
-    await mswControl.use({
-      method: "get",
-      url: "/api/agent-catalog",
-      query: { selectableOnly: "true" },
-      delayMs: 3000,
-      body: makeAgentCatalog({ externalAgents: [externalAgent] }),
-    });
-    const refreshResponse = page.waitForResponse((response) => {
-      const url = new URL(response.url());
-      return (
-        url.pathname === "/api/agent-catalog" &&
-        url.searchParams.get("selectableOnly") === "true"
-      );
-    });
-    await page.getByRole("button", { name: "Share", exact: true }).click();
-    await page.evaluate(() => {
-      window.history.pushState({}, "", "/agents?status=deleted");
-      window.dispatchEvent(new PopStateEvent("popstate"));
-    });
-    await expect(page).toHaveURL(/status=deleted/);
-    await refreshResponse;
-
-    await expect(
-      page.getByRole("dialog", { name: "Share remote agents" }),
-    ).toHaveCount(0);
-  });
-
   test("selects later regular agents without counting unselectable external rows", async ({
     page,
     agentsPage,
@@ -608,9 +435,6 @@ test.describe("Agents", () => {
     await expect(
       page.getByText("Select at most 500 items at a time."),
     ).toBeVisible();
-    await expect(
-      page.getByRole("button", { name: "Share", exact: true }),
-    ).toBeDisabled();
     await expect(
       page.getByRole("button", { name: "Delete", exact: true }),
     ).toBeDisabled();

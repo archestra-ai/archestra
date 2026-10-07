@@ -1226,10 +1226,7 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    expect(useA2aRemoteAgentsMock).toHaveBeenCalledWith({
-      enabled: true,
-      accessibleOnly: true,
-    });
+    expect(useA2aRemoteAgentsMock).toHaveBeenCalledWith({ enabled: true });
 
     const picker = screen.getByRole("button", {
       name: "Add outbound agent",

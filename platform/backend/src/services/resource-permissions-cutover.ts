@@ -113,6 +113,9 @@ WITH candidates AS (
   SELECT k.organization_id, 'llmProviderApiKey', k.id::text, k.scope, k.user_id, k.id
   FROM chat_api_keys k
   UNION ALL
+  SELECT r.organization_id, 'externalAgent', r.id::text, r.scope, r.author_id, r.id
+  FROM a2a_remote_agents r
+  UNION ALL
   -- An OAuth client keeps its owner and audience in its metadata, because the
   -- row belongs to the OAuth provider's table. Only the two kinds the platform
   -- registers convert; a client that registered itself (dynamic registration,
@@ -166,7 +169,8 @@ WITH candidates AS (
     WHERE roles.organization_id = t.organization_id
       AND COALESCE(roles.permission::jsonb -> (CASE
         WHEN t.resource IN ('knowledgeBase', 'knowledgeConnector', 'knowledgeFile')
-        THEN 'knowledgeSource' ELSE t.resource END), '[]'::jsonb) ? 'read'
+        THEN 'knowledgeSource' WHEN t.resource = 'externalAgent' THEN 'agent'
+        ELSE t.resource END), '[]'::jsonb) ? 'read'
   ) reader ON true
   WHERE t.visibility = 'org'
   UNION ALL
@@ -265,6 +269,16 @@ WITH candidates AS (
   FROM targets t JOIN virtual_api_key_team vt ON vt.virtual_api_key_id = t.source_id
   JOIN team tm ON tm.id = vt.team_id AND tm.organization_id = t.organization_id
   WHERE t.resource = 'llmVirtualKey'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'team', rt.team_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN a2a_remote_agent_teams rt ON rt.remote_agent_id = t.source_id
+  JOIN team tm ON tm.id = rt.team_id AND tm.organization_id = t.organization_id
+  WHERE t.resource = 'externalAgent' AND t.visibility = 'team'
+  UNION ALL
+  SELECT t.organization_id, t.resource, t.scope, 'user', ru.user_id, ARRAY['read', 'use']::text[]
+  FROM targets t JOIN a2a_remote_agent_users ru ON ru.remote_agent_id = t.source_id
+  JOIN member m ON m.user_id = ru.user_id AND m.organization_id = t.organization_id
+  WHERE t.resource = 'externalAgent'
   UNION ALL
   -- Team members could see a team's OAuth clients; managing one took the
   -- retired team-admin action, which the team-relative statement below turns
@@ -417,6 +431,7 @@ WITH RECURSIVE effective_teams(organization_id, user_id, team_id) AS (
   UNION SELECT organization_id, 'plugin', id::text FROM plugins
   UNION SELECT organization_id, 'llmVirtualKey', id::text FROM virtual_api_keys
   UNION SELECT organization_id, 'llmProviderApiKey', id::text FROM chat_api_keys
+  UNION SELECT organization_id, 'externalAgent', id::text FROM a2a_remote_agents
   UNION SELECT organization_id, 'knowledgeBase', id::text FROM knowledge_bases
   UNION SELECT organization_id, 'knowledgeConnector', id::text FROM knowledge_base_connectors
   UNION SELECT organization_id, 'knowledgeFile', id::text FROM kb_files
@@ -625,6 +640,59 @@ WITH role_actions AS (
 )
 INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
 SELECT organization_id, 'serviceAccount', '*', grants, true FROM policies
+ON CONFLICT (organization_id, resource, scope) DO UPDATE
+SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
+`),
+  // ---------------------------------------------------------------------
+  // convertExternalAgentAuthority
+  // ---------------------------------------------------------------------
+  sql.raw(`
+-- Every external agent was managed through \`organizationSettings:update\`,
+-- never through an action on the agent itself. So the roles that hold it get
+-- Full access to every external agent, and nobody else does. Built-in admin
+-- and platform admin are the predefined roles holding that action; they are
+-- named because their permissions live in code.
+WITH role_actions AS (
+  SELECT o.id AS organization_id, builtin.id AS subject_id,
+    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
+  FROM organization o
+  CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'externalAgent'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+  UNION ALL
+  SELECT roles.organization_id, roles.id,
+    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'])
+  FROM organization_role roles
+  WHERE COALESCE(roles.permission::jsonb->'organizationSettings', '[]'::jsonb) ? 'update'
+    AND NOT EXISTS (
+      SELECT 1 FROM resource_permission_policies p
+      WHERE p.organization_id = roles.organization_id AND p.resource = 'externalAgent'
+        AND p.scope = '*' AND p.legacy_sharing_migrated
+    )
+), entries AS (
+  SELECT organization_id, 'role' AS subject_type, subject_id, action FROM role_actions
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'externalAgent' AND p.scope = '*'
+), subjects AS (
+  SELECT organization_id, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, subject_type, subject_id
+), policies AS (
+  SELECT organization_id,
+    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
+      ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id
+)
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT organization_id, 'externalAgent', '*', grants, true FROM policies
 ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;

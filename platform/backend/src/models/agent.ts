@@ -29,7 +29,6 @@ import {
   isNotNull,
   isNull,
   max,
-  min,
   ne,
   not,
   notInArray,
@@ -1537,7 +1536,6 @@ class AgentModel {
     filters?: AgentListFilters;
     userId: string;
     isAgentAdmin: boolean;
-    canManageExternalAgents: boolean;
     includeExternalAgents?: boolean;
     excludeOtherPersonalExternalAgents?: boolean;
   }): Promise<AgentCatalogCandidatePage> {
@@ -1576,28 +1574,17 @@ class AgentModel {
       params.filters?.scope === "org"
     ) {
       externalWhereConditions.push(
-        eq(schema.a2aRemoteAgentsTable.scope, params.filters.scope),
+        externalAgentAudienceIs(params.filters.scope),
       );
     }
     if (params.filters?.teamIds?.length) {
       externalWhereConditions.push(
-        exists(
-          db
-            .select({ value: sql`1` })
-            .from(schema.a2aRemoteAgentTeamsTable)
-            .where(
-              and(
-                eq(
-                  schema.a2aRemoteAgentTeamsTable.remoteAgentId,
-                  schema.a2aRemoteAgentsTable.id,
-                ),
-                inArray(
-                  schema.a2aRemoteAgentTeamsTable.teamId,
-                  params.filters.teamIds,
-                ),
-              ),
-            ),
-        ),
+        ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+          organizationId: schema.a2aRemoteAgentsTable.organizationId,
+          resource: "externalAgent",
+          scopeColumn: schema.a2aRemoteAgentsTable.id,
+          teamIds: params.filters.teamIds,
+        }),
       );
     }
     if (params.filters?.authorIds?.length) {
@@ -1619,18 +1606,20 @@ class AgentModel {
     }
     if (params.excludeOtherPersonalExternalAgents) {
       const ownPersonalOnlyCondition = or(
-        ne(schema.a2aRemoteAgentsTable.scope, "personal"),
+        not(externalAgentAudienceIs("personal")),
         eq(schema.a2aRemoteAgentsTable.authorId, params.userId),
       );
       if (ownPersonalOnlyCondition) {
         externalWhereConditions.push(ownPersonalOnlyCondition);
       }
     }
-    if (!params.canManageExternalAgents) {
-      externalWhereConditions.push(
-        A2aRemoteAgentModel.visibilityCondition(params.userId),
-      );
-    }
+    externalWhereConditions.push(
+      await A2aRemoteAgentModel.accessCondition({
+        organizationId: params.filters?.organizationId ?? "",
+        userId: params.userId,
+        action: "read",
+      }),
+    );
     externalWhereConditions.push(
       exists(
         db
@@ -1652,18 +1641,6 @@ class AgentModel {
       ),
     );
 
-    const externalTeamNames = db
-      .select({
-        agentId: schema.a2aRemoteAgentTeamsTable.remoteAgentId,
-        teamName: min(schema.teamsTable.name).as("team_name"),
-      })
-      .from(schema.a2aRemoteAgentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.teamsTable.id, schema.a2aRemoteAgentTeamsTable.teamId),
-      )
-      .groupBy(schema.a2aRemoteAgentTeamsTable.remoteAgentId)
-      .as("external_catalog_team_names");
     const regularCandidates = db
       .select({
         resourceType: sql<"agent" | "external">`'agent'`.as("resource_type"),
@@ -1692,20 +1669,17 @@ class AgentModel {
         id: schema.a2aRemoteAgentsTable.id,
         name: schema.a2aRemoteAgentsTable.name,
         createdAt: schema.a2aRemoteAgentsTable.createdAt,
-        teamName: sql<string>`COALESCE(${externalTeamNames.teamName}, '')`.as(
-          "team_name",
-        ),
+        teamName:
+          sql<string>`COALESCE(${externalAgentFirstGrantedTeamName()}, '')`.as(
+            "team_name",
+          ),
         personalPriority: sql<number>`CASE
-          WHEN ${schema.a2aRemoteAgentsTable.scope} = 'personal'
+          WHEN ${externalAgentAudienceIs("personal")}
             AND ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
       })
       .from(schema.a2aRemoteAgentsTable)
-      .leftJoin(
-        externalTeamNames,
-        eq(externalTeamNames.agentId, schema.a2aRemoteAgentsTable.id),
-      )
       .where(and(...externalWhereConditions));
     const candidates = unionAll(regularCandidates, externalCandidates).as(
       "agent_catalog_candidates",
@@ -4911,6 +4885,39 @@ function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
     ),
   ) as SQL;
   // SPDX-SnippetEnd
+}
+
+/** An external agent's audience, read from its own policy. */
+function externalAgentAudienceIs(audience: "personal" | "team" | "org"): SQL {
+  const table = schema.a2aRemoteAgentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissionPolicyModel.audienceIs({
+    organizationId: table.organizationId,
+    resource: "externalAgent",
+    scopeColumn: table.id,
+    ownerColumn: table.authorId,
+    audience,
+  });
+  // SPDX-SnippetEnd
+}
+
+/** The alphabetically first team an external agent's policy grants read to. */
+function externalAgentFirstGrantedTeamName() {
+  const table = schema.a2aRemoteAgentsTable;
+  return sql<string | null>`(
+    SELECT min(granted_team.name)
+    FROM resource_permission_policies team_policy,
+      jsonb_array_elements(team_policy.grants) team_entry,
+      team granted_team
+    WHERE team_policy.organization_id = ${table.organizationId}
+      AND team_policy.resource = 'externalAgent'
+      AND team_policy.scope = ${table.id}::text
+      AND (team_entry->'actions') ? 'read'
+      AND team_entry->'subject'->>'type' = 'team'
+      AND granted_team.id = team_entry->'subject'->>'id'
+  )`;
 }
 
 /** Agents whose own policy grants read to any of `teamIds`. */

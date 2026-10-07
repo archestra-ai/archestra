@@ -1,10 +1,13 @@
-import type { ResourceVisibilityScope } from "@archestra/shared";
+import type {
+  ResourcePermissionAction,
+  ResourcePermissionGrant,
+  ResourceVisibilityScope,
+} from "@archestra/shared";
 import {
   and,
   count,
   desc,
   eq,
-  exists,
   inArray,
   isNull,
   max,
@@ -20,7 +23,8 @@ import type {
   Tool,
 } from "@/types";
 import CreatedByModel from "./created-by";
-import TeamModel from "./team";
+import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 class A2aRemoteAgentModel {
   static async transferOwnership(params: {
@@ -62,27 +66,12 @@ class A2aRemoteAgentModel {
     if (!result) return null;
 
     const { remoteAgent, connection, toolId } = result;
-    const [teamRows, userRows] = await Promise.all([
-      db
-        .select({ id: schema.a2aRemoteAgentTeamsTable.teamId })
-        .from(schema.a2aRemoteAgentTeamsTable)
-        .where(
-          eq(schema.a2aRemoteAgentTeamsTable.remoteAgentId, remoteAgent.id),
-        ),
-      db
-        .select({ id: schema.a2aRemoteAgentUsersTable.userId })
-        .from(schema.a2aRemoteAgentUsersTable)
-        .where(
-          eq(schema.a2aRemoteAgentUsersTable.remoteAgentId, remoteAgent.id),
-        ),
-    ]);
+    // Who can reach the agent lives in its permission policy, which audits
+    // its own changes.
     return {
       id: remoteAgent.id,
       organizationId: remoteAgent.organizationId,
       authorId: remoteAgent.authorId,
-      scope: remoteAgent.scope,
-      teamIds: teamRows.map((row) => row.id).sort(),
-      userIds: userRows.map((row) => row.id).sort(),
       name: remoteAgent.name,
       description: remoteAgent.description,
       discoveryMode: remoteAgent.discoveryMode,
@@ -114,11 +103,10 @@ class A2aRemoteAgentModel {
   static async findAllVisible(params: {
     organizationId: string;
     userId: string;
-    canManage: boolean;
-    accessibleOnly?: boolean;
     scope?: ResourceVisibilityScope;
     teamId?: string;
     authorId?: string;
+    ids?: string[];
   }): Promise<
     Array<{
       remoteAgent: A2aRemoteAgent;
@@ -133,7 +121,6 @@ class A2aRemoteAgentModel {
     id: string;
     organizationId: string;
     userId: string;
-    canManage: boolean;
   }): Promise<{
     remoteAgent: A2aRemoteAgent;
     connection: A2aConnection;
@@ -147,8 +134,6 @@ class A2aRemoteAgentModel {
     params: {
       organizationId: string;
       userId?: string;
-      canManage?: boolean;
-      accessibleOnly?: boolean;
       scope?: ResourceVisibilityScope;
       teamId?: string;
       authorId?: string;
@@ -166,7 +151,13 @@ class A2aRemoteAgentModel {
       eq(schema.a2aRemoteAgentsTable.organizationId, params.organizationId),
       id ? eq(schema.a2aRemoteAgentsTable.id, id) : undefined,
       params.scope
-        ? eq(schema.a2aRemoteAgentsTable.scope, params.scope)
+        ? ResourcePermissionPolicyModel.audienceIs({
+            organizationId: schema.a2aRemoteAgentsTable.organizationId,
+            resource: "externalAgent",
+            scopeColumn: schema.a2aRemoteAgentsTable.id,
+            ownerColumn: schema.a2aRemoteAgentsTable.authorId,
+            audience: params.scope,
+          })
         : undefined,
       params.authorId
         ? eq(schema.a2aRemoteAgentsTable.authorId, params.authorId)
@@ -177,23 +168,19 @@ class A2aRemoteAgentModel {
           : sql<boolean>`false`
         : undefined,
       params.teamId
-        ? exists(
-            db
-              .select({ value: sql`1` })
-              .from(schema.a2aRemoteAgentTeamsTable)
-              .where(
-                and(
-                  eq(
-                    schema.a2aRemoteAgentTeamsTable.remoteAgentId,
-                    schema.a2aRemoteAgentsTable.id,
-                  ),
-                  eq(schema.a2aRemoteAgentTeamsTable.teamId, params.teamId),
-                ),
-              ),
-          )
+        ? ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+            organizationId: schema.a2aRemoteAgentsTable.organizationId,
+            resource: "externalAgent",
+            scopeColumn: schema.a2aRemoteAgentsTable.id,
+            teamIds: [params.teamId],
+          })
         : undefined,
-      params.userId && (params.accessibleOnly || !params.canManage)
-        ? A2aRemoteAgentModel.visibilityCondition(params.userId)
+      params.userId
+        ? await A2aRemoteAgentModel.accessCondition({
+            organizationId: params.organizationId,
+            userId: params.userId,
+            action: "read",
+          })
         : undefined,
     ];
 
@@ -262,14 +249,39 @@ class A2aRemoteAgentModel {
     return result ?? null;
   }
 
-  static async create(data: InsertA2aRemoteAgent): Promise<A2aRemoteAgent> {
-    const [remoteAgent] = await db
-      .insert(schema.a2aRemoteAgentsTable)
-      .values(
-        await CreatedByModel.forInsert({ data: data, userIdField: "authorId" }),
-      )
-      .returning();
-    return remoteAgent;
+  static async create(params: {
+    data: InsertA2aRemoteAgent;
+    /** The starting audience beyond the author; omitted means the author only. */
+    initialPermissionGrants?: ResourcePermissionGrant[];
+    /** Publish to the whole organization; for system callers only. */
+    publishToOrganization?: boolean;
+  }): Promise<A2aRemoteAgent> {
+    return db.transaction(async (tx) => {
+      const [remoteAgent] = await tx
+        .insert(schema.a2aRemoteAgentsTable)
+        .values(
+          await CreatedByModel.forInsert({
+            data: params.data,
+            userIdField: "authorId",
+            transaction: tx,
+          }),
+        )
+        .returning();
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.createInitial({
+        tx,
+        organizationId: remoteAgent.organizationId,
+        resource: "externalAgent",
+        scope: remoteAgent.id,
+        grants: params.initialPermissionGrants,
+        authorId: remoteAgent.authorId,
+        publishToOrganization: params.publishToOrganization,
+      });
+      // SPDX-SnippetEnd
+      return remoteAgent;
+    });
   }
 
   static async update(
@@ -285,11 +297,22 @@ class A2aRemoteAgentModel {
   }
 
   static async delete(id: string): Promise<boolean> {
-    const rows = await db
-      .delete(schema.a2aRemoteAgentsTable)
-      .where(eq(schema.a2aRemoteAgentsTable.id, id))
-      .returning({ id: schema.a2aRemoteAgentsTable.id });
-    return rows.length > 0;
+    return db.transaction(async (tx) => {
+      const rows = await tx
+        .delete(schema.a2aRemoteAgentsTable)
+        .where(eq(schema.a2aRemoteAgentsTable.id, id))
+        .returning({ id: schema.a2aRemoteAgentsTable.id });
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissionPolicyModel.deleteForTarget({
+        tx,
+        resources: ["externalAgent"],
+        scope: id,
+      });
+      // SPDX-SnippetEnd
+      return rows.length > 0;
+    });
   }
 
   static async countAssignments(toolId: string): Promise<number> {
@@ -338,32 +361,29 @@ class A2aRemoteAgentModel {
     );
   }
 
-  static visibilityCondition(userId: string): SQL {
-    return sql<boolean>`(
-      ${schema.a2aRemoteAgentsTable.scope} = 'org'
-      OR (
-        ${schema.a2aRemoteAgentsTable.scope} = 'personal'
-        AND (
-          ${schema.a2aRemoteAgentsTable.authorId} = ${userId}
-          OR EXISTS (
-            SELECT 1 FROM ${schema.a2aRemoteAgentUsersTable} grants
-            WHERE grants.user_id = ${userId}
-              AND grants.remote_agent_id = ${schema.a2aRemoteAgentsTable.id}
-          )
-        )
-      )
-      OR (
-        ${schema.a2aRemoteAgentsTable.scope} = 'team'
-        AND EXISTS (
-          SELECT 1 FROM ${schema.a2aRemoteAgentTeamsTable} grants
-          WHERE grants.remote_agent_id = ${schema.a2aRemoteAgentsTable.id}
-            AND ${TeamModel.effectiveMembershipCondition({
-              userId,
-              teamIdColumn: sql.raw("grants.team_id"),
-            })}
-        )
-      )
-    )`;
+  /**
+   * External agents the user may reach with `action`, from each agent's own
+   * permission policy and the organization-wide one.
+   */
+  static async accessCondition(params: {
+    organizationId: string;
+    userId: string;
+    action: ResourcePermissionAction;
+  }): Promise<SQL> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId: params.organizationId,
+      userId: params.userId,
+    });
+    return ResourcePermissionPolicyModel.grantCondition({
+      ...principal,
+      resource: "externalAgent",
+      scopeColumn: schema.a2aRemoteAgentsTable.id,
+      action: params.action,
+    });
+    // SPDX-SnippetEnd
   }
 }
 
@@ -414,7 +434,11 @@ class A2aConnectionModel {
             : eq(schema.a2aConnectionsTable.enabled, true),
           isNull(schema.toolsTable.deletedAt),
           access
-            ? A2aRemoteAgentModel.visibilityCondition(access.userId)
+            ? await A2aRemoteAgentModel.accessCondition({
+                organizationId,
+                userId: access.userId,
+                action: "use",
+              })
             : undefined,
         ),
       );
@@ -463,7 +487,11 @@ class A2aConnectionModel {
           eq(schema.a2aConnectionsTable.enabled, true),
           isNull(schema.toolsTable.deletedAt),
           params.userId
-            ? A2aRemoteAgentModel.visibilityCondition(params.userId)
+            ? await A2aRemoteAgentModel.accessCondition({
+                organizationId: params.organizationId,
+                userId: params.userId,
+                action: "use",
+              })
             : undefined,
         ),
       )
@@ -539,7 +567,11 @@ class A2aConnectionModel {
           eq(schema.a2aConnectionsTable.enabled, true),
           isNull(schema.toolsTable.deletedAt),
           params.userId
-            ? A2aRemoteAgentModel.visibilityCondition(params.userId)
+            ? await A2aRemoteAgentModel.accessCondition({
+                organizationId: params.organizationId,
+                userId: params.userId,
+                action: "use",
+              })
             : undefined,
         ),
       );

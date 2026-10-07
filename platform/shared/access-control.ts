@@ -326,6 +326,7 @@ const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
     knowledgeConnector: "knowledgeSource",
     knowledgeFile: "knowledgeSource",
     mcpGateway: "mcpGateway",
+    externalAgent: "agent",
   };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -507,8 +508,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
   [RouteId.ListA2aRemoteAgentRuns]: { organizationSettings: ["read"] },
   [RouteId.CreateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.UpdateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.DeleteA2aRemoteAgent]: { organizationSettings: ["update"] },
+  // Each external agent's own permission policy decides who may change it.
+  [RouteId.UpdateA2aRemoteAgent]: { agent: ["read"] },
+  [RouteId.DeleteA2aRemoteAgent]: { agent: ["read"] },
 
   /**
    * Getting basic info about the organization requires the user to be

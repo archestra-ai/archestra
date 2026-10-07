@@ -133,7 +133,7 @@ export const createA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const deleteA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteA2aRemoteAgentResponses, DeleteA2aRemoteAgentErrors, ThrowOnError>({ url: '/api/a2a/remote-agents/{id}', ...options });
 
@@ -159,7 +159,7 @@ export const getA2aRemoteAgent = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const updateA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).put<UpdateA2aRemoteAgentResponses, UpdateA2aRemoteAgentErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents/{id}',

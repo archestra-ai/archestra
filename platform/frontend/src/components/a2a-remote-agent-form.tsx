@@ -1,13 +1,13 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { A2aRemoteAgentPermissions } from "@/components/a2a-remote-agent-permissions";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
 import { FloatingActionBar } from "@/components/settings/settings-block";
 import {
   SettingsSection,
@@ -23,6 +23,7 @@ import { SecretInput } from "@/components/ui/secret-input";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   A2aRemoteAgent,
+  CreateA2aRemoteAgentBody,
   UpdateA2aRemoteAgentBody,
 } from "@/lib/a2a-remote-agents.query";
 import { useInspectA2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
@@ -30,7 +31,6 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { getApiErrorMessage } from "@/lib/utils/api";
 
 type AuthType = "none" | "bearer" | "api_key";
-type AccessChoice = ResourceVisibilityScope | "user";
 type Source = NonNullable<UpdateA2aRemoteAgentBody["source"]>;
 type Auth = NonNullable<UpdateA2aRemoteAgentBody["auth"]>;
 type Inspection = archestraApiTypes.InspectA2aRemoteAgentResponses["200"];
@@ -41,14 +41,11 @@ type FormValues = {
   authType: AuthType;
   headerName: string;
   credential: string;
-  scope: ResourceVisibilityScope;
-  accessChoice: AccessChoice;
-  teamIds: string[];
-  userIds: string[];
 };
 type CardPrefill = Pick<FormValues, "name" | "description">;
 
-export type A2aRemoteAgentFormSubmission = UpdateA2aRemoteAgentBody;
+export type A2aRemoteAgentFormSubmission = UpdateA2aRemoteAgentBody &
+  Pick<CreateA2aRemoteAgentBody, "initialGrants">;
 
 const AUTH_LABELS: Record<AuthType, string> = {
   none: "None",
@@ -76,6 +73,11 @@ export function A2aRemoteAgentForm({
   const formId = useId();
   const initial = valuesFromAgent(agent);
   const form = useForm<FormValues>({ defaultValues: initial });
+  // Who else can use the agent once it exists. An existing agent's access is
+  // edited in its own Permissions section, which saves on its own.
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   const { mutate: inspectRemoteAgent, reset: resetRemoteAgentInspection } =
     useInspectA2aRemoteAgent();
   const appName = useAppName();
@@ -100,7 +102,10 @@ export function A2aRemoteAgentForm({
     connectionStamp(values, agent) !== compatibleStamp;
   const inspectionNeedsPersistence =
     !!agent && !!inspection && inspection.cardHash !== agent.cardHash;
-  const isDirty = form.formState.isDirty || inspectionNeedsPersistence;
+  const isDirty =
+    form.formState.isDirty ||
+    inspectionNeedsPersistence ||
+    initialGrants.length > 0;
 
   useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
   useEffect(
@@ -253,20 +258,6 @@ export function A2aRemoteAgentForm({
     });
     return false;
   };
-  const validateAccess = () => {
-    form.clearErrors(["teamIds", "userIds"]);
-    const current = form.getValues();
-    if (current.accessChoice === "team" && current.teamIds.length === 0) {
-      form.setError("teamIds", { message: "Select at least one team." });
-      return false;
-    }
-    if (current.accessChoice === "user" && current.userIds.length === 0) {
-      form.setError("userIds", { message: "Select at least one user." });
-      return false;
-    }
-    return true;
-  };
-
   const buildSubmission = ({
     verifiedInspection = inspection,
     verifiedStamp = compatibleStamp,
@@ -278,10 +269,7 @@ export function A2aRemoteAgentForm({
     if (connectionStamp(current, agent) !== verifiedStamp) return null;
     const source = parseSource({ values: current, agent, form });
     const auth = parseAuth({ values: current, agent, form });
-    if (source === null || auth === null || !validateAccess()) return null;
-    const scope = current.accessChoice === "user" ? "personal" : current.scope;
-    const teams = current.accessChoice === "team" ? current.teamIds : [];
-    const users = current.accessChoice === "user" ? current.userIds : [];
+    if (source === null || auth === null) return null;
     if (!agent) {
       if (!source) return null;
       return {
@@ -289,9 +277,10 @@ export function A2aRemoteAgentForm({
         ...(auth ? { auth } : {}),
         name: current.name.trim() || undefined,
         description: current.description.trim() || undefined,
-        scope,
-        teams,
-        users,
+        initialGrants: initialGrants.map(({ subject, actions }) => ({
+          subject,
+          actions,
+        })),
       };
     }
     const submission: A2aRemoteAgentFormSubmission = {};
@@ -309,21 +298,6 @@ export function A2aRemoteAgentForm({
     if (name && name !== agent.name) submission.name = name;
     const description = current.description.trim() || null;
     if (description !== agent.description) submission.description = description;
-    if (
-      scope !== agent.scope ||
-      !sameIds(
-        teams,
-        agent.teams.map((team) => team.id),
-      ) ||
-      !sameIds(
-        users,
-        agent.users.map((user) => user.id),
-      )
-    ) {
-      submission.scope = scope;
-      submission.teams = teams;
-      submission.users = users;
-    }
     return submission;
   };
 
@@ -332,6 +306,7 @@ export function A2aRemoteAgentForm({
     requestRef.current += 1;
     cardPrefillRef.current = { ...EMPTY_CARD_PREFILL };
     form.reset(resetValues);
+    setInitialGrants([]);
     setInspection(agent ? inspectionFromAgent(agent) : null);
     setCapabilitiesInspected(false);
     setCompatibleStamp(agent ? connectionStamp(resetValues, agent) : null);
@@ -358,7 +333,7 @@ export function A2aRemoteAgentForm({
     onSubmit(submission);
   };
   const submit = form.handleSubmit(() => {
-    if (!validateCredential() || !validateAccess()) return;
+    if (!validateCredential()) return;
     const draft = form.getValues();
     const draftStamp = connectionStamp(draft, agent);
     if (draftStamp === compatibleStamp && inspection) {
@@ -611,27 +586,14 @@ export function A2aRemoteAgentForm({
               />
             </div>
           </SettingsSection>
-          <A2aRemoteAgentPermissions
-            scope={values.scope}
-            teamIds={values.teamIds}
-            userIds={values.userIds}
-            ownerName={agent ? agent.authorName : undefined}
-            knownTeams={agent?.teams}
-            knownUsers={agent?.users}
-            initialScope={agent?.scope}
-            error={
-              form.formState.errors.teamIds?.message ??
-              form.formState.errors.userIds?.message
-            }
-            onChange={(next) => {
-              form.clearErrors(["teamIds", "userIds"]);
-              const options = { shouldDirty: true };
-              form.setValue("accessChoice", next.choice, options);
-              form.setValue("scope", next.scope, options);
-              form.setValue("teamIds", next.teamIds, options);
-              form.setValue("userIds", next.userIds, options);
-            }}
-          />
+          {!agent && (
+            <InitialResourcePermissions
+              layout="settings"
+              resource="externalAgent"
+              grants={initialGrants}
+              onChange={setInitialGrants}
+            />
+          )}
         </SettingsSectionGroup>
       </form>
       <FloatingActionBar>
@@ -719,7 +681,7 @@ function ReadOnlySummary({ agent }: { agent: A2aRemoteAgent }) {
       <Alert>
         <AlertDescription>
           You can view this external agent, but you do not have permission to
-          change its connection or access settings.
+          change its connection settings.
         </AlertDescription>
       </Alert>
       <SettingsSectionGroup>
@@ -768,15 +730,6 @@ function ReadOnlySummary({ agent }: { agent: A2aRemoteAgent }) {
             />
           </dl>
         </SettingsSection>
-        <A2aRemoteAgentPermissions
-          readOnly
-          scope={agent.scope}
-          teamIds={agent.teams.map((team) => team.id)}
-          userIds={agent.users.map((user) => user.id)}
-          ownerName={agent.authorName}
-          knownTeams={agent.teams}
-          knownUsers={agent.users}
-        />
       </SettingsSectionGroup>
     </div>
   );
@@ -792,8 +745,6 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
 }
 
 function valuesFromAgent(agent?: A2aRemoteAgent): FormValues {
-  const scope = agent?.scope ?? "personal";
-  const userIds = agent?.users.map((user) => user.id) ?? [];
   return {
     url: storedWellKnownBaseUrl(agent) ?? "",
     name: agent?.name ?? "",
@@ -801,10 +752,6 @@ function valuesFromAgent(agent?: A2aRemoteAgent): FormValues {
     authType: agent?.connection.authType ?? "none",
     headerName: agent?.connection.authConfig.headerName ?? "X-API-Key",
     credential: "",
-    scope,
-    accessChoice: scope === "personal" && userIds.length > 0 ? "user" : scope,
-    teamIds: agent?.teams.map((team) => team.id) ?? [],
-    userIds,
   };
 }
 function inspectionFromAgent(agent: A2aRemoteAgent): Inspection {
@@ -933,11 +880,6 @@ function normalizeAgentBaseUrl(value: string) {
   } catch {
     return null;
   }
-}
-function sameIds(left: string[], right: string[]) {
-  if (left.length !== right.length) return false;
-  const ids = new Set(right);
-  return left.every((id) => ids.has(id));
 }
 function nextCardPrefill({
   current,

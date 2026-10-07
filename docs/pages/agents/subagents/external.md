@@ -29,7 +29,7 @@ What to know:
 - **Supported:** A2A 1.x over JSON-RPC or HTTP+JSON. OAuth sign-in is not supported. Use a static token or key.
 - Credentials are stored as secrets, never in plain text.
 - To pause a connection, click **Disable delegation**. Its assignments stay.
-- An external agent is shared with one audience at a time. Adding teams to an agent shared with people, for example, replaces those people.
+- To change who can use it later, open the external agent and edit its **Permissions** section. **Can use** lets someone assign it as a subagent. **Can edit** also lets them change its connection.
 
 <span id="visibility"></span><span id="edit-or-remove-an-external-agent"></span><span id="authentication"></span><span id="assign-an-external-subagent"></span>
 

@@ -1,4 +1,9 @@
-import { ADMIN_ROLE_NAME, AGENT_TOOL_PREFIX, slugify } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  AGENT_TOOL_PREFIX,
+  MEMBER_ROLE_NAME,
+  slugify,
+} from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { getAgentTools } from "@/archestra-mcp-server";
 import db, { schema } from "@/database";
@@ -434,7 +439,7 @@ describe("outbound A2A subagent assignments", () => {
     const viewer = await makeUser();
     await makeMember(owner.id, ctx.organizationId);
     await makeMember(viewer.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
+      role: MEMBER_ROLE_NAME,
     });
     const parent = await makeAgent({
       organizationId: ctx.organizationId,
@@ -449,7 +454,6 @@ describe("outbound A2A subagent assignments", () => {
         name: "Private external target",
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     ctx.user = viewer;
@@ -464,7 +468,7 @@ describe("outbound A2A subagent assignments", () => {
     expect(await assignedToolIds(parent.id)).toEqual([]);
   });
 
-  test("preserves hidden assignments when a settings manager replaces visible assignments", async ({
+  test("preserves hidden assignments when a member replaces visible assignments", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -473,7 +477,7 @@ describe("outbound A2A subagent assignments", () => {
     const manager = await makeUser();
     await makeMember(owner.id, ctx.organizationId);
     await makeMember(manager.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
+      role: MEMBER_ROLE_NAME,
     });
     const parent = await makeAgent({
       organizationId: ctx.organizationId,
@@ -488,7 +492,6 @@ describe("outbound A2A subagent assignments", () => {
         name: "Hidden existing target",
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     const previousVisible = await createRemoteAgent(

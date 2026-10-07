@@ -46,6 +46,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, ModelModel } from "@/models";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -126,6 +127,13 @@ export interface A2AExecuteParams {
    * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
+  /**
+   * The caller forks itself: a fresh-context copy of the calling agent. It may
+   * repeat its direct parent in the chain once, and never forks again.
+   */
+  selfFork?: boolean;
+  /** The child trajectory an OpenAPPA-governed spawn bound this run to. */
+  appaSubagent?: SubagentBinding;
   /**
    * Id of a persisted `conversations` row, when the execution belongs to one
    * (chat delegation). Tools may persist it as a foreign key — never pass a
@@ -262,7 +270,11 @@ export async function executeA2AMessage(
   // I/O; `handleDelegation` turns the throw into a tool error the model can
   // recover from. Agent ids are uuids, so ":" cannot appear inside one.
   const ancestors = parentDelegationChain?.split(":") ?? [];
-  if (ancestors.includes(agentId)) {
+  const forksItsParent =
+    params.selfFork === true &&
+    ancestors.at(-1) === agentId &&
+    ancestors.filter((ancestor) => ancestor === agentId).length === 1;
+  if (ancestors.includes(agentId) && !forksItsParent) {
     throw new DelegationLoopError(
       "That agent is already in the current delegation chain. Answer directly instead of delegating back to it.",
     );
@@ -361,6 +373,7 @@ export async function executeA2AMessage(
       // attributed to the nested delegation call (recursion through the chain).
       subagentToolStream,
       repeatTracker,
+      appaSubagent: params.appaSubagent,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({
@@ -402,6 +415,7 @@ export async function executeA2AMessage(
         agentLlmApiKeyId: agent.llmApiKeyId,
         contextIsTrusted: parentContextIsTrusted,
         delegationBillingEnvironmentId,
+        appaSubagentToken: params.appaSubagent?.token,
       });
 
     // Which attachment mime types this model can read. A missing model row
@@ -560,6 +574,7 @@ export async function executeA2AMessage(
               agentLlmApiKeyId: agent.llmApiKeyId,
               contextIsTrusted: parentContextIsTrusted,
               delegationBillingEnvironmentId,
+              appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,
       }),

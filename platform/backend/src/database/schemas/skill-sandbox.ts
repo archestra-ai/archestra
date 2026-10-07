@@ -37,10 +37,13 @@ const skillSandboxesTable = pgTable(
     userId: text("user_id")
       .notNull()
       .references(() => usersTable.id, { onDelete: "cascade" }),
-    /** Conversation the sandbox was created from, when known. */
+    /**
+     * Conversation the sandbox was created from, when known. Deleting the
+     * conversation (retention sweep) deletes its sandboxes and their files.
+     */
     conversationId: uuid("conversation_id").references(
       () => conversationsTable.id,
-      { onDelete: "set null" },
+      { onDelete: "cascade" },
     ),
     /**
      * MCP App the sandbox belongs to; null = not an app sandbox. Mutually

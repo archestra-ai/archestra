@@ -756,6 +756,7 @@ pub struct BatteryPackage {
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<BatteryExternal>,
+    pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFileInput>,
 }
@@ -781,6 +782,7 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
                     token_env: external.token_env.clone(),
                 })
                 .collect(),
+            benefit: info.benefit.clone(),
             setup: info.setup.clone(),
             files: info
                 .files
@@ -1842,6 +1844,8 @@ impl State {
                     principal: input.principal.clone(),
                     address: None,
                     title: None,
+                    start: None,
+                    launch: None,
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;
@@ -4267,6 +4271,8 @@ mod runtime_child_tests {
             principal: None,
             address: None,
             title: None,
+            start: None,
+            launch: None,
         }
     }
 

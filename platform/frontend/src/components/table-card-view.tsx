@@ -87,9 +87,16 @@ export function TableCardViewToggle({
   const { mode: selectedMode, selectMode } = useTableCardView();
 
   return (
+    // A soft segmented control, shared look with the sidebar's AI/Studio
+    // toggle: one soft outline on the muted track, so the control keeps its
+    // shape on themes where --muted matches the page, and the selected view
+    // as a raised card (fill + shadow, no outline of its own). 28px segments +
+    // 1px padding + 1px border = 32px, level with the filter controls; the
+    // segments' radius is the track's minus those 2px (`rounded-md` ->
+    // `rounded-sm`), so the corners nest.
     <div
       className={cn(
-        "hidden items-center gap-0.5 rounded-md border p-0.5 md:inline-flex",
+        "hidden h-8 items-center gap-0.5 rounded-md border bg-muted p-px md:inline-flex",
         className,
       )}
     >
@@ -97,11 +104,16 @@ export function TableCardViewToggle({
         <Tooltip key={mode}>
           <TooltipTrigger asChild>
             <Button
-              variant={selectedMode === mode ? "secondary" : "ghost"}
-              size="icon-sm"
+              variant="ghost"
+              size="icon-xs"
               aria-label={VIEW_LABELS[mode]}
               aria-pressed={selectedMode === mode}
-              className={cn(selectedMode !== mode && "text-muted-foreground")}
+              className={cn(
+                "rounded-sm",
+                selectedMode === mode
+                  ? "bg-raised text-foreground shadow-sm hover:bg-raised hover:text-foreground dark:bg-accent dark:hover:bg-accent"
+                  : "text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent",
+              )}
               onClick={() => selectMode(mode)}
             >
               {mode === "cards" ? (

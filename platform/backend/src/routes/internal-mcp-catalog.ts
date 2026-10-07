@@ -4,6 +4,7 @@ import {
   isBuiltInCatalogId,
   isMetadataOnlyEdit,
   mcpRuntimeAlertSource,
+  ResourceAccessQuerySchema,
   ResourcePermissionActionSchema,
   ResourcePermissionGrantSchema,
   RouteId,
@@ -178,6 +179,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.",
             ),
+          access: ResourceAccessQuerySchema,
         }),
         response: constructResponseSchema(
           z.array(
@@ -228,6 +230,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
+        access: request.query.access,
         readGrantContext: (await userHasPermission(
           request.user.id,
           request.organizationId,

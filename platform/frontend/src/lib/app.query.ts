@@ -2,6 +2,7 @@ import {
   archestraApiSdk,
   type archestraApiTypes,
   type Permissions,
+  type ResourceAccessRelation,
 } from "@archestra/shared";
 import {
   type QueryClient,
@@ -52,6 +53,17 @@ const {
   getAppLabelValues,
 } = archestraApiSdk;
 
+/** How many apps a "Show" selection holds, for the filter's counts. */
+export async function countApps(params: {
+  access: ResourceAccessRelation[];
+}): Promise<number> {
+  const { data, error } = await getApps({
+    query: { limit: 1, offset: 0, ...params },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.pagination.total ?? 0;
+}
+
 type AppsQuery = NonNullable<archestraApiTypes.GetAppsData["query"]>;
 type AppsParams = Pick<
   AppsQuery,
@@ -61,6 +73,7 @@ type AppsParams = Pick<
   | "scope"
   | "authorIds"
   | "excludeAuthorIds"
+  | "access"
   | "labels"
 >;
 type AppDetailQueryOptions = { toastOnError?: boolean };

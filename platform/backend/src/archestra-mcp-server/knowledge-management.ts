@@ -83,6 +83,7 @@ import {
   structuredToolErrorResult,
   successResult,
 } from "./helpers";
+import { resourceAccessToolArg } from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -279,6 +280,12 @@ const QueryKnowledgeSourcesToolArgsSchema = z
   })
   .strict();
 
+const GetKnowledgeBasesToolArgsSchema = z
+  .object({
+    access: resourceAccessToolArg({ examplePlural: "knowledge bases" }),
+  })
+  .strict();
+
 const GetKnowledgeBaseToolArgsSchema = z
   .object({
     id: UuidIdSchema.describe("Knowledge base ID."),
@@ -311,6 +318,9 @@ type KnowledgeBaseCreateToolArgs = z.infer<
 >;
 type KnowledgeBaseUpdateToolArgs = z.infer<
   typeof KnowledgeBaseUpdateToolArgsSchema
+>;
+type GetKnowledgeBasesToolArgs = z.infer<
+  typeof GetKnowledgeBasesToolArgsSchema
 >;
 type GetKnowledgeBaseToolArgs = z.infer<typeof GetKnowledgeBaseToolArgsSchema>;
 type DeleteKnowledgeBaseToolArgs = z.infer<
@@ -362,10 +372,10 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_KNOWLEDGE_BASES_SHORT_NAME,
     title: "Get Knowledge Bases",
     description: "List all knowledge bases in the organization.",
-    schema: EmptyToolArgsSchema,
+    schema: GetKnowledgeBasesToolArgsSchema,
     outputSchema: KnowledgeBasesOutputSchema,
-    async handler({ context }) {
-      return handleGetKnowledgeBases({ context });
+    async handler({ args, context }) {
+      return handleGetKnowledgeBases({ args, context });
     },
   }),
   defineArchestraTool({
@@ -877,8 +887,11 @@ async function handleCreateKnowledgeBase(params: {
   }
 }
 
-async function handleGetKnowledgeBases(params: { context: ArchestraContext }) {
-  const { context } = params;
+async function handleGetKnowledgeBases(params: {
+  args: GetKnowledgeBasesToolArgs;
+  context: ArchestraContext;
+}) {
+  const { args, context } = params;
 
   try {
     if (!context.organizationId) {
@@ -896,6 +909,7 @@ async function handleGetKnowledgeBases(params: { context: ArchestraContext }) {
       viewerTeamIds: access?.teamIds ?? [],
       viewerUserId: context.userId,
       organizationId: context.organizationId,
+      access: args.access,
     });
     if (kbs.length === 0) {
       return structuredSuccessResult(

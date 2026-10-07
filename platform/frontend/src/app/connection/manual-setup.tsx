@@ -7,7 +7,6 @@ import type { ReactNode } from "react";
 import type { ConnectClient } from "./clients";
 import { isInstallerClientId, usesGenericInstructions } from "./clients";
 import type { ConnectPageData } from "./connect-page-data";
-import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import {
@@ -18,15 +17,23 @@ import {
 /**
  * How an app gets set up:
  * - "prompt": first-party apps; one prompt, approve in the browser.
- * - "prompt-or-manual": other agents ("Any client", Amp, Kiro, OpenClaw...);
- *   a generic prompt by default, manual setup one toggle away.
+ * - "generic-prompt": other agents (Amp, Kiro, OpenClaw...); the generic
+ *   prompt only. The agent works out what it supports, which manual steps
+ *   can't (Amp has no LLM proxy setting, for one).
+ * - "prompt-or-manual": Generic client; the generic prompt by default,
+ *   manual setup one toggle away.
  * - "manual": n8n (and anything that can't run a prompt); manual only.
  */
-export type SetupMode = "prompt" | "prompt-or-manual" | "manual";
+export type SetupMode =
+  | "prompt"
+  | "generic-prompt"
+  | "prompt-or-manual"
+  | "manual";
 
 export function setupModeFor(client: ConnectClient): SetupMode {
   if (isInstallerClientId(client.id)) return "prompt";
-  if (usesGenericInstructions(client)) return "prompt-or-manual";
+  if (usesGenericInstructions(client))
+    return client.id === "generic" ? "prompt-or-manual" : "generic-prompt";
   return "manual";
 }
 
@@ -51,21 +58,6 @@ export function useManualSteps(
 
   if (!client) return [];
   const steps: ManualStep[] = [];
-  if (data.baseUrls.length > 1) {
-    steps.push({
-      key: "endpoint",
-      title: "Select an endpoint",
-      content: (
-        <ConnectionUrlStep
-          bare
-          candidateUrls={data.baseUrls}
-          metadata={data.baseUrlMetadata}
-          value={baseUrl}
-          onChange={data.selectBaseUrl}
-        />
-      ),
-    });
-  }
   if (data.partsFor(client).tools && gateway) {
     steps.push({
       key: "mcp",

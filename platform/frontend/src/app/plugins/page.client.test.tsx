@@ -38,6 +38,7 @@ vi.mock("./_parts/plugin-install-dialog", () => ({
   PluginInstallDialog: () => null,
 }));
 vi.mock("@/lib/plugins/plugin.query", () => ({
+  countPlugins: async () => 0,
   usePlugins: () => ({
     data: [PLUGIN],
     isPending: false,

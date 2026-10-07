@@ -12,6 +12,7 @@ import { z } from "zod";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import { PluginModel, PluginTeamModel } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
@@ -32,6 +33,7 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import { resourceAccessToolArg } from "./resource-access-tool-arg";
 import {
   type AppliedEditSpan,
   applyStrReplaceEdits,
@@ -57,7 +59,9 @@ import type { ArchestraContext } from "./types";
  * re-checks it (a previously assigned tool can still be dispatched directly).
  */
 
-const ListPluginsSchema = z.object({});
+const ListPluginsSchema = z.object({
+  access: resourceAccessToolArg({ examplePlural: "plugins" }),
+});
 
 const GetPluginSchema = z.object({
   id: UuidIdSchema.describe("The plugin id, as listed by list_plugins."),
@@ -239,7 +243,7 @@ const registry = defineArchestraTools([
       "Call get_plugin with a plugin id to read its files (requires the " +
       "plugin admin permission).",
     schema: ListPluginsSchema,
-    async handler({ context }) {
+    async handler({ args, context }) {
       const disabled = pluginsDisabledError();
       if (disabled) return disabled;
       const ctx = requireUserContext(context);
@@ -263,6 +267,11 @@ const registry = defineArchestraTools([
       const plugins = await PluginModel.findByOrganization({
         organizationId: ctx.organizationId,
         accessiblePluginIds,
+        access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: ctx.userId,
+          organizationId: ctx.organizationId,
+          relations: args.access,
+        }),
       });
       if (plugins.length === 0) {
         return successResult(

@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub
 order: 1
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,7 +25,7 @@ The **Tool coverage** chart on **Overview** shows how many of your tools a rule 
 | **Not enforced** | A battery covers the tool but cannot run yet. |
 | **No rule** | Nothing restricts the tool. The starting policy's catch-all counts here, because it adds no restrictions. |
 
-Start with the servers that read private data or send data out. Under **Servers and gateways**, click **Ask** on a server to have the agent propose rules for its tools. **Improve with chat** does the same for all your tools.
+Start with the servers that read private data or send data out. Under **MCP servers**, click **Ask** on a server to have the agent propose rules for its tools. **Improve with chat** does the same for all your tools.
 
 ## Change the Policy
 
@@ -77,5 +77,7 @@ What to know:
 ## Yells
 
 When an agent finds a block confusing, it reports it with the [`yell`](/docs/reference/archestra-mcp-server#yell) tool. See [Reporting](https://www.openappa.com/yell). The **Yells** tab lists the reports for anyone with [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read). The list shows unresolved reports. To see a resolved report or reopen it, set the status filter to **Resolved**. The link keeps the filter, so you can share it. Click **Investigate in chat** to have the agent propose a fix, then **Mark resolved**, which needs [`openappaDiagnostics:update`](/docs/reference/permissions#openappaDiagnostics:update).
+
+Once you confirm the fix, the agent can mark the report resolved in the chat. A report keeps its investigation chat, so **Investigate in chat** opens it again.
 
 Reports stay in your deployment. With analytics on, they also go to the shared OpenAPPA reporting service. To keep them local, set [`ARCHESTRA_ANALYTICS=disabled`](/docs/reference/configuration#ARCHESTRA_ANALYTICS). To turn reports off, set [`ARCHESTRA_OPENAPPA_YELL_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_OPENAPPA_YELL_ENABLED).

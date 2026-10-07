@@ -22,6 +22,8 @@ vi.mock("@/lib/environment.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  countInternalMcpCatalog: async () => 0,
+  useInternalMcpCatalogAccessIds: () => ({ data: undefined }),
   useInternalMcpCatalog: ({
     initialData,
   }: {
@@ -79,7 +81,14 @@ vi.mock("@/lib/auth/oauth.query", () => ({
 
 vi.mock("@/components/resource-scope-filter", () => ({
   ResourceScopeFilter: () => null,
-  useScopeFilterParams: () => ({ hasActiveScopeFilters: false }),
+  useScopeFilterParams: () => ({
+    access: ["mine", "shared", "org"],
+    hasActiveScopeFilters: false,
+  }),
+}));
+
+vi.mock("@/components/resource-access-filter", () => ({
+  ResourceAccessFilter: () => null,
 }));
 
 vi.mock("@/components/table-card-view", async (importOriginal) => ({

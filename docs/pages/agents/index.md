@@ -98,10 +98,12 @@ What to know:
 Each conversation gets a private Linux container, so the agent can run shell commands and Python with [`run_command`](/docs/reference/archestra-mcp-server#run_command).
 
 - **Files you attach** appear under `/home/sandbox/attachments/`.
+- **Large tool results** go to `/home/sandbox/tool-results/`. When a tool returns more than 100,000 characters, the agent sees only the beginning, plus the file's path to grep the rest.
 - **Files the agent saves** appear in the conversation's **Files** panel.
 - **Network access** follows the [egress policy](/docs/admin/environments#network-egress-policies) of the agent's environment.
 
 What to know:
 
 - Files stay between commands. Running processes do not.
+- Without the sandbox, or in an encrypted chat, a large tool result is cut to its first 100,000 characters.
 - The sandbox is on by default. To turn it off, set [`ARCHESTRA_CODE_RUNTIME_ENABLED=false`](/docs/reference/configuration#ARCHESTRA_CODE_RUNTIME_ENABLED). For setup, see [Code Sandbox deployment](/docs/admin/deployment#code-sandbox).

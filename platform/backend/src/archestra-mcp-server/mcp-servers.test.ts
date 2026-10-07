@@ -152,6 +152,50 @@ describe("mcp server tool execution", () => {
     expect(text).toContain(catalog.id);
   });
 
+  test("search_private_mcp_registry narrows a query by access", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+    makeUser,
+  }) => {
+    const callerId = mockContext.userId as string;
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const mine = await makeInternalMcpCatalog({
+      name: "AccessFilterServer Mine",
+      organizationId,
+      authorId: callerId,
+      access: "personal",
+    });
+    const othersPersonal = await makeInternalMcpCatalog({
+      name: "AccessFilterServer Other",
+      organizationId,
+      authorId: otherUser.id,
+      access: "personal",
+    });
+    await makeInternalMcpCatalog({
+      name: "Unrelated Mine",
+      organizationId,
+      authorId: callerId,
+      access: "personal",
+    });
+
+    const searchIds = async (access?: string[]) => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        { query: "accessfilterserver", ...(access ? { access } : {}) },
+        mockContext,
+      );
+      expect(result.isError).toBe(false);
+      return (result.structuredContent as { items: { id: string }[] }).items
+        .map((item) => item.id)
+        .sort();
+    };
+
+    expect(await searchIds()).toEqual([mine.id, othersPersonal.id].sort());
+    expect(await searchIds(["mine"])).toEqual([mine.id]);
+    expect(await searchIds(["others"])).toEqual([othersPersonal.id]);
+  });
+
   test("get_mcp_server_tools returns tools for a catalog item", async ({
     makeInternalMcpCatalog,
     makeTool,

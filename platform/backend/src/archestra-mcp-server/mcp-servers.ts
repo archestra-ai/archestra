@@ -75,6 +75,7 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import { resourceAccessToolArg } from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -342,6 +343,13 @@ const SearchPrivateMcpRegistryToolArgsSchema = z
       .describe(
         "Optional search query to filter MCP servers by name or description.",
       ),
+    access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
+  })
+  .strict();
+
+const GetMcpServersToolArgsSchema = z
+  .object({
+    access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
   })
   .strict();
 
@@ -421,6 +429,7 @@ const ReloadMcpServerToolsToolArgsSchema = z
   })
   .strict();
 
+type GetMcpServersArgs = z.infer<typeof GetMcpServersToolArgsSchema>;
 type SearchPrivateMcpRegistryArgs = z.infer<
   typeof SearchPrivateMcpRegistryToolArgsSchema
 >;
@@ -449,9 +458,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_MCP_SERVERS_SHORT_NAME,
     title: "Get MCP Servers",
     description: `List all MCP servers from the catalog. Use this to identify candidate MCP servers, then call ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} to fetch exact tool IDs for ${TOOL_CREATE_AGENT_SHORT_NAME}/${TOOL_EDIT_AGENT_SHORT_NAME} toolAssignments.`,
-    schema: EmptyToolArgsSchema,
+    schema: GetMcpServersToolArgsSchema,
     outputSchema: GetMcpServersOutputSchema,
-    handler: ({ context }) => handleGetMcpServers(context),
+    handler: ({ args, context }) => handleGetMcpServers(args, context),
   }),
   defineArchestraTool({
     shortName: TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
@@ -547,7 +556,9 @@ async function handleSearchPrivateMcpRegistry(
 
     let catalogItems: InternalMcpCatalog[];
 
-    if (query && query.trim() !== "") {
+    // `searchByQuery` has no `access` filter, so a filtered search narrows
+    // the filtered list by the same name/description substring instead.
+    if (query && query.trim() !== "" && !args.access) {
       catalogItems = await InternalMcpCatalogModel.searchByQuery(query, {
         expandSecrets: false,
         userId: context.userId,
@@ -570,6 +581,7 @@ async function handleSearchPrivateMcpRegistry(
         isAdmin,
         organizationId,
         environmentId,
+        access: args.access,
         readGrantContext: (await userHasPermission(
           context.userId,
           organizationId,
@@ -579,6 +591,14 @@ async function handleSearchPrivateMcpRegistry(
           ? undefined
           : { userId: context.userId, organizationId },
       });
+      const needle = query?.trim().toLowerCase();
+      if (needle) {
+        catalogItems = catalogItems.filter((item) =>
+          [item.name, item.description].some((text) =>
+            text?.toLowerCase().includes(needle),
+          ),
+        );
+      }
     }
 
     if (catalogItems.length === 0) {
@@ -625,6 +645,7 @@ async function handleSearchPrivateMcpRegistry(
 }
 
 async function handleGetMcpServers(
+  args: GetMcpServersArgs,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
   const { agent: contextAgent, organizationId } = context;
@@ -648,6 +669,7 @@ async function handleGetMcpServers(
       isAdmin,
       organizationId,
       environmentId,
+      access: args.access,
       readGrantContext: (await userHasPermission(
         context.userId,
         organizationId,

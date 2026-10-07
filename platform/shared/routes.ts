@@ -851,6 +851,7 @@ export const RouteId = {
   DeleteOpenappaBatteryInclude: "deleteOpenappaBatteryInclude",
   UploadOpenappaBatteryPackage: "uploadOpenappaBatteryPackage",
   DeleteOpenappaBatteryPackage: "deleteOpenappaBatteryPackage",
+  SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
@@ -960,6 +961,9 @@ export const RouteId = {
   GetConnectionHealth: "getConnectionHealth",
   GetConnectedClients: "getConnectedClients",
   DisconnectConnectedClient: "disconnectConnectedClient",
+  GetConnectedClientLog: "getConnectedClientLog",
+  GetAgentAdoption: "getAgentAdoption",
+  GetAgentAdoptionUsage: "getAgentAdoptionUsage",
 
   // MCP App Routes
   GetApps: "getApps",

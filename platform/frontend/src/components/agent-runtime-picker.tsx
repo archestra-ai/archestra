@@ -26,7 +26,11 @@ import { ConfigurationRow } from "@/components/configuration-row";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Accordion } from "@/components/ui/accordion";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
@@ -120,10 +124,8 @@ export function AgentRuntimePicker({
             key={option.id}
             htmlFor={`${id}-option-${option.id}`}
             className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 font-normal transition-colors has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-              visibleSelectedId === option.id
-                ? "border-primary bg-primary/10"
-                : "hover:bg-muted/50",
+              "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 font-normal",
+              radioCardClass({ checked: visibleSelectedId === option.id }),
             )}
           >
             <RadioGroupItem

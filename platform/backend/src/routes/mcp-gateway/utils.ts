@@ -179,6 +179,8 @@ export interface TokenAuthResult {
   isExternalIdp?: boolean;
   /** Raw JWT token for propagation to underlying MCP servers */
   rawToken?: string;
+  /** OAuth client the caller signed in with, for OAuth tokens */
+  oauthClientId?: string;
 }
 
 /**
@@ -698,6 +700,8 @@ export async function createAgentServer(params: {
         userId: tokenAuth?.userId ?? null,
         runId: runId ?? null,
         authMethod: deriveAuthMethod(tokenAuth) ?? null,
+        oauthClientId: tokenAuth?.oauthClientId ?? null,
+        source: tokenAuth?.source ?? null,
       });
       logger.info(
         { agentId, toolsCount: toolsList.length },
@@ -1018,6 +1022,8 @@ export async function createAgentServer(params: {
               userId: tokenAuth?.userId ?? null,
               runId: runId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
+              oauthClientId: tokenAuth?.oauthClientId ?? null,
+              source: tokenAuth?.source ?? null,
             });
           } catch (dbError) {
             logger.info(
@@ -1149,6 +1155,8 @@ export async function createAgentServer(params: {
               userId: tokenAuth?.userId ?? null,
               runId: runId ?? null,
               authMethod: deriveAuthMethod(tokenAuth) ?? null,
+              oauthClientId: tokenAuth?.oauthClientId ?? null,
+              source: tokenAuth?.source ?? null,
             });
           } catch (dbError) {
             logger.info(
@@ -1817,6 +1825,7 @@ async function validateOAuthTokenByHash(params: {
       organizationId,
       isUserToken: true,
       userId,
+      oauthClientId: accessToken.clientId,
     };
   } catch (error) {
     logger.debug(
@@ -1900,6 +1909,7 @@ async function validateMcpClientAccessToken(params: {
     teamId: null,
     isOrganizationToken: false,
     organizationId,
+    oauthClientId: accessToken.clientId,
   };
 }
 

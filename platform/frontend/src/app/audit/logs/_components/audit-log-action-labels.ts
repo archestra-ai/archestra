@@ -228,6 +228,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> & {
   "openappaBatteryInstall.deleted": "Guardrails battery uninstalled",
   "openappaBatteryPackage.updated": "Guardrails battery package uploaded",
   "openappaBatteryPackage.deleted": "Guardrails battery package deleted",
+  "openappaCredentialBinding.updated": "Guardrails battery credential bound",
   "toolInvocationPolicy.created": "Tool policy created",
   "toolInvocationPolicy.updated": "Tool policy updated",
   "toolInvocationPolicy.deleted": "Tool policy deleted",

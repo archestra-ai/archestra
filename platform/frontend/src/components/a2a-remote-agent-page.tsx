@@ -13,6 +13,7 @@ import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { PermissionRequirementHint } from "@/components/permission-requirement-hint";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourcePermissions } from "@/components/resource-permissions";
 import {
   SettingsSection,
   SettingsSectionGroup,
@@ -41,6 +42,7 @@ import {
   useA2aRemoteAgent,
   useCreateA2aRemoteAgent,
   useDeleteA2aRemoteAgent,
+  useExternalAgentCapabilities,
   useUpdateA2aRemoteAgent,
 } from "@/lib/a2a-remote-agents.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -50,7 +52,7 @@ const LIST_HREF = "/agents";
 
 export function CreateA2aRemoteAgentPage() {
   const router = useRouter();
-  const permission = useHasPermissions({ organizationSettings: ["update"] });
+  const permission = useHasPermissions({ agent: ["create"] });
   const createMutation = useCreateA2aRemoteAgent();
   const [formDirty, setFormDirty] = useState(false);
   const navigationGuard = usePageUnsavedChangesGuard(formDirty);
@@ -64,7 +66,7 @@ export function CreateA2aRemoteAgentPage() {
         header={{
           title: "Connect external A2A agent",
           description:
-            "Connect an Agent2Agent-compatible system and choose who can assign it.",
+            "Connect an Agent2Agent-compatible system and choose who can use it.",
         }}
       >
         {permission.isPending ? (
@@ -74,15 +76,9 @@ export function CreateA2aRemoteAgentPage() {
             isSaving={createMutation.isPending}
             onDirtyChange={setFormDirty}
             onSubmit={(submission) => {
-              if (!submission.source || !submission.scope) return;
+              if (!submission.source) return;
               createMutation.mutate(
-                {
-                  ...submission,
-                  source: submission.source,
-                  scope: submission.scope,
-                  teams: submission.teams ?? [],
-                  users: submission.users ?? [],
-                },
+                { ...submission, source: submission.source },
                 {
                   onSuccess: (agent) => {
                     if (agent) router.push(a2aRemoteAgentDetailHref(agent.id));
@@ -96,9 +92,7 @@ export function CreateA2aRemoteAgentPage() {
             <CardContent className="py-6">
               <PermissionRequirementHint
                 message="Connecting external A2A agents requires"
-                permissions={[
-                  { resource: "organizationSettings", action: "update" },
-                ]}
+                permissions={[{ resource: "agent", action: "create" }]}
               />
             </CardContent>
           </Card>
@@ -116,24 +110,36 @@ export function CreateA2aRemoteAgentPage() {
 export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
   const router = useRouter();
   const query = useA2aRemoteAgent(id);
-  const permission = useHasPermissions({ organizationSettings: ["update"] });
+  const capabilities = useExternalAgentCapabilities();
   const updateMutation = useUpdateA2aRemoteAgent(id);
   const deleteMutation = useDeleteA2aRemoteAgent();
   const [deleteOpen, setDeleteOpen] = useState(false);
   const [formDirty, setFormDirty] = useState(false);
-  const navigationGuard = usePageUnsavedChangesGuard(formDirty);
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
+  // The Permissions section keeps its own edits. The form's Save commits them.
+  const permissionsSave = useRef<(() => Promise<void>) | null>(null);
+  const registerPermissionsSave = useCallback(
+    (save: (() => Promise<void>) | null) => {
+      permissionsSave.current = save;
+    },
+    [],
+  );
+  const hasUnsavedChanges = formDirty || permissionsDirty;
+  const navigationGuard = usePageUnsavedChangesGuard(hasUnsavedChanges);
   const agent = query.data;
   const ownership = useResourceOwnershipTransfer({
     kind: "remoteAgent",
     resource: agent,
-    disabledReason: formDirty
+    disabledReason: hasUnsavedChanges
       ? "Save or discard your changes first"
       : undefined,
     onTransferred: () => router.push("/agents"),
   });
-  const canManage = !!permission.data;
+  const canUpdate = capabilities.can(id, "update");
+  const canDelete = capabilities.can(id, "delete");
+  const canManage = canUpdate || canDelete;
 
-  if (query.isPending || permission.isPending) {
+  if (query.isPending || capabilities.isPending) {
     return (
       <DetailShell title="External A2A agent">
         <FormSkeleton />
@@ -215,33 +221,43 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
                       itemName={agent.name}
                       actions={[]}
                       dropdownActions={[
-                        {
-                          icon: <Power className="h-4 w-4" />,
-                          label: agent.connection.enabled
-                            ? "Disable delegation"
-                            : "Enable delegation",
-                          tooltip: agent.connection.enabled
-                            ? "Pause this connection everywhere without removing its agent assignments."
-                            : "Make this connection available to its assigned agents again.",
-                          disabled: updateMutation.isPending || formDirty,
-                          disabledTooltip: formDirty
-                            ? "Save or discard your changes before changing delegation availability."
-                            : undefined,
-                          onClick: () =>
-                            updateMutation.mutate({
-                              enabled: !agent.connection.enabled,
-                            }),
-                        },
-                        {
-                          icon: <Trash2 className="h-4 w-4" />,
-                          label: "Delete",
-                          variant: "destructive",
-                          disabled: deleteMutation.isPending || formDirty,
-                          disabledTooltip: formDirty
-                            ? "Save or discard your changes before deleting this external agent."
-                            : undefined,
-                          onClick: () => setDeleteOpen(true),
-                        },
+                        ...(canUpdate
+                          ? [
+                              {
+                                icon: <Power className="h-4 w-4" />,
+                                label: agent.connection.enabled
+                                  ? "Disable delegation"
+                                  : "Enable delegation",
+                                tooltip: agent.connection.enabled
+                                  ? "Pause this connection everywhere without removing its agent assignments."
+                                  : "Make this connection available to its assigned agents again.",
+                                disabled:
+                                  updateMutation.isPending || hasUnsavedChanges,
+                                disabledTooltip: hasUnsavedChanges
+                                  ? "Save or discard your changes before changing delegation availability."
+                                  : undefined,
+                                onClick: () =>
+                                  updateMutation.mutate({
+                                    enabled: !agent.connection.enabled,
+                                  }),
+                              },
+                            ]
+                          : []),
+                        ...(canDelete
+                          ? [
+                              {
+                                icon: <Trash2 className="h-4 w-4" />,
+                                label: "Delete",
+                                variant: "destructive" as const,
+                                disabled:
+                                  deleteMutation.isPending || hasUnsavedChanges,
+                                disabledTooltip: hasUnsavedChanges
+                                  ? "Save or discard your changes before deleting this external agent."
+                                  : undefined,
+                                onClick: () => setDeleteOpen(true),
+                              },
+                            ]
+                          : []),
                       ]}
                     />
                     {ownership.dialog}
@@ -254,13 +270,38 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
         <A2aRemoteAgentForm
           key={`${agent.id}:${agent.updatedAt}`}
           agent={agent}
-          readOnly={!canManage}
+          readOnly={!canUpdate}
           isSaving={updateMutation.isPending}
           onDirtyChange={setFormDirty}
           onSubmit={(submission: A2aRemoteAgentFormSubmission) => {
             updateMutation.mutate(submission);
           }}
+          permissions={{
+            section: (
+              <ResourcePermissions
+                layout="settings"
+                resource="externalAgent"
+                scope={agent.id}
+                onDirtyChange={setPermissionsDirty}
+                registerSave={registerPermissionsSave}
+              />
+            ),
+            dirty: permissionsDirty,
+            save: async () => {
+              await permissionsSave.current?.();
+            },
+          }}
         />
+        {!canUpdate && (
+          <div className="border-t pt-8">
+            <ResourcePermissions
+              layout="settings"
+              resource="externalAgent"
+              scope={agent.id}
+              onDirtyChange={setPermissionsDirty}
+            />
+          </div>
+        )}
       </AgentPageShell>
       <DeleteConfirmDialog
         open={deleteOpen}
@@ -324,7 +365,7 @@ function DetailShell({
 function FormSkeleton() {
   return (
     <SettingsSectionGroup>
-      {["Connection", "Details", "Access"].map((title) => (
+      {["Connection", "Details", "Permissions"].map((title) => (
         <SettingsSection key={title} title={title}>
           <Skeleton className="h-10 w-full" />
           <Skeleton className="h-10 w-full" />

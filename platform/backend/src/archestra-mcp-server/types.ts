@@ -16,6 +16,11 @@ export interface ArchestraContext {
     toolCallId: string;
     spawn: boolean;
   };
+  /**
+   * The child trajectory an OpenAPPA spawn bound this delegated run to, minted
+   * by the delegation executor. A delegated run without one runs outside APPA.
+   */
+  openappaSubagent?: import("@/openappa/subagent-binding").SubagentBinding;
   /** A verified, short-lived connection setup session; authentication and RBAC still apply. */
   connectionSetupBypass?: boolean;
   agent: {

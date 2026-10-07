@@ -4,7 +4,7 @@ sidebarTitle: Batteries
 description: Cover an MCP server's tools with a ready-made policy package
 order: 2
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-06
+lastUpdated: 2026-10-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,7 +30,8 @@ An included battery that cannot run shows a problem instead of **Active**:
 
 What to know:
 
-- When [GitHub sync](/docs/agents/guardrails/policies#github-sync) owns the policy, the dialog cannot save a key. Pick the key there to get the line to change in the repository.
+- Archestra saves the key beside the policy, not in it. So you can bind a key before the battery is included, and while [GitHub sync](/docs/agents/guardrails/policies#github-sync) owns the policy.
+- A `[credentials]` line in the policy wins over a key bound here. Remove the line to manage the key in the dialog.
 
 ## Write Your Own
 

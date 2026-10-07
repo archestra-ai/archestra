@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { toBulkOutcome } from "@/lib/bulk-action";
@@ -17,6 +21,17 @@ const {
   restoreKnowledgeBase,
   permanentlyDeleteKnowledgeBase,
 } = archestraApiSdk;
+
+/** How many knowledge bases a "Show" selection holds, for the filter's counts. */
+export async function countKnowledgeBases(params: {
+  access: ResourceAccessRelation[];
+}): Promise<number> {
+  const { data, error } = await getKnowledgeBases({
+    query: { limit: 1, offset: 0, ...params },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.pagination.total ?? 0;
+}
 
 type KnowledgeBasesQuery = NonNullable<
   archestraApiTypes.GetKnowledgeBasesData["query"]

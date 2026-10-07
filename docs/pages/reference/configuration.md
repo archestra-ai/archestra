@@ -1417,7 +1417,7 @@ Retention is an Enterprise feature: the backend does not start when a window is 
 - **`ARCHESTRA_MCP_LOGS_RETENTION_DAYS`** - Days to keep MCP gateway tool call logs.
   - Default: `0` (keep forever)
 
-- **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days without a new message before a conversation is deleted with its messages, attachments, and files.
+- **`ARCHESTRA_CHAT_CONVERSATIONS_RETENTION_DAYS`** - Days without a new message before a conversation is deleted with its messages, attachments, files, and code sandboxes.
   - Default: `0` (keep forever)
 
 - **`ARCHESTRA_AUDIT_LOG_RETENTION_DAYS`** - Days to keep audit log records.

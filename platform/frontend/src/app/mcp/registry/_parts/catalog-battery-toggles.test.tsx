@@ -110,6 +110,7 @@ beforeEach(() => {
     lastError: null,
     managedInGithub: false,
     heldPull: null,
+    credentialBindings: [],
   };
   fetches = 0;
   attach = "ready";

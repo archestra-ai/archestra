@@ -35,6 +35,7 @@ import {
   composeCompactionPrompt,
   summarizeCompactionTranscript,
 } from "@/services/context-compaction";
+import { MAX_TOOL_RESULT_CONTEXT_CHARS } from "@/utils/tool-result-cap";
 
 interface SummarizeParams {
   transcript: string;
@@ -301,7 +302,12 @@ function capOversizedToolResults(messages: ModelMessage[]): ModelMessage[] {
     let messageChanged = false;
     const content = message.content.map((part) => {
       if (part.type !== "tool-result") return part;
-      const serialized = JSON.stringify(part.output);
+      // Budget text by its own length: JSON escaping would push a result the
+      // chat tools already capped back over the limit and cut its tail.
+      const serialized =
+        part.output.type === "text"
+          ? part.output.value
+          : JSON.stringify(part.output);
       if (serialized.length <= MAX_TOOL_RESULT_CONTEXT_CHARS) return part;
       messageChanged = true;
       return {
@@ -361,11 +367,6 @@ function safeJson(value: unknown): string {
     return String(value);
   }
 }
-
-// ~25k tokens at typical densities — generous enough for legitimate large
-// outputs (file reads, API listings) while keeping a single result from
-// consuming a meaningful fraction of the context window.
-const MAX_TOOL_RESULT_CONTEXT_CHARS = 100_000;
 
 // Share of the char budget preserved verbatim as the recent suffix when
 // compacting — the rest of the prefix goes into the summary.

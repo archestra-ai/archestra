@@ -8,7 +8,7 @@ import {
   type SupportedProvider,
   SupportedProviders,
 } from "@archestra/shared";
-import { useMemo, useState } from "react";
+import { useMemo } from "react";
 import config from "@/lib/config/config";
 
 /** A provider with its own LLM proxy endpoint: chat providers plus Jev. */
@@ -149,17 +149,13 @@ export function resolveEffectiveId(params: {
 }
 
 /**
- * The connection base URL for the whole page: the user's pick, then the
- * admin default, then the first URL the deployment offers. Admins can hide
- * env URLs from users; those never show up here.
+ * The connection base URL for the whole page: the admin default, then the
+ * first URL the deployment offers. Users don't pick one; admins can hide env
+ * URLs, and those never show up here.
  */
 export function useConnectionBaseUrl(
   metadata: readonly ConnectionBaseUrl[] | null | undefined,
-): {
-  baseUrls: readonly string[];
-  baseUrl: string;
-  selectBaseUrl: (url: string) => void;
-} {
+): string {
   const baseUrls = useMemo(
     () =>
       resolveCandidateBaseUrls({
@@ -170,11 +166,7 @@ export function useConnectionBaseUrl(
     [metadata],
   );
   const adminDefault = resolveAdminDefaultBaseUrl(metadata ?? null);
-  // Derived, not stateful, so the admin default applies once the org loads.
-  const [picked, setPicked] = useState<string | null>(null);
-  const baseUrl =
-    (picked && baseUrls.includes(picked) && picked) ||
-    (adminDefault && baseUrls.includes(adminDefault) && adminDefault) ||
-    baseUrls[0];
-  return { baseUrls, baseUrl, selectBaseUrl: setPicked };
+  return adminDefault && baseUrls.includes(adminDefault)
+    ? adminDefault
+    : baseUrls[0];
 }

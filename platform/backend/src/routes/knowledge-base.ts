@@ -9,6 +9,7 @@ import {
   PaginationQuerySchema,
   PERMISSION_SYNC_FOLLOW_DOCUMENTS_SCHEDULE,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
   ResourcePermissionGrantSchema,
   RouteId,
   TextSearchLanguageSchema,
@@ -313,6 +314,7 @@ const knowledgeBaseRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(KnowledgeBaseWithConnectorsSchema),

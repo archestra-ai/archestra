@@ -84,7 +84,10 @@ import {
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
 } from "@/services/openappa-policy-change";
-import { getOpenAppaYell } from "@/services/openappa-yells";
+import {
+  getOpenAppaYell,
+  resolveOpenAppaYell,
+} from "@/services/openappa-yells";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
@@ -232,6 +235,42 @@ const registry = defineArchestraTools([
           ...args,
           organizationId: context.organizationId,
           userId: context.userId,
+          conversationId: context.conversationId,
+        }),
+      );
+    },
+  }),
+  defineArchestraTool({
+    shortName: "resolve_openappa_yell",
+    title: "Resolve an OpenAPPA yell",
+    description:
+      "Mark an OpenAPPA yell resolved, or reopen it with resolved=false. Resolve only after the user confirms the fix, or when the user asks you to. Resolving does not change policy.",
+    schema: z.strictObject({
+      id: z.uuid(),
+      resolved: z
+        .boolean()
+        .default(true)
+        .describe("false reopens a resolved yell"),
+    }),
+    async handler({ args, context }) {
+      if (!context.organizationId || !context.userId)
+        throw new ApiError(401, "Organization and user context are required");
+      // TOOL_PERMISSIONS checks update; the result returns the yell, so the
+      // read permission the HTTP route also requires is checked here.
+      if (
+        !(await userHasPermission(
+          context.userId,
+          context.organizationId,
+          "openappaDiagnostics",
+          "read",
+        ))
+      )
+        throw new ApiError(403, "You do not have permission to read yells");
+      return result(
+        await resolveOpenAppaYell({
+          ...args,
+          organizationId: context.organizationId,
+          userId: context.userId,
         }),
       );
     },
@@ -314,6 +353,7 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const id = context.sessionId ?? context.conversationId;
       const known =
+        context.openappaSubagent?.session ??
         context.openappaSession ??
         (context.organizationId && context.userId && id
           ? chatOpenAppaSession(context.organizationId, context.userId, id)
@@ -715,7 +755,12 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       const { execution, trajectory, ...submittedArguments } = args;
       const stamp = parseCurrentTrajectory(trajectory);
-      if (!context.organizationId || !stamp) {
+      if (
+        !context.organizationId ||
+        !stamp ||
+        (context.openappaSubagent &&
+          stamp.session_id !== context.openappaSubagent.session.session_id)
+      ) {
         return unknownOfferResult();
       }
       const submittedSemantic =
@@ -1333,6 +1378,7 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME ||
     shortName === "get_guardrails_policy" ||
     shortName === "get_openappa_yell" ||
+    shortName === "resolve_openappa_yell" ||
     shortName === "list_openappa_consults" ||
     shortName === "list_guardrails_battery_fits" ||
     shortName === "inspect_guardrails_server" ||

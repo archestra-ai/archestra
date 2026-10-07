@@ -28,7 +28,10 @@ import {
 } from "@/openappa/command-normalization";
 import { currentTrajectory } from "@/openappa/current-trajectory";
 import { openappaDeclarations } from "@/openappa/declarations";
-import { declareExistingInstalls } from "@/openappa/declare-installs";
+import {
+  declareExistingInstalls,
+  seedCredentialBindings,
+} from "@/openappa/declare-installs";
 import { openappaFailure } from "@/openappa/failure";
 import { captureYellReport } from "@/openappa/yell-receiver";
 import { normalizeToolCallsForPolicy } from "@/routes/proxy/llm-proxy-helpers";
@@ -47,6 +50,8 @@ export const APPA_CHAT_SOURCES = [
   "chat:compaction",
 ] as const;
 export type AppaChatSource = (typeof APPA_CHAT_SOURCES)[number];
+/** The runtime's built-in sanitizer of a schema-attested subagent return. */
+const ATTEST_SCHEMA_SANITIZER = "attest-schema";
 type ExecutionOutcome = "success" | "failure" | "unknown";
 type OutputSource = "tool" | "runtime";
 type RuntimeReason = string;
@@ -237,7 +242,8 @@ export async function getOpenappaStatus(params: {
 
 /**
  * Carry the legacy `openappa_battery_installs` rows into the policy text every
- * composition now reads from. Runs before the runtime opens and before the
+ * composition now reads from, and seed the credential binding table from the
+ * text's `[credentials]` lines. Runs before the runtime opens and before the
  * periodic recompile is registered, because a recompose rewrites the rows from
  * the text and deletes every row the text does not declare.
  *
@@ -255,6 +261,14 @@ export async function declareOpenappaInstalls(): Promise<void> {
     logger.error(
       { err: error },
       "Declaring the legacy OpenAPPA battery installs failed; the periodic recompile will delete every install row the policy text does not declare",
+    );
+  }
+  try {
+    await seedCredentialBindings();
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Seeding the OpenAPPA credential bindings from the policy text failed; the text still binds its own variables",
     );
   }
 }
@@ -858,6 +872,15 @@ export async function evaluateToolCalls(
     supportsDelegation?: boolean;
     /** Signed lineage retained with a child call for later turns. */
     lineage?: { spawnCallId?: string; childNativeId?: string };
+    /**
+     * Declares a held spawn's return on the caller's behalf, so one delegation
+     * call starts its child. Absent for clients that declare returns themselves.
+     */
+    declareSpawnReturn?: (call: {
+      id: string;
+      name: string;
+      namespace?: string;
+    }) => SpawnReturnDeclaration | undefined;
   },
   policy: SharedPolicy = sharedPolicy(session.organization_id),
 ): Promise<AppaCallDecision[]> {
@@ -947,6 +970,20 @@ export async function evaluateToolCalls(
           ? { child_native_id: options.lineage.childNativeId }
           : {}),
       };
+      const declaration = spawn
+        ? options.declareSpawnReturn?.(call)
+        : undefined;
+      if (declaration) {
+        const refusal = await declareSpawnReturn({
+          session,
+          callId: call.id,
+          event,
+          declaration,
+          controlToolName: options.control?.name,
+          policy,
+        });
+        if (refusal) return refusal;
+      }
       const decision = await dispatch(session, event, await policy());
       if (
         spawn &&
@@ -1252,6 +1289,96 @@ function runtimeToolResult(decision: NativeDecision): CallToolResult {
   return {
     isError: false,
     content: [{ type: "text", text: decision.approved_output ?? "" }],
+  };
+}
+
+/** How a delegation call's child may return, when the platform declares it. */
+export type SpawnReturnDeclaration =
+  | { kind: "as_spoken" }
+  | { kind: "attested"; schema: Record<string, unknown> };
+
+const OfferedReturnSchema = z.union([
+  z.literal("as_spoken"),
+  z.object({ sanitizer: z.string() }),
+]);
+
+/**
+ * Declares the return of a spawn the runtime holds until its return is
+ * declared. A probe of the same call, under its own operation, surfaces the
+ * offers; the call itself is then dispatched once, already declared. Returns
+ * the refusal the caller reports instead of dispatching.
+ */
+async function declareSpawnReturn(params: {
+  session: OpenAppaSession;
+  callId: string;
+  event: Record<string, unknown>;
+  declaration: SpawnReturnDeclaration;
+  controlToolName?: string;
+  policy: SharedPolicy;
+}): Promise<AppaCallDecision | undefined> {
+  const probeId = `${params.callId}:declare`;
+  const probe = await dispatch(
+    params.session,
+    { ...params.event, operation_id: `call:${probeId}` },
+    await params.policy(),
+  );
+  switch (probe.decision) {
+    case "allow_call":
+      await dispatch(
+        params.session,
+        { event: "cancel_call", tool_call_id: probeId },
+        await params.policy(),
+      );
+      return undefined;
+    case "pass_control":
+      return undefined;
+    case "deny_call":
+      break;
+    default:
+      return { kind: "deny", feedback: decisionMessage(probe) };
+  }
+  const wanted = params.declaration;
+  const offer = (probe.offers ?? []).find((candidate) => {
+    const returns = OfferedReturnSchema.safeParse(
+      (candidate as { returns?: unknown }).returns,
+    );
+    if (!returns.success) return false;
+    return wanted.kind === "as_spoken"
+      ? returns.data === "as_spoken"
+      : typeof returns.data === "object" &&
+          returns.data.sanitizer === ATTEST_SCHEMA_SANITIZER;
+  });
+  if (!offer) {
+    return {
+      kind: "deny",
+      feedback:
+        wanted.kind === "attested"
+          ? `This policy offers no \`${ATTEST_SCHEMA_SANITIZER}\` return for this subagent, so \`return_schema\` cannot be honored. Call it without \`return_schema\`, or ask an administrator to declare the sanitizer.\n\n${probe.feedback}`
+          : probe.feedback,
+      offers: (probe.offers ?? []).map((candidate) => candidate.offer_id),
+    };
+  }
+  const args = {
+    offer_id: offer.offer_id,
+    label: {},
+    ...(wanted.kind === "attested" ? { return_schema: wanted.schema } : {}),
+  };
+  const declared = await executeRemedyByOffer({
+    organizationId: params.session.organization_id,
+    callerId: params.session.caller_id,
+    sessionId: params.session.session_id,
+    ...(params.session.parent_id ? { parentId: params.session.parent_id } : {}),
+    toolCallId: `${params.callId}:return`,
+    controlToolName: params.controlToolName,
+    originalArguments: JSON.stringify(args),
+    args,
+  });
+  if (!declared.result.isError) return undefined;
+  return {
+    kind: "deny",
+    feedback: declared.result.content
+      .flatMap((block) => (block.type === "text" ? [block.text] : []))
+      .join("\n"),
   };
 }
 

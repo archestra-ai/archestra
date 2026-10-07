@@ -32,7 +32,6 @@ const {
   getPermissionSyncCoverage,
   assignConnectorToKnowledgeBases,
   unassignConnectorFromKnowledgeBase,
-  getConnectorKnowledgeBases,
   startGoogleDriveConnectorOAuth,
   getMfilesVafAddOnDistribution,
 } = archestraApiSdk;
@@ -174,21 +173,6 @@ export function useConnector(id: string | undefined) {
         ? RUN_CHAIN_GRACE_POLL_MS
         : false;
     },
-  });
-}
-
-export function useConnectorKnowledgeBases(connectorId: string) {
-  return useQuery({
-    queryKey: ["connectors", connectorId, "knowledge-bases"],
-    queryFn: async () => {
-      const { data, error } = await getConnectorKnowledgeBases({
-        path: { id: connectorId },
-      });
-      // A deleted connector 404s here; degrade gracefully instead of erroring.
-      throwOnApiError(error, { allowNotFound: true });
-      return data;
-    },
-    enabled: !!connectorId,
   });
 }
 

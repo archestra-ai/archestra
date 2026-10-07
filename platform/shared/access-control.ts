@@ -595,6 +595,12 @@ export const requiredEndpointPermissionsMap: Partial<
   // A signed-in member lists and disconnects only their own connected clients.
   [RouteId.GetConnectedClients]: {},
   [RouteId.DisconnectConnectedClient]: {},
+  // Who connected which agent is per-employee activity, so the org-wide log
+  // of it takes org-wide log visibility (admin tier) plus reading members.
+  [RouteId.GetConnectedClientLog]: { log: ["admin"], member: ["read"] },
+  // The same per-employee activity, summarized per member.
+  [RouteId.GetAgentAdoption]: { log: ["admin"], member: ["read"] },
+  [RouteId.GetAgentAdoptionUsage]: { log: ["admin"], member: ["read"] },
   /**
    * Existence check for a connected remote, used by the Claude Code startup
    * guard on machines with no session. Returns only ok/missing.
@@ -2033,6 +2039,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { openappaDiagnostics: ["read"] },
+  "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },

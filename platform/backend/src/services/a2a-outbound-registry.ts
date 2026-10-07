@@ -39,6 +39,7 @@ export async function inspectA2aRemoteAgent(params: {
   const card = await resolveAgentCard(params.input.source, auth);
   return inspectResolvedCard({
     card,
+    source: params.input.source,
     authType: params.input.auth?.type,
     apiKeyHeader:
       params.input.auth?.type === "api_key"
@@ -181,7 +182,12 @@ export async function updateA2aRemoteAgent(params: {
           (await authenticatedDiscoveryFromStored(existing.connection)),
       )
     : (existing.remoteAgent.agentCard as unknown as AgentCard);
-  const inspection = inspectResolvedCard({ card, authType, apiKeyHeader });
+  const inspection = inspectResolvedCard({
+    card,
+    source,
+    authType,
+    apiKeyHeader,
+  });
   const nextName = params.input.name ?? existing.remoteAgent.name;
 
   // Never mutate a live credential in place. A delegation must observe either
@@ -376,10 +382,14 @@ async function resolveAgentCard(
   source: A2aRemoteAgentSource,
   auth?: AuthenticatedA2aDiscovery,
 ) {
-  const resolver = new DefaultAgentCardResolver({
-    fetchImpl: buildDiscoveryFetch(auth),
-  });
   try {
+    const resolver = new DefaultAgentCardResolver({
+      fetchImpl: buildDiscoveryFetch({
+        auth,
+        trustedOrigin:
+          source.type === "inline_card" ? null : new URL(source.url).origin,
+      }),
+    });
     if (source.type === "inline_card") {
       return resolver.normalizeAgentCard(source.agentCard);
     }
@@ -485,8 +495,13 @@ function assertStoredAuthReuseCompatible(
   }
 }
 
-function buildDiscoveryFetch(auth?: AuthenticatedA2aDiscovery): typeof fetch {
-  if (!auth || auth.type === "none") return safeA2aFetch;
+function buildDiscoveryFetch(params: {
+  auth?: AuthenticatedA2aDiscovery;
+  trustedOrigin: string | null;
+}): typeof fetch {
+  const { auth } = params;
+  const a2aFetch = createA2aFetch(params.trustedOrigin);
+  if (!auth || auth.type === "none") return a2aFetch;
   const headerName = auth.type === "bearer" ? "authorization" : auth.headerName;
   const headerValue =
     auth.type === "bearer" ? `Bearer ${auth.credential}` : auth.credential;
@@ -504,7 +519,7 @@ function buildDiscoveryFetch(auth?: AuthenticatedA2aDiscovery): typeof fetch {
     } catch {
       throw new Error("A2A authentication header is invalid");
     }
-    return safeA2aFetch(input, { ...init, headers });
+    return a2aFetch(input, { ...init, headers });
   };
 }
 
@@ -537,7 +552,9 @@ function canonicalDiscoverySource(source: A2aRemoteAgentSource): string | null {
       cardUrl.hash = "";
       return `card_url:${cardUrl.href}`;
     }
-    const resolver = new DefaultAgentCardResolver({ fetchImpl: safeA2aFetch });
+    const resolver = new DefaultAgentCardResolver({
+      fetchImpl: createA2aFetch(null),
+    });
     const normalized = resolver.normalizeAgentCard(source.agentCard);
     return `inline_card:${stableStringify(normalized)}`;
   } catch {
@@ -567,6 +584,7 @@ function stableStringify(value: unknown): string {
 
 function inspectResolvedCard(params: {
   card: AgentCard;
+  source: A2aRemoteAgentSource;
   authType?: A2aConnectionAuthType;
   apiKeyHeader?: string;
 }): A2aRemoteAgentInspection {
@@ -595,7 +613,14 @@ function inspectResolvedCard(params: {
       "Agent Card must advertise an A2A 1.x JSONRPC or HTTP+JSON interface",
     );
   }
-  assertSafeOutboundUrl(selectedInterface.url);
+  const trustedOrigin = trustedA2aOrigin({
+    discoveryUrl:
+      params.source.type === "inline_card" ? null : params.source.url,
+    interfaceUrl: selectedInterface.url,
+  });
+  if (!isTrustedA2aUrl(selectedInterface.url, trustedOrigin)) {
+    assertSafeOutboundUrl(selectedInterface.url);
+  }
   assertCompatibleMediaModes(card);
   assertNoRequiredExtensions(card);
 
@@ -824,17 +849,47 @@ async function hydratePublicRemoteAgents(
   });
 }
 
-export async function safeA2aFetch(
-  input: string | URL | globalThis.Request,
-  init?: RequestInit,
-): Promise<Response> {
+/**
+ * The origin chosen by whoever connected an outbound agent: the URL they
+ * entered, or the interface of a card they pasted. Calls to it may use http
+ * and private addresses.
+ */
+export function trustedA2aOrigin(params: {
+  discoveryUrl: string | null;
+  interfaceUrl: string;
+}): string | null {
+  try {
+    return new URL(params.discoveryUrl ?? params.interfaceUrl).origin;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Fetch for one outbound agent. Only `trustedOrigin` skips the SSRF guard: the
+ * remote Agent Card is not the creator's input, so it must not steer calls
+ * (and the stored credential) to some other internal address.
+ */
+export function createA2aFetch(trustedOrigin: string | null): typeof fetch {
+  return (input, init) => fetchA2a({ input, init, trustedOrigin });
+}
+
+async function fetchA2a(params: {
+  input: string | URL | globalThis.Request;
+  init?: RequestInit;
+  trustedOrigin: string | null;
+}): Promise<Response> {
+  const { input, init } = params;
   const rawUrl =
     typeof input === "string" || input instanceof URL
       ? input.toString()
       : input.url;
-  assertSafeOutboundUrl(rawUrl);
+  const trusted = isTrustedA2aUrl(rawUrl, params.trustedOrigin);
+  if (!trusted) assertSafeOutboundUrl(rawUrl);
   const url = new URL(rawUrl);
-  const dispatcher = await createPinnedA2aDispatcher(url.hostname);
+  const dispatcher = trusted
+    ? undefined
+    : await createPinnedA2aDispatcher(url.hostname);
   const timeoutSignal = AbortSignal.timeout(A2A_REQUEST_TIMEOUT_MS);
   const signal = init?.signal
     ? AbortSignal.any([init.signal, timeoutSignal])
@@ -862,7 +917,7 @@ export async function safeA2aFetch(
       headers: response.headers,
     });
   } finally {
-    await dispatcher.close();
+    await dispatcher?.close();
   }
 }
 
@@ -897,6 +952,20 @@ async function createPinnedA2aDispatcher(
       },
     },
   });
+}
+
+function isTrustedA2aUrl(
+  rawUrl: string,
+  trustedOrigin: string | null,
+): boolean {
+  if (trustedOrigin === null || !URL.canParse(rawUrl)) return false;
+  const url = new URL(rawUrl);
+  return (
+    url.origin === trustedOrigin &&
+    (url.protocol === "http:" || url.protocol === "https:") &&
+    !url.username &&
+    !url.password
+  );
 }
 
 function assertSafeOutboundUrl(rawUrl: string): void {

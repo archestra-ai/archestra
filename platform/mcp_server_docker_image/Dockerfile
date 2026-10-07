@@ -183,7 +183,11 @@ RUN apk add --no-cache \
    # CVE-2026-19667, CVE-2026-19666: BIND vulnerabilities (HIGH) fixed in 9.20.29-r0.
    # `bind` in the bare `apk upgrade` above has the same cached-layer problem as openssl,
    # so both installed bind-origin packages get explicit floors.
-   apk add --no-cache --upgrade "bind-tools>=9.20.29-r0" "bind-libs>=9.20.29-r0"
+   apk add --no-cache --upgrade "bind-tools>=9.20.29-r0" "bind-libs>=9.20.29-r0" && \
+   # CVE-2026-85091: zlib vulnerability (HIGH) fixed in 1.3.2-r1. `zlib` is in the bare
+   # `apk upgrade` list above, which cannot express a version floor, so the cached layer
+   # kept 1.3.2-r0.
+   apk add --no-cache --upgrade "zlib>=1.3.2-r1"
 
 # Go toolchain sourced from upstream Alpine-based image (Alpine apk currently ships go-1.25.9-r0)
 COPY --from=go-bin /usr/local/go /usr/local/go

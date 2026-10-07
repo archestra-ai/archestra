@@ -6,6 +6,7 @@ import {
   BINARY_BYTES_PER_TOKEN,
   buildContextWindowBreakdown,
   CHARS_PER_TOKEN,
+  estimateEachToolTokens,
   estimateToolsTokens,
   IMAGE_TOKEN_MAX_ESTIMATE,
   PDF_BYTES_PER_TOKEN,
@@ -828,5 +829,38 @@ describe("refreshBreakdownUsedTokens", () => {
     expect(refreshed.usedTokens).toBe(5_000);
     expect(refreshed.freeTokens).toBeNull();
     expect(refreshed.usedPercent).toBeNull();
+  });
+});
+
+describe("estimateEachToolTokens", () => {
+  it("counts each tool on the same yardstick as the breakdown's tools row", () => {
+    const tools = {
+      github__create_issue: {
+        description: "Create an issue in a repository",
+        inputSchema: {
+          jsonSchema: {
+            type: "object",
+            properties: { title: { type: "string" } },
+          },
+        },
+      },
+      archestra__search_tools: {
+        description: "Find tools",
+        inputSchema: { jsonSchema: {} },
+      },
+      broken: null,
+    };
+    const each = estimateEachToolTokens({ provider: "openai", tools });
+
+    expect(Object.keys(each).sort()).toEqual([
+      "archestra__search_tools",
+      "github__create_issue",
+    ]);
+    expect(each.github__create_issue).toBeGreaterThan(
+      each.archestra__search_tools,
+    );
+    expect(each.github__create_issue + each.archestra__search_tools).toBe(
+      estimateToolsTokens({ provider: "openai", model: "gpt-4o", tools }),
+    );
   });
 });

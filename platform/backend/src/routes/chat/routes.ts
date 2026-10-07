@@ -169,6 +169,7 @@ import {
 } from "./context-compaction";
 import {
   buildContextWindowBreakdown,
+  estimateEachToolTokens,
   refreshBreakdownUsedTokens,
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
@@ -2826,6 +2827,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               name: z.string(),
               description: z.string(),
               parameters: z.record(z.string(), z.any()).nullable(),
+              /**
+               * Estimated context cost of this tool's definition, on the same
+               * yardstick as the chat Context Window Visualizer. No model is
+               * in hand here, so the cl100k encoder stands in.
+               */
+              tokens: z.number().int(),
             }),
           ),
         ),
@@ -2857,12 +2864,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Convert AI SDK Tool format to simple array for frontend. Chat keeps the
       // gateway's attestation markers on its model path, where the LLM proxy
       // verifies and strips them; only this UI view drops them.
+      const tokensByTool = estimateEachToolTokens({
+        provider: "openai",
+        tools: mcpTools,
+      });
       const tools = Object.entries(mcpTools).map(([name, tool]) => ({
         name,
         description: removeAttestationTokens(tool.description ?? ""),
         parameters:
           (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
             ?.jsonSchema || null,
+        tokens: tokensByTool[name] ?? 0,
       }));
 
       return reply.send(tools);

@@ -13,6 +13,7 @@
 // Under the hero, spanning the page: the copy prompt, or the manual steps
 // themselves when Manual is chosen.
 
+import { requiredPagePermissionsMap } from "@archestra/shared/access-control";
 import {
   hasNativeSetupSession,
   type NativeSessionClientId,
@@ -20,6 +21,7 @@ import {
 import {
   ArrowDown,
   BookOpen,
+  ChartColumn,
   Check,
   ChevronDown,
   ChevronRight,
@@ -36,7 +38,6 @@ import {
   ShieldOff,
   SlidersHorizontal,
   SquareTerminal,
-  Terminal,
   TriangleAlert,
   Wrench,
 } from "lucide-react";
@@ -54,19 +55,19 @@ import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
+import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
@@ -80,7 +81,6 @@ import {
   saveConnectChoices,
 } from "./connect-choices";
 import {
-  type ConnectFootprint,
   type ConnectPageData,
   type ConnectPageSkill,
   type ConnectServer,
@@ -88,14 +88,19 @@ import {
 } from "./connect-page-data";
 import {
   AgentSearch,
+  approxTokens,
   BrowseDialog,
   fmt,
-  IncludeDialog,
   InfoDialog,
   nameOf,
   plural,
-  toolLoading,
 } from "./connect-page-parts";
+import {
+  type ConnectedAgent,
+  LastConnectedMark,
+  ManageAgents,
+  useConnectedAgents,
+} from "./connected-agents";
 import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
 import { useUpdateUrlParams } from "./use-update-url-params";
@@ -107,22 +112,7 @@ const ConnectCommandPanel = dynamic(
   { ssr: false },
 );
 
-type DialogKind =
-  | "include"
-  | "servers"
-  | "skills"
-  | "plugins"
-  | "routing"
-  | "guardrails"
-  | "cursor";
-
-/** The parts a user can leave out, in the words the page uses. */
-const PART_LABELS: [keyof ConnectChoices, string][] = [
-  ["tools", "tools"],
-  ["skills", "skills"],
-  ["proxy", "model routing"],
-  ["plugins", "plugins"],
-];
+type DialogKind = "servers" | "skills" | "plugins" | "cursor";
 
 const MOTION_CSS = `
 @keyframes connect-pop {
@@ -146,6 +136,11 @@ const MOTION_CSS = `
 export function ConnectPage() {
   usePageTitle("Connect");
   const data = useConnectPageData();
+  const connected = useConnectedAgents();
+  // Same access as the Agent connections log it links to.
+  const { data: canSeeStatistics } = useHasPermissions(
+    requiredPagePermissionsMap["/connections/logs"] ?? {},
+  );
   // Links (connect.md, docs) can open the page on an app, and on its manual
   // setup with ?mode=manual. Picks and the Manual toggle are written back.
   const searchParams = useSearchParams();
@@ -155,7 +150,7 @@ export function ConnectPage() {
   // page actually lands on.
   const [manualChosen, setManualChosen] = useState<boolean | null>(null);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
-  const [focusServer, setFocusServer] = useState<string | null>(null);
+  const [focus, setFocus] = useState<string | null>(null);
   // What the user leaves out, per agent. The prompt carries it, and this
   // browser keeps it for a while (connect-choices.ts).
   const [choices, setChoices] = useState<ConnectChoices>(ALL_INCLUDED);
@@ -172,30 +167,26 @@ export function ConnectPage() {
     data.clients[0];
   const clientId = client?.id;
   useEffect(() => {
-    // Tools and plugins are always included; only skills and model routing
-    // can be turned off.
-    if (clientId)
-      setChoices({
-        ...readConnectChoices(clientId),
-        tools: true,
-        plugins: true,
-      });
+    // Tools and plugins are always included; skills and model routing can
+    // be left out (Choose what to include).
+    if (!clientId) return;
+    setChoices({
+      ...readConnectChoices(clientId),
+      tools: true,
+      plugins: true,
+    });
   }, [clientId]);
 
   if (data.loading || !client) return <LoadingState />;
 
   const parts = data.partsFor(client);
   const routed = parts.proxy && choices.proxy;
-  const guard = guardrailsStatus(data, client, routed);
   const servers = choices.tools ? data.servers : [];
   const tools = servers.reduce((n, s) => n + s.toolCount, 0);
   const skillsOn = data.skillsEnabled && data.totalSkills > 0;
   const skills = skillsOn && choices.skills ? skillsSorted : [];
   const skillCount = skills.length;
   const prompt = data.connectPrompt(client, choices);
-  const leftOut = PART_LABELS.filter(
-    ([part]) => parts[part] && !choices[part],
-  ).map(([, label]) => label);
   const setChoice = (part: keyof ConnectChoices, value: boolean) => {
     const next = { ...choices, [part]: value };
     setChoices(next);
@@ -229,42 +220,69 @@ export function ConnectPage() {
       <style>{MOTION_CSS}</style>
       <DotField />
 
-      <div className="relative mx-auto w-full max-w-7xl px-6 pt-10 pb-16 md:px-10 lg:px-14 lg:pt-12">
-        {data.canManage && (
-          <div className="absolute top-4 right-6 md:right-10 lg:right-14">
-            <Button
-              asChild
-              variant="ghost"
-              size="sm"
-              className="text-muted-foreground"
-            >
-              <Link href="/settings/connection">
-                <Settings />
-                Connection settings
-              </Link>
-            </Button>
+      {/* The layout follows the room left by the sidebar, not the window. */}
+      <div className="@container relative mx-auto w-full max-w-7xl px-6 pt-10 pb-16 md:px-10 lg:px-14 lg:pt-12">
+        {(data.canManage || canSeeStatistics) && (
+          <div className="absolute top-4 right-6 flex gap-2 md:right-10 lg:right-14">
+            {canSeeStatistics && (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="shadow-xs dark:bg-background"
+              >
+                <Link href="/connections/logs">
+                  <ChartColumn />
+                  Statistics
+                </Link>
+              </Button>
+            )}
+            {data.canManage && (
+              <Button
+                asChild
+                variant="outline"
+                size="sm"
+                className="shadow-xs dark:bg-background"
+              >
+                <Link href="/settings/connection">
+                  <Settings />
+                  Connection settings
+                </Link>
+              </Button>
+            )}
           </div>
         )}
 
-        <section className="grid items-start gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] lg:gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] xl:gap-16">
-          {/* Left: headline, picker */}
-          <div className="min-w-0">
-            <h1 className="text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl xl:text-6xl">
+        <section className="grid items-start gap-6 @min-[66rem]:items-stretch @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16">
+          {/* Left: headline, then the picker. Beside a taller card the tiles
+              grow a little, so the column ends level with the card. */}
+          <div className="min-w-0 @min-[66rem]:flex @min-[66rem]:flex-col">
+            <h1 className="max-w-[11em] text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @min-[66rem]:text-6xl @7xl:text-[4.25rem]">
               Connect your agent to {data.appName}
             </h1>
-            <p className="mt-4 max-w-[34rem] text-lg leading-relaxed text-muted-foreground">
+            <p className="mt-4 max-w-[34rem] text-sm leading-relaxed text-muted-foreground">
               The MCP servers and skills your organization runs for itself, now
               usable in your agent of choice.
             </p>
 
-            <h2 className="mt-6 text-sm font-medium">
-              {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
-            </h2>
-            <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-              Your organization's tools and skills get added to the agent you
-              pick.
-            </p>
-            <AgentTiles data={data} selected={client} onPick={pick} />
+            <div className="mt-6 @min-[66rem]:flex @min-[66rem]:flex-1 @min-[66rem]:flex-col">
+              <div className="flex items-center justify-between gap-3">
+                <h2 className="text-sm font-semibold">
+                  {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
+                </h2>
+                <ManageAgents data={data} agents={connected.agents} />
+              </div>
+              <p className="mt-1 max-w-xl text-sm text-muted-foreground">
+                Your organization's tools and skills get added to the agent you
+                pick.
+              </p>
+              <AgentTiles
+                data={data}
+                selected={client}
+                lastConnected={connected.lastConnected}
+                onPick={pick}
+              />
+            </div>
           </div>
 
           {/* Right: the agent's profile card */}
@@ -275,9 +293,12 @@ export function ConnectPage() {
             tools={tools}
             skills={skills}
             skillCount={skillCount}
+            skillsOff={parts.skills && !choices.skills}
             routed={routed}
-            onOpen={(d, server) => {
-              setFocusServer(server ?? null);
+            choices={choices}
+            onChoice={setChoice}
+            onOpen={(d, item) => {
+              setFocus(item ?? null);
               setDialog(d);
             }}
           />
@@ -295,12 +316,6 @@ export function ConnectPage() {
           download={download}
           choices={choices}
           prompt={prompt}
-          includeLabel={
-            leftOut.length === 0
-              ? "Choose what to include"
-              : `Leaving out ${leftOut.join(", ")}`
-          }
-          onInclude={() => setDialog("include")}
           onManual={(v) => {
             setManualChosen(v);
             // Only manual setup is bookmarkable; Script is a view of Prompt.
@@ -308,25 +323,15 @@ export function ConnectPage() {
               updateUrlParams({ mode: v ? "manual" : null });
           }}
           onCursorNote={() => setDialog("cursor")}
-          footprint={data.footprintFor(client)}
-          skillCount={skillCount}
         />
       </div>
 
-      <IncludeDialog
-        open={dialog === "include"}
-        onOpenChange={(v) => !v && setDialog(null)}
-        data={data}
-        client={client}
-        choices={choices}
-        onChoice={setChoice}
-      />
       <BrowseDialog
         open={
           dialog === "servers" || dialog === "skills" || dialog === "plugins"
         }
         tab={dialog === "skills" || dialog === "plugins" ? dialog : "servers"}
-        focus={focusServer}
+        focus={focus}
         onTab={(t) => setDialog(t)}
         onOpenChange={(v) => !v && setDialog(null)}
         data={data}
@@ -346,38 +351,13 @@ export function ConnectPage() {
           </p>
           <p>
             To send Cursor's OpenAI requests through {data.appName} too, keep
-            model routing on in the browser approval. After setup, find "Cursor
+            the LLM proxy on in the browser approval. After setup, find "Cursor
             model settings (manual step)" in the installer output: it shows the
             proxy URL and, if chosen, a virtual key. In Cursor Settings, Models,
             API Keys, enter those values and turn on Use OpenAI API Key and
             Override OpenAI Base URL. A Cursor subscription can't be used as a
             key.
           </p>
-        </div>
-      </InfoDialog>
-      <InfoDialog
-        open={dialog === "routing"}
-        onOpenChange={(v) => !v && setDialog(null)}
-        title={`Model requests go through ${data.appName}`}
-      >
-        <p>
-          {routed
-            ? `${client.label} sends model requests through ${data.appName} instead of straight to the provider. You keep the same models; your org's limits, logging and cost tracking apply.`
-            : `Model routing is turned off, so ${client.label} keeps sending model requests straight to its provider. Turn it on under Choose what to include.`}
-        </p>
-      </InfoDialog>
-      <InfoDialog
-        open={dialog === "guardrails"}
-        onOpenChange={(v) => !v && setDialog(null)}
-        title={`${data.guardrails.name} guardrails`}
-      >
-        <div className="space-y-2">
-          <p>
-            Before a risky tool call runs (deleting data, sending messages
-            outside the org), {data.guardrails.name} checks it against your
-            org's rules and can ask you to approve it first.
-          </p>
-          {guard && <p>{guard.detail}</p>}
         </div>
       </InfoDialog>
     </div>
@@ -387,18 +367,25 @@ export function ConnectPage() {
 // === Background ===
 
 function DotField() {
-  const mask =
-    "linear-gradient(to bottom, black 0%, black 45%, transparent 100%)";
+  // Fades out down the page, and clears behind the headline and picker so
+  // the dots never sit under text. Dark mode's border is too faint to see,
+  // so its dots use the muted text color, kept low.
+  const mask = [
+    "radial-gradient(ellipse 55% 65% at 28% 38%, transparent 35%, black 80%)",
+    "linear-gradient(to bottom, black 0%, black 45%, transparent 100%)",
+  ].join(", ");
   return (
     <div
       aria-hidden
-      className="pointer-events-none absolute inset-x-0 top-0 h-[760px] opacity-70"
+      className="pointer-events-none absolute inset-x-0 top-0 h-[760px] opacity-50 [--dot:var(--border)] dark:opacity-20 dark:[--dot:var(--muted-foreground)]"
       style={{
         backgroundImage:
-          "radial-gradient(circle, var(--border) 1.1px, transparent 1.4px)",
+          "radial-gradient(circle, var(--dot) 1.1px, transparent 1.4px)",
         backgroundSize: "26px 26px",
         maskImage: mask,
+        maskComposite: "intersect",
         WebkitMaskImage: mask,
+        WebkitMaskComposite: "source-in",
       }}
     />
   );
@@ -422,12 +409,18 @@ function tileCount(data: ConnectPageData) {
 function AgentTiles({
   data,
   selected,
+  lastConnected,
   onPick,
 }: {
   data: ConnectPageData;
   selected: ConnectClient;
+  lastConnected: ConnectedAgent | null;
   onPick: (id: string) => void;
 }) {
+  const markFor = (id: string) =>
+    lastConnected?.clientId === id ? (
+      <LastConnectedMark agent={lastConnected} />
+    ) : undefined;
   const featuredIds = new Set(data.featuredClients.map((c) => c.id));
   // Generic client and every non-featured agent live behind the one tile, which
   // then shows the app you picked there.
@@ -438,14 +431,14 @@ function AgentTiles({
   // roomier, centered both ways in the space two grid rows would take, with
   // no box around it.
   const row = count <= ROW_MAX;
-  const iconSize = row ? 40 : 34;
+  const iconSize = row ? 40 : 36;
   return (
     <div
       className={cn(
-        "mt-3 max-w-xl gap-2.5",
+        "mt-3 gap-2.5 @min-[66rem]:max-w-xl",
         row
           ? "flex min-h-[10.75rem] items-center justify-center [&>*]:w-36"
-          : "grid grid-cols-4",
+          : "grid grid-cols-4 @min-[66rem]:max-h-[13rem] @min-[66rem]:flex-1 @min-[66rem]:auto-rows-fr",
       )}
     >
       {data.featuredClients.map((c) => (
@@ -456,13 +449,20 @@ function AgentTiles({
           onClick={() => onPick(c.id)}
           icon={<ClientIcon client={c} size={iconSize} />}
           label={c.label}
+          marker={markFor(c.id)}
         />
       ))}
       {showOther && (
-        <AgentSearch data={data} selectedId={selected.id} onPick={onPick}>
+        <AgentSearch
+          data={data}
+          selectedId={selected.id}
+          lastConnectedId={lastConnected?.clientId}
+          onPick={onPick}
+        >
           <Tile
             roomy={row}
             active={!!otherPicked}
+            marker={otherPicked ? markFor(otherPicked.id) : undefined}
             aria-label={
               otherPicked
                 ? `${otherPicked.label}, change agent`
@@ -502,12 +502,15 @@ function Tile({
   icon,
   label,
   sub,
+  marker,
   onClick,
   ...rest
 }: {
   active: boolean;
   icon: ReactNode;
   label: ReactNode;
+  /** Pinned to the tile's top-right corner, e.g. the last connected mark. */
+  marker?: ReactNode;
   /** One small line under the label, shown in full. */
   sub?: string;
   roomy?: boolean;
@@ -520,22 +523,23 @@ function Tile({
       aria-pressed={active}
       {...rest}
       className={cn(
-        "relative flex min-w-0 flex-col items-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,transform] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none motion-safe:hover:-translate-y-0.5",
-        roomy ? "pt-4 pb-3 text-[13px]" : "pt-3 pb-2.5",
+        "relative flex min-w-0 flex-col items-center justify-center gap-2 rounded-xl border bg-card px-2 text-xs transition-[border-color,background-color,color] duration-200 hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        roomy ? "pt-4 pb-3" : "pt-3.5 pb-3",
         active
           ? // The muted tint is layered over the card fill, so the page's
             // dots never show through a selected tile.
-            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-medium text-foreground ring-1 ring-primary"
-          : "text-muted-foreground",
+            "border-primary bg-linear-to-b from-muted/40 to-muted/40 font-semibold text-foreground ring-1 ring-primary"
+          : "text-muted-foreground hover:bg-linear-to-b hover:from-muted/50 hover:to-muted/50 hover:text-foreground",
       )}
     >
+      {marker && <span className="absolute top-1.5 right-1.5">{marker}</span>}
       {icon}
       {/* Labels wrap to two lines rather than truncate. */}
       <span className="line-clamp-2 w-full text-center leading-tight break-words">
         {label}
       </span>
       {sub && (
-        <span className="-mt-1 w-full text-center text-[11px] leading-tight font-normal text-muted-foreground">
+        <span className="-mt-1 w-full text-center text-xs leading-tight font-normal text-muted-foreground">
           {sub}
         </span>
       )}
@@ -556,12 +560,8 @@ function ConnectArea({
   download,
   choices,
   prompt,
-  includeLabel,
-  onInclude,
   onManual,
   onCursorNote,
-  footprint,
-  skillCount,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
@@ -577,12 +577,8 @@ function ConnectArea({
   choices: ConnectChoices;
   /** null when every part is left out. */
   prompt: string | null;
-  includeLabel: string;
-  onInclude: () => void;
   onManual: (v: boolean) => void;
   onCursorNote: () => void;
-  footprint: ConnectFootprint;
-  skillCount: number;
 }) {
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -621,44 +617,42 @@ function ConnectArea({
       toast.error("Could not copy. Select the prompt and copy it manually.");
     }
   };
-  const generic = setup === "prompt-or-manual";
-  const leftOutParts = PART_LABELS.filter(([part]) => !choices[part]).map(
-    ([part]) => part,
-  );
+  // Other agents read the generic prompt, with or without a manual option.
+  const generic = setup === "prompt-or-manual" || setup === "generic-prompt";
+  const leftOutParts = (
+    Object.keys(choices) as (keyof ConnectChoices)[]
+  ).filter((part) => !choices[part]);
 
   return (
     <Band busy={data.revalidating}>
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         <StepHeading step={step} />
-        {setup === "prompt-or-manual" && (
-          <ModeSwitch
-            alt={manual}
-            altIcon={<ListOrdered />}
-            altLabel="Manual setup"
-            onChange={onManual}
-          />
-        )}
-        {client.id === "claude-desktop" && (
-          <ModeSwitch
-            alt={download}
-            altIcon={<Download />}
-            altLabel="Download"
-            onChange={(v) => onManual(!v)}
-          />
-        )}
-        {scriptable && (
-          <ModeSwitch
-            alt={script}
-            altIcon={<SquareTerminal />}
-            altLabel="Script"
-            onChange={onManual}
-          />
-        )}
-        {setup === "manual" && (
-          <span className="rounded-full border px-2.5 py-1 text-xs text-muted-foreground">
-            Manual setup only
-          </span>
-        )}
+        <div className="flex min-w-0 flex-wrap items-center gap-2">
+          {setup === "prompt-or-manual" && (
+            <ModeSwitch
+              alt={manual}
+              altIcon={<ListOrdered />}
+              altLabel="Manual setup"
+              onChange={onManual}
+            />
+          )}
+          {client.id === "claude-desktop" && (
+            <ModeSwitch
+              alt={download}
+              altIcon={<Download />}
+              altLabel="Download"
+              onChange={(v) => onManual(!v)}
+            />
+          )}
+          {scriptable && (
+            <ModeSwitch
+              alt={script}
+              altIcon={<SquareTerminal />}
+              altLabel="Script"
+              onChange={onManual}
+            />
+          )}
+        </div>
       </div>
 
       {download ? (
@@ -677,20 +671,9 @@ function ConnectArea({
             urlProvider={null}
             onProviderSelect={() => {}}
             baseUrl={data.baseUrl}
-            candidateBaseUrls={data.baseUrls}
-            baseUrlMetadata={data.baseUrlMetadata}
-            onBaseUrlChange={data.selectBaseUrl}
             skillsEnabled={data.skillsEnabled}
             pluginsEnabled={data.pluginsEnabled}
           />
-          <BandFooter>
-            <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
-              {includeLabel}
-            </MetaButton>
-            <span className="md:ml-auto">
-              {footprintSummary(client, footprint, skillCount)}
-            </span>
-          </BandFooter>
         </>
       ) : manual ? (
         // The steps take the prompt's place, starting right here.
@@ -739,33 +722,43 @@ function ConnectArea({
             )}
           </div>
 
-          <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
-            <Terminal className="size-4 shrink-0 text-muted-foreground" />
-            <code
-              className={cn(
-                "min-w-0 flex-1 truncate font-mono text-sm",
-                !text && "font-sans text-muted-foreground",
-              )}
-              title={text ?? undefined}
-            >
-              {text ??
-                "Everything is left out. Choose at least one thing to include."}
-            </code>
-            <Button
-              size="lg"
-              onClick={copy}
-              disabled={!text || !origin || data.revalidating}
-              className="h-12 shrink-0 rounded-xl px-6 text-base"
-            >
-              {copied ? <Check /> : <Copy />}
-              {copied ? "Copied" : script ? "Copy command" : "Copy prompt"}
-            </Button>
-          </div>
+          {script && command ? (
+            <ScriptBlock
+              command={command}
+              copied={copied}
+              disabled={!origin || data.revalidating}
+              onCopy={copy}
+            />
+          ) : (
+            <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+              <code
+                className={cn(
+                  "min-w-0 flex-1 truncate font-mono text-sm",
+                  !text && "font-sans text-muted-foreground",
+                )}
+                title={text ?? undefined}
+              >
+                {text ??
+                  "Everything is left out. Choose at least one thing to include."}
+              </code>
+              <Button
+                size="lg"
+                onClick={copy}
+                disabled={!text || !origin || data.revalidating}
+                className="h-12 shrink-0 rounded-xl px-6"
+              >
+                {copied ? <Check /> : <Copy />}
+                {copied ? "Copied" : "Copy prompt"}
+              </Button>
+            </div>
+          )}
 
           {script && (
             <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
               <div>
-                <p className="font-medium text-foreground">When it finishes</p>
+                <p className="font-semibold text-foreground">
+                  When it finishes
+                </p>
                 <ol className="mt-1 list-decimal space-y-0.5 pl-4">
                   {scriptNextSteps(client).map((line) => (
                     <li key={line}>{line}</li>
@@ -786,66 +779,45 @@ function ConnectArea({
               </UnstyledButton>
             </div>
           )}
-
-          {/* Footer: what to include, and what it adds. */}
-          <BandFooter>
-            <MetaButton icon={<SlidersHorizontal />} onClick={onInclude}>
-              {includeLabel}
-            </MetaButton>
-            {/* Other agents use the admin's default gateway and read the
-                endpoint from the prompt; apps with an installer pick both on
-                the approval page. */}
-            {generic && data.baseUrls.length > 1 && (
-              <EndpointPicker data={data} />
-            )}
-            <span className="md:ml-auto">
-              {footprintSummary(client, footprint, skillCount)}
-            </span>
-          </BandFooter>
         </>
       )}
     </Band>
   );
 }
 
-/** Picks the endpoint other agents connect to, when the admin offers several. */
-function EndpointPicker({ data }: { data: ConnectPageData }) {
-  const describe = new Map(
-    (data.baseUrlMetadata ?? []).map((m) => [m.url, m.description] as const),
-  );
+/**
+ * The installer command on two lines after a dim prompt, in the page's own
+ * colours. Copy takes the text exactly as shown.
+ */
+function ScriptBlock({
+  command,
+  copied,
+  disabled,
+  onCopy,
+}: {
+  command: string;
+  copied: boolean;
+  disabled: boolean;
+  onCopy: () => void;
+}) {
   return (
-    <Select value={data.baseUrl} onValueChange={data.selectBaseUrl}>
-      <SelectTrigger
-        size="sm"
-        aria-label="Endpoint"
-        className="h-7 max-w-72 gap-1.5 text-xs"
+    <div className="relative mt-2 rounded-2xl border bg-background shadow-sm">
+      <Button
+        size="xs"
+        variant="ghost"
+        onClick={onCopy}
+        disabled={disabled}
+        className="absolute top-2.5 right-2.5 text-muted-foreground"
       >
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {data.baseUrls.map((url) => (
-          <SelectItem key={url} value={url} className="text-xs">
-            <code className="font-mono">{url}</code>
-            {describe.get(url) && (
-              <span className="text-muted-foreground">{describe.get(url)}</span>
-            )}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+        {copied ? <Check /> : <Copy />}
+        {copied ? "Copied" : "Copy"}
+      </Button>
+      <pre className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-sm leading-relaxed">
+        <span className="text-muted-foreground select-none">$ </span>
+        {command}
+      </pre>
+    </div>
   );
-}
-
-/** What connecting writes, from the footprint, in plain words. */
-function footprintSummary(
-  client: ConnectClient,
-  fp: ConnectFootprint,
-  skillCount: number,
-) {
-  const files = fp.skillsInstalled > 0 ? skillCount : 0;
-  const skills =
-    files > 0 ? ` and ${fmt(files)} skill ${plural(files, "file")}` : "";
-  return `Adds 1 MCP entry${skills} to ${nameOf(client)}.`;
 }
 
 /**
@@ -924,20 +896,11 @@ function Band({
   );
 }
 
-/** The band's last line: quiet controls, separated from the action above. */
-function BandFooter({ children }: { children: ReactNode }) {
-  return (
-    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t px-1 pt-3 text-xs text-muted-foreground">
-      {children}
-    </div>
-  );
-}
-
 function StepHeading({ step }: { step: string }) {
   return (
     <h2
       key={step}
-      className="inline-flex items-center gap-2.5 text-base font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
+      className="inline-flex items-center gap-2.5 text-sm font-semibold tracking-tight motion-safe:animate-in motion-safe:fade-in motion-safe:duration-300"
     >
       <span
         aria-hidden
@@ -982,39 +945,12 @@ function ManualSteps({
             {i + 1}
           </span>
           <div className="min-w-0">
-            <h3 className="pt-1 text-sm font-medium">{s.title}</h3>
+            <h3 className="pt-1 text-sm font-semibold">{s.title}</h3>
             <div className="mt-3 min-w-0 max-w-5xl">{s.content}</div>
           </div>
         </li>
       ))}
     </ol>
-  );
-}
-
-function MetaButton({
-  icon,
-  children,
-  onClick,
-  className,
-  ...rest
-}: {
-  icon: ReactNode;
-  children: ReactNode;
-  onClick?: () => void;
-} & ComponentProps<"button">) {
-  return (
-    <UnstyledButton
-      type="button"
-      onClick={onClick}
-      {...rest}
-      className={cn(
-        "inline-flex items-center gap-1.5 rounded-sm tabular-nums underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none [&_svg]:size-3.5",
-        className,
-      )}
-    >
-      {icon}
-      {children}
-    </UnstyledButton>
   );
 }
 
@@ -1038,7 +974,7 @@ function ModeSwitch({
       className={cn(
         "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs transition-colors [&_svg]:size-3.5",
         alt === value
-          ? "bg-background font-medium text-foreground shadow-sm"
+          ? "bg-background font-semibold text-foreground shadow-sm"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -1080,37 +1016,119 @@ function guardrailsStatus(
 } | null {
   const { state } = data.guardrails;
   if (state === null) return null;
+  // The Guardrails page's terms: enforcement is on or off, and requests from
+  // a client Guardrails don't recognize are Allowed or Blocked.
   if (state === "off")
     return {
-      label: "Off",
-      detail:
-        "Your admin hasn't turned the guardrails on, so nothing is checked yet.",
+      label: "Not enforced",
+      detail: "Your admin hasn't turned on guardrail enforcement.",
     };
   if (!routed)
     return {
-      label: "Not applied",
-      detail: `Guardrails check model requests that go through ${data.appName}. With model routing off, ${client.label}'s requests aren't checked.`,
+      label: "Not enforced",
+      detail:
+        "Guardrails only see requests that go through the LLM proxy, and it's off for this agent.",
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
       tone: "ok",
-      label: "Active",
-      detail: `${client.label} is supported, so its requests are checked.`,
+      label: "Enforced",
+      detail: `Guardrails recognize ${client.label}, so its tool calls are checked against your org's policy.`,
     };
   return state === "block"
     ? {
         tone: "block",
-        label: "Blocks this agent",
-        detail: `${client.label} isn't supported by the guardrails yet, and your org blocks unsupported agents, so its model requests will be rejected.`,
+        label: "Blocked",
+        detail: `Guardrails don't recognize ${client.label}, and your org blocks unrecognized clients, so the LLM proxy rejects its model requests.`,
       }
     : {
         tone: "warn",
-        label: "Passes through unchecked",
-        detail: `${client.label} isn't supported by the guardrails yet. Your org lets unsupported agents through, so its requests run without checks.`,
+        label: "Allowed",
+        detail: `Guardrails don't recognize ${client.label}, and your org allows unrecognized clients, so its requests run without checks.`,
       };
 }
 
 // === Profile card ===
+
+/** The card's one place to leave parts out; the prompt carries the result. */
+function IncludeMenu({
+  skills,
+  routing,
+  choices,
+  onChoice,
+}: {
+  skills: boolean;
+  routing: boolean;
+  choices: ConnectChoices;
+  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
+}) {
+  const rows: {
+    id: string;
+    title: string;
+    sub: string;
+    part?: keyof ConnectChoices;
+  }[] = [
+    { id: "tools", title: "Tools", sub: "Always included" },
+    ...(skills
+      ? [
+          {
+            id: "skills",
+            title: "Skills",
+            sub: "Loaded when a task needs one",
+            part: "skills" as const,
+          },
+        ]
+      : []),
+    ...(routing
+      ? [
+          {
+            id: "proxy",
+            title: "LLM proxy",
+            sub: "Model requests go through the LLM proxy",
+            part: "proxy" as const,
+          },
+        ]
+      : []),
+  ];
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="-mr-1.5 shrink-0 text-muted-foreground"
+        >
+          <SlidersHorizontal />
+          Choose what to include
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-1.5">
+        {rows.map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center gap-3 rounded-md px-2.5 py-2"
+          >
+            <label
+              htmlFor={`include-${r.id}`}
+              className={cn("min-w-0 flex-1", r.part && "cursor-pointer")}
+            >
+              <span className="block text-sm font-semibold">{r.title}</span>
+              <span className="block text-xs text-muted-foreground">
+                {r.sub}
+              </span>
+            </label>
+            <Switch
+              id={`include-${r.id}`}
+              checked={r.part ? choices[r.part] : true}
+              disabled={!r.part}
+              onCheckedChange={(v) => r.part && onChoice(r.part, v)}
+            />
+          </div>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
 
 const SERVER_ROWS = 6;
 const SKILL_ROWS = 6;
@@ -1118,9 +1136,8 @@ const SKILL_ROWS = 6;
 interface StatusChip {
   id: string;
   icon: ReactNode;
-  title: string;
+  title: ReactNode;
   sub: ReactNode;
-  onOpen: () => void;
 }
 
 function ProfileCard({
@@ -1130,36 +1147,71 @@ function ProfileCard({
   tools,
   skills,
   skillCount,
+  skillsOff,
   routed,
+  choices,
+  onChoice,
   onOpen,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
   /** This agent's model requests go through the LLM proxy. */
   routed: boolean;
+  /** The user turned skills off (Choose what to include). */
+  skillsOff: boolean;
+  choices: ConnectChoices;
+  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
   servers: ConnectServer[];
   tools: number;
   skills: ConnectPageSkill[];
   skillCount: number;
-  onOpen: (d: DialogKind, server?: string) => void;
+  /** Opens a dialog; for servers and skills, on one row's item. */
+  onOpen: (d: DialogKind, item?: string) => void;
 }) {
   const gatewayName = data.gateway?.name;
   const skillsOn = data.skillsEnabled && data.totalSkills > 0;
 
   // Small status chips under the lists. A future capability is one entry.
   const statusChips: StatusChip[] = [];
-  if (data.partsFor(client).proxy)
-    statusChips.push({
-      id: "routing",
-      icon: (
-        <ChipIcon tone={routed ? "ok" : undefined}>
-          <Cpu />
-        </ChipIcon>
-      ),
-      title: "Model routing",
-      sub: routed ? `On, through ${data.appName}` : "Off for this agent",
-      onOpen: () => onOpen("routing"),
-    });
+  // The LLM proxy's real state for this agent: the admin setting, whether
+  // the agent can use a custom model endpoint, then the user's choice.
+  const proxyOn = data.partsFor(client).proxy;
+  const proxy = !data.llmProxyEnabled
+    ? {
+        label: "Not active",
+        reason: `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`,
+      }
+    : client.proxy.kind === "unsupported"
+      ? {
+          label: "Not supported",
+          reason: `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`,
+        }
+      : !routed
+        ? {
+            label: "Off",
+            reason: `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`,
+          }
+        : {
+            label: "On",
+            reason: `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`,
+          };
+  statusChips.push({
+    id: "routing",
+    icon: (
+      <ChipIcon tone={proxy.label === "On" ? "ok" : undefined}>
+        <Cpu />
+      </ChipIcon>
+    ),
+    title: (
+      <span className="inline-flex items-center gap-1">
+        LLM proxy
+        <InfoTip label="What the LLM proxy does">
+          <TipBody reason={proxy.reason} />
+        </InfoTip>
+      </span>
+    ),
+    sub: proxy.label,
+  });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)
     statusChips.push({
@@ -1169,7 +1221,17 @@ function ProfileCard({
           {guard.tone === "ok" ? <ShieldCheck /> : <ShieldOff />}
         </ChipIcon>
       ),
-      title: `${data.guardrails.name} guardrails`,
+      title: (
+        <span className="inline-flex items-center gap-1">
+          Guardrails
+          <InfoTip label="What the guardrails do">
+            <TipBody
+              reason={guard.detail}
+              about={`Guardrails check risky tool calls (like deleting data) against your org's rules and can ask you to approve first. Powered by ${data.guardrails.name}.`}
+            />
+          </InfoTip>
+        </span>
+      ),
       sub: (
         <span
           className={cn(
@@ -1181,32 +1243,39 @@ function ProfileCard({
           {guard.label}
         </span>
       ),
-      onOpen: () => onOpen("guardrails"),
     });
 
   return (
     <aside
       aria-label={`What ${client.label} gets`}
-      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm lg:mt-2"
+      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm @min-[66rem]:mt-2 @min-[66rem]:self-start"
     >
       <div className="flex items-center gap-3.5">
         <div key={`icon-${client.id}`} className="connect-icon">
           <ClientIcon client={client} size={44} />
         </div>
-        <div className="min-w-0 flex-1 truncate text-xl font-semibold tracking-tight">
+        <div className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
           {client.label}
         </div>
+        {(skillsOn || proxyOn) && (
+          <IncludeMenu
+            skills={skillsOn}
+            routing={proxyOn}
+            choices={choices}
+            onChoice={onChoice}
+          />
+        )}
       </div>
 
       {/* One short line; the lists below speak for themselves. */}
-      <p className="mt-4 text-[15px] leading-snug text-pretty text-foreground">
+      <p className="mt-4 text-sm leading-snug text-pretty text-foreground">
         {cardIntro(data, servers, skillsOn ? skillCount : 0)}
       </p>
 
       {/* Capability blocks: they stack in once on page load and stay put when
           another agent is picked (only the header animates per pick). */}
       <div className="mt-2.5">
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-3">
           <li
             className="connect-chip relative"
             style={{ animationDelay: "140ms" }}
@@ -1221,15 +1290,14 @@ function ProfileCard({
             ) : (
               <ListBlock
                 icon={<Wrench />}
-                title={`+${fmt(tools)} ${plural(tools, "tool")}`}
+                title={`Tools from ${fmt(servers.length)} MCP ${plural(servers.length, "server")}`}
                 sub={
                   <>
-                    from {fmt(servers.length)} MCP{" "}
-                    {plural(servers.length, "server")}
+                    ({fmt(tools)} {plural(tools, "tool")}
+                    {data.progressive ? ", loaded on demand" : ""})
                     <InfoTip label="What MCP servers are">
                       Tools your agent calls, served through your organization's
-                      gateway
-                      {gatewayName ? ` (${gatewayName})` : ""}.
+                      gateway{gatewayName ? ` (${gatewayName})` : ""}.
                     </InfoTip>
                   </>
                 }
@@ -1239,6 +1307,15 @@ function ProfileCard({
                     : "See all"
                 }
                 onMore={() => onOpen("servers")}
+                footer={
+                  tools > 0 && (
+                    <ToolLoadingNote
+                      progressive={data.progressive}
+                      tools={tools}
+                      tokens={data.toolTokens?.total ?? null}
+                    />
+                  )
+                }
               >
                 {servers.length === 0 ? (
                   <span className="block py-1 text-muted-foreground">
@@ -1259,7 +1336,7 @@ function ProfileCard({
                           catalogId={s.catalogId ?? undefined}
                           size={15}
                         />
-                        <span className="min-w-0 flex-1 truncate font-medium text-foreground">
+                        <span className="min-w-0 flex-1 truncate text-foreground">
                           {s.name}
                         </span>
                         <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover/row:text-foreground motion-safe:group-hover/row:translate-x-0.5" />
@@ -1278,29 +1355,43 @@ function ProfileCard({
             >
               <ListBlock
                 icon={<BookOpen />}
-                title={`+${fmt(skillCount)} ${plural(skillCount, "skill")}`}
-                sub="loaded when a task needs one"
+                title={
+                  skillsOff
+                    ? "Skills off"
+                    : `+${fmt(skillCount)} ${plural(skillCount, "skill")}`
+                }
+                sub={
+                  skillsOff
+                    ? "turn them on in Choose what to include"
+                    : "loaded when a task needs one"
+                }
+                muted={skillsOff}
                 more={
-                  skillCount > SKILL_ROWS
+                  !skillsOff && skillCount > SKILL_ROWS
                     ? `See all ${fmt(skillCount)}`
                     : "See all"
                 }
                 onMore={() => onOpen("skills")}
               >
-                {skills.length === 0 ? (
+                {skillsOff ? null : skills.length === 0 ? (
                   <span className="block py-1 text-muted-foreground">
-                    Every skill is left out.
+                    No skills yet.
                   </span>
                 ) : (
                   <span className="grid grid-cols-2 gap-x-2">
                     {skills.slice(0, SKILL_ROWS).map((s) => (
-                      <span
+                      <UnstyledButton
                         key={s.id}
+                        type="button"
+                        onClick={() => onOpen("skills", s.id)}
                         title={s.description}
-                        className="flex h-6 min-w-0 items-center truncate font-mono text-[11px] text-foreground"
+                        className="group/row -mx-1.5 flex h-6.5 min-w-0 items-center gap-2 rounded-md px-1.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
                       >
-                        {s.name}
-                      </span>
+                        <span className="min-w-0 flex-1 truncate text-foreground">
+                          {s.name}
+                        </span>
+                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover/row:text-foreground motion-safe:group-hover/row:translate-x-0.5" />
+                      </UnstyledButton>
                     ))}
                   </span>
                 )}
@@ -1313,44 +1404,27 @@ function ProfileCard({
               className="connect-chip relative"
               style={{ animationDelay: "360ms" }}
             >
-              <div className="grid gap-2 sm:grid-cols-2">
+              <div className="grid gap-3 sm:grid-cols-2">
                 {statusChips.map((c) => (
-                  <UnstyledButton
+                  <div
                     key={c.id}
-                    type="button"
-                    onClick={c.onOpen}
-                    className="flex min-w-0 items-center gap-2.5 rounded-xl border bg-background py-2 pr-3 pl-2 text-left transition-colors hover:border-foreground/30 focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                    className="flex min-w-0 items-center gap-2.5 rounded-xl border bg-background py-2 pr-3 pl-2 text-left"
                   >
                     {c.icon}
-                    <span className="min-w-0">
-                      <span className="block truncate text-[13px] font-semibold tracking-tight">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold tracking-tight">
                         {c.title}
                       </span>
                       <span className="block text-xs leading-snug text-muted-foreground">
                         {c.sub}
                       </span>
                     </span>
-                  </UnstyledButton>
+                  </div>
                 ))}
               </div>
             </li>
           )}
         </ul>
-      </div>
-
-      {/* Footer: what it costs. */}
-      <div className="mt-4 space-y-1.5 border-t pt-3 text-xs text-muted-foreground">
-        <div className="flex items-center gap-1.5">
-          <span className="flex min-w-0 items-center gap-2">
-            <Gauge className="size-3.5 shrink-0" />
-            <span>{toolLoading(data, tools)}</span>
-          </span>
-          <InfoTip label="How tools load">
-            {data.progressive
-              ? "Your agent starts with a small fixed set of tools and finds the rest when a task needs them. Adding servers doesn't grow it."
-              : "Every included tool loads at the start of each session. More tools take more of your agent's working memory."}
-          </InfoTip>
-        </div>
       </div>
     </aside>
   );
@@ -1363,6 +1437,7 @@ function ListBlock({
   muted,
   more,
   onMore,
+  footer,
   children,
 }: {
   icon: ReactNode;
@@ -1371,39 +1446,79 @@ function ListBlock({
   muted?: boolean;
   more?: string;
   onMore?: () => void;
+  /** A tinted strip across the bottom of the block. */
+  footer?: ReactNode;
   children?: ReactNode;
 }) {
   return (
-    <div className="rounded-xl border bg-background py-2 pr-3.5 pl-2">
-      <div className="flex min-w-0 items-center gap-2.5">
-        <ChipIcon>{icon}</ChipIcon>
-        <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-          <span
-            className={cn(
-              "text-[15px] font-semibold tracking-tight tabular-nums",
-              muted && "text-muted-foreground",
-            )}
-          >
-            {title}
+    <div className="overflow-hidden rounded-xl border bg-background">
+      <div className="py-2 pr-3.5 pl-2">
+        <div className="flex min-w-0 items-center gap-2.5">
+          <ChipIcon>{icon}</ChipIcon>
+          <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
+            <span
+              className={cn(
+                "text-sm font-semibold tracking-tight tabular-nums",
+                muted && "text-muted-foreground",
+              )}
+            >
+              {title}
+            </span>
+            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
+              {sub}
+            </span>
           </span>
-          <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-            {sub}
-          </span>
-        </span>
-        {more && onMore && (
-          <UnstyledButton
-            type="button"
-            onClick={onMore}
-            className="shrink-0 rounded-sm text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-          >
-            {more}
-          </UnstyledButton>
+          {more && onMore && (
+            <UnstyledButton
+              type="button"
+              onClick={onMore}
+              className="shrink-0 rounded-sm text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+            >
+              {more}
+            </UnstyledButton>
+          )}
+        </div>
+        {children && (
+          <div className="mt-1.5 border-t pt-1 pl-1 text-xs">{children}</div>
         )}
       </div>
-      {children && (
-        <div className="mt-1.5 border-t pt-1 pl-1 text-xs">{children}</div>
-      )}
+      {footer && <div className="border-t px-3 py-1.5 text-xs">{footer}</div>}
     </div>
+  );
+}
+
+/** How the included tools reach the agent, as the tools block's footer. */
+function ToolLoadingNote({
+  progressive,
+  tools,
+  tokens,
+}: {
+  progressive: boolean;
+  tools: number;
+  /** Estimated tokens of the tool list the agent starts with. */
+  tokens: number | null;
+}) {
+  // Just the estimate once it's in ("~9K tokens"); the tip says how tools load.
+  const label = tokens
+    ? approxTokens(tokens)
+    : progressive
+      ? "Tools load on demand"
+      : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`;
+  return (
+    <p className="flex items-center gap-1.5 text-muted-foreground">
+      <Gauge className="size-3.5 shrink-0" />
+      {label}
+      <InfoTip label="How tools load">
+        {progressive
+          ? "Your agent starts with a small fixed set of tools and finds the rest when a task needs them. Adding servers doesn't grow it."
+          : `All ${fmt(tools)} ${plural(tools, "tool")} load at the start of each session. More tools take more of your agent's working memory.`}
+        <span hidden={!tokens}>
+          {" "}
+          The token count is an estimate; your agent's model may count a little
+          differently.
+        </span>
+      </InfoTip>
+    </p>
   );
 }
 
@@ -1425,6 +1540,16 @@ function cardIntro(
   if (data.servers.length === 0)
     return "Your agent gets your company's tools here as soon as your admin adds them.";
   return "You left out every tool and skill, so your agent gets nothing yet.";
+}
+
+/** A status tooltip: why this state, then what the feature is. */
+function TipBody({ reason, about }: { reason: string; about?: string }) {
+  return (
+    <span className="block space-y-1.5">
+      <span className="block">{reason}</span>
+      {about && <span className="block opacity-75">{about}</span>}
+    </span>
+  );
 }
 
 function InfoTip({ label, children }: { label: string; children: ReactNode }) {
@@ -1473,8 +1598,8 @@ function ChipIcon({
 
 function LoadingState() {
   return (
-    <div className="mx-auto w-full max-w-7xl px-6 pt-12 md:px-10 lg:px-14">
-      <div className="grid gap-10 lg:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] lg:gap-12 xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] xl:gap-16">
+    <div className="@container mx-auto w-full max-w-7xl px-6 pt-12 md:px-10 lg:px-14">
+      <div className="grid gap-6 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16">
         <div className="space-y-5">
           <Skeleton className="h-16 w-80 max-w-full" />
           <Skeleton className="h-16 w-64 max-w-full" />

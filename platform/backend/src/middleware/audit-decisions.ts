@@ -1017,10 +1017,6 @@ export const AUDIT_DECISIONS = {
     reason: "proxy record of tool calls made while enforcement was off",
   },
   openappaYellsTable: { audited: true, model: OpenAppaYellModel },
-  openappaYellConversationsTable: {
-    audited: false,
-    reason: "bookkeeping of the chats that read a yell",
-  },
   openappaExternalConsultsTable: {
     audited: false,
     reason: "external consult dataset the native runtime appends",

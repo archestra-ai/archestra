@@ -3,6 +3,7 @@ import {
   count,
   desc,
   eq,
+  exists,
   getTableColumns,
   ilike,
   inArray,
@@ -16,7 +17,6 @@ import conversationsTable, {
   notDeletedConversation,
 } from "@/database/schemas/conversation";
 import { openappaYellsTable as table } from "@/database/schemas/openappa-yell";
-import { openappaYellConversationsTable as links } from "@/database/schemas/openappa-yell-conversation";
 import {
   createCursorPaginatedResult,
   decodeCursor,
@@ -168,39 +168,36 @@ export default class OpenAppaYellModel {
     }));
   }
 
+  /** Links the yell to its investigation chat once; a later chat never replaces it. */
   static async linkConversation(params: {
     id: string;
     organizationId: string;
     conversationId: string;
   }) {
     await db
-      .insert(links)
-      .select(
-        db
-          .select({
-            yellId: table.id,
-            conversationId: conversationsTable.id,
-            createdAt: sql<Date>`now()`.as("created_at"),
-          })
-          .from(table)
-          .innerJoin(
-            conversationsTable,
-            and(
-              eq(conversationsTable.id, params.conversationId),
-              eq(conversationsTable.organizationId, params.organizationId),
-            ),
-          )
-          .where(
-            and(
-              eq(table.id, params.id),
-              eq(table.organizationId, params.organizationId),
-            ),
+      .update(table)
+      .set({ conversationId: params.conversationId })
+      .where(
+        and(
+          eq(table.id, params.id),
+          eq(table.organizationId, params.organizationId),
+          isNull(table.conversationId),
+          exists(
+            db
+              .select({ id: conversationsTable.id })
+              .from(conversationsTable)
+              .where(
+                and(
+                  eq(conversationsTable.id, params.conversationId),
+                  eq(conversationsTable.organizationId, params.organizationId),
+                ),
+              ),
           ),
-      )
-      .onConflictDoNothing();
+        ),
+      );
   }
 
-  static async listConversations(params: {
+  static async findConversations(params: {
     ids: string[];
     organizationId: string;
     userId: string;
@@ -208,25 +205,27 @@ export default class OpenAppaYellModel {
     if (params.ids.length === 0) return [];
     return db
       .select({
-        yellId: links.yellId,
+        yellId: table.id,
         id: conversationsTable.id,
         title: conversationsTable.title,
-        createdAt: links.createdAt,
+        createdAt: conversationsTable.createdAt,
       })
-      .from(links)
+      .from(table)
       .innerJoin(
         conversationsTable,
-        eq(conversationsTable.id, links.conversationId),
-      )
-      .where(
         and(
-          inArray(links.yellId, params.ids),
+          eq(conversationsTable.id, table.conversationId),
           notDeletedConversation,
           eq(conversationsTable.organizationId, params.organizationId),
           eq(conversationsTable.userId, params.userId),
         ),
       )
-      .orderBy(desc(links.createdAt), desc(conversationsTable.id));
+      .where(
+        and(
+          inArray(table.id, params.ids),
+          eq(table.organizationId, params.organizationId),
+        ),
+      );
   }
 
   static async setResolved(params: {
@@ -253,6 +252,6 @@ export default class OpenAppaYellModel {
 }
 
 function metadataColumns() {
-  const { archive, ...columns } = getTableColumns(table);
+  const { archive, conversationId, ...columns } = getTableColumns(table);
   return { ...columns, hasArchive: sql<boolean>`${archive} IS NOT NULL` };
 }

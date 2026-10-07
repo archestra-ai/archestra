@@ -256,15 +256,17 @@ describe("OpenAPPA yells", () => {
     ).toBe(403);
   });
 
-  test("lists the viewer's live chats that read a yell, newest first", async ({
+  test("links a yell to the first chat that reads it and shows it only to that chat's owner", async ({
     makeAgent,
     makeConversation,
     makeOrganization,
   }) => {
     const yell = await record("Investigated report");
     const untouched = await record("Unread report");
+    const colleaguesYell = await record("Colleague's report");
+    const deletedYell = await record("Report with a deleted chat");
     const agent = await makeAgent({ organizationId, accessAllTools: true });
-    const chat = (title: string | null, overrides = {}) =>
+    const chat = (title: string, overrides = {}) =>
       makeConversation(agent.id, {
         userId: user.id,
         organizationId,
@@ -272,7 +274,7 @@ describe("OpenAPPA yells", () => {
         ...overrides,
       });
     const first = await chat("First investigation");
-    const second = await chat(null);
+    const second = await chat("Second investigation");
     const deleted = await chat("Deleted investigation");
     const colleagues = await chat("Colleague's investigation", {
       userId: "another-user",
@@ -280,10 +282,10 @@ describe("OpenAPPA yells", () => {
     const foreign = await chat("Other organization", {
       organizationId: (await makeOrganization()).id,
     });
-    const read = async (conversationId?: string) => {
+    const read = async (id: string, conversationId?: string) => {
       const result = await executeArchestraTool(
         "archestra__get_openappa_yell",
-        { id: yell.id },
+        { id },
         {
           agent,
           agentId: agent.id,
@@ -294,40 +296,50 @@ describe("OpenAPPA yells", () => {
       );
       expect(result.isError, JSON.stringify(result.content)).toBeFalsy();
     };
-    await read();
-    await read(first.id);
-    await read(first.id);
-    await read(randomUUID());
-    for (const conversation of [second, deleted, colleagues, foreign])
-      await read(conversation.id);
-    await ConversationModel.delete(deleted.id, user.id, organizationId);
+    const linkedChat = async (id: string) =>
+      (
+        await db
+          .select({ conversationId: schema.openappaYellsTable.conversationId })
+          .from(schema.openappaYellsTable)
+          .where(eq(schema.openappaYellsTable.id, id))
+      )[0]?.conversationId;
 
-    const links = await db
-      .select()
-      .from(schema.openappaYellConversationsTable)
-      .where(eq(schema.openappaYellConversationsTable.yellId, yell.id));
-    expect(links.map((link) => link.conversationId).sort()).toEqual(
-      [first.id, second.id, deleted.id, colleagues.id].sort(),
-    );
+    await read(yell.id);
+    await read(yell.id, randomUUID());
+    await read(yell.id, foreign.id);
+    expect(await linkedChat(yell.id)).toBeNull();
+    await read(yell.id, first.id);
+    await read(yell.id, second.id);
+    expect(await linkedChat(yell.id)).toBe(first.id);
+
+    await read(colleaguesYell.id, colleagues.id);
+    await read(deletedYell.id, deleted.id);
+    await ConversationModel.delete(deleted.id, user.id, organizationId);
+    expect(await linkedChat(colleaguesYell.id)).toBe(colleagues.id);
+    expect(await linkedChat(deletedYell.id)).toBe(deleted.id);
 
     const detail = (
       await app.inject({ url: `/api/openappa/yells/${yell.id}` })
     ).json();
-    expect(detail.conversations).toEqual([
-      { id: second.id, title: null, createdAt: expect.any(String) },
-      {
-        id: first.id,
-        title: "First investigation",
-        createdAt: expect.any(String),
-      },
-    ]);
+    expect(detail.conversation).toEqual({
+      id: first.id,
+      title: "First investigation",
+      createdAt: expect.any(String),
+    });
+    expect(detail).not.toHaveProperty("conversationId");
+    for (const hidden of [colleaguesYell, deletedYell])
+      expect(
+        (await app.inject({ url: `/api/openappa/yells/${hidden.id}` })).json()
+          .conversation,
+      ).toBeNull();
+
     const list = (await app.inject({ url: "/api/openappa/yells" })).json().data;
-    expect(
-      list.find((row: { id: string }) => row.id === yell.id).conversations,
-    ).toEqual(detail.conversations);
-    expect(
-      list.find((row: { id: string }) => row.id === untouched.id).conversations,
-    ).toEqual([]);
+    const conversationOf = (id: string) =>
+      list.find((row: { id: string }) => row.id === id).conversation;
+    expect(conversationOf(yell.id)).toEqual(detail.conversation);
+    expect(conversationOf(untouched.id)).toBeNull();
+    expect(conversationOf(colleaguesYell.id)).toBeNull();
+    expect(conversationOf(deletedYell.id)).toBeNull();
   });
 
   test("resolves and reopens a yell from chat with an audit record", async ({

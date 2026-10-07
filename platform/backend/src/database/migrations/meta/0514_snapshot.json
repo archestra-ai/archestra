@@ -1,5 +1,5 @@
 {
-  "id": "b831e6f2-88f4-4b7e-9f74-581a9bc550bc",
+  "id": "23e8819f-06ee-4472-a368-c5d05ea0f065",
   "prevId": "dce6d93a-2ff5-4589-9ecc-c59655d340ff",
   "version": "7",
   "dialect": "postgresql",
@@ -17669,89 +17669,6 @@
       "checkConstraints": {},
       "isRLSEnabled": false
     },
-    "public.openappa_yell_conversations": {
-      "name": "openappa_yell_conversations",
-      "schema": "",
-      "columns": {
-        "yell_id": {
-          "name": "yell_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "conversation_id": {
-          "name": "conversation_id",
-          "type": "uuid",
-          "primaryKey": false,
-          "notNull": true
-        },
-        "created_at": {
-          "name": "created_at",
-          "type": "timestamp with time zone",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "now()"
-        }
-      },
-      "indexes": {
-        "openappa_yell_conversations_conversation_id_idx": {
-          "name": "openappa_yell_conversations_conversation_id_idx",
-          "columns": [
-            {
-              "expression": "conversation_id",
-              "isExpression": false,
-              "asc": true,
-              "nulls": "last"
-            }
-          ],
-          "isUnique": false,
-          "concurrently": false,
-          "method": "btree",
-          "with": {}
-        }
-      },
-      "foreignKeys": {
-        "openappa_yell_conversations_yell_id_openappa_yells_id_fk": {
-          "name": "openappa_yell_conversations_yell_id_openappa_yells_id_fk",
-          "tableFrom": "openappa_yell_conversations",
-          "tableTo": "openappa_yells",
-          "columnsFrom": [
-            "yell_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        },
-        "openappa_yell_conversations_conversation_id_conversations_id_fk": {
-          "name": "openappa_yell_conversations_conversation_id_conversations_id_fk",
-          "tableFrom": "openappa_yell_conversations",
-          "tableTo": "conversations",
-          "columnsFrom": [
-            "conversation_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "cascade",
-          "onUpdate": "no action"
-        }
-      },
-      "compositePrimaryKeys": {
-        "openappa_yell_conversations_yell_id_conversation_id_pk": {
-          "name": "openappa_yell_conversations_yell_id_conversation_id_pk",
-          "columns": [
-            "yell_id",
-            "conversation_id"
-          ]
-        }
-      },
-      "uniqueConstraints": {},
-      "policies": {},
-      "checkConstraints": {},
-      "isRLSEnabled": false
-    },
     "public.openappa_yells": {
       "name": "openappa_yells",
       "schema": "",
@@ -17836,6 +17753,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -17904,6 +17827,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "openappa_yells_conversation_id_idx": {
+          "name": "openappa_yells_conversation_id_idx",
+          "columns": [
+            {
+              "expression": "conversation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -17918,6 +17856,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "openappa_yells_conversation_id_conversations_id_fk": {
+          "name": "openappa_yells_conversation_id_conversations_id_fk",
+          "tableFrom": "openappa_yells",
+          "tableTo": "conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },

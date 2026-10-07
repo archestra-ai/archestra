@@ -29,7 +29,7 @@ export async function getOpenAppaYell(params: {
   organizationId: string;
   userId: string;
   id: string;
-  /** The chat reading the yell. Recorded so the yell lists it later. */
+  /** The chat reading the yell. Becomes its investigation chat if it has none. */
   conversationId?: string;
 }) {
   const row = await OpenAppaYellModel.find({
@@ -70,19 +70,20 @@ async function present<T extends { id: string; callerId: string }>(
   rows: T[],
   viewer: { organizationId: string; userId: string },
 ) {
-  const [withCaller, links] = await Promise.all([
+  const [withCaller, conversations] = await Promise.all([
     withCallers(rows, viewer.organizationId),
-    OpenAppaYellModel.listConversations({
+    OpenAppaYellModel.findConversations({
       ids: rows.map((row) => row.id),
       organizationId: viewer.organizationId,
       userId: viewer.userId,
     }),
   ]);
+  const byYell = new Map(
+    conversations.map(({ yellId, ...conversation }) => [yellId, conversation]),
+  );
   return withCaller.map((row) => ({
     ...row,
-    conversations: links
-      .filter((link) => link.yellId === row.id)
-      .map(({ id, title, createdAt }) => ({ id, title, createdAt })),
+    conversation: byYell.get(row.id) ?? null,
   }));
 }
 

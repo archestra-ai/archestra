@@ -132,9 +132,7 @@ test("phone controls stay reachable through the permission handoff confirmation"
     .poll(async () => (await permission.boundingBox())?.height ?? 0)
     .toBeGreaterThanOrEqual(43.99);
   await dialog.getByRole("combobox", { name: "Permission for Admin" }).click();
-  await page
-    .getByRole("option", { name: "Can view View without making changes" })
-    .click();
+  await page.getByRole("option", { name: "Can view", exact: true }).click();
   await expect(dialog.getByRole("alert")).toContainText(
     "You won’t be able to change permissions.",
   );

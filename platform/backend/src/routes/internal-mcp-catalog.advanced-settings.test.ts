@@ -34,7 +34,7 @@ spec:
 
 /**
  * Deployment YAML requires `configure-deployment-spec` on the MCP registry
- * entry (the "Full access + deployment" preset). Full access alone stops short.
+ * entry (the "Full access + deploy" preset). Full access alone stops short.
  * Session identity is stubbed; middleware and database-backed policies are real.
  */
 const DEPLOY_ACTIONS = topResourcePermissionPreset("mcpRegistry").actions;

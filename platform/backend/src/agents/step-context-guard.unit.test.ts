@@ -59,6 +59,18 @@ describe("createStepContextGuard — tool result capping", () => {
     expect(output.value).toContain("[tool result truncated");
   });
 
+  test("leaves a text result at the cap intact, keeping its tail", async () => {
+    const atCap = `${'"q"\n'.repeat(25_000)}[hook feedback] stop`.slice(
+      -100_000,
+    );
+    const messages: ModelMessage[] = [
+      { role: "user", content: "list the workflow runs" },
+      toolResultMessage(atCap),
+    ];
+    const guard = createStepContextGuard({ contextLength: null });
+    expect((await guard({ messages })).messages).toBe(messages);
+  });
+
   test("returns the same array when nothing is oversized", async () => {
     const messages: ModelMessage[] = [
       { role: "user", content: "hello" },

@@ -302,7 +302,12 @@ function capOversizedToolResults(messages: ModelMessage[]): ModelMessage[] {
     let messageChanged = false;
     const content = message.content.map((part) => {
       if (part.type !== "tool-result") return part;
-      const serialized = JSON.stringify(part.output);
+      // Budget text by its own length: JSON escaping would push a result the
+      // chat tools already capped back over the limit and cut its tail.
+      const serialized =
+        part.output.type === "text"
+          ? part.output.value
+          : JSON.stringify(part.output);
       if (serialized.length <= MAX_TOOL_RESULT_CONTEXT_CHARS) return part;
       messageChanged = true;
       return {

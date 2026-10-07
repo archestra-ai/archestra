@@ -1305,6 +1305,21 @@ class AgentModel {
       );
   }
 
+  /** Agents a delegation call starts as an OpenAPPA child: the organization's own, built-ins excluded. */
+  static async findSpawnTargets(organizationId: string) {
+    return db
+      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
+
   /**
    * Find all agents for an organization filtered by accessible agent IDs
    * Returns only agents the user has access to via team membership
@@ -2713,9 +2728,13 @@ class AgentModel {
 
   static async findDelegationTarget(
     id: string,
-  ): Promise<Pick<Agent, "id" | "name"> | null> {
+  ): Promise<Pick<Agent, "id" | "name" | "agentType"> | null> {
     const [targetAgent] = await db
-      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+      })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
       .limit(1);

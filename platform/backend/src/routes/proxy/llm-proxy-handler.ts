@@ -119,6 +119,10 @@ import {
 } from "@/openappa/service";
 import { formatSessionReceipt } from "@/openappa/session-token";
 import {
+  APPA_SUBAGENT_BINDING_HEADER,
+  verifySubagentBinding,
+} from "@/openappa/subagent-binding";
+import {
   restoreTrajectoryStampText,
   stampedSessions,
 } from "@/openappa/trajectory-stamp";
@@ -1712,11 +1716,30 @@ export async function handleLLMProxy<
         (isInternalChat || (!authenticatedApp && !virtualKeyId))
           ? userId
           : undefined);
-      // Delegated A2A runs share the parent's logging session, but have no
-      // APPA child-return lifecycle. Keep their events out of that trajectory;
-      // the existing guardrails still evaluate the child independently.
-      // Only the trusted internal executor's agent chain selects this path.
+      // A delegated run an OpenAPPA spawn bound to a child trajectory carries
+      // the executor's signed binding; its turns run on that trajectory.
+      const subagentToken = isInternalRequest
+        ? firstHeaderValue(
+            headersForExtraction[APPA_SUBAGENT_BINDING_HEADER.toLowerCase()],
+          )
+        : undefined;
+      const subagentBinding = subagentToken
+        ? verifySubagentBinding(subagentToken, {
+            organizationId: resolvedAgent.organizationId,
+            agentId: resolvedAgent.id,
+          })
+        : null;
+      // A child that claims a trajectory it cannot prove must not run unbound.
+      if (subagentToken && !subagentBinding) {
+        throw new ApiError(403, "The subagent binding is invalid or expired");
+      }
+      // Other delegated A2A runs share the parent's logging session, but have
+      // no APPA child-return lifecycle. Keep their events out of that
+      // trajectory; the existing guardrails still evaluate the child
+      // independently. Only the trusted internal executor's agent chain
+      // selects this path.
       const delegatedRun =
+        !subagentBinding &&
         isInternalRequest &&
         isAppaDelegatedRun(resolvedAgent.id, externalAgentId);
       const runtimeLookup =
@@ -1793,7 +1816,13 @@ export async function handleLLMProxy<
               })
             )?.session
           : undefined;
-      const runtimeSessionId = runtimeSession?.session_id;
+      // A bound subagent ends its turns the way a runtime workspace does: its
+      // return is keyed by the spawn call that opened it.
+      const runtimeSessionId =
+        runtimeSession?.session_id ?? subagentBinding?.session.session_id;
+      const runtimeTaskId = runtimeSession
+        ? runtimeIdentity?.taskId
+        : subagentBinding?.spawnCallId;
       // Enforcement rejects conflicts above; observing and setup-bypass paths
       // must also avoid adopting the conflicting workspace's authority.
       const boundRuntimeIdentity =
@@ -1981,6 +2010,9 @@ export async function handleLLMProxy<
                       : undefined,
                   }),
             });
+        // The executor signed the trajectory its spawn bound; the child's own
+        // headers name the parent conversation and carry no authority here.
+        if (subagentBinding) openappaSession = subagentBinding.session;
         if (runtimeSession) {
           if (openappaSession?.session_id !== runtimeSession.session_id) {
             throw new ApiError(
@@ -2015,6 +2047,7 @@ export async function handleLLMProxy<
       } else if (
         appaObserving &&
         !delegatedRun &&
+        !subagentBinding &&
         (isInternalRequest ||
           authenticatedUserId ||
           authenticatedApp ||
@@ -2072,9 +2105,7 @@ export async function handleLLMProxy<
               toolIdentity,
               request: lineageRequest(),
               claims: appaClaims,
-              ...(runtimeSessionId
-                ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
-                : {}),
+              ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
               ...(isInternalChat ? { chatSource: source } : {}),
             },
           }).session,
@@ -2140,9 +2171,7 @@ export async function handleLLMProxy<
           toolIdentity,
           request: appaRequest,
           claims: appaClaims,
-          ...(runtimeSessionId
-            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
-            : {}),
+          ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "active",
           ...(isInternalChat ? { chatSource: source } : {}),
@@ -2154,9 +2183,7 @@ export async function handleLLMProxy<
           toolIdentity,
           request: lineageRequest(),
           claims: appaClaims,
-          ...(runtimeSessionId
-            ? { runtimeSessionId, runtimeTaskId: runtimeIdentity?.taskId }
-            : {}),
+          ...(runtimeSessionId ? { runtimeSessionId, runtimeTaskId } : {}),
           compaction: clientCompaction && !isInternalChat,
           enforcement: "inactive",
           ...(isInternalChat ? { chatSource: source } : {}),

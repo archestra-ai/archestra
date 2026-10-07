@@ -240,6 +240,15 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 [policy.deployment]
 context_control = true
 
+# A subagent's return that matches the bounded JSON schema its parent declared
+# at the spawn crosses at the parent's trust. Built into the runtime.
+[[policy.sanitizer]]
+name = "attest-schema"
+on = ["tool_output"]
+
+[policy.sanitizer.permits]
+trust = { from = "suspicious", to = "trusted" }
+
 [[policy.annotator]]
 name = "noop"
 

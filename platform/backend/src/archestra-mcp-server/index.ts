@@ -406,7 +406,8 @@ export async function executeArchestraTool(
   }
   if (
     (!openappaEnabled() ||
-      isAppaDelegatedRun(context.agent.id, context.delegationChain)) &&
+      (!context.openappaSubagent &&
+        isAppaDelegatedRun(context.agent.id, context.delegationChain))) &&
     isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
   ) {
     throw {

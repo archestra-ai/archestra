@@ -1,8 +1,8 @@
 ---
 title: Subagents
-description: Let an agent delegate work to built-in subagents or to external A2A agents
+description: Let an agent delegate work to its own copy, your agents, built-in subagents, or external A2A agents
 order: 5
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -30,3 +30,22 @@ What to know:
 - Subagents must share the parent agent's [environment](/docs/admin/environments).
 - Automated runs, with no signed-in person, use only the agents you selected.
 - For long coding tasks, pick a subagent with a [dedicated runtime](/docs/agents/runtime).
+
+## Fork the Agent
+
+Keep long searches and noisy tool output out of the conversation. Every agent can hand a task to a fresh copy of itself, and only the copy's answer comes back. You don't need to set this up.
+
+What to know:
+
+- The copy has the same tools and instructions, but none of the conversation. The agent writes everything the copy needs into the task.
+- A copy cannot fork again.
+
+## Get Trusted Answers From Untrusted Data
+
+Let a subagent read untrusted data, such as inbound email or a web page, without the parent losing trust. With [Guardrails](/docs/agents/guardrails) on, a parent can ask for a structured answer, such as a number of days or one choice from a fixed list. An answer that matches comes back at the parent's own trust.
+
+What to know:
+
+- The parent names the answer's shape when it delegates. Every field must be bounded: a number in a range, a yes or no, or a fixed list of values. Free text is never accepted.
+- An answer that does not match is withheld. The parent gets an error, never the raw text.
+- Built-in subagents and external agents cannot return structured answers.

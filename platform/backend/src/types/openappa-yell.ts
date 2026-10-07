@@ -5,7 +5,17 @@ import { openappaYellsTable } from "@/database/schemas/openappa-yell";
 
 export const OpenAppaYellSchema = createSelectSchema(openappaYellsTable)
   .omit({ archive: true })
-  .extend({ hasArchive: z.boolean(), caller: CreatedByNullableSchema });
+  .extend({
+    hasArchive: z.boolean(),
+    caller: CreatedByNullableSchema,
+    conversations: z.array(
+      z.object({
+        id: z.uuid(),
+        title: z.string().nullable(),
+        createdAt: z.date(),
+      }),
+    ),
+  });
 export const InsertOpenAppaYellSchema = createInsertSchema(
   openappaYellsTable,
 ).pick({

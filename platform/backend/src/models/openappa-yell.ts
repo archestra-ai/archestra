@@ -5,13 +5,18 @@ import {
   eq,
   getTableColumns,
   ilike,
+  inArray,
   isNotNull,
   isNull,
   sql,
 } from "drizzle-orm";
 import { z } from "zod";
 import db from "@/database";
+import conversationsTable, {
+  notDeletedConversation,
+} from "@/database/schemas/conversation";
 import { openappaYellsTable as table } from "@/database/schemas/openappa-yell";
+import { openappaYellConversationsTable as links } from "@/database/schemas/openappa-yell-conversation";
 import {
   createCursorPaginatedResult,
   decodeCursor,
@@ -161,6 +166,67 @@ export default class OpenAppaYellModel {
       value: row.createdAt.toISOString(),
       id: row.id,
     }));
+  }
+
+  static async linkConversation(params: {
+    id: string;
+    organizationId: string;
+    conversationId: string;
+  }) {
+    await db
+      .insert(links)
+      .select(
+        db
+          .select({
+            yellId: table.id,
+            conversationId: conversationsTable.id,
+            createdAt: sql<Date>`now()`.as("created_at"),
+          })
+          .from(table)
+          .innerJoin(
+            conversationsTable,
+            and(
+              eq(conversationsTable.id, params.conversationId),
+              eq(conversationsTable.organizationId, params.organizationId),
+            ),
+          )
+          .where(
+            and(
+              eq(table.id, params.id),
+              eq(table.organizationId, params.organizationId),
+            ),
+          ),
+      )
+      .onConflictDoNothing();
+  }
+
+  static async listConversations(params: {
+    ids: string[];
+    organizationId: string;
+    userId: string;
+  }) {
+    if (params.ids.length === 0) return [];
+    return db
+      .select({
+        yellId: links.yellId,
+        id: conversationsTable.id,
+        title: conversationsTable.title,
+        createdAt: links.createdAt,
+      })
+      .from(links)
+      .innerJoin(
+        conversationsTable,
+        eq(conversationsTable.id, links.conversationId),
+      )
+      .where(
+        and(
+          inArray(links.yellId, params.ids),
+          notDeletedConversation,
+          eq(conversationsTable.organizationId, params.organizationId),
+          eq(conversationsTable.userId, params.userId),
+        ),
+      )
+      .orderBy(desc(links.createdAt), desc(conversationsTable.id));
   }
 
   static async setResolved(params: {

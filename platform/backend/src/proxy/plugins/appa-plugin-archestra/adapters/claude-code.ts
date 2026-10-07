@@ -1,5 +1,7 @@
+import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
 import type { AppaSessionIdentity } from "@/openappa/wire";
 import { parseClaudeMetadataSessionId } from "@/routes/proxy/utils/headers/session-id";
+import { ApiError } from "@/types";
 import type { CommonToolResult } from "@/types/common-llm-format";
 import type {
   AppaClientAdapter,
@@ -23,9 +25,21 @@ import {
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,
+  nativeId,
   stringField,
   stripRecordFields,
 } from "./trajectory";
+
+/** Reads native identity signals without composing or binding a trajectory. */
+export function claudeCodeNativeChildIds(context: AppaMatchContext): {
+  parentNativeId: string | undefined;
+  childNativeId: string | undefined;
+} {
+  return {
+    parentNativeId: parentSessionId(context),
+    childNativeId: childAgentId(context),
+  };
+}
 
 /** A skill runs in the spawner's trajectory. An agent opens a new child trajectory. */
 const CHILD_SPAWN_TOOLS = new Set(["Agent", "Task"]);
@@ -265,21 +279,22 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   }
 
   nativeConversationId(context: AppaMatchContext): string | undefined {
-    // Claude Code names the session at every depth.
-    // Child subagents report the session as their parent.
-    return parentSessionId(context);
+    // In-process children share the lead's conversation; split-pane teammates
+    // have their own conversation and separately report parent_session_id.
+    return (
+      this.extractSessionIdentity(context)?.sessionId ??
+      parentSessionId(context)
+    );
   }
 
   /** Native parent signal used to keep delegated children out of fork tracing. */
   nativeSpawnParentId(
     context: AppaMatchContext,
-    sessionId: string,
+    _sessionId: string,
   ): string | undefined {
     const parentNativeId = parentSessionId(context);
     const child = this.bindChildTrajectory(context);
-    return parentNativeId === sessionId &&
-      child &&
-      child.sessionId !== parentNativeId
+    return child && child.sessionId !== parentNativeId
       ? parentNativeId
       : undefined;
   }
@@ -302,11 +317,57 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
    */
   bindChildTrajectory(context: AppaMatchContext) {
     const parentNativeId = parentSessionId(context);
+    const nativeMetadata = claudeUserMetadata(context);
+    const childNativeId = childAgentId(context);
+    const sessionOnlyMetadata =
+      stringField(nativeMetadata?.session_id) &&
+      !stringField(nativeMetadata?.parent_session_id) &&
+      !childNativeId;
+    // A shared session id cannot distinguish a root from a marker-only child.
+    // Do not adopt a quoted receipt; a signed opening marker may still bind it.
+    const bindingContext =
+      sessionOnlyMetadata && context.trustedContext
+        ? {
+            ...context,
+            trustedContext: {
+              ...context.trustedContext,
+              request: {
+                ...context.trustedContext.request,
+                childTrajectoryReceipts: [],
+              },
+            },
+          }
+        : context;
     const child = bindMintedChildTrajectory({
-      context,
+      context: bindingContext,
       parentNativeId,
-      childNativeId: childAgentId(context),
+      childNativeId,
     });
+    const trusted = context.trustedContext;
+    if (
+      sessionOnlyMetadata &&
+      !child &&
+      trusted &&
+      parentNativeId &&
+      trusted.request.childTrajectoryReceipts?.some((receipt) =>
+        verifyChildTrajectoryReceipt({
+          receipt,
+          organizationId: trusted.session.organization_id,
+          callerId: trusted.session.caller_id,
+          spawnerNativeId: parentNativeId,
+          ...(receipt.nativeConversationId !== undefined
+            ? { nativeConversationId: this.nativeConversationId(context) }
+            : {}),
+        }),
+      )
+    ) {
+      const error = new ApiError(
+        409,
+        "OpenAPPA cannot distinguish this compacted subagent from its parent session. No inference or tool action was started. Resume the correct native child session, or start a new conversation without this ambiguous history.",
+      );
+      error.shouldRetry = false;
+      throw error;
+    }
     return child?.lineage?.source === "native" &&
       isToolModelCall(context.requestBody)
       ? undefined
@@ -316,13 +377,13 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
   stripCarrierMetadata(request: unknown): void {
     const metadata = asRecord(asRecord(request)?.metadata);
     if (!metadata) return;
-    stripRecordFields(metadata, ["agent_id"]);
+    stripRecordFields(metadata, ["agent_id", "parent_session_id"]);
     const userId = stringField(metadata.user_id);
     if (!userId?.trimStart().startsWith("{")) return;
     try {
       const parsed = asRecord(JSON.parse(userId));
       if (!parsed) return;
-      stripRecordFields(parsed, ["agent_id"]);
+      stripRecordFields(parsed, ["agent_id", "parent_session_id"]);
       metadata.user_id = JSON.stringify(parsed);
     } catch {
       return;
@@ -331,30 +392,69 @@ export class AppaClaudeCodeAdapter implements AppaClientAdapter {
 }
 
 function parentSessionId(context: AppaMatchContext): string | undefined {
+  const metadata = claudeUserMetadata(context);
+  const description = "Claude Code parent session id";
+  // A present invalid parent is a broken claim, not permission to fall back.
+  if (metadata && "parent_session_id" in metadata) {
+    return nativeId(metadata.parent_session_id, description);
+  }
   const header = readHeader(context.headers, "x-claude-code-session-id");
-  if (header) return header;
-  const userId = stringField(
-    asRecord(asRecord(context.requestBody)?.metadata)?.user_id,
+  if (header !== undefined) return nativeId(header, description);
+  if (metadata && "session_id" in metadata) {
+    return nativeId(metadata.session_id, description);
+  }
+  const userId = asRecord(asRecord(context.requestBody)?.metadata)?.user_id;
+  return nativeId(
+    typeof userId === "string"
+      ? (parseClaudeMetadataSessionId(userId) ?? userId)
+      : userId,
+    description,
   );
-  return userId ? (parseClaudeMetadataSessionId(userId) ?? userId) : undefined;
 }
 
 function childAgentId(context: AppaMatchContext): string | undefined {
+  if (context.trustedContext?.claudeTeammateNativeId)
+    return context.trustedContext.claudeTeammateNativeId;
+  const description = "Claude Code child agent id";
+  // A present invalid child id is a broken claim, not permission to fall back.
   const header = readHeader(context.headers, "x-claude-code-agent-id");
-  if (header) return header;
+  if (header !== undefined) return nativeId(header, description);
   const metadata = asRecord(asRecord(context.requestBody)?.metadata);
   const fromMetadata = stringField(metadata?.agent_id);
-  if (fromMetadata) return fromMetadata;
+  if (fromMetadata) return nativeId(fromMetadata, description);
   const userId = stringField(metadata?.user_id);
   if (userId?.trimStart().startsWith("{")) {
+    let user: Record<string, unknown> | undefined;
     try {
-      const fromUser = stringField(asRecord(JSON.parse(userId))?.agent_id);
-      if (fromUser) return fromUser;
+      user = asRecord(JSON.parse(userId));
     } catch {
       // Ignore JSON parse errors
     }
+    if (user) {
+      const fromUser = stringField(user.agent_id);
+      if (fromUser) return nativeId(fromUser, description);
+      const parent = stringField(user.parent_session_id);
+      const session = stringField(user.session_id);
+      if (parent && session && parent !== session) {
+        return nativeId(session, description);
+      }
+    }
   }
   return undefined;
+}
+
+function claudeUserMetadata(
+  context: AppaMatchContext,
+): Record<string, unknown> | undefined {
+  const raw = stringField(
+    asRecord(asRecord(context.requestBody)?.metadata)?.user_id,
+  );
+  if (!raw?.trimStart().startsWith("{")) return undefined;
+  try {
+    return asRecord(JSON.parse(raw));
+  } catch {
+    return undefined;
+  }
 }
 
 function childLaunchIdentifier(

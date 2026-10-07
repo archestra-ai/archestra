@@ -54,11 +54,12 @@ test("connection loads skills without treating the proxy as a skill agent", asyn
     expect((await catalog.json()).data).toEqual(
       expect.arrayContaining([expect.objectContaining({ id: skill.id })]),
     );
-    await page.getByRole("button", { name: "Customize setup" }).click();
+    await page.getByRole("button", { name: "Choose what to include" }).click();
+    await expect(page.getByRole("switch", { name: /^Skills/ })).toBeChecked();
+    await page.keyboard.press("Escape");
     await expect(
-      page.getByRole("checkbox", { name: "Install shared skills" }),
-    ).toBeChecked();
-    await expect(page.getByText("Setup command ready")).toBeVisible();
+      page.getByRole("link", { name: "Download installer" }),
+    ).toBeVisible();
     await expect(
       page.getByText("This agent type does not expose skills"),
     ).toHaveCount(0);

@@ -1,4 +1,8 @@
-import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  MEMBER_ROLE_NAME,
+  type ResourcePermissionGrant,
+} from "@archestra/shared";
 import { A2aOutboundRunModel } from "@/models";
 import AgentToolModel from "@/models/agent-tool";
 import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
@@ -10,7 +14,7 @@ import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
 describe("outbound A2A visibility reads", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
 
-  test("list, filters, and direct reads enforce owner/team/org/user visibility", async ({
+  test("list, filters, and direct reads follow each agent's permission grants", async ({
     makeMember,
     makeOrganization,
     makeTeam,
@@ -30,23 +34,18 @@ describe("outbound A2A visibility reads", () => {
     });
     await makeTeamMember(team.id, viewer.id);
 
-    const personal = await createRemote(ctx, {
-      name: "Owner only",
-      scope: "personal",
-    });
+    const personal = await createRemote(ctx, { name: "Owner only" });
     const sharedUser = await createRemote(ctx, {
       name: "Shared directly",
-      scope: "personal",
-      users: [viewer.id],
+      initialGrants: [grant("user", viewer.id)],
     });
     const sharedTeam = await createRemote(ctx, {
       name: "Shared with team",
-      scope: "team",
-      teams: [team.id],
+      initialGrants: [grant("team", team.id)],
     });
     const organization = await createRemote(ctx, {
       name: "Shared with organization",
-      scope: "org",
+      initialGrants: [grant("organization", "*")],
     });
     const credentialBackedResponse = await ctx.app.inject({
       method: "POST",
@@ -59,7 +58,7 @@ describe("outbound A2A visibility reads", () => {
           headerName: "X-API-Key",
           credential: "list-secret",
         },
-        scope: "org",
+        initialGrants: [grant("organization", "*")],
       },
     });
     expect(credentialBackedResponse.statusCode).toBe(200);
@@ -130,8 +129,9 @@ describe("outbound A2A visibility reads", () => {
       id: sharedUser.id,
       authorId: owner.id,
       authorName: owner.name,
-      users: [{ id: viewer.id, name: viewer.name, email: viewer.email }],
     });
+    expect(visibleDetail.json()).not.toHaveProperty("users");
+    expect(visibleDetail.json()).not.toHaveProperty("scope");
 
     const hiddenDetail = await ctx.app.inject({
       method: "GET",
@@ -147,7 +147,7 @@ describe("outbound A2A visibility reads", () => {
     expect(ownerDetail.statusCode).toBe(200);
   });
 
-  test("an agent-settings manager can inspect all scopes", async ({
+  test("an administrator reaches every external agent through the organization-wide grant", async ({
     makeMember,
     makeUser,
   }) => {
@@ -155,10 +155,7 @@ describe("outbound A2A visibility reads", () => {
     await makeMember(owner.id, ctx.organizationId, {
       role: MEMBER_ROLE_NAME,
     });
-    const hidden = await createRemote(ctx, {
-      name: "Managed personal target",
-      scope: "personal",
-    });
+    const hidden = await createRemote(ctx, { name: "Managed personal target" });
 
     const manager = await makeUser({ name: "A2A Manager" });
     await makeMember(manager.id, ctx.organizationId, { role: ADMIN_ROLE_NAME });
@@ -173,24 +170,6 @@ describe("outbound A2A visibility reads", () => {
       hidden.id,
     );
 
-    const accessibleList = await ctx.app.inject({
-      method: "GET",
-      url: "/api/a2a/remote-agents?accessibleOnly=true",
-    });
-    expect(accessibleList.statusCode).toBe(200);
-    expect(
-      accessibleList.json().map((item: { id: string }) => item.id),
-    ).not.toContain(hidden.id);
-
-    const managementList = await ctx.app.inject({
-      method: "GET",
-      url: "/api/a2a/remote-agents?accessibleOnly=false",
-    });
-    expect(managementList.statusCode).toBe(200);
-    expect(
-      managementList.json().map((item: { id: string }) => item.id),
-    ).toContain(hidden.id);
-
     const detail = await ctx.app.inject({
       method: "GET",
       url: `/api/a2a/remote-agents/${hidden.id}`,
@@ -200,15 +179,13 @@ describe("outbound A2A visibility reads", () => {
 
   test("list and detail return the exact number of local agent assignments", async ({
     makeAgent,
+    makeMember,
   }) => {
-    const assigned = await createRemote(ctx, {
-      name: "Assigned target",
-      scope: "org",
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
     });
-    const unassigned = await createRemote(ctx, {
-      name: "Unassigned target",
-      scope: "org",
-    });
+    const assigned = await createRemote(ctx, { name: "Assigned target" });
+    const unassigned = await createRemote(ctx, { name: "Unassigned target" });
     const firstAgent = await makeAgent({
       organizationId: ctx.organizationId,
       agentType: "agent",
@@ -277,12 +254,7 @@ describe("outbound A2A visibility reads", () => {
 
 async function createRemote(
   ctx: ReturnType<typeof useRouteTestApp>,
-  visibility: {
-    name: string;
-    scope: "personal" | "team" | "org";
-    teams?: string[];
-    users?: string[];
-  },
+  visibility: { name: string; initialGrants?: ResourcePermissionGrant[] },
 ) {
   const response = await ctx.app.inject({
     method: "POST",
@@ -295,4 +267,14 @@ async function createRemote(
   });
   expect(response.statusCode).toBe(200);
   return response.json();
+}
+
+function grant(
+  type: "user" | "team" | "organization",
+  id: string,
+): ResourcePermissionGrant {
+  return {
+    subject: { type, id } as ResourcePermissionGrant["subject"],
+    actions: ["read", "use"],
+  };
 }

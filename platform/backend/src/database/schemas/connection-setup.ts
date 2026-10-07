@@ -91,6 +91,16 @@ const connectionSetupsTable = pgTable(
     tokenStart: varchar("token_start", { length: 22 }).notNull(),
     expiresAt: timestamp("expires_at", { mode: "date" }).notNull(),
     consumedAt: timestamp("consumed_at", { mode: "date" }),
+    /** Set when the user (or an admin) disconnects this setup's client. */
+    revokedAt: timestamp("revoked_at", { mode: "date" }),
+    /** Hostname the installer reported, so the user can tell machines apart. */
+    deviceName: text("device_name"),
+    revokedByUserId: text("revoked_by_user_id").references(
+      () => usersTable.id,
+      {
+        onDelete: "set null",
+      },
+    ),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => [

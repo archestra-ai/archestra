@@ -59,7 +59,7 @@ test("a locally managed change validates and saves a new revision", async ({
   const result = await publishOpenAppaPolicyChange({
     organizationId: org.id,
     userId: user.id,
-    content: changed,
+    edits: [{ oldText: initialPolicy(), newText: changed }],
     expectedRevision: 0,
     title: "Clarify policy",
     summary: "Explain the change",
@@ -235,7 +235,9 @@ for (const scenario of [
     const params = {
       organizationId: org.id,
       userId: user.id,
-      content: testsOnly ? initialPolicy() : changed,
+      ...(scenario === "combined"
+        ? { edits: [{ oldText: initialPolicy(), newText: changed }] }
+        : { content: testsOnly ? initialPolicy() : changed }),
       includePolicy: !testsOnly,
       expectedRevision: 1,
       title: "Add policy regression validation",

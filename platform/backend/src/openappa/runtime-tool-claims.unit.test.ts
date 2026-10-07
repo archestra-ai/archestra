@@ -153,4 +153,33 @@ describe("runtime tool origin proofs", () => {
     });
     expect(body.input[2].arguments).toBe("non-JSON custom tool input");
   });
+  it("removes a host proof inside stringified dispatch arguments without changing unrelated bytes", () => {
+    const unchanged = '{ "message" : "unchanged", "tool_args": "not JSON" }';
+    const body = {
+      input: [
+        {
+          arguments: JSON.stringify({
+            tool_name: "archestra__steer_run",
+            tool_args: JSON.stringify({
+              message: "original",
+              runtime_proof: "proof",
+            }),
+          }),
+        },
+        { arguments: unchanged },
+      ],
+    };
+    stripRuntimeToolProofs(body);
+    const args = JSON.parse(body.input[0].arguments);
+    expect(JSON.parse(args.tool_args)).toEqual({ message: "original" });
+    expect(body.input[1].arguments).toBe(unchanged);
+    expect(body.input[0].arguments).not.toContain("runtime_proof");
+  });
+  it("fails closed instead of leaving a deeply nested serialized proof", () => {
+    let args: Record<string, unknown> = { runtime_proof: "proof" };
+    for (let index = 0; index < 65; index++) args = { tool_args: args };
+    expect(() =>
+      stripRuntimeToolProofs({ arguments: JSON.stringify(args) }),
+    ).toThrow("too deep");
+  });
 });

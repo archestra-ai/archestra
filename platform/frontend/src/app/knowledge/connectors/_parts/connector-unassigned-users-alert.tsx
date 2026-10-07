@@ -63,7 +63,10 @@ export function ConnectorUnassignedUsersAlert({
             </>
           )}
           <a
-            href={getDocsUrl(DocsPage.PlatformKnowledge)}
+            href={getDocsUrl(
+              DocsPage.PlatformKnowledgeConnectors,
+              "credentials-and-email-resolution",
+            )}
             target="_blank"
             rel="noreferrer"
             className="font-medium underline underline-offset-4"

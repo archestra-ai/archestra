@@ -306,6 +306,32 @@ describe("PageLayout header", () => {
     expect(heading.querySelector("[aria-label='agent icon']")).not.toBeNull();
   });
 
+  it("starts the description at the name, not under the record's icon", () => {
+    // An icon composed into `title` sits on the heading's row only, so the
+    // description below it starts under the icon instead of under the name.
+    render(
+      <PageLayout
+        icon={<svg role="img" aria-label="server icon" />}
+        title="filesystem"
+        description="Read and write local files."
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    const description = screen.getByText("Read and write local files.");
+    const icon = document.querySelector("[data-page-icon]");
+    // The mark is decoration beside the heading, not part of its name.
+    expect(heading).toHaveAccessibleName("filesystem");
+    expect(heading.querySelector("svg")).toBeNull();
+    // Heading and description share one column; the icon is outside it.
+    const textColumn = heading.parentElement?.parentElement;
+    expect(textColumn).toContainElement(description);
+    expect(textColumn).not.toContainElement(icon as HTMLElement);
+    expect(icon).toHaveAttribute("aria-hidden");
+  });
+
   it("puts the status pill beside the heading, never inside its name", () => {
     render(
       <PageLayout
@@ -420,10 +446,15 @@ describe("PageLayout header", () => {
     expect(slot?.children).toHaveLength(0);
   });
 
-  it("keeps wizard and detail header copy within one shared height contract", () => {
+  it.each([
+    "wide",
+    "wizard",
+  ] as const)("gives a %s header the shared title and description rhythm", (maxWidth) => {
+    // jsdom has no layout, so the shared spacing tokens are the contract:
+    // every width must use them, and only `wizard` clamps its copy.
     render(
       <PageLayout
-        maxWidth="wizard"
+        maxWidth={maxWidth}
         title="Add a new skill"
         description="Choose where the skill comes from before configuring it."
       >
@@ -431,13 +462,16 @@ describe("PageLayout header", () => {
       </PageLayout>,
     );
 
-    expect(
-      screen.getByRole("heading", { level: 1 }).parentElement?.parentElement,
-    ).toHaveClass("min-h-10", "sm:h-[3.75rem]");
-    expect(document.querySelector("[data-page-description]")).toHaveClass(
-      "hidden",
-      "sm:line-clamp-1",
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).toHaveClass(
+      "min-h-10",
     );
+    const description = document.querySelector("[data-page-description]");
+    expect(description).toHaveClass("sm:mt-1");
+    if (maxWidth === "wizard") {
+      expect(description).toHaveClass("hidden", "sm:line-clamp-1");
+    } else {
+      expect(description).not.toHaveClass("hidden");
+    }
   });
 });
 

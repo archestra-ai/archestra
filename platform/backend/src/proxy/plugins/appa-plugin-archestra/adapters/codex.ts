@@ -19,6 +19,7 @@ import {
   bindMintedChildTrajectory,
   localToolName,
   namesChildrenFromArguments,
+  nativeId,
   parseJsonHeader,
   stringField,
   stripRecordFields,
@@ -173,6 +174,9 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       typeof result.content === "string"
         ? parseJsonObject(result.content)
         : asRecord(result.content);
+    // V1 wait returns completed leaves; V2 wait only reports mailbox activity
+    // or new input. Its timed_out:false does not establish child completion.
+    // V2 child output crosses separately through agent_message admission.
     const status = asRecord(output?.status);
     return Object.values(status ?? {}).some(
       (entry) => typeof asRecord(entry)?.completed === "string",
@@ -201,6 +205,26 @@ export class AppaCodexAdapter implements AppaClientAdapter {
       throw withheldChildLaunch();
     }
     return JSON.stringify({ task_name: taskName });
+  }
+
+  unsupportedSpawnFields(params: {
+    requestBody: unknown;
+    name: string;
+    namespace?: string;
+    arguments: unknown;
+  }): string[] | undefined {
+    if (!this.isSpawnTool(params.name, params.namespace)) return undefined;
+    const args = argumentRecord(params.arguments);
+    const properties = closedSpawnProperties(
+      params.requestBody,
+      params.name,
+      params.namespace,
+    );
+    if (!args || !properties) return undefined;
+    const extra = Object.keys(args)
+      .filter((key) => !properties.has(key))
+      .sort();
+    return extra.length > 0 ? extra : undefined;
   }
 
   spawnPromptField(
@@ -378,6 +402,83 @@ function parseJsonObject(value: string): Record<string, unknown> | undefined {
   }
 }
 
+function argumentRecord(value: unknown): Record<string, unknown> | undefined {
+  if (typeof value === "string") {
+    try {
+      return asRecord(JSON.parse(value));
+    } catch {
+      return undefined;
+    }
+  }
+  return asRecord(value);
+}
+
+function closedSpawnProperties(
+  body: unknown,
+  name: string,
+  namespace: string | undefined,
+): ReadonlySet<string> | undefined {
+  const wanted = localToolName(name);
+  const matches: Array<ReadonlySet<string>> = [];
+  for (const tool of declaredContainers(body)) {
+    const group = asRecord(tool);
+    const members =
+      group?.type === "namespace" && Array.isArray(group.tools)
+        ? group.tools
+        : [tool];
+    const declaredNamespace =
+      group?.type === "namespace" && typeof group.name === "string"
+        ? group.name
+        : undefined;
+    if (namespace !== declaredNamespace) continue;
+    for (const member of members) {
+      const record = asRecord(member);
+      if (!record || localToolName(String(record.name ?? "")) !== wanted) {
+        continue;
+      }
+      const properties = closedProperties(record);
+      if (properties) matches.push(properties);
+    }
+  }
+  if (matches.length !== 1) return undefined;
+  return matches[0];
+}
+
+function declaredContainers(body: unknown): unknown[] {
+  const record = asRecord(body);
+  if (!record) return [];
+  const tools: unknown[] = [];
+  for (const key of ["tools", "additional_tools"] as const) {
+    if (Array.isArray(record[key])) tools.push(...record[key]);
+  }
+  if (!Array.isArray(record.input)) return tools;
+  for (const item of record.input) {
+    const entry = asRecord(item);
+    if (
+      entry &&
+      (entry.type === "additional_tools" ||
+        entry.type === "tool_search_output") &&
+      Array.isArray(entry.tools)
+    ) {
+      tools.push(...entry.tools);
+    }
+  }
+  return tools;
+}
+
+function closedProperties(
+  member: Record<string, unknown>,
+): ReadonlySet<string> | undefined {
+  const schema =
+    asRecord(member.parameters) ??
+    asRecord(member.input_schema) ??
+    asRecord(asRecord(member.function)?.parameters);
+  if (!schema || schema.additionalProperties !== false) return undefined;
+  const properties = asRecord(schema.properties);
+  if (!properties) return undefined;
+  return new Set(Object.keys(properties));
+}
+
 function parseTurnMetadataJson(value: string): Record<string, unknown> {
   try {
     const parsed: unknown = JSON.parse(value);
@@ -422,10 +523,14 @@ function childThreadId(
   parentNativeId: string | undefined,
 ): string | undefined {
   const turn = parseJsonHeader(context.headers, "x-codex-turn-metadata");
+  // A thread or session id names the requester's own trajectory: without a
+  // parent thread placing it under a spawn it is the root's id, never a child
+  // identity. Only an explicit agent claim stands alone.
   const child =
     stringField(turn?.agent_id) ??
-    stringField(turn?.thread_id) ??
-    stringField(turn?.session_id);
+    (parentNativeId
+      ? (stringField(turn?.thread_id) ?? stringField(turn?.session_id))
+      : undefined);
   if (child && child !== parentNativeId) return child;
   const body = asRecord(context.requestBody);
   const metadata = asRecord(body?.client_metadata) ?? asRecord(body?.metadata);
@@ -433,9 +538,12 @@ function childThreadId(
   const fromMetadata =
     stringField(metadata?.agent_id) ??
     stringField(metadata?.child_thread_id) ??
-    stringField(metadata?.thread_id) ??
-    nested?.threadId;
+    (parentNativeId
+      ? (stringField(metadata?.thread_id) ?? nested?.threadId)
+      : undefined);
+  // The body metadata fallback is a compat path a client fully controls, so a
+  // present malformed claim is rejected rather than bound as a child id.
   return fromMetadata && fromMetadata !== parentNativeId
-    ? fromMetadata
+    ? nativeId(fromMetadata, "Codex child thread id")
     : undefined;
 }

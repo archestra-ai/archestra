@@ -23,8 +23,9 @@ import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import type { PolicyTestFile } from "@/types/openappa-policy-tests";
 
 /**
- * A document and the revision it would replace, resolved together: resolving
- * one says nothing about the other, and every write compares the two.
+ * A document and the revision it would replace, resolved together with the
+ * stored credential bindings applied: resolving one says nothing about the
+ * other, and every write compares the two as the host would compose them.
  */
 async function resolveBoth(params: {
   organizationId: string;
@@ -33,10 +34,16 @@ async function resolveBoth(params: {
 }): Promise<{ submitted: PolicyResolution; previous: PolicyResolution }> {
   const { organizationId } = params;
   const [submitted, previous] = await Promise.all([
-    openappaDeclarations.resolve({ organizationId, content: params.content }),
-    openappaDeclarations.resolve({ organizationId, content: params.previous }),
+    openappaDeclarations.resolveWithBindings({
+      organizationId,
+      content: params.content,
+    }),
+    openappaDeclarations.resolveWithBindings({
+      organizationId,
+      content: params.previous,
+    }),
   ]);
-  return { submitted, previous };
+  return { submitted: submitted.resolution, previous: previous.resolution };
 }
 
 /**
@@ -257,6 +264,15 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 
 [policy.deployment]
 context_control = true
+
+# A subagent's return that matches the bounded JSON schema its parent declared
+# at the spawn crosses at the parent's trust. Built into the runtime.
+[[policy.sanitizer]]
+name = "attest-schema"
+on = ["tool_output"]
+
+[policy.sanitizer.permits]
+trust = { from = "suspicious", to = "trusted" }
 
 [[policy.annotator]]
 name = "noop"

@@ -4,21 +4,22 @@ import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
 import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import {
   resolveGithubAppInstallationToken,
   resolveGithubPatToken,
 } from "@/skills/github-app-token";
 import { ApiError } from "@/types";
+import type { GuardrailsPolicyProposal } from "@/types/guardrails-policy-proposal";
 import {
   PolicyTestDirectorySchema,
   PolicyTestFilesSchema,
 } from "@/types/openappa-policy-tests";
 
-type ChangeRequest = {
+type ChangeRequest = GuardrailsPolicyProposal & {
   organizationId: string;
   userId: string;
-  content: string;
   expectedRevision: number;
   title: string;
   summary: string;
@@ -49,10 +50,11 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       409,
       "The policy changed. Read it again before proposing changes.",
     );
+  const content = resolveProposedPolicy({ current: before, proposal: params });
   // Revision 0 is an unsaved starter, even when its text needs no edits.
   if (
     !params.validationChanges &&
-    before.content === params.content &&
+    before.content === content &&
     (before.revision > 0 || source?.interval)
   )
     throw new ApiError(400, "The proposed policy has no changes");
@@ -63,7 +65,12 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
         409,
         "Save local policy and validation changes together through the validation workflow",
       );
-    const saved = await guardrailsPolicyService.update(params);
+    const saved = await guardrailsPolicyService.update({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      content,
+      expectedRevision: params.expectedRevision,
+    });
     return {
       delivery: "revision" as const,
       revision: saved.revision,
@@ -72,7 +79,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     };
   }
 
-  if (!includePolicy && params.content !== before.content)
+  if (!includePolicy && content !== before.content)
     throw new ApiError(
       400,
       "A validations-only change must keep the current policy",
@@ -97,7 +104,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
   )
     throw new ApiError(403, "GitHub credential read permission is required");
 
-  const validation = await guardrailsPolicyService.validate(params.content, {
+  const validation = await guardrailsPolicyService.validate(content, {
     organizationId: params.organizationId,
     previous: before.content,
   });
@@ -171,7 +178,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
                   path: source.path,
                   mode: "100644",
                   type: "blob",
-                  content: params.content,
+                  content,
                 },
               ]
             : []),
@@ -223,7 +230,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
       token,
       body: {
         message: params.title,
-        content: Buffer.from(params.content).toString("base64"),
+        content: Buffer.from(content).toString("base64"),
         sha: file.sha,
         branch: head,
       },
@@ -249,7 +256,7 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     path: source.path,
     warnings: validation.warnings,
     before: before.content,
-    after: params.content,
+    after: content,
   };
 }
 

@@ -468,6 +468,10 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * must continue that message rather than open a new one — unlike
    * {@link formatCompleteTextSSE}, which replaces the response wholesale.
    *
+   * OpenAI Responses also replaces its retained output and terminal snapshot.
+   * Passing no calls clears held executable output. At unexpected EOF the
+   * caller must discard the returned frames, which can synthesize a terminal.
+   *
    * Optional: an adapter that does not implement it keeps the pre-existing
    * behavior for its provider (the calls are refused with the
    * "cannot be called directly" steer), so coverage can grow one wire format at

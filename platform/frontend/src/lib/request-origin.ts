@@ -61,3 +61,33 @@ function applyConfiguredScheme(origin: string): string {
   })}:`;
   return parsed.origin;
 }
+
+/**
+ * Where the client's config points. Setup writes URLs under the connection base
+ * URL the user picked (`base`, e.g. https://host/v1), which can be another host
+ * than this page; without it, assume this origin.
+ */
+export interface DeploymentTarget {
+  /** The connection page origin, for links. */
+  origin: string;
+  /** Connection base URL, e.g. https://host/v1. */
+  base: string;
+  /** Origin of the base URL: proxy, gateway and skills all live on it. */
+  host: string;
+}
+
+export function deploymentTarget(
+  origin: string,
+  base: string | null,
+): DeploymentTarget {
+  try {
+    const url = new URL(base ?? "");
+    if (url.protocol === "http:" || url.protocol === "https:") {
+      const path = url.pathname.replace(/\/+$/, "");
+      return { origin, base: `${url.origin}${path}`, host: url.origin };
+    }
+  } catch {
+    // fall through to this origin
+  }
+  return { origin, base: `${origin}/v1`, host: origin };
+}

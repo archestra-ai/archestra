@@ -40,6 +40,10 @@ export const TOOL_PERMISSIONS: Record<
   list_peer_messages: null,
   read_peer_message: null,
   get_openappa_yell: { resource: "openappaDiagnostics", action: "read" },
+  resolve_openappa_yell: {
+    resource: "openappaDiagnostics",
+    action: "update",
+  },
   list_openappa_consults: { resource: "openappaDiagnostics", action: "read" },
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
@@ -67,6 +71,10 @@ export const TOOL_PERMISSIONS: Record<
     resource: "organizationSettings",
     action: "update",
   },
+  connect_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
   list_runtime_credentials: { resource: "credential", action: "read" },
   get_runtime_credential: { resource: "credential", action: "read" },
   create_runtime_credential: { resource: "credential", action: "create" },
@@ -76,6 +84,7 @@ export const TOOL_PERMISSIONS: Record<
     resource: "credential",
     action: "create",
   },
+  request_battery_credentials: { resource: "credential", action: "create" },
 
   // Agents
   create_agent: { resource: "agent", action: "create" },

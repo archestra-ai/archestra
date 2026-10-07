@@ -24,6 +24,7 @@ import {
   anthropicMapping,
   type GuardrailsPolicy,
   type MakeApiRequest,
+  readOfferId,
   readPolicy,
   textAnswerEvents,
   toolUseEvents,
@@ -914,7 +915,7 @@ delta = {}
     }).catch(() => {});
   });
 
-  test("holds the send, routes the signed read to the receiver, and leaves the parent able to publish", async ({
+  test("holds the send, routes the read remedy to the receiver, and leaves the parent able to publish", async ({
     request,
     makeApiRequest,
   }) => {
@@ -1102,11 +1103,13 @@ delta = {}
     expect(firstRead).toContain("Accept this change");
     expect(firstRead).not.toContain(sentinel);
     const readRuling = JSON.parse(gatewayText(firstRead)) as {
-      offers: Array<{ payload: string }>;
+      message: string;
+      offers: Array<{ offer_id: string }>;
     };
-    const readOfferId = JSON.parse(readRuling.offers[0].payload).offer_id;
-    expect(readOfferId).toMatch(/^[0-9a-f]+$/);
-    // The model chooses the offered id. Only the proxy can stamp its proof.
+    const offeredId = readOfferId(readRuling.message);
+    expect(readRuling.offers).toContainEqual({ offer_id: offeredId });
+    expect(offeredId).toMatch(/^[0-9a-f]+$/);
+    // The model chooses the offered id, not its execution trajectory.
     mappingIds.push(
       await addWireMockMapping(
         request,
@@ -1121,9 +1124,17 @@ delta = {}
               callId: callId("acceptread"),
               toolName: "archestra__execute_remedy_plan",
               input: {
-                offer_id: readOfferId,
+                offer_id: offeredId,
                 label: {},
                 plan: "Accept this change for the rest of this session",
+                trajectory: {
+                  v: 1,
+                  session_id: "model-selected-wrong-root",
+                  parent_id: "model-selected-wrong-parent",
+                },
+                protected: "model-selected-protected",
+                payload: "model-selected-payload",
+                signature: "model-selected-signature",
               },
             },
           ]),
@@ -1153,10 +1164,48 @@ delta = {}
     expect(acceptRead.name, await acceptProposed.text()).toBe(
       "archestra__execute_remedy_plan",
     );
-    expect(typeof acceptRead.input.signature).toBe("string");
-    expect(JSON.parse(String(acceptRead.input.payload)).session_id).toContain(
-      `|${session}:${bob}`,
-    );
+    expect(acceptRead.input.offer_id).toBe(offeredId);
+    const trajectory = acceptRead.input.trajectory as {
+      v: number;
+      session_id: string;
+      parent_id: string;
+    };
+    expect(trajectory).toEqual({
+      v: 1,
+      session_id: expect.stringContaining(`|${session}:${bob}`),
+      parent_id: expect.stringContaining(`|${session}`),
+    });
+    expect(trajectory.session_id).toBe(`${trajectory.parent_id}:${bob}`);
+    for (const field of ["protected", "payload", "signature"]) {
+      expect(acceptRead.input).not.toHaveProperty(field);
+    }
+    const execution = acceptRead.input.execution as {
+      original_arguments: string;
+    };
+    expect(JSON.parse(execution.original_arguments)).toEqual({
+      offer_id: offeredId,
+      label: {},
+      plan: "Accept this change for the rest of this session",
+    });
+    // Neither the parent nor a different receiver may spend bob's offer.
+    // Refusals must leave it live for the real receiver below.
+    for (const wrongTrajectory of [
+      { v: 1, session_id: trajectory.parent_id },
+      {
+        v: 1,
+        session_id: `${trajectory.parent_id}:${alice}`,
+        parent_id: trajectory.parent_id,
+      },
+    ]) {
+      const refused = await callGatewayTool(request, makeApiRequest, {
+        name: "archestra__execute_remedy_plan",
+        args: { ...acceptRead.input, trajectory: wrongTrajectory },
+        inheritedSessionId: session,
+        allowDenial: true,
+      });
+      expect(JSON.parse(refused).result.isError).toBe(true);
+      expect(gatewayText(refused)).not.toContain("Authorized");
+    }
     await executeOffer(
       request,
       makeApiRequest,
@@ -1331,7 +1380,8 @@ async function callGatewayTool(
         accept: "application/json, text/event-stream",
         authorization: `Bearer ${token}`,
         // The teammate's MCP client inherits the root session header and does
-        // not send a logical tool-call id. The signed proof selects the child.
+        // not send a logical tool-call id. Peer tools use their signed proof;
+        // remedy tools use the proxy-written trajectory.
         "x-appa-session-id": params.inheritedSessionId,
       },
       data: {

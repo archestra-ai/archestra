@@ -1,6 +1,7 @@
 import { createHash } from "node:crypto";
 import {
   ARCHESTRA_MCP_CATALOG_ID,
+  type ResourceAccessRelation,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
 } from "@archestra/shared";
@@ -67,6 +68,8 @@ type CatalogListOptions = {
    * which filters by environment client-side).
    */
   environmentId?: string | null;
+  /** The list's "Show" filter, read against `userId`. */
+  access?: ResourceAccessRelation[];
 };
 
 /**
@@ -1822,6 +1825,19 @@ class InternalMcpCatalogModel {
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       listConditions.push(McpCatalogTeamModel.readCondition(principals.viewer));
+      if (userId && options?.access) {
+        const accessCondition =
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            organizationId: principals.viewer.organizationId,
+            resource: "mcpRegistry",
+            scopeColumn: schema.internalMcpCatalogTable.id,
+            ownerColumn: schema.internalMcpCatalogTable.authorId,
+            userId,
+            subjects: principals.viewer.subjects,
+            relations: options.access,
+          });
+        if (accessCondition) listConditions.push(accessCondition);
+      }
       // SPDX-SnippetEnd
     }
     if (environmentId !== undefined) {

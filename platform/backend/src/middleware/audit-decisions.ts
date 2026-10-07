@@ -25,6 +25,7 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
@@ -105,11 +106,13 @@ export const AUDIT_DECISIONS = {
   a2aRemoteAgentsTable: { audited: true, model: A2aRemoteAgentModel },
   a2aRemoteAgentTeamsTable: {
     audited: false,
-    reason: "Association changes are captured on the parent outbound A2A agent",
+    reason:
+      "Retired sharing rows, read once by the permission conversion and never written",
   },
   a2aRemoteAgentUsersTable: {
     audited: false,
-    reason: "Association changes are captured on the parent outbound A2A agent",
+    reason:
+      "Retired sharing rows, read once by the permission conversion and never written",
   },
   a2aConnectionsTable: {
     audited: false,
@@ -652,7 +655,7 @@ export const AUDIT_DECISIONS = {
   connectionSetupsTable: {
     audited: false,
     reason:
-      "ephemeral 15-minute render tickets for /connection setup scripts; durable artifacts (virtual key, skill share link) carry the audit signal",
+      "15-minute render tickets for /connection setup scripts, kept as the connected-client history; the approval (clientConnection.updated), disconnecting (connectedClient.disconnected) and the durable artifacts (virtual key, skill share link) carry the audit signal",
   },
   connectionSetupSkillsTable: {
     audited: false,
@@ -969,6 +972,10 @@ export const AUDIT_DECISIONS = {
   openappaBatteryPackagesTable: {
     audited: true,
     model: OpenAppaBatteryPackageModel,
+  },
+  openappaCredentialBindingsTable: {
+    audited: true,
+    model: OpenAppaCredentialBindingModel,
   },
   openappaEffectivePoliciesTable: {
     audited: false,

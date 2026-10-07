@@ -16,7 +16,6 @@ import { type ReactNode, useState } from "react";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { OpenAppaAlertIcon } from "@/components/openappa-icon";
 import { OpenAppaMascot } from "@/components/openappa-mascot";
-import { SettingsBlock } from "@/components/settings/settings-block";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import {
@@ -416,10 +415,10 @@ function YellsCard() {
 /**
  * What the proxy does with a request that Guardrails cannot follow: one from
  * a client with no built-in support that sends no OpenAPPA session headers.
- * The inside is a settings block, so it reads like the settings pages; the
- * card around it matches the other tiles on this page.
+ * It sits in the coverage column: the select goes under its label, as wide as
+ * its options need.
  */
-export function UnrecognizedClientsCard() {
+export function UnrecognizedClientsCard({ className }: { className?: string }) {
   const query = useGuardrailsDeployment();
   const update = useUpdateUnsupportedClientAction();
   const { data: canManage } = useHasPermissions({
@@ -428,71 +427,58 @@ export function UnrecognizedClientsCard() {
   const appName = useAppName();
   if (!query.data || query.isError) return null;
   return (
-    <Card className="py-5">
-      <CardContent className="px-5">
-        <SettingsBlock
-          title="Client coverage"
-          description={
-            <>
-              <span>
-                Guardrails work with natively supported clients like {appName}{" "}
-                chat, Claude Code, Codex, and{" "}
-              </span>
-              <GuardrailsDocsLink anchor="clients">more</GuardrailsDocsLink>
-              <span>, and with any client that correctly sends </span>
-              <GuardrailsDocsLink anchor="session-headers">
-                OpenAPPA session headers
-              </GuardrailsDocsLink>
-              <span>.</span>
-            </>
-          }
+    <Card className={cn("gap-4 py-5", className)}>
+      <CardHeader className="gap-1 px-5">
+        <CardTitle>Client coverage</CardTitle>
+        <CardDescription className="text-xs leading-relaxed">
+          <span>
+            Guardrails follow {appName} chat, Claude Code, Codex, and{" "}
+          </span>
+          <GuardrailsDocsLink>more</GuardrailsDocsLink>
+          <span>, plus any client that sends </span>
+          <GuardrailsDocsLink anchor="session-headers">
+            OpenAPPA session headers
+          </GuardrailsDocsLink>
+          <span>.</span>
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-2 px-5">
+        <Label
+          htmlFor="openappa-unrecognized-clients"
+          className="text-sm font-normal"
         >
-          <div className="grid gap-2 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center sm:gap-4">
-            <Label
-              htmlFor="openappa-unrecognized-clients"
-              className="text-sm text-muted-foreground"
+          Requests from clients without native support or recognized OpenAPPA
+          session headers should be:
+        </Label>
+        <Select
+          value={query.data.unsupportedClientAction}
+          disabled={
+            !canManage || !query.data.featureEnabled || update.isPending
+          }
+          onValueChange={(value) => {
+            if (value === "bypass" || value === "block") update.mutate(value);
+          }}
+        >
+          <SelectTrigger id="openappa-unrecognized-clients" className="w-48">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent align="start">
+            <SelectItem
+              value="bypass"
+              description="Requests run without checks."
             >
-              Requests from clients without native support or recognized
-              OpenAPPA session headers should be:
-            </Label>
-            <Select
-              value={query.data.unsupportedClientAction}
-              disabled={
-                !canManage || !query.data.featureEnabled || update.isPending
-              }
-              onValueChange={(value) => {
-                if (value === "bypass" || value === "block")
-                  update.mutate(value);
-              }}
-            >
-              <SelectTrigger
-                id="openappa-unrecognized-clients"
-                className="w-48"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent align="end">
-                <SelectItem
-                  value="bypass"
-                  description="Requests run without checks."
-                >
-                  Allowed
-                </SelectItem>
-                <SelectItem
-                  value="block"
-                  description="The proxy rejects requests."
-                >
-                  Blocked
-                </SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
-          {!canManage && (
-            <p className="mt-2 text-xs text-muted-foreground">
-              Only administrators can change this setting.
-            </p>
-          )}
-        </SettingsBlock>
+              Allowed
+            </SelectItem>
+            <SelectItem value="block" description="The proxy rejects requests.">
+              Blocked
+            </SelectItem>
+          </SelectContent>
+        </Select>
+        {!canManage && (
+          <p className="text-xs text-muted-foreground">
+            Only administrators can change this setting.
+          </p>
+        )}
       </CardContent>
     </Card>
   );
@@ -507,11 +493,11 @@ function GuardrailsDocsLink({
   anchor,
   children,
 }: {
-  anchor: string;
+  anchor?: string;
   children: string;
 }) {
   const href = getVisibleDocsUrl(
-    getDocsUrl(DocsPage.PlatformAiToolGuardrails, anchor),
+    getDocsUrl(DocsPage.PlatformAiToolGuardrailsClients, anchor),
   );
   if (!href) return <span>{children}</span>;
   return (

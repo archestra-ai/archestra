@@ -326,6 +326,7 @@ const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
     knowledgeConnector: "knowledgeSource",
     knowledgeFile: "knowledgeSource",
     mcpGateway: "mcpGateway",
+    externalAgent: "agent",
   };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -508,13 +509,14 @@ export const requiredEndpointPermissionsMap: Partial<
   // visibility-filtered unless the caller can update Agent settings. Run
   // history includes caller and conversation identifiers, so it requires
   // Agent-settings read and intentionally permits organization-wide access.
-  [RouteId.InspectA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.InspectA2aRemoteAgent]: { agent: ["create"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
-  [RouteId.ListA2aRemoteAgentRuns]: { organizationSettings: ["read"] },
-  [RouteId.CreateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.UpdateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.DeleteA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
+  [RouteId.CreateA2aRemoteAgent]: { agent: ["create"] },
+  // Each external agent's own permission policy decides who may change it.
+  [RouteId.UpdateA2aRemoteAgent]: { agent: ["read"] },
+  [RouteId.DeleteA2aRemoteAgent]: { agent: ["read"] },
 
   /**
    * Getting basic info about the organization requires the user to be
@@ -596,6 +598,15 @@ export const requiredEndpointPermissionsMap: Partial<
   // (X-Archestra-Virtual-Key attribution). llmVirtualKey:create + llmProxy read
   // access are enforced in the handler.
   [RouteId.CreateConnectionPassthroughKey]: {},
+  // A signed-in member lists and disconnects only their own connected clients.
+  [RouteId.GetConnectedClients]: {},
+  [RouteId.DisconnectConnectedClient]: {},
+  // Who connected which agent is per-employee activity, so the org-wide log
+  // of it takes org-wide log visibility (admin tier) plus reading members.
+  [RouteId.GetConnectedClientLog]: { log: ["admin"], member: ["read"] },
+  // The same per-employee activity, summarized per member.
+  [RouteId.GetAgentAdoption]: { log: ["admin"], member: ["read"] },
+  [RouteId.GetAgentAdoptionUsage]: { log: ["admin"], member: ["read"] },
   /**
    * Existence check for a connected remote, used by the Claude Code startup
    * guard on machines with no session. Returns only ok/missing.
@@ -624,7 +635,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
   [RouteId.TransferAppOwnership]: {},
   [RouteId.TransferMcpCatalogOwnership]: {},
-  [RouteId.TransferRemoteAgentOwnership]: { organizationSettings: ["update"] },
+  // The external agent's own permission policy decides who may transfer it.
+  [RouteId.TransferRemoteAgentOwnership]: { agent: ["read"] },
   [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.BulkDeleteAgents]: {},
@@ -1698,6 +1710,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOpenappaBatteryInclude]: { openappaPolicy: ["update"] },
   [RouteId.UploadOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
+  // Binding hands an organization credential's value to helper code.
+  [RouteId.SetOpenappaCredentialBinding]: {
+    openappaPolicy: ["update"],
+    credential: ["update"],
+  },
   [RouteId.GetOpenappaPolicyDeclarations]: { openappaPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
@@ -2033,6 +2050,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { openappaDiagnostics: ["read"] },
+  "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },

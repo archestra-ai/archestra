@@ -11,7 +11,7 @@ use serde::{Deserialize, Serialize};
 use std::{collections::HashSet, path::Path, sync::Arc, time::Duration};
 
 pub(crate) const ENGINE_VERSION: &str =
-    "a525cf4d72066ccc4b2814508d2394e6a1ee96b9:archestra-offline-v1";
+    "10aa0e09e32d8c6704bdb030dc3c66140bf81915:archestra-offline-v1";
 const MAX_FILES: usize = 32;
 const MAX_FILE_BYTES: usize = 256 * 1024;
 const MAX_INPUT_BYTES: usize = 2 * 1024 * 1024;

@@ -145,7 +145,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Migration `0483_openappa_batteries.sql` adds the composed batteries. Migration `0484_openappa_session_fork_receipts.sql` adds fork lineage. Offer routing is a host-signed claim. Session receipts are stored on `openappa_sessions` and verified by lookup.
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Migration `0483_openappa_batteries.sql` adds the composed batteries. Migration `0484_openappa_session_fork_receipts.sql` adds fork lineage. The trusted proxy supplies the current trajectory for remedy execution. Session receipt codes are random stored identifiers resolved by lookup.
 
 | Table | Owner / purpose |
 | --- | --- |
@@ -199,9 +199,9 @@ behavior, not exactly-once execution of arbitrary external services.
 
 ## Remedies and current limits
 
-`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing is a signed plaintext claim on the notice and control call. Any replica verifies the HMAC and reconstructs the session. The runtime event log validates the offer before execution.
+`archestra__execute_remedy_plan` executes remedies through the native gate. The proxy overwrites routing arguments with the adapter's current session and optional parent. The gateway supplies this expected actor to the runtime. The event log validates that the offer belongs to that run and remains executable.
 
-Personal offers require their original user. Organization offers allow any caller in that organization. Unknown, unauthorized, or spent offers return terminal feedback without executing.
+The proxy, client, and user are trusted. Model output and external tool text are not. There is no separate original-account comparison or signed offer envelope. Normal host authentication and permissions remain required. Unknown, wrong-run, and spent offers return terminal feedback without executing.
 
 The embedded API returns typed remedy outcomes, refusal reasons, and offer descriptions.
 

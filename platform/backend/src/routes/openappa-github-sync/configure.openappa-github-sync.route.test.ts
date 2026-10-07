@@ -12,6 +12,7 @@ import {
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { GithubAppConfigModel } from "@/models";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { secretManager } from "@/secrets-manager";
@@ -873,6 +874,45 @@ describe("APPA GitHub sync", () => {
         })
       ).statusCode,
     ).toBe(409);
+  });
+
+  test("a pull is measured against the stored bindings: including a reader of one is held, spelling its own key is not", async () => {
+    await configure();
+    await syncAppaGithubPolicy(organizationId);
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      credentialKey: "github-token",
+      updatedBy: adminId,
+    });
+    const included = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
+    upstream(included, "b".repeat(40));
+    await syncAppaGithubPolicy(organizationId);
+    // The text names no credential, but the battery it includes reads a bound one.
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: included,
+      heldReasons: ["changes_credentials"],
+    });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/openappa/github-sync/accept-held",
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const spelled = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
+    upstream(spelled, "c".repeat(40));
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: null,
+      heldReasons: [],
+      content: spelled,
+    });
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: spelled, revision: 3 });
   });
 
   test("a pull dropping a battery this deployment has not published yet is held", async () => {

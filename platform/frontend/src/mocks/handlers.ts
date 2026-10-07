@@ -232,6 +232,9 @@ export const handlers: HttpHandler[] = [
     activatedAt: null,
   }),
   ...getJson("/api/organization/mcp-preset-entries", []),
+  ...getJson("/api/connected-clients", []),
+  // The Connect page reads the gateway's tool list for its token estimate.
+  ...getJson("/api/chat/agents/:agentId/mcp-tools", []),
   ...getJson("/api/projects", []),
   ...getJson("/api/apps", {
     data: [],
@@ -561,7 +564,6 @@ export const handlers: HttpHandler[] = [
     "/api/connectors/:id/runs",
     paginated(connectorRunsSeed, { total: 178 }),
   ),
-  ...getJson("/api/connectors/:id/knowledge-bases", { data: [] }),
   ...getJson("/api/connectors/:id/permission-coverage", {
     connectorId: CONNECTOR_ID,
     totalDocuments: connectorSeed.totalDocsIngested,

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  DEFAULT_MODELS,
   E2eTestId,
   isModelRouterSupportedProvider,
   providerSupportsChat,
@@ -12,18 +13,29 @@ import {
   AlertTriangle,
   Check,
   Copy,
+  Eye,
+  EyeOff,
   Info,
+  Loader2,
   Plug,
   Waypoints,
 } from "lucide-react";
 import Link from "next/link";
 import { useId, useMemo, useState } from "react";
 import { PROVIDER_ORIGINAL_URLS } from "@/app/connection/proxy-client-instructions";
-import { terminalCodeClass } from "@/components/terminal-surface";
+import { SecretCopyButton } from "@/components/secret-copy-button";
+import {
+  terminalActionClass,
+  terminalCodeClass,
+} from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -31,11 +43,13 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   buildCurlExample,
   getProviderAuthHeader,
   getProxyBaseUrl,
   providerKeyEnvVar,
+  type RequestCredential,
   type RequestTarget,
 } from "@/components/virtual-key-request-example";
 import { copyToClipboard } from "@/lib/clipboard";
@@ -280,10 +294,8 @@ function EndpointPicker({
           key={option.value}
           htmlFor={`${id}-${option.value}`}
           className={cn(
-            "flex cursor-pointer flex-col items-start gap-1 rounded-md border p-3 font-normal transition-colors has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-            value === option.value
-              ? "border-primary bg-primary/10"
-              : "hover:bg-muted/50",
+            "flex cursor-pointer flex-col items-start gap-1 rounded-md p-3 font-normal",
+            radioCardClass({ checked: value === option.value }),
           )}
         >
           <RadioGroupItem
@@ -364,41 +376,63 @@ function EndpointDetails({
   );
 }
 
-function RequestExample({
+/**
+ * The request a client sends, with a model picked from what the credential can
+ * reach. `credentialEnvVar` names the variable the example reads the
+ * credential from when its value is not on hand.
+ */
+export function RequestExample({
   connectionBaseUrl,
   target,
   keyType,
   keyValue,
   routerProviders,
   mappedProviderKeys,
+  credentialEnvVar = "ARCHESTRA_LLM_VIRTUAL_KEY",
+  secret,
+  credentialField,
 }: {
   connectionBaseUrl: string;
   target: RequestTarget;
-  keyType: "standard" | "passthrough";
+  keyType: RequestCredential;
   keyValue?: string;
   routerProviders: SupportedProvider[];
   mappedProviderKeys: Array<{
     provider: SupportedProvider;
     providerApiKeyId: string;
   }>;
+  credentialEnvVar?: string;
+  /**
+   * A key value the reader may see but that stays masked until they ask:
+   * revealed in place, or copied with the real value or a placeholder.
+   */
+  secret?: RevealableSecret;
+  /**
+   * Shows the credential itself in place of the line telling the reader to
+   * set {@link credentialEnvVar}.
+   */
+  credentialField?: React.ReactNode;
 }) {
   const providerCatalog = useModelProviderCatalog();
   const isPassthrough = keyType === "passthrough";
+  // A credential with no provider keys of its own (passthrough, an identity
+  // provider's JWT) can reach the whole catalog.
+  const usesCatalog = keyType !== "standard" && mappedProviderKeys.length === 0;
   const { data: passthroughModels, isPending: passthroughModelsPending } =
-    useLlmModels({ enabled: isPassthrough });
+    useLlmModels({ enabled: usesCatalog });
   const { data: linkedModels, isPending: linkedModelsPending } =
-    useModelsWithApiKeys({ enabled: !isPassthrough });
-  const isPending = isPassthrough
+    useModelsWithApiKeys({ enabled: !usesCatalog });
+  const isPending = usesCatalog
     ? passthroughModelsPending
     : linkedModelsPending;
 
-  // The general catalog spans every key the creator can access. For standard
-  // keys, use the model-to-key links instead so this example only offers models
-  // served by the provider keys mapped to the newly created virtual key.
+  // The general catalog spans every key the creator can access. For mapped
+  // credentials, use the model-to-key links instead so this example only
+  // offers models served by the provider keys the credential maps to.
   const mappedKeyIds = new Set(
     mappedProviderKeys.map((mapping) => mapping.providerApiKeyId),
   );
-  const candidates = isPassthrough
+  const candidates = usesCatalog
     ? (passthroughModels ?? []).map((model) => ({
         id: model.id,
         provider: model.provider,
@@ -415,7 +449,9 @@ function RequestExample({
             model.embeddingDimensions === null &&
             (!model.inputModalities ||
               model.inputModalities.includes("text")) &&
-            (!model.outputModalities ||
+            // Decision models answer with probabilities, not text.
+            (model.provider === "jev" ||
+              !model.outputModalities ||
               model.outputModalities.includes("text")),
         )
         .map((model) => ({
@@ -447,6 +483,14 @@ function RequestExample({
           : model.id,
       supportedEndpoints: model.supportedEndpoints,
     }));
+  // A provider route still has a request to show before its models sync: the
+  // provider's default model stands in rather than leaving the step empty.
+  if (!isPending && modelOptions.length === 0 && target.kind === "provider") {
+    modelOptions.push({
+      value: DEFAULT_MODELS[target.provider],
+      supportedEndpoints: null,
+    });
+  }
 
   const [pickedModel, setPickedModel] = useState<string | null>(null);
   const model =
@@ -461,7 +505,7 @@ function RequestExample({
       connectionBaseUrl,
       target,
       keyType,
-      keyValue: keyValue ?? "$ARCHESTRA_LLM_VIRTUAL_KEY",
+      keyValue: secret ? MASKED_KEY : (keyValue ?? `$${credentialEnvVar}`),
       model,
       supportedEndpoints: selectedModel?.supportedEndpoints,
     });
@@ -488,29 +532,34 @@ function RequestExample({
 
   return (
     <div className="space-y-3">
-      <p className="text-sm text-muted-foreground">
-        {!keyValue ? (
-          <span>
-            Set <InlineCode>ARCHESTRA_LLM_VIRTUAL_KEY</InlineCode> to your saved
-            key before running this example.
-            {isPassthrough && target.kind === "provider" && (
-              <span>
-                {" "}
-                Your {providerLabel} key is read from{" "}
-                <InlineCode>{providerKeyEnvVar(target.provider)}</InlineCode>.
-              </span>
-            )}
-          </span>
-        ) : isPassthrough && target.kind === "provider" ? (
-          <span>
-            Your key, base URL and model are filled in. Your {providerLabel} key
-            is read from{" "}
-            <InlineCode>{providerKeyEnvVar(target.provider)}</InlineCode>.
-          </span>
-        ) : (
-          <span>Your key, base URL and model are filled in. Run it as is.</span>
-        )}
-      </p>
+      {credentialField ?? (
+        <p className="text-sm text-muted-foreground">
+          {!keyValue ? (
+            <span>
+              Set <InlineCode>{credentialEnvVar}</InlineCode>{" "}
+              {keyType === "token" ? "to your token" : "to your saved key"}{" "}
+              before running this example.
+              {isPassthrough && target.kind === "provider" && (
+                <span>
+                  {" "}
+                  Your {providerLabel} key is read from{" "}
+                  <InlineCode>{providerKeyEnvVar(target.provider)}</InlineCode>.
+                </span>
+              )}
+            </span>
+          ) : isPassthrough && target.kind === "provider" ? (
+            <span>
+              Your key, base URL and model are filled in. Your {providerLabel}{" "}
+              key is read from{" "}
+              <InlineCode>{providerKeyEnvVar(target.provider)}</InlineCode>.
+            </span>
+          ) : (
+            <span>
+              Your key, base URL and model are filled in. Run it as is.
+            </span>
+          )}
+        </p>
+      )}
       <div className="space-y-1.5">
         <Label htmlFor="virtual-key-example-model">Model</Label>
         <Select
@@ -536,14 +585,23 @@ function RequestExample({
             ))}
           </SelectContent>
         </Select>
-        {isPassthrough && (
+        {usesCatalog && (
           <p className="text-xs text-muted-foreground">
             From your organization&apos;s model catalog. Your own key may have
             access to different models.
           </p>
         )}
       </div>
-      <CodeExample language="cURL" code={example} />
+      {secret ? (
+        <MaskedCodeExample
+          language="cURL"
+          code={example}
+          placeholder={`$${credentialEnvVar}`}
+          secret={secret}
+        />
+      ) : (
+        <CodeExample language="cURL" code={example} />
+      )}
     </div>
   );
 }
@@ -586,8 +644,101 @@ function CopyField({
   );
 }
 
+/** Stands in for a key the reader has not asked to reveal. */
+export const MASKED_KEY = "arch_••••••••••••••••";
+
+/**
+ * A key the reader may see once they ask. The caller owns `revealed` so every
+ * place showing the same key reveals and hides together.
+ */
+export type RevealableSecret = {
+  resolve: () => Promise<string | null>;
+  revealed: string | null;
+  onRevealedChange: (value: string | null) => void;
+};
+
+/**
+ * A code example embedding a key shown masked, like the MCP gateway's token
+ * examples: the eye reveals it in place, and copying is an explicit choice
+ * between the real key and a placeholder.
+ */
+export function MaskedCodeExample({
+  language,
+  code,
+  placeholder,
+  secret,
+}: {
+  language: string;
+  code: string;
+  placeholder: string;
+  secret: RevealableSecret;
+}) {
+  const { resolve, revealed, onRevealedChange: setRevealed } = secret;
+  const [isRevealing, setIsRevealing] = useState(false);
+  const withKey = (value: string) => code.replaceAll(MASKED_KEY, value);
+
+  return (
+    <div className="overflow-hidden rounded-md border border-terminal-edge bg-terminal">
+      <div className="flex items-center justify-between border-b border-terminal-edge py-1 pr-1 pl-3">
+        <span className="text-xs text-terminal-muted">{language}</span>
+        <div className="flex items-center gap-1">
+          <UnstyledButton
+            type="button"
+            aria-label={revealed ? "Hide key" : "Show key"}
+            aria-pressed={revealed !== null}
+            className={cn(terminalActionClass, "size-7")}
+            disabled={isRevealing}
+            onClick={async () => {
+              if (revealed) {
+                setRevealed(null);
+                return;
+              }
+              setIsRevealing(true);
+              try {
+                setRevealed(await resolve());
+              } finally {
+                setIsRevealing(false);
+              }
+            }}
+          >
+            {isRevealing ? (
+              <Loader2 className="animate-spin" />
+            ) : revealed ? (
+              <EyeOff />
+            ) : (
+              <Eye />
+            )}
+          </UnstyledButton>
+          <SecretCopyButton
+            variant="terminal"
+            getSecretText={async () => {
+              const value = revealed ?? (await resolve());
+              return value ? withKey(value) : null;
+            }}
+            placeholderText={withKey(placeholder)}
+          />
+        </div>
+      </div>
+      <pre
+        className={cn(
+          terminalCodeClass,
+          "m-0 max-h-[360px] overflow-auto px-3.5 py-3 text-[12.5px]",
+        )}
+      >
+        <HighlightedCurl code={revealed ? withKey(revealed) : code} />
+      </pre>
+    </div>
+  );
+}
+
 /** A multi-line example with a header bar naming the language. */
-function CodeExample({ language, code }: { language: string; code: string }) {
+export function CodeExample({
+  language,
+  code,
+}: {
+  language: string;
+  code: string;
+}) {
   return (
     <div className="overflow-hidden rounded-md border border-terminal-edge bg-terminal">
       <div className="flex items-center justify-between border-b border-terminal-edge py-1 pr-1 pl-3">
@@ -616,21 +767,36 @@ function CopyButton({
   primary?: boolean;
 }) {
   const [copied, setCopied] = useState(false);
+  const onClick = async () => {
+    await copyToClipboard(value);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1600);
+  };
+  const icon = copied ? <Check /> : <Copy />;
+  // `primary` is the one deliberate call to action (copy the key you just
+  // created); every other copy on a code surface is the shared terminal action.
+  if (primary) {
+    return (
+      <Button
+        type="button"
+        size="icon-xs"
+        aria-label={copied ? "Copied" : label}
+        className="shrink-0"
+        onClick={onClick}
+      >
+        {icon}
+      </Button>
+    );
+  }
   return (
-    <Button
+    <UnstyledButton
       type="button"
-      size="icon-xs"
-      variant={primary ? "default" : "outline"}
       aria-label={copied ? "Copied" : label}
-      className="shrink-0"
-      onClick={async () => {
-        await copyToClipboard(value);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1600);
-      }}
+      className={cn(terminalActionClass, "size-7 shrink-0")}
+      onClick={onClick}
     >
-      {copied ? <Check /> : <Copy />}
-    </Button>
+      {icon}
+    </UnstyledButton>
   );
 }
 

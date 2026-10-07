@@ -1,5 +1,6 @@
 import { generateKeyPairSync } from "node:crypto";
 import { HttpResponse, http } from "msw";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import { openappaDeclarations } from "@/openappa/declarations";
@@ -97,4 +98,50 @@ test("a bound credential its provider refuses fails the dispatch as the organiza
   });
   expect(failure.statusCode).toBe(500);
   expect(failure.shouldRetry).toBe(false);
+});
+
+test("a policy line wins, a stored binding fills what an included battery reads, and nothing else is applied", async ({
+  makeOrganization,
+}) => {
+  const organizationId = (await makeOrganization()).id;
+  const GITHUB_TOKEN = "APPA_PROVIDER_GITHUB_TOKEN";
+  for (const [variable, credentialKey] of [
+    [GITHUB_TOKEN, "stored-github"],
+    // No included battery reads it, and the runtime refuses a variable no helper reads.
+    [JEV_KEY, "stored-jev"],
+  ])
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId,
+      variable,
+      credentialKey,
+      updatedBy: null,
+    });
+  const included = `include = ["batteries/github/appa.toml"]\n\n[policy]\nversion = 2\n`;
+
+  const filled = await openappaDeclarations.resolveWithBindings({
+    organizationId,
+    content: included,
+  });
+  expect(filled.resolution.credentials).toEqual({
+    [GITHUB_TOKEN]: "stored-github",
+  });
+  expect(filled.credentialSource).toEqual({ [GITHUB_TOKEN]: "binding" });
+  // The bound text says exactly what the bound resolution says.
+  expect(
+    (
+      await openappaDeclarations.resolve({
+        organizationId,
+        content: filled.content,
+      })
+    ).credentials,
+  ).toEqual(filled.resolution.credentials);
+
+  const declared = `${included}\n[credentials]\n${GITHUB_TOKEN} = "repo-github"\n`;
+  const won = await openappaDeclarations.resolveWithBindings({
+    organizationId,
+    content: declared,
+  });
+  expect(won.content).toBe(declared);
+  expect(won.resolution.credentials).toEqual({ [GITHUB_TOKEN]: "repo-github" });
+  expect(won.credentialSource).toEqual({ [GITHUB_TOKEN]: "policy" });
 });

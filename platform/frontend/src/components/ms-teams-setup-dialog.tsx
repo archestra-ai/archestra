@@ -29,7 +29,7 @@ export function MsTeamsSetupDialog({
   open,
   onOpenChange,
 }: MsTeamsSetupDialogProps) {
-  const docsUrl = getFrontendDocsUrl("platform-ms-teams");
+  const docsUrl = getFrontendDocsUrl("agents/triggers-and-channels/ms-teams");
   const configuredAppName = useAppName();
   const mutation = useUpdateChatOpsConfigInQuickstart();
   const { data: chatOpsProviders } = useChatOpsStatus();

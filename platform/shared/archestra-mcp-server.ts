@@ -132,6 +132,13 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
   "unassign_knowledge_connector_from_agent";
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_ASK_USER_SHORT_NAME = "ask_user";
+/**
+ * The property `ask_user` adds to its requested schema for a typed answer.
+ * Chat renders only this property as an "Other" alternative to the options.
+ */
+export const ASK_USER_OTHER_ANSWER_FIELD = "archestra_other_answer";
+export const TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME =
+  "request_battery_credentials";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
@@ -257,6 +264,7 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "preview_openappa_validation_change",
   "publish_openappa_validation_change",
   "get_openappa_yell",
+  "resolve_openappa_yell",
   "list_openappa_consults",
   "list_guardrails_battery_fits",
   "inspect_guardrails_server",
@@ -270,7 +278,9 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "update_runtime_credential",
   "delete_runtime_credential",
   "request_runtime_credential_setup",
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   "create_guardrails_repository",
+  "connect_guardrails_repository",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
@@ -481,6 +491,7 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   preview_openappa_validation_change: "openappa",
   publish_openappa_validation_change: "openappa",
   get_openappa_yell: "openappa",
+  resolve_openappa_yell: "openappa",
   list_openappa_consults: "openappa",
   list_guardrails_battery_fits: "openappa",
   inspect_guardrails_server: "openappa",
@@ -489,12 +500,14 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   update_guardrails_policy: "openappa",
   get_guardrails_policy_change_status: "openappa",
   create_guardrails_repository: "openappa",
+  connect_guardrails_repository: "openappa",
   list_runtime_credentials: "openappa",
   get_runtime_credential: "openappa",
   create_runtime_credential: "openappa",
   update_runtime_credential: "openappa",
   delete_runtime_credential: "openappa",
   request_runtime_credential_setup: "openappa",
+  request_battery_credentials: "openappa",
 
   create_agent: "agents",
   get_agent: "agents",
@@ -1188,7 +1201,7 @@ export function buildElicitationMandateInstruction(params?: {
 
 /**
  * Maps tools to arguments stamped by the OpenAPPA proxy before dispatching to the client.
- * Includes signed remedy offers on `ask_user` and execution receipts on `execute_remedy_plan`.
+ * Includes the current trajectory, peer-message proofs, and the remedy receipt.
  * The model never writes these arguments. The proxy strips them from provider history
  * and tool declarations to keep provider state clean.
  */
@@ -1205,7 +1218,7 @@ export const OPENAPPA_RUNTIME_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
-  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],
+  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers", "trajectory"],
   [TOOL_LIST_PEER_MESSAGES_SHORT_NAME]: ["peer_proof"],
   [TOOL_READ_PEER_MESSAGE_SHORT_NAME]: ["peer_proof"],
   [TOOL_START_RUN_SHORT_NAME]: ["runtime_proof"],
@@ -1219,6 +1232,8 @@ export const PROXY_STAMPED_TOOL_ARGUMENTS = {
   [TOOL_POST_RUN_FILE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
+    "trajectory",
+    // Strip legacy signed fields from persisted history without trusting them.
     "protected",
     "payload",
     "signature",

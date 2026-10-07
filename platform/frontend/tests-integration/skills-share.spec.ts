@@ -14,10 +14,10 @@ async function openShareLinks(page: Page) {
   await page.getByTestId("skills-marketplace-share-link-toggle").click();
 }
 
-// The marketplace step only mounts for manual (non-script) clients; among the
-// marketplace-capable ids that is exactly "generic" ("Any client"), so every
-// test drives the step through it.
-const STEP_URL = "/connection?clientId=generic";
+// The marketplace step only mounts in the manual setup; among the
+// marketplace-capable ids only "generic" ("Generic client") offers it, behind
+// its Manual setup toggle, so every test drives the step through that.
+const STEP_URL = "/connection?clientId=generic&mode=manual";
 const STEP_TITLE = "Install shared skills";
 
 test.describe("Skills marketplace share step", () => {
@@ -98,7 +98,7 @@ test.describe("Skills marketplace share step", () => {
 
     await page.goto(STEP_URL);
     await expect(
-      page.getByRole("heading", { name: /^Connect your tools to / }),
+      page.getByRole("heading", { name: /^Connect your agent to / }),
     ).toBeVisible();
     await expect(page.getByText(STEP_TITLE)).toBeHidden();
   });
@@ -108,7 +108,7 @@ test.describe("Skills marketplace share step", () => {
   }) => {
     await page.goto("/connection?clientId=n8n");
     await expect(
-      page.getByRole("heading", { name: /^Connect your tools to / }),
+      page.getByRole("heading", { name: /^Connect your agent to / }),
     ).toBeVisible();
     await expect(page.getByText(STEP_TITLE)).toBeHidden();
   });

@@ -1,0 +1,536 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { eq } from "drizzle-orm";
+import db, { schema } from "@/database";
+import type { FastifyInstanceWithZod } from "@/fastify-instance";
+import { createFastifyInstance } from "@/fastify-instance";
+import {
+  ConnectionSetupModel,
+  SkillMarketplaceCredentialModel,
+} from "@/models";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import type { Agent, ConnectionSetupClientId, User } from "@/types";
+
+const DAY_MS = 24 * 60 * 60 * 1000;
+
+describe("GET /api/connected-clients/adoption", () => {
+  let app: FastifyInstanceWithZod;
+  let organizationId: string;
+  let admin: User;
+  let gateway: Agent;
+
+  beforeEach(async ({ makeOrganization, makeUser, makeMember, makeAgent }) => {
+    organizationId = (await makeOrganization()).id;
+    admin = await makeUser({ name: "Admin" });
+    await makeMember(admin.id, organizationId, { role: ADMIN_ROLE_NAME });
+    gateway = await makeAgent({
+      organizationId,
+      name: "Engineering tools",
+      agentType: "mcp_gateway",
+    });
+
+    app = createFastifyInstance();
+    app.addHook("onRequest", async (request) => {
+      (
+        request as typeof request & { organizationId: string; user: User }
+      ).organizationId = organizationId;
+      (request as typeof request & { user: User }).user = admin;
+    });
+    const { default: routes } = await import("./connected-client.routes");
+    await app.register(routes);
+  });
+
+  afterEach(async () => {
+    await app.close();
+  });
+
+  const getAdoption = async () => {
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/connected-clients/adoption",
+    });
+    expect(response.statusCode).toBe(200);
+    return response.json() as {
+      lookbackDays: number;
+      members: {
+        userId: string;
+        status: string;
+        gatewayUses: { agent: { clientId: string | null; name: string } }[];
+        llmUses: { agent: { clientId: string | null; name: string } }[];
+        skillSyncs: { agent: { clientId: string | null; name: string } }[];
+        gatewayLastSeenAt: string | null;
+        llmLastSeenAt: string | null;
+      }[];
+    };
+  };
+
+  const memberById = async (userId: string) =>
+    (await getAdoption()).members.find((m) => m.userId === userId);
+
+  test("a member with no setup and no traffic is inactive", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+
+    const body = await getAdoption();
+
+    expect(body).toMatchObject({ lookbackDays: 30 });
+    expect(body.members.find((m) => m.userId === ada.id)).toMatchObject({
+      status: "inactive",
+      gatewayLastSeenAt: null,
+      llmLastSeenAt: null,
+    });
+  });
+
+  test("a redeemed setup with no traffic is still inactive", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await redeem(ada.id, "codex");
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "inactive",
+      llmLastSeenAt: null,
+    });
+  });
+
+  test("recent gateway calls from a signed-in agent make a member active", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await redeem(ada.id, "claude-code");
+    await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 1 });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "active",
+      gatewayLastSeenAt: expect.any(String),
+    });
+  });
+
+  test("only OAuth gateway calls count, not the built-in chat's", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await gatewayCall(ada.id, { authMethod: "user_token", daysAgo: 1 });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "inactive",
+      gatewayLastSeenAt: null,
+    });
+  });
+
+  test("traffic in the last 30 days is active, older traffic is ignored", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    const bob = await makeUser({ name: "Bob" });
+    await makeMember(ada.id, organizationId);
+    await makeMember(bob.id, organizationId);
+    await makeInteraction(gateway.id, {
+      userId: ada.id,
+      source: "api",
+      externalAgentId: "openai_codex",
+      createdAt: new Date(Date.now() - 10 * DAY_MS),
+    });
+    await gatewayCall(bob.id, { authMethod: "oauth", daysAgo: 40 });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "active",
+      llmUses: [
+        expect.objectContaining({
+          agent: { clientId: "codex", name: "Codex" },
+        }),
+      ],
+    });
+    expect(await memberById(bob.id)).toMatchObject({
+      status: "inactive",
+      gatewayLastSeenAt: null,
+    });
+  });
+
+  test("LLM proxy calls are credited to the passthrough key's owner", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+    makeVirtualApiKey,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    const bob = await makeUser({ name: "Bob" });
+    await makeMember(ada.id, organizationId);
+    await makeMember(bob.id, organizationId);
+    const adaKey = await makeVirtualApiKey(organizationId, {
+      authorId: ada.id,
+    });
+    // The user header names Bob, but Ada's key authenticated the call.
+    await makeInteraction(gateway.id, {
+      userId: bob.id,
+      passthroughVirtualKeyId: adaKey.id,
+      source: "api",
+      externalAgentId: "anthropic_claude_code",
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({ status: "active" });
+    expect(await memberById(bob.id)).toMatchObject({
+      status: "inactive",
+    });
+  });
+
+  test("built-in chat LLM calls do not count as agent traffic", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await makeInteraction(gateway.id, { userId: ada.id, source: "chat" });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "inactive",
+    });
+  });
+
+  test("traffic from another organization's agents is not counted", async ({
+    makeUser,
+    makeMember,
+    makeOrganization,
+    makeAgent,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    const otherOrg = await makeOrganization();
+    const otherGateway = await makeAgent({
+      organizationId: otherOrg.id,
+      agentType: "mcp_gateway",
+    });
+    await gatewayCall(ada.id, {
+      authMethod: "oauth",
+      daysAgo: 1,
+      agentId: otherGateway.id,
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "inactive",
+    });
+  });
+
+  test("built-in agent runs and agent-to-agent calls do not count", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    // An agent run on Claude Code: API traffic, but stamped with a run id.
+    const run = await makeInteraction(gateway.id, {
+      userId: ada.id,
+      source: "api",
+      externalAgentId: "anthropic_claude_code",
+    });
+    await db
+      .update(schema.interactionsTable)
+      .set({ runId: "task-1" })
+      .where(eq(schema.interactionsTable.id, run.id));
+    // One Archestra agent calling another names them as the external agent.
+    await makeInteraction(gateway.id, {
+      userId: ada.id,
+      source: "api",
+      externalAgentId: `${gateway.id}:${gateway.id}`,
+    });
+    await db.insert(schema.mcpToolCallsTable).values({
+      agentId: gateway.id,
+      mcpServerName: "mcp-gateway",
+      method: "tools/list",
+      userId: ada.id,
+      authMethod: "oauth",
+      runId: "task-1",
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "inactive",
+      gatewayLastSeenAt: null,
+      llmLastSeenAt: null,
+    });
+  });
+
+  test("agents are named by their OAuth client and the agent header", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await db.insert(schema.oauthClientsTable).values({
+      id: "droid-row",
+      clientId: "droid-client",
+      name: "Droid",
+      redirectUris: ["http://localhost:1/callback"],
+    });
+    await gatewayCall(ada.id, {
+      authMethod: "oauth",
+      daysAgo: 1,
+      oauthClientId: "droid-client",
+    });
+    // The generic instructions send the picked agent's id as the agent header.
+    await makeInteraction(gateway.id, {
+      userId: ada.id,
+      source: "api",
+      externalAgentId: "amp",
+    });
+
+    const member = await memberById(ada.id);
+    expect(member?.status).toBe("active");
+    expect(member?.gatewayUses.map((u) => u.agent)).toEqual([
+      { clientId: null, name: "Droid" },
+    ]);
+    expect(member?.llmUses.map((u) => u.agent)).toEqual([
+      { clientId: "amp", name: "amp" },
+    ]);
+  });
+
+  test("skills marketplace syncs are reported per agent, without making a member active", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    const setup = await redeem(ada.id, "codex");
+    const synced = async (
+      connectionSetupId: string | undefined,
+      daysAgo: number,
+    ) => {
+      const { credential } = await SkillMarketplaceCredentialModel.create({
+        organizationId,
+        userId: ada.id,
+        connectionSetupId,
+      });
+      await db
+        .update(schema.skillMarketplaceCredentialsTable)
+        .set({ lastUsedAt: new Date(Date.now() - daysAgo * DAY_MS) })
+        .where(eq(schema.skillMarketplaceCredentialsTable.id, credential.id));
+    };
+    await synced(setup.id, 1);
+    await synced(undefined, 2);
+    await synced(undefined, 40);
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "inactive",
+      skillSyncs: [
+        { agent: { clientId: "codex", name: "Codex" } },
+        { agent: { clientId: null, name: "An earlier setup" } },
+      ],
+    });
+  });
+
+  test("an OAuth sign-in without calls is still inactive", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await db.insert(schema.oauthClientsTable).values({
+      id: "kiro-row",
+      clientId: "kiro-client",
+      name: "Kiro",
+      redirectUris: ["http://localhost:2/callback"],
+    });
+    await db.insert(schema.oauthConsentsTable).values({
+      id: "kiro-consent",
+      clientId: "kiro-client",
+      userId: ada.id,
+      scopes: ["mcp"],
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "inactive",
+      gatewayLastSeenAt: null,
+    });
+  });
+
+  test("an outside agent on a personal token counts; the built-in chat does not", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    const bob = await makeUser({ name: "Bob" });
+    await makeMember(ada.id, organizationId);
+    await makeMember(bob.id, organizationId);
+    await gatewayCall(ada.id, {
+      authMethod: "user_token",
+      daysAgo: 1,
+      source: "api",
+    });
+    await gatewayCall(bob.id, {
+      authMethod: "user_token",
+      daysAgo: 1,
+      source: "chat",
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "active",
+      gatewayUses: [
+        expect.objectContaining({
+          agent: { clientId: "generic", name: "Generic client" },
+        }),
+      ],
+    });
+    expect(await memberById(bob.id)).toMatchObject({
+      status: "inactive",
+      gatewayLastSeenAt: null,
+    });
+  });
+
+  test("reports calls per gateway or proxy and agent", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await db.insert(schema.oauthClientsTable).values({
+      id: "droid-row",
+      clientId: "droid-client",
+      name: "Droid",
+      redirectUris: ["http://localhost:1/callback"],
+    });
+    await gatewayCall(ada.id, {
+      authMethod: "oauth",
+      daysAgo: 1,
+      oauthClientId: "droid-client",
+    });
+    await gatewayCall(ada.id, {
+      authMethod: "oauth",
+      daysAgo: 2,
+      oauthClientId: "droid-client",
+    });
+    await gatewayCall(ada.id, {
+      authMethod: "user_token",
+      daysAgo: 1,
+      source: "api",
+    });
+    await makeInteraction(gateway.id, {
+      userId: ada.id,
+      source: "api",
+      externalAgentId: "openai_codex",
+    });
+
+    const member = (await getAdoption()).members.find(
+      (m) => m.userId === ada.id,
+    ) as unknown as {
+      gatewayUses: unknown[];
+      llmUses: unknown[];
+    };
+    expect(member.gatewayUses).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          via: { id: gateway.id, name: "Engineering tools" },
+          agent: { clientId: null, name: "Droid" },
+          calls: 2,
+        }),
+        expect.objectContaining({
+          via: { id: gateway.id, name: "Engineering tools" },
+          agent: { clientId: "generic", name: "Generic client" },
+          calls: 1,
+        }),
+      ]),
+    );
+    expect(member.llmUses).toEqual([
+      expect.objectContaining({
+        via: { id: gateway.id, name: "Engineering tools" },
+        agent: { clientId: "codex", name: "Codex" },
+        calls: 1,
+      }),
+    ]);
+  });
+
+  test("usage counts calls per day, for one member or everyone", async ({
+    makeUser,
+    makeMember,
+    makeInteraction,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    const bob = await makeUser({ name: "Bob" });
+    await makeMember(ada.id, organizationId);
+    await makeMember(bob.id, organizationId);
+    await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 0 });
+    await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 0 });
+    await gatewayCall(ada.id, { authMethod: "user_token", daysAgo: 0 });
+    await gatewayCall(bob.id, { authMethod: "oauth", daysAgo: 2 });
+    await makeInteraction(gateway.id, { userId: bob.id, source: "api" });
+    await makeInteraction(gateway.id, { userId: bob.id, source: "chat" });
+
+    const usage = async (userId?: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/connected-clients/adoption/usage${userId ? `?userId=${userId}` : ""}`,
+      });
+      expect(response.statusCode).toBe(200);
+      return response.json() as {
+        lookbackDays: number;
+        days: { date: string; gatewayCalls: number; llmCalls: number }[];
+      };
+    };
+    const total = (body: Awaited<ReturnType<typeof usage>>) =>
+      body.days.reduce(
+        (sum, d) => ({
+          gateway: sum.gateway + d.gatewayCalls,
+          llm: sum.llm + d.llmCalls,
+        }),
+        { gateway: 0, llm: 0 },
+      );
+
+    const everyone = await usage();
+    expect(everyone.days).toHaveLength(30);
+    expect(everyone.days.at(-1)).toMatchObject({
+      date: new Date().toISOString().slice(0, 10),
+      gatewayCalls: 2,
+      llmCalls: 1,
+    });
+    expect(total(everyone)).toEqual({ gateway: 3, llm: 1 });
+    expect(total(await usage(ada.id))).toEqual({ gateway: 2, llm: 0 });
+    expect(total(await usage(bob.id))).toEqual({ gateway: 1, llm: 1 });
+  });
+
+  async function redeem(userId: string, clientId: ConnectionSetupClientId) {
+    const { setup, rawToken } = await ConnectionSetupModel.create({
+      organizationId,
+      userId,
+      clientId,
+      platform: "macos",
+      baseUrl: "http://localhost:9000/v1",
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+    await ConnectionSetupModel.claimByToken({ rawToken });
+    return setup;
+  }
+
+  async function gatewayCall(
+    userId: string,
+    options: {
+      authMethod: "oauth" | "user_token";
+      daysAgo: number;
+      agentId?: string;
+      oauthClientId?: string;
+      source?: "api" | "chat";
+    },
+  ) {
+    await db.insert(schema.mcpToolCallsTable).values({
+      agentId: options.agentId ?? gateway.id,
+      mcpServerName: "mcp-gateway",
+      method: "tools/list",
+      userId,
+      authMethod: options.authMethod,
+      oauthClientId: options.oauthClientId ?? null,
+      source: options.source ?? null,
+      createdAt: new Date(Date.now() - options.daysAgo * DAY_MS),
+    });
+  }
+});

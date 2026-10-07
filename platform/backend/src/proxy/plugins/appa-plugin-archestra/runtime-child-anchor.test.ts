@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
 import { childSessionId } from "@/openappa/actor";
+import { currentTrajectory } from "@/openappa/current-trajectory";
 import { mintDelegationMarker } from "@/openappa/delegation";
-import { verifyOfferClaims } from "@/openappa/offer-claims";
 import { prepareAppaRequest } from "@/openappa/request";
 import * as appaService from "@/openappa/service";
 import type {
@@ -39,7 +39,7 @@ describe("runtime workspace child anchor", () => {
     config.openappa.offerSigningSecret = priorSecret;
   });
 
-  test("admits a Claude child's tool result and return on the workspace child, and signs controls for that child", async () => {
+  test("admits a Claude child's tool result and return on the workspace child, and routes controls for that child", async () => {
     const plugin = new AppaPluginArchestra([
       new AppaClaudeCodeAdapter(),
       new AppaCodexAdapter(),
@@ -117,14 +117,38 @@ describe("runtime workspace child anchor", () => {
       });
       if (denied?.decision !== "allow") throw new Error("expected a notice");
       const notice = JSON.parse(String(denied.toolCalls[0]?.arguments)) as {
-        offers?: unknown[];
+        tool: string;
+        ruling: string;
       };
-      expect(verifyOfferClaims(notice.offers?.[0], SECRET)).toMatchObject({
-        session_id: childId,
-        parent_id: parentId,
-        caller_id: CALLER,
-        offer_id: "offer-1",
+      expect(notice).toMatchObject({
+        tool: "Bash",
+        ruling: expect.stringContaining("Blocked"),
       });
+      const prepared = await plugin.onPrepareToolCalls({
+        ...context,
+        toolCalls: [
+          {
+            id: "control",
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-1",
+              trajectory: { v: 1, session_id: "untrusted-model-root" },
+            },
+          },
+        ],
+      });
+      if (prepared?.decision !== "allow")
+        throw new Error("expected trusted child routing");
+      const args =
+        typeof prepared.toolCalls[0].arguments === "string"
+          ? JSON.parse(prepared.toolCalls[0].arguments)
+          : prepared.toolCalls[0].arguments;
+      expect(args.trajectory).toEqual(
+        currentTrajectory({
+          session_id: childId,
+          parent_id: parentId,
+        }),
+      );
 
       await plugin.onToolResults({
         ...context,

@@ -2,8 +2,10 @@ import { createHash } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import config from "@/config";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import { openappaDeclarations } from "@/openappa/declarations";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -109,6 +111,48 @@ describe("source-aware validation proposals", () => {
     expect(
       await OpenAppaPolicyTestsModel.listRuns(ctx.organizationId),
     ).toHaveLength(0);
+  });
+
+  test("candidate replay applies stored credential bindings without writing them into the policy", async () => {
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId: ctx.organizationId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      credentialKey: "stored-github",
+      updatedBy: ctx.user.id,
+    });
+    const candidate = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
+    const preview = await previewOpenAppaValidationChange({
+      ...request(),
+      policyContent: candidate,
+      changes: { upsert: [], delete: [] },
+    });
+    const declared = `${candidate}\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "stored-github"\n`;
+    const composed = await openappaDeclarations.composeForCheck({
+      root: declared,
+      resolution: await openappaDeclarations.resolve({
+        organizationId: ctx.organizationId,
+        content: declared,
+      }),
+    });
+    expect(composed.content).toBeTruthy();
+    expect(preview.tests.effectivePolicyHash).toBe(
+      hash(composed.content ?? ""),
+    );
+    expect(preview.tests.policyHash).toBe(hash(candidate));
+    expect(preview.tests.validation.valid).toBe(true);
+    expect(preview.tests.files).toMatchObject([
+      {
+        path: existing.path,
+        status: "cannot_run",
+        error: expect.stringMatching(/\S/),
+      },
+    ]);
+    expect(await guardrailsPolicyService.get(ctx.organizationId)).toMatchObject(
+      {
+        content: policy,
+        revision: 1,
+      },
+    );
   });
 
   test("policy and specification publication is atomic and failed assertions stay informational", async () => {

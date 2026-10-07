@@ -26,6 +26,7 @@ export interface BatteryPackage {
   helpers: Array<string>
   credentials: Array<string>
   externals: Array<BatteryExternal>
+  benefit?: string
   setup?: string
   files: Array<BatteryFileInput>
 }
@@ -125,7 +126,10 @@ export interface EditedPolicy {
  */
 export declare function editOpenappaPolicy(content: string, edits: Array<PolicyEditInput>): Promise<EditedPolicy>
 
-/** Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL. */
+/**
+ * Executes a remedy for the proxy-stamped trajectory, resolving that session
+ * from PostgreSQL. The caller, when present, is the receipt spender.
+ */
 export declare function executeRemedyByOffer(input: string, policy: DispatchPolicy): Promise<string>
 
 /** The upstream pin and host replay boundary version stored with each run. */
@@ -189,7 +193,7 @@ export declare function loadChildReturns(organizationId: string, parentSessionId
 
 /**
  * Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
- * Session routing comes from the verified offer claims; no offer-owner lookup.
+ * Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
  */
 export declare function loadOfferReview(organizationId: string, sessionId: string, offerId: string): Promise<OfferReviewOutput | null>
 

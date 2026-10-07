@@ -23,7 +23,7 @@ import {
 } from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import { scopedSessionId } from "@/openappa/actor";
-import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import { currentTrajectory } from "@/openappa/current-trajectory";
 import {
   issueRuntimeBinding,
   RUNTIME_BINDING_HEADER,
@@ -367,7 +367,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
-  test("hands the runtime the dispatch tool a signed offer names", async ({
+  test("hands the runtime the stamped child trajectory despite the gateway header", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -379,20 +379,8 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       user.id,
       agent.organizationId,
     );
-    const secret = "test-offer-signing-secret-32chars";
-    config.openappa = { ...config.openappa, offerSigningSecret: secret };
-    const jws = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: agent.organizationId,
-        sessionId: "conversation",
-        callerId: `user:${user.id}`,
-        offerId: "offer-1",
-        tool: "archestra__whoami",
-        spelling: "archestra__whoami",
-        dispatch: "my_gateway_archestra__run_tool",
-      }),
-      secret,
-    );
+    const childId = "virtual-key:vk-1|parent-session:child-agent";
+    const parentId = "virtual-key:vk-1|parent-session";
     native.executeRemedyByOffer.mockResolvedValue(
       JSON.stringify({
         decision: "mcp_result",
@@ -401,33 +389,54 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       }),
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/mcp/${agent.id}`,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${token}`,
-      },
-      payload: {
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: {
-          name: "archestra__execute_remedy_plan",
-          arguments: { offer_id: "offer-1", ...jws },
-          _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },
+    for (const gatewayHeader of ["absent", "parent"] as const) {
+      native.executeRemedyByOffer.mockClear();
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token}`,
+          ...(gatewayHeader === "parent"
+            ? { "x-appa-session-id": "parent-session" }
+            : {}),
         },
-        id: "remedy-1",
-      },
-    });
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-1",
+              protected: "e30",
+              payload: "{}",
+              signature: "sig",
+              trajectory: currentTrajectory({
+                session_id: childId,
+                parent_id: parentId,
+              }),
+            },
+            _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },
+          },
+          id: "remedy-1",
+        },
+      });
 
-    expect(response.statusCode, response.body).toBe(200);
-    expect(
-      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({
-      tool: "archestra__whoami",
-      dispatch: "my_gateway_archestra__run_tool",
-    });
+      expect(response.statusCode, response.body).toBe(200);
+      const sent = JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]);
+      expect(sent.trajectory?.session_id ?? sent.session_id).toBe(childId);
+      expect(sent.trajectory?.parent_id ?? sent.parent_id).toBe(parentId);
+      expect(sent.caller_id).toBe(`user:${user.id}`);
+      expect(sent.organization_id).toBe(agent.organizationId);
+      expect(sent).not.toHaveProperty("tool");
+      expect(sent).not.toHaveProperty("dispatch");
+      expect(sent).not.toHaveProperty("owner_caller_id");
+      expect(sent).not.toHaveProperty("spelling");
+      expect(sent.session_id ?? sent.trajectory?.session_id).not.toBe(
+        `user:${user.id}|parent-session`,
+      );
+    }
   });
 
   test("uses untracked mode when an anonymous-token remedy has no logical id", async ({
@@ -610,15 +619,9 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       teamId: null,
       isOrganizationToken: true,
     });
-    const jws = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: org.id,
-        sessionId: scopedSessionId(principal, workloadName),
-        callerId: principal,
-        offerId: "offer-runtime",
-      }),
-      secret,
-    );
+    const trajectory = currentTrajectory({
+      session_id: scopedSessionId(principal, workloadName),
+    });
     native.executeRemedyByOffer.mockResolvedValue(
       JSON.stringify({
         decision: "mcp_result",
@@ -639,7 +642,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       method: "tools/call",
       params: {
         name: "archestra__execute_remedy_plan",
-        arguments: { offer_id: "offer-runtime", plan: "keep", ...jws },
+        arguments: { offer_id: "offer-runtime", plan: "keep", trajectory },
       },
       id: "runtime-remedy",
     };
@@ -653,7 +656,10 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(accepted.statusCode, accepted.body).toBe(200);
     expect(
       JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({ caller_id: principal, owner_caller_id: principal });
+    ).toMatchObject({ caller_id: principal, trajectory });
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).not.toHaveProperty("owner_caller_id");
 
     native.executeRemedyByOffer.mockClear();
     const sibling = await app.inject({
@@ -759,15 +765,9 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       }),
     );
     const principal = workloadPrincipal(first.workspace.id);
-    const jws = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: org.id,
-        sessionId: scopedSessionId(principal, first.workspace.workloadName),
-        callerId: principal,
-        offerId: "offer-stamped",
-      }),
-      secret,
-    );
+    const trajectory = currentTrajectory({
+      session_id: scopedSessionId(principal, first.workspace.workloadName),
+    });
     const headers = {
       "content-type": "application/json",
       accept: "application/json, text/event-stream",
@@ -781,7 +781,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       method: "tools/call",
       params: {
         name: "archestra__execute_remedy_plan",
-        arguments: { offer_id: "offer-stamped", plan: "keep", ...jws },
+        arguments: { offer_id: "offer-stamped", plan: "keep", trajectory },
       },
       id: "stamped-remedy",
     };
@@ -887,18 +887,12 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
           arguments: {
             offer_id: "offer-system",
             plan: "keep",
-            ...signOfferClaims(
-              unsignedOfferClaims({
-                organizationId: org.id,
-                sessionId: scopedSessionId(
-                  systemPrincipal,
-                  systemRun.workspace.workloadName,
-                ),
-                callerId: systemPrincipal,
-                offerId: "offer-system",
-              }),
-              secret,
-            ),
+            trajectory: currentTrajectory({
+              session_id: scopedSessionId(
+                systemPrincipal,
+                systemRun.workspace.workloadName,
+              ),
+            }),
           },
         },
       },

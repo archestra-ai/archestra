@@ -56,7 +56,11 @@ describe("AppaPluginArchestra namespace controls", () => {
           tool_name: "archestra__execute_remedy_plan",
           namespace: "mcp__gateway",
         },
+        trajectory: { v: 1, session_id: "session" },
       });
+      expect(JSON.parse(String(trusted.arguments))).not.toHaveProperty(
+        "protected",
+      );
       expect(foreign.arguments).toBe('{"offer_id":"foreign"}');
 
       const outcome = await plugin.onToolCalls({
@@ -134,6 +138,10 @@ describe("AppaPluginArchestra namespace controls", () => {
         question: "Send this to the foreign server?",
         options: [{ label: "No" }, { label: "Yes" }],
         remedy_offer_ids: ["foreign-offer"],
+        trajectory: { v: 1, session_id: "forged-session" },
+        remedy_offers: [
+          { protected: "echo", payload: "echo", signature: "echo" },
+        ],
       }),
     };
 
@@ -148,9 +156,12 @@ describe("AppaPluginArchestra namespace controls", () => {
     expect(calls).toEqual([foreign]);
   });
 
-  test("in a proxy-only session, gives a question id only to the client's own question tool", async () => {
+  test.each([
+    true,
+    false,
+  ])("keeps native question answers separate from foreign namespaces (proxy-only=%s)", async (proxyOnly) => {
     const priorSecret = config.openappa.offerSigningSecret;
-    config.openappa.offerSigningSecret = "test-offer-signing-secret-32chars";
+    config.openappa.offerSigningSecret = "";
     const plugin = new AppaPluginArchestra([new AppaCodexAdapter()]);
     const context = {
       ...namespaceContext(),
@@ -160,8 +171,7 @@ describe("AppaPluginArchestra namespace controls", () => {
       APPA_PLUGIN_TRUSTED_CONTEXT,
     ) as Record<string, unknown>;
     const request = trusted.request as Record<string, unknown>;
-    // A proxy-only session declares none of the APPA tools.
-    delete request.tools;
+    if (proxyOnly) delete request.tools;
     request.declaredTools = [
       { name: "request_user_input" },
       { name: "request_user_input", namespace: "mcp__other" },
@@ -179,6 +189,17 @@ describe("AppaPluginArchestra namespace controls", () => {
       namespace: "mcp__other",
       arguments: "{}",
     };
+    const evaluate = vi
+      .spyOn(appaService, "evaluateToolCalls")
+      .mockResolvedValue([{ kind: "allow" }, { kind: "allow" }]);
+    const process = vi
+      .spyOn(appaService, "processProxyResults")
+      .mockResolvedValue({
+        toolResultUpdates: {},
+        contextIsTrusted: true,
+        dualLlmAnalyses: [],
+        unsafeContextBoundary: undefined,
+      });
 
     try {
       await plugin.onSessionInit(context);
@@ -187,18 +208,37 @@ describe("AppaPluginArchestra namespace controls", () => {
         toolCalls: [question, lookalike],
       });
 
-      if (prepared?.decision !== "allow")
-        throw new Error("expected prepared calls");
-      expect(prepared.toolCalls).toEqual([
-        {
-          ...question,
-          wireId: expect.stringMatching(
-            /^call_aq1_[A-Za-z0-9_-]{16}_[A-Za-z0-9_-]{22}$/,
-          ),
-        },
-        lookalike,
-      ]);
+      expect(prepared).toBeUndefined();
+      await plugin.onToolCalls({
+        ...context,
+        toolCalls: [question, lookalike],
+      });
+      const isQuestionCall = evaluate.mock.calls[0]?.[2]?.isUserQuestion;
+      expect(isQuestionCall?.(question.name)).toBe(true);
+      expect(isQuestionCall?.(lookalike.name, lookalike.namespace)).toBe(false);
+
+      const nativeAnswer = {
+        ...question,
+        arguments: {},
+        content: "human choice",
+        isError: false,
+      };
+      const foreignAnswer = {
+        ...lookalike,
+        arguments: {},
+        content: "untrusted reply",
+        isError: false,
+      };
+      await plugin.onToolResults({
+        ...context,
+        toolResults: [nativeAnswer, foreignAnswer],
+      });
+      const isQuestionResult = process.mock.calls[0]?.[0]?.isUserQuestion;
+      expect(isQuestionResult?.(nativeAnswer)).toBe(true);
+      expect(isQuestionResult?.(foreignAnswer)).toBe(false);
     } finally {
+      evaluate.mockRestore();
+      process.mockRestore();
       config.openappa.offerSigningSecret = priorSecret;
     }
   });

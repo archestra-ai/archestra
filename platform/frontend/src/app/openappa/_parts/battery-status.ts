@@ -4,12 +4,12 @@ type BatteryStatus = PolicyBattery["status"];
 
 /** Shared status meaning; each surface chooses its own badge presentation. */
 export const BATTERY_STATUS = {
-  active: { label: "Active", severity: "ok" },
+  active: { label: "Enforced", severity: "ok" },
   missing_credentials: { label: "Needs a credential", severity: "critical" },
   naming_conflict: { label: "Tool name conflict", severity: "critical" },
   server_missing: { label: "No server bound", severity: "warning" },
   unrouted: { label: "Not used by any rule", severity: "warning" },
-  refused: { label: "Not enforced", severity: "critical" },
+  refused: { label: "Refused by policy", severity: "critical" },
   unavailable: { label: "Package missing", severity: "critical" },
 } satisfies Record<
   BatteryStatus,
@@ -18,14 +18,14 @@ export const BATTERY_STATUS = {
 
 /**
  * The statuses grouped by what the reader does next: nothing, fix it, install
- * it, or browse it. Broken is every included battery that is not active; the
+ * it, or browse it. Not enforced is every included battery that is not active; the
  * row's badge names the exact problem. The overview counts the same groups.
  */
 export const BATTERY_STATUS_GROUPS = [
-  { value: "active", label: "Active" },
-  { value: "broken", label: "Broken" },
+  { value: "active", label: "Enforced" },
+  { value: "broken", label: "Not enforced" },
   { value: "fits", label: "Fits your servers" },
-  { value: "other", label: "Other available" },
+  { value: "other", label: "For other servers" },
 ] as const;
 
 export type BatteryStatusGroup =

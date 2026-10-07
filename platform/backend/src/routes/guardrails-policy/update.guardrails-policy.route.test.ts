@@ -18,6 +18,7 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
@@ -323,7 +324,15 @@ describe("guardrails policy authoring", () => {
         { ...draft, expectedRevision: 1 },
         context,
       ),
-    ).rejects.toThrow("The proposed policy has no changes");
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The proposed policy has no changes"),
+        },
+      ],
+    });
     expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
   });
 
@@ -532,6 +541,61 @@ describe("guardrails policy authoring", () => {
       payload: { content: declared, expectedRevision: 2 },
     });
     expect(removed.statusCode, removed.body).toBe(200);
+  });
+
+  test("including a battery that reads a stored binding grants it and needs credential update", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+    makeSession,
+  }) => {
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId: orgId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      credentialKey: "github-token",
+      updatedBy: userId,
+    });
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: { openappaPolicy: ["read", "update"] },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    const authorSession = await makeSession(author.id, {
+      activeOrganizationId: orgId,
+    });
+    const actAs = (user: typeof author, session: typeof authorSession) =>
+      vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+        response: { user, session },
+        headers: new Headers(),
+      } as never);
+    const declared = `include = ["batteries/github/appa.toml"]\n\n${content}`;
+    const put = (body: string, expectedRevision: number) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/guardrails-policy",
+        payload: { content: body, expectedRevision },
+      });
+
+    actAs(author, authorSession);
+    expect((await put(declared, 0)).statusCode).toBe(403);
+    expect(await GuardrailsPolicyModel.findLatest(orgId)).toBeNull();
+
+    const binder = await makeUser();
+    await makeMember(binder.id, orgId, { role: "admin" });
+    actAs(
+      binder,
+      await makeSession(binder.id, { activeOrganizationId: orgId }),
+    );
+    const included = await put(declared, 0);
+    expect(included.statusCode, included.body).toBe(200);
+
+    // Spelling the key the binding already hands over grants nothing new.
+    actAs(author, authorSession);
+    const spelled = await put(
+      `${declared}\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n`,
+      1,
+    );
+    expect(spelled.statusCode, spelled.body).toBe(200);
   });
 
   test("an entry spelling bytes nobody stored is refused when it is added and unavailable when it stays", async () => {

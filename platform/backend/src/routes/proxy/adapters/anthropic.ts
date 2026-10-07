@@ -336,7 +336,7 @@ class AnthropicRequestAdapter
                 name: toolUse.name,
                 arguments: toolUse.arguments,
                 content: toolResult,
-                isError: false,
+                isError: contentBlock.is_error ?? false,
               });
             }
           }
@@ -665,11 +665,7 @@ class AnthropicStreamAdapter
         data: string;
       }
   >();
-  private textBlockIndices = new Set<number>();
-  private textByBlock = new Map<number, string>();
-  private pendingTextBlockStop = "";
-  private pendingTextBlockIndex: number | null = null;
-  private getTextSuffix: ((completedText: string) => string) | null = null;
+  private getTextPrefix: ((firstText: string) => string) | null = null;
   private textPrefixIssued = false;
 
   private startReasoningBlock(
@@ -748,8 +744,8 @@ class AnthropicStreamAdapter
     };
   }
 
-  setTextSuffix(getSuffix: (completedText: string) => string): void {
-    this.getTextSuffix = getSuffix;
+  setTextSuffix(getPrefix: (firstText: string) => string): void {
+    this.getTextPrefix = getPrefix;
   }
 
   processChunk(chunk: AnthropicStreamChunk): ChunkProcessingResult {
@@ -786,7 +782,7 @@ class AnthropicStreamAdapter
       case "content_block_start":
         if (chunk.content_block.type === "tool_use") {
           let prefixSse = "";
-          if (!this.textPrefixIssued && this.getTextSuffix) {
+          if (!this.textPrefixIssued && this.getTextPrefix) {
             const prefix = this.resolveTextPrefix("");
             if (prefix) {
               this.textPrefixIssued = true;
@@ -820,9 +816,6 @@ class AnthropicStreamAdapter
             sseData = prefixSse;
           }
         } else {
-          if (chunk.content_block.type === "text") {
-            this.textBlockIndices.add(chunk.index);
-          }
           this.startReasoningBlock(chunk.index, chunk.content_block);
           // Everything except client tool calls (text, thinking,
           // redacted_thinking, server_tool_use, ...) streams through
@@ -853,11 +846,7 @@ class AnthropicStreamAdapter
           let prefixSse = "";
           if (chunk.delta.type === "text_delta") {
             this.state.text += chunk.delta.text;
-            this.textByBlock.set(
-              chunk.index,
-              `${this.textByBlock.get(chunk.index) ?? ""}${chunk.delta.text}`,
-            );
-            if (!this.textPrefixIssued && this.getTextSuffix) {
+            if (!this.textPrefixIssued && this.getTextPrefix) {
               const prefix = this.resolveTextPrefix(chunk.delta.text);
               this.textPrefixIssued = true;
               if (prefix) {
@@ -914,14 +903,9 @@ class AnthropicStreamAdapter
         break;
 
       case "message_stop":
-        sseData = this.formatPendingTextBlockStop();
         isFinal = true;
         // Don't send message_stop yet - we'll send it after policy evaluation
         break;
-    }
-
-    if (!isFinal && sseData) {
-      sseData = this.flushPendingTextBlockStop(sseData);
     }
 
     return { sseData, isToolCallChunk, isFinal, isResponsePreamble };
@@ -1059,10 +1043,6 @@ class AnthropicStreamAdapter
     this.state.stopReason = "end_turn";
     this.toolCallsReleased = false;
     this.toolUseBlockIndices.clear();
-    this.textBlockIndices.clear();
-    this.textByBlock.clear();
-    this.pendingTextBlockStop = "";
-    this.pendingTextBlockIndex = null;
     this.currentToolCallIndex = 0;
   }
 
@@ -1224,34 +1204,10 @@ class AnthropicStreamAdapter
   }
 
   private resolveTextPrefix(firstText: string): string {
-    if (!this.getTextSuffix || this.responseReplacedWithText) {
+    if (!this.getTextPrefix || this.responseReplacedWithText) {
       return "";
     }
-    return this.getTextSuffix(firstText);
-  }
-
-  private formatPendingTextBlockStop(): string | null {
-    if (!this.pendingTextBlockStop) return null;
-    const suffix = "";
-    const textEvent = suffix
-      ? `event: content_block_delta\ndata: ${JSON.stringify({
-          type: "content_block_delta",
-          index: this.pendingTextBlockIndex,
-          delta: { type: "text_delta", text: suffix },
-        })}\n\n`
-      : "";
-    const stop = this.pendingTextBlockStop;
-    this.pendingTextBlockStop = "";
-    this.pendingTextBlockIndex = null;
-    return `${textEvent}${stop}`;
-  }
-
-  private flushPendingTextBlockStop(sseData: string): string {
-    if (!this.pendingTextBlockStop) return sseData;
-    const pending = this.pendingTextBlockStop;
-    this.pendingTextBlockStop = "";
-    this.pendingTextBlockIndex = null;
-    return `${pending}${sseData}`;
+    return this.getTextPrefix(firstText);
   }
 
   /** Rewrite a block event's index to the one the client knows it by. */
@@ -1651,8 +1607,14 @@ function parseArgs(argumentsJson: string): Record<string, unknown> {
  */
 function stripEmptyTextBlocks(messages: AnthropicMessages): AnthropicMessages {
   if (!Array.isArray(messages)) return messages;
-  return messages.map((message) => {
-    if (!Array.isArray(message.content)) return message;
+  return messages.flatMap((message) => {
+    if (!Array.isArray(message.content)) {
+      return message.role === "system" &&
+        typeof message.content === "string" &&
+        !message.content.trim()
+        ? []
+        : [message];
+    }
     const filtered = message.content.filter((part) => {
       const record = part as Record<string, unknown>;
       if (
@@ -1664,9 +1626,14 @@ function stripEmptyTextBlocks(messages: AnthropicMessages): AnthropicMessages {
       }
       return true;
     });
-    return {
-      ...message,
-      content: filtered.length > 0 ? filtered : [{ type: "text", text: " " }],
-    };
+    // Compaction can leave an empty system placeholder. A whitespace filler is
+    // valid for some conversational turns, but never for a system text block.
+    if (message.role === "system" && filtered.length === 0) return [];
+    return [
+      {
+        ...message,
+        content: filtered.length > 0 ? filtered : [{ type: "text", text: " " }],
+      },
+    ];
   });
 }

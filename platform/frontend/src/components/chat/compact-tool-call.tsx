@@ -6,6 +6,7 @@ import {
   parseFullToolName,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
 } from "@archestra/shared";
 import type { DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon, WebhookIcon } from "lucide-react";
@@ -36,6 +37,10 @@ import {
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { cn } from "@/lib/utils/tailwind";
 import { useApps } from "./apps-context";
+import {
+  BatteryCredentialsTool,
+  parseBatteryCredentialRequest,
+} from "./battery-credentials-tool";
 import {
   type AppEntryRender,
   resolveAppEntryRender,
@@ -583,6 +588,27 @@ export function CompactToolGroup({
           <RuntimeCredentialSetupTool
             key={entry.key}
             ready
+            toolCallId={entry.part.toolCallId}
+            onSendMessage={appContext?.onSendMessage}
+          />
+        );
+      })}
+      {tools.map((entry) => {
+        if (entry.kind === "hook" || entry.errorText) return null;
+        const name = resolveRunToolTargetName(entry.part, entry.toolName, {
+          getToolShortName,
+        });
+        const request =
+          getToolShortName(name) === TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME
+            ? parseBatteryCredentialRequest(
+                entry.toolResultPart?.output ?? entry.part.output,
+              )
+            : null;
+        if (!request) return null;
+        return (
+          <BatteryCredentialsTool
+            key={entry.key}
+            request={request}
             toolCallId={entry.part.toolCallId}
             onSendMessage={appContext?.onSendMessage}
           />

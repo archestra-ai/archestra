@@ -184,13 +184,16 @@ async function evaluateOpenAppaPolicyTests(
     lastError: string | null;
   };
   if (params.proposedPolicy) {
-    const composed = validation.valid
+    const bound = validation.valid
+      ? await openappaDeclarations.resolveWithBindings({
+          organizationId: params.organizationId,
+          content: policyContent,
+        })
+      : null;
+    const composed = bound
       ? await openappaDeclarations.composeForCheck({
-          root: policyContent,
-          resolution: await openappaDeclarations.resolve({
-            organizationId: params.organizationId,
-            content: policyContent,
-          }),
+          root: bound.content,
+          resolution: bound.resolution,
         })
       : null;
     const content = composed?.content ?? policyContent;

@@ -94,6 +94,7 @@ const declaredGithub = (
     {
       variable: "APPA_PROVIDER_GITHUB_TOKEN",
       key: null,
+      source: null,
       readers: ["github"],
     },
   ],
@@ -109,6 +110,7 @@ const emptyDeclarations = (
   lastError: null,
   managedInGithub: false,
   heldPull: null,
+  credentialBindings: [],
   ...fields,
 });
 const credential = {
@@ -294,6 +296,32 @@ async function attach(battery: string, serverName: string) {
   await user.click(await screen.findByRole("button", { name: "Attach" }));
 }
 
+/** A GitHub source that owns the policy, as the sync settings report it. */
+const githubSyncSource = () =>
+  http.get(`${baseUrl}/api/openappa/github-sync`, () =>
+    HttpResponse.json({
+      enabled: true,
+      hasPolicy: true,
+      source: {
+        organizationId: "org-1",
+        repo: "acme/policy",
+        ref: "main",
+        path: "org.appa.toml",
+        interval: "1h",
+        githubPatId: null,
+        githubAppConfigId: null,
+        revision: "2d1c0b9a-8f7e-4d6c-9b5a-4f3e2d1c0b9a",
+        sourceCommit: "abc123",
+        lastSyncedAt: "2026-10-06T12:00:00Z",
+        lastSyncError: null,
+        declarationsPendingPublish: false,
+        heldContentHash: null,
+        heldSourceCommit: null,
+        heldReasons: [],
+      },
+    }),
+  );
+
 /** Pick an item from the row's "More actions" menu. */
 async function rowMenu(battery: string) {
   const user = userEvent.setup();
@@ -351,7 +379,7 @@ test("an included entry shows the status the declaration gives it", async () => 
     batteries: [declaredGithub({ status: "active" })],
   });
   show();
-  expect(await entry("github")).toHaveTextContent("Active");
+  expect(await entry("github")).toHaveTextContent("Enforced");
   expect(await entry("github")).toHaveTextContent("Bundled");
 });
 
@@ -373,8 +401,8 @@ test("a failed composition degrades every status and says what broke", async () 
     "line 4: unknown battery",
   );
   const row = await entry("github");
-  expect(row).toHaveTextContent("Not enforced");
-  expect(row).not.toHaveTextContent("Active");
+  expect(row).toHaveTextContent("Refused by policy");
+  expect(row).not.toHaveTextContent("Enforced");
 });
 
 test("an uploaded entry names the package bytes it is pinned to", async () => {
@@ -435,11 +463,12 @@ test("a held pull that moves credentials needs the credential permission", async
   ).not.toBeInTheDocument();
 });
 
-test("binding a credential sends the entry's whole binding table", async () => {
-  let body: unknown;
+test("binding a credential writes that variable alone", async () => {
+  let written: { variable: unknown; body: unknown } | undefined;
   const retained = {
     variable: "APPA_SECOND_TOKEN",
     key: "retained-token",
+    source: "binding" as const,
     readers: ["github"],
   };
   declarations = emptyDeclarations({
@@ -450,10 +479,10 @@ test("binding a credential sends the entry's whole binding table", async () => {
     ],
   });
   server.use(
-    http.patch(
-      `${baseUrl}/api/openappa/battery-installs/install-1`,
-      async ({ request }) => {
-        body = await request.json();
+    http.put(
+      `${baseUrl}/api/openappa/credential-bindings/:variable`,
+      async ({ request, params }) => {
+        written = { variable: params.variable, body: await request.json() };
         declarations = emptyDeclarations({
           batteries: [
             declaredGithub({
@@ -463,13 +492,14 @@ test("binding a credential sends the entry's whole binding table", async () => {
                 {
                   variable: "APPA_PROVIDER_GITHUB_TOKEN",
                   key: "github-token",
+                  source: "binding",
                   readers: ["github"],
                 },
               ],
             }),
           ],
         });
-        return HttpResponse.json(declarations.batteries[0]);
+        return HttpResponse.json(declarations);
       },
     ),
   );
@@ -481,11 +511,9 @@ test("binding a credential sends the entry's whole binding table", async () => {
   );
   await user.click(screen.getByRole("option", { name: "GitHub token" }));
   await waitFor(() =>
-    expect(body).toEqual({
-      credentialBindings: {
-        APPA_PROVIDER_GITHUB_TOKEN: "github-token",
-        APPA_SECOND_TOKEN: "retained-token",
-      },
+    expect(written).toEqual({
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      body: { key: "github-token" },
     }),
   );
   await waitFor(() =>
@@ -499,7 +527,7 @@ test("binding a credential sends the entry's whole binding table", async () => {
 });
 
 test("a variable another entry reads is never unset, and the row says so", async () => {
-  let patched = false;
+  let written = false;
   declarations = emptyDeclarations({
     batteries: [
       declaredGithub({
@@ -507,6 +535,7 @@ test("a variable another entry reads is never unset, and the row says so", async
           {
             variable: "APPA_PROVIDER_GITHUB_TOKEN",
             key: "github-token",
+            source: "binding",
             readers: ["github", "acme"],
           },
         ],
@@ -514,9 +543,9 @@ test("a variable another entry reads is never unset, and the row says so", async
     ],
   });
   server.use(
-    http.patch(`${baseUrl}/api/openappa/battery-installs/install-1`, () => {
-      patched = true;
-      return HttpResponse.json(declarations.batteries[0]);
+    http.put(`${baseUrl}/api/openappa/credential-bindings/:variable`, () => {
+      written = true;
+      return HttpResponse.json(declarations);
     }),
   );
   show();
@@ -530,7 +559,7 @@ test("a variable another entry reads is never unset, and the row says so", async
   await waitFor(() =>
     expect(within(row).getByRole("alert")).toBeInTheDocument(),
   );
-  expect(patched).toBe(false);
+  expect(written).toBe(false);
   expect(
     within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   ).toHaveTextContent("GitHub token");
@@ -588,38 +617,21 @@ test("attaching a bundled battery that is not included yet names no package", as
   );
 });
 
-test("attaching a server enables credential binding and keeps saved changes visible", async () => {
-  const writes: string[] = [];
-  let binding: unknown;
+test("a battery not yet included binds its credential without attaching a server", async () => {
+  let written: unknown;
   declarations = emptyDeclarations();
   batteries = [githubBattery()];
   server.use(
-    http.post(`${baseUrl}/api/openappa/battery-installs`, () => {
-      writes.push("attach");
-      batteries = [githubBattery([install()])];
-      declarations = emptyDeclarations({ batteries: [declaredGithub()] });
-      return HttpResponse.json(declarations.batteries[0]);
-    }),
-    http.patch(
-      `${baseUrl}/api/openappa/battery-installs/install-1`,
+    http.put(
+      `${baseUrl}/api/openappa/credential-bindings/APPA_PROVIDER_GITHUB_TOKEN`,
       async ({ request }) => {
-        writes.push("bind");
-        binding = await request.json();
+        written = await request.json();
         declarations = emptyDeclarations({
-          batteries: [
-            declaredGithub({
-              status: "active",
-              credentials: [
-                {
-                  variable: "APPA_PROVIDER_GITHUB_TOKEN",
-                  key: "github-token",
-                  readers: ["github"],
-                },
-              ],
-            }),
+          credentialBindings: [
+            { variable: "APPA_PROVIDER_GITHUB_TOKEN", key: "github-token" },
           ],
         });
-        return HttpResponse.json(declarations.batteries[0]);
+        return HttpResponse.json(declarations);
       },
     ),
   );
@@ -628,25 +640,13 @@ test("attaching a server enables credential binding and keeps saved changes visi
   const select = within(row).getByRole("combobox", {
     name: "APPA_PROVIDER_GITHUB_TOKEN",
   });
-  expect(select).toBeDisabled();
-  await attach("github", "Code");
   await waitFor(() => expect(select).toBeEnabled());
-  expect(row).toHaveTextContent("code__*");
-  expect(writes).toEqual(["attach"]);
   const user = userEvent.setup();
   await user.click(select);
   await user.click(screen.getByRole("option", { name: "GitHub token" }));
-  await waitFor(() => expect(writes).toEqual(["attach", "bind"]));
-  expect(binding).toEqual({
-    credentialBindings: { APPA_PROVIDER_GITHUB_TOKEN: "github-token" },
-  });
-  await waitFor(() => expect(row).toHaveTextContent("Active"));
-  expect(select).toHaveTextContent("GitHub token");
-  await user.click(within(row).getAllByRole("button", { name: "Close" })[0]);
-  expect(
-    screen.queryByText("Discard unsaved changes?"),
-  ).not.toBeInTheDocument();
-  expect(await entry("github")).toHaveTextContent("Active");
+  await waitFor(() => expect(written).toEqual({ key: "github-token" }));
+  await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
+  expect(row).toHaveTextContent("Not attached to a server yet.");
 });
 
 test("the credentials section links to where credentials are set up", async () => {
@@ -682,7 +682,12 @@ const declaredJev = (fields: Partial<PolicyBattery> = {}): PolicyBattery => ({
   line: 2,
   servers: [],
   credentials: [
-    { variable: "APPA_PROVIDER_JEV_API_KEY", key: null, readers: ["jev"] },
+    {
+      variable: "APPA_PROVIDER_JEV_API_KEY",
+      key: null,
+      source: null,
+      readers: ["jev"],
+    },
   ],
   helpers: ["jev-annotator.py"],
   ...fields,
@@ -730,12 +735,9 @@ test("an organization battery can be included and removed without an installed s
   await user.click(toggle);
   await waitFor(() => expect(removed).toBe(true));
   await waitFor(() => expect(toggle).not.toBeChecked());
-  expect(
-    screen.getByRole("combobox", { name: "APPA_PROVIDER_JEV_API_KEY" }),
-  ).toBeDisabled();
 });
 
-test("an included battery governing the organization says so and binds its credential on its one row", async () => {
+test("an included battery governing the organization says so and binds its credential", async () => {
   let body: unknown;
   batteries = [
     jevBattery([
@@ -744,11 +746,11 @@ test("an included battery governing the organization says so and binds its crede
   ];
   declarations = emptyDeclarations({ batteries: [declaredJev()] });
   server.use(
-    http.patch(
-      `${baseUrl}/api/openappa/battery-installs/jev-row`,
+    http.put(
+      `${baseUrl}/api/openappa/credential-bindings/APPA_PROVIDER_JEV_API_KEY`,
       async ({ request }) => {
         body = await request.json();
-        return HttpResponse.json(declaredJev({ status: "active" }));
+        return HttpResponse.json(declarations);
       },
     ),
   );
@@ -762,11 +764,7 @@ test("an included battery governing the organization says so and binds its crede
     within(row).getByRole("combobox", { name: "APPA_PROVIDER_JEV_API_KEY" }),
   );
   await user.click(screen.getByRole("option", { name: "GitHub token" }));
-  await waitFor(() =>
-    expect(body).toEqual({
-      credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "github-token" },
-    }),
-  );
+  await waitFor(() => expect(body).toEqual({ key: "github-token" }));
 });
 
 test("a battery governing the organization that no rule routes to says how to route it", async () => {
@@ -781,7 +779,7 @@ test("a battery governing the organization that no rule routes to says how to ro
   show();
   const row = await entry("jev");
   expect(row).toHaveTextContent("Not used by any rule");
-  expect(row).not.toHaveTextContent("Active");
+  expect(row).not.toHaveTextContent("Enforced");
   expect(within(row).getByRole("code")).toHaveTextContent(
     'annotator = "jev.tool-call"',
   );
@@ -1022,15 +1020,17 @@ test("a personal-only credential is listed but cannot be bound", async () => {
   await user.click(
     within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
   );
-  expect(
-    await screen.findByRole("option", { name: "GH real (personal only)" }),
-  ).toHaveAttribute("aria-disabled", "true");
+  const personal = await screen.findByRole("option", { name: "GH real" });
+  expect(personal).toHaveAttribute("aria-disabled", "true");
+  expect(personal).toHaveTextContent(
+    "batteries need an organization credential",
+  );
   expect(
     screen.getByRole("option", { name: "GitHub token" }),
   ).not.toHaveAttribute("aria-disabled", "true");
 });
 
-test("a binding to a key the credential list no longer offers still reads as that key", async () => {
+test("a binding to a key the loaded credential list does not hold reads as missing", async () => {
   declarations = emptyDeclarations({
     batteries: [
       declaredGithub({
@@ -1038,6 +1038,7 @@ test("a binding to a key the credential list no longer offers still reads as tha
           {
             variable: "APPA_PROVIDER_GITHUB_TOKEN",
             key: "retired-token",
+            source: "binding",
             readers: ["github"],
           },
         ],
@@ -1050,9 +1051,13 @@ test("a binding to a key the credential list no longer offers still reads as tha
     name: "APPA_PROVIDER_GITHUB_TOKEN",
   });
   await waitFor(() => expect(select).toHaveTextContent("retired-token"));
+  await userEvent.setup().click(select);
+  expect(
+    await screen.findByRole("option", { name: "retired-token" }),
+  ).toHaveTextContent("No credential has this key");
 });
 
-test("a reader who cannot bind still sees which key a variable is bound to", async () => {
+test("a reader who cannot load credentials sees the bound key without a verdict on it", async () => {
   grantOnly();
   declarations = emptyDeclarations({
     batteries: [
@@ -1061,6 +1066,7 @@ test("a reader who cannot bind still sees which key a variable is bound to", asy
           {
             variable: "APPA_PROVIDER_GITHUB_TOKEN",
             key: "github-token",
+            source: "binding",
             readers: ["github"],
           },
         ],
@@ -1074,6 +1080,39 @@ test("a reader who cannot bind still sees which key a variable is bound to", asy
   });
   expect(select).toBeDisabled();
   await waitFor(() => expect(select).toHaveTextContent("github-token"));
+  expect(select).not.toHaveTextContent(
+    /No credential has this key|not available/,
+  );
+});
+
+test("a reader who can read credentials but not bind sees the bound credential by name", async () => {
+  grantOnly("credential");
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+            source: "binding",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+  });
+  show();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  expect(select).toBeDisabled();
+  await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
+  expect(
+    within(row).getByText(
+      "Changing a key takes permission to update guardrails and credentials.",
+    ),
+  ).toBeVisible();
 });
 
 test("a policy the repository owns is read-only", async () => {
@@ -1081,6 +1120,7 @@ test("a policy the repository owns is read-only", async () => {
     batteries: [declaredGithub()],
     managedInGithub: true,
   });
+  server.use(githubSyncSource());
   show();
   expect(
     await screen.findByRole("button", { name: "View github" }),
@@ -1093,11 +1133,90 @@ test("a policy the repository owns is read-only", async () => {
   ).not.toBeInTheDocument();
   const row = await entry("github");
   expect(
-    within(row).getByRole("combobox", { name: "APPA_PROVIDER_GITHUB_TOKEN" }),
-  ).toBeDisabled();
-  expect(
     within(row).queryByRole("button", { name: /Detach|Attach/ }),
   ).not.toBeInTheDocument();
+});
+
+test("a battery not yet included under GitHub sync can bind its credential", async () => {
+  let written: unknown;
+  declarations = emptyDeclarations({ managedInGithub: true });
+  batteries = [jevBattery()];
+  server.use(
+    githubSyncSource(),
+    http.put(
+      `${baseUrl}/api/openappa/credential-bindings/APPA_PROVIDER_JEV_API_KEY`,
+      async ({ request }) => {
+        written = await request.json();
+        return HttpResponse.json(declarations);
+      },
+    ),
+  );
+  show();
+  const row = await entry("jev");
+  // The repository decides what is included, and the dialog says where.
+  expect(
+    within(row).getByRole("switch", { name: "Include in policy" }),
+  ).toBeDisabled();
+  expect(row).toHaveTextContent(
+    "The policy repository decides which batteries are included.",
+  );
+  expect(
+    await within(row).findByRole("link", { name: /Open the policy file/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/acme/policy/blob/main/org.appa.toml",
+  );
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_JEV_API_KEY",
+  });
+  await waitFor(() => expect(select).toBeEnabled());
+  const user = userEvent.setup();
+  await user.click(select);
+  await user.click(await screen.findByRole("option", { name: "GitHub token" }));
+  await waitFor(() => expect(written).toEqual({ key: "github-token" }));
+});
+
+test("a key the policy text sets is locked to the repository line", async () => {
+  let written = false;
+  declarations = emptyDeclarations({
+    batteries: [
+      declaredGithub({
+        credentials: [
+          {
+            variable: "APPA_PROVIDER_GITHUB_TOKEN",
+            key: "github-token",
+            source: "policy",
+            readers: ["github"],
+          },
+        ],
+      }),
+    ],
+    managedInGithub: true,
+  });
+  server.use(
+    githubSyncSource(),
+    http.put(`${baseUrl}/api/openappa/credential-bindings/:variable`, () => {
+      written = true;
+      return HttpResponse.json(declarations);
+    }),
+  );
+  show();
+  const row = await entry("github");
+  const select = within(row).getByRole("combobox", {
+    name: "APPA_PROVIDER_GITHUB_TOKEN",
+  });
+  await waitFor(() => expect(select).toHaveTextContent("GitHub token"));
+  expect(select).toBeDisabled();
+  expect(row).toHaveTextContent(
+    "Set in the policy repository. Remove its line there to manage it here.",
+  );
+  expect(
+    await within(row).findByRole("link", { name: /Open the policy file/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/acme/policy/blob/main/org.appa.toml",
+  );
+  expect(written).toBe(false);
 });
 
 test("without the permission to manage guardrails the controls are read-only", async () => {
@@ -1248,7 +1367,7 @@ test("source and status filters narrow the battery table", async () => {
     screen.queryByRole("row", { name: /github GitHub rules/ }),
   ).not.toBeInTheDocument();
   await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Broken" }));
+  await user.click(screen.getByRole("option", { name: "Not enforced" }));
   expect(screen.getByText("No batteries match your filters")).toBeVisible();
   await user.click(screen.getByRole("button", { name: "Clear filters" }));
   expect(
@@ -1274,7 +1393,7 @@ test("the status filter groups statuses and keeps the group in the URL", async (
   const user = userEvent.setup();
   await screen.findByRole("row", { name: /docs Knowledge rules/ });
   await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Broken" }));
+  await user.click(screen.getByRole("option", { name: "Not enforced" }));
   expect(url.get("status")).toBe("broken");
   // A missing credential and an unused battery are both broken.
   expect(
@@ -1306,7 +1425,7 @@ test("the available batteries split into the ones that fit a server and the rest
 
   const user = userEvent.setup();
   await user.click(screen.getByRole("combobox", { name: "Filter by status" }));
-  await user.click(screen.getByRole("option", { name: "Other available" }));
+  await user.click(screen.getByRole("option", { name: "For other servers" }));
   expect(url.get("status")).toBe("other");
   expect(
     await screen.findByRole("row", { name: /github GitHub rules/ }),
@@ -1334,7 +1453,7 @@ test("filters in the URL apply on load, so a reload or a link keeps them", async
   ).not.toBeInTheDocument();
   expect(
     screen.getByRole("combobox", { name: "Filter by status" }),
-  ).toHaveTextContent("Active");
+  ).toHaveTextContent("Enforced");
   expect(screen.getByPlaceholderText(/Search batteries by name/)).toHaveValue(
     "github",
   );

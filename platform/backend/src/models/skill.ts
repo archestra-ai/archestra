@@ -58,7 +58,9 @@ import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessFilter,
+} from "./resource-permission-subject";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
 /**
@@ -353,6 +355,8 @@ class SkillModel {
     status?: SkillRecordStatus;
     /** Skill ids matching a `?labels=` filter; omit when not filtering. */
     labelFilteredIds?: string[];
+    /** The list's "Show" filter; omit when not filtering. */
+    access?: ResourceAccessFilter;
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
@@ -397,6 +401,8 @@ class SkillModel {
     status?: SkillRecordStatus;
     /** Skill ids matching a `?labels=` filter; omit when not filtering. */
     labelFilteredIds?: string[];
+    /** Same "Show" filter as `findByOrganization`. */
+    access?: ResourceAccessFilter;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -1743,6 +1749,7 @@ function buildOrgFilters(params: {
    * route so the list and count queries agree without resolving twice.
    */
   labelFilteredIds?: string[];
+  access?: ResourceAccessFilter;
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
@@ -1776,6 +1783,17 @@ function buildOrgFilters(params: {
             resource: "skill",
             scopeColumn: schema.skillsTable.id,
             action: "use",
+          }),
+        ]
+      : []),
+    ...(params.access
+      ? [
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            ...params.access,
+            organizationId: schema.skillsTable.organizationId,
+            resource: "skill",
+            scopeColumn: schema.skillsTable.id,
+            ownerColumn: schema.skillsTable.authorId,
           }),
         ]
       : []),

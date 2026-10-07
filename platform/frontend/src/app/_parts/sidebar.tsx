@@ -60,6 +60,7 @@ import { useIsAuthenticated } from "@/lib/auth/auth.hook";
 import { useHasPermissions, usePermissionMap } from "@/lib/auth/auth.query";
 import config from "@/lib/config/config";
 import { useFeature } from "@/lib/config/config.query";
+import { useDocsScreenshotMode } from "@/lib/docs-screenshot-mode";
 import { useGithubStars } from "@/lib/github/github.query";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
@@ -152,7 +153,8 @@ function SidebarModeToggle({
       className={cn(
         "relative flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
         mode === value
-          ? "bg-sidebar-emphasis font-medium text-sidebar shadow-sm"
+          ? // Light: a raised card on the muted track. Dark: a solid pill.
+            "bg-raised font-medium text-foreground shadow-sm dark:bg-sidebar-emphasis dark:text-sidebar"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -170,7 +172,7 @@ function SidebarModeToggle({
     <div
       role="group"
       aria-label="Sidebar view"
-      className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden"
+      className="flex gap-0.5 rounded-lg border border-sidebar-border bg-sidebar-track p-px group-data-[collapsible=icon]:hidden"
     >
       {segment("chats", "AI", MessageCircle)}
       {segment("studio", "Studio", PencilRuler)}
@@ -223,7 +225,7 @@ const NavPrimary = ({
           {item.beta && (
             <Badge
               variant="outline"
-              className="ml-auto shrink-0 border-sidebar-emphasis bg-sidebar px-1.5 py-0 text-[10px] text-sidebar-emphasis group-data-[collapsible=icon]:hidden"
+              className="ml-auto shrink-0 border-transparent bg-sidebar-chip px-1.5 py-0 text-[10px] text-sidebar-emphasis dark:border-sidebar-emphasis dark:bg-sidebar group-data-[collapsible=icon]:hidden"
             >
               {item.badgeLabel ?? "New"}
             </Badge>
@@ -481,8 +483,10 @@ export function AppSidebar() {
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   // Show community menu items unless the Enterprise license env var is set
   // (the small-team free tier doesn't hide them).
-  const showCommunityLinks = !config.enterpriseFeatures.core;
+  const showLicenseCommunityLinks = !config.enterpriseFeatures.core;
   // SPDX-SnippetEnd
+  const docsScreenshotMode = useDocsScreenshotMode();
+  const showCommunityLinks = showLicenseCommunityLinks && !docsScreenshotMode;
   // GitHub stars are cosmetic and external, so defer them until after the
   // authenticated shell data has had a chance to load.
   const { data: starCount } = useGithubStars({
@@ -508,8 +512,14 @@ export function AppSidebar() {
   const [sidebarMode, pickSidebarMode] = useSidebarMode(pathname);
   const chatListFadeIn = useOnce();
   // Onboarding red dots: unseen nav items for this user (RBAC/flag filtered).
-  const { unseenKeys, showChatsDot, showStudioDot, markSeen } =
-    useNavOnboarding();
+  const onboarding = useNavOnboarding();
+  const { markSeen } = onboarding;
+  // Screenshots show the steady-state shell, not a first visit's dots.
+  const unseenKeys = docsScreenshotMode
+    ? NO_UNSEEN_KEYS
+    : onboarding.unseenKeys;
+  const showChatsDot = !docsScreenshotMode && onboarding.showChatsDot;
+  const showStudioDot = !docsScreenshotMode && onboarding.showStudioDot;
 
   // Connect is offered when either MCP gateway or LLM proxy is readable.
   const filteredChatsNavItems = React.useMemo(
@@ -678,9 +688,11 @@ export function AppSidebar() {
       <SidebarFooter>
         {/* The studio nav already shows the Guardrails row, tinted red while
             enforcement is off, so the status row would only repeat it. */}
-        <SidebarWarningsAccordion
-          showGuardrailsStatus={sidebarMode !== "studio"}
-        />
+        {!docsScreenshotMode && (
+          <SidebarWarningsAccordion
+            showGuardrailsStatus={sidebarMode !== "studio"}
+          />
+        )}
         {isAuthenticated && (
           <SidebarGroup className="mt-auto p-0">
             <SidebarGroupContent>
@@ -772,3 +784,5 @@ function getPrefetchHref(href: React.ComponentProps<typeof Link>["href"]) {
   const query = searchParams.toString();
   return `${href.pathname}${query ? `?${query}` : ""}${href.hash ?? ""}`;
 }
+
+const NO_UNSEEN_KEYS: Set<NavDotKey> = new Set();

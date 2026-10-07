@@ -4,6 +4,7 @@ import {
   AGENT_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
+  SELF_FORK_TOOL_NAME,
   slugify,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -20,6 +21,11 @@ import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool, getAgentTools } from ".";
+
+/** The delegation targets a surface offers, without the caller's own fork. */
+function delegationTargets(tools: Array<{ name: string }>) {
+  return tools.filter((tool) => tool.name !== SELF_FORK_TOOL_NAME);
+}
 
 const mockExecuteA2AMessage = vi.fn();
 const mockStartDelegatedTask = vi.fn();
@@ -714,7 +720,7 @@ describe("Auto-mode subagent delegation", () => {
       skipAccessCheck: true,
     });
 
-    expect(tools).toHaveLength(0);
+    expect(delegationTargets(tools)).toHaveLength(0);
   });
 
   test("Custom mode ignores accessible agents (explicit only)", async ({
@@ -737,7 +743,7 @@ describe("Auto-mode subagent delegation", () => {
       userId: user.id,
     });
 
-    expect(tools).toHaveLength(0);
+    expect(delegationTargets(tools)).toHaveLength(0);
   });
 
   test("dispatches to an accessible target without explicit assignment", async ({
@@ -908,7 +914,7 @@ describe("Auto-mode subagent delegation", () => {
       organizationId: organization.id,
       userId: user.id,
     });
-    expect(tools).toHaveLength(0);
+    expect(delegationTargets(tools)).toHaveLength(0);
 
     const result = await executeArchestraTool(
       `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
@@ -1234,6 +1240,145 @@ describe("Auto-mode subagent delegation", () => {
     );
     expect(mockExecuteA2AMessage).not.toHaveBeenCalledWith(
       expect.objectContaining({ agentId: impostor.id }),
+    );
+  });
+});
+
+describe("self-fork and attested returns", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function setup(fixtures: {
+    makeOrganization: any;
+    makeUser: any;
+    makeMember: any;
+    makeAgent: any;
+  }) {
+    const organization = await fixtures.makeOrganization();
+    const user = await fixtures.makeUser();
+    await fixtures.makeMember(user.id, organization.id, { role: "member" });
+    const parent = await fixtures.makeAgent({
+      name: "Parent Agent",
+      agentType: "agent",
+      organizationId: organization.id,
+    });
+    await AgentModel.update(parent.id, { accessAllSubagents: true });
+    const target = await fixtures.makeAgent({
+      name: "Research Bot",
+      agentType: "agent",
+      organizationId: organization.id,
+    });
+    const advisor = await fixtures.makeAgent({
+      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+      agentType: "agent",
+      organizationId: organization.id,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+    return { organization, user, parent, target, advisor };
+  }
+
+  test("offers every agent a fork of itself", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+
+    expect(tools.find((tool) => tool.name === SELF_FORK_TOOL_NAME)).toEqual(
+      expect.objectContaining({
+        _meta: expect.objectContaining({ targetAgentId: parent.id }),
+      }),
+    );
+  });
+
+  for (const active of [true, false]) {
+    test(`offers return_schema to own agents only while Guardrails v2 is ${active ? "active" : "off"}`, async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    }) => {
+      config.openappa.enabled = true;
+      await GuardrailsDeploymentModel.setEnabled(active);
+      const { organization, user, parent, target, advisor } = await setup({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeAgent,
+      });
+
+      const tools = await getAgentTools({
+        agentId: parent.id,
+        organizationId: organization.id,
+        userId: user.id,
+      });
+      const attests = (name: string) =>
+        Object.hasOwn(
+          tools.find((tool) => tool.name === name)?.inputSchema.properties ??
+            {},
+          "return_schema",
+        );
+
+      expect(attests(SELF_FORK_TOOL_NAME)).toBe(active);
+      expect(attests(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`)).toBe(
+        active,
+      );
+      // A built-in subagent is not started as a child trajectory.
+      expect(attests(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`)).toBe(
+        false,
+      );
+    });
+  }
+
+  test("a fork runs the calling agent itself", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "fork-message",
+      text: "Summarized",
+      finishReason: "stop",
+    });
+
+    const result = await executeArchestraTool(
+      SELF_FORK_TOOL_NAME,
+      { message: "Summarize the logs." },
+      {
+        userId: user.id,
+        agent: { id: parent.id, name: parent.name },
+        agentId: parent.id,
+        organizationId: organization.id,
+      },
+    );
+
+    expect(result.isError).toBeFalsy();
+    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
+      expect.objectContaining({
+        agentId: parent.id,
+        selfFork: true,
+        parentDelegationChain: parent.id,
+      }),
     );
   });
 });

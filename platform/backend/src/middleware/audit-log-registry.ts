@@ -28,6 +28,7 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
@@ -47,6 +48,7 @@ import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import TrustedDataPolicyModel from "@/models/trusted-data-policy";
 import UserTokenModel from "@/models/user-token";
 import VirtualApiKeyModel from "@/models/virtual-api-key";
+import { findConnectedClientForAudit } from "@/services/connected-client";
 import { type AuditEventName, AuditEventNameSchema } from "@/types/audit-log";
 
 export type AuditResourceIdSource =
@@ -222,6 +224,19 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
   "/api/client-connections/:id/decision": {
     resourceType: "clientConnection",
     action: "clientConnection.updated",
+  },
+  // Disconnecting a client: the resource is the user whose client it was;
+  // the snapshot names the client.
+  "/api/connected-clients/:clientId": {
+    resourceType: "connectedClient",
+    action: "connectedClient.disconnected",
+    resourceIdSource: "currentUser",
+    fetchById: (userId, organizationId, routeParams) =>
+      findConnectedClientForAudit({
+        organizationId,
+        userId,
+        clientId: String(routeParams?.clientId),
+      }),
   },
   // Sole audited child of the denylisted /api/connection-setups prefix.
   // Installer tickets stay unaudited; this window grant records no secrets.
@@ -859,6 +874,12 @@ export const AUDITABLE_ROUTES: Record<string, AuditableRouteConfig> = {
     actionByMethod: { PUT: "openappaBatteryPackage.updated" },
     fetchById: (name, orgId) =>
       OpenAppaBatteryPackageModel.findNewestByNameForAudit(name, orgId),
+  },
+  "/api/openappa/credential-bindings/:variable": {
+    resourceType: "openappaCredentialBinding",
+    resourceIdParam: "variable",
+    fetchById: (variable, orgId) =>
+      OpenAppaCredentialBindingModel.findByIdForAudit(variable, orgId),
   },
   "/api/openappa/battery-packages/:contentHash": {
     resourceType: "openappaBatteryPackage",

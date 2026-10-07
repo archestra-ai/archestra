@@ -732,6 +732,256 @@ test("drainStreamToEvents stops cleanly when the run is deleted before a schedul
   expect(await ActiveChatRunModel.findById(run?.id ?? "")).toBeNull();
 });
 
+test("Stop on a run whose owner died fails it at once and frees the conversation", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    50,
+    50,
+  );
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const runId = run?.id ?? "";
+  await ActiveChatRunModel.appendEvents({
+    runId,
+    seq: 1,
+    payloads: [{ type: "start-step" }],
+  });
+  // The owning process was killed mid-stream: nothing touches the row anymore.
+  await db
+    .update(schema.chatActiveRunsTable)
+    .set({ updatedAt: new Date(Date.now() - 2 * 60 * 1000) })
+    .where(eq(schema.chatActiveRunsTable.id, runId));
+
+  await service.requestStop({
+    conversationId: conversation.id,
+    organizationId: organization.id,
+  });
+  const startedAt = Date.now();
+  await service.waitForTerminal(runId);
+
+  expect(Date.now() - startedAt).toBeLessThan(5_000);
+  expect((await ActiveChatRunModel.findById(runId))?.status).toBe("failed");
+  // A reconnecting client gets the partial stream and then a closed replay.
+  expect(await readStream(service.createReplayStream(runId))).toEqual([
+    { type: "start-step" },
+  ]);
+  // The next message is accepted instead of 409-ing on the orphaned run.
+  const next = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  expect(next).not.toBeNull();
+});
+
+test("Stop on a run owned by another replica goes through the owner, not the stale path", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const notifier = new InMemoryActiveChatRunNotifier();
+  const owner = new ActiveChatRunService(notifier, 50, 50);
+  const otherReplica = new ActiveChatRunService(notifier, 50, 50);
+  const run = await owner.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const runId = run?.id ?? "";
+  const abortController = new AbortController();
+  owner.drainStreamToEvents({
+    runId,
+    conversationId: conversation.id,
+    stream: createStreamOpenUntilAbort(abortController.signal, [
+      { type: "start" },
+    ]),
+    abortController,
+    getTerminalStatus: async () => ({
+      status: abortController.signal.aborted ? "cancelled" : "completed",
+    }),
+  });
+  const stopPolling = owner.startStopPolling({
+    runId,
+    conversationId: conversation.id,
+    abortController,
+  });
+
+  try {
+    await otherReplica.requestStop({
+      conversationId: conversation.id,
+      organizationId: organization.id,
+    });
+    await otherReplica.waitForTerminal(runId);
+
+    expect(abortController.signal.aborted).toBe(true);
+    expect((await ActiveChatRunModel.findById(runId))?.status).toBe(
+      "cancelled",
+    );
+  } finally {
+    stopPolling();
+  }
+});
+
+test("Stop's wait is bounded and never fails a recently touched run", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    20,
+    20,
+  );
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const runId = run?.id ?? "";
+  // Touched 20s ago: its owner may still be alive, so it must not be failed.
+  await db
+    .update(schema.chatActiveRunsTable)
+    .set({ updatedAt: new Date(Date.now() - 20_000) })
+    .where(eq(schema.chatActiveRunsTable.id, runId));
+
+  await service.requestStop({
+    conversationId: conversation.id,
+    organizationId: organization.id,
+  });
+  await service.waitForTerminal(runId, { timeoutMs: 100 });
+
+  expect((await ActiveChatRunModel.findById(runId))?.status).toBe("running");
+});
+
+test("a live run whose stream is silent keeps its liveness fresh and is not reaped", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    50,
+    50,
+  );
+  const run = await service.createRun({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const runId = run?.id ?? "";
+  const lastTouch = new Date(Date.now() - 2 * 60 * 1000);
+  await db
+    .update(schema.chatActiveRunsTable)
+    .set({ updatedAt: lastTouch })
+    .where(eq(schema.chatActiveRunsTable.id, runId));
+  const abortController = new AbortController();
+
+  vi.useFakeTimers({ toFake: ["setInterval", "clearInterval"] });
+  try {
+    // A long tool call or reasoning step: the stream emits nothing at all.
+    service.drainStreamToEvents({
+      runId,
+      conversationId: conversation.id,
+      stream: createStreamOpenUntilAbort(abortController.signal, []),
+      abortController,
+      getTerminalStatus: async () => ({ status: "cancelled" }),
+    });
+
+    vi.advanceTimersByTime(5_000);
+    await waitForAsyncCondition(async () => {
+      const current = await ActiveChatRunModel.findById(runId);
+      return (current?.updatedAt.getTime() ?? 0) > lastTouch.getTime();
+    }, 3_000);
+
+    await service.reapStaleRuns();
+    expect((await ActiveChatRunModel.findById(runId))?.status).toBe("running");
+  } finally {
+    abortController.abort();
+    vi.useRealTimers();
+  }
+  await waitForTerminalRun(runId);
+});
+
+test("reapStaleRuns fails runs untouched for a minute and spares recently touched ones", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const service = new ActiveChatRunService(
+    new InMemoryActiveChatRunNotifier(),
+    10_000,
+    10_000,
+  );
+  const makeRunTouchedAgo = async (ageMs: number) => {
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: organization.id,
+    });
+    const run = await service.createRun({
+      conversationId: conversation.id,
+      userId: user.id,
+      organizationId: organization.id,
+    });
+    await db
+      .update(schema.chatActiveRunsTable)
+      .set({ updatedAt: new Date(Date.now() - ageMs) })
+      .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
+    return run?.id ?? "";
+  };
+  const recentlyTouched = await makeRunTouchedAgo(30_000);
+  const ownerless = await makeRunTouchedAgo(70_000);
+
+  await service.reapStaleRuns();
+
+  expect((await ActiveChatRunModel.findById(recentlyTouched))?.status).toBe(
+    "running",
+  );
+  expect((await ActiveChatRunModel.findById(ownerless))?.status).toBe("failed");
+});
+
 function createChunkStream(
   payloads: UIMessageChunk[],
 ): ReadableStream<UIMessageChunk> {
@@ -790,6 +1040,37 @@ async function waitForCondition(
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
     if (predicate()) {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
+
+  throw new Error("Condition was not met within timeout");
+}
+
+function createStreamOpenUntilAbort(
+  signal: AbortSignal,
+  payloads: UIMessageChunk[],
+): ReadableStream<UIMessageChunk> {
+  return new ReadableStream<UIMessageChunk>({
+    start(controller) {
+      for (const payload of payloads) {
+        controller.enqueue(payload);
+      }
+      signal.addEventListener("abort", () => controller.close(), {
+        once: true,
+      });
+    },
+  });
+}
+
+async function waitForAsyncCondition(
+  predicate: () => Promise<boolean>,
+  timeoutMs: number,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (await predicate()) {
       return;
     }
     await new Promise((resolve) => setTimeout(resolve, 10));

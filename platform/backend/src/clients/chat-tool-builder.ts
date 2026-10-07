@@ -18,6 +18,7 @@ import {
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_INVOCATION_APPROVAL_REQUIRED_AUTONOMOUS_REASON,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -50,6 +51,7 @@ import type {
   RepeatSeverity,
   ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
+import { capChatToolResult } from "@/clients/tool-result-spill";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import {
   legacyTrustedDataActive,
@@ -71,6 +73,7 @@ import {
   type SpanTeamInfo,
   startActiveMcpSpan,
 } from "@/observability/tracing";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { TASK_TTL_MS } from "@/routes/mcp-gateway/tasks";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import type {
@@ -141,6 +144,8 @@ export interface ChatToolContext {
    * delegation call that spawned them.
    */
   subagentToolStream?: SubagentToolStreamBridge;
+  /** The child trajectory an OpenAPPA spawn bound this delegated run to. */
+  appaSubagent?: SubagentBinding;
   /**
    * Bridge that detaches a long-running tool call into a durable, cancellable
    * MCP task and surfaces it as a live card (chat path only). Absent in
@@ -298,6 +303,7 @@ export function buildMcpGatewayTool(params: {
                 // `run_tool` can dispatch a delegation tool, so this context
                 // needs the caller's ancestors for the executor's cycle check.
                 delegationChain: ctx.delegationChain,
+                openappaSubagent: ctx.appaSubagent,
                 approvalRequiredPoliciesHandled: true,
                 // Every runner that drives an agent lands here — web
                 // chat, A2A, ChatOps, schedule triggers, incoming email
@@ -415,8 +421,8 @@ export function buildMcpGatewayTool(params: {
             });
           }
 
-          // PostToolUse lifecycle hook: append any block feedback to the
-          // tool result the model sees, preserving its shape.
+          // PostToolUse lifecycle hook sees the full result; its block
+          // feedback is appended to the (size-capped) text the model sees.
           const postFeedback = await firePostToolUseHook({
             ctx,
             toolName: mcpTool.name,
@@ -424,9 +430,12 @@ export function buildMcpGatewayTool(params: {
             toolResponse: toolResultText(toolResult),
             toolCallId: options.toolCallId,
           });
-          return postFeedback
-            ? appendHookFeedbackToToolResult(toolResult, postFeedback)
-            : toolResult;
+          return capChatToolResult({
+            result: toolResult,
+            hookFeedback: postFeedback,
+            context: ctx,
+            toolCallId: options.toolCallId,
+          });
         },
       });
     },
@@ -468,6 +477,7 @@ export function buildAgentDelegationTool(params: {
     sessionId: ctx.sessionId,
     scheduleTriggerRunId: ctx.scheduleTriggerRunId,
     delegationChain: ctx.delegationChain,
+    openappaSubagent: ctx.appaSubagent,
     abortSignal: ctx.abortSignal,
     tokenAuth: buildTokenAuthContext({
       mcpGwToken: ctx.mcpGwToken,
@@ -554,19 +564,27 @@ export function buildAgentDelegationTool(params: {
           // Internal subagents retain their established trust behavior. Only
           // an external A2A descriptor carries an exact policy-bearing tool ID
           // and therefore introduces this explicit opaque-data boundary.
-          if (!resolvedToolId) return content;
-          const boundaryResult = await buildUnsafeContextBoundaryResult({
-            resultMeta: response._meta as Record<string, unknown> | undefined,
+          const boundaryResult = resolvedToolId
+            ? await buildUnsafeContextBoundaryResult({
+                resultMeta: response._meta as
+                  | Record<string, unknown>
+                  | undefined,
+                toolCallId: options.toolCallId,
+                toolName: agentTool.name,
+                toolOutput: content,
+                agentId: ctx.agentId,
+                considerContextUntrusted: ctx.considerContextUntrusted,
+                resolvedToolId,
+              })
+            : null;
+          return capChatToolResult({
+            result: boundaryResult?.unsafeContextBoundary
+              ? { content, ...boundaryResult }
+              : content,
+            hookFeedback: null,
+            context: ctx,
             toolCallId: options.toolCallId,
-            toolName: agentTool.name,
-            toolOutput: content,
-            agentId: ctx.agentId,
-            considerContextUntrusted: ctx.considerContextUntrusted,
-            resolvedToolId,
           });
-          return boundaryResult.unsafeContextBoundary
-            ? { content, ...boundaryResult }
-            : content;
         },
       }),
   };
@@ -764,7 +782,8 @@ export async function buildArchestraToolOutput(params: {
     // Not a run_tool dispatch — no UI resource to attach, but the card still
     // names who the platform ran this for and, on a reviewed remedy, the
     // ruling the viewer gave. ask_user keeps the user's recorded answer,
-    // which its card reads back after a reload.
+    // which its card reads back after a reload; the battery credential card
+    // reads its batteries the same way.
     const humanRuling = extractMcpHumanRuling(response);
     return {
       content: text,
@@ -772,7 +791,8 @@ export async function buildArchestraToolOutput(params: {
         ...executedAsMeta,
         ...(humanRuling ? { [MCP_HUMAN_RULING_META_KEY]: humanRuling } : {}),
       },
-      ...(targetShortName === TOOL_ASK_USER_SHORT_NAME &&
+      ...((targetShortName === TOOL_ASK_USER_SHORT_NAME ||
+        targetShortName === TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME) &&
       isRecord(response.structuredContent)
         ? { structuredContent: response.structuredContent }
         : {}),
@@ -870,7 +890,6 @@ export const __test = {
   // Hook helpers — exposed for focused unit tests
   firePreToolUseHook,
   firePostToolUseHook,
-  appendHookFeedbackToToolResult,
   buildPreToolUseBlockedResult,
   toolResultText,
   collectKbChunksForVerification,
@@ -2159,24 +2178,6 @@ function toolResultText(
   result: string | { content: string; [key: string]: unknown },
 ): string {
   return typeof result === "string" ? result : result.content;
-}
-
-/**
- * Appends PostToolUse hook feedback to a tool result, preserving its shape: a
- * string stays a string; a rich `{ content }` object keeps its other fields.
- */
-function appendHookFeedbackToToolResult<
-  T extends string | { content: string; [key: string]: unknown },
->(result: T, feedback: string): T {
-  const suffix = `\n\n[hook feedback] ${feedback}`;
-  if (typeof result === "string") {
-    return (result + suffix) as T;
-  }
-  const objectResult = result as { content: string; [key: string]: unknown };
-  return {
-    ...objectResult,
-    content: objectResult.content + suffix,
-  } as T;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

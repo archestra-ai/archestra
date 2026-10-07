@@ -10,8 +10,6 @@ export {
   A2aConnectionModel,
   default as A2aRemoteAgentModel,
 } from "./a2a-remote-agent";
-export { default as A2aRemoteAgentTeamModel } from "./a2a-remote-agent-team";
-export { default as A2aRemoteAgentUserModel } from "./a2a-remote-agent-user";
 export { default as AccountModel } from "./account";
 export { default as AgentModel } from "./agent";
 export { default as AgentActivationSkillRuleModel } from "./agent-activation-skill-rule";
@@ -47,6 +45,7 @@ export { default as ChatOpsChannelBindingModel } from "./chatops-channel-binding
 export { default as ChatOpsConfigModel } from "./chatops-config";
 export { default as ChatOpsProcessedMessageModel } from "./chatops-processed-message";
 export { default as ChatOpsThreadContextModel } from "./chatops-thread-context";
+export { default as ConnectedClientModel } from "./connected-client";
 export { default as ConnectionSetupModel } from "./connection-setup";
 export { default as ConnectorRunModel } from "./connector-run";
 export { default as ConversationModel } from "./conversation";

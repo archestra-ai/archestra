@@ -15,6 +15,9 @@ export function useLogsLayoutConfig() {
       ...(permissionMap?.["/audit/logs"]
         ? [{ label: "Audit", href: "/audit/logs" }]
         : []),
+      ...(permissionMap?.["/connections/logs"]
+        ? [{ label: "Agent connections", href: "/connections/logs" }]
+        : []),
       ...(openappaEnabled && permissionMap?.["/consults/logs"]
         ? [{ label: "Guardrail consults", href: "/consults/logs" }]
         : []),

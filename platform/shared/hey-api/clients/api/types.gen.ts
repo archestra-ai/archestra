@@ -37135,6 +37135,7 @@ export type GetChatAgentMcpToolsResponses = {
         parameters: {
             [key: string]: unknown;
         } | null;
+        tokens: number;
     }>;
 };
 
@@ -40799,10 +40800,359 @@ export type GetConnectedClientsResponses = {
         clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'amp';
         lastConnectedAt: string;
         deviceNames: Array<string>;
+        lastSeenAt: string | null;
     }>;
 };
 
 export type GetConnectedClientsResponse = GetConnectedClientsResponses[keyof GetConnectedClientsResponses];
+
+export type GetConnectedClientLogData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        cursor?: string;
+        /**
+         * Only events for this user's clients
+         */
+        userId?: string;
+        /**
+         * Only events for this client
+         */
+        clientId?: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
+        /**
+         * Only connects or only disconnects
+         */
+        action?: 'connected' | 'disconnected';
+        /**
+         * Events on or after this date (ISO 8601)
+         */
+        startDate?: string;
+        /**
+         * Events on or before this date (ISO 8601)
+         */
+        endDate?: string;
+    };
+    url: '/api/connected-clients/log';
+};
+
+export type GetConnectedClientLogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectedClientLogError = GetConnectedClientLogErrors[keyof GetConnectedClientLogErrors];
+
+export type GetConnectedClientLogResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            action: 'connected' | 'disconnected';
+            occurredAt: string;
+            userId: string;
+            userName: string;
+            userEmail: string;
+            clientId: string | null;
+            agentName: string;
+            via: 'setup' | 'oauthSignIn';
+            platform: 'macos' | 'linux' | 'windows' | null;
+            deviceName: string | null;
+            mcpGateway: {
+                id: string;
+                name: string;
+            } | null;
+            modelRouting: boolean;
+            includeSkills: boolean;
+            disconnectedBy: {
+                id: string;
+                name: string;
+            } | null;
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
+};
+
+export type GetConnectedClientLogResponse = GetConnectedClientLogResponses[keyof GetConnectedClientLogResponses];
+
+export type GetAgentAdoptionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connected-clients/adoption';
+};
+
+export type GetAgentAdoptionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionError = GetAgentAdoptionErrors[keyof GetAgentAdoptionErrors];
+
+export type GetAgentAdoptionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        lookbackDays: number;
+        members: Array<{
+            userId: string;
+            name: string;
+            email: string;
+            status: 'active' | 'inactive';
+            gatewayLastSeenAt: string | null;
+            llmLastSeenAt: string | null;
+            gatewayUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+            llmUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+            skillSyncs: Array<{
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                lastSyncedAt: string;
+            }>;
+        }>;
+    };
+};
+
+export type GetAgentAdoptionResponse = GetAgentAdoptionResponses[keyof GetAgentAdoptionResponses];
+
+export type GetAgentAdoptionUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Only this member's calls; the whole organization when left out
+         */
+        userId?: string;
+    };
+    url: '/api/connected-clients/adoption/usage';
+};
+
+export type GetAgentAdoptionUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionUsageError = GetAgentAdoptionUsageErrors[keyof GetAgentAdoptionUsageErrors];
+
+export type GetAgentAdoptionUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        lookbackDays: number;
+        days: Array<{
+            date: string;
+            gatewayCalls: number;
+            llmCalls: number;
+        }>;
+    };
+};
+
+export type GetAgentAdoptionUsageResponse = GetAgentAdoptionUsageResponses[keyof GetAgentAdoptionUsageResponses];
 
 export type DisconnectConnectedClientData = {
     body?: never;
@@ -79778,6 +80128,8 @@ export type GetMcpToolCallsResponses = {
             userId: string | null;
             runId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+            oauthClientId: string | null;
+            source: 'api' | 'chat';
             createdAt: string;
             userName: string | null;
             appName: string | null;
@@ -79894,6 +80246,8 @@ export type GetMcpToolCallResponses = {
         userId: string | null;
         runId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+        oauthClientId: string | null;
+        source: 'api' | 'chat';
         createdAt: string;
         userName: string | null;
         appName: string | null;

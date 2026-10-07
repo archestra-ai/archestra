@@ -296,12 +296,14 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
           }}
         />
         {!canUpdate && (
-          <ResourcePermissions
-            layout="settings"
-            resource="externalAgent"
-            scope={agent.id}
-            onDirtyChange={setPermissionsDirty}
-          />
+          <div className="border-t pt-8">
+            <ResourcePermissions
+              layout="settings"
+              resource="externalAgent"
+              scope={agent.id}
+              onDirtyChange={setPermissionsDirty}
+            />
+          </div>
         )}
       </AgentPageShell>
       <DeleteConfirmDialog

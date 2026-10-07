@@ -624,9 +624,13 @@ export function A2aRemoteAgentForm({
               onChange={setInitialGrants}
             />
           )}
-          {agent && permissions?.section}
         </SettingsSectionGroup>
       </form>
+      {/* Outside the form: the Permissions editor is a form of its own, and
+        forms cannot nest. The rule and padding match the group's sections. */}
+      {agent && permissions && (
+        <div className="border-t pt-8">{permissions.section}</div>
+      )}
       <FloatingActionBar>
         <Button
           type="submit"

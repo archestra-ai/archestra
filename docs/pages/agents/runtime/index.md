@@ -100,6 +100,7 @@ What to know:
 
 - **Your coding agent:** [hand work off](/docs/agents/runtime/handoff) from Claude Code or another connected agent, and bring it back.
 - **A coordinator agent:** add the agent as a [subagent](/docs/agents/subagents). The coordinator keeps answering while the run works. This also covers messaging channels: the result returns to the original thread.
+- **Messaging channels:** a message to the agent in [Slack](/docs/agents/triggers-and-channels/slack), [Microsoft Teams](/docs/agents/triggers-and-channels/ms-teams), or [Telegram](/docs/agents/triggers-and-channels/telegram) starts a run. The bot replies with a link to the run, then posts the result in the thread. A follow-up from the same person continues their run.
 - **Email:** an [email](/docs/agents/triggers-and-channels/email) to the agent starts a run. The result returns in the thread when replies are on.
 - **A2A:** A2A clients start runs and continue them with the same `contextId`. See [A2A](/docs/agents/triggers-and-channels/webhook-a2a#sdks).
 

@@ -196,7 +196,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`** - Encrypts secrets stored in the database, such as API keys and tokens.
   - Default: Helm generates one in the `<release>-auth` Secret under `secrets-encryption-secret`. Without Helm, it falls back to [`ARCHESTRA_AUTH_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SECRET).
   - Values: a random string of at least 32 characters
-  - Startup stops if this key cannot decrypt the stored secrets. To rotate it, set the old value in [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) and restart. See [Secrets Management](/docs/admin/security/secrets-management).
+  - Startup stops if this key cannot decrypt the stored secrets. To rotate it, set the old value in [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) and restart. See [Credentials and Secrets](/docs/admin/security/credentials#secrets-storage).
 
 - **`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`** - Previous encryption secret, used on startup to re-encrypt stored secrets under the new one.
   - Default: [`ARCHESTRA_AUTH_SECRET`](/docs/reference/configuration#ARCHESTRA_AUTH_SECRET)
@@ -227,7 +227,7 @@ Archestra reads its configuration from environment variables. Pass them with `-e
 - **`ARCHESTRA_SECRETS_MANAGER`** - Where Archestra stores secrets such as API keys and tokens.
   - Default: `DB`
   - Values: `DB`, `VAULT`, `READONLY_VAULT`. Both Vault values require an enterprise license.
-  - With an invalid Vault configuration or no license, Archestra logs a warning and uses `DB`. See [Secrets Management](/docs/admin/security/secrets-management).
+  - With an invalid Vault configuration or no license, Archestra logs a warning and uses `DB`. See [Credentials and Secrets](/docs/admin/security/credentials#secrets-storage).
 
 - **`ARCHESTRA_HASHICORP_VAULT_ADDR`** - Address of the HashiCorp Vault server.
   - Required when: [`ARCHESTRA_SECRETS_MANAGER=VAULT`](/docs/reference/configuration#ARCHESTRA_SECRETS_MANAGER) or `READONLY_VAULT`

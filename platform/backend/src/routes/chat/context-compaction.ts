@@ -46,6 +46,7 @@ import type {
 import { extractTaggedText } from "@/utils/generate-tagged-text";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
+import { projectCappedToolOutputs } from "@/utils/tool-result-cap";
 import { estimateToolsTokens } from "./context-window-breakdown";
 import {
   estimateFileTokens,
@@ -149,7 +150,10 @@ export async function compactMessagesForChat(
   params: ContextCompactionParams,
 ): Promise<ContextCompactionResult> {
   return await startContextCompactionSpan(params, async (span) => {
-    const result = await runCompactMessagesForChat(params);
+    const result = await runCompactMessagesForChat({
+      ...params,
+      messages: projectCappedToolOutputs(params.messages),
+    });
     recordContextCompactionOutcome(span, params, result);
     return result;
   });

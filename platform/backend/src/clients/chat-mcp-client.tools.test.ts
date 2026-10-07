@@ -22,6 +22,10 @@ import ToolInvocationPolicyModel from "@/models/tool-invocation-policy";
 import { metrics } from "@/observability";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { beforeEach, describe, expect, test } from "@/test";
+import {
+  MAX_TOOL_RESULT_CONTEXT_CHARS,
+  readCappedToolResult,
+} from "@/utils/tool-result-cap";
 import * as chatClient from "./chat-mcp-client";
 import mcpClient from "./mcp-client";
 import {
@@ -359,6 +363,37 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
         isError: false,
       }),
     );
+  });
+
+  test("caps an oversized external result for the model, keeping UI fields and hook feedback", async () => {
+    const { baseParams } = await setupChatToolEnv({
+      gatewayTools: [externalTool("extsrv__fetch_data")],
+    });
+    vi.spyOn(hookDispatcherService, "fire").mockImplementation(
+      async ({ event }) =>
+        event === "post_tool_use"
+          ? { decision: "block", reason: "trim it", runs: [] }
+          : { decision: "proceed", runs: [] },
+    );
+    const huge = "x".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 2);
+    vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
+      content: [{ type: "text", text: huge }],
+      structuredContent: { rows: ["for the UI"] },
+      isError: false,
+    } as never);
+
+    const tools = await chatClient.getChatMcpTools(baseParams);
+    const result = (await tools.extsrv__fetch_data.execute?.(
+      { query: "q" },
+      execOptions("call-huge"),
+    )) as { content: string; structuredContent?: unknown };
+
+    expect(result.content.length).toBeLessThanOrEqual(
+      MAX_TOOL_RESULT_CONTEXT_CHARS,
+    );
+    expect(result.content.endsWith("[hook feedback] trim it")).toBe(true);
+    expect(result.structuredContent).toEqual({ rows: ["for the UI"] });
+    expect(readCappedToolResult(result)?.totalChars).toBe(huge.length);
   });
 
   test("shows the identity the gateway resolved, not one the server's tool definition claims", async () => {
@@ -709,6 +744,35 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
         isError: false,
       }),
     );
+  });
+
+  test("caps an oversized child-agent reply", async () => {
+    const { agent, org, baseParams } = await setupChatToolEnv();
+    const { delegationTool } = await makeAssignedDelegationTool({
+      agentId: agent.id,
+      organizationId: org.id,
+      childName: "Child Worker",
+    });
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "child-msg-huge",
+      text: "y".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 2),
+      finishReason: "stop",
+    });
+
+    const tools = await chatClient.getChatMcpTools({
+      ...baseParams,
+      delegationChain: agent.id,
+    });
+    const result = await tools[delegationTool.name].execute?.(
+      { message: "do the work" },
+      execOptions("call-child-huge"),
+    );
+
+    expect(typeof result).toBe("string");
+    expect((result as string).length).toBeLessThanOrEqual(
+      MAX_TOOL_RESULT_CONTEXT_CHARS,
+    );
+    expect((result as string).startsWith("[Tool result too large")).toBe(true);
   });
 
   test("a run reuses the cached tool set instead of refetching from the gateway", async () => {

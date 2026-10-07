@@ -154,7 +154,7 @@ function SidebarModeToggle({
         "relative flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
         mode === value
           ? // Light: a raised card on the muted track. Dark: a solid pill.
-            "bg-background font-medium text-foreground shadow-sm ring-1 ring-border dark:bg-sidebar-emphasis dark:text-sidebar dark:ring-0"
+            "bg-background font-medium text-foreground shadow-sm dark:bg-sidebar-emphasis dark:text-sidebar"
           : "text-muted-foreground hover:text-foreground",
       )}
     >
@@ -172,7 +172,7 @@ function SidebarModeToggle({
     <div
       role="group"
       aria-label="Sidebar view"
-      className="flex rounded-lg border bg-muted p-0.5 group-data-[collapsible=icon]:hidden"
+      className="flex gap-0.5 rounded-lg bg-muted p-0.5 group-data-[collapsible=icon]:hidden"
     >
       {segment("chats", "AI", MessageCircle)}
       {segment("studio", "Studio", PencilRuler)}

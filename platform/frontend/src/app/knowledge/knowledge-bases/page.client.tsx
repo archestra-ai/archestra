@@ -502,7 +502,9 @@ function KnowledgeBasesList() {
                 />
               }
             >
-              {!isDeletedView && <ResourceAccessFilter />}
+              {!isDeletedView && (
+                <ResourceAccessFilter resource="knowledgeBase" />
+              )}
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}
               />

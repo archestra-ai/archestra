@@ -599,7 +599,7 @@ function PluginsList() {
                     />
                   }
                 >
-                  <ResourceAccessFilter />
+                  <ResourceAccessFilter resource="plugin" />
                   <FacetSelect
                     label="Filter by client"
                     value={client}

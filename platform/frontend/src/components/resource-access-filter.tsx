@@ -2,9 +2,11 @@
 
 import {
   DEFAULT_RESOURCE_ACCESS_RELATIONS,
+  type Permissions,
   RESOURCE_ACCESS_RELATIONS,
   type ResourceAccessRelation,
   ResourceAccessRelationSchema,
+  type ScopedResource,
 } from "@archestra/shared";
 import { ChevronDown, Eye } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -20,19 +22,26 @@ import {
   DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import type { QueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 
 /**
  * The "Show" filter of a grant-governed list: which objects to list by how the
  * viewer reaches them. Mine, shared with me or my teams, and shared with the
  * organization are on by default. "Others" is off, so an administrator does
- * not see everyone's personal objects until they ask to. The selection lives
- * in the `access` URL parameter; read it with {@link useResourceAccessParam}.
+ * not see everyone's personal objects until they ask to. "Others" is offered
+ * only to a viewer who reads every object of the type through a `*` grant,
+ * because nobody else can see an object outside the other three. The
+ * selection lives in the `access` URL parameter; read it with
+ * {@link useResourceAccessParam}.
  */
 export function ResourceAccessFilter({
+  resource,
   navigate,
   queryParamsAdapter,
 }: {
+  /** The grant resource the list shows, which decides whether "Others" applies. */
+  resource: ScopedResource;
   /** Override navigation for lists that own local URL state without an RSC round trip. */
   navigate?: (url: string) => void;
   /** Optional logical-to-URL adapter shared by a page section. */
@@ -43,6 +52,16 @@ export function ResourceAccessFilter({
   const pathname = usePathname();
   const { access, isDefault } = useResourceAccessParam({ queryParamsAdapter });
   const selected = useMemo(() => new Set(access), [access]);
+  const { data: readsEveryObject } = useHasPermissions(
+    { [resource]: ["read"] } as Permissions,
+    "*",
+  );
+  // A bookmarked selection that holds "others" keeps the box visible, so the
+  // viewer can still clear it.
+  const relations = RESOURCE_ACCESS_RELATIONS.filter(
+    (relation) =>
+      relation !== "others" || readsEveryObject || selected.has("others"),
+  );
 
   const setAccess = useCallback(
     (next: ResourceAccessRelation[]) => {
@@ -92,7 +111,7 @@ export function ResourceAccessFilter({
         <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
           Show
         </DropdownMenuLabel>
-        {RESOURCE_ACCESS_RELATIONS.map((relation) => (
+        {relations.map((relation) => (
           <DropdownMenuCheckboxItem
             key={relation}
             checked={selected.has(relation)}

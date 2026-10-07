@@ -200,7 +200,7 @@ export default function AppsPage() {
               />
             }
           >
-            <ResourceAccessFilter />
+            <ResourceAccessFilter resource="app" />
             <Select
               value={kind}
               onValueChange={(value) =>

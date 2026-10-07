@@ -1179,7 +1179,10 @@ export function InternalMCPCatalog({
               />
             }
           >
-            <ResourceAccessFilter navigate={replaceRegistryListUrl} />
+            <ResourceAccessFilter
+              resource="mcpRegistry"
+              navigate={replaceRegistryListUrl}
+            />
             <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
 
             {selectedFacet ? (

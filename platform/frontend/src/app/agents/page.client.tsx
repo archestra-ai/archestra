@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   E2eTestId,
   MAX_BULK_IDS,
 } from "@archestra/shared";
@@ -290,6 +291,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     offset: pageIndex * pageSize,
     initialData: initialData?.agents ?? undefined,
     initialDataPinned: isDeletedView ? undefined : false,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     pinned: isDeletedView ? undefined : false,
     ...catalogFilters,
   });
@@ -304,6 +306,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     offset: 0,
     initialData: initialData?.pinnedAgents ?? undefined,
     initialDataPinned: true,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     initialDataLimit: 100,
     enabled: !isDeletedView,
     ...catalogFilters,
@@ -1173,6 +1176,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                   }
                 >
                   <ResourceAccessFilter
+                    resource="agent"
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ResourceScopeFilter

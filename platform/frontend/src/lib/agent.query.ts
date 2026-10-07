@@ -1,7 +1,8 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
-  isDefaultResourceAccess,
+  isSameResourceAccess,
+  type ResourceAccessRelation,
 } from "@archestra/shared";
 import {
   type QueryClient,
@@ -175,6 +176,8 @@ export function useProfilesPaginated(
     initialDataExcludeOtherPersonalAgents?: boolean;
     /** Pin slice of the server seed; never reuse it for the other list section. */
     initialDataPinned?: boolean;
+    /** `access` filter of the server seed; never reuse it for another selection. */
+    initialDataAccess?: ResourceAccessRelation[];
     /** Page size used to produce the server seed. */
     initialDataLimit?: number;
     enabled?: boolean;
@@ -184,6 +187,7 @@ export function useProfilesPaginated(
     initialData,
     initialDataExcludeOtherPersonalAgents,
     initialDataPinned,
+    initialDataAccess,
     initialDataLimit,
     enabled,
     limit,
@@ -219,7 +223,7 @@ export function useProfilesPaginated(
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
-    isDefaultResourceAccess(access) &&
+    isSameResourceAccess(access, initialDataAccess) &&
     pinned === initialDataPinned &&
     labels === undefined &&
     status === undefined &&

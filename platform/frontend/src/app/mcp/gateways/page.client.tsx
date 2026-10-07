@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
+  E2eTestId,
+} from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -287,6 +291,7 @@ function McpGateways({
     offset,
     initialData: initialData?.agents ?? undefined,
     initialDataPinned: false,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     ...listFilters,
     pinned: isDeletedView ? undefined : false,
   });
@@ -301,6 +306,7 @@ function McpGateways({
     offset: pinnedPageIndex * pinnedPage.pageSize,
     initialData: initialData?.pinnedAgents ?? undefined,
     initialDataPinned: true,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     initialDataLimit: 100,
     enabled: !isDeletedView,
     ...listFilters,
@@ -922,7 +928,7 @@ function McpGateways({
                   />
                 }
               >
-                <ResourceAccessFilter />
+                <ResourceAccessFilter resource="mcpGateway" />
                 <ResourceScopeFilter showLabels />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}

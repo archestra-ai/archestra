@@ -1,8 +1,9 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
-  isDefaultResourceAccess,
+  isSameResourceAccess,
   MAX_BULK_IDS,
+  type ResourceAccessRelation,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -27,6 +28,8 @@ export function useAgentCatalog(
     initialData?: archestraApiTypes.GetAgentCatalogResponses["200"];
     initialDataExcludeOtherPersonalAgents?: boolean;
     initialDataPinned?: boolean;
+    /** `access` filter of the server seed; never reuse it for another selection. */
+    initialDataAccess?: ResourceAccessRelation[];
     initialDataLimit?: number;
     enabled?: boolean;
   },
@@ -35,6 +38,7 @@ export function useAgentCatalog(
     initialData,
     initialDataExcludeOtherPersonalAgents,
     initialDataPinned,
+    initialDataAccess,
     initialDataLimit,
     enabled,
     ...query
@@ -51,7 +55,7 @@ export function useAgentCatalog(
     query.excludeAuthorIds === undefined &&
     query.excludeOtherPersonalAgents ===
       initialDataExcludeOtherPersonalAgents &&
-    isDefaultResourceAccess(query.access) &&
+    isSameResourceAccess(query.access, initialDataAccess) &&
     query.pinned === initialDataPinned &&
     query.labels === undefined &&
     query.status === undefined &&

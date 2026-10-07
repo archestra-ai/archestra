@@ -309,7 +309,7 @@ function ProjectsList() {
             >
               {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
-              {!isDeletedView && <ResourceAccessFilter />}
+              {!isDeletedView && <ResourceAccessFilter resource="project" />}
               {!isDeletedView && (
                 <EntityLabelFilter
                   useLabelKeys={useProjectLabelKeys}

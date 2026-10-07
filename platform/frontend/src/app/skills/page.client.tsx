@@ -920,7 +920,7 @@ function SkillsList() {
                     />
                   }
                 >
-                  {!isDeletedView && <ResourceAccessFilter />}
+                  {!isDeletedView && <ResourceAccessFilter resource="skill" />}
                   {(mcpSkillsEnabled || pluginSkillsEnabled) &&
                     !isDeletedView && (
                       <Select value={kind} onValueChange={setKindFilter}>

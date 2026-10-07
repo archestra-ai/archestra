@@ -38,19 +38,15 @@ export const DEFAULT_RESOURCE_ACCESS_RELATIONS: ResourceAccessRelation[] = [
 ];
 
 /**
- * Whether `access` is the default selection, the one a list's server seed is
- * fetched with. Order does not matter.
+ * Whether two `access` selections filter the same way, for reusing a list's
+ * server seed. Order does not matter, and two absent selections match.
  */
-export function isDefaultResourceAccess(
-  access: readonly ResourceAccessRelation[] | undefined,
+export function isSameResourceAccess(
+  a: readonly ResourceAccessRelation[] | undefined,
+  b: readonly ResourceAccessRelation[] | undefined,
 ): boolean {
-  return (
-    !!access &&
-    access.length === DEFAULT_RESOURCE_ACCESS_RELATIONS.length &&
-    DEFAULT_RESOURCE_ACCESS_RELATIONS.every((relation) =>
-      access.includes(relation),
-    )
-  );
+  if (!a || !b) return a === b;
+  return a.length === b.length && a.every((relation) => b.includes(relation));
 }
 
 /**

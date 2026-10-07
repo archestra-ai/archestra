@@ -2,6 +2,7 @@ import { render, renderHook, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   ResourceAccessFilter,
   useResourceAccessParam,
@@ -28,7 +29,14 @@ beforeEach(() => {
   >);
   vi.mocked(usePathname).mockReturnValue("/agents");
   setQuery("");
+  setReadsEveryObject(true);
 });
+
+function setReadsEveryObject(value: boolean) {
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: value,
+  } as ReturnType<typeof useHasPermissions>);
+}
 
 describe("resource access filter", () => {
   it("hides other people's objects until the viewer asks for them", () => {
@@ -59,7 +67,7 @@ describe("resource access filter", () => {
 
   it("adds others to the URL and resets the page", async () => {
     setQuery("page=3&name=x");
-    render(<ResourceAccessFilter />);
+    render(<ResourceAccessFilter resource="agent" />);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Filter by access" }));
     await user.click(screen.getByRole("menuitemcheckbox", { name: /Others/ }));
@@ -71,7 +79,7 @@ describe("resource access filter", () => {
 
   it("drops the parameter when the selection returns to the default", async () => {
     setQuery("access=mine,shared,org,others");
-    render(<ResourceAccessFilter />);
+    render(<ResourceAccessFilter resource="agent" />);
     expect(
       screen.getByRole("button", { name: "Filter by access" }),
     ).toHaveTextContent("All");
@@ -81,9 +89,32 @@ describe("resource access filter", () => {
     expect(push).toHaveBeenCalledWith("/agents?", { scroll: false });
   });
 
+  it("offers others only to a viewer who reads every object of the type", async () => {
+    setReadsEveryObject(false);
+    render(<ResourceAccessFilter resource="agent" />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Filter by access" }));
+    expect(screen.getAllByRole("menuitemcheckbox")).toHaveLength(3);
+    expect(
+      screen.queryByRole("menuitemcheckbox", { name: /Others/ }),
+    ).not.toBeInTheDocument();
+    expect(useHasPermissions).toHaveBeenCalledWith({ agent: ["read"] }, "*");
+  });
+
+  it("keeps a bookmarked others selection clearable without that access", async () => {
+    setReadsEveryObject(false);
+    setQuery("access=mine,others");
+    render(<ResourceAccessFilter resource="agent" />);
+    const user = userEvent.setup();
+    await user.click(screen.getByRole("button", { name: "Filter by access" }));
+    expect(
+      screen.getByRole("menuitemcheckbox", { name: /Others/ }),
+    ).toBeInTheDocument();
+  });
+
   it("keeps the last remaining relation selected", async () => {
     setQuery("access=mine");
-    render(<ResourceAccessFilter />);
+    render(<ResourceAccessFilter resource="agent" />);
     const user = userEvent.setup();
     await user.click(screen.getByRole("button", { name: "Filter by access" }));
     expect(

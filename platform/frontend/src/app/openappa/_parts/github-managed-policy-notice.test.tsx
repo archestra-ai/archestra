@@ -43,7 +43,10 @@ afterAll(() => {
   archestraApiClient.setConfig({ baseUrl: "" });
 });
 
-test("offers sync settings on failure and removes recovery guidance after sync succeeds", async () => {
+test.each([
+  [undefined, "blob/policy%2Fupdate/config/openappa.toml"],
+  ["traces/required", "tree/policy%2Fupdate/traces/required"],
+])("offers sync recovery for %s and removes guidance after success", async (validationDirectory, path) => {
   let lastSyncError: string | null = "GitHub returned HTTP 404";
   server.use(
     http.get("http://localhost:9000/api/openappa/github-sync", () =>
@@ -63,7 +66,7 @@ test("offers sync settings on failure and removes recovery guidance after sync s
   });
   render(
     <QueryClientProvider client={client}>
-      <GithubManagedPolicyNotice />
+      <GithubManagedPolicyNotice validationDirectory={validationDirectory} />
     </QueryClientProvider>,
   );
   expect(await screen.findByText("GitHub sync failed")).toBeVisible();
@@ -72,7 +75,7 @@ test("offers sync settings on failure and removes recovery guidance after sync s
   ).toHaveAttribute("href", "/settings/openappa");
   expect(screen.getByRole("link", { name: /repository/ })).toHaveAttribute(
     "href",
-    "https://github.com/example/policies/blob/policy%2Fupdate/config/openappa.toml",
+    `https://github.com/example/policies/${path}`,
   );
   expect(screen.getByRole("link", { name: /repository/ })).toHaveAttribute(
     "target",

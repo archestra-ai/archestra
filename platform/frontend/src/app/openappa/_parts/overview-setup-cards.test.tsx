@@ -490,7 +490,7 @@ test("the dashboard summarizes the latest run time and validation count with a d
   expect(summary).toHaveTextContent(
     `Last run executed on ${formatDate({ date: validationRun.createdAt })}.`,
   );
-  expect(summary).toHaveTextContent("3 validations in this run.");
+  expect(summary).toHaveTextContent(/3\s*validations in this run/);
   expect(summary).not.toHaveTextContent("Git sync run");
   expect(screen.getByText("Failed")).toBeVisible();
   expect(
@@ -620,6 +620,6 @@ test("the dashboard adopts a newer result when history refreshes", async () => {
     expect(screen.queryByText("Failed")).not.toBeInTheDocument();
     expect(
       screen.getByRole("region", { name: "Last validation run" }),
-    ).toHaveTextContent("1 validation in this run.");
+    ).toHaveTextContent(/1\s*validation in this run/);
   });
 });

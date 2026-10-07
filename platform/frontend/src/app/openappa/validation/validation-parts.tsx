@@ -1,7 +1,6 @@
 "use client";
 import {
   Clock,
-  Github,
   Info,
   MessageCircle,
   Play,
@@ -24,6 +23,7 @@ import {
 } from "@/components/ui/table";
 import type { PolicyTestRun } from "@/lib/openappa-policy-tests.query";
 import { formatDate } from "@/lib/utils/date-time";
+import { GithubManagedPolicyNotice } from "../_parts/github-managed-policy-notice";
 import { OpenAppaChatButton } from "../_parts/openappa-chat-button";
 import { useValidation } from "./validation-context";
 
@@ -51,18 +51,9 @@ export function ValidationNotices() {
         </InlineNotice>
       )}
       {github && (
-        <InlineNotice variant="neutral">
-          <Github />
-          <span className="font-medium">Managed in GitHub</span>
-          <InlineNoticeText>
-            {collection.activeDirectory
-              ? "Synced files are read-only. Draft changes can be run or exported."
-              : "Validations are disabled. Set a validation directory in GitHub source settings to load tests."}
-          </InlineNoticeText>
-          <Button size="xs" variant="link" className="ml-auto" asChild>
-            <Link href="/settings/openappa">GitHub source settings</Link>
-          </Button>
-        </InlineNotice>
+        <GithubManagedPolicyNotice
+          validationDirectory={collection.activeDirectory}
+        />
       )}
       {collection.error && (
         <InlineNotice variant="error">

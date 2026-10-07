@@ -146,6 +146,17 @@ beforeEach(() => {
   );
   server.use(
     http.get(`${origin}/api/agents/all`, () => HttpResponse.json([])),
+    http.get(`${origin}/api/openappa/github-sync`, () =>
+      HttpResponse.json({
+        enabled: true,
+        source: {
+          repo: "example/policies",
+          ref: "main",
+          path: "appa.toml",
+          lastSyncError: null,
+        },
+      }),
+    ),
     http.get(endpoint, () => HttpResponse.json(collection)),
     http.get(`${endpoint}/runs`, () => HttpResponse.json([])),
     http.get(`${origin}/api/guardrails-policy`, () =>
@@ -584,8 +595,11 @@ test("Git directory configuration lives in source settings; browser refresh stil
   );
   fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
   expect(
-    await screen.findByRole("link", { name: "GitHub source settings" }),
-  ).toHaveAttribute("href", "/settings/openappa");
+    await screen.findByRole("link", { name: /repository/ }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/example/policies/tree/main/traces",
+  );
   expect(
     screen.queryByRole("textbox", { name: "Repository validation directory" }),
   ).not.toBeInTheDocument();
@@ -1423,9 +1437,7 @@ test("policy readers cannot select directories or edit files", async () => {
     ),
   );
   showPage();
-  expect(
-    await screen.findByRole("link", { name: "GitHub source settings" }),
-  ).toBeVisible();
+  expect(await screen.findByText("Managed in GitHub")).toBeVisible();
   expect(
     screen.queryByRole("button", { name: "Use directory" }),
   ).not.toBeInTheDocument();

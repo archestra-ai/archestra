@@ -366,9 +366,14 @@ function ValidationCard() {
           <CardDescription className="leading-relaxed">
             {`Last run executed on ${formatDate({ date: run.createdAt })}.`}
           </CardDescription>
-          <CardDescription className="leading-relaxed">
-            {`${run.files.length} ${validationNoun} in this run.`}
-          </CardDescription>
+          <p className="flex items-baseline gap-2">
+            <span className="text-3xl font-semibold tabular-nums">
+              {run.files.length}
+            </span>
+            <span className="text-sm text-muted-foreground">
+              {`${validationNoun} in this run`}
+            </span>
+          </p>
         </section>
       ) : (
         <p className="text-sm text-muted-foreground">No runs yet.</p>

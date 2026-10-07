@@ -306,6 +306,32 @@ describe("PageLayout header", () => {
     expect(heading.querySelector("[aria-label='agent icon']")).not.toBeNull();
   });
 
+  it("starts the description at the name, not under the record's icon", () => {
+    // An icon composed into `title` sits on the heading's row only, so the
+    // description below it starts under the icon instead of under the name.
+    render(
+      <PageLayout
+        icon={<svg role="img" aria-label="server icon" />}
+        title="filesystem"
+        description="Read and write local files."
+      >
+        <div />
+      </PageLayout>,
+    );
+
+    const heading = screen.getByRole("heading", { level: 1 });
+    const description = screen.getByText("Read and write local files.");
+    const icon = document.querySelector("[data-page-icon]");
+    // The mark is decoration beside the heading, not part of its name.
+    expect(heading).toHaveAccessibleName("filesystem");
+    expect(heading.querySelector("svg")).toBeNull();
+    // Heading and description share one column; the icon is outside it.
+    const textColumn = heading.parentElement?.parentElement;
+    expect(textColumn).toContainElement(description);
+    expect(textColumn).not.toContainElement(icon as HTMLElement);
+    expect(icon).toHaveAttribute("aria-hidden");
+  });
+
   it("puts the status pill beside the heading, never inside its name", () => {
     render(
       <PageLayout

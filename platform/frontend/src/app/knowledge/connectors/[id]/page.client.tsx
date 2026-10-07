@@ -550,17 +550,10 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
       // — which put a <p> inside a heading, folded the whole description into
       // the heading's accessible name, and hid the connector's type entirely
       // whenever it happened to have a description.
-      title={
-        <span className="flex min-w-0 items-center gap-2.5">
-          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-md border bg-card">
-            <ConnectorTypeIcon
-              type={connector.connectorType}
-              className="h-4 w-4"
-            />
-          </span>
-          <span className="min-w-0 truncate">{connector.name}</span>
-        </span>
+      icon={
+        <ConnectorTypeIcon type={connector.connectorType} className="size-6" />
       }
+      title={<span className="block min-w-0 truncate">{connector.name}</span>}
       documentTitle={connector.name}
       status={
         <ConnectorStatusPill

@@ -1,5 +1,61 @@
 # Changelog
 
+## [1.4.0-rc.34](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.33...platform-v1.4.0-rc.34) (2026-10-07)
+
+
+### Features
+
+* **agents:** grant-based permissions for external agents, plus subagent picker fixes ([#8514](https://github.com/archestra-ai/archestra/issues/8514)) ([500db16](https://github.com/archestra-ai/archestra/commit/500db161d7a9d5cd3e0c5b3c3fc1dec84651bee9))
+* **chat:** save oversized tool results to the conversation sandbox ([#8533](https://github.com/archestra-ai/archestra/issues/8533)) ([9253702](https://github.com/archestra-ai/archestra/commit/9253702001c1c38d749aa1780afc948d10526709))
+* **connect:** Agent connections log and a reworked Connect page ([#8515](https://github.com/archestra-ai/archestra/issues/8515)) ([2f65ca2](https://github.com/archestra-ai/archestra/commit/2f65ca2827e3d49e649f7ea654a29c962dbf7b77))
+* **connect:** hide connected agents and the disconnect flow on the Connect page ([#8499](https://github.com/archestra-ai/archestra/issues/8499)) ([02a24bf](https://github.com/archestra-ai/archestra/commit/02a24bf38cd131c4e9eeba208971a86fe06b354c))
+* **llm-proxy:** rework the LLM Proxy page into a step-by-step connect flow ([#8497](https://github.com/archestra-ai/archestra/issues/8497)) ([3930907](https://github.com/archestra-ai/archestra/commit/393090731aa1ace6f392dc4439250626f4178055))
+* **mcp-gateway:** rework the gateway Connect tab into the step-by-step connect flow ([#8502](https://github.com/archestra-ai/archestra/issues/8502)) ([5f257fc](https://github.com/archestra-ai/archestra/commit/5f257fc85557318fb90fc70a100518fd61d19db4))
+* **openappa:** link a yell to its investigation chat and resolve it from the chat ([#8520](https://github.com/archestra-ai/archestra/issues/8520)) ([2c49218](https://github.com/archestra-ai/archestra/commit/2c49218b0003d600abb141082274cd4e3fef932d))
+* uniform access filter for grant-governed lists ([#8529](https://github.com/archestra-ai/archestra/issues/8529)) ([70e7ab7](https://github.com/archestra-ai/archestra/commit/70e7ab7bcafd8702bbd648c0b404173d9f45eb22))
+
+
+### Bug Fixes
+
+* **a2a:** allow admin-registered outbound agents at internal http addresses ([#8527](https://github.com/archestra-ai/archestra/issues/8527)) ([6bb5f18](https://github.com/archestra-ai/archestra/commit/6bb5f18f02d096fd899e12f1f839e1cdedc75dee))
+* **chat:** fix the Shared label, one-click Add access, and a cleaner share link ([#8522](https://github.com/archestra-ai/archestra/issues/8522)) ([5ea5040](https://github.com/archestra-ai/archestra/commit/5ea50403626c606ef973e2b63f7e3dfc1fcb6892))
+* **chat:** free chats whose run owner died mid-stream ([#8477](https://github.com/archestra-ai/archestra/issues/8477)) ([0f35225](https://github.com/archestra-ai/archestra/commit/0f352254e530c9e4c7fba7c28711c18950166d35))
+* **deps:** bump sharp to 0.35.5 and the MCP SDK to 1.31.0 ([#8503](https://github.com/archestra-ai/archestra/issues/8503)) ([7679bbd](https://github.com/archestra-ai/archestra/commit/7679bbdd844672269184cbaa9a917117bfa8695c))
+* **docker:** let a quickstart container restart cleanly ([#8512](https://github.com/archestra-ai/archestra/issues/8512)) ([6f6d06a](https://github.com/archestra-ai/archestra/commit/6f6d06abd67591965c474e81d4537bb4428cb8a7))
+* **frontend:** give detail page headers a shared icon slot ([#8521](https://github.com/archestra-ai/archestra/issues/8521)) ([dd48e3e](https://github.com/archestra-ai/archestra/commit/dd48e3e2c05a8f8f4f19e1b6ebf11a341f3565a3))
+* **frontend:** soften light-mode borders, keep 3:1 only where WCAG requires it ([#8528](https://github.com/archestra-ai/archestra/issues/8528)) ([9e931f7](https://github.com/archestra-ai/archestra/commit/9e931f7d0189725277263fda7343c3b94e001eb3))
+* **guardrails:** include Archestra and hide gateways in MCP server list ([#8516](https://github.com/archestra-ai/archestra/issues/8516)) ([e8d5143](https://github.com/archestra-ai/archestra/commit/e8d5143d0f52daf18e287b90e4057470ca337325))
+* **openappa:** ask for a resend when a request lacks the gateway remedy tools ([#8500](https://github.com/archestra-ai/archestra/issues/8500)) ([df93962](https://github.com/archestra-ai/archestra/commit/df93962f3e33f565e19a63ce81b98e9df56829ec))
+* **openappa:** keep configuration agent replies short and walk batteries one at a time ([#8524](https://github.com/archestra-ai/archestra/issues/8524)) ([b73ae49](https://github.com/archestra-ai/archestra/commit/b73ae49b9dc46d46491c066c9a5cfa719602ec01))
+* **openappa:** run the archestra annotator on the configured key and name the upstream rejection ([#8517](https://github.com/archestra-ai/archestra/issues/8517)) ([c5616e8](https://github.com/archestra-ai/archestra/commit/c5616e833b9830b7c22f5db284ec1c1f6bc7055b))
+* **openappa:** show and switch a battery's credential when GitHub owns the policy ([#8509](https://github.com/archestra-ai/archestra/issues/8509)) ([0e0fe0e](https://github.com/archestra-ai/archestra/commit/0e0fe0eb29b7c895df62216fecc35b4ab6658f66))
+* **plugins:** remove duplicate save controls from permissions tab ([#8531](https://github.com/archestra-ai/archestra/issues/8531)) ([d7098dc](https://github.com/archestra-ai/archestra/commit/d7098dc6c0ee366d1455eb4fa212e4efe2c3c37c))
+* **rbac:** let admins assign roles that members' own chats and keys are shared with ([#8510](https://github.com/archestra-ai/archestra/issues/8510)) ([94d09e1](https://github.com/archestra-ai/archestra/commit/94d09e1b6ec5c93012e9e7d18170c41aedc6efb2))
+* **security:** require zlib 1.3.2-r1 in the MCP server base image (CVE-2026-85091) ([#8513](https://github.com/archestra-ai/archestra/issues/8513)) ([365abb6](https://github.com/archestra-ai/archestra/commit/365abb61163ec77b1622ed28535c3edc09b271d0))
+
+
+### Performance Improvements
+
+* **environments:** check deploy access for the whole environment list in one pass ([#8508](https://github.com/archestra-ai/archestra/issues/8508)) ([0d21759](https://github.com/archestra-ai/archestra/commit/0d217591c9994f62f93914e5c56591e54f0f4113))
+
+
+### Documentation
+
+* reorganize the docs into feature sections and rewrite them for skimming ([#8419](https://github.com/archestra-ai/archestra/issues/8419)) ([32bec6e](https://github.com/archestra-ai/archestra/commit/32bec6e7802af4adf98ad0842cd650f0eab3c1d8))
+
+
+### Code Refactoring
+
+* **openappa:** give each layer of configuration-agent instructions one owner ([#8501](https://github.com/archestra-ai/archestra/issues/8501)) ([84e5ccf](https://github.com/archestra-ai/archestra/commit/84e5ccfe654d1477d7761643965aaa7598fbb1c6))
+* **openappa:** use trusted proxy trajectories ([#8473](https://github.com/archestra-ai/archestra/issues/8473)) ([ea38cae](https://github.com/archestra-ai/archestra/commit/ea38caee91eb008dd3d482ca0f7a6ff33e4bf699))
+
+
+### Miscellaneous Chores
+
+* **deps:** relax the source-map-js pin now that 1.2.2 has cleared the release-age window ([#8525](https://github.com/archestra-ai/archestra/issues/8525)) ([bdb9683](https://github.com/archestra-ai/archestra/commit/bdb968355940ba69ed585f021e5249ada2ea0f4e))
+* **openappa:** bump OpenAPPA so a refused archestra consult keeps the host's message ([#8518](https://github.com/archestra-ai/archestra/issues/8518)) ([f0739e7](https://github.com/archestra-ai/archestra/commit/f0739e7070261c4f87e792f2c1c146d04656e6c2))
+* update client versions ([#8535](https://github.com/archestra-ai/archestra/issues/8535)) ([12f7774](https://github.com/archestra-ai/archestra/commit/12f77748f8cfaa561de74895bbc5767867c037b6))
+
 ## [1.4.0-rc.33](https://github.com/archestra-ai/archestra/compare/platform-v1.4.0-rc.32...platform-v1.4.0-rc.33) (2026-10-06)
 
 

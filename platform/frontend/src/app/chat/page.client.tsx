@@ -153,6 +153,7 @@ import {
   getMessageFeedback,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { isConversationShared } from "@/lib/chat/conversation-sharing";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import {
   generateEncryptedChatKey,
@@ -857,17 +858,10 @@ export function ChatPageContent({
     canManageShare === true,
   );
   const isShared = sharingPolicy.data
-    ? [
-        ...sharingPolicy.data.grants,
-        ...sharingPolicy.data.inheritedGrants,
-      ].some(
-        (grant) =>
-          grant.actions.includes("read") &&
-          !(
-            grant.subject.type === "user" &&
-            grant.subject.id === conversation?.userId
-          ),
-      )
+    ? isConversationShared({
+        grants: sharingPolicy.data.grants,
+        ownerId: conversation?.userId,
+      })
     : !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&

@@ -168,6 +168,7 @@ export function ResourcePermissionsDialog({
   scope = "*",
   title,
   description,
+  lead,
   children,
   open,
   onOpenChange,
@@ -176,6 +177,8 @@ export function ResourcePermissionsDialog({
   scope?: string;
   title?: string;
   description?: string;
+  /** Shown above the access list, such as the shared object's link. */
+  lead?: ReactNode;
   children?: ReactNode;
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -190,10 +193,15 @@ export function ResourcePermissionsDialog({
   const [canManage, setCanManage] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessDirty, setAccessDirty] = useState(false);
+  // A lead such as a share link renders before the list loads, so it would
+  // take the open-time focus and show a ring. Start on its wrapper instead,
+  // as the dialog does without a lead; Tab still reaches its controls.
+  const leadRef = useRef<HTMLDivElement>(null);
   const noun = scopedResourceNouns[resource];
   return (
     <StandardDialog
       open={open}
+      initialFocusRef={lead ? leadRef : undefined}
       onOpenChange={(next) => {
         if (!next) {
           setAccessOpen(false);
@@ -253,6 +261,11 @@ export function ResourcePermissionsDialog({
           setCanManage,
         }}
       >
+        {!accessOpen && lead && (
+          <div ref={leadRef} tabIndex={-1} className="outline-none">
+            {lead}
+          </div>
+        )}
         {open && (
           // The dialog's own title and description already say whose access
           // this is, so the editor contributes only the list.
@@ -872,7 +885,35 @@ function PermissionsEditor({
             ),
           }))}
           onAdd={(grants) => {
-            append(grants);
+            // In a permissions dialog, the picker's "Add access" commits, so
+            // sharing takes one click rather than a second Save on the list.
+            // It saves straight from the saved grants, never staging a draft,
+            // so the Save bar does not flash while the request is in flight.
+            // Unsaved edits made beforehand are not saved behind the user's
+            // back: the addition joins that draft and its Save bar instead,
+            // as it does when the save fails.
+            if (!dialog || form.formState.isDirty) {
+              append(grants);
+              return;
+            }
+            const { revision, grants: current } = form.getValues();
+            mutation.mutate(
+              {
+                revision,
+                grants: [...current, ...grants].map(({ subject, actions }) => ({
+                  subject,
+                  actions,
+                })),
+              },
+              {
+                onSuccess: (saved) =>
+                  form.reset({
+                    revision: saved.revision,
+                    grants: saved.grants,
+                  }),
+                onError: () => append(grants),
+              },
+            );
           }}
         />
       )}

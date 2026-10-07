@@ -2,7 +2,7 @@
 "use client";
 
 import { Info } from "lucide-react";
-import { CopyableCode } from "@/components/copyable-code";
+import { ShareLink } from "@/components/chat/share-link";
 import { ResourcePermissionsDialog } from "@/components/resource-permissions";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 
@@ -25,6 +25,13 @@ export function ShareConversationDialog({
       description="Share a read-only view of this chat. Only its owner can continue the conversation."
       open={open}
       onOpenChange={onOpenChange}
+      lead={
+        <ShareLink
+          path={`/chat/${conversationId}`}
+          label="Chat link"
+          toastMessage="Chat link copied"
+        />
+      }
     >
       {appIds.length > 0 && (
         <InlineNotice variant="info">
@@ -35,10 +42,6 @@ export function ShareConversationDialog({
           </InlineNoticeText>
         </InlineNotice>
       )}
-      <CopyableCode
-        value={`${typeof window === "undefined" ? "" : window.location.origin}/chat/${conversationId}`}
-        toastMessage="Chat link copied"
-      />
     </ResourcePermissionsDialog>
   );
 }

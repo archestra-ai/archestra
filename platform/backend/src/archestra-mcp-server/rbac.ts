@@ -77,6 +77,7 @@ export const TOOL_PERMISSIONS: Record<
   create_agent: { resource: "agent", action: "create" },
   get_agent: { resource: "agent", action: "read" },
   list_agents: { resource: "agent", action: "read" },
+  list_llm_models: { resource: "llmModel", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
 
   // Agent lifecycle hooks — mirror the REST hook routes' permissions

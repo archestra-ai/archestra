@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  buildCustomAgentRuntime,
   getAgentRuntimeAllowedProtocols,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
@@ -77,20 +78,7 @@ export type AgentRuntimeConfig = {
 };
 
 export function defaultAgentRuntime(): AgentRuntimeConfig {
-  return {
-    image: "",
-    command: null,
-    inferenceProtocol: "openai_responses",
-    backend: "kubernetes",
-    steerMode: "pipe",
-    privileged: false,
-    resources: null,
-    environment: null,
-    credentials: null,
-    ttlHours: null,
-    maxCostUsd: null,
-    idleTimeoutMinutes: null,
-  };
+  return buildCustomAgentRuntime({ image: "" });
 }
 
 export function AgentRuntimeFields({

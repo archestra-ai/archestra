@@ -501,14 +501,8 @@ function CatalogItemDetails({
     <PageLayout
       // The wizard's column, so Edit opens in the same one this page reads in.
       maxWidth="wizard"
-      title={
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
-          </div>
-          <span className="min-w-0 truncate">{item.name}</span>
-        </div>
-      }
+      icon={<McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />}
+      title={<span className="block min-w-0 truncate">{item.name}</span>}
       status={
         statusIssue ? undefined : (
           <ServerStatus

@@ -182,12 +182,10 @@ function ProjectDetail() {
     <div className="flex h-full w-full min-h-0">
       <div className="min-w-0 flex-1 overflow-y-auto">
         <PageLayout
-          title={
-            <span className="flex items-center gap-2">
-              <AgentIcon icon={project.icon} fallbackType="project" size={22} />
-              <span className="min-w-0 truncate">{project.name}</span>
-            </span>
+          icon={
+            <AgentIcon icon={project.icon} fallbackType="project" size={24} />
           }
+          title={<span className="block min-w-0 truncate">{project.name}</span>}
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">

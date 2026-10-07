@@ -17,7 +17,7 @@ export function ComposerBadge({
     <Badge
       variant="secondary"
       className={cn(
-        "gap-1 bg-slate-200/70 text-slate-600 dark:bg-slate-700/50 dark:text-slate-300 px-2.5 py-1.5 text-xs font-medium leading-none",
+        "gap-1 bg-muted text-muted-foreground px-2.5 py-1.5 text-xs font-medium leading-none",
         className,
       )}
       {...props}

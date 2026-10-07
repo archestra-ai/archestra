@@ -162,7 +162,7 @@ function endpointTabClass(active: boolean) {
   return cn(
     "flex items-center gap-2 rounded-md px-3 py-1.5 text-xs transition-colors",
     active
-      ? "bg-terminal-emphasis/10 font-semibold text-terminal-foreground shadow-sm"
+      ? "bg-terminal-elevated font-semibold text-terminal-foreground shadow-sm"
       : "text-terminal-muted hover:text-terminal-emphasis",
   );
 }

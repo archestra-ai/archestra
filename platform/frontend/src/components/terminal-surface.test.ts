@@ -78,10 +78,15 @@ function contrast(a: Rgb, b: Rgb): number {
 }
 
 /** The mix percentage globals.css uses, so the test follows the real values. */
-function mixPercent(token: string): number {
-  const match = globals.match(
-    new RegExp(`${token}:\\s*color-mix\\(in oklab,[^%]*?([\\d.]+)%`),
-  );
+function mixPercent(token: string, { dark = false } = {}): number {
+  // `:root` comes first in globals.css and `html.dark` after it, so a token
+  // that dark mode redefines has its dark value in the last match.
+  const matches = [
+    ...globals.matchAll(
+      new RegExp(`${token}:\\s*color-mix\\(in oklab,[^%]*?([\\d.]+)%`, "g"),
+    ),
+  ];
+  const match = dark ? matches.at(-1) : matches[0];
   if (!match) throw new Error(`No color-mix percentage for ${token}`);
   return Number.parseFloat(match[1]) / 100;
 }
@@ -106,9 +111,9 @@ function themeTokens(): [string, Record<string, string>][] {
 function terminalPalette(theme: Record<string, string>, dark: boolean) {
   const anchor = parse(dark ? "white" : "black");
   const surface = mix(
-    parse(theme["--card"]),
+    parse(theme[dark ? "--card" : "--muted"]),
     parse(theme["--foreground"]),
-    mixPercent("--terminal"),
+    mixPercent("--terminal", { dark }),
   );
   const foreground = mix(
     parse(theme["--foreground"]),

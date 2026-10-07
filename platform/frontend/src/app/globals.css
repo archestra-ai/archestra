@@ -131,9 +131,13 @@
      derived *from the surface* rather than from the theme's text tokens so the
      contrast holds without per-theme tuning. --terminal-anchor is the far end
      of the theme's range; it is the only value dark mode overrides.
-     terminal-surface.test.ts checks the resulting ratios for every theme. */
+     terminal-surface.test.ts checks the resulting ratios for every theme.
+     Light mode starts from --muted rather than --card: many light themes ship
+     a pure-white card, which turned the block a neutral grey that clashed
+     with tinted pages (e.g. cosmic-night's lavender); --muted carries the
+     theme's hue. Dark mode keeps --card. */
   --terminal-anchor: black;
-  --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
+  --terminal: color-mix(in oklab, var(--muted) 97%, var(--foreground));
   --terminal-foreground: color-mix(in oklab, var(--foreground) 74%, var(--terminal-anchor));
   /* Raised fill so controls on the surface read as buttons. */
   --terminal-elevated: color-mix(in oklab, var(--terminal) 93%, var(--terminal-foreground));
@@ -163,6 +167,7 @@
 
 html.dark {
   --terminal-anchor: white;
+  --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
   --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, white);
   --sidebar-attention-foreground: color-mix(in oklab, var(--destructive) 55%, white);
 }

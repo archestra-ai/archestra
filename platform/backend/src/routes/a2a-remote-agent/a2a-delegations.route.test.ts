@@ -1,5 +1,4 @@
 import {
-  ADMIN_ROLE_NAME,
   AGENT_TOOL_PREFIX,
   MEMBER_ROLE_NAME,
   slugify,

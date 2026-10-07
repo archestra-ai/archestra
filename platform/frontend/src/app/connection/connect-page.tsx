@@ -38,7 +38,6 @@ import {
   ShieldOff,
   SlidersHorizontal,
   SquareTerminal,
-  Terminal,
   TriangleAlert,
   Wrench,
 } from "lucide-react";
@@ -82,7 +81,6 @@ import {
   saveConnectChoices,
 } from "./connect-choices";
 import {
-  type ConnectFootprint,
   type ConnectPageData,
   type ConnectPageSkill,
   type ConnectServer,
@@ -325,8 +323,6 @@ export function ConnectPage() {
               updateUrlParams({ mode: v ? "manual" : null });
           }}
           onCursorNote={() => setDialog("cursor")}
-          footprint={data.footprintFor(client)}
-          skillCount={skillCount}
         />
       </div>
 
@@ -355,7 +351,7 @@ export function ConnectPage() {
           </p>
           <p>
             To send Cursor's OpenAI requests through {data.appName} too, keep
-            model routing on in the browser approval. After setup, find "Cursor
+            the LLM proxy on in the browser approval. After setup, find "Cursor
             model settings (manual step)" in the installer output: it shows the
             proxy URL and, if chosen, a virtual key. In Cursor Settings, Models,
             API Keys, enter those values and turn on Use OpenAI API Key and
@@ -566,8 +562,6 @@ function ConnectArea({
   prompt,
   onManual,
   onCursorNote,
-  footprint,
-  skillCount,
 }: {
   data: ConnectPageData;
   client: ConnectClient;
@@ -585,8 +579,6 @@ function ConnectArea({
   prompt: string | null;
   onManual: (v: boolean) => void;
   onCursorNote: () => void;
-  footprint: ConnectFootprint;
-  skillCount: number;
 }) {
   const [copied, setCopied] = useState(false);
   const [origin, setOrigin] = useState("");
@@ -682,9 +674,6 @@ function ConnectArea({
             skillsEnabled={data.skillsEnabled}
             pluginsEnabled={data.pluginsEnabled}
           />
-          <BandFooter>
-            <span>{footprintSummary(client, footprint, skillCount)}</span>
-          </BandFooter>
         </>
       ) : manual ? (
         // The steps take the prompt's place, starting right here.
@@ -734,7 +723,6 @@ function ConnectArea({
           </div>
 
           <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
-            <Terminal className="size-4 shrink-0 text-muted-foreground" />
             <code
               className={cn(
                 "min-w-0 flex-1 truncate font-mono text-sm",
@@ -782,27 +770,10 @@ function ConnectArea({
               </UnstyledButton>
             </div>
           )}
-
-          {/* Footer: what connecting adds. */}
-          <BandFooter>
-            <span>{footprintSummary(client, footprint, skillCount)}</span>
-          </BandFooter>
         </>
       )}
     </Band>
   );
-}
-
-/** What connecting writes, from the footprint, in plain words. */
-function footprintSummary(
-  client: ConnectClient,
-  fp: ConnectFootprint,
-  skillCount: number,
-) {
-  const files = fp.skillsInstalled > 0 ? skillCount : 0;
-  const skills =
-    files > 0 ? ` and ${fmt(files)} skill ${plural(files, "file")}` : "";
-  return `Adds 1 MCP entry${skills} to ${nameOf(client)}.`;
 }
 
 /**
@@ -878,15 +849,6 @@ function Band({
     >
       {children}
     </section>
-  );
-}
-
-/** The band's last line: quiet controls, separated from the action above. */
-function BandFooter({ children }: { children: ReactNode }) {
-  return (
-    <div className="mt-4 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-t px-1 pt-3 text-xs text-muted-foreground">
-      {children}
-    </div>
   );
 }
 
@@ -1016,7 +978,7 @@ function guardrailsStatus(
     return {
       label: "Inactive",
       detail:
-        "Guardrails only see requests that go through the LLM proxy, and model routing is off.",
+        "Guardrails only see requests that go through the LLM proxy, and it's off for this agent.",
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
@@ -1072,7 +1034,7 @@ function IncludeMenu({
       ? [
           {
             id: "proxy",
-            title: "Model routing",
+            title: "LLM proxy",
             sub: "Model requests go through the LLM proxy",
             part: "proxy" as const,
           },
@@ -1170,33 +1132,27 @@ function ProfileCard({
     statusChips.push({
       id: "routing",
       icon: (
-        <ChipIcon tone={!routed ? undefined : verified ? "ok" : "warn"}>
+        <ChipIcon tone={routed && verified ? "ok" : undefined}>
           <Cpu />
         </ChipIcon>
       ),
       title: (
         <span className="inline-flex items-center gap-1">
-          Model routing
-          <InfoTip label="What model routing does">
+          LLM proxy
+          <InfoTip label="What the LLM proxy does">
             <TipBody
               reason={
                 !routed
-                  ? `You turned routing off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+                  ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
                   : verified
                     ? `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`
-                    : `Your admin turned on ${data.appName}'s LLM proxy, but we can't confirm it works with ${client.label}. It works only if ${client.label} lets you set a custom model endpoint.`
+                    : `${client.label} isn't supported by ${data.appName}'s LLM proxy yet. It can still work if ${client.label} lets you set a custom model endpoint.`
               }
             />
           </InfoTip>
         </span>
       ),
-      sub: !routed ? (
-        "Off"
-      ) : verified ? (
-        "On"
-      ) : (
-        <span className="text-amber-600 dark:text-amber-400">Unconfirmed</span>
-      ),
+      sub: !routed ? "Off" : verified ? "On" : "Not supported",
     });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)
@@ -1276,11 +1232,11 @@ function ProfileCard({
             ) : (
               <ListBlock
                 icon={<Wrench />}
-                title={`+${fmt(tools)} ${plural(tools, "tool")}`}
+                title={`Tools from ${fmt(servers.length)} MCP ${plural(servers.length, "server")}`}
                 sub={
                   <>
-                    from {fmt(servers.length)} MCP{" "}
-                    {plural(servers.length, "server")}
+                    ({fmt(tools)} {plural(tools, "tool")}
+                    {data.progressive ? ", loaded on demand" : ""})
                     <InfoTip label="What MCP servers are">
                       Tools your agent calls, served through your organization's
                       gateway{gatewayName ? ` (${gatewayName})` : ""}.

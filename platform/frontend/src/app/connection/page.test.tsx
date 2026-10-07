@@ -297,7 +297,7 @@ describe("ConnectPage (no connect request)", () => {
     ).toBeVisible();
   });
 
-  it("shows model routing as on for an app with an installer, unverified for other agents", () => {
+  it("shows the LLM proxy as on for an app with an installer, not supported for other agents", () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -319,10 +319,10 @@ describe("ConnectPage (no connect request)", () => {
       new URLSearchParams("clientId=amp") as ReturnType<typeof useSearchParams>,
     );
     render(<ConnectionPage />);
-    expect(screen.getByText("Unconfirmed")).toBeVisible();
+    expect(screen.getByText("Not supported")).toBeVisible();
   });
 
-  it("lets any agent leave model routing out", async () => {
+  it("lets any agent leave the LLM proxy out", async () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -346,9 +346,7 @@ describe("ConnectPage (no connect request)", () => {
       await userEvent.click(
         screen.getByRole("button", { name: /Choose what to include/ }),
       );
-      await userEvent.click(
-        screen.getByRole("switch", { name: /Model routing/ }),
-      );
+      await userEvent.click(screen.getByRole("switch", { name: /LLM proxy/ }));
       expect(screen.getByText("Off")).toBeVisible();
       // Other agents' prompt is covered by the generic prompt tests.
       if (id === "claude-code")

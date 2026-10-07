@@ -22,6 +22,8 @@ lerna-debug.log*
 # Tests
 coverage
 .nyc_output
+.pytest_cache/
+.ruff_cache/
 
 # IDEs and editors
 .idea

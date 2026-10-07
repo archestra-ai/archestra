@@ -236,6 +236,23 @@ export default class ResourcePermissionTargetModel {
         );
       return target ?? null;
     }
+    if (params.resource === "externalAgent") {
+      const table = schema.a2aRemoteAgentsTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          authorId: table.authorId,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      return target ?? null;
+    }
     if (params.resource === "llmProviderApiKey") {
       const table = schema.llmProviderApiKeysTable;
       const [target] = await db

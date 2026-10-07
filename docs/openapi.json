@@ -42102,7 +42102,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "requestBody": {
           "required": true,
           "content": {
@@ -42386,7 +42386,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "agent:read"
           ]
         }
       }
@@ -43013,7 +43013,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Resolve and validate an outbound A2A Agent Card without saving it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Resolve and validate an outbound A2A Agent Card without saving it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
         "requestBody": {
           "required": true,
           "content": {
@@ -43477,7 +43477,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "agent:create"
           ]
         }
       }
@@ -43518,14 +43518,6 @@
             "in": "query",
             "name": "authorId",
             "required": false
-          },
-          {
-            "schema": {
-              "type": "boolean"
-            },
-            "in": "query",
-            "name": "accessibleOnly",
-            "required": false
           }
         ],
         "responses": {
@@ -43549,14 +43541,6 @@
                       "authorId": {
                         "nullable": true,
                         "type": "string"
-                      },
-                      "scope": {
-                        "type": "string",
-                        "enum": [
-                          "personal",
-                          "team",
-                          "org"
-                        ]
                       },
                       "name": {
                         "type": "string"
@@ -43755,55 +43739,12 @@
                           "email"
                         ],
                         "additionalProperties": false
-                      },
-                      "teams": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name"
-                          ],
-                          "additionalProperties": false
-                        }
-                      },
-                      "users": {
-                        "type": "array",
-                        "items": {
-                          "type": "object",
-                          "properties": {
-                            "id": {
-                              "type": "string"
-                            },
-                            "name": {
-                              "type": "string"
-                            },
-                            "email": {
-                              "type": "string"
-                            }
-                          },
-                          "required": [
-                            "id",
-                            "name",
-                            "email"
-                          ],
-                          "additionalProperties": false
-                        }
                       }
                     },
                     "required": [
                       "id",
                       "organizationId",
                       "authorId",
-                      "scope",
                       "name",
                       "description",
                       "discoveryMode",
@@ -43819,9 +43760,7 @@
                       "assignmentCount",
                       "lastUsedAt",
                       "authorName",
-                      "createdBy",
-                      "teams",
-                      "users"
+                      "createdBy"
                     ],
                     "additionalProperties": false
                   }
@@ -44070,7 +44009,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Configure an outbound A2A agent and its default connection.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Configure an outbound A2A agent and its default connection.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
         "requestBody": {
           "required": true,
           "content": {
@@ -44217,27 +44156,135 @@
                     "type": "string",
                     "maxLength": 2000
                   },
-                  "scope": {
-                    "default": "personal",
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teams": {
-                    "default": [],
+                  "initialGrants": {
+                    "maxItems": 200,
                     "type": "array",
                     "items": {
-                      "type": "string"
-                    }
-                  },
-                  "users": {
-                    "default": [],
-                    "type": "array",
-                    "items": {
-                      "type": "string"
+                      "type": "object",
+                      "properties": {
+                        "subject": {
+                          "oneOf": [
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "user"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "team"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "serviceAccount"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "format": "uuid",
+                                  "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "role"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "minLength": 1
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "type": {
+                                  "type": "string",
+                                  "enum": [
+                                    "organization"
+                                  ]
+                                },
+                                "id": {
+                                  "type": "string",
+                                  "enum": [
+                                    "*"
+                                  ]
+                                }
+                              },
+                              "required": [
+                                "type",
+                                "id"
+                              ]
+                            }
+                          ]
+                        },
+                        "actions": {
+                          "minItems": 1,
+                          "maxItems": 6,
+                          "type": "array",
+                          "items": {
+                            "type": "string",
+                            "enum": [
+                              "read",
+                              "use",
+                              "update",
+                              "delete",
+                              "manage-permissions",
+                              "configure-deployment-spec"
+                            ]
+                          }
+                        }
+                      },
+                      "required": [
+                        "subject",
+                        "actions"
+                      ]
                     }
                   }
                 },
@@ -44267,14 +44314,6 @@
                     "authorId": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
                     },
                     "name": {
                       "type": "string"
@@ -44473,55 +44512,12 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "users": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "email": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "email"
-                        ],
-                        "additionalProperties": false
-                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
-                    "scope",
                     "name",
                     "description",
                     "discoveryMode",
@@ -44537,9 +44533,7 @@
                     "assignmentCount",
                     "lastUsedAt",
                     "authorName",
-                    "createdBy",
-                    "teams",
-                    "users"
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -44778,7 +44772,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "agent:create"
           ]
         }
       }
@@ -44821,14 +44815,6 @@
                     "authorId": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
                     },
                     "name": {
                       "type": "string"
@@ -45027,55 +45013,12 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "users": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "email": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "email"
-                        ],
-                        "additionalProperties": false
-                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
-                    "scope",
                     "name",
                     "description",
                     "discoveryMode",
@@ -45091,9 +45034,7 @@
                     "assignmentCount",
                     "lastUsedAt",
                     "authorName",
-                    "createdBy",
-                    "teams",
-                    "users"
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -45341,7 +45282,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Update an outbound A2A agent, refresh its card, or rotate its credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Update an outbound A2A agent, refresh its card, or rotate its credential.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "requestBody": {
           "required": true,
           "content": {
@@ -45487,26 +45428,6 @@
                   },
                   "enabled": {
                     "type": "boolean"
-                  },
-                  "scope": {
-                    "type": "string",
-                    "enum": [
-                      "personal",
-                      "team",
-                      "org"
-                    ]
-                  },
-                  "teams": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
-                  },
-                  "users": {
-                    "type": "array",
-                    "items": {
-                      "type": "string"
-                    }
                   }
                 }
               }
@@ -45544,14 +45465,6 @@
                     "authorId": {
                       "nullable": true,
                       "type": "string"
-                    },
-                    "scope": {
-                      "type": "string",
-                      "enum": [
-                        "personal",
-                        "team",
-                        "org"
-                      ]
                     },
                     "name": {
                       "type": "string"
@@ -45750,55 +45663,12 @@
                         "email"
                       ],
                       "additionalProperties": false
-                    },
-                    "teams": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name"
-                        ],
-                        "additionalProperties": false
-                      }
-                    },
-                    "users": {
-                      "type": "array",
-                      "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "email": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "email"
-                        ],
-                        "additionalProperties": false
-                      }
                     }
                   },
                   "required": [
                     "id",
                     "organizationId",
                     "authorId",
-                    "scope",
                     "name",
                     "description",
                     "discoveryMode",
@@ -45814,9 +45684,7 @@
                     "assignmentCount",
                     "lastUsedAt",
                     "authorName",
-                    "createdBy",
-                    "teams",
-                    "users"
+                    "createdBy"
                   ],
                   "additionalProperties": false
                 }
@@ -46055,7 +45923,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "agent:read"
           ]
         }
       },
@@ -46064,7 +45932,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Delete an outbound A2A agent and remove its subagent assignments.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Delete an outbound A2A agent and remove its subagent assignments.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "parameters": [
           {
             "schema": {
@@ -46329,7 +46197,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "agent:read"
           ]
         }
       }
@@ -46340,7 +46208,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
+        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "parameters": [
           {
             "schema": {
@@ -46744,7 +46612,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:read"
+            "agent:read"
           ]
         }
       }
@@ -48682,14 +48550,6 @@
                                     "nullable": true,
                                     "type": "string"
                                   },
-                                  "scope": {
-                                    "type": "string",
-                                    "enum": [
-                                      "personal",
-                                      "team",
-                                      "org"
-                                    ]
-                                  },
                                   "name": {
                                     "type": "string"
                                   },
@@ -48887,55 +48747,12 @@
                                       "email"
                                     ],
                                     "additionalProperties": false
-                                  },
-                                  "teams": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string"
-                                        },
-                                        "name": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "name"
-                                      ],
-                                      "additionalProperties": false
-                                    }
-                                  },
-                                  "users": {
-                                    "type": "array",
-                                    "items": {
-                                      "type": "object",
-                                      "properties": {
-                                        "id": {
-                                          "type": "string"
-                                        },
-                                        "name": {
-                                          "type": "string"
-                                        },
-                                        "email": {
-                                          "type": "string"
-                                        }
-                                      },
-                                      "required": [
-                                        "id",
-                                        "name",
-                                        "email"
-                                      ],
-                                      "additionalProperties": false
-                                    }
                                   }
                                 },
                                 "required": [
                                   "id",
                                   "organizationId",
                                   "authorId",
-                                  "scope",
                                   "name",
                                   "description",
                                   "discoveryMode",
@@ -48951,9 +48768,7 @@
                                   "assignmentCount",
                                   "lastUsedAt",
                                   "authorName",
-                                  "createdBy",
-                                  "teams",
-                                  "users"
+                                  "createdBy"
                                 ],
                                 "additionalProperties": false
                               }
@@ -436490,6 +436305,7 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "externalAgent",
                 "mcpOauthClient",
                 "llmOauthClient",
                 "environment",
@@ -436911,6 +436727,7 @@
                           "knowledgeFile",
                           "llmVirtualKey",
                           "llmProviderApiKey",
+                          "externalAgent",
                           "mcpOauthClient",
                           "llmOauthClient",
                           "environment",
@@ -437229,6 +437046,7 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "externalAgent",
                 "mcpOauthClient",
                 "llmOauthClient",
                 "environment",
@@ -437659,6 +437477,7 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "externalAgent",
                 "mcpOauthClient",
                 "llmOauthClient",
                 "environment",
@@ -437717,6 +437536,7 @@
                         "knowledgeFile",
                         "llmVirtualKey",
                         "llmProviderApiKey",
+                        "externalAgent",
                         "mcpOauthClient",
                         "llmOauthClient",
                         "environment",
@@ -438484,6 +438304,7 @@
                 "knowledgeFile",
                 "llmVirtualKey",
                 "llmProviderApiKey",
+                "externalAgent",
                 "mcpOauthClient",
                 "llmOauthClient",
                 "environment",
@@ -438542,6 +438363,7 @@
                         "knowledgeFile",
                         "llmVirtualKey",
                         "llmProviderApiKey",
+                        "externalAgent",
                         "mcpOauthClient",
                         "llmOauthClient",
                         "environment",

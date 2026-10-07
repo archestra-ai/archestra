@@ -99,7 +99,7 @@ export async function getAgentTools(context: {
         agentId,
         organizationId,
         false,
-        realUserId ? { userId: realUserId } : undefined,
+        realUserId ? { userId: realUserId, lookups } : undefined,
       );
   const outboundTools = outboundTargets.map((target) =>
     buildDelegationToolDescriptor({

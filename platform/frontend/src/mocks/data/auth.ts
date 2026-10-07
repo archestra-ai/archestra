@@ -128,6 +128,7 @@ export const adminScopedCapabilitiesSeed: archestraApiTypes.GetScopedCapabilitie
     "knowledgeFile",
     "llmVirtualKey",
     "llmProviderApiKey",
+    "externalAgent",
     "mcpOauthClient",
     "llmOauthClient",
     "environment",

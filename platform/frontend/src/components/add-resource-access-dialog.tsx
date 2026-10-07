@@ -18,6 +18,7 @@ import { useEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import { useFormDialogView } from "@/components/form-dialog-view";
+import { PermissionLevelSelect } from "@/components/permission-level-select";
 import {
   PermissionRecipientIdentity,
   PermissionRecipientSelect,
@@ -27,13 +28,6 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
@@ -399,7 +393,7 @@ export function ResourceAccessPicker({
               <div className="min-w-0 flex-1">
                 <PermissionRecipientIdentity recipient={recipient} />
               </div>
-              <Select
+              <PermissionLevelSelect
                 value={recipient.permission}
                 onValueChange={(value) =>
                   form.setValue(
@@ -411,26 +405,9 @@ export function ResourceAccessPicker({
                     ),
                   )
                 }
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-32 shrink-0"
-                  aria-label={`Permission for ${recipient.name}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {presets.map((preset) => (
-                    <SelectItem
-                      key={preset.value}
-                      value={preset.value}
-                      disabled={preset.disabled}
-                    >
-                      <span>{preset.label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={presets}
+                ariaLabel={`Permission for ${recipient.name}`}
+              />
               <Button
                 type="button"
                 variant="ghost"

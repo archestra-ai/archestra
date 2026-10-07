@@ -92,6 +92,10 @@ it("loads the chosen recipient type, excludes existing grants, searches, and add
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Alex Reader" }),
   );
+  // Each level explains itself here, as it does in the Permissions list.
+  expect(screen.getByRole("option", { name: "Can use" })).toHaveTextContent(
+    "Read and use this resource",
+  );
   await user.click(screen.getByRole("option", { name: "Can use" }));
   await user.click(screen.getByRole("button", { name: "Add access" }));
   expect(onAdd).toHaveBeenCalledExactlyOnceWith([

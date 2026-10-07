@@ -10,6 +10,7 @@ import {
 import { Info, Plus, Trash2, UserRound } from "lucide-react";
 import { useState } from "react";
 import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
+import { PermissionLevelSelect } from "@/components/permission-level-select";
 import {
   PermissionsSettingsSection,
   permissionsSettingsDescription,
@@ -31,13 +32,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -107,6 +101,12 @@ export function InitialResourcePermissions({
             grant.scope === "*",
         ),
     );
+  const levelOptions = Object.entries(presets).map(([value, preset]) => ({
+    value,
+    label: preset.label,
+    description: presetDescription(value, resource),
+    disabled: !canGrantPreset(preset.actions),
+  }));
   const description = permissionsSettingsDescription(
     scopedResourceNouns[resource],
   );
@@ -163,7 +163,7 @@ export function InitialResourcePermissions({
                   {subjectLabels[grant.subject.type]}
                 </span>
               </div>
-              <Select
+              <PermissionLevelSelect
                 value={presetFor(grant.actions, resource)}
                 onValueChange={(value) => {
                   const preset = presets[value];
@@ -176,26 +176,10 @@ export function InitialResourcePermissions({
                     ),
                   );
                 }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-48 shrink-0 border-transparent bg-transparent shadow-none dark:bg-transparent"
-                  aria-label={`Permission for ${grant.name}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(presets).map(([key, preset]) => (
-                    <SelectItem
-                      key={key}
-                      value={key}
-                      disabled={!canGrantPreset(preset.actions)}
-                    >
-                      {preset.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={levelOptions}
+                ariaLabel={`Permission for ${grant.name}`}
+                className="border-transparent bg-transparent shadow-none dark:bg-transparent"
+              />
               <Button
                 type="button"
                 variant="ghost"

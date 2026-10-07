@@ -13,6 +13,7 @@ import {
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
+import ConversationModel from "@/models/conversation";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { ApiError, type User } from "@/types";
@@ -253,6 +254,165 @@ describe("OpenAPPA yells", () => {
         })
       ).statusCode,
     ).toBe(403);
+  });
+
+  test("links a yell to the first chat that reads it and shows it only to that chat's owner", async ({
+    makeAgent,
+    makeConversation,
+    makeOrganization,
+  }) => {
+    const yell = await record("Investigated report");
+    const untouched = await record("Unread report");
+    const colleaguesYell = await record("Colleague's report");
+    const deletedYell = await record("Report with a deleted chat");
+    const agent = await makeAgent({ organizationId, accessAllTools: true });
+    const chat = (title: string, overrides = {}) =>
+      makeConversation(agent.id, {
+        userId: user.id,
+        organizationId,
+        title,
+        ...overrides,
+      });
+    const first = await chat("First investigation");
+    const second = await chat("Second investigation");
+    const deleted = await chat("Deleted investigation");
+    const colleagues = await chat("Colleague's investigation", {
+      userId: "another-user",
+    });
+    const foreign = await chat("Other organization", {
+      organizationId: (await makeOrganization()).id,
+    });
+    const read = async (id: string, conversationId?: string) => {
+      const result = await executeArchestraTool(
+        "archestra__get_openappa_yell",
+        { id },
+        {
+          agent,
+          agentId: agent.id,
+          organizationId,
+          userId: user.id,
+          conversationId,
+        },
+      );
+      expect(result.isError, JSON.stringify(result.content)).toBeFalsy();
+    };
+    const linkedChat = async (id: string) =>
+      (
+        await db
+          .select({ conversationId: schema.openappaYellsTable.conversationId })
+          .from(schema.openappaYellsTable)
+          .where(eq(schema.openappaYellsTable.id, id))
+      )[0]?.conversationId;
+
+    await read(yell.id);
+    await read(yell.id, randomUUID());
+    await read(yell.id, foreign.id);
+    expect(await linkedChat(yell.id)).toBeNull();
+    await read(yell.id, first.id);
+    await read(yell.id, second.id);
+    expect(await linkedChat(yell.id)).toBe(first.id);
+
+    await read(colleaguesYell.id, colleagues.id);
+    await read(deletedYell.id, deleted.id);
+    await ConversationModel.delete(deleted.id, user.id, organizationId);
+    expect(await linkedChat(colleaguesYell.id)).toBe(colleagues.id);
+    expect(await linkedChat(deletedYell.id)).toBe(deleted.id);
+
+    const detail = (
+      await app.inject({ url: `/api/openappa/yells/${yell.id}` })
+    ).json();
+    expect(detail.conversation).toEqual({
+      id: first.id,
+      title: "First investigation",
+      createdAt: expect.any(String),
+    });
+    expect(detail).not.toHaveProperty("conversationId");
+    for (const hidden of [colleaguesYell, deletedYell])
+      expect(
+        (await app.inject({ url: `/api/openappa/yells/${hidden.id}` })).json()
+          .conversation,
+      ).toBeNull();
+
+    const list = (await app.inject({ url: "/api/openappa/yells" })).json().data;
+    const conversationOf = (id: string) =>
+      list.find((row: { id: string }) => row.id === id).conversation;
+    expect(conversationOf(yell.id)).toEqual(detail.conversation);
+    expect(conversationOf(untouched.id)).toBeNull();
+    expect(conversationOf(colleaguesYell.id)).toBeNull();
+    expect(conversationOf(deletedYell.id)).toBeNull();
+  });
+
+  test("resolves and reopens a yell from chat with an audit record", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeCustomRole,
+  }) => {
+    const yell = await record("Report fixed in chat");
+    const agent = await makeAgent({ organizationId, accessAllTools: true });
+    const resolve = (args: Record<string, unknown>, userId = user.id) =>
+      executeArchestraTool("archestra__resolve_openappa_yell", args, {
+        agent,
+        agentId: agent.id,
+        organizationId,
+        userId,
+      });
+
+    const resolved = await resolve({ id: yell.id });
+    expect(resolved.isError, JSON.stringify(resolved.content)).toBeFalsy();
+    expect(JSON.stringify(resolved.content)).toContain(yell.message);
+    expect(
+      await OpenAppaYellModel.find({ id: yell.id, organizationId }),
+    ).toMatchObject({
+      id: yell.id,
+      resolvedBy: user.id,
+    });
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 0 });
+    await vi.waitFor(async () => {
+      const rows = await db
+        .select()
+        .from(schema.auditLogsTable)
+        .where(eq(schema.auditLogsTable.resourceId, yell.id));
+      expect(rows).toHaveLength(1);
+      expect(rows[0]).toMatchObject({
+        action: "openappaYell.updated",
+        resourceType: "openappaYell",
+        before: { resolvedAt: null, resolvedBy: null },
+        after: { resolvedAt: expect.any(String), resolvedBy: user.id },
+      });
+      expect(JSON.stringify(rows)).not.toContain(yell.message);
+    });
+
+    await resolve({ id: yell.id, resolved: false });
+    expect(
+      await OpenAppaYellModel.find({ id: yell.id, organizationId }),
+    ).toMatchObject({
+      resolvedAt: null,
+      resolvedBy: null,
+    });
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 1 });
+
+    const memberWith = async (permission: "read" | "update") => {
+      const role = await makeCustomRole(organizationId, {
+        permission: { openappaDiagnostics: [permission] },
+      });
+      const member = await makeUser();
+      await makeMember(member.id, organizationId, { role: role.role });
+      return member.id;
+    };
+    expect(
+      (await resolve({ id: yell.id }, await memberWith("read"))).isError,
+    ).toBe(true);
+    await expect(
+      resolve({ id: yell.id }, await memberWith("update")),
+    ).rejects.toThrow("permission to read yells");
+    expect(
+      (await app.inject({ url: "/api/openappa/yells/summary" })).json(),
+    ).toEqual({ unresolved: 1 });
   });
 
   test("keeps reports with missing users and non-user callers visible", async () => {

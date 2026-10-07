@@ -12,7 +12,7 @@ export function TerminalCard({ className, ...props }: ComponentProps<"div">) {
   return (
     <div
       className={cn(
-        "overflow-hidden rounded-xl border border-terminal-edge bg-terminal shadow-lg",
+        "overflow-hidden rounded-xl border border-terminal-edge bg-terminal shadow-sm dark:shadow-lg",
         className,
       )}
       {...props}

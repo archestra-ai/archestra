@@ -110,11 +110,13 @@ function themeTokens(): [string, Record<string, string>][] {
 /** Resolve the terminal palette the browser computes for one theme and mode. */
 function terminalPalette(theme: Record<string, string>, dark: boolean) {
   const anchor = parse(dark ? "white" : "black");
-  const surface = mix(
-    parse(theme[dark ? "--card" : "--muted"]),
-    parse(theme["--foreground"]),
-    mixPercent("--terminal", { dark }),
-  );
+  const surface = dark
+    ? mix(
+        parse(theme["--card"]),
+        parse(theme["--foreground"]),
+        mixPercent("--terminal", { dark }),
+      )
+    : mix(parse(theme["--card"]), parse("white"), mixPercent("--terminal"));
   const foreground = mix(
     parse(theme["--foreground"]),
     anchor,
@@ -180,21 +182,22 @@ describe("terminal surface contrast", () => {
         contrast(palette.foreground, palette.selected),
       ).toBeGreaterThanOrEqual(4.5);
     } else {
-      const raised = mix(
-        parse(tokens["--card"]),
-        parse("white"),
-        mixPercent("--raised"),
-      );
       const lightness = (c: Rgb) => toOklab(c)[0];
-      // Raised keys are the lightest thing on screen: lighter than the code
-      // surface they sit on and never darker than the page.
-      expect(lightness(raised)).toBeGreaterThan(lightness(palette.surface));
-      expect(lightness(raised)).toBeGreaterThanOrEqual(
-        // a hair of slack: a pure-white page with a tinted card lands 0.004 under
+      const track = mix(
+        parse(tokens["--muted"]),
+        parse(tokens["--foreground"]),
+        mixPercent("--terminal-track"),
+      );
+      // The block is a raised card: never darker than the page it sits on
+      // (a hair of slack for a pure-white page with a tinted card).
+      expect(lightness(palette.surface)).toBeGreaterThanOrEqual(
         lightness(parse(tokens["--background"])) - 0.005,
       );
+      // A tab strip's track steps below the card, and the raised (card
+      // coloured) selected tab stands out on it.
+      expect(contrast(track, palette.surface)).toBeGreaterThanOrEqual(1.05);
       expect(
-        contrast(parse(tokens["--foreground"]), raised),
+        contrast(parse(tokens["--foreground"]), palette.surface),
       ).toBeGreaterThanOrEqual(4.5);
     }
     // The copied tick is a state graphic, so the 3:1 non-text bar applies.

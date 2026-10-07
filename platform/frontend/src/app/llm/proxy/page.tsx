@@ -231,7 +231,7 @@ function ProxyEndpointCard({
     <TerminalBlock
       rows={rows}
       header={
-        <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge p-1.5">
+        <div className="flex flex-wrap items-center gap-1 border-b border-terminal-edge bg-terminal-track p-1.5">
           <UnstyledButton
             type="button"
             onClick={() => onSelect("model-router")}

@@ -307,7 +307,7 @@ describe("ConnectPage (no connect request)", () => {
     } as unknown as ReturnType<typeof useLlmProxy>);
     mockOrganization({
       data: {
-        connectionShownClientIds: ["claude-code", "amp"],
+        connectionShownClientIds: ["claude-code", "hermes-agent"],
         connectionLlmProxyEnabled: true,
       },
     });
@@ -316,7 +316,9 @@ describe("ConnectPage (no connect request)", () => {
     unmount();
 
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("clientId=amp") as ReturnType<typeof useSearchParams>,
+      new URLSearchParams("clientId=hermes-agent") as ReturnType<
+        typeof useSearchParams
+      >,
     );
     render(<ConnectionPage />);
     expect(screen.getByText("Not supported")).toBeVisible();
@@ -332,11 +334,11 @@ describe("ConnectPage (no connect request)", () => {
     } as unknown as ReturnType<typeof useLlmProxy>);
     mockOrganization({
       data: {
-        connectionShownClientIds: ["claude-code", "amp"],
+        connectionShownClientIds: ["claude-code", "hermes-agent"],
         connectionLlmProxyEnabled: true,
       },
     });
-    for (const id of ["claude-code", "amp"]) {
+    for (const id of ["claude-code", "hermes-agent"]) {
       vi.mocked(useSearchParams).mockReturnValue(
         new URLSearchParams(`clientId=${id}`) as ReturnType<
           typeof useSearchParams
@@ -396,13 +398,15 @@ describe("ConnectPage (no connect request)", () => {
 
   it("gives other agents the prompt only, even when linked to manual setup", () => {
     vi.mocked(useSearchParams).mockReturnValue(
-      new URLSearchParams("clientId=amp&mode=manual") as ReturnType<
+      new URLSearchParams("clientId=hermes-agent&mode=manual") as ReturnType<
         typeof useSearchParams
       >,
     );
     mockOrganization({});
     render(<ConnectionPage />);
-    expect(screen.getByText("Paste the prompt into Amp")).toBeVisible();
+    expect(
+      screen.getByText("Paste the prompt into Hermes Agent"),
+    ).toBeVisible();
     expect(
       screen.queryByRole("button", { name: "Manual setup" }),
     ).not.toBeInTheDocument();

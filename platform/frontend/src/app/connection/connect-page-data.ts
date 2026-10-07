@@ -23,6 +23,7 @@ import { isDeliverablePlugin, usePlugins } from "@/lib/plugins/plugin.query";
 import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
 import {
   type ConnectClient,
+  isInstallerClientId,
   usesGenericInstructions,
   visibleClients,
 } from "./clients";
@@ -137,6 +138,10 @@ export interface ConnectPageData {
 /** What connect.md?client=generic can set up; it has no plugins. */
 const GENERIC_PARTS = ["tools", "skills", "proxy"] as const;
 
+// Agents besides the installer apps that the page offers for now, while the
+// rest are tested against the LLM proxy. Delete this filter to list them all.
+const OTHER_AGENT_IDS = new Set(["hermes-agent", "openclaw", "n8n", "generic"]);
+
 export function useConnectPageData(): ConnectPageData {
   // A fresh read: these settings decide what a setup may include.
   const orgQuery = useOrganization(true, { fresh: true });
@@ -205,7 +210,10 @@ export function useConnectPageData(): ConnectPageData {
   const baseUrl = useConnectionBaseUrl(org?.connectionBaseUrls);
 
   const clients = useMemo(
-    () => visibleClients(org?.connectionShownClientIds),
+    () =>
+      visibleClients(org?.connectionShownClientIds).filter(
+        (c) => isInstallerClientId(c.id) || OTHER_AGENT_IDS.has(c.id),
+      ),
     [org?.connectionShownClientIds],
   );
   const featuredClients = INSTALLER_CLIENT_IDS.map((id) =>

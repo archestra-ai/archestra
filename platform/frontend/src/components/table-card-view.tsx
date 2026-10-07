@@ -87,9 +87,13 @@ export function TableCardViewToggle({
   const { mode: selectedMode, selectMode } = useTableCardView();
 
   return (
+    // A soft segmented control, styled like the sidebar's AI/Studio toggle: a
+    // muted track with the selected view as a raised card. 32px tall overall
+    // (28px segments + 1px padding + 1px border) to line up with the filter
+    // controls beside it.
     <div
       className={cn(
-        "hidden items-center gap-0.5 rounded-md border p-0.5 md:inline-flex",
+        "hidden h-8 items-center gap-px rounded-md border bg-muted p-px md:inline-flex",
         className,
       )}
     >
@@ -97,11 +101,15 @@ export function TableCardViewToggle({
         <Tooltip key={mode}>
           <TooltipTrigger asChild>
             <Button
-              variant={selectedMode === mode ? "secondary" : "ghost"}
-              size="icon-sm"
+              variant="ghost"
+              size="icon-xs"
               aria-label={VIEW_LABELS[mode]}
               aria-pressed={selectedMode === mode}
-              className={cn(selectedMode !== mode && "text-muted-foreground")}
+              className={cn(
+                selectedMode === mode
+                  ? "bg-background text-foreground shadow-sm ring-1 ring-border hover:bg-background hover:text-foreground dark:bg-accent dark:hover:bg-accent"
+                  : "text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent",
+              )}
               onClick={() => selectMode(mode)}
             >
               {mode === "cards" ? (

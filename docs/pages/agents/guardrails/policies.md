@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub
 order: 1
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,7 +25,7 @@ The **Tool coverage** chart on **Overview** shows how many of your tools a rule 
 | **Not enforced** | A battery covers the tool but cannot run yet. |
 | **No rule** | Nothing restricts the tool. The starting policy's catch-all counts here, because it adds no restrictions. |
 
-Start with the servers that read private data or send data out. Under **Servers and gateways**, click **Ask** on a server to have the agent propose rules for its tools. **Improve with chat** does the same for all your tools.
+Start with the servers that read private data or send data out. Under **MCP servers**, click **Ask** on a server to have the agent propose rules for its tools. **Improve with chat** does the same for all your tools.
 
 ## Change the Policy
 

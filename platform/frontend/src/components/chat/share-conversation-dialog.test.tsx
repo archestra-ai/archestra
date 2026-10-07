@@ -138,3 +138,43 @@ it.each([
   );
   expect(within(dialog).getByText("Support")).toBeVisible();
 });
+
+it.each([
+  ["conversation", `/chat/${scope}`],
+  ["agentRun", `/chat/runs/${scope}`],
+] as const)("%s shows a short link but copies the full URL", async (resource, path) => {
+  const user = userEvent.setup();
+  server.use(
+    http.get(`${origin}/api/resource-permissions/${resource}/${scope}`, () =>
+      HttpResponse.json({
+        resource,
+        scope,
+        name: "Review",
+        revision: 1,
+        grants: [],
+        inheritedGrants: [],
+        effectiveActions: ["read", "manage-permissions"],
+      }),
+    ),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  render(
+    <QueryClientProvider client={client}>
+      {resource === "conversation" ? (
+        <ShareConversationDialog
+          conversationId={scope}
+          open
+          onOpenChange={vi.fn()}
+        />
+      ) : (
+        <ShareAgentRunDialog taskId={scope} open onOpenChange={vi.fn()} />
+      )}
+    </QueryClientProvider>,
+  );
+  const url = `${window.location.origin}${path}`;
+  expect(screen.getByTitle(url)).toHaveTextContent(/11111111…1111$/);
+  await user.click(screen.getByRole("button", { name: "Copy link" }));
+  expect(await navigator.clipboard.readText()).toBe(url);
+});

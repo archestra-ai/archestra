@@ -193,10 +193,15 @@ export function ResourcePermissionsDialog({
   const [canManage, setCanManage] = useState(false);
   const [accessOpen, setAccessOpen] = useState(false);
   const [accessDirty, setAccessDirty] = useState(false);
+  // A lead such as a share link renders before the list loads, so it would
+  // take the open-time focus and show a ring. Start on its wrapper instead,
+  // as the dialog does without a lead; Tab still reaches its controls.
+  const leadRef = useRef<HTMLDivElement>(null);
   const noun = scopedResourceNouns[resource];
   return (
     <StandardDialog
       open={open}
+      initialFocusRef={lead ? leadRef : undefined}
       onOpenChange={(next) => {
         if (!next) {
           setAccessOpen(false);
@@ -256,7 +261,11 @@ export function ResourcePermissionsDialog({
           setCanManage,
         }}
       >
-        {!accessOpen && lead}
+        {!accessOpen && lead && (
+          <div ref={leadRef} tabIndex={-1} className="outline-none">
+            {lead}
+          </div>
+        )}
         {open && (
           // The dialog's own title and description already say whose access
           // this is, so the editor contributes only the list.

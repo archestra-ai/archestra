@@ -3,6 +3,8 @@ import {
   isResourcePermissionPreset,
   ManagedResourceSchema,
   type PermissionSubject,
+  RESOURCE_ACCESS_RELATIONS,
+  type ResourceAccessRelation,
   type ResourcePermissionAction,
   type ResourcePermissionGrant,
   type ResourcePermissionScope,
@@ -541,6 +543,48 @@ export default class ResourcePermissionPolicyModel {
   }
 
   /**
+   * Whether a listed object is in any of `relations` for the caller, the
+   * predicate behind every list's "Show" filter. Undefined when every relation
+   * is selected, because then nothing is filtered.
+   *
+   * Only the object's OWN policy counts. A grant at `*` reaches every object
+   * of the type, so counting it would put every row in `shared` or `org` for
+   * an administrator, and the filter could never hide other people's
+   * personal objects. Role grants count as `org`, the same reading as
+   * {@link sharedAudience}. A grant to the author's own user is `mine`, not
+   * `shared`.
+   */
+  static accessRelationCondition(params: {
+    organizationId: string | SQLWrapper;
+    resource: ScopedResource;
+    scopeColumn: SQLWrapper;
+    ownerColumn: SQLWrapper;
+    userId: string;
+    /** The caller's subjects, e.g. from `resolvePrincipal(s)`. */
+    subjects: PermissionSubject[];
+    relations: ResourceAccessRelation[] | undefined;
+  }): SQL<boolean> | undefined {
+    const selected = new Set(params.relations ?? RESOURCE_ACCESS_RELATIONS);
+    if (RESOURCE_ACCESS_RELATIONS.every((relation) => selected.has(relation)))
+      return undefined;
+
+    const mine = sql<boolean>`coalesce(${params.ownerColumn}::text = ${params.userId}, false)`;
+    const shared = sharedWithCallerCondition(params);
+    const org = ResourcePermissionPolicyModel.audienceIs({
+      ...params,
+      audience: "org",
+    });
+    const byRelation: Record<ResourceAccessRelation, SQL<boolean>> = {
+      mine,
+      shared,
+      org,
+      others: sql<boolean>`NOT (${mine} OR ${shared} OR ${org})`,
+    };
+    const kept = [...selected].map((relation) => byRelation[relation]);
+    return sql<boolean>`(${sql.join(kept, sql` OR `)})`;
+  }
+
+  /**
    * The audience and granted teams of one object, from its own policy, in
    * the terms of {@link audienceIs}. For callers that decide in code rather
    * than in a query.
@@ -1060,3 +1104,43 @@ const USE_UNGATED_BY_ROLE = new Set<ScopedResource>([
   // only for the right to create the thing deployed.
   "environment",
 ]);
+
+/**
+ * Whether an object's own policy grants read to one of the caller's teams, or
+ * to the caller by name when the caller is not its author.
+ */
+function sharedWithCallerCondition(params: {
+  organizationId: string | SQLWrapper;
+  resource: ScopedResource;
+  scopeColumn: SQLWrapper;
+  ownerColumn: SQLWrapper;
+  subjects: PermissionSubject[];
+}): SQL<boolean> {
+  const teamIds = params.subjects
+    .filter((subject) => subject.type === "team")
+    .map((subject) => subject.id);
+  const selfIds = params.subjects
+    .filter(
+      (subject) => subject.type === "user" || subject.type === "serviceAccount",
+    )
+    .map((subject) => subject.id);
+  const reaches: SQL[] = [];
+  if (teamIds.length > 0)
+    reaches.push(
+      sql`(shared_entry->'subject'->>'type' = 'team' AND ${inArray(sql`shared_entry->'subject'->>'id'`, teamIds)})`,
+    );
+  if (selfIds.length > 0)
+    reaches.push(
+      sql`(shared_entry->'subject'->>'type' IN ('user', 'serviceAccount') AND ${inArray(sql`shared_entry->'subject'->>'id'`, selfIds)} AND shared_entry->'subject'->>'id' IS DISTINCT FROM ${params.ownerColumn}::text)`,
+    );
+  if (reaches.length === 0) return sql<boolean>`false`;
+  return sql<boolean>`EXISTS (
+    SELECT 1 FROM resource_permission_policies shared_policy,
+      jsonb_array_elements(shared_policy.grants) shared_entry
+    WHERE shared_policy.organization_id = ${params.organizationId}
+      AND shared_policy.resource = ${params.resource}
+      AND shared_policy.scope = ${params.scopeColumn}::text
+      AND (shared_entry->'actions') ? 'read'
+      AND (${sql.join(reaches, sql` OR `)})
+  )`;
+}

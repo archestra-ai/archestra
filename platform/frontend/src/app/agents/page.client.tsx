@@ -70,6 +70,7 @@ import {
   ProviderKeyFilterSelect,
 } from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -269,6 +270,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     authorIds: scopeFilter.authorIds,
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
+    access: scopeFilter.access,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
@@ -631,6 +633,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       teamIds: null,
       authorIds: null,
       excludeAuthorIds: null,
+      access: null,
       labels: null,
       status: null,
       providerApiKeyId: null,
@@ -1169,6 +1172,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     />
                   }
                 >
+                  <ResourceAccessFilter
+                    queryParamsAdapter={queryParamsAdapter}
+                  />
                   <ResourceScopeFilter
                     showBuiltIn
                     showLabels

@@ -1,6 +1,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  isDefaultResourceAccess,
   MAX_BULK_IDS,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
@@ -50,6 +51,7 @@ export function useAgentCatalog(
     query.excludeAuthorIds === undefined &&
     query.excludeOtherPersonalAgents ===
       initialDataExcludeOtherPersonalAgents &&
+    isDefaultResourceAccess(query.access) &&
     query.pinned === initialDataPinned &&
     query.labels === undefined &&
     query.status === undefined &&

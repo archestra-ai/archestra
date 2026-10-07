@@ -2,6 +2,7 @@ import {
   calculatePaginationMeta,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -59,6 +60,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 z.boolean(),
               )
               .optional(),
+            access: ResourceAccessQuerySchema,
             selectableOnly: z
               .preprocess(
                 (value) =>
@@ -115,6 +117,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         excludeOtherPersonalAgents: isAgentAdmin
           ? query.excludeOtherPersonalAgents
           : undefined,
+        access: query.access,
         labels: parseLabelsParam(query.labels),
         status: query.status,
         providerApiKeyId: query.providerApiKeyId,

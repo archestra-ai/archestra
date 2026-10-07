@@ -61,6 +61,7 @@ type AppsParams = Pick<
   | "scope"
   | "authorIds"
   | "excludeAuthorIds"
+  | "access"
   | "labels"
 >;
 type AppDetailQueryOptions = { toastOnError?: boolean };

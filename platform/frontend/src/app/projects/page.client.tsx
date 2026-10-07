@@ -33,6 +33,7 @@ import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { EditProjectDialog } from "@/components/projects/edit-project-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ResourceDeletedStatusFilter,
@@ -105,8 +106,14 @@ const PROJECTS_DESCRIPTION =
 
 function ProjectsList() {
   const searchParams = useSearchParams();
-  const { scope, teamIds, authorIds, excludeAuthorIds, hasActiveScopeFilters } =
-    useScopeFilterParams();
+  const {
+    scope,
+    teamIds,
+    authorIds,
+    excludeAuthorIds,
+    access,
+    hasActiveScopeFilters,
+  } = useScopeFilterParams();
   const search = searchParams.get("search") ?? undefined;
   const labelsFilter = searchParams.get("labels") ?? undefined;
   // The trash. The backend serves this slice to project admins only (empty for
@@ -124,6 +131,7 @@ function ProjectsList() {
     teamIds,
     authorIds,
     excludeAuthorIds,
+    access,
     status: isDeletedView ? "deleted" : undefined,
     labels: labelsFilter,
     toastOnError: false,
@@ -301,6 +309,7 @@ function ProjectsList() {
             >
               {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
+              {!isDeletedView && <ResourceAccessFilter />}
               {!isDeletedView && (
                 <EntityLabelFilter
                   useLabelKeys={useProjectLabelKeys}

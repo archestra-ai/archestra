@@ -6,6 +6,7 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
+  RESOURCE_ACCESS_RELATIONS,
 } from "@archestra/shared";
 import { CheckCircle2, Route, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -30,6 +31,7 @@ import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -71,6 +73,7 @@ import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
   useInternalMcpCatalog,
+  useInternalMcpCatalogAccessIds,
   useMcpCatalogLabelKeys,
   useMcpCatalogLabelValues,
   useReinstallInternalMcpCatalogItem,
@@ -163,6 +166,11 @@ export function InternalMCPCatalog({
   } = useInternalMcpCatalog({
     initialData,
   });
+  const { data: accessIds } = useInternalMcpCatalogAccessIds(
+    ownershipFilters.access.length < RESOURCE_ACCESS_RELATIONS.length
+      ? ownershipFilters.access
+      : undefined,
+  );
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
   });
@@ -921,6 +929,7 @@ export function InternalMCPCatalog({
     ) {
       return false;
     }
+    if (accessIds && !accessIds.has(item.id)) return false;
     if (facetCatalogIds && !facetCatalogIds.has(item.id)) return false;
     if (filters.issue.size > 0) {
       const itemIssues = issuesByCatalog.get(item.id) ?? [];
@@ -1106,7 +1115,13 @@ export function InternalMCPCatalog({
     params.delete("search");
     params.delete("labels");
     for (const group of FILTER_GROUPS) params.delete(group);
-    for (const group of ["scope", "teamIds", "authorIds", "excludeAuthorIds"]) {
+    for (const group of [
+      "scope",
+      "teamIds",
+      "authorIds",
+      "excludeAuthorIds",
+      "access",
+    ]) {
       params.delete(group);
     }
     const qs = params.toString();
@@ -1164,6 +1179,7 @@ export function InternalMCPCatalog({
               />
             }
           >
+            <ResourceAccessFilter navigate={replaceRegistryListUrl} />
             <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
 
             {selectedFacet ? (

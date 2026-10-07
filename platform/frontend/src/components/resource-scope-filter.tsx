@@ -1,6 +1,6 @@
 "use client";
 
-import type { Permissions } from "@archestra/shared";
+import type { Permissions, ResourceAccessRelation } from "@archestra/shared";
 import { Braces } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useMemo, useState } from "react";
@@ -12,6 +12,7 @@ import {
   parseLabelsParam,
   serializeLabels,
 } from "@/components/label-select";
+import { useResourceAccessParam } from "@/components/resource-access-filter";
 import {
   Select,
   SelectContent,
@@ -110,10 +111,15 @@ interface ScopeFilterParams<Scope extends string> {
   authorIds: undefined;
   excludeAuthorIds: undefined;
   excludeOtherPersonal: undefined;
+  /** The `ResourceAccessFilter` selection, for the list API's `access`. */
+  access: ResourceAccessRelation[];
   hasActiveScopeFilters: boolean;
 }
 
-/** Ignore retired visibility parameters in bookmarked links. */
+/**
+ * Ignore retired visibility parameters in bookmarked links. The access
+ * selection replaces them; a non-default one counts as an active filter.
+ */
 export function useScopeFilterParams(options: {
   includeBuiltIn: true;
   queryParamsAdapter?: QueryParamsAdapter;
@@ -129,6 +135,9 @@ export function useScopeFilterParams(options?: {
   const searchParams = useSearchParams();
   const activeSearchParams =
     options?.queryParamsAdapter?.searchParams ?? searchParams;
+  const { access, isDefault: isDefaultAccess } = useResourceAccessParam({
+    queryParamsAdapter: options?.queryParamsAdapter,
+  });
   const scope =
     options?.includeBuiltIn && activeSearchParams.get("scope") === "built_in"
       ? "built_in"
@@ -139,7 +148,8 @@ export function useScopeFilterParams(options?: {
     authorIds: undefined,
     excludeAuthorIds: undefined,
     excludeOtherPersonal: undefined,
-    hasActiveScopeFilters: !!scope,
+    access,
+    hasActiveScopeFilters: !!scope || !isDefaultAccess,
   };
 }
 

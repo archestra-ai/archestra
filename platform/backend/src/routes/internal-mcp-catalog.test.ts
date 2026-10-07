@@ -20,7 +20,14 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  type TestAccess,
+  test,
+} from "@/test";
 import { ApiError, type User } from "@/types";
 import internalMcpCatalogRoutes from "./internal-mcp-catalog";
 
@@ -73,6 +80,71 @@ describe("internal MCP catalog routes", () => {
   afterEach(async () => {
     vi.restoreAllMocks();
     await app.close();
+  });
+
+  test("GET /api/internal_mcp_catalog access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    const callerId = policyAuthor;
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const myTeam = await makeTeam(organizationId, callerId);
+    await makeTeamMember(myTeam.id, callerId);
+    const otherTeam = await makeTeam(organizationId, otherUser.id);
+
+    const seed = (name: string, access: TestAccess, authorId = otherUser.id) =>
+      makeInternalMcpCatalog({
+        name: `${name}-${suffix}`,
+        organizationId,
+        authorId,
+        access,
+      });
+    await seed("mine", "personal", callerId);
+    await seed("other-personal", "personal");
+    await seed("org", "org");
+    await seed("my-team", { teams: [myTeam.id] });
+    await seed("other-team", { teams: [otherTeam.id] });
+    await seed("shared-with-me", { users: [callerId] });
+
+    const list = async (access?: string) => {
+      const response = await app.inject({
+        method: "GET",
+        url: `/api/internal_mcp_catalog${access ? `?access=${access}` : ""}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .map((item: { name: string }) => item.name)
+        .filter((name: string) => name.endsWith(`-${suffix}`))
+        .map((name: string) => name.replace(`-${suffix}`, ""))
+        .sort();
+    };
+
+    // The admin reads every catalog item through a `*` grant, which the
+    // filter must not count as "shared".
+    expect(await list()).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "other-personal",
+      "other-team",
+      "shared-with-me",
+    ]);
+    expect(await list("mine,shared,org")).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "shared-with-me",
+    ]);
+    expect(await list("others")).toEqual(["other-personal", "other-team"]);
+    expect(await list("mine")).toEqual(["mine"]);
+    expect(await list("shared")).toEqual(["my-team", "shared-with-me"]);
+    expect(await list("org")).toEqual(["org"]);
   });
 
   test("GET /api/internal_mcp_catalog/:id/tools hides implicit Archestra meta tools", async ({

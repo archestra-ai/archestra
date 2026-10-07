@@ -23,6 +23,7 @@ import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
@@ -74,7 +75,7 @@ export default function AppsPage() {
   // Scope/owner filtering is server-side (mirroring the Projects list) so an
   // app admin's "Personal → Other users" view can reach apps that aren't in the
   // default page. The scope filter component owns these URL params.
-  const { scope, authorIds, excludeAuthorIds } = useScopeFilterParams();
+  const { scope, authorIds, excludeAuthorIds, access } = useScopeFilterParams();
   const settingsId = searchParams.get("settings");
   // Label filtering is server-side too: an owned app matches its own labels, an
   // external one its backing MCP server's, so both halves of the list filter.
@@ -89,6 +90,7 @@ export default function AppsPage() {
       scope,
       authorIds,
       excludeAuthorIds,
+      access,
       labels: labelsFromUrl || undefined,
     },
     { toastOnError: false },
@@ -198,6 +200,7 @@ export default function AppsPage() {
               />
             }
           >
+            <ResourceAccessFilter />
             <Select
               value={kind}
               onValueChange={(value) =>

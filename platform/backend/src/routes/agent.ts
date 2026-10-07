@@ -6,6 +6,7 @@ import {
   isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
   RouteId,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
@@ -162,6 +163,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
               ),
+            access: ResourceAccessQuerySchema,
             labels: z
               .string()
               .optional()
@@ -236,6 +238,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds,
           authorIds,
           excludeAuthorIds,
+          access,
           labels,
           excludeOtherPersonalAgents,
           status,
@@ -295,6 +298,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeOtherPersonalAgents: isAdmin
             ? excludeOtherPersonalAgents
             : undefined,
+          access,
           labels: parseLabelsParam(labels),
           status,
           providerApiKeyId,

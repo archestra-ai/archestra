@@ -8,6 +8,8 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
+  RESOURCE_ACCESS_RELATIONS,
+  type ResourceAccessRelation,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -107,6 +109,8 @@ type AgentListFilters = {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonalAgents?: boolean;
+  /** The list's "Show" filter; see {@link ResourceAccessRelation}. */
+  access?: ResourceAccessRelation[];
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
@@ -1617,6 +1621,15 @@ class AgentModel {
         externalWhereConditions.push(excludeAuthorsCondition);
       }
     }
+    if (params.filters?.access) {
+      const externalAccessCondition = await externalAgentAccessCondition({
+        userId: params.userId,
+        organizationId: params.filters.organizationId,
+        relations: params.filters.access,
+      });
+      if (externalAccessCondition)
+        externalWhereConditions.push(externalAccessCondition);
+    }
     if (params.excludeOtherPersonalExternalAgents) {
       const ownPersonalOnlyCondition = or(
         ne(schema.a2aRemoteAgentsTable.scope, "personal"),
@@ -2151,6 +2164,14 @@ class AgentModel {
       whereConditions.push(
         AgentModel.notOthersPersonalCondition({ userId, principals }),
       );
+    }
+    if (filters?.access && userId) {
+      const accessCondition = agentAccessCondition({
+        userId,
+        principals,
+        relations: filters.access,
+      });
+      if (accessCondition) whereConditions.push(accessCondition);
     }
     if (filters?.labels) {
       for (const [key, values] of Object.entries(filters.labels)) {
@@ -4911,6 +4932,94 @@ function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
     ),
   ) as SQL;
   // SPDX-SnippetEnd
+}
+
+/**
+ * {@link ResourcePermissionPolicyModel.accessRelationCondition} for every
+ * agent kind. The organization's LLM proxy has no grant namespace and serves
+ * the whole organization, so it is always `org`.
+ */
+function agentAccessCondition(params: {
+  userId: string;
+  principals: GrantPrincipal[];
+  relations: ResourceAccessRelation[];
+}): SQL | undefined {
+  const table = schema.agentsTable;
+  const subjects = params.principals.flatMap((principal) => principal.subjects);
+  const byResource = (resource: "agent" | "mcpGateway") =>
+    ResourcePermissionPolicyModel.accessRelationCondition({
+      organizationId: table.organizationId,
+      resource,
+      scopeColumn: table.id,
+      ownerColumn: table.authorId,
+      userId: params.userId,
+      subjects,
+      relations: params.relations,
+    });
+  const agentCondition = byResource("agent");
+  if (!agentCondition) return undefined;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(inArray(table.agentType, ["agent", "profile"]), agentCondition),
+    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+    and(
+      eq(table.agentType, "llm_proxy"),
+      params.relations.includes("org") ? sql`true` : sql`false`,
+    ),
+  ) as SQL;
+  // SPDX-SnippetEnd
+}
+
+/**
+ * The "Show" filter for external A2A agents, which still carry the retired
+ * visibility column and team assignments instead of grants.
+ */
+async function externalAgentAccessCondition(params: {
+  userId: string;
+  organizationId?: string;
+  relations: ResourceAccessRelation[];
+}): Promise<SQL | undefined> {
+  const selected = new Set(params.relations);
+  if (RESOURCE_ACCESS_RELATIONS.every((relation) => selected.has(relation)))
+    return undefined;
+  const table = schema.a2aRemoteAgentsTable;
+  const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  const teamIds = principals.flatMap((principal) =>
+    principal.subjects
+      .filter((subject) => subject.type === "team")
+      .map((subject) => subject.id),
+  );
+  const mine = sql<boolean>`coalesce(${table.authorId} = ${params.userId}, false)`;
+  const org = sql<boolean>`${table.scope} = 'org'`;
+  const shared =
+    teamIds.length > 0
+      ? sql<boolean>`(${table.scope} = 'team' AND ${exists(
+          db
+            .select({ value: sql`1` })
+            .from(schema.a2aRemoteAgentTeamsTable)
+            .where(
+              and(
+                eq(schema.a2aRemoteAgentTeamsTable.remoteAgentId, table.id),
+                inArray(schema.a2aRemoteAgentTeamsTable.teamId, teamIds),
+              ),
+            ),
+        )})`
+      : sql<boolean>`false`;
+  const byRelation: Record<ResourceAccessRelation, SQL> = {
+    mine,
+    shared,
+    org,
+    others: sql`NOT (${mine} OR ${shared} OR ${org})`,
+  };
+  return sql`(${sql.join(
+    [...selected].map((relation) => byRelation[relation]),
+    sql` OR `,
+  )})`;
 }
 
 /** Agents whose own policy grants read to any of `teamIds`. */

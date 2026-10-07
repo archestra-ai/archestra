@@ -44,6 +44,7 @@ import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -258,6 +259,7 @@ function McpGateways({
     authorIds: scopeFilter.authorIds,
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
+    access: scopeFilter.access,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   } satisfies Omit<
@@ -706,6 +708,7 @@ function McpGateways({
                 teamIds: null,
                 authorIds: null,
                 excludeAuthorIds: null,
+                access: null,
                 labels: null,
                 status: null,
                 page: "1",
@@ -807,6 +810,7 @@ function McpGateways({
                 teamIds: null,
                 authorIds: null,
                 excludeAuthorIds: null,
+                access: null,
                 labels: null,
                 status: null,
                 page: "1",
@@ -918,6 +922,7 @@ function McpGateways({
                   />
                 }
               >
+                <ResourceAccessFilter />
                 <ResourceScopeFilter showLabels />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}

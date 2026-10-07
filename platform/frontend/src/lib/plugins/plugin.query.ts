@@ -41,16 +41,24 @@ export type GithubPluginMarketplace =
 export type ImportGithubPluginMarketplaceBody =
   archestraApiTypes.ImportGithubPluginMarketplaceData["body"];
 
-export function usePlugins(enabled = true, filters?: { labels?: string }) {
-  // Label filtering is resolved server-side (the junction table is the only
-  // place the mapping lives), unlike this page's other filters.
+export function usePlugins(
+  enabled = true,
+  filters?: Pick<
+    NonNullable<archestraApiTypes.GetPluginsData["query"]>,
+    "labels" | "access"
+  >,
+) {
+  // Label and access filtering are resolved server-side (the junction table
+  // and the grants are the only places those live), unlike this page's other
+  // filters.
   const labels = filters?.labels;
+  const access = filters?.access;
   return useQuery({
-    queryKey: ["plugins", { labels }],
+    queryKey: ["plugins", { labels, access }],
     enabled,
     queryFn: async () => {
       const { data, error } = await getPlugins({
-        query: labels ? { labels } : {},
+        query: { labels, access },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];

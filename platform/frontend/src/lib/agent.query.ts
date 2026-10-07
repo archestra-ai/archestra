@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  isDefaultResourceAccess,
+} from "@archestra/shared";
 import {
   type QueryClient,
   useMutation,
@@ -193,6 +197,7 @@ export function useProfilesPaginated(
     authorIds,
     excludeAuthorIds,
     excludeOtherPersonalAgents,
+    access,
     labels,
     status,
     includeActivationSkillsCount,
@@ -214,6 +219,7 @@ export function useProfilesPaginated(
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
+    isDefaultResourceAccess(access) &&
     pinned === initialDataPinned &&
     labels === undefined &&
     status === undefined &&
@@ -236,6 +242,7 @@ export function useProfilesPaginated(
         authorIds,
         excludeAuthorIds,
         excludeOtherPersonalAgents,
+        access,
         labels,
         status,
         includeActivationSkillsCount,
@@ -257,6 +264,7 @@ export function useProfilesPaginated(
           authorIds,
           excludeAuthorIds,
           excludeOtherPersonalAgents,
+          access,
           labels,
           status,
           includeActivationSkillsCount,

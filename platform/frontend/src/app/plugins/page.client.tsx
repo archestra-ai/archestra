@@ -30,6 +30,7 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -151,7 +152,10 @@ function PluginsList() {
     isFetching,
     isLoadingError,
     refetch,
-  } = usePlugins(true, { labels: labelsFilter });
+  } = usePlugins(true, {
+    labels: labelsFilter,
+    access: scopeFilter.access,
+  });
 
   const setFilter = useCallback(
     (name: string, value: string) => {
@@ -241,6 +245,7 @@ function PluginsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      "access",
       "labels",
     ]) {
       params.delete(key);
@@ -594,6 +599,7 @@ function PluginsList() {
                     />
                   }
                 >
+                  <ResourceAccessFilter />
                   <FacetSelect
                     label="Filter by client"
                     value={client}

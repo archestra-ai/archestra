@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
 import {
   type QueryClient,
   useMutation,
@@ -96,6 +100,28 @@ export function useInternalMcpCatalog(
     },
     initialData: params?.initialData,
     enabled: params?.enabled,
+  });
+}
+
+/**
+ * Ids of the catalog items the registry's "Show" filter keeps. The registry
+ * filters its rows in the browser over the shared catalog list; only the
+ * access relation needs the server, which reads the grants. Disabled when
+ * `access` is undefined, meaning every relation is selected.
+ */
+export function useInternalMcpCatalogAccessIds(
+  access: ResourceAccessRelation[] | undefined,
+) {
+  return useQuery({
+    queryKey: ["mcp-catalog", "access-ids", access ?? null],
+    enabled: !!access,
+    queryFn: async () => {
+      const { data, error } = await getInternalMcpCatalog({
+        query: { access },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return new Set((data ?? []).map((item) => item.id));
+    },
   });
 }
 

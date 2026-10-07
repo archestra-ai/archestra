@@ -199,6 +199,13 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
+// The access filter is a real dropdown, which this file stubs flat.
+vi.mock("@/components/resource-access-filter", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/resource-access-filter")
+  >()),
+  ResourceAccessFilter: () => null,
+}));
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>

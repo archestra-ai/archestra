@@ -46,6 +46,7 @@ describe("resource list origin filters", () => {
       authorIds: undefined,
       excludeAuthorIds: undefined,
       excludeOtherPersonal: undefined,
+      access: ["mine", "shared", "org"],
       hasActiveScopeFilters: false,
     });
   });

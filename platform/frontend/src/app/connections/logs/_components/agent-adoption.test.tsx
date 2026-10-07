@@ -5,7 +5,7 @@ import type {
   AgentAdoptionMember,
 } from "@/lib/connected-client.query";
 import { formatRelativeTimeFromNow } from "@/lib/utils/date-time";
-import { AgentAdoptionOverview, agentChartData } from "./agent-adoption";
+import { AgentAdoptionOverview } from "./agent-adoption";
 
 global.ResizeObserver = class ResizeObserver {
   observe() {}
@@ -141,15 +141,5 @@ describe("AgentAdoptionOverview", () => {
     expect(tile("Members using MCP gateway")).toHaveTextContent("1of 3 · 33%");
     expect(tile("Members using LLM proxy")).toHaveTextContent("1of 3 · 33%");
     expect(tile("Active members")).toHaveTextContent("1of 3 · 33%");
-  });
-});
-
-describe("agentChartData", () => {
-  it("counts members per agent by name, with an Inactive row", () => {
-    expect(agentChartData(adoption)).toEqual([
-      { id: "droid", label: "Droid", members: 1 },
-      { id: "generic", label: "Generic client", members: 1 },
-      { id: "inactive", label: "Inactive", members: 2 },
-    ]);
   });
 });

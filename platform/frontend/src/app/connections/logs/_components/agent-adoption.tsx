@@ -4,16 +4,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import { format, parseISO } from "date-fns";
 import { Users } from "lucide-react";
 import { useMemo, useState } from "react";
-import {
-  Bar,
-  BarChart,
-  CartesianGrid,
-  Cell,
-  Line,
-  LineChart,
-  XAxis,
-  YAxis,
-} from "recharts";
+import { CartesianGrid, Line, LineChart, XAxis, YAxis } from "recharts";
 import {
   CollectionFilters,
   FilterBar,
@@ -79,8 +70,6 @@ const STATUS_OPTIONS = [
   { value: "inactive", label: "Inactive" },
 ];
 
-const INACTIVE_BAR = "inactive";
-
 /**
  * Who uses Archestra through an agent, judged by gateway and LLM proxy
  * traffic: summary tiles, calls over time, members per agent, and the members
@@ -103,10 +92,7 @@ export function AgentAdoptionOverview() {
     <div className="space-y-8">
       <div className="flex flex-col gap-6">
         <SummaryTiles adoption={data} />
-        <div className="grid gap-6 xl:grid-cols-3">
-          <UsageChart adoption={data} className="xl:col-span-2" />
-          <AgentChart adoption={data} />
-        </div>
+        <UsageChart adoption={data} />
       </div>
       <section aria-labelledby="adoption-members" className="space-y-3">
         <div className="space-y-1">
@@ -181,13 +167,7 @@ const usageChartConfig = {
   llmCalls: { label: "LLM proxy", color: "var(--chart-2)" },
 } satisfies ChartConfig;
 
-function UsageChart({
-  adoption,
-  className,
-}: {
-  adoption: AgentAdoption;
-  className?: string;
-}) {
+function UsageChart({ adoption }: { adoption: AgentAdoption }) {
   const [userId, setUserId] = useState(ALL_VALUE);
   const selected = adoption.members.find((m) => m.userId === userId);
   const { data, isPending, isLoadingError } = useAgentAdoptionUsage(
@@ -213,7 +193,7 @@ function UsageChart({
   );
 
   return (
-    <Card className={cn("min-w-0", className)}>
+    <Card className="min-w-0">
       <CardHeader>
         <CardTitle>Calls from agents</CardTitle>
         <CardDescription>
@@ -306,69 +286,6 @@ function CallsPerDayChart({ days }: { days: AgentAdoptionUsage["days"] }) {
         />
       </LineChart>
     </ChartContainer>
-  );
-}
-
-const chartConfig = {
-  members: { label: "Members", color: "var(--chart-1)" },
-} satisfies ChartConfig;
-
-function AgentChart({ adoption }: { adoption: AgentAdoption }) {
-  const data = useMemo(() => agentChartData(adoption), [adoption]);
-  const height = Math.max(160, data.length * 36 + 24);
-
-  return (
-    <Card className="min-w-0">
-      <CardHeader>
-        <CardTitle>{`Members per agent, last ${adoption.lookbackDays} days`}</CardTitle>
-        <CardDescription>Members with two agents count twice.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ChartContainer
-          config={chartConfig}
-          className="aspect-auto w-full"
-          style={{ height }}
-        >
-          <BarChart
-            accessibilityLayer
-            data={data}
-            layout="vertical"
-            margin={{ left: 0, right: 12 }}
-          >
-            <CartesianGrid horizontal={false} />
-            <XAxis
-              type="number"
-              allowDecimals={false}
-              tickLine={false}
-              axisLine={false}
-            />
-            <YAxis
-              type="category"
-              dataKey="label"
-              tickLine={false}
-              axisLine={false}
-              width={104}
-            />
-            <ChartTooltip
-              cursor={{ fill: "var(--muted)", fillOpacity: 0.6 }}
-              content={<ChartTooltipContent indicator="dot" hideLabel />}
-            />
-            <Bar dataKey="members" radius={3} isAnimationActive={false}>
-              {data.map((row) => (
-                <Cell
-                  key={row.id}
-                  fill={
-                    row.id === INACTIVE_BAR
-                      ? "var(--muted-foreground)"
-                      : "var(--color-members)"
-                  }
-                />
-              ))}
-            </Bar>
-          </BarChart>
-        </ChartContainer>
-      </CardContent>
-    </Card>
   );
 }
 
@@ -716,40 +633,6 @@ function keyOfUse(use: Use): string {
 
 function callCount(calls: number): string {
   return `${calls.toLocaleString()} ${calls === 1 ? "call" : "calls"}`;
-}
-
-/**
- * Members per agent, counting a member once per agent that called the MCP
- * gateway or LLM proxy for them; inactive members are the last row.
- */
-export function agentChartData(adoption: AgentAdoption) {
-  const rows = new Map<
-    string,
-    { id: string; label: string; members: number }
-  >();
-  let inactive = 0;
-  for (const member of adoption.members) {
-    if (member.status === "inactive") inactive += 1;
-    const seen = new Set<string>();
-    for (const use of [...member.gatewayUses, ...member.llmUses]) {
-      const id = agentKey(use.agent);
-      if (seen.has(id)) continue;
-      seen.add(id);
-      const row = rows.get(id) ?? {
-        id,
-        label: agentLabel(use.agent),
-        members: 0,
-      };
-      row.members += 1;
-      rows.set(id, row);
-    }
-  }
-  const sorted = [...rows.values()].sort(
-    (a, b) => b.members - a.members || a.label.localeCompare(b.label),
-  );
-  return inactive > 0
-    ? [...sorted, { id: INACTIVE_BAR, label: "Inactive", members: inactive }]
-    : sorted;
 }
 
 function formatDay(date: string): string {

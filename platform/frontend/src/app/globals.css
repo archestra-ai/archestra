@@ -33,6 +33,7 @@
   --color-sidebar: var(--sidebar);
   --color-sidebar-emphasis: var(--sidebar-emphasis);
   --color-sidebar-chip: var(--sidebar-chip);
+  --color-sidebar-track: var(--sidebar-track);
   --color-sidebar-attention: var(--sidebar-attention);
   --color-sidebar-attention-foreground: var(--sidebar-attention-foreground);
   --color-chart-5: var(--chart-5);
@@ -157,6 +158,9 @@
   /* Soft tinted fill for light-mode sidebar chips ("New"/"Beta"): a chip reads
      as a label through its fill, so it needs no dark outline. */
   --sidebar-chip: color-mix(in oklab, var(--sidebar-emphasis) 8%, var(--sidebar));
+  /* Track of the sidebar's segmented AI/Studio toggle: pulled toward the
+     sidebar text so it never matches the sidebar, whatever --muted is. */
+  --sidebar-track: color-mix(in oklab, var(--sidebar-foreground) 10%, var(--sidebar));
   /* Sidebar "needs action" signals (attention count, onboarding dot), drawn
      from the theme's --destructive hue instead of a fixed red. The ink is
      pushed toward the far end of the range so it clears 4.5:1 on the tinted

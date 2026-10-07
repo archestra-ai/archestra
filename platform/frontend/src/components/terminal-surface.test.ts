@@ -242,3 +242,22 @@ describe("sidebar attention contrast", () => {
     expect(contrast(ink, sidebar)).toBeGreaterThanOrEqual(3);
   });
 });
+
+describe("sidebar segmented toggle", () => {
+  it.each(
+    themeTokens(),
+  )("keeps the %s AI/Studio track visible against the sidebar", (_name, tokens) => {
+    const sidebar = parse(tokens["--sidebar"]);
+    const track = mix(
+      parse(tokens["--sidebar-foreground"]),
+      sidebar,
+      mixPercent("--sidebar-track"),
+    );
+    // The track reads as one control through its fill or its outline (a
+    // near-black sidebar flattens the fill's luminance step, but such
+    // themes ship a strong --sidebar-border).
+    const fillStep = contrast(track, sidebar);
+    const outline = contrast(parse(tokens["--sidebar-border"]), sidebar);
+    expect(fillStep >= 1.1 || outline >= 1.3).toBe(true);
+  });
+});

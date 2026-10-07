@@ -172,7 +172,7 @@ function SidebarModeToggle({
     <div
       role="group"
       aria-label="Sidebar view"
-      className="flex gap-0.5 rounded-lg bg-muted p-0.5 group-data-[collapsible=icon]:hidden"
+      className="flex gap-0.5 rounded-lg border border-sidebar-border bg-sidebar-track p-px group-data-[collapsible=icon]:hidden"
     >
       {segment("chats", "AI", MessageCircle)}
       {segment("studio", "Studio", PencilRuler)}

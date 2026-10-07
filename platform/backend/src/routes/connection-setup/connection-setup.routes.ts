@@ -901,6 +901,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await SkillMarketplaceCredentialModel.create({
                 organizationId: setup.organizationId,
                 userId: setup.userId,
+                connectionSetupId: setup.id,
                 tx,
               });
             const origin = proxyBaseUrlToOrigin(setup.baseUrl);

@@ -105,6 +105,7 @@ export function InitialResourcePermissions({
     value,
     label: preset.label,
     description: presetDescription(value, resource),
+    actions: preset.actions,
     disabled: !canGrantPreset(preset.actions),
   }));
   const description = permissionsSettingsDescription(

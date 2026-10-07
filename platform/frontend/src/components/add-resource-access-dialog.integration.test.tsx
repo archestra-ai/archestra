@@ -92,10 +92,12 @@ it("loads the chosen recipient type, excludes existing grants, searches, and add
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Alex Reader" }),
   );
-  // Each level explains itself here, as it does in the Permissions list.
-  expect(screen.getByRole("option", { name: "Can use" })).toHaveTextContent(
-    "Read and use this resource",
-  );
+  // The detail under the list explains the chosen level, then follows the
+  // highlighted one, as it does in every other permission picker.
+  const detail = screen.getByTestId("permission-level-detail");
+  expect(detail).toHaveTextContent("Read this resource");
+  await user.hover(screen.getByRole("option", { name: "Can use" }));
+  expect(detail).toHaveTextContent("Read and use this resource");
   await user.click(screen.getByRole("option", { name: "Can use" }));
   await user.click(screen.getByRole("button", { name: "Add access" }));
   expect(onAdd).toHaveBeenCalledExactlyOnceWith([

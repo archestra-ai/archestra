@@ -371,6 +371,7 @@ function PermissionsEditor({
     value,
     label: preset.label,
     description: presetDescription(value, policy.resource),
+    actions: preset.actions,
     disabled: !canGrant(preset.actions),
   }));
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);

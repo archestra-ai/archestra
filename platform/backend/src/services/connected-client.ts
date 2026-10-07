@@ -12,26 +12,49 @@ import {
   type ConnectedClientRecord,
   ConnectionSetupClientIdSchema,
 } from "@/types";
+import { isOAuthClientForConnectClient } from "./connected-client-oauth";
 import { dropRevokedSkillShareLinkRepo } from "./skill-share-link";
+
+/** Traffic is read this far back, as on the Agent connections tab. */
+const LAST_SEEN_DAYS = 30;
 
 /**
  * The user's connected clients, most recently connected first: redeemed
  * setups, plus agents the gateway can tell apart by their OAuth client while
  * the user holds an unexpired token for one, set up by hand or not. Merged
  * with a setup entry, the earliest connect is kept as the first and the
- * latest as the last.
+ * latest as the last. A sign-in counts as a connect once, when it was first
+ * consented to: token refreshes happen on every launch and are not connects.
+ * Each client carries when its gateway or LLM proxy traffic was last seen.
  */
 export async function listConnectedClients(params: {
   organizationId: string;
   userId: string;
 }): Promise<ConnectedClientRecord[]> {
-  const [redeemed, oauthClients] = await Promise.all([
+  const [redeemed, oauthClients, adoption] = await Promise.all([
     ConnectedClientModel.listRedeemedForUser(params),
     OAuthClientModel.listWithUserTokens({
       userId: params.userId,
       activeOnly: true,
     }),
+    ConnectedClientModel.getAdoption({
+      organizationId: params.organizationId,
+      userId: params.userId,
+      lookbackDays: LAST_SEEN_DAYS,
+    }),
   ]);
+  // Newest gateway or LLM proxy call per Connect client.
+  const member = adoption.members[0];
+  const lastSeen = new Map<string, Date>();
+  for (const use of [
+    ...(member?.gatewayUses ?? []),
+    ...(member?.llmUses ?? []),
+  ]) {
+    const { clientId } = use.agent;
+    if (!clientId) continue;
+    const prev = lastSeen.get(clientId);
+    if (!prev || use.lastSeenAt > prev) lastSeen.set(clientId, use.lastSeenAt);
+  }
   const byClient = new Map(redeemed.map((c) => [c.clientId, c]));
   for (const clientId of OAUTH_RECOGNISED_CLIENT_IDS) {
     const matches = oauthClients.filter((c) =>
@@ -39,13 +62,16 @@ export async function listConnectedClients(params: {
     );
     if (matches.length === 0) continue;
     const first = Math.min(...matches.map((c) => c.firstIssuedAt.getTime()));
-    const last = Math.max(...matches.map((c) => c.lastIssuedAt.getTime()));
+    const consents = matches.flatMap((c) =>
+      c.consentedAt ? [c.consentedAt.getTime()] : [],
+    );
+    const signedIn = consents.length > 0 ? Math.max(...consents) : first;
     const client = byClient.get(clientId);
     if (client) {
       if (first < client.connectedAt.getTime())
         client.connectedAt = new Date(first);
-      if (last > client.lastConnectedAt.getTime())
-        client.lastConnectedAt = new Date(last);
+      if (signedIn > client.lastConnectedAt.getTime())
+        client.lastConnectedAt = new Date(signedIn);
       continue;
     }
     byClient.set(clientId, {
@@ -53,10 +79,14 @@ export async function listConnectedClients(params: {
       platform: null,
       mcpGatewayId: null,
       llmProxyId: null,
-      connectedAt: new Date(first),
-      lastConnectedAt: new Date(last),
+      connectedAt: new Date(Math.min(first, signedIn)),
+      lastConnectedAt: new Date(signedIn),
       deviceNames: [],
+      lastSeenAt: null,
     });
+  }
+  for (const client of byClient.values()) {
+    client.lastSeenAt = lastSeen.get(client.clientId) ?? null;
   }
   return [...byClient.values()].sort(
     (a, b) => b.lastConnectedAt.getTime() - a.lastConnectedAt.getTime(),
@@ -160,44 +190,4 @@ export async function disconnectClient(params: {
     "disconnectClient: connected client disconnected",
   );
   return disconnected;
-}
-
-// === OAuth client matching
-
-/** Claude Code's CIMD client_id: every install shares this one OAuth client. */
-const CLAUDE_CODE_OAUTH_CLIENT_ID =
-  "https://claude.ai/oauth/claude-code-client-metadata";
-
-const AMP_CLIENT_NAME = /^Amp MCP Client \(.*\)$/;
-const AMP_REDIRECT_URI = "http://localhost:41592/oauth/callback";
-
-/**
- * Whether an OAuth client (the gateway's `oauth_client` row) belongs to a
- * Connect client, so disconnecting it can revoke the user's gateway grant.
- * Only clients with a stable, verified identity match; everything else
- * returns false and keeps its grant.
- *
- * @public - exported for testability
- */
-export function isOAuthClientForConnectClient(
-  clientId: ConnectedClientId,
-  oauthClient: {
-    clientId: string;
-    name: string | null;
-    redirectUris: string[];
-  },
-): boolean {
-  switch (clientId) {
-    case "claude-code":
-      return oauthClient.clientId === CLAUDE_CODE_OAUTH_CLIENT_ID;
-    case "amp":
-      // Amp registers per install via DCR as "Amp MCP Client (<server name>)"
-      // with this fixed loopback redirect (captured from amp 0.0.1791201662).
-      return (
-        AMP_CLIENT_NAME.test(oauthClient.name ?? "") &&
-        oauthClient.redirectUris.includes(AMP_REDIRECT_URI)
-      );
-    default:
-      return false;
-  }
 }

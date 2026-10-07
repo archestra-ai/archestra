@@ -6,8 +6,10 @@ import {
   PERSONAL_MCP_GATEWAY_NAME,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import JSZip from "jszip";
 import { vi } from "vitest";
+import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
@@ -469,6 +471,18 @@ describe("GET /api/connection-setups/script/:token", () => {
     expect(script).toContain("/skills/marketplace.git");
     expect(script).toContain("archestra_mkt_");
     expect(script).not.toContain("/skills/m/archestra_skl_");
+    // The credential remembers its setup, so syncs can be told apart by agent.
+    const [credential] = await db
+      .select({ clientId: schema.connectionSetupsTable.clientId })
+      .from(schema.skillMarketplaceCredentialsTable)
+      .innerJoin(
+        schema.connectionSetupsTable,
+        eq(
+          schema.connectionSetupsTable.id,
+          schema.skillMarketplaceCredentialsTable.connectionSetupId,
+        ),
+      );
+    expect(credential?.clientId).toBe("claude-code");
     const links = await SkillShareLinkModel.listByOrganization({
       organizationId,
     });

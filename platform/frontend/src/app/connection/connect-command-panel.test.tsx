@@ -163,9 +163,6 @@ function renderPanelProps(
     urlProvider: null,
     onProviderSelect: vi.fn(),
     baseUrl: "http://localhost:9000/v1",
-    candidateBaseUrls: ["http://localhost:9000/v1"],
-    baseUrlMetadata: null,
-    onBaseUrlChange: vi.fn(),
     ...overrides,
   };
 }
@@ -338,7 +335,7 @@ describe("ConnectCommandPanel", () => {
       screen.queryByRole("tab", { name: "Claude subscription" }),
     ).toBeNull();
     expect(screen.getByText(COMMAND)).not.toBeVisible();
-    await userEvent.click(screen.getByText("Advanced: terminal setup"));
+    await userEvent.click(screen.getByText(/Advanced: terminal setup/));
     expect(screen.getByText(COMMAND)).toBeVisible();
     // The Desktop panel sits on a card, so the command must bring its own
     // terminal surface; without one it inherited the card and was unreadable.
@@ -1069,21 +1066,6 @@ describe("ConnectCommandPanel", () => {
     if (detailCopy) {
       expect(screen.getByText(new RegExp(detailCopy, "i"))).toBeInTheDocument();
     }
-  });
-
-  it("shows a separate endpoint line when more than one endpoint is configured", async () => {
-    renderPanel({
-      baseUrl: "https://eu.example.com/v1",
-      candidateBaseUrls: [
-        "https://eu.example.com/v1",
-        "https://us.example.com/v1",
-      ],
-    });
-    await screen.findByText(COMMAND);
-    expect(
-      screen.getByText(/Reach the gateway and proxy at/),
-    ).toBeInTheDocument();
-    expect(screen.getByText("https://eu.example.com/v1")).toBeInTheDocument();
   });
 
   it("shows the auto-detected platform in the review step", async () => {

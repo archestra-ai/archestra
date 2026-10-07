@@ -34,7 +34,7 @@ export function SetupCommandLine({
 
   if (failed) {
     return (
-      <div className="flex items-center gap-3 px-5 py-4 font-mono text-[13px] text-terminal-destructive">
+      <div className="flex items-center gap-3 px-5 py-4 font-mono text-xs text-terminal-destructive">
         <span>Couldn&apos;t generate the command.</span>
         <Button
           type="button"
@@ -51,7 +51,7 @@ export function SetupCommandLine({
 
   if (pending || !command) {
     return (
-      <div className="flex items-center gap-2.5 px-5 py-4 font-mono text-[13px] text-terminal-muted">
+      <div className="flex items-center gap-2.5 px-5 py-4 font-mono text-xs text-terminal-muted">
         <Loader2 className="size-3.5 animate-spin" />
         <span>Generating command…</span>
       </div>

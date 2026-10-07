@@ -88180,6 +88180,11 @@ export type GetOpenAppaYellsResponses = {
                 name: string | null;
                 email: string | null;
             } | null;
+            conversation: {
+                id: string;
+                title: string | null;
+                createdAt: string;
+            } | null;
         }>;
         pagination: {
             limit: number;
@@ -88372,6 +88377,11 @@ export type GetOpenAppaYellResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        conversation: {
+            id: string;
+            title: string | null;
+            createdAt: string;
+        } | null;
     };
 };
 
@@ -88476,6 +88486,11 @@ export type UpdateOpenAppaYellResponses = {
             type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
+        } | null;
+        conversation: {
+            id: string;
+            title: string | null;
+            createdAt: string;
         } | null;
     };
 };

@@ -57,7 +57,7 @@ archestra:
     existingSecretKey: auth-secret
 ```
 
-The referenced Secret must also contain `session-secret` and `secrets-encryption-secret`. Preserve these keys across upgrades and restores. Use the [key rotation procedure](/docs/admin/security/secrets-management#database-storage) when changing encryption keys.
+The referenced Secret must also contain `session-secret` and `secrets-encryption-secret`. Preserve these keys across upgrades and restores. Use the [key rotation procedure](/docs/admin/security/credentials#database-storage) when changing encryption keys.
 
 ### Database Configuration
 

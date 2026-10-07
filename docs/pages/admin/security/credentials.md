@@ -1,8 +1,8 @@
 ---
-title: Credentials
-description: Save credentials once and reuse them across agents, MCP servers, skills, and knowledge
-order: 3
-lastUpdated: 2026-10-02
+title: Credentials and Secrets
+description: Save credentials once, reuse them across integrations, and configure encrypted secrets storage
+order: 1
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -37,15 +37,68 @@ With Agent Runtime enabled, **Account → Connections** appears when a personal 
 
 Create separate definitions when the same service needs both ownership policies. A personal MCP credential cannot be used by an organization installation.
 
-## Storage
+## Secrets Storage
 
-Connect both personal and organization values from **Settings → Credentials**. **Settings → Secrets** configures the storage provider.
+<span id="secrets-management"></span>
 
-Saved values use the configured [secrets manager](/docs/admin/security/secrets-management). Archestra stores them in its database or Vault. Read-only Vault deployments store references to existing secret fields.
+Saved credential values use the configured secrets manager. Archestra stores them in its PostgreSQL database by default, or in HashiCorp Vault when external secrets storage is configured. Configure your storage provider under **Settings → Secrets**.
 
-Select the Vault path and key when connecting a value. The same reference works wherever the credential is selected. Integrations read values through the secrets manager at execution time.
+The Credentials page displays connection status without revealing stored secrets. LLM provider accounts and native Claude subscriptions retain their dedicated sign-in flows.
 
-The Credentials page shows connection status without revealing saved values. LLM provider accounts and native Claude subscriptions retain their dedicated sign-in flows.
+### Database Storage
+
+<span id="database-storage"></span>
+
+Database storage is the default. To configure it explicitly, set [`ARCHESTRA_SECRETS_MANAGER`](/docs/reference/configuration#ARCHESTRA_SECRETS_MANAGER) to `DB`.
+
+Stored secrets are automatically encrypted at rest using AES-256-GCM derived from [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET). Existing plaintext secrets migrate to encrypted format on startup.
+
+#### Key Rotation
+
+To rotate the encryption key without losing access to stored secrets:
+
+1. Set [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET) to the new key.
+2. Set [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) to the old key.
+3. Restart Archestra. The platform re-encrypts stored secrets under the new key on startup.
+4. Remove [`ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS`](/docs/reference/configuration#ARCHESTRA_SECRETS_ENCRYPTION_SECRET_PREVIOUS) on the next deployment.
+
+Startup verifies the active key against stored secrets and aborts if it cannot decrypt them. To accept a new key without re-encrypting older secrets, set [`ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY=true`](/docs/reference/configuration#ARCHESTRA_SECRETS_ACCEPT_NEW_ENCRYPTION_KEY) for one boot. Unmigrated secrets remain unreadable and must be reconnected.
+
+### HashiCorp Vault
+
+<span id="hashicorp-vault"></span>
+
+HashiCorp Vault stores secret values externally instead of in the database. Only references to Vault secret paths are stored in PostgreSQL.
+
+> [!NOTE]
+> HashiCorp Vault storage requires an Enterprise license. Contact sales@archestra.ai for licensing.
+
+Set [`ARCHESTRA_SECRETS_MANAGER`](/docs/reference/configuration#ARCHESTRA_SECRETS_MANAGER) to `VAULT` and configure the connection parameters:
+
+| Variable | Required | Description |
+| --- | --- | --- |
+| [`ARCHESTRA_SECRETS_MANAGER`](/docs/reference/configuration#ARCHESTRA_SECRETS_MANAGER) | Yes | Set to `VAULT`. |
+| [`ARCHESTRA_HASHICORP_VAULT_ADDR`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_ADDR) | Yes | Your Vault server address. |
+| [`ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED`](/docs/reference/configuration#ARCHESTRA_ENTERPRISE_LICENSE_ACTIVATED) | Yes | Valid enterprise license key. |
+| [`ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_AUTH_METHOD) | No | `TOKEN` (default), `K8S`, or `AWS`. |
+| [`ARCHESTRA_HASHICORP_VAULT_KV_VERSION`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_KV_VERSION) | No | KV secrets engine version: `1` or `2` (default: `2`). |
+| [`ARCHESTRA_HASHICORP_VAULT_SECRET_PATH`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_SECRET_PATH) | No | Path prefix to store secrets under (see [Secret Storage Paths](#secret-storage-paths)). |
+| [`ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_SECRET_METADATA_PATH) | No | Override path prefix for KV v2 metadata operations. |
+
+If [`ARCHESTRA_SECRETS_MANAGER`](/docs/reference/configuration#ARCHESTRA_SECRETS_MANAGER) is set to `VAULT` but required variables are missing, Archestra logs a warning and falls back to database storage.
+
+<span id="secret-storage-paths"></span>
+Vault paths are formatted as `{prefix}/{secretName}`. The default prefix depends on the KV engine version: `secret/data/archestra` for KV v2 and `secret/archestra` for KV v1.
+
+#### Vault Authentication
+
+<span id="vault-authentication"></span>
+
+Archestra supports three authentication methods for connecting to HashiCorp Vault:
+
+- **Token**: Set [`ARCHESTRA_HASHICORP_VAULT_TOKEN`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_TOKEN).
+- **Kubernetes**: Set [`ARCHESTRA_HASHICORP_VAULT_K8S_ROLE`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_K8S_ROLE). Optionally customize [`ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_K8S_TOKEN_PATH) and [`ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_K8S_MOUNT_POINT).
+- **AWS IAM**: Set [`ARCHESTRA_HASHICORP_VAULT_AWS_ROLE`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_AWS_ROLE). Optionally configure [`ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_AWS_MOUNT_POINT), [`ARCHESTRA_HASHICORP_VAULT_AWS_REGION`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_AWS_REGION), [`ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_AWS_STS_ENDPOINT), and [`ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID`](/docs/reference/configuration#ARCHESTRA_HASHICORP_VAULT_AWS_IAM_SERVER_ID).
 
 ## Using Credentials
 

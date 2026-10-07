@@ -1,8 +1,8 @@
 ---
 title: "Content Encryption at Rest"
 description: "Server-side encryption of stored conversation and tool content"
-order: 1
-lastUpdated: 2026-10-05
+order: 2
+lastUpdated: 2026-10-06
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -11,7 +11,7 @@ Content encryption at rest (Enterprise, disabled by default) encrypts stored con
 
 > **Enterprise feature:** Content encryption at rest requires an enterprise license. Contact sales@archestra.ai for licensing information.
 
-Beyond [stored secrets](/docs/admin/security/secrets-management), Archestra can encrypt conversation and tool content at rest. Set [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET) — a key separate from the stored-secrets key, so a security team can hold it in their own vault and map it to the environment variable at deploy time. Encryption and decryption are transparent; rows written before enablement are encrypted by a background sweep.
+Beyond [stored credentials and secrets](/docs/admin/security/credentials#secrets-storage), Archestra can encrypt conversation and tool content at rest. Set [`ARCHESTRA_CONTENT_ENCRYPTION_SECRET`](/docs/reference/configuration#ARCHESTRA_CONTENT_ENCRYPTION_SECRET) — a key separate from the stored-secrets key, so a security team can hold it in their own vault and map it to the environment variable at deploy time. Encryption and decryption are transparent; rows written before enablement are encrypted by a background sweep.
 
 ## What Is Encrypted
 

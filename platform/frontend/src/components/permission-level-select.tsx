@@ -51,7 +51,7 @@ export function PermissionLevelSelect({
     <Select disabled={disabled} value={value} onValueChange={onValueChange}>
       <SelectTrigger
         size="sm"
-        // Sized to fit the longest level ("Full access + deployment") so the
+        // Sized to fit the longest level ("Full access + deploy") so the
         // label is never cut off, and the same width in every list.
         className={cn("w-56 shrink-0 text-left", className)}
         aria-label={ariaLabel}

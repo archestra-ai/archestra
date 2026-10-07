@@ -172,19 +172,42 @@ describe("terminal surface contrast", () => {
 
 describe("sidebar emphasis contrast", () => {
   const themes = themeTokens();
-
-  it.each(themes)("keeps %s legible", (name, tokens) => {
-    const sidebar = parse(tokens["--sidebar"]);
-    const emphasis = mix(
+  const sidebarEmphasis = (name: string, tokens: Record<string, string>) =>
+    mix(
       parse(tokens["--sidebar-foreground"]),
       parse(name.endsWith("dark") ? "white" : "black"),
       mixPercent("--sidebar-emphasis"),
     );
 
+  it.each(
+    themes.filter(([name]) => name.endsWith("light")),
+  )("keeps %s chips and selected segment legible without heavy outlines", (name, tokens) => {
+    const emphasis = sidebarEmphasis(name, tokens);
+    const chip = mix(
+      emphasis,
+      parse(tokens["--sidebar"]),
+      mixPercent("--sidebar-chip"),
+    );
+
+    // "New"/"Beta" chips: emphasis text on the soft tinted fill.
+    expect(contrast(emphasis, chip)).toBeGreaterThanOrEqual(4.5);
+    // Selected AI/Studio segment: foreground text on a background card.
+    expect(
+      contrast(parse(tokens["--foreground"]), parse(tokens["--background"])),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(
+    themes.filter(([name]) => name.endsWith("dark")),
+  )("keeps %s chips and selected segment legible", (name, tokens) => {
+    const emphasis = sidebarEmphasis(name, tokens);
+
     // Outlined "New"/"Beta" chips: emphasis text and edge on the sidebar.
     // The selected AI/Studio segment: sidebar text on an emphasis fill, set
     // against the muted track the unselected segment shares.
-    expect(contrast(emphasis, sidebar)).toBeGreaterThanOrEqual(4.5);
+    expect(
+      contrast(emphasis, parse(tokens["--sidebar"])),
+    ).toBeGreaterThanOrEqual(4.5);
     expect(contrast(emphasis, parse(tokens["--muted"]))).toBeGreaterThanOrEqual(
       4.5,
     );

@@ -32,6 +32,7 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
   --color-sidebar-emphasis: var(--sidebar-emphasis);
+  --color-sidebar-chip: var(--sidebar-chip);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -147,6 +148,9 @@
      past --sidebar-foreground so it clears 4.5:1 against --sidebar on themes
      whose own sidebar text does not. terminal-surface.test.ts checks it. */
   --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, black);
+  /* Soft tinted fill for light-mode sidebar chips ("New"/"Beta"): a chip reads
+     as a label through its fill, so it needs no dark outline. */
+  --sidebar-chip: color-mix(in oklab, var(--sidebar-emphasis) 8%, var(--sidebar));
 }
 
 html.dark {

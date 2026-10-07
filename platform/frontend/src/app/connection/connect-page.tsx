@@ -691,11 +691,22 @@ function ConnectArea({
           {/* What happens next, right above the prompt it's about. */}
           <div className="mt-2 space-y-1 px-1 text-xs text-muted-foreground">
             {script ? (
-              <p>
-                Run it in a terminal on the computer where you use{" "}
-                {nameOf(client)}. It needs Node.js 18 or newer, opens a browser
-                page, and changes nothing until you approve.
-              </p>
+              <div className="flex flex-wrap items-end justify-between gap-x-8 gap-y-1">
+                <p className="min-w-0 flex-1">
+                  Run it in a terminal on the computer where you use{" "}
+                  {nameOf(client)}. It needs Node.js 18 or newer, opens a
+                  browser page, and changes nothing until you approve.
+                </p>
+                <UnstyledButton
+                  type="button"
+                  onClick={() => setWindows(!windows)}
+                  className="shrink-0 rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                >
+                  {windows
+                    ? "Use the macOS / Linux command"
+                    : "Use the Windows command"}
+                </UnstyledButton>
+              </div>
             ) : (
               <p>
                 {nameOf(client) === "your agent"
@@ -754,7 +765,7 @@ function ConnectArea({
           )}
 
           {script && (
-            <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
+            <div className="mt-3 px-1 text-xs text-muted-foreground">
               <div>
                 <p className="font-semibold text-foreground">
                   When it finishes
@@ -768,15 +779,6 @@ function ConnectArea({
                   </li>
                 </ol>
               </div>
-              <UnstyledButton
-                type="button"
-                onClick={() => setWindows(!windows)}
-                className="self-start rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-              >
-                {windows
-                  ? "Use the macOS / Linux command"
-                  : "Use the Windows command"}
-              </UnstyledButton>
             </div>
           )}
         </>
@@ -785,12 +787,9 @@ function ConnectArea({
   );
 }
 
-/** Words the installer command runs, shown in the command colour. */
-const SHELL_COMMANDS = new Set(["curl", "irm", "node"]);
-
 /**
- * The installer command as a terminal: always dark, a dim prompt, and the
- * command and its flags tinted. Copy takes the text exactly as shown.
+ * The installer command on two lines after a dim prompt, in the page's own
+ * colours. Copy takes the text exactly as shown.
  */
 function ScriptBlock({
   command,
@@ -804,36 +803,20 @@ function ScriptBlock({
   onCopy: () => void;
 }) {
   return (
-    <div className="relative mt-2 rounded-xl border border-zinc-800 bg-zinc-950 shadow-sm">
+    <div className="relative mt-2 rounded-2xl border bg-background shadow-sm">
       <Button
         size="xs"
         variant="ghost"
         onClick={onCopy}
         disabled={disabled}
-        className="absolute top-2.5 right-2.5 text-zinc-400 hover:bg-zinc-800 hover:text-zinc-100"
+        className="absolute top-2.5 right-2.5 text-muted-foreground"
       >
         {copied ? <Check /> : <Copy />}
         {copied ? "Copied" : "Copy"}
       </Button>
-      <pre className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-[13px] leading-relaxed text-zinc-100">
-        {command.split("\n").map((line, i) => (
-          <div key={line}>
-            {i === 0 && <span className="text-zinc-500 select-none">$ </span>}
-            {line.split(/(\s+)/).map((word, j) => (
-              <span
-                // biome-ignore lint/suspicious/noArrayIndexKey: words repeat
-                key={j}
-                className={cn(
-                  SHELL_COMMANDS.has(word) && "text-emerald-400",
-                  word.startsWith("-") && "text-sky-300",
-                  /^[|\\`]$/.test(word) && "text-zinc-500",
-                )}
-              >
-                {word}
-              </span>
-            ))}
-          </div>
-        ))}
+      <pre className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-sm leading-relaxed">
+        <span className="text-muted-foreground select-none">$ </span>
+        {command}
       </pre>
     </div>
   );

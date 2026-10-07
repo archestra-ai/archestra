@@ -1,23 +1,29 @@
 /**
  * Contrast-safety pass for generated theme tokens.
  *
- * tweakcn's light palettes ship structural chrome (table/card/input borders,
- * dividers, unchecked control outlines) and muted text at contrast ratios far
- * below WCAG 2.2 minimums — most light themes render borders at ~1.2:1 against
- * their background, so table grids and bulk-action checkboxes are nearly
- * invisible. This module darkens only the offending tokens just enough to clear
- * the target ratio, preserving each theme's hue and chroma so the palette's
- * character is unchanged. It runs on the LIGHT variant only; dark mode is never
- * touched.
+ * tweakcn's light palettes ship control outlines, focus rings and muted text at
+ * contrast ratios below WCAG 2.2 minimums, and a few ship dividers so faint
+ * they disappear. This module moves only the offending tokens just far enough
+ * to clear their target, preserving each theme's hue and chroma so the
+ * palette's character is unchanged. It runs on the LIGHT variant only; dark
+ * mode is never touched.
  *
- * WCAG 2.2 targets:
- *   - 1.4.11 Non-text Contrast: 3:1 for UI component boundaries/states
- *   - 1.4.3 Contrast (Minimum): 4.5:1 for body/secondary text
+ * Targets follow what WCAG 2.2 actually requires of each token:
+ *   - 1.4.3 Contrast (Minimum), 4.5:1 — muted (secondary) text.
+ *   - 1.4.11 Non-text Contrast, 3:1 — boundaries needed to identify a control
+ *     or its state: `input` (text fields, selects, checkboxes, radios, switch
+ *     tracks) and `ring` / `sidebar-ring` (focus indicators).
+ *   - No WCAG minimum — decorative lines: `border` (dividers, card and table
+ *     edges, outline-button edges, whose label already identifies them) and
+ *     `sidebar-border`. These keep the theme's soft hairline and are only
+ *     lifted to a visibility floor, so light mode reads as surfaces rather
+ *     than a wireframe of 3:1 lines.
  */
 
 /**
- * Raise the contrast of a light theme's structural and muted-text tokens to the
- * WCAG minimums, returning a new token map. Tokens already meeting their target
+ * Raise the contrast of a light theme's control, focus and muted-text tokens to
+ * the WCAG minimums, and lift faint decorative borders to a visibility floor,
+ * returning a new token map. Tokens already meeting their target
  * (or that are not plain `oklch()` values) are left byte-for-byte unchanged, so
  * high-contrast themes (e.g. neo-brutalism) and non-color tokens are untouched.
  */
@@ -56,6 +62,16 @@ export function contrastRatio(a: string, b: string): number | null {
 // Internal
 // ============================================================================
 
+/** WCAG 1.4.11 minimum for control boundaries and focus indicators. */
+const NON_TEXT_MINIMUM = 3;
+
+/**
+ * Lowest contrast a decorative border may have. Faint enough to read as a
+ * hairline (most themes ship ~1.2–1.4:1), high enough that a divider never
+ * vanishes into the surface on a washed-out display.
+ */
+const DECORATIVE_BORDER_FLOOR = 1.3;
+
 interface ContrastRule {
   /** Token to adjust. */
   token: string;
@@ -67,16 +83,23 @@ interface ContrastRule {
 
 /**
  * Tokens whose light-mode contrast we guarantee, and what each is seen against:
- *   - `border`   — table/card/popover borders and the default component border
- *   - `input`    — input outlines and unchecked checkbox/radio outlines
- *   - `sidebar-border` — sidebar dividers, seen against the sidebar surface
+ *   - `border` / `sidebar-border` — decorative dividers and container edges;
+ *     only lifted to the visibility floor, never to 3:1
+ *   - `input` — form control boundaries: text fields, select triggers,
+ *     unchecked checkbox/radio outlines, unchecked switch tracks
+ *   - `ring` / `sidebar-ring` — keyboard focus indicators
  *   - `muted-foreground` — secondary text, seen on both muted and base surfaces
- * Borders/outlines target 3:1 (1.4.11); muted text targets 4.5:1 (1.4.3).
  */
 const CONTRAST_RULES: ContrastRule[] = [
-  { token: "border", against: ["background"], ratio: 3 },
-  { token: "input", against: ["background"], ratio: 3 },
-  { token: "sidebar-border", against: ["sidebar", "background"], ratio: 3 },
+  { token: "border", against: ["background"], ratio: DECORATIVE_BORDER_FLOOR },
+  {
+    token: "sidebar-border",
+    against: ["sidebar", "background"],
+    ratio: DECORATIVE_BORDER_FLOOR,
+  },
+  { token: "input", against: ["background"], ratio: NON_TEXT_MINIMUM },
+  { token: "ring", against: ["background"], ratio: NON_TEXT_MINIMUM },
+  { token: "sidebar-ring", against: ["sidebar"], ratio: NON_TEXT_MINIMUM },
   {
     token: "muted-foreground",
     against: ["muted", "background"],

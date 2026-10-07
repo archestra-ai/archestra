@@ -275,7 +275,6 @@ export type CreateBatteryInstall = z.infer<typeof CreateBatteryInstallSchema>;
 
 export const UpdateBatteryInstallSchema = z.strictObject({
   enabled: z.boolean().optional(),
-  credentialBindings: BatteryCredentialBindingsSchema.optional(),
 });
 export type UpdateBatteryInstall = z.infer<typeof UpdateBatteryInstallSchema>;
 

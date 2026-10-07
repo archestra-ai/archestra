@@ -445,8 +445,8 @@ class OpenAppaBatteriesService {
   }
 
   /**
-   * Bind or unbind one catalog's prefixes for an included battery, or rebind the
-   * credential variables it reads. The include entry stays either way.
+   * Bind or unbind one catalog's prefixes for an included battery. The include
+   * entry stays either way.
    */
   async updateInstall(params: {
     userId: string;
@@ -485,37 +485,15 @@ class OpenAppaBatteriesService {
           organizationId,
           content: latest.content,
         });
-        const edits: PolicyEditInput[] = [];
-        if (catalog !== null)
-          edits.push(
-            ...(await this.catalogBindingEdits({
-              organizationId,
-              resolution,
-              catalog,
-              batteryName: existing.batteryName,
-              namespaces: battery?.namespaces ?? [],
-              enabled: changes.enabled,
-            })),
-          );
-        for (const [variable, key] of Object.entries(
-          changes.credentialBindings ?? {},
-        ))
-          edits.push({ kind: "setCredential", variable, key });
-        // The table is one per organization: a variable another included
-        // battery reads stays bound when this one lets go of it.
-        const readElsewhere = new Set(
-          resolution.entries
-            .filter((entry) => entry.name !== existing.batteryName)
-            .flatMap((entry) => entry.battery?.credentials ?? []),
-        );
-        for (const variable of Object.keys(existing.credentialBindings))
-          if (
-            changes.credentialBindings &&
-            !(variable in changes.credentialBindings) &&
-            !readElsewhere.has(variable)
-          )
-            edits.push({ kind: "setCredential", variable });
-        return edits;
+        if (catalog === null) return [];
+        return this.catalogBindingEdits({
+          organizationId,
+          resolution,
+          catalog,
+          batteryName: existing.batteryName,
+          namespaces: battery?.namespaces ?? [],
+          enabled: changes.enabled,
+        });
       },
     });
     return this.batteryView({

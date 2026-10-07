@@ -86839,9 +86839,6 @@ export type DeleteOpenappaBatteryInstallResponse = DeleteOpenappaBatteryInstallR
 export type UpdateOpenappaBatteryInstallData = {
     body: {
         enabled?: boolean;
-        credentialBindings?: {
-            [key: string]: string;
-        };
     };
     path: {
         id: string;

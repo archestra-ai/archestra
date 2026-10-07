@@ -168,6 +168,24 @@ describe("connect_guardrails_repository", () => {
     });
   });
 
+  test("explains a file path the source cannot use and saves nothing", async () => {
+    const response = await executeArchestraTool(
+      CONNECT,
+      {
+        repo: "example/existing-policy",
+        path: "../policy.toml",
+        githubAppConfigId,
+      },
+      context,
+    );
+
+    expect(response.isError).toBe(true);
+    expect(JSON.stringify(response.content)).toContain(
+      "Use a repository-relative .toml file path",
+    );
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
+  });
+
   test("refuses to replace a sync that is already running", async () => {
     await OpenAppaGithubSyncModel.save(organizationId, {
       repo: "example/current-policy",

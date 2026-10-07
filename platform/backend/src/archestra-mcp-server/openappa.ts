@@ -93,12 +93,12 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
 import { ProposedGuardrailsPolicySchema } from "@/types/guardrails-policy-proposal";
-import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
 import {
   type ExternalConsult,
   ExternalConsultOutcomeSchema,
   ExternalConsultRoleSchema,
 } from "@/types/openappa-external-consults";
+import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
 import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
@@ -350,28 +350,44 @@ const registry = defineArchestraTools([
     title: "Connect existing OpenAPPA GitHub repository",
     description:
       "Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and choose a connected organization GitHub App installed on the repository owner. Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
+    // `ref` and `path` stay plain strings here and are checked against the
+    // source schema in the handler: its `ref` pattern uses a Unicode property
+    // escape, which OpenAI refuses in a function schema.
     schema: z.strictObject({
       repo: AppaGithubSourceSchema.shape.repo.describe(
         "The existing repository, as owner/name.",
       ),
-      path: AppaGithubSourceSchema.shape.path
+      path: z
+        .string()
         .default("appa.toml")
         .describe("Repository-relative path of the policy file."),
-      ref: AppaGithubSourceSchema.shape.ref.describe(
-        "Branch, tag, or commit to follow. Omit to follow the default branch.",
-      ),
+      ref: z
+        .string()
+        .nullable()
+        .default(null)
+        .describe(
+          "Branch, tag, or commit to follow. Omit to follow the default branch.",
+        ),
       githubAppConfigId: z.string().uuid(),
       interval: z.enum(["15m", "1h", "1d"]).default("1h"),
     }),
     async handler({ args, context }) {
       if (!context.organizationId || !context.userId)
         throw new ApiError(401, "Organization and user context are required");
+      const source = AppaGithubSourceSchema.safeParse({
+        ...args,
+        githubPatId: null,
+      });
+      if (!source.success)
+        return errorResult(
+          source.error.issues.map((issue) => issue.message).join("; "),
+        );
       try {
         return result(
           await connectAppaGithubRepository({
             organizationId: context.organizationId,
             userId: context.userId,
-            source: { ...args, githubPatId: null },
+            source: source.data,
           }),
         );
       } catch (error) {

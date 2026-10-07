@@ -5,6 +5,7 @@ import {
   render as rtlRender,
   screen,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
@@ -179,7 +180,13 @@ describe("ConnectPage guardrails chip", () => {
       },
     });
     render(<ConnectionPage />);
-    return screen.getByRole("button", { name: /guardrails/ });
+    // The chip is status only; its info button sits inside it.
+    const chip = screen
+      .getByRole("button", { name: "What the guardrails do" })
+      .closest(".rounded-xl");
+    expect(chip).toHaveTextContent("Guardrails");
+    expect(chip).not.toHaveTextContent("OpenAPPA");
+    return chip as HTMLElement;
   }
 
   it("says the guardrails are off when the deployment is off", () => {
@@ -197,13 +204,13 @@ describe("ConnectPage guardrails chip", () => {
   it("says an unsupported agent passes through unchecked", () => {
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "bypass" }),
-    ).toHaveTextContent("Passes through unchecked");
+    ).toHaveTextContent("Unchecked");
   });
 
   it("says an unsupported agent is blocked", () => {
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "block" }),
-    ).toHaveTextContent("Blocks this agent");
+    ).toHaveTextContent("Agent blocked");
   });
 });
 
@@ -232,6 +239,26 @@ describe("ConnectPage (no connect request)", () => {
     const link = screen.queryByRole("link", { name: "Connection settings" });
     if (allowed) {
       expect(link).toHaveAttribute("href", "/settings/connection");
+    } else {
+      expect(link).not.toBeInTheDocument();
+    }
+  });
+
+  it.each([
+    true,
+    false,
+  ])("shows the Statistics link only to log admins (%s)", (allowed) => {
+    vi.mocked(useHasPermissions).mockImplementation(
+      (permissions) =>
+        ({
+          data: permissions.log?.includes("admin") ? allowed : false,
+        }) as ReturnType<typeof useHasPermissions>,
+    );
+    mockOrganization({});
+    render(<ConnectionPage />);
+    const link = screen.queryByRole("link", { name: "Statistics" });
+    if (allowed) {
+      expect(link).toHaveAttribute("href", "/connections/logs");
     } else {
       expect(link).not.toBeInTheDocument();
     }
@@ -270,6 +297,68 @@ describe("ConnectPage (no connect request)", () => {
     ).toBeVisible();
   });
 
+  it("shows model routing as on for an app with an installer, unverified for other agents", () => {
+    window.localStorage.clear();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useLlmProxy).mockReturnValue({
+      data: { id: "proxy-1" },
+    } as unknown as ReturnType<typeof useLlmProxy>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["claude-code", "amp"],
+        connectionLlmProxyEnabled: true,
+      },
+    });
+    const { unmount } = render(<ConnectionPage />);
+    expect(screen.getByText("On")).toBeVisible();
+    unmount();
+
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=amp") as ReturnType<typeof useSearchParams>,
+    );
+    render(<ConnectionPage />);
+    expect(screen.getByText("Unconfirmed")).toBeVisible();
+  });
+
+  it("lets any agent leave model routing out", async () => {
+    window.localStorage.clear();
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useLlmProxy).mockReturnValue({
+      data: { id: "proxy-1" },
+    } as unknown as ReturnType<typeof useLlmProxy>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["claude-code", "amp"],
+        connectionLlmProxyEnabled: true,
+      },
+    });
+    for (const id of ["claude-code", "amp"]) {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams(`clientId=${id}`) as ReturnType<
+          typeof useSearchParams
+        >,
+      );
+      const { unmount } = render(<ConnectionPage />);
+      await userEvent.click(
+        screen.getByRole("button", { name: /Choose what to include/ }),
+      );
+      await userEvent.click(
+        screen.getByRole("switch", { name: /Model routing/ }),
+      );
+      expect(screen.getByText("Off")).toBeVisible();
+      // Other agents' prompt is covered by the generic prompt tests.
+      if (id === "claude-code")
+        expect(
+          screen.getByText(/connect\.md\?client=claude-code&exclude=proxy/),
+        ).toBeVisible();
+      unmount();
+    }
+  });
+
   it("gives other agents the generic prompt with the gateway to set up", () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
@@ -305,6 +394,20 @@ describe("ConnectPage (no connect request)", () => {
       screen.getByRole("button", { name: "Manual setup", pressed: true }),
     ).toBeVisible();
     expect(screen.getByText("Follow the steps for your agent")).toBeVisible();
+  });
+
+  it("gives other agents the prompt only, even when linked to manual setup", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=amp&mode=manual") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    mockOrganization({});
+    render(<ConnectionPage />);
+    expect(screen.getByText("Paste the prompt into Amp")).toBeVisible();
+    expect(
+      screen.queryByRole("button", { name: "Manual setup" }),
+    ).not.toBeInTheDocument();
   });
 
   it("opens Claude Desktop on its installer download when linked", async () => {

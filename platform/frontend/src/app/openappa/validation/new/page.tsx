@@ -2,7 +2,7 @@
 
 import { Plus, TriangleAlert } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useRef } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { Editor } from "@/components/editor";
 import { PageBackLink } from "@/components/page-back-link";
@@ -18,29 +18,69 @@ import {
   useUnsavedChangesGuard,
 } from "@/components/unsaved-changes-guard";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
+import { useValidationHistoryGuard } from "../_parts/use-validation-history-guard";
 import {
   useValidation,
   validationFileHref,
 } from "../_parts/validation-context";
+import {
+  clearValidationDraft,
+  getValidationDraft,
+  retainValidationDraft,
+} from "../_parts/validation-draft";
 import { ValidationNotices } from "../_parts/validation-parts";
 
 export default function NewValidationPage() {
   const suite = useValidation();
   const router = useRouter();
+  const [restored] = useState(() =>
+    getValidationDraft(suite.sessionKey, "new"),
+  );
+  const [baseline] = useState(restored?.baseline ?? suite.collection);
+  const sourceChanged =
+    suite.sourceChanged ||
+    baseline.version !== suite.collection.version ||
+    baseline.source !== suite.collection.source ||
+    baseline.activeDirectory !== suite.collection.activeDirectory;
   const paths = new Set(suite.baseline.files.map((file) => file.path));
-  let number = suite.baseline.files.length + 1;
+  let number = baseline.files.length + 1;
   while (paths.has(`scenario-${number}.appa`)) number += 1;
   const form = useForm<{ path: string; content: string }>({
     defaultValues: { path: `scenario-${number}.appa`, content: "" },
   });
+  useLayoutEffect(() => {
+    if (restored) form.reset(restored.values, { keepDefaultValues: true });
+  }, [form, restored]);
+  const values = form.watch();
+  useLayoutEffect(() => {
+    if (form.formState.isDirty)
+      retainValidationDraft({
+        scope: suite.sessionKey,
+        route: "new",
+        baseline,
+        values,
+      });
+    else clearValidationDraft(suite.sessionKey, "new");
+  }, [form.formState.isDirty, values, baseline, suite.sessionKey]);
+  function clearDraft() {
+    clearValidationDraft(suite.sessionKey, "new");
+  }
+  function discardDraft() {
+    clearDraft();
+    form.reset();
+  }
   const nextHref = useRef(suite.listHref);
   const guard = useUnsavedChangesGuard({
     isDirty: form.formState.isDirty,
     onOpenChange: (open) => {
-      if (!open) router.push(nextHref.current);
+      if (!open) {
+        discardDraft();
+        router.push(nextHref.current);
+      }
     },
   });
   useBeforeUnloadWhileDirty(form.formState.isDirty);
+  useValidationHistoryGuard(form.formState.isDirty, discardDraft);
   useGuardedInAppNavigation({
     isDirty: form.formState.isDirty,
     onRequestNavigate: (href) => {
@@ -52,7 +92,7 @@ export default function NewValidationPage() {
     suite.github ||
     !suite.canWrite ||
     suite.busy ||
-    suite.sourceChanged ||
+    sourceChanged ||
     Boolean(suite.loadError || suite.collection.error) ||
     suite.baseline.files.length >= 32;
   function cancel() {
@@ -64,7 +104,7 @@ export default function NewValidationPage() {
       <PageBackLink href={suite.listHref} onNavigate={cancel}>
         <span>Back to validation</span>
       </PageBackLink>
-      <ValidationNotices />
+      <ValidationNotices sourceChanged={sourceChanged} />
       {suite.baseline.files.length >= 32 && (
         <InlineNotice>
           <TriangleAlert />
@@ -90,7 +130,9 @@ export default function NewValidationPage() {
           form.clearErrors("root");
           suite.createFile(
             file,
+            baseline.version,
             () => {
+              clearDraft();
               form.reset(file);
               router.push(validationFileHref(file.path));
             },

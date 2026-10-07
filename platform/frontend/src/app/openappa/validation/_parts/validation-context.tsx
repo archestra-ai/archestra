@@ -24,6 +24,8 @@ import {
   useSaveOpenAppaPolicyTests,
 } from "@/lib/openappa-policy-tests.query";
 
+import { reconcileValidationDraft } from "./validation-draft";
+
 type ValidationState = ReturnType<typeof useSuite>;
 const ValidationContext = createContext<ValidationState | null>(null);
 
@@ -57,6 +59,7 @@ export function ValidationProvider({ children }: { children: ReactNode }) {
   return (
     <SuiteOwner
       key={sessionKey}
+      sessionKey={sessionKey}
       collection={source.data}
       canWrite={canWrite === true}
       loadError={source.error}
@@ -84,6 +87,7 @@ function SuiteOwner({
   collection: PolicyTestCollection;
   canWrite: boolean;
   loadError: Error | null;
+  sessionKey: string;
 }) {
   const suite = useSuite(props);
   return (
@@ -97,18 +101,21 @@ function useSuite({
   collection,
   canWrite,
   loadError,
+  sessionKey,
 }: {
   collection: PolicyTestCollection;
   canWrite: boolean;
   loadError: Error | null;
+  sessionKey: string;
 }) {
   const router = useRouter();
   const [baseline, setBaseline] = useState(collection);
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const [listHref, setListHref] = useState("/openappa/validation");
   const history = useOpenAppaPolicyTestRuns(true);
-  const saveMutation = useSaveOpenAppaPolicyTests((next) => {
+  const saveMutation = useSaveOpenAppaPolicyTests((next, submitted) => {
     if (next) {
+      reconcileValidationDraft(sessionKey, next, submitted.expectedVersion);
       setBaseline(next);
       setSelected(new Set());
     }
@@ -170,6 +177,7 @@ function useSuite({
   }
   function createFile(
     file: PolicyTestCollection["files"][number],
+    expectedVersion: string,
     onCreated: () => void,
     onError: (error: Error) => void,
   ) {
@@ -178,11 +186,12 @@ function useSuite({
       !canWrite ||
       busy ||
       !available ||
+      expectedVersion !== baseline.version ||
       baseline.files.length >= 32
     )
       return;
     saveMutation.mutate(
-      { files: [...baseline.files, file], expectedVersion: baseline.version },
+      { files: [...baseline.files, file], expectedVersion },
       {
         onSuccess: (next) => {
           if (next) onCreated();
@@ -206,6 +215,7 @@ function useSuite({
     );
   }
   return {
+    sessionKey,
     files,
     collection,
     baseline,

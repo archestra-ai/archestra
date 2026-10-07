@@ -2,7 +2,7 @@
 
 import { Download, Play, Save, Trash2, TriangleAlert } from "lucide-react";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { Controller, useForm } from "react-hook-form";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { Editor } from "@/components/editor";
@@ -26,11 +26,17 @@ import {
   usePreviewOpenAppaPolicyTest,
 } from "@/lib/openappa-policy-tests.query";
 import { POLICY_EDITOR_OPTIONS } from "../../_parts/policy-editor-options";
+import { useValidationHistoryGuard } from "../_parts/use-validation-history-guard";
 import {
   useValidation,
   useValidationInspection,
   validationFileHref,
 } from "../_parts/validation-context";
+import {
+  clearValidationDraft,
+  getValidationDraft,
+  retainValidationDraft,
+} from "../_parts/validation-draft";
 import { exportValidationFile } from "../_parts/validation-file";
 import {
   StepResults,
@@ -46,10 +52,16 @@ export default function ValidationFilePage() {
 
 function ValidationFileEditor({ path }: { path: string }) {
   const suite = useValidation();
-  const [baseline, setBaseline] = useState(suite.collection);
+  const route = `file:${path}`;
+  const [restored] = useState(() =>
+    getValidationDraft(suite.sessionKey, route),
+  );
+  const [baseline, setBaseline] = useState(
+    restored?.baseline ?? suite.collection,
+  );
   const baselineFile = baseline.files.find((file) => file.path === path);
   const form = useForm<PolicyTestCollection["files"][number]>({
-    defaultValues: baselineFile ?? { path, content: "" },
+    defaultValues: restored?.values ?? baselineFile ?? { path, content: "" },
   });
   const file = baselineFile ? form.watch() : undefined;
   const fileDirty = Boolean(
@@ -66,6 +78,23 @@ function ValidationFileEditor({ path }: { path: string }) {
     form.reset(current ?? { path, content: "" });
     setBaseline(suite.collection);
   }, [fileDirty, baseline, suite.collection, path, form]);
+  useLayoutEffect(() => {
+    if (fileDirty && file)
+      retainValidationDraft({
+        scope: suite.sessionKey,
+        route,
+        baseline,
+        values: file,
+      });
+    else clearValidationDraft(suite.sessionKey, route);
+  }, [fileDirty, file, baseline, route, suite.sessionKey]);
+  function clearDraft() {
+    clearValidationDraft(suite.sessionKey, route);
+  }
+  function discardDraft() {
+    clearDraft();
+    form.reset(baselineFile);
+  }
   const mounted = useRef(true);
   useEffect(() => {
     mounted.current = true;
@@ -78,12 +107,13 @@ function ValidationFileEditor({ path }: { path: string }) {
     isDirty: fileDirty,
     onOpenChange: (open) => {
       if (!open) {
-        form.reset(baselineFile);
+        discardDraft();
         router.push(nextHref.current);
       }
     },
   });
   useBeforeUnloadWhileDirty(fileDirty);
+  useValidationHistoryGuard(fileDirty, discardDraft);
   useGuardedInAppNavigation({
     isDirty: fileDirty,
     onRequestNavigate: (href) => {
@@ -150,6 +180,7 @@ function ValidationFileEditor({ path }: { path: string }) {
   const summary = inspection.summaries?.[0];
   function saved(next: PolicyTestCollection) {
     if (!file || !mounted.current) return;
+    clearDraft();
     setBaseline(next);
     form.reset(file);
     if (path !== file.path)
@@ -351,7 +382,10 @@ function ValidationFileEditor({ path }: { path: string }) {
           Boolean(suite.loadError || suite.collection.error)
         }
         onConfirm={() =>
-          suite.deleteFiles([path], () => router.push(suite.listHref))
+          suite.deleteFiles([path], () => {
+            clearDraft();
+            router.push(suite.listHref);
+          })
         }
       />
       <UnsavedChangesDialog

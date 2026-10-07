@@ -23,7 +23,7 @@ import {
   vi,
 } from "vitest";
 import { TooltipProvider } from "@/components/ui/tooltip";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { OpenAppaPageActionSlotContext } from "../_parts/openappa-page-action";
 import { ValidationProvider } from "./_parts/validation-context";
@@ -129,10 +129,19 @@ const run = {
   validation: { valid: true, errors: [], warnings: [] },
 };
 
+let sessionNumber = 0;
 let currentHref = "/openappa/validation";
 beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
 beforeEach(() => {
   currentHref = "/openappa/validation";
+  vi.mocked(useSession).mockReturnValue({
+    data: {
+      session: {
+        id: `session-${++sessionNumber}`,
+        activeOrganizationId: "test-org",
+      },
+    },
+  } as ReturnType<typeof useSession>);
   archestraApiClient.setConfig({ baseUrl: origin });
   vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
     typeof useHasPermissions
@@ -336,6 +345,73 @@ test("a rename save completing after leaving the editor does not navigate back i
   expect(currentHref).toBe("/openappa/validation");
 });
 
+test("an older rename completing while a newer history draft is hidden preserves that draft's original version", async () => {
+  let finish: () => void = () => undefined;
+  let began: () => void = () => undefined;
+  const pending = new Promise<void>((resolve) => {
+    finish = resolve;
+  });
+  const started = new Promise<void>((resolve) => {
+    began = resolve;
+  });
+  const next = {
+    ...collection,
+    files: [{ ...scenario, path: "renamed.appa" }],
+    version: "v2",
+  };
+  server.use(
+    http.put(endpoint, async () => {
+      began();
+      await pending;
+      return HttpResponse.json(next);
+    }),
+  );
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  currentHref = "/openappa/validation/file?path=scenario.appa";
+  const first = showPage(client);
+  fireEvent.change(
+    await screen.findByRole("textbox", { name: "Validation filename" }),
+    { target: { value: "renamed.appa" } },
+  );
+  fireEvent.click(screen.getByRole("button", { name: "Save validation" }));
+  await started;
+  first.unmount();
+  const returned = showPage(client);
+  fireEvent.change(
+    await screen.findByRole("textbox", { name: "Validation filename" }),
+    { target: { value: "newer.appa" } },
+  );
+  fireEvent.change(
+    await screen.findByRole("textbox", {
+      name: "Policy validation newer.appa",
+    }),
+    { target: { value: "newer hidden edit" } },
+  );
+  returned.unmount();
+  server.use(http.get(endpoint, () => HttpResponse.json(next)));
+  finish();
+  await waitFor(() =>
+    expect(client.getQueryData(["openappa-policy-tests", "active"])).toEqual(
+      next,
+    ),
+  );
+  showPage(client);
+  expect(
+    await screen.findByRole("textbox", {
+      name: "Policy validation newer.appa",
+    }),
+  ).toHaveValue("newer hidden edit");
+  expect(
+    screen.getByRole("textbox", { name: "Validation filename" }),
+  ).toHaveValue("newer.appa");
+  expect(await screen.findByText("Validation source changed")).toBeVisible();
+  expect(
+    screen.getByRole("button", { name: "Save validation" }),
+  ).toBeDisabled();
+});
+
 test("a clean editor reopened during a pending save adopts its completed version before another edit", async () => {
   let finish: () => void = () => undefined;
   let began: () => void = () => undefined;
@@ -402,6 +478,102 @@ test("a clean editor reopened during a pending save adopts its completed version
       expectedVersion: "v2",
     }),
   );
+});
+
+test.each([
+  "file",
+  "new",
+])("%s history draft restores safely and clears on discard or session change", async (kind) => {
+  currentHref =
+    kind === "file"
+      ? "/openappa/validation/file?path=scenario.appa"
+      : "/openappa/validation/new";
+  const label =
+    kind === "file"
+      ? "Policy validation scenario.appa"
+      : "New validation content";
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const first = showPage(client);
+  fireEvent.change(await screen.findByRole("textbox", { name: label }), {
+    target: { value: "first edit" },
+  });
+  fireEvent.change(screen.getByRole("textbox", { name: label }), {
+    target: { value: "latest edit" },
+  });
+  first.unmount();
+  const restored = showPage(client);
+  expect(await screen.findByRole("textbox", { name: label })).toHaveValue(
+    "latest edit",
+  );
+  expect(client.getQueryData(["openappa-policy-tests", "active"])).toEqual(
+    collection,
+  );
+  restored.unmount();
+  vi.mocked(useSession).mockReturnValue({
+    data: {
+      session: { id: "another-session", activeOrganizationId: "test-org" },
+    },
+  } as ReturnType<typeof useSession>);
+  showPage(client);
+  expect(await screen.findByRole("textbox", { name: label })).toHaveValue(
+    kind === "file" ? scenario.content : "",
+  );
+  fireEvent.change(screen.getByRole("textbox", { name: label }), {
+    target: { value: "discard this edit" },
+  });
+  fireEvent.click(screen.getByRole("link", { name: "Back to validation" }));
+  fireEvent.click(
+    await screen.findByRole("button", { name: "Discard changes" }),
+  );
+  fireEvent.click(
+    kind === "file"
+      ? await screen.findByRole("link", { name: scenario.path })
+      : await screen.findByRole("button", { name: "Add validation" }),
+  );
+  expect(await screen.findByRole("textbox", { name: label })).toHaveValue(
+    kind === "file" ? scenario.content : "",
+  );
+});
+
+test.each([
+  "file",
+  "new",
+])("%s history draft keeps its old source version when authoritative inputs changed", async (kind) => {
+  currentHref =
+    kind === "file"
+      ? "/openappa/validation/file?path=scenario.appa"
+      : "/openappa/validation/new";
+  const label =
+    kind === "file"
+      ? "Policy validation scenario.appa"
+      : "New validation content";
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  const first = showPage(client);
+  fireEvent.change(await screen.findByRole("textbox", { name: label }), {
+    target: { value: "older-source edit" },
+  });
+  first.unmount();
+  const next = {
+    ...collection,
+    version: "new-version",
+    files: [{ ...scenario, content: "external edit" }],
+  };
+  server.use(http.get(endpoint, () => HttpResponse.json(next)));
+  client.setQueryData(["openappa-policy-tests", "active"], next);
+  showPage(client);
+  expect(await screen.findByRole("textbox", { name: label })).toHaveValue(
+    "older-source edit",
+  );
+  expect(await screen.findByText("Validation source changed")).toBeVisible();
+  expect(
+    screen.getByRole("button", {
+      name: kind === "file" ? "Save validation" : "Create validation",
+    }),
+  ).toBeDisabled();
 });
 
 test("Git editor previews run without local save and become stale after edits", async () => {
@@ -1554,6 +1726,7 @@ test("inventory rows open files while selection and compact actions stay indepen
     screen.queryByRole("button", { name: `Run ${scenario.path}` }),
   ).not.toBeInTheDocument();
   expect(currentHref).toBe("/openappa/validation");
+  await screen.findByText("mcp/files/read");
   await userEvent.click(
     screen.getByRole("button", { name: `More actions ${scenario.path}` }),
   );

@@ -3132,7 +3132,7 @@ Required RBAC permission: [`toolPolicy:delete`](/docs/reference/permissions#tool
 | `connect_guardrails_repository` | Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tools and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `preview_guardrails_policy_change` | Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -3260,6 +3260,9 @@ Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#op
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The exact MCP catalog ID to inspect. |
+| `detail` | `"summary" \| "full"` | No | `summary` for a coverage overview; `full` adds input schemas, full descriptions and rule details. |
+| `tools` | `string[]` | No | Only these tools, by name or full name (`<prefix>__<name>`). |
+| `offset` | `integer` | No | The first row to return; pass the previous `nextOffset`. |
 
 
 #### list_guardrails_battery_fits

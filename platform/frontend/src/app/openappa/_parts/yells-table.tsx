@@ -8,7 +8,6 @@ import {
   MessageCircle,
   RotateCcw,
 } from "lucide-react";
-import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { CreatedByCell } from "@/components/created-by-cell";
@@ -23,7 +22,6 @@ import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { DataTable } from "@/components/ui/data-table";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { getConversationDisplayTitle } from "@/lib/chat/chat-utils";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
@@ -75,7 +73,6 @@ export function YellsTable() {
           <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
             {row.original.message}
           </p>
-          <YellConversation yell={row.original} />
           {isMobile && (
             <span className="block space-y-1 text-xs font-normal text-muted-foreground">
               <YellCaller yell={row.original} />
@@ -306,28 +303,6 @@ function YellRowActions({
           : []),
       ]}
     />
-  );
-}
-
-function YellConversation({ yell }: { yell: OpenAppaYell }) {
-  const { conversation } = yell;
-  if (!conversation) return null;
-  return (
-    <Link
-      href={`/chat/${conversation.id}`}
-      className="flex w-fit max-w-full items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground hover:underline"
-    >
-      <MessageCircle className="size-3 shrink-0" />
-      <span className="truncate">
-        {getConversationDisplayTitle(conversation.title)}
-      </span>
-      <span
-        className="shrink-0"
-        title={formatDate({ date: conversation.createdAt })}
-      >
-        {formatRelativeTimeFromNow(conversation.createdAt)}
-      </span>
-    </Link>
   );
 }
 

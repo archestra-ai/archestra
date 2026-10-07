@@ -3129,6 +3129,7 @@ Required RBAC permission: [`toolPolicy:delete`](/docs/reference/permissions#tool
 | `resolve_openappa_yell` | Mark an OpenAPPA yell resolved, or reopen it with resolved=false. | [`openappaDiagnostics:update`](/docs/reference/permissions#openappaDiagnostics:update) |
 | `list_openappa_consults` | List the external consults OpenAPPA recorded for one session, newest first: every annotator, context provider, authority, sanitizer and audience source it asked, with the outcome, the HTTP status, ... | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
+| `connect_guardrails_repository` | Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `yell` | Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. | None (no additional RBAC permission required) |
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
@@ -3212,6 +3213,21 @@ Required RBAC permission: [`organizationSettings:update`](/docs/reference/permis
 |-----------|------|----------|-------------|
 | `owner` | `string` | Yes |  |
 | `name` | `string` | Yes |  |
+| `githubAppConfigId` | `string` | Yes |  |
+| `interval` | `"15m" \| "1h" \| "1d"` | No |  |
+
+
+#### connect_guardrails_repository
+
+Required RBAC permission: [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `repo` | `string` | Yes | The existing repository, as owner/name. |
+| `path` | `string` | No | Repository-relative path of the policy file. |
+| `ref` | `string \| null` | No | Branch, tag, or commit to follow. Omit to follow the default branch. |
 | `githubAppConfigId` | `string` | Yes |  |
 | `interval` | `"15m" \| "1h" \| "1d"` | No |  |
 

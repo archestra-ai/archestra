@@ -65,6 +65,8 @@ With GitHub sync, the policy lives in a repository. The agent opens a pull reque
 2. Choose a GitHub App, and enter the owner and repository name.
 3. Archestra creates a private repository from the [configuration template](https://github.com/archestra-ai/openappa-config) and starts syncing.
 
+To use a repository you already have, click **Connect existing repository** in the same dialog, or ask the setup chat. The policy file in that repository replaces the current policy.
+
 The **GitHub sync** card shows **Connected**. Manage it under **Settings → OpenAPPA**.
 
 What to know:

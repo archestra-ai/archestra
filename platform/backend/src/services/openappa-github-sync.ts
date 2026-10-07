@@ -40,24 +40,39 @@ export async function configureAppaGithubSync(params: {
   source: AppaGithubSource;
 }) {
   assertEnabled();
-  if (
-    (params.source.githubPatId || params.source.githubAppConfigId) &&
-    !(await userHasPermission(
-      params.userId,
-      params.organizationId,
-      "credential",
-      "read",
-    ))
-  ) {
-    throw new ApiError(403, "You do not have access to GitHub credentials");
-  }
-  // Resolve now to reject a missing or cross-organization credential before saving it.
-  await resolveToken({
-    ...params.source,
-    organizationId: params.organizationId,
-  });
-  await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
+  await saveSource(params);
   await OpenAppaGithubSyncModel.enqueue(params.organizationId);
+  return getAppaGithubSync(params.organizationId);
+}
+
+/**
+ * Make an existing repository's policy file the organization's policy source
+ * and pull it before answering, so the caller learns at once whether the
+ * repository, file and credential work. A first pull that fails leaves the
+ * sync stopped and the current policy in force; a held pull stays connected
+ * for an operator to accept.
+ */
+export async function connectAppaGithubRepository(params: {
+  organizationId: string;
+  userId: string;
+  source: AppaGithubSource;
+}) {
+  assertEnabled();
+  if ((await OpenAppaGithubSyncModel.find(params.organizationId))?.interval)
+    throw new ApiError(
+      409,
+      "Stop the existing GitHub sync before connecting another repository",
+    );
+  await saveSource(params);
+  await syncAppaGithubPolicy(params.organizationId);
+  const row = await OpenAppaGithubSyncModel.find(params.organizationId);
+  if (row?.lastSyncError && !row.heldContentHash) {
+    await OpenAppaGithubSyncModel.setInterval(params.organizationId, null);
+    throw new ApiError(
+      400,
+      `Could not connect ${params.source.repo}: ${row.lastSyncError} The current policy is unchanged.`,
+    );
+  }
   return getAppaGithubSync(params.organizationId);
 }
 
@@ -458,6 +473,30 @@ function holdMessage(changes: {
         .join(", ")}`,
     );
   return `This pull was not published. ${parts.join("; ")}. Accept it in the guardrails panel.`;
+}
+
+async function saveSource(params: {
+  organizationId: string;
+  userId: string;
+  source: AppaGithubSource;
+}) {
+  if (
+    (params.source.githubPatId || params.source.githubAppConfigId) &&
+    !(await userHasPermission(
+      params.userId,
+      params.organizationId,
+      "credential",
+      "read",
+    ))
+  ) {
+    throw new ApiError(403, "You do not have access to GitHub credentials");
+  }
+  // Resolve now to reject a missing or cross-organization credential before saving it.
+  await resolveToken({
+    ...params.source,
+    organizationId: params.organizationId,
+  });
+  await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
 }
 
 function assertEnabled() {

@@ -77,6 +77,7 @@ import {
   listExternalConsults,
 } from "@/services/openappa-external-consults";
 import {
+  connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubSync,
 } from "@/services/openappa-github-sync";
@@ -92,6 +93,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
 import { ProposedGuardrailsPolicySchema } from "@/types/guardrails-policy-proposal";
+import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
 import {
   type ExternalConsult,
   ExternalConsultOutcomeSchema,
@@ -341,6 +343,44 @@ const registry = defineArchestraTools([
           ...args,
         }),
       );
+    },
+  }),
+  defineArchestraTool({
+    shortName: "connect_guardrails_repository",
+    title: "Connect existing OpenAPPA GitHub repository",
+    description:
+      "Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and choose a connected organization GitHub App installed on the repository owner. Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
+    schema: z.strictObject({
+      repo: AppaGithubSourceSchema.shape.repo.describe(
+        "The existing repository, as owner/name.",
+      ),
+      path: AppaGithubSourceSchema.shape.path
+        .default("appa.toml")
+        .describe("Repository-relative path of the policy file."),
+      ref: AppaGithubSourceSchema.shape.ref.describe(
+        "Branch, tag, or commit to follow. Omit to follow the default branch.",
+      ),
+      githubAppConfigId: z.string().uuid(),
+      interval: z.enum(["15m", "1h", "1d"]).default("1h"),
+    }),
+    async handler({ args, context }) {
+      if (!context.organizationId || !context.userId)
+        throw new ApiError(401, "Organization and user context are required");
+      try {
+        return result(
+          await connectAppaGithubRepository({
+            organizationId: context.organizationId,
+            userId: context.userId,
+            source: { ...args, githubPatId: null },
+          }),
+        );
+      } catch (error) {
+        // A repository, file, or credential the first pull cannot use is the
+        // agent's to explain; thrown, the chat would report a provider failure.
+        if (error instanceof ApiError && error.statusCode < 500)
+          return errorResult(error.message);
+        throw error;
+      }
     },
   }),
   defineArchestraTool({
@@ -1269,7 +1309,8 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === "preview_guardrails_policy_change" ||
     shortName === "update_guardrails_policy" ||
     shortName === "get_guardrails_policy_change_status" ||
-    shortName === "create_guardrails_repository"
+    shortName === "create_guardrails_repository" ||
+    shortName === "connect_guardrails_repository"
   );
 }
 

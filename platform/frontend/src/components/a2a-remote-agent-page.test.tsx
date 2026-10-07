@@ -554,9 +554,9 @@ describe("external A2A agent routed pages", () => {
     expect(descriptionInput).toHaveValue("Second description (edited)");
   });
 
-  it("requires a selected user or team for explicit access choices", async () => {
+  it("adds recipients through Add access and replaces one audience with another", async () => {
     const user = userEvent.setup();
-    let inspectCalls = 0;
+    let createdBody: unknown;
     vi.mocked(useOrganizationMembers).mockReturnValue({
       data: [
         { id: "user-1", name: "Test User", email: "owner@example.com" },
@@ -567,8 +567,11 @@ describe("external A2A agent routed pages", () => {
       data: [{ id: "team-1", name: "Operations", parentId: null }],
     } as unknown as ReturnType<typeof useTeams>);
     server.use(
+      http.post(REGISTRY_URL, async ({ request }) => {
+        createdBody = await request.json();
+        return HttpResponse.json(remoteAgent);
+      }),
       http.post(`${REGISTRY_URL}/inspect`, () => {
-        inspectCalls += 1;
         return HttpResponse.json({
           name: "Fixture Agent",
           description: null,
@@ -588,35 +591,50 @@ describe("external A2A agent routed pages", () => {
     );
     await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
     await screen.findByRole("status", { name: "Connection compatible" });
+    const permissions = screen
+      .getByRole("heading", { name: "Permissions" })
+      .closest("section") as HTMLElement;
+    expect(within(permissions).getByText("Only the owner")).toBeInTheDocument();
+
     await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
+      within(permissions).getByRole("button", { name: "Add access" }),
+    );
+    let dialog = screen.getByRole("dialog", { name: "Add access" });
+    await user.click(within(dialog).getByRole("button", { name: /^People/ }));
+    await user.click(within(dialog).getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: /Morgan Lee/ }));
+    await user.keyboard("{Escape}");
+    dialog = screen.getByRole("dialog", { name: "Add access" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add access" }),
+    );
+    expect(within(permissions).getByText("Morgan Lee")).toBeInTheDocument();
+    expect(within(permissions).getByText("1 person")).toBeInTheDocument();
+
+    await user.click(
+      within(permissions).getByRole("button", { name: "Add access" }),
+    );
+    dialog = screen.getByRole("dialog", { name: "Add access" });
+    await user.click(within(dialog).getByRole("button", { name: /^Teams/ }));
+    expect(dialog).toHaveTextContent("removes access for 1 person");
+    await user.click(within(dialog).getByRole("combobox", { name: "Teams" }));
+    await user.click(screen.getByRole("option", { name: /Operations/ }));
+    await user.keyboard("{Escape}");
+    dialog = screen.getByRole("dialog", { name: "Add access" });
+    await user.click(
+      within(dialog).getByRole("button", { name: "Add access" }),
+    );
+    expect(within(permissions).getByText("Operations")).toBeInTheDocument();
+    expect(within(permissions).queryByText("Morgan Lee")).toBeNull();
+
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+    await waitFor(() =>
+      expect(createdBody).toMatchObject({
+        scope: "team",
+        teams: ["team-1"],
+        users: [],
       }),
     );
-    await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("option", { name: "Selected people" }));
-    const connectButton = screen.getByRole("button", {
-      name: "Connect agent",
-    });
-    expect(connectButton).toBeEnabled();
-    await user.click(connectButton);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Select at least one user.",
-    );
-    expect(inspectCalls).toBe(1);
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    );
-    await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("option", { name: "Selected teams" }));
-    expect(connectButton).toBeEnabled();
-    await user.click(connectButton);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Select at least one team.",
-    );
-    expect(inspectCalls).toBe(1);
   });
 
   it("prefills edit and omits unchanged source and stored credential on a visibility-only update", async () => {
@@ -642,13 +660,7 @@ describe("external A2A agent routed pages", () => {
       "",
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    );
-    await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("option", { name: /Everyone/ }));
+    await shareWithOrganization(user);
     await user.click(
       screen.getByRole("button", {
         name: `More actions ${remoteAgent.name}`,
@@ -758,13 +770,7 @@ describe("external A2A agent routed pages", () => {
     expect(
       screen.getByText(/uses a legacy Agent Card source/i),
     ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    );
-    await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("option", { name: /Everyone/ }));
+    await shareWithOrganization(user);
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
     await waitFor(() =>
@@ -958,6 +964,12 @@ describe("external A2A agent routed pages", () => {
     expect(screen.queryByRole("button", { name: "Show value" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     expect(screen.queryByRole("button", { name: /More actions/ })).toBeNull();
+    const permissions = screen
+      .getByRole("heading", { name: "Permissions" })
+      .closest("section") as HTMLElement;
+    expect(within(permissions).getByText("Test User")).toBeInTheDocument();
+    expect(within(permissions).getByText("Only the owner")).toBeInTheDocument();
+    expect(within(permissions).queryByRole("button")).toBeNull();
   });
 
   it("lets external-agent managers choose organization visibility", async () => {
@@ -974,13 +986,13 @@ describe("external A2A agent routed pages", () => {
 
     renderPage(<CreateA2aRemoteAgentPage />);
 
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    );
-    await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("option", { name: /Everyone/ })).toBeEnabled();
+    await user.click(screen.getByRole("button", { name: "Add access" }));
+    expect(
+      within(screen.getByRole("dialog", { name: "Add access" })).getByRole(
+        "button",
+        { name: "Everyone in the organization" },
+      ),
+    ).toBeEnabled();
   });
 
   it("warns assigned agents before deletion from the detail page", async () => {
@@ -1076,4 +1088,15 @@ function renderPage(children: React.ReactNode) {
   render(
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
   );
+}
+
+async function shareWithOrganization(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole("button", { name: "Add access" }));
+  const dialog = screen.getByRole("dialog", { name: "Add access" });
+  await user.click(
+    within(dialog).getByRole("button", {
+      name: "Everyone in the organization",
+    }),
+  );
+  await user.click(within(dialog).getByRole("button", { name: "Add access" }));
 }

@@ -7,7 +7,7 @@ import type {
 import { CheckCircle2, Loader2 } from "lucide-react";
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
-import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
+import { A2aRemoteAgentPermissions } from "@/components/a2a-remote-agent-permissions";
 import { FloatingActionBar } from "@/components/settings/settings-block";
 import {
   SettingsSection,
@@ -611,58 +611,27 @@ export function A2aRemoteAgentForm({
               />
             </div>
           </SettingsSection>
-          <SettingsSection
-            title="Access"
-            description="Choose who can discover and assign this external agent."
-          >
-            <div
-              aria-invalid={
-                !!form.formState.errors.teamIds ||
-                !!form.formState.errors.userIds
-              }
-              aria-describedby="a2a-access-error"
-            >
-              <A2aRemoteAgentScopeSelector
-                initialScope={agent?.scope}
-                onChoiceChange={(choice) => {
-                  form.clearErrors(["teamIds", "userIds"]);
-                  form.setValue("accessChoice", choice, {
-                    shouldDirty: true,
-                  });
-                }}
-                scope={values.scope}
-                onScopeChange={(scope) =>
-                  form.setValue("scope", scope, { shouldDirty: true })
-                }
-                teamIds={values.teamIds}
-                onTeamIdsChange={(ids) =>
-                  form.setValue("teamIds", ids, { shouldDirty: true })
-                }
-                userIds={values.userIds}
-                onUserIdsChange={(ids) =>
-                  form.setValue("userIds", ids, { shouldDirty: true })
-                }
-              />
-            </div>
-            {form.formState.errors.teamIds ? (
-              <p
-                id="a2a-access-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {form.formState.errors.teamIds.message}
-              </p>
-            ) : null}
-            {form.formState.errors.userIds ? (
-              <p
-                id="a2a-access-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {form.formState.errors.userIds.message}
-              </p>
-            ) : null}
-          </SettingsSection>
+          <A2aRemoteAgentPermissions
+            scope={values.scope}
+            teamIds={values.teamIds}
+            userIds={values.userIds}
+            ownerName={agent ? agent.authorName : undefined}
+            knownTeams={agent?.teams}
+            knownUsers={agent?.users}
+            initialScope={agent?.scope}
+            error={
+              form.formState.errors.teamIds?.message ??
+              form.formState.errors.userIds?.message
+            }
+            onChange={(next) => {
+              form.clearErrors(["teamIds", "userIds"]);
+              const options = { shouldDirty: true };
+              form.setValue("accessChoice", next.choice, options);
+              form.setValue("scope", next.scope, options);
+              form.setValue("teamIds", next.teamIds, options);
+              form.setValue("userIds", next.userIds, options);
+            }}
+          />
         </SettingsSectionGroup>
       </form>
       <FloatingActionBar>
@@ -799,6 +768,15 @@ function ReadOnlySummary({ agent }: { agent: A2aRemoteAgent }) {
             />
           </dl>
         </SettingsSection>
+        <A2aRemoteAgentPermissions
+          readOnly
+          scope={agent.scope}
+          teamIds={agent.teams.map((team) => team.id)}
+          userIds={agent.users.map((user) => user.id)}
+          ownerName={agent.authorName}
+          knownTeams={agent.teams}
+          knownUsers={agent.users}
+        />
       </SettingsSectionGroup>
     </div>
   );

@@ -19,7 +19,7 @@ You need [`agent:read`](/docs/reference/permissions#agent:read) and [`organizati
 
 1. Go to **Agents**, click **Add Agent**, then **Add an External Agent**.
 2. Enter the agent's base URL and its authentication: none, a bearer token, or an API key.
-3. Choose who can use it: **Personal**, **Users**, **Team**, or **Organization**.
+3. Under **Permissions**, click **Add access** to share it with people, teams, or everyone in the organization. Left alone, only you can use it.
 4. Click **Connect agent**. Archestra reads and checks its Agent Card first.
 
 The connection shows as verified after its first successful call.
@@ -29,6 +29,7 @@ What to know:
 - **Supported:** A2A 1.x over JSON-RPC or HTTP+JSON. OAuth sign-in is not supported. Use a static token or key.
 - Credentials are stored as secrets, never in plain text.
 - To pause a connection, click **Disable delegation**. Its assignments stay.
+- An external agent is shared with one audience at a time. Adding teams to an agent shared with people, for example, replaces those people.
 
 <span id="visibility"></span><span id="edit-or-remove-an-external-agent"></span><span id="authentication"></span><span id="assign-an-external-subagent"></span>
 

@@ -872,7 +872,13 @@ function PermissionsEditor({
             ),
           }))}
           onAdd={(grants) => {
+            const hadDraft = form.formState.isDirty;
             append(grants);
+            // In a permissions dialog, the picker's "Add access" commits, so
+            // sharing takes one click rather than a second Save on the list.
+            // Unsaved edits made beforehand are not saved behind the user's
+            // back: the addition joins that draft and its Save bar instead.
+            if (dialog && !hadDraft) void submit();
           }}
         />
       )}

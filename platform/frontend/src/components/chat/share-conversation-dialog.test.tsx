@@ -26,7 +26,7 @@ afterAll(() => server.close());
 it.each([
   "conversation",
   "agentRun",
-] as const)("%s adds team access in one dialog and saves only session capabilities", async (resource) => {
+] as const)("%s saves team access with one Add access click, granting only session capabilities", async (resource) => {
   const user = userEvent.setup();
   const ownerGrant = {
     subject: { type: "user", id: "owner" },
@@ -58,7 +58,18 @@ it.each([
       `${origin}/api/resource-permissions/${resource}/${scope}`,
       async ({ request }) => {
         saved = await request.json();
-        policy = { ...policy, revision: 2 };
+        policy = {
+          ...policy,
+          revision: 2,
+          grants: [
+            ownerGrant,
+            {
+              subject: { type: "team", id: "support" },
+              name: "Support",
+              actions: ["read"],
+            },
+          ],
+        };
         return HttpResponse.json(policy);
       },
     ),
@@ -94,9 +105,6 @@ it.each([
   expect(screen.queryByText("Can edit")).not.toBeInTheDocument();
   expect(screen.queryByText("Full access")).not.toBeInTheDocument();
   await user.click(within(dialog).getByRole("button", { name: "Add access" }));
-  await user.click(
-    within(dialog).getByRole("button", { name: "Save permissions" }),
-  );
   await waitFor(() =>
     expect(saved).toEqual({
       revision: 1,
@@ -109,4 +117,11 @@ it.each([
       ],
     }),
   );
+  // Nothing is left to save: the list is back to its saved state.
+  await waitFor(() =>
+    expect(
+      within(dialog).queryByRole("button", { name: "Save permissions" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(within(dialog).getByText("Support")).toBeVisible();
 });

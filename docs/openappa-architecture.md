@@ -712,7 +712,7 @@ For external clients, the gateway might lack the proxy session or call ID. `reme
 
 `executeYell` creates an `openappa_yells` row and triggers `yell:<call-id>`. `captureYellReport` opens a temporary loopback listener on `127.0.0.1` using a random token. The native reporter builds the archive. Archestra stores the exact gzip payload, forwarding it only when analytics is permitted. Forwarding preserves `x-appa-signature`, rejects redirects, and applies an 8-second timeout. Delivery failures are recorded locally.
 
-`get_openappa_yell({id})` reads stored reports under `openappaDiagnostics:read`. Report contents remain untrusted diagnostic data. Reading reports does not resolve them or grant policy edit rights. HTTP routes support listing, summaries, archive downloads, and status updates. Unlike consult logs, reading organization yells does not require the diagnostics `admin` action.
+`get_openappa_yell({id})` reads stored reports under `openappaDiagnostics:read`. Report contents remain untrusted diagnostic data. Reading reports does not resolve them or grant policy edit rights. A read from a UI chat records that chat in `openappa_yell_conversations`, and yell responses list the viewer's own linked chats. `resolve_openappa_yell({id, resolved})` sets the status under `openappaDiagnostics:read` and `update` and writes the same `openappaYell.updated` audit entry as the HTTP route. HTTP routes support listing, summaries, archive downloads, and status updates. Unlike consult logs, reading organization yells does not require the diagnostics `admin` action.
 
 The reporting flag controls `yell` advertisement, while analytics controls upstream transmission. Automatic failure reports (such as missing remedy tools) are recorded locally without invoking the model yell flow.
 
@@ -725,7 +725,7 @@ Sources: [`yell-session.ts`](../platform/backend/src/openappa/yell-session.ts), 
 | `get_remedy_plans`, `execute_remedy_plan` | Deliver notices and execute verified recovery requests. Advertised when Guardrails v2 is active. |
 | `list_peer_messages`, `read_peer_message` | Actor-scoped inbox operations with proxy execution proofs. Shared active-enforcement advertisement gate. |
 | `ask_user` | General user questions and exact security review prompts. Separate implicit tool path and native client adapters. |
-| `yell`, `get_openappa_yell` | Submit routed diagnostic reports and inspect stored reports. Reporting and reading permissions are separate. |
+| `yell`, `get_openappa_yell`, `resolve_openappa_yell` | Submit routed diagnostic reports, inspect stored reports, and resolve or reopen them. Reporting, reading, and resolving permissions are separate. |
 | `list_openappa_consults` | List the external consults recorded for a session, with each helper's diagnostics and raw response. A caller reads their own sessions; another caller's session needs the diagnostics `admin` action. The request and answer are not returned. |
 | `get_guardrails_policy`, `validate_guardrails_policy`, `preview_guardrails_policy_change`, `update_guardrails_policy` | Read, validate, preview, or publish policies. Administration tools, not runtime remedies. |
 | `inspect_guardrails_server`, `list_guardrails_battery_fits`, `get_guardrails_policy_change_status`, `create_guardrails_repository` | Inspect bindings, check publication state, or configure the policy repository. Standard policy and credential permissions apply. |

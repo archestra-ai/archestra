@@ -1437,11 +1437,9 @@ function ToolLoadingNote({
   /** Estimated tokens of the tool list the agent starts with. */
   tokens: number | null;
 }) {
-  // Short when the estimate is in: "~9K tokens, rest on demand".
+  // Just the estimate once it's in ("~9K tokens"); the tip says how tools load.
   const label = tokens
-    ? progressive
-      ? `${approxTokens(tokens)}, rest on demand`
-      : `${approxTokens(tokens)}, all up front`
+    ? approxTokens(tokens)
     : progressive
       ? "Tools load on demand"
       : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`;

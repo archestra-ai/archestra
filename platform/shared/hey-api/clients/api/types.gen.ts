@@ -86338,7 +86338,7 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             credentials: Array<{
                 variable: string;
                 key: string | null;
-                source: 'policy' | 'binding';
+                source: 'policy' | 'binding' | null;
                 readers: Array<string>;
             }>;
             helpers: Array<string>;
@@ -86742,7 +86742,7 @@ export type CreateOpenappaBatteryInstallResponses = {
         credentials: Array<{
             variable: string;
             key: string | null;
-            source: 'policy' | 'binding';
+            source: 'policy' | 'binding' | null;
             readers: Array<string>;
         }>;
         helpers: Array<string>;
@@ -86935,7 +86935,7 @@ export type UpdateOpenappaBatteryInstallResponses = {
         credentials: Array<{
             variable: string;
             key: string | null;
-            source: 'policy' | 'binding';
+            source: 'policy' | 'binding' | null;
             readers: Array<string>;
         }>;
         helpers: Array<string>;
@@ -87126,7 +87126,7 @@ export type SetOpenappaCredentialBindingResponses = {
             credentials: Array<{
                 variable: string;
                 key: string | null;
-                source: 'policy' | 'binding';
+                source: 'policy' | 'binding' | null;
                 readers: Array<string>;
             }>;
             helpers: Array<string>;

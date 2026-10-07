@@ -333170,11 +333170,21 @@
                                   "type": "string"
                                 },
                                 "source": {
-                                  "nullable": true,
-                                  "type": "string",
-                                  "enum": [
-                                    "policy",
-                                    "binding"
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "policy",
+                                        "binding"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "nullable": true,
+                                      "enum": [
+                                        null
+                                      ]
+                                    }
                                   ]
                                 },
                                 "readers": {
@@ -334638,11 +334648,21 @@
                             "type": "string"
                           },
                           "source": {
-                            "nullable": true,
-                            "type": "string",
-                            "enum": [
-                              "policy",
-                              "binding"
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "policy",
+                                  "binding"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
                             ]
                           },
                           "readers": {
@@ -335049,11 +335069,21 @@
                             "type": "string"
                           },
                           "source": {
-                            "nullable": true,
-                            "type": "string",
-                            "enum": [
-                              "policy",
-                              "binding"
+                            "anyOf": [
+                              {
+                                "type": "string",
+                                "enum": [
+                                  "policy",
+                                  "binding"
+                                ]
+                              },
+                              {
+                                "type": "string",
+                                "nullable": true,
+                                "enum": [
+                                  null
+                                ]
+                              }
                             ]
                           },
                           "readers": {
@@ -336019,11 +336049,21 @@
                                   "type": "string"
                                 },
                                 "source": {
-                                  "nullable": true,
-                                  "type": "string",
-                                  "enum": [
-                                    "policy",
-                                    "binding"
+                                  "anyOf": [
+                                    {
+                                      "type": "string",
+                                      "enum": [
+                                        "policy",
+                                        "binding"
+                                      ]
+                                    },
+                                    {
+                                      "type": "string",
+                                      "nullable": true,
+                                      "enum": [
+                                        null
+                                      ]
+                                    }
                                   ]
                                 },
                                 "readers": {

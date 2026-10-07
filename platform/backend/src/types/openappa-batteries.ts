@@ -187,8 +187,8 @@ const BatteryServerViewSchema = z.object({
 const BatteryCredentialViewSchema = z.object({
   variable: z.string(),
   key: z.string().nullable(),
-  /** Null while the variable is unbound. */
-  source: CredentialSourceSchema.nullable(),
+  /** Null while the variable is unbound; a union so the generated client keeps the null. */
+  source: z.union([CredentialSourceSchema, z.null()]),
   readers: z.array(z.string()),
 });
 

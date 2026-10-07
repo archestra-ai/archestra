@@ -665,7 +665,9 @@ function TeamMembersSection(props: {
             External Group Sync
           </UnstyledButton>{" "}
           to sync membership. Configure roles through{" "}
-          <ExternalDocsLink href={getDocsUrl(DocsPage.PlatformSsoRoleMapping)}>
+          <ExternalDocsLink
+            href={getDocsUrl(DocsPage.PlatformSsoRoleMapping, "role-mapping")}
+          >
             Role Mapping
           </ExternalDocsLink>
           .

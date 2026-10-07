@@ -871,7 +871,7 @@ class OpenAppaBatteriesService {
         };
       }
       const values = await this.compose({
-        root,
+        root: planned.root,
         composed,
         installFingerprint,
         previousContent: expected?.content ?? null,
@@ -982,8 +982,9 @@ class OpenAppaBatteriesService {
   }
 
   /**
-   * Resolve what the root declares into the batteries it composes and the install
-   * rows that composition implies, without writing anything.
+   * Resolve what the root declares, with the stored credential bindings applied,
+   * into the batteries it composes and the install rows that composition
+   * implies, without writing anything. The planned root carries the bound text.
    */
   private async plan(params: {
     organizationId: string;
@@ -991,11 +992,13 @@ class OpenAppaBatteriesService {
     /** Catalogs the organization already governs; read even if no target names them. */
     governed: readonly string[];
   }): Promise<PlannedComposition> {
-    const { organizationId, root, governed } = params;
-    const resolution = await openappaDeclarations.resolve({
+    const { organizationId, governed } = params;
+    const bound = await openappaDeclarations.resolveWithBindings({
       organizationId,
-      content: root.content,
+      content: params.root.content,
     });
+    const { resolution, credentialSource } = bound;
+    const root = { ...params.root, content: bound.content };
     const [prefixes, bindable] = await Promise.all([
       catalogToolPrefixes(organizationId, {
         targets: resolution.aliases.flatMap((alias) => alias.servers),
@@ -1038,6 +1041,7 @@ class OpenAppaBatteriesService {
         (variable) => ({
           variable,
           key: resolution.credentials[variable] ?? null,
+          source: credentialSource[variable] ?? null,
           readers: readers.get(variable) ?? [],
         }),
       );

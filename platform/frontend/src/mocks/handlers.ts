@@ -561,7 +561,6 @@ export const handlers: HttpHandler[] = [
     "/api/connectors/:id/runs",
     paginated(connectorRunsSeed, { total: 178 }),
   ),
-  ...getJson("/api/connectors/:id/knowledge-bases", { data: [] }),
   ...getJson("/api/connectors/:id/permission-coverage", {
     connectorId: CONNECTOR_ID,
     totalDocuments: connectorSeed.totalDocsIngested,

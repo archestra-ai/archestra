@@ -7,17 +7,14 @@ import {
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
-  Database,
   Logs,
   MoreHorizontal,
   Pencil,
   Play,
   Plug,
-  Plus,
   RefreshCw,
   RotateCcw,
   Square,
-  X,
 } from "lucide-react";
 import { useSearchParams } from "next/navigation";
 import { Fragment, useCallback, useMemo, useState } from "react";
@@ -51,7 +48,7 @@ import {
   filterControlClass,
 } from "@/components/filter-bar";
 import { FormDialog } from "@/components/form-dialog";
-import { LoadingState, LoadingWrapper } from "@/components/loading";
+import { LoadingWrapper } from "@/components/loading";
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -60,16 +57,7 @@ import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogForm,
-  DialogHeader,
-  DialogStickyFooter,
-  DialogTitle,
-} from "@/components/ui/dialog";
+import { DialogStickyFooter } from "@/components/ui/dialog";
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -96,19 +84,15 @@ import {
   useDialogUrlParam,
 } from "@/lib/hooks/use-dialog-url-param";
 import {
-  useAssignConnectorToKnowledgeBases,
   useCancelConnectorRun,
   useConnector,
-  useConnectorKnowledgeBases,
   useConnectorPermissionCoverage,
   useConnectorRuns,
   useForceResyncConnector,
   useSyncConnector,
   useTestConnectorConnection,
   useTriggerPermissionSync,
-  useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
-import { useKnowledgeBases } from "@/lib/knowledge/knowledge-base.query";
 import { formatDate } from "@/lib/utils/date-time";
 import { formatCronSchedule } from "@/lib/utils/format-cron";
 
@@ -495,10 +479,6 @@ function ConnectorDetail({ connectorId }: { connectorId: string }) {
           {connector.totalDocsIngested.toLocaleString()}
         </span>
       ),
-    },
-    {
-      label: "Knowledge bases",
-      value: <KnowledgeBasesValue connectorId={connectorId} />,
     },
     createdByFact(connector.createdBy),
     ...(isAutoSync
@@ -1163,128 +1143,4 @@ function formatSyncFrequency(intervalSeconds: number): string {
   }
   const hours = minutes / 60;
   return `Every ${hours} hour${hours === 1 ? "" : "s"}`;
-}
-
-function KnowledgeBasesValue({ connectorId }: { connectorId: string }) {
-  const { data: assignedKbs, isPending } =
-    useConnectorKnowledgeBases(connectorId);
-  const { data: allKbs } = useKnowledgeBases();
-  const assignMutation = useAssignConnectorToKnowledgeBases();
-  const unassignMutation = useUnassignConnectorFromKnowledgeBase();
-  const [isAddDialogOpen, setIsAddDialogOpen] = useState(false);
-  const [selectedKbId, setSelectedKbId] = useState<string>("");
-
-  const assignedIds = new Set((assignedKbs?.data ?? []).map((kb) => kb.id));
-  const availableKbs = (allKbs ?? []).filter((kb) => !assignedIds.has(kb.id));
-
-  const handleAssign = useCallback(async () => {
-    if (!selectedKbId) return;
-    const result = await assignMutation.mutateAsync({
-      connectorId,
-      knowledgeBaseIds: [selectedKbId],
-    });
-    if (result) {
-      setSelectedKbId("");
-      setIsAddDialogOpen(false);
-    }
-  }, [selectedKbId, connectorId, assignMutation]);
-
-  const handleUnassign = useCallback(
-    async (knowledgeBaseId: string) => {
-      await unassignMutation.mutateAsync({ connectorId, knowledgeBaseId });
-    },
-    [connectorId, unassignMutation],
-  );
-
-  const kbItems = assignedKbs?.data ?? [];
-
-  return (
-    <>
-      {isPending ? (
-        <LoadingState label="Loading knowledge bases…" variant="inline" />
-      ) : kbItems.length === 0 ? (
-        <div className="flex items-center gap-2">
-          <span className="text-muted-foreground">None</span>
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => setIsAddDialogOpen(true)}
-            aria-label="Add knowledge base"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      ) : (
-        <div className="flex flex-wrap items-center gap-1.5">
-          {kbItems.map((kb) => (
-            <Badge key={kb.id} variant="secondary" className="gap-1 pr-1">
-              <Database className="h-3 w-3" />
-              {kb.name}
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-4 w-4 ml-0.5 hover:bg-destructive/20"
-                onClick={() => handleUnassign(kb.id)}
-                disabled={unassignMutation.isPending}
-                aria-label="Remove knowledge base"
-              >
-                <X className="h-3 w-3" />
-              </Button>
-            </Badge>
-          ))}
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            onClick={() => setIsAddDialogOpen(true)}
-            disabled={availableKbs.length === 0}
-            aria-label="Add knowledge base"
-          >
-            <Plus className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      )}
-
-      <Dialog open={isAddDialogOpen} onOpenChange={setIsAddDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>Assign to Knowledge Base</DialogTitle>
-            <DialogDescription>
-              Select a knowledge base to assign this connector to.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogForm onSubmit={handleAssign}>
-            <div className="py-2">
-              <Select value={selectedKbId} onValueChange={setSelectedKbId}>
-                <SelectTrigger>
-                  <SelectValue placeholder="Select a knowledge base" />
-                </SelectTrigger>
-                <SelectContent>
-                  {availableKbs.map((kb) => (
-                    <SelectItem key={kb.id} value={kb.id}>
-                      {kb.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-            <DialogFooter>
-              <Button
-                type="button"
-                variant="outline"
-                onClick={() => setIsAddDialogOpen(false)}
-              >
-                Cancel
-              </Button>
-              <Button
-                type="submit"
-                disabled={!selectedKbId || assignMutation.isPending}
-              >
-                {assignMutation.isPending ? "Assigning..." : "Assign"}
-              </Button>
-            </DialogFooter>
-          </DialogForm>
-        </DialogContent>
-      </Dialog>
-    </>
-  );
 }

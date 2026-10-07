@@ -216,21 +216,22 @@ export function PageLayout({
               "mx-auto px-6",
               minWidth,
               maxWidth,
-              maxWidthKey === "wizard" ? "pt-4 sm:pt-6" : "pt-6",
+              HEADER_SPACING.top,
             )}
           >
             {/* On phones, the title and actions share a row while the
                 description uses the full width below them. An icon adds a
                 leading column; from `sm` up the title and description stack
-                beside it as one block, so both start at the same edge. */}
+                beside it as one block, so both start at the same edge. Every
+                width shares HEADER_SPACING; `wizard` only clamps the copy to
+                one line each, so its header never changes height. */}
             <div
               className={cn(
                 "grid items-center gap-x-3 gap-y-2 sm:gap-y-3",
                 icon
                   ? "grid-cols-[auto_minmax(0,1fr)_auto] sm:gap-x-4"
                   : "grid-cols-[minmax(0,1fr)_auto] sm:gap-x-6",
-                maxWidthKey === "wizard" ? "mb-4 sm:mb-6" : "mb-6",
-                maxWidthKey === "wizard" && description && "sm:min-h-[3.75rem]",
+                HEADER_SPACING.bottom,
               )}
             >
               {backLink && (
@@ -244,6 +245,10 @@ export function PageLayout({
                   data-page-icon
                   className={cn(
                     "col-start-1 flex size-10 shrink-0 items-center justify-center self-center overflow-hidden rounded-lg border bg-muted/40",
+                    // The tile owns the glyph size so no page can drift. Line
+                    // icons keep a 2px inner margin, so a 20px raster logo
+                    // reads the same size as a 24px line icon.
+                    "*:size-6! [&>img]:size-5!",
                     backLink ? "row-start-2" : "row-start-1",
                     // From `sm` up the description stacks beside the icon, so
                     // the tile grows to the height of the two lines it fronts.
@@ -258,10 +263,6 @@ export function PageLayout({
                   "contents sm:block sm:min-w-0",
                   icon ? "sm:col-start-2" : "sm:col-start-1",
                   backLink ? "row-start-2" : "row-start-1",
-                  maxWidthKey === "wizard" &&
-                    description &&
-                    "min-h-10 sm:relative sm:h-[3.75rem] sm:min-h-0",
-                  maxWidthKey === "wizard" && !description && "min-h-10",
                 )}
               >
                 {/* Sibling pages of a tabbed section render PageLayout at the
@@ -281,14 +282,12 @@ export function PageLayout({
                 <div
                   className={cn(
                     "flex min-w-0 items-center gap-2",
+                    HEADER_SPACING.titleRow,
                     icon ? "col-start-2" : "col-start-1",
                     backLink ? "row-start-2" : "row-start-1",
-                    // 40px even without an icon, so a plain text title and
-                    // the actions share one centre line.
                     maxWidthKey === "wizard"
-                      ? "min-h-10 flex-nowrap overflow-hidden"
-                      : "min-h-9 flex-wrap",
-                    description && maxWidthKey !== "wizard" && "sm:mb-2",
+                      ? "flex-nowrap overflow-hidden"
+                      : "flex-wrap",
                   )}
                 >
                   <h1
@@ -306,9 +305,9 @@ export function PageLayout({
                     data-page-description
                     className={cn(
                       "col-span-full text-sm text-muted-foreground",
+                      HEADER_SPACING.description,
                       backLink ? "row-start-3" : "row-start-2",
-                      maxWidthKey === "wizard" &&
-                        "hidden sm:absolute sm:inset-x-0 sm:bottom-0 sm:line-clamp-1",
+                      maxWidthKey === "wizard" && "hidden sm:line-clamp-1",
                     )}
                   >
                     <span key={pathname}>{description}</span>
@@ -319,13 +318,13 @@ export function PageLayout({
                 <div
                   data-page-actions
                   className={cn(
-                    "flex min-h-9 items-center justify-self-end self-start lg:self-center",
+                    // Tablet and phone actions align with the title; desktop
+                    // actions centre against the title and description together.
+                    "flex items-center justify-self-end self-start lg:self-center",
+                    HEADER_SPACING.titleRow,
                     icon ? "col-start-3" : "col-start-2",
                     backLink ? "row-start-2" : "row-start-1",
                     contentOverflowX === "clip" && "max-w-full overflow-x-auto",
-                    // Tablet and phone actions align with the title; desktop
-                    // actions centre against the title and description together.
-                    maxWidthKey === "wizard" && "min-h-10",
                   )}
                 >
                   {actionButton}
@@ -451,11 +450,7 @@ export function PageLayout({
                 </div>
               </>
             )}
-            {!tabs.length && (
-              <div
-                className={maxWidthKey === "wizard" ? "mb-2 sm:mb-6" : "mb-6"}
-              />
-            )}
+            {!tabs.length && <div className={HEADER_SPACING.bottom} />}
           </div>
         </div>
         <div
@@ -506,6 +501,16 @@ export function PageLayout({
 const MIN_WIDTH_CLASSES = {
   none: "",
   phone: "min-w-[20rem]",
+} as const;
+
+// One vertical rhythm for every page header, whatever its width. The title
+// row is 40px, the height of the icon tile and of the actions, so all three
+// share a centre line.
+const HEADER_SPACING = {
+  top: "pt-4 sm:pt-6",
+  bottom: "mb-4 sm:mb-6",
+  titleRow: "min-h-10",
+  description: "sm:mt-1",
 } as const;
 
 const MAX_WIDTH_CLASSES = {

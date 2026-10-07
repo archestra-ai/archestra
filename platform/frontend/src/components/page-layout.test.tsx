@@ -446,10 +446,15 @@ describe("PageLayout header", () => {
     expect(slot?.children).toHaveLength(0);
   });
 
-  it("keeps wizard and detail header copy within one shared height contract", () => {
+  it.each([
+    "wide",
+    "wizard",
+  ] as const)("gives a %s header the shared title and description rhythm", (maxWidth) => {
+    // jsdom has no layout, so the shared spacing tokens are the contract:
+    // every width must use them, and only `wizard` clamps its copy.
     render(
       <PageLayout
-        maxWidth="wizard"
+        maxWidth={maxWidth}
         title="Add a new skill"
         description="Choose where the skill comes from before configuring it."
       >
@@ -457,13 +462,16 @@ describe("PageLayout header", () => {
       </PageLayout>,
     );
 
-    expect(
-      screen.getByRole("heading", { level: 1 }).parentElement?.parentElement,
-    ).toHaveClass("min-h-10", "sm:h-[3.75rem]");
-    expect(document.querySelector("[data-page-description]")).toHaveClass(
-      "hidden",
-      "sm:line-clamp-1",
+    expect(screen.getByRole("heading", { level: 1 }).parentElement).toHaveClass(
+      "min-h-10",
     );
+    const description = document.querySelector("[data-page-description]");
+    expect(description).toHaveClass("sm:mt-1");
+    if (maxWidth === "wizard") {
+      expect(description).toHaveClass("hidden", "sm:line-clamp-1");
+    } else {
+      expect(description).not.toHaveClass("hidden");
+    }
   });
 });
 

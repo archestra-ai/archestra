@@ -49,6 +49,7 @@ import {
   defineArchestraTools,
   structuredSuccessResult,
 } from "./helpers";
+import { resourceAccessToolArg } from "./resource-access-tool-arg";
 
 // === Constants ===
 
@@ -114,6 +115,7 @@ const ListAgentsToolArgsSchema = z
       .describe(
         "Optional agent name filter. Use this when the user names an agent but you still need to look up the ID.",
       ),
+    access: resourceAccessToolArg({ examplePlural: "agents" }),
   })
   .strict();
 
@@ -261,7 +263,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_AGENTS_SHORT_NAME,
     title: "List Agents",
     description:
-      "List agents with optional filtering by name or provider key. Returns configured provider-key and model names, assigned tools, and knowledge sources.",
+      "List agents with optional filtering by name, provider key, or how the caller reaches them (access). Returns configured provider-key and model names, assigned tools, and knowledge sources.",
     schema: ListAgentsToolArgsSchema,
     outputSchema: ListAgentsOutputSchema,
     async handler({ args, context }) {
@@ -309,10 +311,13 @@ const registry = defineArchestraTools([
               : {}),
             ...(args.name ? { name: args.name } : {}),
             providerApiKeyId: args.providerApiKeyId,
-            // Hide other users' personal agents. MCP tools only need the
-            // caller's own personal agents to be visible, even though admins
-            // can see all personal agents in the UI.
-            excludeOtherPersonalAgents: true,
+            // Without `access`, hide other users' personal agents: MCP tools
+            // only need the caller's own personal agents, even though admins
+            // see all of them in the UI. An explicit `access` decides on its
+            // own, so `others` can reach those agents for an admin.
+            ...(args.access
+              ? { access: args.access }
+              : { excludeOtherPersonalAgents: true }),
           },
           context.userId,
           isAdmin,

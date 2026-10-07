@@ -868,6 +868,72 @@ describe("agent RBAC visibility", () => {
     expect(agentNames).not.toContain("Hidden Agent");
   });
 
+  test("list_agents narrows an admin's results by access", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, org.id, { role: "member" });
+
+    const mine = await makeAgent({
+      name: "Access Mine",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "personal",
+      authorId: admin.id,
+    });
+    await makeAgent({
+      name: "Access Other Personal",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "personal",
+      authorId: otherUser.id,
+    });
+    await makeAgent({
+      name: "Access Org",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "org",
+      authorId: otherUser.id,
+    });
+
+    const context: ArchestraContext = {
+      agent: { id: mine.id, name: mine.name },
+      userId: admin.id,
+      organizationId: org.id,
+    };
+    const listNames = async (access?: string[]) => {
+      const result = await executeArchestraTool(
+        archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+        { name: "Access", ...(access ? { access } : {}) },
+        context,
+      );
+      expect(result.isError, JSON.stringify(result.content)).toBe(false);
+      return JSON.parse((result.content[0] as any).text)
+        .agents.map((agent: { name: string }) => agent.name)
+        .sort();
+    };
+
+    // Omitted keeps today's behaviour: the admin's wildcard grant reaches
+    // every agent.
+    expect(await listNames()).toEqual([
+      "Access Mine",
+      "Access Org",
+      "Access Other Personal",
+    ]);
+    expect(await listNames(["mine"])).toEqual(["Access Mine"]);
+    expect(await listNames(["others"])).toEqual(["Access Other Personal"]);
+    expect(await listNames(["mine", "org"])).toEqual([
+      "Access Mine",
+      "Access Org",
+    ]);
+  });
+
   test("get_agent by name does not return inaccessible team-scoped agent", async ({
     makeUser,
     makeOrganization,

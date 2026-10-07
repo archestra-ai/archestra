@@ -514,8 +514,13 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   };
 
   const selectablePageCount = rows.filter(canSelectRow).length;
+  // The total counts every visible external agent. Only a viewer who may
+  // delete all of them can select all of them.
   const totalSelectableCount =
-    regularTotal + (catalogResponse?.totals.externalAgents ?? 0);
+    regularTotal +
+    (externalAgentCapabilities.canEvery("delete")
+      ? (catalogResponse?.totals.externalAgents ?? 0)
+      : 0);
   const bulkDeletePermissions = {
     ...(selectedRegularAgents.length > 0 ? { agent: ["delete" as const] } : {}),
   };

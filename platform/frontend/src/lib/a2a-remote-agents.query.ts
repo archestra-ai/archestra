@@ -204,14 +204,17 @@ export function useSyncAgentA2aDelegations() {
  */
 export function useExternalAgentCapabilities() {
   const capabilities = useScopedCapabilities();
+  const has = (action: "update" | "delete", scope: string) =>
+    !!capabilities.data?.some(
+      (grant) =>
+        grant.resource === "externalAgent" &&
+        grant.action === action &&
+        (grant.scope === "*" || grant.scope === scope),
+    );
   return {
     isPending: capabilities.isPending,
-    can: (id: string, action: "update" | "delete") =>
-      !!capabilities.data?.some(
-        (grant) =>
-          grant.resource === "externalAgent" &&
-          grant.action === action &&
-          (grant.scope === "*" || grant.scope === id),
-      ),
+    can: (id: string, action: "update" | "delete") => has(action, id),
+    /** The action is granted on every external agent, not only some. */
+    canEvery: (action: "update" | "delete") => has(action, "*"),
   };
 }

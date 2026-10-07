@@ -148,28 +148,49 @@ describe("access-control", () => {
       expect(requiredPagePermissionsMap["/agents/new"]).toBeUndefined();
     });
 
-    test("credential-bearing configuration mutations require organization settings administration", () => {
+    test("connecting an external agent takes the same permission as creating a local one", () => {
       for (const routeId of [
         RouteId.InspectA2aRemoteAgent,
         RouteId.CreateA2aRemoteAgent,
-        RouteId.UpdateA2aRemoteAgent,
-        RouteId.DeleteA2aRemoteAgent,
       ]) {
         expect(requiredEndpointPermissionsMap[routeId]).toEqual({
-          organizationSettings: ["update"],
+          agent: ["create"],
         });
       }
     });
 
-    test("run metadata is restricted while approved target summaries remain assignable", () => {
-      expect(
-        requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgentRuns],
-      ).toEqual({ organizationSettings: ["read"] });
-      expect(
-        requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgents],
-      ).toEqual({ agent: ["read"] });
-      expect(memberPermissions.organizationSettings).toEqual([]);
-      expect(editorPermissions.organizationSettings).toEqual([]);
+    test("each external agent's own grants decide everything after it exists", () => {
+      // The route gate only admits agent readers. The handler then checks the
+      // external agent's permission policy for the action it performs.
+      for (const routeId of [
+        RouteId.ListA2aRemoteAgents,
+        RouteId.GetA2aRemoteAgent,
+        RouteId.UpdateA2aRemoteAgent,
+        RouteId.DeleteA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgentRuns,
+        RouteId.TransferRemoteAgentOwnership,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).toEqual({
+          agent: ["read"],
+        });
+      }
+    });
+
+    test("organization settings play no part in external agents", () => {
+      for (const routeId of [
+        RouteId.InspectA2aRemoteAgent,
+        RouteId.CreateA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgents,
+        RouteId.GetA2aRemoteAgent,
+        RouteId.UpdateA2aRemoteAgent,
+        RouteId.DeleteA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgentRuns,
+        RouteId.TransferRemoteAgentOwnership,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).not.toHaveProperty(
+          "organizationSettings",
+        );
+      }
     });
   });
 

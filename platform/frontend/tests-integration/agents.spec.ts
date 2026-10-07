@@ -313,10 +313,13 @@ test.describe("Agents", () => {
     await mswControl.use({
       method: "get",
       url: "/api/user/permissions",
-      body: makeUserPermissions({
-        agent: ["read", "update", "delete"],
-        organizationSettings: [],
-      }),
+      body: makeUserPermissions({ agent: ["read", "update", "delete"] }),
+    });
+    // No grants on any external agent, so none of them can be deleted.
+    await mswControl.use({
+      method: "get",
+      url: "/api/resource-permissions",
+      body: [],
     });
     await mswControl.use({
       method: "get",

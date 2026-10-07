@@ -24,7 +24,9 @@ import type {
 } from "@/types";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type PrincipalSource,
+} from "./resource-permission-subject";
 
 class A2aRemoteAgentModel {
   static async transferOwnership(params: {
@@ -369,14 +371,16 @@ class A2aRemoteAgentModel {
     organizationId: string;
     userId: string;
     action: ResourcePermissionAction;
+    /** The request's resolved caller, so a request resolves it once. */
+    lookups?: PrincipalSource;
   }): Promise<SQL> {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
-      organizationId: params.organizationId,
-      userId: params.userId,
-    });
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      params.lookups,
+      { organizationId: params.organizationId, userId: params.userId },
+    );
     return ResourcePermissionPolicyModel.grantCondition({
       ...principal,
       resource: "externalAgent",
@@ -392,7 +396,7 @@ class A2aConnectionModel {
     agentId: string,
     organizationId: string,
     includeDisabled = false,
-    access?: { userId: string },
+    access?: { userId: string; lookups?: PrincipalSource },
   ): Promise<
     Array<{
       remoteAgent: A2aRemoteAgent;
@@ -438,6 +442,7 @@ class A2aConnectionModel {
                 organizationId,
                 userId: access.userId,
                 action: "use",
+                lookups: access.lookups,
               })
             : undefined,
         ),

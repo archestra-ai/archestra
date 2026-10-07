@@ -3,6 +3,7 @@ import { z } from "zod";
 import {
   openappaBatteryInstallsTable,
   openappaBatteryPackagesTable,
+  openappaCredentialBindingsTable,
   openappaEffectivePoliciesTable,
 } from "@/database/schemas/openappa-batteries";
 import { HeldPullReasonSchema } from "@/types/openappa-github-sync";
@@ -24,6 +25,32 @@ export const BatteryCredentialBindingsSchema = z.record(
 export type BatteryCredentialBindings = z.infer<
   typeof BatteryCredentialBindingsSchema
 >;
+
+/** One organization-wide binding of a helper variable to a runtime credential key. */
+export const CredentialBindingSchema = createSelectSchema(
+  openappaCredentialBindingsTable,
+).extend({
+  variable: z.string().regex(BATTERY_CREDENTIAL_VARIABLE),
+  createdAt: z.coerce.date(),
+  updatedAt: z.coerce.date(),
+});
+export type CredentialBinding = z.infer<typeof CredentialBindingSchema>;
+
+/**
+ * Where a variable's key comes from: a `[credentials]` line in the policy text,
+ * which wins, or a stored binding filling a variable the text leaves out.
+ */
+export const CredentialSourceSchema = z.enum(["policy", "binding"]);
+export type CredentialSource = z.infer<typeof CredentialSourceSchema>;
+
+export const CredentialBindingParamsSchema = z.object({
+  variable: z.string().regex(BATTERY_CREDENTIAL_VARIABLE),
+});
+
+/** The key to bind a variable to; null unbinds it. */
+export const SetCredentialBindingSchema = z.strictObject({
+  key: z.string().min(1).max(200).nullable(),
+});
 
 /** Why a declared battery does or does not take part in the composed policy, by precedence. */
 export const BatteryInstallStatusSchema = z.enum([

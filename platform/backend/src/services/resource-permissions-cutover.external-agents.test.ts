@@ -68,36 +68,49 @@ describe("external agent sharing conversion", () => {
     );
   });
 
-  test("roles that managed external agents keep Full access to every one", async ({
+  test("whoever reaches every local agent reaches every external agent", async ({
     makeOrganization,
     makeCustomRole,
   }) => {
     const org = await makeOrganization({ legacyPermissions: true });
-    const manager = await makeCustomRole(org.id, {
-      permission: { agent: ["read"], organizationSettings: ["update"] },
+    const agentAdmin = await makeCustomRole(org.id, {
+      // `admin` is the retired role action that reached every local agent.
+      permission: { agent: ["read", "admin"] } as never,
     });
-    const reader = await makeCustomRole(org.id, {
-      permission: { agent: ["read"] },
+    const settingsManager = await makeCustomRole(org.id, {
+      permission: { agent: ["read"], organizationSettings: ["update"] },
     });
 
     await runScopedResourcePermissionCutover();
 
-    const grants = (
-      await ResourcePermissionPolicyModel.find({
-        organizationId: org.id,
-        resource: "externalAgent",
-        scope: "*",
-      })
-    )?.grants;
-    expect(grants).toEqual(
-      expect.arrayContaining(
-        ["admin", "platform_admin", manager.id].map((id) => ({
-          subject: { type: "role", id },
-          actions: FULL_ACCESS,
-        })),
-      ),
+    const grantsAt = async (resource: "agent" | "externalAgent") =>
+      (
+        await ResourcePermissionPolicyModel.find({
+          organizationId: org.id,
+          resource,
+          scope: "*",
+        })
+      )?.grants ?? [];
+    const external = await grantsAt("externalAgent");
+    for (const grant of await grantsAt("agent")) {
+      expect(external).toContainEqual(grant);
+    }
+    // Same reach on both: here, read and use on every agent.
+    const local = (await grantsAt("agent")).find(
+      (grant) => grant.subject.id === agentAdmin.id,
     );
-    expect(grants?.some((grant) => grant.subject.id === reader.id)).toBe(false);
+    expect(local?.actions).toEqual(["read", "use"]);
+    expect(external).toContainEqual(local);
+    // Organization settings are not an agent permission.
+    expect(
+      external.some((grant) => grant.subject.id === settingsManager.id),
+    ).toBe(false);
+    for (const id of ["admin", "platform_admin"]) {
+      expect(external).toContainEqual({
+        subject: { type: "role", id },
+        actions: FULL_ACCESS,
+      });
+    }
   });
 });
 

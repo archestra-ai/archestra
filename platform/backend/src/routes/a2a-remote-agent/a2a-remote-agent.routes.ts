@@ -238,10 +238,11 @@ const a2aRemoteAgentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         response: constructResponseSchema(z.array(A2aOutboundRunSummarySchema)),
       },
     },
-    async ({ organizationId, params, query }, reply) => {
-      const remoteAgent = await A2aRemoteAgentModel.findByIdForOrganization({
+    async ({ organizationId, params, query, user }, reply) => {
+      const remoteAgent = await A2aRemoteAgentModel.findByIdVisible({
         id: params.id,
         organizationId,
+        userId: user.id,
       });
       if (!remoteAgent) {
         throw new ApiError(404, "Outbound A2A agent not found");

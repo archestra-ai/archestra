@@ -96,6 +96,7 @@ import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
   type A2aRemoteAgent,
   useDeleteA2aRemoteAgent,
+  useExternalAgentCapabilities,
 } from "@/lib/a2a-remote-agents.query";
 import {
   useBulkDeleteProfiles,
@@ -220,10 +221,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canCreateAgent } = useHasPermissions({ agent: ["create"] });
-  const { data: canManageExternalAgents } = useHasPermissions({
-    agent: ["read"],
-    organizationSettings: ["update"],
-  });
+  const externalAgentCapabilities = useExternalAgentCapabilities();
 
   // Get pagination/filter params from URL
   const nameFilter = searchParams.get("name") || "";
@@ -447,8 +445,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     filterSignature,
     selected: allMatchingSelected,
   };
+  // Delete is the only bulk action, so an external agent is selectable only
+  // where its own grants allow deleting it.
   const canSelectRow = (row: AgentListRow) =>
-    row.type === "agent" || !!canManageExternalAgents;
+    row.type === "agent" ||
+    externalAgentCapabilities.can(row.value.id, "delete");
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
       rowSelection,
@@ -514,15 +515,9 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
 
   const selectablePageCount = rows.filter(canSelectRow).length;
   const totalSelectableCount =
-    regularTotal +
-    (canManageExternalAgents
-      ? (catalogResponse?.totals.externalAgents ?? 0)
-      : 0);
+    regularTotal + (catalogResponse?.totals.externalAgents ?? 0);
   const bulkDeletePermissions = {
     ...(selectedRegularAgents.length > 0 ? { agent: ["delete" as const] } : {}),
-    ...(selectedExternalAgents.length > 0
-      ? { organizationSettings: ["update" as const] }
-      : {}),
   };
   const bulkBusy =
     bulkDeleteAgents.isPending ||
@@ -650,7 +645,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const renderExternalAgentActions = (agent: A2aRemoteAgent) => (
     <A2aRemoteAgentActions
       agent={agent}
-      canManage={!!canManageExternalAgents}
+      canEdit={externalAgentCapabilities.can(agent.id, "update")}
+      canDelete={externalAgentCapabilities.can(agent.id, "delete")}
       onOpen={() => openExternalAgent(agent)}
       onDelete={() => setDeletingExternalAgent(agent)}
     />
@@ -1054,7 +1050,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       }
       actionButton={
         <div className="flex items-center gap-2">
-          {(canCreateAgent || canManageExternalAgents) && (
+          {canCreateAgent && (
             <Button
               size="sm"
               onClick={() => router.push(agentNewHref("agent"))}

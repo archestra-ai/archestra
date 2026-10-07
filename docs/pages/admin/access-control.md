@@ -69,6 +69,8 @@ The Permissions editor displays inherited grants separately. A read grant on all
 
 You can share only actions you hold. Team administration can change membership, but does not authorize editing the resources or grants shared with the team.
 
+Assigning a role, or adding someone to a team, shares every grant the role or team carries, so you must hold those grants too. Grants that members put on their own chats, agent runs, and personal provider keys do not count: only their owner holds those.
+
 If another administrator saves first, the editor preserves your draft and asks you to reload. Review the latest permissions before saving again. Permission changes appear in the audit log.
 
 ### API Example
@@ -110,12 +112,6 @@ Deploying into an [environment](/docs/admin/environments#deploy-permissions) req
 ### OAuth Clients
 
 MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management; tokens reach only what the client configuration allows.
-
-### External Agents
-
-Connecting an [external agent](/docs/agents/subagents/external) requires [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update). After that, each external agent has its own grants. **Can use** permits assigning it as a subagent. **Can edit** permits changing its connection. **Full access** also permits deletion and sharing.
-
-Upgrades keep existing access. Roles with `organizationSettings:update` get Full access to every external agent.
 
 ### Visibility-Scoped Credentials
 

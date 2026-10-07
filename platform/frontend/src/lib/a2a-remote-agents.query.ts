@@ -2,6 +2,7 @@ import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { agentCatalogQueryKeys } from "@/lib/agent-catalog.query";
+import { useScopedCapabilities } from "@/lib/auth/auth.query";
 import { handleApiError, throwOnApiError } from "./utils";
 
 const {
@@ -195,4 +196,22 @@ export function useSyncAgentA2aDelegations() {
       queryClient.invalidateQueries({ queryKey: ["agents"] });
     },
   });
+}
+
+/**
+ * What the viewer may do with each external agent, from that agent's own
+ * permission policy and the organization-wide one.
+ */
+export function useExternalAgentCapabilities() {
+  const capabilities = useScopedCapabilities();
+  return {
+    isPending: capabilities.isPending,
+    can: (id: string, action: "update" | "delete") =>
+      !!capabilities.data?.some(
+        (grant) =>
+          grant.resource === "externalAgent" &&
+          grant.action === action &&
+          (grant.scope === "*" || grant.scope === id),
+      ),
+  };
 }

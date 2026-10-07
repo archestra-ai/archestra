@@ -46,7 +46,7 @@ export async function transferResourceOwnership(params: {
     });
     // SPDX-SnippetEnd
   } else {
-    const resource = LEGACY_RESOURCE_FOR_KIND[kind];
+    const resource = LEGACY_RESOURCE_FOR_KIND[kind as LegacyKind];
     const permissions = await getPermissionsForUserContext({
       userId,
       organizationId,
@@ -68,21 +68,13 @@ export async function transferResourceOwnership(params: {
     throw new ApiError(404, "Resource not found");
   const { row, authorId, teamIds, scope } = entry;
   if (!scoped) {
-    const permissions = await getPermissionsForUserContext({
-      userId,
-      organizationId,
-    });
-    const resource = LEGACY_RESOURCE_FOR_KIND[kind];
-    const actions = permissions[resource] ?? [];
     if (
       authorId !== userId &&
-      !(kind === "remoteAgent"
-        ? actions.includes("update")
-        : await managesEveryObject({
-            kind: kind as "plugin" | "project",
-            userId,
-            organizationId,
-          }))
+      !(await managesEveryObject({
+        kind: kind as "plugin" | "project",
+        userId,
+        organizationId,
+      }))
     )
       throw new ApiError(
         403,
@@ -104,7 +96,7 @@ export async function transferResourceOwnership(params: {
       "The new owner must be a user in this organization",
     );
   if (!scoped) {
-    const resource = LEGACY_RESOURCE_FOR_KIND[kind];
+    const resource = LEGACY_RESOURCE_FOR_KIND[kind as LegacyKind];
     const recipientPermissions = await getPermissionsForUserContext({
       userId: ownerId,
       organizationId,
@@ -167,16 +159,13 @@ export async function transferResourceOwnership(params: {
 }
 
 /** Kinds still authorized by role permissions alone. */
-const LEGACY_RESOURCE_FOR_KIND: Record<
-  "skill" | "plugin" | "project" | "app" | "catalog" | "remoteAgent",
-  Resource
-> = {
+type LegacyKind = "skill" | "plugin" | "project" | "app" | "catalog";
+const LEGACY_RESOURCE_FOR_KIND: Record<LegacyKind, Resource> = {
   skill: "skill",
   app: "app",
   catalog: "mcpRegistry",
   plugin: "plugin",
   project: "project",
-  remoteAgent: "organizationSettings",
 };
 
 /**

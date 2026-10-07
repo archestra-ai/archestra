@@ -42,19 +42,17 @@ import {
   useA2aRemoteAgent,
   useCreateA2aRemoteAgent,
   useDeleteA2aRemoteAgent,
+  useExternalAgentCapabilities,
   useUpdateA2aRemoteAgent,
 } from "@/lib/a2a-remote-agents.query";
-import {
-  useHasPermissions,
-  useScopedCapabilities,
-} from "@/lib/auth/auth.query";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 
 const CREATE_BACK_HREF = "/agents/new";
 const LIST_HREF = "/agents";
 
 export function CreateA2aRemoteAgentPage() {
   const router = useRouter();
-  const permission = useHasPermissions({ organizationSettings: ["update"] });
+  const permission = useHasPermissions({ agent: ["create"] });
   const createMutation = useCreateA2aRemoteAgent();
   const [formDirty, setFormDirty] = useState(false);
   const navigationGuard = usePageUnsavedChangesGuard(formDirty);
@@ -94,9 +92,7 @@ export function CreateA2aRemoteAgentPage() {
             <CardContent className="py-6">
               <PermissionRequirementHint
                 message="Connecting external A2A agents requires"
-                permissions={[
-                  { resource: "organizationSettings", action: "update" },
-                ]}
+                permissions={[{ resource: "agent", action: "create" }]}
               />
             </CardContent>
           </Card>
@@ -114,7 +110,7 @@ export function CreateA2aRemoteAgentPage() {
 export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
   const router = useRouter();
   const query = useA2aRemoteAgent(id);
-  const permission = useExternalAgentPermissions(id);
+  const capabilities = useExternalAgentCapabilities();
   const updateMutation = useUpdateA2aRemoteAgent(id);
   const deleteMutation = useDeleteA2aRemoteAgent();
   const [deleteOpen, setDeleteOpen] = useState(false);
@@ -139,10 +135,11 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
       : undefined,
     onTransferred: () => router.push("/agents"),
   });
-  const { canUpdate, canDelete } = permission;
+  const canUpdate = capabilities.can(id, "update");
+  const canDelete = capabilities.can(id, "delete");
   const canManage = canUpdate || canDelete;
 
-  if (query.isPending || permission.isPending) {
+  if (query.isPending || capabilities.isPending) {
     return (
       <DetailShell title="External A2A agent">
         <FormSkeleton />
@@ -325,26 +322,6 @@ export function A2aRemoteAgentDetailPage({ id }: { id: string }) {
       />
     </>
   );
-}
-
-/**
- * What the viewer may do with this external agent, from its own permission
- * policy and the organization-wide one.
- */
-function useExternalAgentPermissions(id: string) {
-  const capabilities = useScopedCapabilities();
-  const can = (action: "update" | "delete") =>
-    !!capabilities.data?.some(
-      (grant) =>
-        grant.resource === "externalAgent" &&
-        grant.action === action &&
-        (grant.scope === "*" || grant.scope === id),
-    );
-  return {
-    isPending: capabilities.isPending,
-    canUpdate: can("update"),
-    canDelete: can("delete"),
-  };
 }
 
 function usePageUnsavedChangesGuard(isDirty: boolean) {

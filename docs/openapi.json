@@ -42102,7 +42102,7 @@
         "tags": [
           "Ownership"
         ],
-        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Transfer ownership to another organization member\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "requestBody": {
           "required": true,
           "content": {
@@ -42386,7 +42386,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "agent:read"
           ]
         }
       }
@@ -43013,7 +43013,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Resolve and validate an outbound A2A Agent Card without saving it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Resolve and validate an outbound A2A Agent Card without saving it.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
         "requestBody": {
           "required": true,
           "content": {
@@ -43477,7 +43477,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "agent:create"
           ]
         }
       }
@@ -44009,7 +44009,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "Configure an outbound A2A agent and its default connection.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:update`: Change organization settings, messaging channels, and site notifications",
+        "description": "Configure an outbound A2A agent and its default connection.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:create`: Create new agents",
         "requestBody": {
           "required": true,
           "content": {
@@ -44772,7 +44772,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:update"
+            "agent:create"
           ]
         }
       }
@@ -46208,7 +46208,7 @@
         "tags": [
           "Outbound A2A Agents"
         ],
-        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels",
+        "description": "List recent outbound A2A protocol outcomes for one configured external agent.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`agent:read`: Open Agents, and use the code sandboxes and files of agents you can use",
         "parameters": [
           {
             "schema": {
@@ -46612,7 +46612,7 @@
         "x-required-permissions": {
           "kind": "static",
           "permissions": [
-            "organizationSettings:read"
+            "agent:read"
           ]
         }
       }

@@ -1536,7 +1536,11 @@ class AgentModel {
     filters?: AgentListFilters;
     userId: string;
     isAgentAdmin: boolean;
-    includeExternalAgents?: boolean;
+    /**
+     * The grant an external agent row needs. A bulk selection asks for
+     * `delete`, the only bulk action, so it lists only rows it can act on.
+     */
+    externalAgentAction?: "read" | "delete";
     excludeOtherPersonalExternalAgents?: boolean;
   }): Promise<AgentCatalogCandidatePage> {
     const regularWhereClause = await AgentModel.buildListWhereClause({
@@ -1548,7 +1552,6 @@ class AgentModel {
       isAgentAdmin: params.isAgentAdmin,
     });
     const includeExternalAgents =
-      (params.includeExternalAgents ?? true) &&
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
       !params.filters?.providerApiKeyId &&
@@ -1617,7 +1620,7 @@ class AgentModel {
       await A2aRemoteAgentModel.accessCondition({
         organizationId: params.filters?.organizationId ?? "",
         userId: params.userId,
-        action: "read",
+        action: params.externalAgentAction ?? "read",
       }),
     );
     externalWhereConditions.push(

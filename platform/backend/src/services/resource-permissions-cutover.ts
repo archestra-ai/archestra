@@ -35,6 +35,7 @@ export async function runScopedResourcePermissionCutover(
       ...SHARING_CONVERSION_STATEMENTS,
       SESSION_SHARING_CONVERSION,
       ...ROLE_RETIREMENT_STATEMENTS,
+      EXTERNAL_AGENT_AUTHORITY,
     ])
       await tx.execute(statement);
     await widenGrantsToPresets(tx);
@@ -644,59 +645,6 @@ ON CONFLICT (organization_id, resource, scope) DO UPDATE
 SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
 WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
 `),
-  // ---------------------------------------------------------------------
-  // convertExternalAgentAuthority
-  // ---------------------------------------------------------------------
-  sql.raw(`
--- Every external agent was managed through \`organizationSettings:update\`,
--- never through an action on the agent itself. So the roles that hold it get
--- Full access to every external agent, and nobody else does. Built-in admin
--- and platform admin are the predefined roles holding that action; they are
--- named because their permissions live in code.
-WITH role_actions AS (
-  SELECT o.id AS organization_id, builtin.id AS subject_id,
-    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
-  FROM organization o
-  CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
-  WHERE NOT EXISTS (
-    SELECT 1 FROM resource_permission_policies p
-    WHERE p.organization_id = o.id AND p.resource = 'externalAgent'
-      AND p.scope = '*' AND p.legacy_sharing_migrated
-  )
-  UNION ALL
-  SELECT roles.organization_id, roles.id,
-    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions'])
-  FROM organization_role roles
-  WHERE COALESCE(roles.permission::jsonb->'organizationSettings', '[]'::jsonb) ? 'update'
-    AND NOT EXISTS (
-      SELECT 1 FROM resource_permission_policies p
-      WHERE p.organization_id = roles.organization_id AND p.resource = 'externalAgent'
-        AND p.scope = '*' AND p.legacy_sharing_migrated
-    )
-), entries AS (
-  SELECT organization_id, 'role' AS subject_type, subject_id, action FROM role_actions
-  UNION ALL
-  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
-  FROM resource_permission_policies p
-  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
-  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
-  WHERE p.resource = 'externalAgent' AND p.scope = '*'
-), subjects AS (
-  SELECT organization_id, subject_type, subject_id,
-    jsonb_agg(DISTINCT action ORDER BY action) AS actions
-  FROM entries GROUP BY organization_id, subject_type, subject_id
-), policies AS (
-  SELECT organization_id,
-    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
-      ORDER BY subject_type, subject_id) AS grants
-  FROM subjects GROUP BY organization_id
-)
-INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
-SELECT organization_id, 'externalAgent', '*', grants, true FROM policies
-ON CONFLICT (organization_id, resource, scope) DO UPDATE
-SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
-WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
-`),
 ];
 
 /** @public — read by resource-permissions-cutover.roles.test.ts */
@@ -1143,3 +1091,55 @@ export async function widenGrantsToPresets(tx: Transaction): Promise<void> {
       "[ResourcePermissions] Widened grants to the nearest permission preset",
     );
 }
+
+// convertExternalAgentAuthority
+const EXTERNAL_AGENT_AUTHORITY = sql.raw(`
+-- External agents follow local agents. Whoever reaches every local agent
+-- through the \`agent\` policy at \`*\` reaches every external agent with
+-- the same actions. Built-in admin and platform admin are named as well,
+-- because their permissions live in code. It runs after the role retirement,
+-- so the \`agent\` policy already holds the converted \`admin\` roles. It
+-- runs once per organization, so later edits to this policy stay.
+WITH unconverted AS (
+  SELECT o.id AS organization_id FROM organization o
+  WHERE NOT EXISTS (
+    SELECT 1 FROM resource_permission_policies p
+    WHERE p.organization_id = o.id AND p.resource = 'externalAgent'
+      AND p.scope = '*' AND p.legacy_sharing_migrated
+  )
+), role_actions AS (
+  SELECT u.organization_id, 'role' AS subject_type, builtin.id AS subject_id,
+    unnest(ARRAY['read', 'use', 'update', 'delete', 'manage-permissions']) AS action
+  FROM unconverted u
+  CROSS JOIN (VALUES ('admin'), ('platform_admin')) builtin(id)
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  JOIN unconverted u ON u.organization_id = p.organization_id
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'agent' AND p.scope = '*'
+), entries AS (
+  SELECT organization_id, subject_type, subject_id, action FROM role_actions
+  UNION ALL
+  SELECT p.organization_id, g->'subject'->>'type', g->'subject'->>'id', action
+  FROM resource_permission_policies p
+  CROSS JOIN LATERAL jsonb_array_elements(p.grants) g
+  CROSS JOIN LATERAL jsonb_array_elements_text(g->'actions') action
+  WHERE p.resource = 'externalAgent' AND p.scope = '*'
+), subjects AS (
+  SELECT organization_id, subject_type, subject_id,
+    jsonb_agg(DISTINCT action ORDER BY action) AS actions
+  FROM entries GROUP BY organization_id, subject_type, subject_id
+), policies AS (
+  SELECT organization_id,
+    jsonb_agg(jsonb_build_object('subject', jsonb_build_object('type', subject_type, 'id', subject_id), 'actions', actions)
+      ORDER BY subject_type, subject_id) AS grants
+  FROM subjects GROUP BY organization_id
+)
+INSERT INTO resource_permission_policies (organization_id, resource, scope, grants, legacy_sharing_migrated)
+SELECT organization_id, 'externalAgent', '*', grants, true FROM policies
+ON CONFLICT (organization_id, resource, scope) DO UPDATE
+SET grants = EXCLUDED.grants, legacy_sharing_migrated = true, revision = resource_permission_policies.revision + 1, updated_at = now()
+WHERE NOT resource_permission_policies.legacy_sharing_migrated OR resource_permission_policies.grants IS DISTINCT FROM EXCLUDED.grants;
+`);

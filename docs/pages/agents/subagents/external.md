@@ -15,7 +15,7 @@ For example, a support team keeps its investigation agent private, and connects 
 
 ## Connect an External Agent
 
-You need [`agent:read`](/docs/reference/permissions#agent:read) and [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update).
+You need [`agent:create`](/docs/reference/permissions#agent:create).
 
 1. Go to **Agents**, click **Add Agent**, then **Add an External Agent**.
 2. Enter the agent's base URL and its authentication: none, a bearer token, or an API key.

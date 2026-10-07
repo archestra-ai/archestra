@@ -31,7 +31,11 @@ import {
 import { Button } from "@/components/ui/button";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -290,10 +294,8 @@ function EndpointPicker({
           key={option.value}
           htmlFor={`${id}-${option.value}`}
           className={cn(
-            "flex cursor-pointer flex-col items-start gap-1 rounded-md border p-3 font-normal transition-colors has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-            value === option.value
-              ? "border-primary bg-primary/10"
-              : "hover:bg-muted/50",
+            "flex cursor-pointer flex-col items-start gap-1 rounded-md p-3 font-normal",
+            radioCardClass({ checked: value === option.value }),
           )}
         >
           <RadioGroupItem

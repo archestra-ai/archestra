@@ -146,7 +146,7 @@
      surface actions, selected tabs, selected segments. Many light themes
      tint --background and --card, so "raised" in either matched the page;
      this pulls the card 80% of the way to white so it reads as the
-     lightest thing on screen. Dark mode never uses it. */
+     lightest thing on screen. Dark mode maps it to --card. */
   --raised: color-mix(in oklab, var(--card) 20%, white);
   --terminal: color-mix(in oklab, var(--card) 20%, white);
   --terminal-foreground: color-mix(in oklab, var(--foreground) 74%, var(--terminal-anchor));
@@ -186,6 +186,7 @@
 }
 
 html.dark {
+  --raised: var(--card);
   --terminal-anchor: white;
   --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
   --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));

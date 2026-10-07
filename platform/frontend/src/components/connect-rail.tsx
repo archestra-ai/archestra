@@ -6,7 +6,11 @@ import { useId } from "react";
 import { TerminalBlock } from "@/app/connection/terminal-block";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import {
   Select,
   SelectContent,
@@ -122,12 +126,8 @@ export function AuthMethodPicker<T extends string>({
           <div
             key={method.value}
             className={cn(
-              "flex flex-col gap-2 rounded-md border p-3 transition-colors has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-              reason
-                ? "opacity-50"
-                : checked
-                  ? "border-foreground bg-muted/40"
-                  : "hover:bg-muted/30",
+              "flex flex-col gap-2 rounded-md p-3",
+              radioCardClass({ checked, disabled: !!reason }),
             )}
           >
             <Label

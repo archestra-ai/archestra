@@ -149,6 +149,8 @@ class OpenAppaBatteriesService {
           description: found.package.description,
           namespaces: found.package.namespaces,
           credentials: found.package.credentials,
+          benefit: found.package.benefit ?? null,
+          setup: batterySetupSteps(found.package),
           policy: found.package.policy,
         });
     }
@@ -1598,6 +1600,8 @@ type CatalogBattery =
       namespaces: string[];
       /** Credential variables `[credentials]` must bind to a runtime credential key. */
       credentials: string[];
+      benefit: string | null;
+      setup: string[];
       policy: string;
     };
 
@@ -1696,6 +1700,11 @@ function composes(battery: {
     case "refused":
       return false;
   }
+}
+
+/** The native package joins its one-line setup steps with newlines. */
+function batterySetupSteps(battery: NativeBatteryPackage): string[] {
+  return battery.setup?.split("\n") ?? [];
 }
 
 /** A battery with no tool namespace and at least one annotator governs the organization. */

@@ -26,6 +26,7 @@ export interface BatteryPackage {
   helpers: Array<string>
   credentials: Array<string>
   externals: Array<BatteryExternal>
+  benefit?: string
   setup?: string
   files: Array<BatteryFileInput>
 }

@@ -69,6 +69,8 @@ The Permissions editor displays inherited grants separately. A read grant on all
 
 You can share only actions you hold. Team administration can change membership, but does not authorize editing the resources or grants shared with the team.
 
+Assigning a role, or adding someone to a team, shares every grant the role or team carries, so you must hold those grants too. Grants that members put on their own chats, agent runs, and personal provider keys do not count: only their owner holds those.
+
 If another administrator saves first, the editor preserves your draft and asks you to reload. Review the latest permissions before saving again. Permission changes appear in the audit log.
 
 ### API Example

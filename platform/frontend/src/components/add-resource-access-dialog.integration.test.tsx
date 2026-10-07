@@ -176,7 +176,11 @@ it("choosing the organization goes straight to permission selection and adds onl
   await user.click(
     screen.getByRole("button", { name: "Everyone in the organization" }),
   );
-  expect(screen.getAllByText("Everyone in the organization")).toHaveLength(1);
+  expect(
+    screen.getByRole("combobox", {
+      name: "Permission for Everyone in the organization",
+    }),
+  ).toHaveTextContent("Can view");
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   expect(screen.queryByText(/selected$/)).not.toBeInTheDocument();
   expect(screen.queryByText("Alex Reader")).not.toBeInTheDocument();
@@ -193,7 +197,12 @@ it("choosing the organization goes straight to permission selection and adds onl
   await user.click(
     screen.getByRole("button", { name: "Everyone in the organization" }),
   );
-  await user.click(screen.getByRole("radio", { name: /^Can use/ }));
+  await user.click(
+    screen.getByRole("combobox", {
+      name: "Permission for Everyone in the organization",
+    }),
+  );
+  await user.click(screen.getByRole("option", { name: "Can use" }));
   await user.click(screen.getByRole("button", { name: "Add access" }));
   expect(onAdd).toHaveBeenCalledExactlyOnceWith([
     {

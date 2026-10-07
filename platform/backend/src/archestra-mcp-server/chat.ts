@@ -1,4 +1,5 @@
 import {
+  ASK_USER_OTHER_ANSWER_FIELD,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
@@ -128,8 +129,6 @@ const AskUserSchema = z.object({
 const AskUserExecutionSchema = AskUserSchema.extend({
   trajectory: CurrentTrajectorySchema.optional(),
 });
-
-const TEXT_FIELD = "text";
 
 const NO_CHOICE_FORM_MESSAGE =
   "This client did not answer the choice form. If it has its own question tool (AskUserQuestion, Codex, OpenCode), use that instead. Do not ask this as a plain-text chat question.";
@@ -400,7 +399,10 @@ function withTextField(params: {
     type: "object" as const,
     properties: {
       ...schema.properties,
-      [TEXT_FIELD]: { type: "string" as const, title: "Other" },
+      [ASK_USER_OTHER_ANSWER_FIELD]: {
+        type: "string" as const,
+        title: "Other",
+      },
     },
     required: [],
   };
@@ -410,7 +412,9 @@ function typedText(content: unknown): string | undefined {
   if (!content || typeof content !== "object" || Array.isArray(content)) {
     return undefined;
   }
-  const value = (content as Record<string, unknown>)[TEXT_FIELD];
+  const value = (content as Record<string, unknown>)[
+    ASK_USER_OTHER_ANSWER_FIELD
+  ];
   const text = typeof value === "string" ? value.trim() : "";
   return text.length > 0 ? text : undefined;
 }

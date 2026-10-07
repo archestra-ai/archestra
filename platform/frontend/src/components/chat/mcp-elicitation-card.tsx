@@ -361,8 +361,10 @@ export function McpElicitationCard({
         [fieldName]: value,
       },
     }));
-    // Typing never advances; Next or Submit sends the text.
-    if (!typed) advanceOnPick(question);
+    // Typing never advances, and stops an advance a pick just scheduled;
+    // Next or Submit sends the text.
+    if (typed) cancelAutoAdvance();
+    else advanceOnPick(question);
   };
 
   const respondToAll = async (
@@ -462,6 +464,7 @@ export function McpElicitationCard({
           setFieldValue({ question, fieldName: field.name, value })
         }
         onPick={() => advanceOnPick(question)}
+        onFocus={isOtherTextField(field) ? cancelAutoAdvance : undefined}
       />
     ));
     return singlePick ? (

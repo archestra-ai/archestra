@@ -31,6 +31,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import { useFeature } from "@/lib/config/config.query";
 import {
   type RuntimeCredentialDefinition,
   useRuntimeCredentials,
@@ -63,6 +64,7 @@ export function BatteryCredentialsTool({
   const [choices, setChoices] = useState<Record<string, Choice>>({});
   const [adding, setAdding] = useState<Adding | null>(null);
   const credentials = useRuntimeCredentials();
+  const byosEnabled = useFeature("byosEnabled") === true;
   useEffect(() => setSent(sessionStorage.getItem(sentKey)), [sentKey]);
   const all = credentials.data ?? [];
   const options = all.filter(
@@ -135,7 +137,11 @@ export function BatteryCredentialsTool({
         {battery.credentials.map((variable) => {
           const choice = choices[choiceId(battery, variable)];
           const id = `battery-credential-${toolCallId}-${choiceId(battery, variable)}`;
-          const existing = existingDefinition({ battery, credentials: all });
+          const existing = existingDefinition({
+            battery,
+            variable,
+            credentials: all,
+          });
           return (
             <div key={variable} className="space-y-1">
               <Label htmlFor={id} className="font-mono text-xs">
@@ -248,7 +254,7 @@ export function BatteryCredentialsTool({
           initialKind="secret"
           initialScope="organization"
           initialValues={{
-            name: tokenName(adding.battery),
+            name: tokenName(adding.battery, adding.variable),
             description: `Read by the ${adding.battery.title} battery's helpers.`,
             icon: null,
           }}
@@ -261,6 +267,7 @@ export function BatteryCredentialsTool({
         <RuntimeCredentialConnectionDialog
           definition={connecting}
           scope="organization"
+          useExternalSecretsManager={byosEnabled}
           onClose={() => setAdding(null)}
           onConnected={() =>
             choose(adding.battery, adding.variable, {
@@ -347,23 +354,29 @@ function StepText({ text }: { text: string }) {
 }
 
 /**
- * The organization definition an earlier "Add new token" made for this
- * battery, so a second attempt connects it instead of making a duplicate.
+ * The organization secret an earlier "Add new token" made for this variable,
+ * so a second attempt connects it instead of making a duplicate.
  */
 function existingDefinition(params: {
   battery: Battery;
+  variable: string;
   credentials: RuntimeCredentialDefinition[];
 }) {
-  const name = tokenName(params.battery);
+  const name = tokenName(params.battery, params.variable);
   const key = slugifyCredentialKey(name);
   return params.credentials.find(
     (entry) =>
-      entry.allowOrganization && (entry.key === key || entry.name === name),
+      entry.kind === "secret" &&
+      entry.allowOrganization &&
+      (entry.key === key || entry.name === name),
   );
 }
 
-function tokenName(battery: Battery) {
-  return `${battery.title} token`;
+/** One token per variable: a battery reading two gets two definitions. */
+function tokenName(battery: Battery, variable: string) {
+  return battery.credentials.length > 1
+    ? `${battery.title} ${variable} token`
+    : `${battery.title} token`;
 }
 
 function choiceId(battery: Battery, variable: string) {

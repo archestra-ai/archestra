@@ -2,6 +2,7 @@
 
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  ASK_USER_OTHER_ANSWER_FIELD,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   TOOL_ASK_USER_FULL_NAME,
 } from "@archestra/shared";
@@ -353,7 +354,10 @@ describe("chat tool execution", () => {
             status: "answered" as const,
             result: {
               action: "accept" as const,
-              content: { choice: "", text: "  acme/openappa-policy " },
+              content: {
+                choice: "",
+                [ASK_USER_OTHER_ANSWER_FIELD]: "  acme/openappa-policy ",
+              },
             },
           };
         },
@@ -374,7 +378,7 @@ describe("chat tool execution", () => {
     expect(asked[0]?.requestedSchema).toMatchObject({
       properties: {
         choice: { enum: ["My account", "The organization"] },
-        text: { type: "string" },
+        [ASK_USER_OTHER_ANSWER_FIELD]: { type: "string", title: "Other" },
       },
       required: [],
     });
@@ -394,7 +398,10 @@ describe("chat tool execution", () => {
             status: "answered" as const,
             result: {
               action: "accept" as const,
-              content: { choice: "Yes", text: "something else" },
+              content: {
+                choice: "Yes",
+                [ASK_USER_OTHER_ANSWER_FIELD]: "something else",
+              },
             },
           };
         },

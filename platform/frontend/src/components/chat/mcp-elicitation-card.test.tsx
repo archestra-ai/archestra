@@ -1,3 +1,4 @@
+import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -287,7 +288,7 @@ describe("McpElicitationCard", () => {
             title: "Choice",
             enum: ["my-user", "my-org"],
           },
-          text: { type: "string", title: "Other" },
+          [ASK_USER_OTHER_ANSWER_FIELD]: { type: "string", title: "Other" },
         },
         required: [],
       },
@@ -326,13 +327,67 @@ describe("McpElicitationCard", () => {
     expect(onRespond).toHaveBeenCalledWith({
       id: "q-owner",
       action: "accept",
-      content: { choice: "", text: "acme" },
+      content: { choice: "", [ASK_USER_OTHER_ANSWER_FIELD]: "acme" },
     });
     expect(onRespond).toHaveBeenCalledWith({
       id: "q-name",
       action: "accept",
       content: { choice: "guardrails" },
     });
+  });
+
+  it("stays on the question when the user types right after clicking an option", async () => {
+    const user = userEvent.setup();
+    render(
+      <McpElicitationCard
+        requests={[
+          withOther(
+            singleChoice({
+              id: "q-owner",
+              header: "Owner",
+              message: "Owner?",
+              options: ["my-user", "my-org"],
+            }),
+          ),
+          singleChoice({
+            id: "q-name",
+            message: "Repository name?",
+            options: ["openappa-policy", "guardrails"],
+          }),
+        ]}
+        onRespond={vi.fn().mockResolvedValue(true)}
+      />,
+    );
+
+    await user.click(screen.getByRole("radio", { name: "my-org" }));
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "a");
+    await new Promise((resolve) => setTimeout(resolve, 400));
+
+    expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
+      "aria-selected",
+      "true",
+    );
+  });
+
+  it("keeps an enum and an independent optional text field off the inline card", () => {
+    const request: ChatMcpElicitationRequest = {
+      ...singleChoice({
+        id: "q-deploy",
+        message: "Deploy where?",
+        options: ["staging", "production"],
+      }),
+      toolName: "deployer__deploy",
+      requestedSchema: {
+        type: "object",
+        properties: {
+          environment: { type: "string", enum: ["staging", "production"] },
+          comment: { type: "string", title: "Comment" },
+        },
+        required: ["environment"],
+      },
+    };
+
+    expect(isChoiceElicitationRequest(request)).toBe(false);
   });
 
   it("clears a typed Other answer when an option is picked instead", async () => {
@@ -351,7 +406,10 @@ describe("McpElicitationCard", () => {
               type: "object",
               properties: {
                 choice: { type: "string", enum: ["my-user", "my-org"] },
-                text: { type: "string", title: "Other" },
+                [ASK_USER_OTHER_ANSWER_FIELD]: {
+                  type: "string",
+                  title: "Other",
+                },
               },
               required: [],
             },
@@ -370,7 +428,7 @@ describe("McpElicitationCard", () => {
     expect(onRespond).toHaveBeenCalledExactlyOnceWith({
       id: "q-owner",
       action: "accept",
-      content: { choice: "my-org", text: "" },
+      content: { choice: "my-org", [ASK_USER_OTHER_ANSWER_FIELD]: "" },
     });
   });
 
@@ -1137,6 +1195,25 @@ describe("McpElicitationCard", () => {
     });
   });
 });
+
+function withOther(
+  request: ChatMcpElicitationRequest,
+): ChatMcpElicitationRequest {
+  const schema = request.requestedSchema as {
+    properties: Record<string, unknown>;
+  };
+  return {
+    ...request,
+    requestedSchema: {
+      type: "object",
+      properties: {
+        ...schema.properties,
+        [ASK_USER_OTHER_ANSWER_FIELD]: { type: "string", title: "Other" },
+      },
+      required: [],
+    },
+  };
+}
 
 function singleChoice(params: {
   id: string;

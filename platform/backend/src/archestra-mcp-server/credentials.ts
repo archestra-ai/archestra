@@ -227,18 +227,18 @@ const registry = defineArchestraTools([
       const setups = await openappaBatteriesService.batterySetups(
         actor.organizationId,
       );
-      const names = [...new Set(args.batteries)];
-      const unknown = names.filter((name) => !setups.has(name));
+      const request: BatteryCredentialRequest = { batteries: [] };
+      const unknown: string[] = [];
+      for (const name of new Set(args.batteries)) {
+        const setup = setups.get(name);
+        if (setup)
+          request.batteries.push({ name, title: batteryTitle(name), ...setup });
+        else unknown.push(name);
+      }
       if (unknown.length > 0)
         return errorResult(
           `No battery is named ${unknown.join(", ")}. Use the names list_guardrails_battery_fits returns.`,
         );
-      const request: BatteryCredentialRequest = {
-        batteries: names.flatMap((name) => {
-          const setup = setups.get(name);
-          return setup ? [{ name, title: batteryTitle(name), ...setup }] : [];
-        }),
-      };
       return structuredSuccessResult(
         request,
         `Opened the credential card for ${request.batteries.map((battery) => battery.title).join(", ")}. Wait for the person's "Battery credentials: ..." reply.`,

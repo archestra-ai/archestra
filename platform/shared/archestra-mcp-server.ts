@@ -132,6 +132,11 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
   "unassign_knowledge_connector_from_agent";
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_ASK_USER_SHORT_NAME = "ask_user";
+/**
+ * The property `ask_user` adds to its requested schema for a typed answer.
+ * Chat renders only this property as an "Other" alternative to the options.
+ */
+export const ASK_USER_OTHER_ANSWER_FIELD = "archestra_other_answer";
 export const TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME =
   "request_battery_credentials";
 // Turn the current chat into a project (moves the chat + its files into a new project).

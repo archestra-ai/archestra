@@ -1,5 +1,6 @@
 "use client";
 
+import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
 import { z } from "zod";
 import { Checkbox } from "@/components/ui/checkbox";
 import { FieldDescription } from "@/components/ui/field-description";
@@ -92,11 +93,13 @@ export function getElicitationFields(schema: unknown): ElicitationField[] {
 }
 
 /**
- * An optional free-text field beside the options, such as `ask_user`'s
- * "Other": the user may type an answer instead of picking one.
+ * `ask_user`'s "Other" field: a typed answer instead of a pick. Only the
+ * property it names counts; another server's optional text field is its own
+ * question, and its form keeps the dialog.
  */
 export function isOtherTextField(field: ElicitationField) {
   return (
+    field.name === ASK_USER_OTHER_ANSWER_FIELD &&
     field.schema.type === "string" &&
     !field.schema.enum?.length &&
     !field.required
@@ -255,6 +258,7 @@ export function ElicitationFieldInput({
   disabled = false,
   onChange,
   onPick,
+  onFocus,
 }: {
   /** Keeps control ids unique when several requests render at once. */
   idPrefix: string;
@@ -275,6 +279,8 @@ export function ElicitationFieldInput({
    * which changes nothing and so never reaches `onChange`.
    */
   onPick?: (value: string) => void;
+  /** Focus on a text field; choice controls ignore it. */
+  onFocus?: () => void;
 }) {
   const id = `mcp-elicitation-${idPrefix}-${field.name}`;
   const errorId = `${id}-error`;
@@ -424,6 +430,7 @@ export function ElicitationFieldInput({
           value={String(value ?? "")}
           disabled={disabled}
           onChange={(event) => onChange(event.target.value)}
+          onFocus={onFocus}
           aria-invalid={Boolean(error)}
           aria-describedby={error ? errorId : undefined}
           className={String(value ?? "").length > 120 ? "min-h-24" : "min-h-10"}

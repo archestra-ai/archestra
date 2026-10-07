@@ -1,4 +1,9 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  isSameResourceAccess,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
 import {
   type QueryClient,
   useMutation,
@@ -42,6 +47,18 @@ const {
   pinAgent,
   unpinAgent,
 } = archestraApiSdk;
+
+/** How many gateways a "Show" selection holds, for the filter's counts. */
+export async function countGateways(params: {
+  access: ResourceAccessRelation[];
+  agentTypes: Array<"mcp_gateway" | "profile">;
+}): Promise<number> {
+  const { data, error } = await getAgents({
+    query: { limit: 1, offset: 0, ...params },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.pagination.total ?? 0;
+}
 
 /**
  * The roster, without each agent's tools. No consumer of this list reads them
@@ -171,6 +188,8 @@ export function useProfilesPaginated(
     initialDataExcludeOtherPersonalAgents?: boolean;
     /** Pin slice of the server seed; never reuse it for the other list section. */
     initialDataPinned?: boolean;
+    /** `access` filter of the server seed; never reuse it for another selection. */
+    initialDataAccess?: ResourceAccessRelation[];
     /** Page size used to produce the server seed. */
     initialDataLimit?: number;
     enabled?: boolean;
@@ -180,6 +199,7 @@ export function useProfilesPaginated(
     initialData,
     initialDataExcludeOtherPersonalAgents,
     initialDataPinned,
+    initialDataAccess,
     initialDataLimit,
     enabled,
     limit,
@@ -193,6 +213,7 @@ export function useProfilesPaginated(
     authorIds,
     excludeAuthorIds,
     excludeOtherPersonalAgents,
+    access,
     labels,
     status,
     includeActivationSkillsCount,
@@ -214,6 +235,7 @@ export function useProfilesPaginated(
     authorIds === undefined &&
     excludeAuthorIds === undefined &&
     excludeOtherPersonalAgents === initialDataExcludeOtherPersonalAgents &&
+    isSameResourceAccess(access, initialDataAccess) &&
     pinned === initialDataPinned &&
     labels === undefined &&
     status === undefined &&
@@ -236,6 +258,7 @@ export function useProfilesPaginated(
         authorIds,
         excludeAuthorIds,
         excludeOtherPersonalAgents,
+        access,
         labels,
         status,
         includeActivationSkillsCount,
@@ -257,6 +280,7 @@ export function useProfilesPaginated(
           authorIds,
           excludeAuthorIds,
           excludeOtherPersonalAgents,
+          access,
           labels,
           status,
           includeActivationSkillsCount,

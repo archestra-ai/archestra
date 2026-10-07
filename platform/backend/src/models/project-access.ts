@@ -1,4 +1,7 @@
-import type { ResourcePermissionGrant } from "@archestra/shared";
+import type {
+  ResourceAccessRelation,
+  ResourcePermissionGrant,
+} from "@archestra/shared";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -83,6 +86,45 @@ class ProjectAccessModel {
         return b.createdAt.getTime() - a.createdAt.getTime();
       },
     );
+  }
+
+  /**
+   * Ids of the org's active projects in any of `relations` for the caller,
+   * the list's "Show" filter; see
+   * {@link ResourcePermissionPolicyModel.accessRelationCondition}.
+   */
+  static async getIdsInAccessRelations(params: {
+    userId: string;
+    organizationId: string;
+    relations: ResourceAccessRelation[];
+  }): Promise<string[]> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    const rows = await db
+      .select({ id: schema.projectsTable.id })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          notDeleted(schema.projectsTable),
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            organizationId: params.organizationId,
+            resource: "project",
+            scopeColumn: schema.projectsTable.id,
+            ownerColumn: schema.projectsTable.userId,
+            userId: params.userId,
+            subjects: principal.subjects,
+            relations: params.relations,
+          }),
+        ),
+      );
+    // SPDX-SnippetEnd
+    return rows.map((row) => row.id);
   }
 
   /**

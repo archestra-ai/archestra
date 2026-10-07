@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   E2eTestId,
   MAX_BULK_IDS,
 } from "@archestra/shared";
@@ -68,6 +69,7 @@ import {
   ProviderKeyFilterSelect,
 } from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -109,6 +111,7 @@ import {
   useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
 import {
+  countAgentCatalog,
   useAgentCatalog,
   useAllMatchingAgentCatalog,
 } from "@/lib/agent-catalog.query";
@@ -239,6 +242,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     queryParamsAdapter,
   });
   const labelsFromUrl = searchParams.get("labels");
+  const includeBuiltIn = searchParams.get("builtIn") === "true";
   const statusFromUrl = searchParams.get("status") as
     | "active"
     | "deleted"
@@ -264,6 +268,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     authorIds: scopeFilter.authorIds,
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
+    access: scopeFilter.access,
+    includeBuiltIn: includeBuiltIn || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
@@ -283,6 +289,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     offset: pageIndex * pageSize,
     initialData: initialData?.agents ?? undefined,
     initialDataPinned: isDeletedView ? undefined : false,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     pinned: isDeletedView ? undefined : false,
     ...catalogFilters,
   });
@@ -297,6 +304,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     offset: 0,
     initialData: initialData?.pinnedAgents ?? undefined,
     initialDataPinned: true,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     initialDataLimit: 100,
     enabled: !isDeletedView,
     ...catalogFilters,
@@ -552,6 +560,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
+    includeBuiltIn ||
     labelsFromUrl ||
     isDeletedView ||
     providerApiKeyIdFilter
@@ -565,6 +574,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       teamIds: null,
       authorIds: null,
       excludeAuthorIds: null,
+      access: null,
+      builtIn: null,
       labels: null,
       status: null,
       providerApiKeyId: null,
@@ -1104,8 +1115,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     />
                   }
                 >
+                  <ResourceAccessFilter
+                    resource="agent"
+                    noun="agents"
+                    countItems={countAgentCatalog}
+                    offerBuiltIn
+                    queryParamsAdapter={queryParamsAdapter}
+                  />
                   <ResourceScopeFilter
-                    showBuiltIn
                     showLabels
                     queryParamsAdapter={queryParamsAdapter}
                   />

@@ -8,6 +8,7 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
+  type ResourceAccessRelation,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -106,6 +107,13 @@ type AgentListFilters = {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonalAgents?: boolean;
+  /** The list's "Show" filter; see {@link ResourceAccessRelation}. */
+  access?: ResourceAccessRelation[];
+  /**
+   * Add the built-in agents to the list. The `access` filter does not apply to
+   * them: they have no author and are listed only to agent admins.
+   */
+  includeBuiltIn?: boolean;
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
@@ -1607,6 +1615,15 @@ class AgentModel {
         externalWhereConditions.push(excludeAuthorsCondition);
       }
     }
+    if (params.filters?.access) {
+      const externalAccessCondition = await externalAgentAccessCondition({
+        userId: params.userId,
+        organizationId: params.filters.organizationId,
+        relations: params.filters.access,
+      });
+      if (externalAccessCondition)
+        externalWhereConditions.push(externalAccessCondition);
+    }
     if (params.excludeOtherPersonalExternalAgents) {
       const ownPersonalOnlyCondition = or(
         not(externalAgentAudienceIs("personal")),
@@ -2080,20 +2097,17 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
     }
 
+    const includeBuiltIn =
+      filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
     if (filters?.scope === "built_in") {
-      whereConditions.push(eq(schema.agentsTable.builtIn, true));
-      if (config.openappa.enabled) {
-        whereConditions.push(
-          notInArray(
-            sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-            [
-              BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-              BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-            ],
-          ),
-        );
-      }
+      whereConditions.push(listedBuiltInAgentCondition());
+    } else if (includeBuiltIn) {
+      whereConditions.push(
+        or(
+          eq(schema.agentsTable.builtIn, false),
+          listedBuiltInAgentCondition(),
+        ) as SQL,
+      );
     } else if (
       filters?.scope === "personal" ||
       filters?.scope === "team" ||
@@ -2128,6 +2142,19 @@ class AgentModel {
       whereConditions.push(
         AgentModel.notOthersPersonalCondition({ userId, principals }),
       );
+    }
+    if (filters?.access && userId) {
+      const accessCondition = agentAccessCondition({
+        userId,
+        principals,
+        relations: filters.access,
+      });
+      if (accessCondition)
+        whereConditions.push(
+          includeBuiltIn
+            ? (or(eq(schema.agentsTable.builtIn, true), accessCondition) as SQL)
+            : accessCondition,
+        );
     }
     if (filters?.labels) {
       for (const [key, values] of Object.entries(filters.labels)) {
@@ -4890,6 +4917,73 @@ function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
   // SPDX-SnippetEnd
 }
 
+/**
+ * {@link ResourcePermissionPolicyModel.accessRelationCondition} for every
+ * agent kind. The organization's LLM proxy has no grant namespace and serves
+ * the whole organization, so it is always `org`.
+ */
+function agentAccessCondition(params: {
+  userId: string;
+  principals: GrantPrincipal[];
+  relations: ResourceAccessRelation[];
+}): SQL | undefined {
+  const table = schema.agentsTable;
+  const subjects = params.principals.flatMap((principal) => principal.subjects);
+  const byResource = (resource: "agent" | "mcpGateway") =>
+    ResourcePermissionPolicyModel.accessRelationCondition({
+      organizationId: table.organizationId,
+      resource,
+      scopeColumn: table.id,
+      ownerColumn: table.authorId,
+      userId: params.userId,
+      subjects,
+      relations: params.relations,
+    });
+  const agentCondition = byResource("agent");
+  if (!agentCondition) return undefined;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(inArray(table.agentType, ["agent", "profile"]), agentCondition),
+    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+    and(
+      eq(table.agentType, "llm_proxy"),
+      params.relations.includes("org") ? sql`true` : sql`false`,
+    ),
+  ) as SQL;
+  // SPDX-SnippetEnd
+}
+
+/**
+ * The "Show" filter for external A2A agents, read from their own policies like
+ * internal agents.
+ */
+async function externalAgentAccessCondition(params: {
+  userId: string;
+  organizationId?: string;
+  relations: ResourceAccessRelation[];
+}): Promise<SQL | undefined> {
+  const table = schema.a2aRemoteAgentsTable;
+  const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissionPolicyModel.accessRelationCondition({
+    organizationId: table.organizationId,
+    resource: "externalAgent",
+    scopeColumn: table.id,
+    ownerColumn: table.authorId,
+    userId: params.userId,
+    subjects: principals.flatMap((principal) => principal.subjects),
+    relations: params.relations,
+  });
+  // SPDX-SnippetEnd
+}
+
 /** An external agent's audience, read from its own policy. */
 function externalAgentAudienceIs(audience: "personal" | "team" | "org"): SQL {
   const table = schema.a2aRemoteAgentsTable;
@@ -4966,4 +5060,21 @@ function agentGrantedTeamIds() {
         AND team_entry->'subject'->>'type' = 'team'
     ) granted_team
   ), array[]::text[])`;
+}
+
+/**
+ * The built-in agents the Agents page lists. With OpenAPPA on, the policy
+ * configuration and dual-LLM agents are internal and stay hidden.
+ */
+function listedBuiltInAgentCondition(): SQL {
+  const builtIn = eq(schema.agentsTable.builtIn, true);
+  if (!config.openappa.enabled) return builtIn;
+  return and(
+    builtIn,
+    notInArray(sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`, [
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+    ]),
+  ) as SQL;
 }

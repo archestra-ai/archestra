@@ -47525,6 +47525,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeBuiltIn",
+            "required": false,
+            "description": "Also list the built-in agents. Applies to agent admins only, and the access filter does not apply to these agents."
+          },
+          {
+            "schema": {
               "type": "array",
               "items": {
                 "type": "string"
@@ -47563,6 +47572,25 @@
             "in": "query",
             "name": "excludeOtherPersonalAgents",
             "required": false
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
           },
           {
             "schema": {
@@ -49187,6 +49215,25 @@
             "name": "excludeAuthorIds",
             "required": false,
             "description": "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
           },
           {
             "schema": {
@@ -90336,6 +90383,25 @@
             "name": "labels",
             "required": false,
             "description": "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
           }
         ],
         "responses": {
@@ -244681,6 +244747,25 @@
             "name": "status",
             "required": false,
             "description": "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
           }
         ],
         "responses": {
@@ -261586,6 +261671,25 @@
             "name": "labels",
             "required": false,
             "description": "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
           }
         ],
         "responses": {
@@ -363471,6 +363575,25 @@
             "name": "labels",
             "required": false,
             "description": "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
           }
         ],
         "responses": {
@@ -374034,6 +374157,25 @@
             "name": "status",
             "required": false,
             "description": "Lifecycle slice: `active` (default) or `deleted` (project admins only; org-wide soft-deleted projects for the restore view)."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
           }
         ],
         "responses": {
@@ -397007,6 +397149,25 @@
             "name": "labels",
             "required": false,
             "description": "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values."
+          },
+          {
+            "schema": {
+              "minItems": 1,
+              "type": "array",
+              "items": {
+                "type": "string",
+                "enum": [
+                  "mine",
+                  "shared",
+                  "org",
+                  "others"
+                ]
+              }
+            },
+            "in": "query",
+            "name": "access",
+            "required": false,
+            "description": "Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object."
           },
           {
             "schema": {

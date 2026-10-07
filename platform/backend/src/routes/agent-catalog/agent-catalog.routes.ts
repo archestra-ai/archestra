@@ -2,6 +2,7 @@ import {
   calculatePaginationMeta,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -31,6 +32,16 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().optional(),
             scope: AgentScopeFilterSchema.optional(),
+            includeBuiltIn: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value === "true" : value,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Also list the built-in agents. Applies to agent admins only, and the access filter does not apply to these agents.",
+              ),
             teamIds: z
               .preprocess(
                 (value) =>
@@ -59,6 +70,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 z.boolean(),
               )
               .optional(),
+            access: ResourceAccessQuerySchema,
             selectableOnly: z
               .preprocess(
                 (value) =>
@@ -103,12 +115,14 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
         name: query.name,
         scope: query.scope,
+        includeBuiltIn: query.includeBuiltIn,
         teamIds: query.teamIds,
         authorIds: isAgentAdmin ? query.authorIds : undefined,
         excludeAuthorIds: isAgentAdmin ? query.excludeAuthorIds : undefined,
         excludeOtherPersonalAgents: isAgentAdmin
           ? query.excludeOtherPersonalAgents
           : undefined,
+        access: query.access,
         labels: parseLabelsParam(query.labels),
         status: query.status,
         providerApiKeyId: query.providerApiKeyId,

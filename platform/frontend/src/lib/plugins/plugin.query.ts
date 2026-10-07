@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -23,6 +27,15 @@ const {
   updatePluginGithubSync,
 } = archestraApiSdk;
 
+/** How many plugins a "Show" selection holds, for the filter's counts. */
+export async function countPlugins(params: {
+  access: ResourceAccessRelation[];
+}): Promise<number> {
+  const { data, error } = await getPlugins({ query: params });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.length ?? 0;
+}
+
 export type PluginListItem =
   archestraApiTypes.GetPluginsResponses["200"][number];
 export type PluginDetail = archestraApiTypes.GetPluginResponses["200"];
@@ -41,16 +54,24 @@ export type GithubPluginMarketplace =
 export type ImportGithubPluginMarketplaceBody =
   archestraApiTypes.ImportGithubPluginMarketplaceData["body"];
 
-export function usePlugins(enabled = true, filters?: { labels?: string }) {
-  // Label filtering is resolved server-side (the junction table is the only
-  // place the mapping lives), unlike this page's other filters.
+export function usePlugins(
+  enabled = true,
+  filters?: Pick<
+    NonNullable<archestraApiTypes.GetPluginsData["query"]>,
+    "labels" | "access"
+  >,
+) {
+  // Label and access filtering are resolved server-side (the junction table
+  // and the grants are the only places those live), unlike this page's other
+  // filters.
   const labels = filters?.labels;
+  const access = filters?.access;
   return useQuery({
-    queryKey: ["plugins", { labels }],
+    queryKey: ["plugins", { labels, access }],
     enabled,
     queryFn: async () => {
       const { data, error } = await getPlugins({
-        query: labels ? { labels } : {},
+        query: { labels, access },
       });
       throwOnApiError(error, { toastOnError: false });
       return data ?? [];

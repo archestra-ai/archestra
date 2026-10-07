@@ -2,6 +2,7 @@
 import {
   type PermissionSubject,
   PredefinedRoleNameSchema,
+  type ResourceAccessRelation,
 } from "@archestra/shared";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
@@ -14,6 +15,16 @@ import TeamModel from "./team";
 export type GrantPrincipal = {
   organizationId: string;
   subjects: PermissionSubject[];
+};
+
+/**
+ * A list's "Show" filter with the caller's subjects resolved, in the shape
+ * `ResourcePermissionPolicyModel.accessRelationCondition` takes.
+ */
+export type ResourceAccessFilter = {
+  userId: string;
+  subjects: PermissionSubject[];
+  relations: ResourceAccessRelation[];
 };
 
 /** Resolves principals; a request passes one that resolves each caller once. */
@@ -86,6 +97,28 @@ export default class ResourcePermissionSubjectModel {
       ),
     );
     return principals.filter((principal) => principal.subjects.length > 0);
+  }
+
+  /**
+   * The caller's subjects for a list's `access` filter, resolved once so a
+   * page query and its count share them. Undefined when the list is not
+   * filtered.
+   */
+  static async resolveAccessFilter(params: {
+    userId: string;
+    organizationId: string;
+    relations: ResourceAccessRelation[] | undefined;
+  }): Promise<ResourceAccessFilter | undefined> {
+    if (!params.relations) return undefined;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    return {
+      userId: params.userId,
+      subjects: principal.subjects,
+      relations: params.relations,
+    };
   }
 
   static async search(params: { organizationId: string; query: string }) {

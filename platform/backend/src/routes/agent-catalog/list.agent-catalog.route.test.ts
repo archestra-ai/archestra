@@ -1,4 +1,4 @@
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { AgentPinModel } from "@/models";
@@ -87,6 +87,122 @@ describe("GET /api/agent-catalog", () => {
         },
       });
     }
+  });
+
+  test("adds the built-in agents to an access-filtered list on request", async ({
+    makeAgent,
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, { role: "member" });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Mine ${suffix}`,
+      access: "personal",
+      authorId: ctx.user.id,
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Theirs ${suffix}`,
+      access: "personal",
+      authorId: otherUser.id,
+    });
+    await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "agent",
+      name: `Advisor ${suffix}`,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+    });
+
+    const list = async (query: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}&${query}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      return {
+        names: body.data
+          .map((row: { value: { name: string } }) =>
+            row.value.name.replace(` ${suffix}`, ""),
+          )
+          .sort(),
+        total: body.pagination.total,
+      };
+    };
+
+    expect(await list("access=mine")).toEqual({ names: ["Mine"], total: 1 });
+    // Built-in agents have no author, so the access filter does not apply to
+    // them; the flag adds them on top of the selection.
+    expect(await list("access=mine&includeBuiltIn=true")).toEqual({
+      names: ["Advisor", "Mine"],
+      total: 2,
+    });
+    expect(await list("access=others&includeBuiltIn=true")).toEqual({
+      names: ["Advisor", "Theirs"],
+      total: 2,
+    });
+    // The older origin filter still lists the built-in agents alone.
+    expect(await list("scope=built_in")).toEqual({
+      names: ["Advisor"],
+      total: 1,
+    });
+  });
+
+  test("splits external agents by how the caller reaches them, from their grants", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, { role: "member" });
+    const suffix = crypto.randomUUID().slice(0, 8);
+    const createExternal = (name: string, authorId?: string) =>
+      createA2aRemoteAgent({
+        organizationId: ctx.organizationId,
+        authorId,
+        input: {
+          name: `${name} ${suffix}`,
+          source: { type: "inline_card", agentCard: makeAgentCard() },
+          auth: { type: "none" },
+        },
+      });
+    // An authored external agent starts personal; one without an author is
+    // shared with the organization.
+    await createExternal("Mine", ctx.user.id);
+    await createExternal("Theirs", otherUser.id);
+    await createExternal("Org");
+
+    const list = async (access: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/agent-catalog?limit=50&offset=0&name=${suffix}&access=${access}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      return response
+        .json()
+        .data.map((row: { value: { name: string } }) =>
+          row.value.name.replace(` ${suffix}`, ""),
+        )
+        .sort();
+    };
+
+    // The admin reads every external agent through a `*` grant, which must
+    // not count as "shared".
+    expect(await list("mine")).toEqual(["Mine"]);
+    expect(await list("org")).toEqual(["Org"]);
+    expect(await list("shared")).toEqual([]);
+    expect(await list("others")).toEqual(["Theirs"]);
+    expect(await list("mine,shared,org")).toEqual(["Mine", "Org"]);
   });
 
   test("keeps external agents out of regular-only filtered views", async ({

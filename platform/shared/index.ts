@@ -58,6 +58,7 @@ export * from "./plugin-marketplaces";
 export * from "./policy-conditions";
 export * from "./provider-billing-copy";
 export * from "./public-origin";
+export * from "./resource-access";
 export * from "./resource-permissions";
 export * from "./roles";
 export * from "./routes";

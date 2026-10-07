@@ -180,8 +180,21 @@ describe("terminal surface contrast", () => {
         contrast(palette.foreground, palette.selected),
       ).toBeGreaterThanOrEqual(4.5);
     } else {
+      const raised = mix(
+        parse(tokens["--card"]),
+        parse("white"),
+        mixPercent("--raised"),
+      );
+      const lightness = (c: Rgb) => toOklab(c)[0];
+      // Raised keys are the lightest thing on screen: lighter than the code
+      // surface they sit on and never darker than the page.
+      expect(lightness(raised)).toBeGreaterThan(lightness(palette.surface));
+      expect(lightness(raised)).toBeGreaterThanOrEqual(
+        // a hair of slack: a pure-white page with a tinted card lands 0.004 under
+        lightness(parse(tokens["--background"])) - 0.005,
+      );
       expect(
-        contrast(parse(tokens["--foreground"]), parse(tokens["--background"])),
+        contrast(parse(tokens["--foreground"]), raised),
       ).toBeGreaterThanOrEqual(4.5);
     }
     // The copied tick is a state graphic, so the 3:1 non-text bar applies.

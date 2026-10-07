@@ -111,7 +111,7 @@ export function TableCardViewToggle({
               className={cn(
                 "rounded-sm",
                 selectedMode === mode
-                  ? "bg-background text-foreground shadow-sm hover:bg-background hover:text-foreground dark:bg-accent dark:hover:bg-accent"
+                  ? "bg-raised text-foreground shadow-sm hover:bg-raised hover:text-foreground dark:bg-accent dark:hover:bg-accent"
                   : "text-muted-foreground hover:bg-transparent hover:text-foreground dark:hover:bg-transparent",
               )}
               onClick={() => selectMode(mode)}

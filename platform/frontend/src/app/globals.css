@@ -34,6 +34,7 @@
   --color-sidebar-emphasis: var(--sidebar-emphasis);
   --color-sidebar-chip: var(--sidebar-chip);
   --color-sidebar-track: var(--sidebar-track);
+  --color-raised: var(--raised);
   --color-sidebar-attention: var(--sidebar-attention);
   --color-sidebar-attention-foreground: var(--sidebar-attention-foreground);
   --color-chart-5: var(--chart-5);
@@ -139,6 +140,12 @@
      with tinted pages (e.g. cosmic-night's lavender); --muted carries the
      theme's hue. Dark mode keeps --card. */
   --terminal-anchor: black;
+  /* Light-mode fill for raised elements that sit on a tinted surface: code
+     surface actions, selected tabs, selected segments. Many light themes
+     tint --background and --card, so "raised" in either matched the page;
+     this pulls the card 80% of the way to white so it reads as the
+     lightest thing on screen. Dark mode never uses it. */
+  --raised: color-mix(in oklab, var(--card) 20%, white);
   --terminal: color-mix(in oklab, var(--muted) 97%, var(--foreground));
   --terminal-foreground: color-mix(in oklab, var(--foreground) 74%, var(--terminal-anchor));
   /* Raised fill so controls on the surface read as buttons. */

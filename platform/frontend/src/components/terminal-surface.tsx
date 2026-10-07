@@ -26,7 +26,7 @@ export function TerminalCard({ className, ...props }: ComponentProps<"div">) {
  * lighter elevated fill in dark mode.
  */
 export const terminalRaisedClass =
-  "border-border bg-background text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground dark:border-terminal-edge dark:bg-terminal-selected dark:text-terminal-foreground dark:hover:bg-terminal-selected dark:hover:text-terminal-emphasis";
+  "border-border bg-raised text-foreground shadow-sm hover:bg-accent hover:text-accent-foreground dark:border-terminal-edge dark:bg-terminal-selected dark:text-terminal-foreground dark:hover:bg-terminal-selected dark:hover:text-terminal-emphasis";
 
 /**
  * Icon-sized control on a terminal surface: copy, reveal, token switcher.

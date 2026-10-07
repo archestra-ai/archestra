@@ -154,7 +154,7 @@ function SidebarModeToggle({
         "relative flex flex-1 items-center justify-center gap-1 rounded-md px-1.5 py-1 text-xs transition-colors",
         mode === value
           ? // Light: a raised card on the muted track. Dark: a solid pill.
-            "bg-background font-medium text-foreground shadow-sm dark:bg-sidebar-emphasis dark:text-sidebar"
+            "bg-raised font-medium text-foreground shadow-sm dark:bg-sidebar-emphasis dark:text-sidebar"
           : "text-muted-foreground hover:text-foreground",
       )}
     >

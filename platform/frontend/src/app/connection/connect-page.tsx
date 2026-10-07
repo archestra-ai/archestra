@@ -103,6 +103,7 @@ import {
 } from "./connected-agents";
 import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
+import { TerminalBlock } from "./terminal-block";
 import { useUpdateUrlParams } from "./use-update-url-params";
 
 // The approval panel is large; the page only needs it for Claude Desktop's
@@ -722,34 +723,33 @@ function ConnectArea({
             )}
           </div>
 
-          <div
-            className={cn(
-              "mt-2 flex items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm",
-              // The script is never cut off: it wraps beside the button.
-              script ? "min-h-16 py-2" : "h-16",
-            )}
-          >
-            <code
-              className={cn(
-                "min-w-0 flex-1 font-mono text-sm",
-                script ? "whitespace-pre-wrap wrap-anywhere" : "truncate",
-                !text && "font-sans text-muted-foreground",
-              )}
-              title={text ?? undefined}
-            >
-              {text ??
-                "Everything is left out. Choose at least one thing to include."}
-            </code>
-            <Button
-              size="lg"
-              onClick={copy}
-              disabled={!text || !origin || data.revalidating}
-              className="h-12 shrink-0 rounded-xl px-6"
-            >
-              {copied ? <Check /> : <Copy />}
-              {copied ? "Copied" : script ? "Copy command" : "Copy prompt"}
-            </Button>
-          </div>
+          {script && command ? (
+            <div className="mt-2">
+              <TerminalBlock prompt code={command} />
+            </div>
+          ) : (
+            <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+              <code
+                className={cn(
+                  "min-w-0 flex-1 truncate font-mono text-sm",
+                  !text && "font-sans text-muted-foreground",
+                )}
+                title={text ?? undefined}
+              >
+                {text ??
+                  "Everything is left out. Choose at least one thing to include."}
+              </code>
+              <Button
+                size="lg"
+                onClick={copy}
+                disabled={!text || !origin || data.revalidating}
+                className="h-12 shrink-0 rounded-xl px-6"
+              >
+                {copied ? <Check /> : <Copy />}
+                {copied ? "Copied" : "Copy prompt"}
+              </Button>
+            </div>
+          )}
 
           {script && (
             <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">

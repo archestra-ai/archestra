@@ -331,11 +331,16 @@ export function useConnectPageData(): ConnectPageData {
     },
     installerCommand: (client, choices, windows) => {
       const exclude = CONNECT_SETUP_PARTS.filter((part) => !choices[part]);
-      const excludeFlag = exclude.length
-        ? ` --exclude ${exclude.join(",")}`
-        : "";
-      const fetch = windows ? "irm" : "curl -fsSL";
-      return `${fetch} ${origin}/api/client-connections/installer | node - --url ${origin} --client ${client.id}${excludeFlag}`;
+      // One step per line, each continued (backtick in PowerShell), so the
+      // command reads like a terminal block and still runs when pasted.
+      const [fetch, next] = windows ? ["irm", " `"] : ["curl -fsSL", " \\"];
+      return [
+        `${fetch} ${origin}/api/client-connections/installer`,
+        "  | node -",
+        `    --url ${origin}`,
+        `    --client ${client.id}`,
+        ...(exclude.length ? [`    --exclude ${exclude.join(",")}`] : []),
+      ].join(`${next}\n`);
     },
   };
 }

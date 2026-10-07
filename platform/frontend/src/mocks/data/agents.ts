@@ -116,7 +116,6 @@ export function makeExternalAgent(
     lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
     createdAt: "2026-09-08T12:00:00.000Z",
     updatedAt: "2026-09-08T12:00:00.000Z",
-    scope: "org",
     authorId: "user-1",
     createdByServiceAccountId: null,
     authorName: "Test User",
@@ -126,8 +125,6 @@ export function makeExternalAgent(
       name: "Test User",
       email: "test@example.com",
     },
-    teams: [],
-    users: [],
     connection: {
       id: "connection-1",
       remoteAgentId: "external-agent",

@@ -918,12 +918,17 @@ export function useGenerateConversationTitle() {
   });
 }
 
-export function useChatProfileMcpTools(agentId: string | undefined) {
+export function useChatProfileMcpTools(
+  agentId: string | undefined,
+  options?: { silent?: boolean },
+) {
   return useQuery({
     queryKey: ["chat", "agents", agentId, "mcp-tools"],
     queryFn: () => {
       if (!agentId) return [];
-      return callApi(() => getChatAgentMcpTools({ path: { agentId } }), []);
+      return callApi(() => getChatAgentMcpTools({ path: { agentId } }), [], {
+        silent: options?.silent,
+      });
     },
     enabled: !!agentId,
     staleTime: 5 * 60 * 1000, // 5 minutes

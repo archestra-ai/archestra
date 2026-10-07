@@ -35,6 +35,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         await listOpenAppaYells({
           ...request.query,
           organizationId: request.organizationId,
+          userId: request.user.id,
         }),
       ),
   );

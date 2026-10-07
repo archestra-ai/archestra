@@ -123,7 +123,12 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(24);
+    expect(originalToolIds).toHaveLength(25);
+    const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
+      archestraMcpBranding.getToolName("resolve_openappa_yell"),
+    ]);
+    expect(resolveYellTool).toBeDefined();
+    expect(originalToolIds).toContain(resolveYellTool);
     const extraTools = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("whoami"),
     ]);
@@ -350,7 +355,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(24);
+    ).toHaveLength(25);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -458,7 +463,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(24);
+    expect(managedToolIds).toHaveLength(25);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -504,7 +509,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(21);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(22);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -514,7 +519,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(24);
+    expect(assigned).toHaveLength(25);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 

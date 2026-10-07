@@ -12,7 +12,10 @@ import {
 export interface GatewayServer {
   key: string;
   catalogId: string | null;
-  /** The catalog entry's name; null when the tools have no catalog entry. */
+  /**
+   * The catalog entry's name, else one made from its tools' `<server>__`
+   * prefix; null when neither is known.
+   */
   catalogName: string | null;
   icon: string | null;
   description: string | null;
@@ -31,7 +34,9 @@ export function useGatewayServers(
 ) {
   const profileQuery = useProfile(gatewayId);
   const gateway = profileQuery.data;
-  const { data: catalog } = useInternalMcpCatalog();
+  // Apps are catalog entries too; without them an app's tools have no name.
+  // The backend leaves them out for callers who can't read apps.
+  const { data: catalog } = useInternalMcpCatalog({ includeApps: true });
   const accessAll = gateway?.accessAllTools ?? false;
   const withTools = params?.withTools ?? false;
   const { data: catalogTools } = useAllCatalogTools({
@@ -44,7 +49,9 @@ export function useGatewayServers(
       const toolsByCatalog = withTools
         ? groupCatalogTools(catalogTools)
         : new Map();
+      // An "access all tools" gateway covers the MCP registry, not apps.
       return (catalog ?? [])
+        .filter((c) => c.serverType !== "app")
         .map((c) => ({
           key: c.id,
           catalogId: c.id,
@@ -73,7 +80,7 @@ export function useGatewayServers(
         return {
           key: catalogId ?? "other",
           catalogId,
-          catalogName: item?.name ?? null,
+          catalogName: item?.name ?? nameFromPrefix(gateway?.tools, catalogId),
           icon: item?.icon ?? null,
           description: item?.description ?? null,
           toolCount: tools.length,
@@ -84,6 +91,17 @@ export function useGatewayServers(
   }, [accessAll, gateway?.tools, catalog, catalogTools, withTools]);
 
   return { gateway, profileQuery, accessAll, servers };
+}
+
+/** "linear__create_ticket" names its server "Linear". */
+function nameFromPrefix(
+  tools: { name: string; catalogId: string | null }[] | undefined,
+  catalogId: string | null,
+): string | null {
+  const tool = tools?.find((t) => t.catalogId === catalogId);
+  const i = tool?.name.indexOf("__") ?? -1;
+  if (!tool || i <= 0) return null;
+  return tool.name.charAt(0).toUpperCase() + tool.name.slice(1, i);
 }
 
 function shortToolName(name: string) {

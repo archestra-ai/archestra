@@ -78,7 +78,12 @@ describe("GET /api/agent-catalog", () => {
             agentCard: makeAgentCard("none", { name }),
           },
           auth: { type: "none" },
-          scope: "org",
+          initialGrants: [
+            {
+              subject: { type: "organization", id: "*" },
+              actions: ["read", "use"],
+            },
+          ],
         },
       });
     }
@@ -106,7 +111,12 @@ describe("GET /api/agent-catalog", () => {
           agentCard: makeAgentCard(),
         },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -151,7 +161,12 @@ describe("GET /api/agent-catalog", () => {
         name: "External agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -213,6 +228,7 @@ describe("GET /api/agent-catalog", () => {
     makeAgent,
     makeCustomRole,
     makeMember,
+    makeUser,
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
       permission: { agent: ["read"] },
@@ -223,14 +239,22 @@ describe("GET /api/agent-catalog", () => {
       agentType: "agent",
       name: "Selectable regular agent",
     });
+    // Someone else owns it, so the caller can use it but not delete it.
+    const owner = await makeUser();
+    await makeMember(owner.id, ctx.organizationId);
     await createA2aRemoteAgent({
       organizationId: ctx.organizationId,
-      authorId: ctx.user.id,
+      authorId: owner.id,
       input: {
         name: "Visible but unselectable external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "org",
+        initialGrants: [
+          {
+            subject: { type: "organization", id: "*" },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
 
@@ -246,17 +270,14 @@ describe("GET /api/agent-catalog", () => {
     });
   });
 
-  test("scopes the personal-owner filter to external agents for non-agent-admin managers", async ({
+  test("scopes the personal-owner filter to external agents for non-agent-admins", async ({
     makeAgent,
     makeCustomRole,
     makeMember,
     makeUser,
   }) => {
     const role = await makeCustomRole(ctx.organizationId, {
-      permission: {
-        agent: ["read"],
-        organizationSettings: ["update"],
-      },
+      permission: { agent: ["read"] },
     });
     await makeMember(ctx.user.id, ctx.organizationId, { role: role.role });
     const otherUser = await makeUser();
@@ -296,7 +317,6 @@ describe("GET /api/agent-catalog", () => {
         name: "Own external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
     await createA2aRemoteAgent({
@@ -306,7 +326,6 @@ describe("GET /api/agent-catalog", () => {
         name: "Other external agent",
         source: { type: "inline_card", agentCard: makeAgentCard() },
         auth: { type: "none" },
-        scope: "personal",
       },
     });
 

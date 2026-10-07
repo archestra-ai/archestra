@@ -38,19 +38,15 @@ export function McpRegistryServerDetailPage({ name }: { name: string }) {
   return (
     <PageLayout
       maxWidth="wizard"
+      icon={
+        server?.icon ? (
+          <img src={server.icon} alt="" className="size-7 object-contain" />
+        ) : undefined
+      }
       title={
         server ? (
-          <span className="flex min-w-0 items-center gap-3">
-            {server.icon && (
-              <img
-                src={server.icon}
-                alt=""
-                className="h-10 w-10 shrink-0 rounded-lg border bg-background p-1"
-              />
-            )}
-            <span className="min-w-0 truncate">
-              {server.display_name || server.name}
-            </span>
+          <span className="block min-w-0 truncate">
+            {server.display_name || server.name}
           </span>
         ) : (
           <span>MCP Server</span>

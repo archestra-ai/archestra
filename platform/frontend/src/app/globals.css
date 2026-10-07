@@ -32,6 +32,11 @@
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
   --color-sidebar-emphasis: var(--sidebar-emphasis);
+  --color-sidebar-chip: var(--sidebar-chip);
+  --color-sidebar-track: var(--sidebar-track);
+  --color-raised: var(--raised);
+  --color-sidebar-attention: var(--sidebar-attention);
+  --color-sidebar-attention-foreground: var(--sidebar-attention-foreground);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -86,6 +91,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-terminal: var(--terminal);
   --color-terminal-elevated: var(--terminal-elevated);
+  --color-terminal-selected: var(--terminal-selected);
   --color-terminal-foreground: var(--terminal-foreground);
   --color-terminal-muted: var(--terminal-muted);
   --color-terminal-comment: var(--terminal-comment);
@@ -127,14 +133,28 @@
      so each of the 24 selectable themes gets a block in its own palette, and
      derived *from the surface* rather than from the theme's text tokens so the
      contrast holds without per-theme tuning. --terminal-anchor is the far end
-     of the theme's range; it is the only value dark mode overrides.
-     terminal-surface.test.ts checks the resulting ratios for every theme. */
+     of the theme's range; dark mode overrides it and the surface tokens.
+     terminal-surface.test.ts checks the resulting ratios for every theme.
+     Light mode follows the usual elevation model: the block is a raised
+     card, near-white like --raised and never darker than the tinted page,
+     with the soft --border edge; a grey "well" there read as sunken and put
+     white controls inside something darker. Dark mode keeps the darker well
+     mixed from --card. */
   --terminal-anchor: black;
-  --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
+  /* Light-mode fill for raised elements that sit on a tinted surface: code
+     surface actions, selected tabs, selected segments. Many light themes
+     tint --background and --card, so "raised" in either matched the page;
+     this pulls the card 80% of the way to white so it reads as the
+     lightest thing on screen. Dark mode maps it to --card. */
+  --raised: color-mix(in oklab, var(--card) 20%, white);
+  --terminal: color-mix(in oklab, var(--card) 20%, white);
   --terminal-foreground: color-mix(in oklab, var(--foreground) 74%, var(--terminal-anchor));
   /* Raised fill so controls on the surface read as buttons. */
   --terminal-elevated: color-mix(in oklab, var(--terminal) 93%, var(--terminal-foreground));
-  --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
+  /* Selected tab on the surface: far enough from it to read as selected in
+     every theme and mode, close enough that the text still clears 4.5:1. */
+  --terminal-selected: color-mix(in oklab, var(--terminal) 80%, var(--terminal-foreground));
+  --terminal-edge: var(--border);
   --terminal-muted: color-mix(in oklab, var(--terminal-foreground) 85%, var(--terminal));
   --terminal-comment: color-mix(in oklab, var(--terminal-foreground) 78%, var(--terminal));
   --terminal-emphasis: var(--terminal-anchor);
@@ -147,11 +167,27 @@
      past --sidebar-foreground so it clears 4.5:1 against --sidebar on themes
      whose own sidebar text does not. terminal-surface.test.ts checks it. */
   --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, black);
+  /* Soft tinted fill for light-mode sidebar chips ("New"/"Beta"): a chip reads
+     as a label through its fill, so it needs no dark outline. */
+  --sidebar-chip: color-mix(in oklab, var(--sidebar-emphasis) 8%, var(--sidebar));
+  /* Track of the sidebar's segmented AI/Studio toggle: pulled toward the
+     sidebar text so it never matches the sidebar, whatever --muted is. */
+  --sidebar-track: color-mix(in oklab, var(--sidebar-foreground) 10%, var(--sidebar));
+  /* Sidebar "needs action" signals (attention count, onboarding dot), drawn
+     from the theme's --destructive hue instead of a fixed red. The ink is
+     pushed toward the far end of the range so it clears 4.5:1 on the tinted
+     fill in every theme; terminal-surface.test.ts checks it. */
+  --sidebar-attention-foreground: color-mix(in oklab, var(--destructive) 55%, black);
+  --sidebar-attention: color-mix(in oklab, var(--destructive) 12%, var(--sidebar));
 }
 
 html.dark {
+  --raised: var(--card);
   --terminal-anchor: white;
+  --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
+  --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
   --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, white);
+  --sidebar-attention-foreground: color-mix(in oklab, var(--destructive) 55%, white);
 }
 
 @layer base {

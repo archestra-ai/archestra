@@ -75,6 +75,7 @@ import {
   PluginNotFound,
   PluginPageLoading,
 } from "../_parts/plugin-page-shell";
+import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
 
 /**
  * `/plugins/[id]` — one plugin's page. Its metadata, payload and access are
@@ -352,6 +353,7 @@ function PluginDetailView({
 
   return (
     <PageLayout
+      icon={<PluginSourceGlyph plugin={plugin} />}
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{plugin.displayName}</span>
@@ -529,7 +531,7 @@ function PluginDetailView({
           activeSection={activeSection}
         />
 
-        {!isReadOnly && (
+        {activeSection === "general" && !isReadOnly && (
           <WizardFooter>
             <div>
               {isDirty && !isSaving && (

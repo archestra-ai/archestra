@@ -39,6 +39,7 @@ import {
   backToListLabel,
   notYoursToChange,
 } from "@/lib/design/resource-lexicon";
+import { useAppIconLogo } from "@/lib/hooks/use-app-name";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { useSkill, useUpdateSkill } from "@/lib/skills/skill.query";
 import { useSkillAccess } from "@/lib/skills/use-skill-access";
@@ -75,6 +76,7 @@ import {
   SkillNotFound,
   SkillPageLoading,
 } from "../_parts/skill-page-shell";
+import { SkillSourceGlyph } from "../_parts/skill-source-glyph";
 import { SkillUsagePanel } from "../_parts/skill-usage-panel";
 import { SkillVersionHistoryDialog } from "../_parts/skill-version-history-dialog";
 
@@ -240,6 +242,7 @@ function SkillDetailView({
 
   const isSynced = isSyncedGithubSkill(skill);
   const isGithubSkill = skill.sourceType === "github";
+  const appIconLogo = useAppIconLogo();
   const githubSourceRepo = skillGithubSourceRepo(skill);
 
   const parsed = useMemo(
@@ -307,6 +310,7 @@ function SkillDetailView({
 
   return (
     <PageLayout
+      icon={<SkillSourceGlyph skill={skill} appIconLogo={appIconLogo} />}
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{skill.name}</span>

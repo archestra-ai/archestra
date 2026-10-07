@@ -1226,10 +1226,7 @@ describe("AgentForm delegation state", () => {
 
     render(<AgentForm agentType="agent" agent={autoAgent} />);
 
-    expect(useA2aRemoteAgentsMock).toHaveBeenCalledWith({
-      enabled: true,
-      accessibleOnly: true,
-    });
+    expect(useA2aRemoteAgentsMock).toHaveBeenCalledWith({ enabled: true });
 
     const picker = screen.getByRole("button", {
       name: "Add outbound agent",
@@ -1274,11 +1271,11 @@ describe("AgentForm delegation state", () => {
 
     expect(
       screen.getByText(
-        "Save this agent before assigning an outbound A2A agent.",
+        "You can add external agents after you create this agent.",
       ),
     ).toBeInTheDocument();
     expect(
-      screen.getByRole("combobox", { name: "Add subagent" }),
+      screen.getByRole("combobox", { name: "Exclude a local agent" }),
     ).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Add outbound agent" }),
@@ -1309,11 +1306,45 @@ describe("AgentForm delegation state", () => {
       />,
     );
 
+    await user.click(subagentModeTab("Manual"));
     await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
 
     const option = screen.getByRole("option", { name: /Target Agent/ });
     expect(within(option).getByText("🔭")).toBeInTheDocument();
     expect(within(option).getByText("Agent Owner")).toBeInTheDocument();
+  });
+
+  it("adds a subagent in Manual mode and only excludes one in All mode", async () => {
+    const user = userEvent.setup();
+    useDelegationTargetAgentsMock.mockReturnValue({ data: [targetAgent] });
+    render(<AgentForm agentType="agent" />);
+
+    // All mode already includes every local agent, so nothing offers to add.
+    expect(
+      screen.queryByRole("combobox", { name: "Add subagent" }),
+    ).not.toBeInTheDocument();
+    await user.click(
+      screen.getByRole("combobox", { name: "Exclude a local agent" }),
+    );
+    await user.click(screen.getByRole("option", { name: /Target Agent/ }));
+    await user.keyboard("{Escape}");
+    expect(
+      screen.getByText("All local agents are subagents, except 1 excluded."),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", {
+        name: `Include agent ${targetAgent.name} again`,
+      }),
+    ).toBeInTheDocument();
+
+    await user.click(subagentModeTab("Manual"));
+    await user.click(screen.getByRole("combobox", { name: "Add subagent" }));
+    await user.click(screen.getByRole("option", { name: /Target Agent/ }));
+    await user.keyboard("{Escape}");
+    expect(screen.getByText("1 subagent assigned.")).toBeInTheDocument();
+    expect(
+      screen.getByRole("button", { name: `Remove agent ${targetAgent.name}` }),
+    ).toBeInTheDocument();
   });
 
   it.each([
@@ -1520,7 +1551,7 @@ describe("AgentForm delegation state", () => {
     });
     expect(screen.queryByText(advisorAgent.name)).not.toBeInTheDocument();
     expect(
-      screen.getByText(/Every local agent, with no exceptions\./),
+      screen.getByText(/All local agents are subagents\./),
     ).toBeInTheDocument();
   });
 
@@ -1618,7 +1649,7 @@ describe("AgentForm delegation state", () => {
     await user.click(subagentModeTab("All"));
 
     expect(
-      screen.getByText(/Every local agent, with no exceptions\./),
+      screen.getByText(/All local agents are subagents\./),
     ).toBeInTheDocument();
     expect(
       screen.getByTestId(E2eTestId.ConsultAdvisorSwitch),

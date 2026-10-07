@@ -1842,6 +1842,8 @@ impl State {
                     principal: input.principal.clone(),
                     address: None,
                     title: None,
+                    start: None,
+                    launch: None,
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;
@@ -4267,6 +4269,8 @@ mod runtime_child_tests {
             principal: None,
             address: None,
             title: None,
+            start: None,
+            launch: None,
         }
     }
 

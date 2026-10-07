@@ -1,5 +1,5 @@
 import { describe, expect, test } from "vitest";
-import { isOAuthClientForConnectClient } from "./connected-client";
+import { isOAuthClientForConnectClient } from "./connected-client-oauth";
 
 describe("isOAuthClientForConnectClient", () => {
   const claudeCode = {

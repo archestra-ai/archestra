@@ -221,10 +221,17 @@ function useYellInvestigation(yell: OpenAppaYell) {
     subject: { kind: "yell", yellId: yell.id },
   });
   const archive = useOpenAppaYellArchive();
+  const { conversation } = yell;
   return {
     permissions,
-    disabled: archive.isPending || (!href && !agents.isError),
+    label: conversation ? "Open investigation" : "Investigate in chat",
+    disabled:
+      !conversation && (archive.isPending || (!href && !agents.isError)),
     launch: () => {
+      if (conversation) {
+        router.push(`/chat/${conversation.id}`);
+        return;
+      }
       if (!href) {
         void agents.refetch();
         return;
@@ -265,7 +272,7 @@ function YellRowActions({
       actions={[
         {
           icon: <MessageCircle className="size-4" />,
-          label: "Investigate in chat",
+          label: investigation.label,
           permissions: investigation.permissions,
           disabled: investigation.disabled,
           onClick: investigation.launch,

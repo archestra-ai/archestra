@@ -13124,7 +13124,6 @@ export type ListA2aRemoteAgentsData = {
         scope?: 'personal' | 'team' | 'org';
         teamId?: string;
         authorId?: string;
-        accessibleOnly?: boolean;
     };
     url: '/api/a2a/remote-agents';
 };
@@ -13202,7 +13201,6 @@ export type ListA2aRemoteAgentsResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13247,15 +13245,6 @@ export type ListA2aRemoteAgentsResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     }>;
 };
 
@@ -13287,9 +13276,25 @@ export type CreateA2aRemoteAgentData = {
         };
         name?: string;
         description?: string | null;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
-        users?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -13369,7 +13374,6 @@ export type CreateA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13414,15 +13418,6 @@ export type CreateA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -13595,7 +13590,6 @@ export type GetA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13640,15 +13634,6 @@ export type GetA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -13681,9 +13666,6 @@ export type UpdateA2aRemoteAgentData = {
             credential: string;
         };
         enabled?: boolean;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
-        users?: Array<string>;
     };
     path: {
         id: string;
@@ -13765,7 +13747,6 @@ export type UpdateA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13810,15 +13791,6 @@ export type UpdateA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -14418,7 +14390,6 @@ export type GetAgentCatalogResponses = {
                 id: string;
                 organizationId: string;
                 authorId: string | null;
-                scope: 'personal' | 'team' | 'org';
                 name: string;
                 description: string | null;
                 discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -14463,15 +14434,6 @@ export type GetAgentCatalogResponses = {
                     name: string | null;
                     email: string | null;
                 } | null;
-                teams: Array<{
-                    id: string;
-                    name: string;
-                }>;
-                users: Array<{
-                    id: string;
-                    name: string;
-                    email: string;
-                }>;
             };
         }>;
         pagination: {
@@ -37135,6 +37097,7 @@ export type GetChatAgentMcpToolsResponses = {
         parameters: {
             [key: string]: unknown;
         } | null;
+        tokens: number;
     }>;
 };
 
@@ -40799,10 +40762,359 @@ export type GetConnectedClientsResponses = {
         clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'amp';
         lastConnectedAt: string;
         deviceNames: Array<string>;
+        lastSeenAt: string | null;
     }>;
 };
 
 export type GetConnectedClientsResponse = GetConnectedClientsResponses[keyof GetConnectedClientsResponses];
+
+export type GetConnectedClientLogData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        cursor?: string;
+        /**
+         * Only events for this user's clients
+         */
+        userId?: string;
+        /**
+         * Only events for this client
+         */
+        clientId?: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
+        /**
+         * Only connects or only disconnects
+         */
+        action?: 'connected' | 'disconnected';
+        /**
+         * Events on or after this date (ISO 8601)
+         */
+        startDate?: string;
+        /**
+         * Events on or before this date (ISO 8601)
+         */
+        endDate?: string;
+    };
+    url: '/api/connected-clients/log';
+};
+
+export type GetConnectedClientLogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectedClientLogError = GetConnectedClientLogErrors[keyof GetConnectedClientLogErrors];
+
+export type GetConnectedClientLogResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            action: 'connected' | 'disconnected';
+            occurredAt: string;
+            userId: string;
+            userName: string;
+            userEmail: string;
+            clientId: string | null;
+            agentName: string;
+            via: 'setup' | 'oauthSignIn';
+            platform: 'macos' | 'linux' | 'windows' | null;
+            deviceName: string | null;
+            mcpGateway: {
+                id: string;
+                name: string;
+            } | null;
+            modelRouting: boolean;
+            includeSkills: boolean;
+            disconnectedBy: {
+                id: string;
+                name: string;
+            } | null;
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
+};
+
+export type GetConnectedClientLogResponse = GetConnectedClientLogResponses[keyof GetConnectedClientLogResponses];
+
+export type GetAgentAdoptionData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connected-clients/adoption';
+};
+
+export type GetAgentAdoptionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionError = GetAgentAdoptionErrors[keyof GetAgentAdoptionErrors];
+
+export type GetAgentAdoptionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        lookbackDays: number;
+        members: Array<{
+            userId: string;
+            name: string;
+            email: string;
+            status: 'active' | 'inactive';
+            gatewayLastSeenAt: string | null;
+            llmLastSeenAt: string | null;
+            gatewayUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+            llmUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+            skillSyncs: Array<{
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                lastSyncedAt: string;
+            }>;
+        }>;
+    };
+};
+
+export type GetAgentAdoptionResponse = GetAgentAdoptionResponses[keyof GetAgentAdoptionResponses];
+
+export type GetAgentAdoptionUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Only this member's calls; the whole organization when left out
+         */
+        userId?: string;
+    };
+    url: '/api/connected-clients/adoption/usage';
+};
+
+export type GetAgentAdoptionUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionUsageError = GetAgentAdoptionUsageErrors[keyof GetAgentAdoptionUsageErrors];
+
+export type GetAgentAdoptionUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        lookbackDays: number;
+        days: Array<{
+            date: string;
+            gatewayCalls: number;
+            llmCalls: number;
+        }>;
+    };
+};
+
+export type GetAgentAdoptionUsageResponse = GetAgentAdoptionUsageResponses[keyof GetAgentAdoptionUsageResponses];
 
 export type DisconnectConnectedClientData = {
     body?: never;
@@ -79778,6 +80090,8 @@ export type GetMcpToolCallsResponses = {
             userId: string | null;
             runId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+            oauthClientId: string | null;
+            source: 'api' | 'chat';
             createdAt: string;
             userName: string | null;
             appName: string | null;
@@ -79894,6 +80208,8 @@ export type GetMcpToolCallResponses = {
         userId: string | null;
         runId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+        oauthClientId: string | null;
+        source: 'api' | 'chat';
         createdAt: string;
         userName: string | null;
         appName: string | null;
@@ -88180,6 +88496,11 @@ export type GetOpenAppaYellsResponses = {
                 name: string | null;
                 email: string | null;
             } | null;
+            conversation: {
+                id: string;
+                title: string | null;
+                createdAt: string;
+            } | null;
         }>;
         pagination: {
             limit: number;
@@ -88372,6 +88693,11 @@ export type GetOpenAppaYellResponses = {
             name: string | null;
             email: string | null;
         } | null;
+        conversation: {
+            id: string;
+            title: string | null;
+            createdAt: string;
+        } | null;
     };
 };
 
@@ -88476,6 +88802,11 @@ export type UpdateOpenAppaYellResponses = {
             type?: 'user' | 'service_account';
             name: string | null;
             email: string | null;
+        } | null;
+        conversation: {
+            id: string;
+            title: string | null;
+            createdAt: string;
         } | null;
     };
 };
@@ -113657,7 +113988,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
     };
     query?: {
         query?: string;
@@ -113836,7 +114167,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
@@ -113847,7 +114178,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: {
@@ -113952,7 +114283,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -114029,7 +114360,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -114104,7 +114435,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -114181,7 +114512,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;

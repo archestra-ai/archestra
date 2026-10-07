@@ -1,5 +1,5 @@
 {
-  "id": "7c760669-dac6-46d2-95a6-645aa66adb91",
+  "id": "23e8819f-06ee-4472-a368-c5d05ea0f065",
   "prevId": "dce6d93a-2ff5-4589-9ecc-c59655d340ff",
   "version": "7",
   "dialect": "postgresql",
@@ -17753,6 +17753,12 @@
           "type": "text",
           "primaryKey": false,
           "notNull": false
+        },
+        "conversation_id": {
+          "name": "conversation_id",
+          "type": "uuid",
+          "primaryKey": false,
+          "notNull": false
         }
       },
       "indexes": {
@@ -17821,6 +17827,21 @@
           "concurrently": false,
           "method": "btree",
           "with": {}
+        },
+        "openappa_yells_conversation_id_idx": {
+          "name": "openappa_yells_conversation_id_idx",
+          "columns": [
+            {
+              "expression": "conversation_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
         }
       },
       "foreignKeys": {
@@ -17835,6 +17856,19 @@
             "id"
           ],
           "onDelete": "cascade",
+          "onUpdate": "no action"
+        },
+        "openappa_yells_conversation_id_conversations_id_fk": {
+          "name": "openappa_yells_conversation_id_conversations_id_fk",
+          "tableFrom": "openappa_yells",
+          "tableTo": "conversations",
+          "columnsFrom": [
+            "conversation_id"
+          ],
+          "columnsTo": [
+            "id"
+          ],
+          "onDelete": "set null",
           "onUpdate": "no action"
         }
       },
@@ -22820,7 +22854,7 @@
           "columnsTo": [
             "id"
           ],
-          "onDelete": "cascade",
+          "onDelete": "set null",
           "onUpdate": "no action"
         },
         "skill_sandboxes_app_id_apps_id_fk": {

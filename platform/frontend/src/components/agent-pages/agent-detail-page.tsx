@@ -475,15 +475,15 @@ function AgentDetails({
           ? "clip"
           : "auto"
       }
+      icon={
+        <AgentIcon
+          icon={agent.icon}
+          fallbackType={config.defaultIconType}
+          size={24}
+        />
+      }
       title={
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <AgentIcon
-              icon={agent.icon}
-              fallbackType={config.defaultIconType}
-              size={24}
-            />
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate">{agent.name}</span>
           {isBuiltIn && <BuiltInAgentBadge className="font-normal" />}
           {/* Hidden below sm: the header is one clipped line, and the Start

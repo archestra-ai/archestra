@@ -531,7 +531,7 @@ function PluginDetailView({
           activeSection={activeSection}
         />
 
-        {!isReadOnly && (
+        {activeSection === "general" && !isReadOnly && (
           <WizardFooter>
             <div>
               {isDirty && !isSaving && (

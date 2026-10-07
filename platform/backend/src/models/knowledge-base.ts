@@ -1,4 +1,7 @@
-import type { ResourcePermissionGrant } from "@archestra/shared";
+import type {
+  ResourceAccessRelation,
+  ResourcePermissionGrant,
+} from "@archestra/shared";
 import {
   and,
   count,
@@ -48,6 +51,8 @@ async function buildOrgFilters(params: {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonal?: boolean;
+  /** The list's "Show" filter, read against `viewerUserId`. */
+  access?: ResourceAccessRelation[];
 }) {
   const normalizedSearch = params.search?.trim();
   const viewer = params.viewerUserId
@@ -108,6 +113,16 @@ async function buildOrgFilters(params: {
           ResourcePermissionPolicyModel.grantsReadToAnyTeam({
             ...ownAudienceContext(params.organizationId),
             teamIds: params.teamIds,
+          }),
+        ]
+      : []),
+    ...(viewer && params.viewerUserId && params.access
+      ? [
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            ...ownAudienceContext(params.organizationId),
+            userId: params.viewerUserId,
+            subjects: viewer.subjects,
+            relations: params.access,
           }),
         ]
       : []),
@@ -179,6 +194,8 @@ class KnowledgeBaseModel {
     authorIds?: string[];
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
+    /** The list's "Show" filter, read against `viewerUserId`. */
+    access?: ResourceAccessRelation[];
   }): Promise<KnowledgeBase[]> {
     const filters = await buildOrgFilters(params);
 
@@ -442,6 +459,8 @@ class KnowledgeBaseModel {
     authorIds?: string[];
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
+    /** The list's "Show" filter, read against `viewerUserId`. */
+    access?: ResourceAccessRelation[];
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })

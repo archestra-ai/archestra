@@ -41,6 +41,7 @@ import {
 } from "@/components/permanent-delete";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -94,6 +95,7 @@ import {
 } from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
+  countSkills,
   type SkillUsageReference,
   useAllMatchingSkills,
   useBulkDeleteSkills,
@@ -247,6 +249,7 @@ function SkillsList() {
     authorIds: scopeFilter.authorIds,
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalSkills: scopeFilter.excludeOtherPersonal,
+    access: scopeFilter.access,
     status: isDeletedView ? ("deleted" as const) : undefined,
     sortBy,
     sortDirection,
@@ -552,6 +555,7 @@ function SkillsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      "access",
       "status",
       "kind",
       "labels",
@@ -917,6 +921,13 @@ function SkillsList() {
                     />
                   }
                 >
+                  {!isDeletedView && (
+                    <ResourceAccessFilter
+                      resource="skill"
+                      noun="skills"
+                      countItems={countSkills}
+                    />
+                  )}
                   {(mcpSkillsEnabled || pluginSkillsEnabled) &&
                     !isDeletedView && (
                       <Select value={kind} onValueChange={setKindFilter}>

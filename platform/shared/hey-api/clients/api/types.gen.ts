@@ -13124,7 +13124,6 @@ export type ListA2aRemoteAgentsData = {
         scope?: 'personal' | 'team' | 'org';
         teamId?: string;
         authorId?: string;
-        accessibleOnly?: boolean;
     };
     url: '/api/a2a/remote-agents';
 };
@@ -13202,7 +13201,6 @@ export type ListA2aRemoteAgentsResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13247,15 +13245,6 @@ export type ListA2aRemoteAgentsResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     }>;
 };
 
@@ -13287,9 +13276,25 @@ export type CreateA2aRemoteAgentData = {
         };
         name?: string;
         description?: string | null;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
-        users?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -13369,7 +13374,6 @@ export type CreateA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13414,15 +13418,6 @@ export type CreateA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -13595,7 +13590,6 @@ export type GetA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13640,15 +13634,6 @@ export type GetA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -13681,9 +13666,6 @@ export type UpdateA2aRemoteAgentData = {
             credential: string;
         };
         enabled?: boolean;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
-        users?: Array<string>;
     };
     path: {
         id: string;
@@ -13765,7 +13747,6 @@ export type UpdateA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13810,15 +13791,6 @@ export type UpdateA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -14177,10 +14149,18 @@ export type GetAgentCatalogData = {
     query?: {
         name?: string;
         scope?: 'personal' | 'team' | 'org' | 'built_in';
+        /**
+         * Also list the built-in agents. Applies to agent admins only, and the access filter does not apply to these agents.
+         */
+        includeBuiltIn?: boolean;
         teamIds?: Array<string>;
         authorIds?: Array<string>;
         excludeAuthorIds?: Array<string>;
         excludeOtherPersonalAgents?: boolean;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
          * When true, omit external A2A agents unless the caller can manage external-agent settings. Used to enumerate rows for bulk selection on the Agents page.
          */
@@ -14418,7 +14398,6 @@ export type GetAgentCatalogResponses = {
                 id: string;
                 organizationId: string;
                 authorId: string | null;
-                scope: 'personal' | 'team' | 'org';
                 name: string;
                 description: string | null;
                 discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -14463,15 +14442,6 @@ export type GetAgentCatalogResponses = {
                     name: string | null;
                     email: string | null;
                 } | null;
-                teams: Array<{
-                    id: string;
-                    name: string;
-                }>;
-                users: Array<{
-                    id: string;
-                    name: string;
-                    email: string;
-                }>;
             };
         }>;
         pagination: {
@@ -14523,6 +14493,10 @@ export type GetAgentsData = {
          * Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.
          */
         excludeAuthorIds?: Array<string>;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
@@ -25533,6 +25507,10 @@ export type GetAppsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/apps';
 };
@@ -62440,6 +62418,10 @@ export type GetInternalMcpCatalogData = {
          * Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.
          */
         status?: 'active' | 'deleted';
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/internal_mcp_catalog';
 };
@@ -67060,6 +67042,10 @@ export type GetKnowledgeBasesData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/knowledge-bases';
 };
@@ -94074,6 +94060,10 @@ export type GetPluginsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/plugins';
 };
@@ -96485,6 +96475,10 @@ export type GetProjectsData = {
          * Lifecycle slice: `active` (default) or `deleted` (project admins only; org-wide soft-deleted projects for the restore view).
          */
         status?: 'active' | 'deleted';
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/projects';
 };
@@ -103105,6 +103099,10 @@ export type GetSkillsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         sortBy?: 'usageCount' | 'lastUsedAt' | 'name' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
     };
@@ -114154,7 +114152,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
     };
     query?: {
         query?: string;
@@ -114333,7 +114331,7 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
@@ -114344,7 +114342,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: {
@@ -114449,7 +114447,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -114526,7 +114524,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -114601,7 +114599,7 @@ export type UpdateResourcePermissionsData = {
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -114678,7 +114676,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;

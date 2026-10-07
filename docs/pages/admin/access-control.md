@@ -39,15 +39,15 @@ Look up every role action in the [permission reference](/docs/reference/permissi
 
 ## Granular Access Control
 
-A resource grant names a recipient and the actions they can perform. Recipients can be users, teams, service accounts, roles, or **Everyone in the organization**. A service account's access is independent of its creator; disabling the account prevents it from using its grants.
+A resource grant names a recipient and the actions they can perform. Recipients can be users, teams, service accounts, roles, or **Everyone in the organization**. A service account's access is independent of its creator. Disabling the account prevents it from using its grants.
 
-Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started/pricing-model). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants; adding or expanding them requires entitlement.
+Granular access control is an Enterprise feature, including the [small-team allowance](/docs/get-started/pricing-model). When entitlement ends, existing grants remain enforced. You can revoke or reduce grants. Adding or expanding them requires entitlement.
 
 To share a resource:
 
 1. Open its **Permissions** tab or the **Permissions** section of its settings dialog.
 2. Add a recipient and choose **Can view**, **Can use**, **Can edit**, or **Full access**.
-3. Click **Save permissions**. Confirm the recipient appears with the intended access.
+3. Click **Save permissions**. In a permissions dialog, such as a chat's **Share**, **Add access** saves the recipient at once. Confirm the recipient appears with the intended access.
 
 For grants covering every object of a kind, open the resource list's **More actions** menu beside **Create** or **Add**, then choose **Permissions**. Global policy administration requires [`accessPolicies:read`](/docs/reference/permissions#accessPolicies:read) to view or [`accessPolicies:update`](/docs/reference/permissions#accessPolicies:update) to edit. An individual resource requires `manage-permissions` on that resource.
 
@@ -55,13 +55,13 @@ For grants covering every object of a kind, open the resource list's **More acti
 
 **Can view** permits reading. **Can use** permits execution. **Can edit** permits configuration changes. **Full access** also includes deletion and permission management. Editing does not imply execution or sharing.
 
-MCP registry entries add **Full access + deployment**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default; the creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
+MCP registry entries add **Full access + deployment**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
 
 A grant applies to one resource or to `*`: every current and future resource of that kind in the organization. Actions and scopes stay paired. Giving someone read access to all entries and edit access to one entry lets them edit only that entry.
 
 ### Inheritance And Revocation
 
-Access combines direct grants, team grants, effective-role grants, and organization-wide grants. A team grant reaches every member regardless of membership role, including descendant teams. Removing a direct grant does not remove inherited access; change that grant at its source.
+Access combines direct grants, team grants, effective-role grants, and organization-wide grants. A team grant reaches every member regardless of membership role, including descendant teams. Removing a direct grant does not remove inherited access. Change that grant at its source.
 
 The Permissions editor displays inherited grants separately. A read grant on all chats reaches chats in projects the recipient can open, never private chats.
 
@@ -93,7 +93,7 @@ Use the service account ID, not an API-key ID. `PUT` replaces all direct grants:
 
 ## Scoped Resources
 
-Creation requires the kind's organization-level create permission. Most resources give their creator full direct access; that grant can be revoked. Ownership does not override revocation.
+Creation requires the kind's organization-level create permission. Most resources give their creator full direct access. That grant can be revoked. Ownership does not override revocation.
 
 ### Team Roles
 
@@ -103,7 +103,7 @@ A team **member** receives shared access. A team **admin** can manage its member
 
 Members inherit resource grants and organization roles from ancestor teams. Access does not flow from a child to its parent or to siblings. Team administrator roles are not inherited. Deleting a parent moves its direct children to the root.
 
-[SSO Team Sync](/docs/admin/identity/sso-team-sync) creates direct membership in mapped teams; normal inheritance then applies.
+[SSO Team Sync](/docs/admin/identity/sso-team-sync) creates direct membership in mapped teams. Normal inheritance then applies.
 
 ### Environments
 
@@ -111,15 +111,15 @@ Deploying into an [environment](/docs/admin/environments#deploy-permissions) req
 
 ### OAuth Clients
 
-MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management; tokens reach only what the client configuration allows.
+MCP and LLM OAuth clients have separate grants. **Can edit** permits reconfiguration and secret rotation. **Full access** also permits deletion and sharing. These grants govern client management. Tokens reach only what the client configuration allows.
 
 ### Visibility-Scoped Credentials
 
-Provider keys and virtual keys can have personal, team, or organization scope. Personal records are limited to their owner. Team records require membership; team admins can manage their team's records. Organization records require an update grant on `*` for that kind.
+Provider keys and virtual keys can have personal, team, or organization scope. Personal records are limited to their owner. Team records require membership. Team admins can manage their team's records. Organization records require an update grant on `*` for that kind.
 
 ### Models
 
-Read grants control model discovery; use grants control invocation through the LLM Proxy. A wildcard use grant covers future models and uncatalogued model IDs. Refreshing the catalog preserves grants and revocations.
+Read grants control model discovery. Use grants control invocation through the LLM Proxy. A wildcard use grant covers future models and uncatalogued model IDs. Refreshing the catalog preserves grants and revocations.
 
 ### Chat Access And Optional UI Controls
 
@@ -143,7 +143,7 @@ In **Auto** mode, callers discover tools from servers they can access, plus tool
 
 ## Log Visibility
 
-[`log:read`](/docs/reference/permissions#log:read) shows your LLM and MCP logs; add [`log:admin`](/docs/reference/permissions#log:admin) for organization-wide logs. Audit events use [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin). Guardrail consult logs use [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) and [`openappaDiagnostics:admin`](/docs/reference/permissions#openappaDiagnostics:admin). Resource sharing does not determine log visibility.
+[`log:read`](/docs/reference/permissions#log:read) shows your LLM and MCP logs. Add [`log:admin`](/docs/reference/permissions#log:admin) for organization-wide logs. Audit events use [`auditLog:read`](/docs/reference/permissions#auditLog:read) and [`auditLog:admin`](/docs/reference/permissions#auditLog:admin). Guardrail consult logs use [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) and [`openappaDiagnostics:admin`](/docs/reference/permissions#openappaDiagnostics:admin). Resource sharing does not determine log visibility.
 
 ## LLM API Permissions
 

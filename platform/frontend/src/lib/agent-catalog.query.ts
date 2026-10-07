@@ -1,7 +1,9 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  isSameResourceAccess,
   MAX_BULK_IDS,
+  type ResourceAccessRelation,
 } from "@archestra/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -15,6 +17,18 @@ import { throwOnApiError } from "@/lib/utils/api";
 
 const { getAgentCatalog } = archestraApiSdk;
 
+/** How many Agents-page rows a "Show" selection holds, for the filter's counts. */
+export async function countAgentCatalog(params: {
+  access: ResourceAccessRelation[];
+  includeBuiltIn?: boolean;
+}): Promise<number> {
+  const { data, error } = await getAgentCatalog({
+    query: { limit: 1, offset: 0, ...params },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.pagination.total ?? 0;
+}
+
 export const agentCatalogQueryKeys = {
   all: ["agents", "catalog"] as const,
   list: (query: archestraApiTypes.GetAgentCatalogData["query"]) =>
@@ -26,6 +40,8 @@ export function useAgentCatalog(
     initialData?: archestraApiTypes.GetAgentCatalogResponses["200"];
     initialDataExcludeOtherPersonalAgents?: boolean;
     initialDataPinned?: boolean;
+    /** `access` filter of the server seed; never reuse it for another selection. */
+    initialDataAccess?: ResourceAccessRelation[];
     initialDataLimit?: number;
     enabled?: boolean;
   },
@@ -34,6 +50,7 @@ export function useAgentCatalog(
     initialData,
     initialDataExcludeOtherPersonalAgents,
     initialDataPinned,
+    initialDataAccess,
     initialDataLimit,
     enabled,
     ...query
@@ -50,6 +67,7 @@ export function useAgentCatalog(
     query.excludeAuthorIds === undefined &&
     query.excludeOtherPersonalAgents ===
       initialDataExcludeOtherPersonalAgents &&
+    isSameResourceAccess(query.access, initialDataAccess) &&
     query.pinned === initialDataPinned &&
     query.labels === undefined &&
     query.status === undefined &&

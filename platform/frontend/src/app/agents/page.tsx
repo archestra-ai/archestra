@@ -1,6 +1,7 @@
 import {
   archestraApiSdk,
   type archestraApiTypes,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   type ErrorExtended,
 } from "@archestra/shared";
 
@@ -51,6 +52,7 @@ export default async function AgentsPageServer() {
             sortBy: DEFAULT_SORT_BY,
             sortDirection: DEFAULT_SORT_DIRECTION,
             pinned: false,
+            access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
           },
         }),
         archestraApiSdk.getAgentCatalog({
@@ -61,6 +63,7 @@ export default async function AgentsPageServer() {
             sortBy: DEFAULT_SORT_BY,
             sortDirection: DEFAULT_SORT_DIRECTION,
             pinned: true,
+            access: DEFAULT_RESOURCE_ACCESS_RELATIONS,
           },
         }),
         canReadTeams

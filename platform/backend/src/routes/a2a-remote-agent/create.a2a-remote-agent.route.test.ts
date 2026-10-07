@@ -1,7 +1,9 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import config from "@/config";
 import db, { schema } from "@/database";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { secretManager } from "@/secrets-manager";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
@@ -14,6 +16,13 @@ import {
 
 describe("POST /api/a2a/remote-agents", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
+  beforeEach(async ({ makeMember }) => {
+    // Grants resolve through membership; an administrator reaches every
+    // external agent through the organization-wide grant.
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+  });
   let closeFixture: (() => Promise<void>) | undefined;
 
   afterEach(async () => {
@@ -42,9 +51,6 @@ describe("POST /api/a2a/remote-agents", () => {
       name: "External researcher",
       authorId: ctx.user.id,
       authorName: ctx.user.name,
-      scope: "personal",
-      teams: [],
-      users: [],
       discoveryMode: "inline_card",
       discoveryUrl: null,
       connection: {
@@ -108,7 +114,7 @@ describe("POST /api/a2a/remote-agents", () => {
     expect(JSON.stringify(response.json())).not.toContain("fixture-api-key");
   });
 
-  test("round-trips team visibility and rejects invalid team audiences", async ({
+  test("writes the author and the starting grants to the agent's permission policy", async ({
     makeOrganization,
     makeTeam,
   }) => {
@@ -121,30 +127,27 @@ describe("POST /api/a2a/remote-agents", () => {
       payload: {
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        scope: "team",
-        teams: [team.id],
+        initialGrants: [
+          { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+        ],
       },
     });
 
-    expect(created.statusCode).toBe(200);
-    expect(created.json()).toMatchObject({
-      authorId: ctx.user.id,
-      scope: "team",
-      teams: [{ id: team.id, name: "Research Team" }],
-      users: [],
+    expect(created.statusCode, created.body).toBe(200);
+    const policy = await ResourcePermissionPolicyModel.find({
+      organizationId: ctx.organizationId,
+      resource: "externalAgent",
+      scope: created.json().id,
     });
-
-    const noTeam = await ctx.app.inject({
-      method: "POST",
-      url: "/api/a2a/remote-agents",
-      payload: {
-        source: { type: "inline_card", agentCard: makeAgentCard("none") },
-        auth: { type: "none" },
-        scope: "team",
-        teams: [],
-      },
-    });
-    expect(noTeam.statusCode).toBe(400);
+    expect(policy?.grants).toEqual(
+      expect.arrayContaining([
+        {
+          subject: { type: "user", id: ctx.user.id },
+          actions: expect.arrayContaining(["read", "update", "delete"]),
+        },
+        { subject: { type: "team", id: team.id }, actions: ["read", "use"] },
+      ]),
+    );
 
     const foreignOrganization = await makeOrganization();
     const foreignTeam = await makeTeam(foreignOrganization.id, ctx.user.id);
@@ -154,11 +157,40 @@ describe("POST /api/a2a/remote-agents", () => {
       payload: {
         source: { type: "inline_card", agentCard: makeAgentCard("none") },
         auth: { type: "none" },
-        scope: "team",
-        teams: [foreignTeam.id],
+        initialGrants: [
+          {
+            subject: { type: "team", id: foreignTeam.id },
+            actions: ["read", "use"],
+          },
+        ],
       },
     });
     expect(foreign.statusCode).toBe(400);
+  });
+
+  test("removes the permission policy with the agent", async () => {
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const key = {
+      organizationId: ctx.organizationId,
+      resource: "externalAgent" as const,
+      scope: created.json().id,
+    };
+    expect(await ResourcePermissionPolicyModel.find(key)).not.toBeNull();
+
+    const removed = await ctx.app.inject({
+      method: "DELETE",
+      url: `/api/a2a/remote-agents/${created.json().id}`,
+    });
+    expect(removed.statusCode, removed.body).toBe(200);
+    expect(await ResourcePermissionPolicyModel.find(key)).toBeNull();
   });
 
   test("rejects an auth method the Agent Card does not advertise", async () => {

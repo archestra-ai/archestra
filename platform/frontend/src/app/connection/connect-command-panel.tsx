@@ -1314,7 +1314,7 @@ export function ConnectCommandPanel({
               "overflow-hidden rounded-xl border",
               connectRequest || client.id === "claude-desktop"
                 ? "bg-card"
-                : "border-terminal-edge bg-terminal shadow-lg",
+                : "border-terminal-edge bg-terminal shadow-sm dark:shadow-lg",
             )}
           >
             {!hasRunnableAnything ? (

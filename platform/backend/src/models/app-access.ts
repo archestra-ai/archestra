@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import type { ResourceAccessRelation } from "@archestra/shared";
 import { and, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
@@ -21,6 +22,8 @@ class AppAccessModel {
   static async getUserAccessibleAppIds(params: {
     organizationId: string;
     userId?: string;
+    /** Keep only apps in these relations to the caller (the "Show" filter). */
+    access?: ResourceAccessRelation[];
   }): Promise<string[]> {
     const { organizationId, userId } = params;
     if (userId === undefined) return [];
@@ -54,6 +57,17 @@ class AppAccessModel {
             scopeColumn: schema.appsTable.id,
             action: "read",
           }),
+          params.access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                organizationId,
+                resource: "app",
+                scopeColumn: schema.appsTable.id,
+                ownerColumn: schema.appsTable.authorId,
+                userId,
+                subjects: principal.subjects,
+                relations: params.access,
+              })
+            : undefined,
         ),
       );
     return rows.map((row) => row.id);

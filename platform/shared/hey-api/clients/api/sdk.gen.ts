@@ -27,7 +27,7 @@ export type Options<TData extends TDataShape = TDataShape, ThrowOnError extends 
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const transferRemoteAgentOwnership = <ThrowOnError extends boolean = false>(options: Options<TransferRemoteAgentOwnershipData, ThrowOnError>) => (options.client ?? client).post<TransferRemoteAgentOwnershipResponses, TransferRemoteAgentOwnershipErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents/{id}/transfer-ownership',
@@ -80,7 +80,7 @@ export const syncAgentA2aDelegations = <ThrowOnError extends boolean = false>(op
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `agent:create`: Create new agents
  */
 export const inspectA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<InspectA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).post<InspectA2aRemoteAgentResponses, InspectA2aRemoteAgentErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents/inspect',
@@ -113,7 +113,7 @@ export const listA2aRemoteAgents = <ThrowOnError extends boolean = false>(option
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `agent:create`: Create new agents
  */
 export const createA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<CreateA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).post<CreateA2aRemoteAgentResponses, CreateA2aRemoteAgentErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents',
@@ -133,7 +133,7 @@ export const createA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const deleteA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<DeleteA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).delete<DeleteA2aRemoteAgentResponses, DeleteA2aRemoteAgentErrors, ThrowOnError>({ url: '/api/a2a/remote-agents/{id}', ...options });
 
@@ -159,7 +159,7 @@ export const getA2aRemoteAgent = <ThrowOnError extends boolean = false>(options:
  *
  * Authorization:
  *
- * `organizationSettings:update`: Change organization settings, messaging channels, and site notifications
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const updateA2aRemoteAgent = <ThrowOnError extends boolean = false>(options: Options<UpdateA2aRemoteAgentData, ThrowOnError>) => (options.client ?? client).put<UpdateA2aRemoteAgentResponses, UpdateA2aRemoteAgentErrors, ThrowOnError>({
     url: '/api/a2a/remote-agents/{id}',
@@ -179,7 +179,7 @@ export const updateA2aRemoteAgent = <ThrowOnError extends boolean = false>(optio
  *
  * Authorization:
  *
- * `organizationSettings:read`: View every organization settings page, including messaging channels
+ * `agent:read`: Open Agents, and use the code sandboxes and files of agents you can use
  */
 export const listA2aRemoteAgentRuns = <ThrowOnError extends boolean = false>(options: Options<ListA2aRemoteAgentRunsData, ThrowOnError>) => (options.client ?? client).get<ListA2aRemoteAgentRunsResponses, ListA2aRemoteAgentRunsErrors, ThrowOnError>({ url: '/api/a2a/remote-agents/{id}/runs', ...options });
 

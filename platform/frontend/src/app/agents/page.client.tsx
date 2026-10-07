@@ -2,6 +2,7 @@
 
 import {
   type archestraApiTypes,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
   E2eTestId,
   MAX_BULK_IDS,
 } from "@archestra/shared";
@@ -14,7 +15,6 @@ import {
   Bot,
   ChevronDown,
   ChevronUp,
-  Pencil,
   Plus,
   Trash2,
   Upload,
@@ -45,7 +45,6 @@ import {
 import { computeCanModifyAgent } from "@/components/agent-pages/use-agent-access";
 import { AgentProviderIndicator } from "@/components/agent-provider-indicator";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
-import { BulkA2aSharingDialog } from "@/components/bulk-a2a-sharing-dialog";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import {
@@ -70,6 +69,7 @@ import {
   ProviderKeyFilterSelect,
 } from "@/components/provider-key-filter-select";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -97,8 +97,8 @@ import { getA2aRemoteAgentDeleteDescription } from "@/lib/a2a-remote-agent-delet
 import { a2aRemoteAgentDetailHref } from "@/lib/a2a-remote-agent-route";
 import {
   type A2aRemoteAgent,
-  useBulkUpdateA2aRemoteAgentVisibility,
   useDeleteA2aRemoteAgent,
+  useExternalAgentCapabilities,
 } from "@/lib/a2a-remote-agents.query";
 import {
   useBulkDeleteProfiles,
@@ -111,6 +111,7 @@ import {
   useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
 import {
+  countAgentCatalog,
   useAgentCatalog,
   useAllMatchingAgentCatalog,
 } from "@/lib/agent-catalog.query";
@@ -223,10 +224,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const { data: session } = useSession();
   const currentUserId = session?.user?.id;
   const { data: canCreateAgent } = useHasPermissions({ agent: ["create"] });
-  const { data: canManageExternalAgents } = useHasPermissions({
-    agent: ["read"],
-    organizationSettings: ["update"],
-  });
+  const externalAgentCapabilities = useExternalAgentCapabilities();
 
   // Get pagination/filter params from URL
   const nameFilter = searchParams.get("name") || "";
@@ -244,6 +242,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     queryParamsAdapter,
   });
   const labelsFromUrl = searchParams.get("labels");
+  const includeBuiltIn = searchParams.get("builtIn") === "true";
   const statusFromUrl = searchParams.get("status") as
     | "active"
     | "deleted"
@@ -269,6 +268,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     authorIds: scopeFilter.authorIds,
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
+    access: scopeFilter.access,
+    includeBuiltIn: includeBuiltIn || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
@@ -288,6 +289,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     offset: pageIndex * pageSize,
     initialData: initialData?.agents ?? undefined,
     initialDataPinned: isDeletedView ? undefined : false,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     pinned: isDeletedView ? undefined : false,
     ...catalogFilters,
   });
@@ -302,6 +304,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     offset: 0,
     initialData: initialData?.pinnedAgents ?? undefined,
     initialDataPinned: true,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     initialDataLimit: 100,
     enabled: !isDeletedView,
     ...catalogFilters,
@@ -434,15 +437,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const bulkDeleteAgents = useBulkDeleteProfiles();
   const deleteExternalAgent = useDeleteA2aRemoteAgent();
   const bulkDeleteExternalAgents = useDeleteA2aRemoteAgent({ notify: false });
-  const [bulkVisibilityOpen, setBulkVisibilityOpen] = useState(false);
-  const [bulkVisibilityRows, setBulkVisibilityRows] = useState<AgentListRow[]>(
-    [],
-  );
-  const [bulkVisibilityContext, setBulkVisibilityContext] = useState<{
-    filterSignature: string;
-    allMatching: boolean;
-  } | null>(null);
-  const bulkExternalAgentVisibility = useBulkUpdateA2aRemoteAgentVisibility();
   const pinAgent = usePinAgent();
   // Derived from what is on screen rather than read straight out of
   // `rowSelection`: the table is server-paginated, so ids left behind by
@@ -459,8 +453,11 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     filterSignature,
     selected: allMatchingSelected,
   };
+  // Delete is the only bulk action, so an external agent is selectable only
+  // where its own grants allow deleting it.
   const canSelectRow = (row: AgentListRow) =>
-    row.type === "agent" || !!canManageExternalAgents;
+    row.type === "agent" ||
+    externalAgentCapabilities.can(row.value.id, "delete");
   const { effectiveRowSelection, onRowSelectionChange, rangeSelection } =
     useControlledRowSelection({
       rowSelection,
@@ -519,80 +516,25 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const allMatchingSelectionUnavailable =
     allMatchingSelected &&
     (isFetchingAllMatching || isAllMatchingError || bulkSelectionOverLimit);
-  // Access to internal agents is a grant policy edited on each agent's
-  // Permissions tab; only external A2A agents still carry a visibility scope.
-  const { externalAgents: bulkVisibilityExternalAgents } =
-    partitionAgentRows(bulkVisibilityRows);
-  const openBulkVisibility = async () => {
-    const requestedFilterSignature = filterSignature;
-    const requestedAllMatching = allMatchingSelected;
-    let refreshedRows = selectedRows;
-    if (requestedAllMatching) {
-      const result = await refetchAllMatching();
-      if (result.isError || !result.data) return;
-      const currentContext = allMatchingContextRef.current;
-      if (
-        currentContext.filterSignature !== requestedFilterSignature ||
-        !currentContext.selected
-      ) {
-        return;
-      }
-      refreshedRows = result.data.filter(canSelectRow);
-    }
-    if (refreshedRows.length > MAX_BULK_IDS) return;
-    setBulkVisibilityRows(refreshedRows);
-    setBulkVisibilityContext({
-      filterSignature: requestedFilterSignature,
-      allMatching: requestedAllMatching,
-    });
-    setBulkVisibilityOpen(true);
-  };
   const openBulkDelete = () => {
     setBulkDeleteOpen(true);
     if (allMatchingSelected) void refetchAllMatching();
   };
 
-  useEffect(() => {
-    if (!bulkVisibilityOpen || !bulkVisibilityContext) {
-      return;
-    }
-    const contextInvalid =
-      bulkVisibilityContext.filterSignature !== filterSignature ||
-      (bulkVisibilityContext.allMatching && !allMatchingSelected);
-    const selectionRefreshing =
-      bulkVisibilityContext.allMatching && isFetchingAllMatching;
-    if (!contextInvalid && !selectionRefreshing) return;
-    setBulkVisibilityOpen(false);
-    setBulkVisibilityRows([]);
-    setBulkVisibilityContext(null);
-  }, [
-    bulkVisibilityOpen,
-    bulkVisibilityContext,
-    filterSignature,
-    allMatchingSelected,
-    isFetchingAllMatching,
-  ]);
   const selectablePageCount = rows.filter(canSelectRow).length;
+  // The total counts every visible external agent. Only a viewer who may
+  // delete all of them can select all of them.
   const totalSelectableCount =
     regularTotal +
-    (canManageExternalAgents
+    (externalAgentCapabilities.canEvery("delete")
       ? (catalogResponse?.totals.externalAgents ?? 0)
       : 0);
-  const bulkVisibilityPermissions = {
-    organizationSettings: ["update" as const],
-  };
-  const showBulkVisibility =
-    selectedExternalAgents.length > 0 && selectedRegularAgents.length === 0;
   const bulkDeletePermissions = {
     ...(selectedRegularAgents.length > 0 ? { agent: ["delete" as const] } : {}),
-    ...(selectedExternalAgents.length > 0
-      ? { organizationSettings: ["update" as const] }
-      : {}),
   };
   const bulkBusy =
     bulkDeleteAgents.isPending ||
     bulkDeleteExternalAgents.isPending ||
-    bulkExternalAgentVisibility.isPending ||
     isFetchingAllMatching;
   const bulkDeleteDescription = (() => {
     const noun = selectedCount === 1 ? "agent" : "agents";
@@ -618,6 +560,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
+    includeBuiltIn ||
     labelsFromUrl ||
     isDeletedView ||
     providerApiKeyIdFilter
@@ -631,6 +574,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       teamIds: null,
       authorIds: null,
       excludeAuthorIds: null,
+      access: null,
+      builtIn: null,
       labels: null,
       status: null,
       providerApiKeyId: null,
@@ -716,7 +661,8 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const renderExternalAgentActions = (agent: A2aRemoteAgent) => (
     <A2aRemoteAgentActions
       agent={agent}
-      canManage={!!canManageExternalAgents}
+      canEdit={externalAgentCapabilities.can(agent.id, "update")}
+      canDelete={externalAgentCapabilities.can(agent.id, "delete")}
       onOpen={() => openExternalAgent(agent)}
       onDelete={() => setDeletingExternalAgent(agent)}
     />
@@ -1120,7 +1066,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       }
       actionButton={
         <div className="flex items-center gap-2">
-          {(canCreateAgent || canManageExternalAgents) && (
+          {canCreateAgent && (
             <Button
               size="sm"
               onClick={() => router.push(agentNewHref("agent"))}
@@ -1169,8 +1115,14 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     />
                   }
                 >
+                  <ResourceAccessFilter
+                    resource="agent"
+                    noun="agents"
+                    countItems={countAgentCatalog}
+                    offerBuiltIn
+                    queryParamsAdapter={queryParamsAdapter}
+                  />
                   <ResourceScopeFilter
-                    showBuiltIn
                     showLabels
                     queryParamsAdapter={queryParamsAdapter}
                   />
@@ -1214,18 +1166,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                     : "match the current filters",
                 }}
               >
-                {showBulkVisibility && (
-                  <PermissionButton
-                    permissions={bulkVisibilityPermissions}
-                    disabled={allMatchingSelectionUnavailable}
-                    variant="outline"
-                    size="sm"
-                    onClick={openBulkVisibility}
-                  >
-                    <Pencil className="h-4 w-4" />
-                    <span>Share</span>
-                  </PermissionButton>
-                )}
                 <PermissionButton
                   permissions={bulkDeletePermissions}
                   disabled={allMatchingSelectionUnavailable}
@@ -1267,49 +1207,6 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                       })
                     : null}
               </div>
-
-              {bulkVisibilityOpen && (
-                <BulkA2aSharingDialog
-                  items={bulkVisibilityExternalAgents}
-                  noun="agent"
-                  plural="agents"
-                  open={bulkVisibilityOpen}
-                  onOpenChange={(open) => {
-                    setBulkVisibilityOpen(open);
-                    if (!open) {
-                      setBulkVisibilityRows([]);
-                      setBulkVisibilityContext(null);
-                    }
-                  }}
-                  isPending={bulkExternalAgentVisibility.isPending}
-                  applyDisabled={allMatchingSelectionUnavailable}
-                  onApply={async (change) => {
-                    if (allMatchingSelectionUnavailable) return false;
-                    const outcomes: BulkOutcome[] = [];
-                    if (bulkVisibilityExternalAgents.length > 0) {
-                      outcomes.push(
-                        await bulkExternalAgentVisibility.mutateAsync({
-                          agents: bulkVisibilityExternalAgents,
-                          scope: change.scope,
-                          teamIds: change.teamIds,
-                          userIds: change.userIds,
-                        }),
-                      );
-                    }
-                    const outcome = combineBulkOutcomes(outcomes);
-                    reportBulkOutcome({
-                      outcome,
-                      verb: "Updated",
-                      failureVerb: "update",
-                      noun: "agent",
-                      plural: "agents",
-                    });
-                    if (outcome.succeeded.length === 0) return false;
-                    if (outcome.failed.length === 0) clearSelection();
-                    return true;
-                  }}
-                />
-              )}
 
               {bulkDeleteOpen && (
                 <DeleteConfirmDialog

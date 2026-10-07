@@ -417,7 +417,11 @@ function SubagentPill({
             size="icon-sm"
             className="rounded-l-none text-muted-foreground hover:text-destructive"
             onClick={() => onToggle(agent.id)}
-            aria-label={`Remove agent ${agent.name}`}
+            aria-label={
+              tone === "exclude"
+                ? `Include agent ${agent.name} again`
+                : `Remove agent ${agent.name}`
+            }
           >
             <X className="h-3 w-3" />
           </Button>
@@ -520,9 +524,8 @@ function SubagentsEditor({
             </Badge>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {excludedLocalAgents.length === 0
-              ? "Every local agent you can access may be delegated to."
-              : `${excludedLocalAgents.length} local ${excludedLocalAgents.length === 1 ? "agent is" : "agents are"} excluded below.`}
+            Includes every local agent you can access, and agents created later.
+            To leave one out, exclude it.
           </p>
         </div>
       ) : !hasSelectedTargets ? (
@@ -535,7 +538,7 @@ function SubagentsEditor({
       {localMode === "all" && excludedLocalAgents.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">
-            Local exceptions
+            Excluded from all local agents
           </p>
           <div className="flex flex-wrap gap-2">
             {excludedLocalAgents.map((agent) => (
@@ -580,7 +583,11 @@ function SubagentsEditor({
           agents={filteredAgents}
           value={selectedIds}
           onValueChange={handleSelectionChange}
-          triggerLabel="Add subagent"
+          // In All mode every local agent is already a subagent, so the only
+          // change the picker can make is to leave one out. Its label says so.
+          triggerLabel={
+            localMode === "all" ? "Exclude a local agent" : "Add subagent"
+          }
           searchPlaceholder={
             localMode === "all"
               ? "Search agents to exclude..."
@@ -791,7 +798,7 @@ function OutboundAgentsEditor({
         )}
         {!agentId && (
           <p className="pt-1 text-xs text-muted-foreground">
-            Save this agent before assigning an outbound A2A agent.
+            You can add external agents after you create this agent.
           </p>
         )}
         {agentId && (assignmentsError || agentsError) && (
@@ -1082,7 +1089,6 @@ export function AgentForm({
   } = useAgentA2aDelegations(supportsSubagents ? agent?.id : undefined);
   const a2aRemoteAgents = useA2aRemoteAgents({
     enabled: supportsSubagents && Boolean(agent?.id) && !agent?.builtIn,
-    accessibleOnly: true,
   });
   const syncA2aDelegations = useSyncAgentA2aDelegations();
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();

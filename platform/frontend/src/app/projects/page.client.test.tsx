@@ -199,6 +199,13 @@ vi.mock("@/components/ui/button", () => ({
   ),
 }));
 
+// The access filter is a real dropdown, which this file stubs flat.
+vi.mock("@/components/resource-access-filter", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@/components/resource-access-filter")
+  >()),
+  ResourceAccessFilter: () => null,
+}));
 vi.mock("@/components/ui/dropdown-menu", () => ({
   DropdownMenu: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
@@ -251,6 +258,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
+  countProjects: async () => 0,
   // Records its filters: which slice the page asks for is the whole difference
   // between the trash and the active list, so a mock that dropped them would
   // stay green if the page stopped passing `status: "deleted"` and listed live

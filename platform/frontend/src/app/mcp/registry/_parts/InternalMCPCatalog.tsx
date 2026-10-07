@@ -72,6 +72,7 @@ import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
+  countInternalMcpCatalog,
   useInternalMcpCatalog,
   useInternalMcpCatalogAccessIds,
   useMcpCatalogLabelKeys,
@@ -1181,6 +1182,8 @@ export function InternalMCPCatalog({
           >
             <ResourceAccessFilter
               resource="mcpRegistry"
+              noun="MCP servers"
+              countItems={countInternalMcpCatalog}
               navigate={replaceRegistryListUrl}
             />
             <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />

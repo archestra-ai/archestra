@@ -1,4 +1,8 @@
-import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import {
@@ -22,6 +26,15 @@ const {
   updatePlugin,
   updatePluginGithubSync,
 } = archestraApiSdk;
+
+/** How many plugins a "Show" selection holds, for the filter's counts. */
+export async function countPlugins(params: {
+  access: ResourceAccessRelation[];
+}): Promise<number> {
+  const { data, error } = await getPlugins({ query: params });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.length ?? 0;
+}
 
 export type PluginListItem =
   archestraApiTypes.GetPluginsResponses["200"][number];

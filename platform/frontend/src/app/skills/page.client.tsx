@@ -95,6 +95,7 @@ import {
 } from "@/lib/hooks/use-bulk-selection";
 import { useIsGlobalAdmin } from "@/lib/organization.query";
 import {
+  countSkills,
   type SkillUsageReference,
   useAllMatchingSkills,
   useBulkDeleteSkills,
@@ -920,7 +921,13 @@ function SkillsList() {
                     />
                   }
                 >
-                  {!isDeletedView && <ResourceAccessFilter resource="skill" />}
+                  {!isDeletedView && (
+                    <ResourceAccessFilter
+                      resource="skill"
+                      noun="skills"
+                      countItems={countSkills}
+                    />
+                  )}
                   {(mcpSkillsEnabled || pluginSkillsEnabled) &&
                     !isDeletedView && (
                       <Select value={kind} onValueChange={setKindFilter}>

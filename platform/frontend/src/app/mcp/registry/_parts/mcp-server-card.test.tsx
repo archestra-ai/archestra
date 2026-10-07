@@ -22,6 +22,7 @@ vi.mock("@/lib/environment.query", () => ({
 }));
 
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
+  countInternalMcpCatalog: async () => 0,
   useInternalMcpCatalogAccessIds: () => ({ data: undefined }),
   useInternalMcpCatalog: ({
     initialData,

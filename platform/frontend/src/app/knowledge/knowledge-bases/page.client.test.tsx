@@ -19,6 +19,7 @@ const mockRestoreMutate = vi.fn();
 const mockPurgeMutateAsync = vi.fn();
 
 vi.mock("@/lib/knowledge/knowledge-base.query", () => ({
+  countKnowledgeBases: async () => 0,
   useKnowledgeBasesPaginated: (params: unknown) =>
     mockUseKnowledgeBasesPaginated(params),
   // By-id query behind the ?edit= deep link; no param in these tests.

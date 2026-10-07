@@ -113,6 +113,7 @@ import {
   useUpdateDefaultAgentId,
 } from "@/lib/agent.query";
 import {
+  countAgentCatalog,
   useAgentCatalog,
   useAllMatchingAgentCatalog,
 } from "@/lib/agent-catalog.query";
@@ -246,6 +247,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     queryParamsAdapter,
   });
   const labelsFromUrl = searchParams.get("labels");
+  const includeBuiltIn = searchParams.get("builtIn") === "true";
   const statusFromUrl = searchParams.get("status") as
     | "active"
     | "deleted"
@@ -272,6 +274,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
     access: scopeFilter.access,
+    includeBuiltIn: includeBuiltIn || undefined,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
     providerApiKeyId: providerApiKeyIdFilter,
@@ -623,6 +626,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
   const hasActiveFilters = !!(
     nameFilter ||
     scopeFilter.hasActiveScopeFilters ||
+    includeBuiltIn ||
     labelsFromUrl ||
     isDeletedView ||
     providerApiKeyIdFilter
@@ -637,6 +641,7 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
       authorIds: null,
       excludeAuthorIds: null,
       access: null,
+      builtIn: null,
       labels: null,
       status: null,
       providerApiKeyId: null,
@@ -1177,10 +1182,12 @@ function Agents({ initialData }: { initialData?: AgentsInitialData }) {
                 >
                   <ResourceAccessFilter
                     resource="agent"
+                    noun="agents"
+                    countItems={countAgentCatalog}
+                    offerBuiltIn
                     queryParamsAdapter={queryParamsAdapter}
                   />
                   <ResourceScopeFilter
-                    showBuiltIn
                     showLabels
                     queryParamsAdapter={queryParamsAdapter}
                   />

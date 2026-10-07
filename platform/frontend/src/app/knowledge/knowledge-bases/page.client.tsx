@@ -82,6 +82,7 @@ import {
   useUnassignConnectorFromKnowledgeBase,
 } from "@/lib/knowledge/connector.query";
 import {
+  countKnowledgeBases,
   useAllMatchingKnowledgeBases,
   useBulkDeleteKnowledgeBases,
   useDeleteKnowledgeBase,
@@ -503,7 +504,11 @@ function KnowledgeBasesList() {
               }
             >
               {!isDeletedView && (
-                <ResourceAccessFilter resource="knowledgeBase" />
+                <ResourceAccessFilter
+                  resource="knowledgeBase"
+                  noun="knowledge bases"
+                  countItems={countKnowledgeBases}
+                />
               )}
               <ResourceDeletedStatusFilter
                 deletePermission={{ knowledgeSource: ["delete"] }}

@@ -17,6 +17,18 @@ import { throwOnApiError } from "@/lib/utils/api";
 
 const { getAgentCatalog } = archestraApiSdk;
 
+/** How many Agents-page rows a "Show" selection holds, for the filter's counts. */
+export async function countAgentCatalog(params: {
+  access: ResourceAccessRelation[];
+  includeBuiltIn?: boolean;
+}): Promise<number> {
+  const { data, error } = await getAgentCatalog({
+    query: { limit: 1, offset: 0, ...params },
+  });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.pagination.total ?? 0;
+}
+
 export const agentCatalogQueryKeys = {
   all: ["agents", "catalog"] as const,
   list: (query: archestraApiTypes.GetAgentCatalogData["query"]) =>

@@ -78,6 +78,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  countGateways,
   useAllMatchingProfiles,
   useBulkDeleteProfiles,
   useDeleteProfile,
@@ -928,7 +929,14 @@ function McpGateways({
                   />
                 }
               >
-                <ResourceAccessFilter resource="mcpGateway" />
+                <ResourceAccessFilter
+                  resource="mcpGateway"
+                  noun="gateways"
+                  countItems={(params) =>
+                    countGateways({ ...params, agentTypes: gatewayAgentTypes })
+                  }
+                  countKey={gatewayAgentTypes}
+                />
                 <ResourceScopeFilter showLabels />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}

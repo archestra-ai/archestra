@@ -611,6 +611,7 @@ Required RBAC permission: [`app:read`](/docs/reference/permissions#app:read)
 | `labels[].key` | `string` | Yes |  |
 | `labels[].value` | `string` | Yes |  |
 | `limit` | `integer` | No |  |
+| `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my apps". |
 
 ##### Output
 
@@ -1071,6 +1072,7 @@ Additional access requirement: Returns only projects the caller owns or that are
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Case-insensitive substring matched against the project name and description. Omit to list everything the caller can reach. |
+| `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my projects". |
 
 ##### Output
 
@@ -1760,7 +1762,7 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 |------|-------------|--------------------------|
 | `create_agent` | Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. | [`agent:create`](/docs/reference/permissions#agent:create) |
 | `get_agent` | Get a specific agent by ID or name. | [`agent:read`](/docs/reference/permissions#agent:read) |
-| `list_agents` | List agents with optional filtering by name or provider key. | [`agent:read`](/docs/reference/permissions#agent:read) |
+| `list_agents` | List agents with optional filtering by name, provider key, or how the caller reaches them (access). | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `edit_agent` | Edit an existing agent. | `update` on the agent (granted per item) |
 | `list_hooks` | List an agent's lifecycle hooks. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `create_hook` | Create a lifecycle hook on an agent. | `update` on the agent (granted per item) |
@@ -1871,6 +1873,7 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `providerApiKeyId` | `string \| "organization-default"` | No | Filter by a configured provider key, or organization-default for agents with no pinned key or model. |
 | `limit` | `integer` | No | Maximum number of agents to return. |
 | `name` | `string` | No | Optional agent name filter. Use this when the user names an agent but you still need to look up the ID. |
+| `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my agents". |
 
 ##### Output
 
@@ -2114,7 +2117,11 @@ Required RBAC permission: [`knowledgeSource:create`](/docs/reference/permissions
 
 Required RBAC permission: [`knowledgeSource:read`](/docs/reference/permissions#knowledgeSource:read)
 
-This tool takes no arguments.
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my knowledge bases". |
 
 ##### Output
 
@@ -2396,6 +2403,7 @@ Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRe
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
 | `query` | `string` | No | Optional search query to filter MCP servers by name or description. |
+| `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my MCP servers". |
 
 ##### Output
 
@@ -2414,7 +2422,11 @@ Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRe
 
 Required RBAC permission: [`mcpRegistry:read`](/docs/reference/permissions#mcpRegistry:read)
 
-This tool takes no arguments.
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my MCP servers". |
 
 ##### Output
 
@@ -3903,7 +3915,11 @@ Required RBAC permission: [`team:read`](/docs/reference/permissions#team:read)
 
 Required RBAC permission: [`plugin:read`](/docs/reference/permissions#plugin:read)
 
-This tool takes no arguments.
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `access` | `string[]` | No | Only return items the caller reaches in one of these ways: mine (created by the caller), shared (shared with the caller or one of their teams), org (shared with the whole organization), others (not shared with the caller; visible only through admin access). Omit for everything the caller can read. Use ["mine"] for "my plugins". |
 
 
 #### get_plugin

@@ -68,6 +68,7 @@ import {
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
+  countPlugins,
   type PluginListItem,
   useBulkDeletePlugins,
   useDeletePlugin,
@@ -599,7 +600,11 @@ function PluginsList() {
                     />
                   }
                 >
-                  <ResourceAccessFilter resource="plugin" />
+                  <ResourceAccessFilter
+                    resource="plugin"
+                    noun="plugins"
+                    countItems={countPlugins}
+                  />
                   <FacetSelect
                     label="Filter by client"
                     value={client}

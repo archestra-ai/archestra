@@ -111,6 +111,11 @@ type AgentListFilters = {
   excludeOtherPersonalAgents?: boolean;
   /** The list's "Show" filter; see {@link ResourceAccessRelation}. */
   access?: ResourceAccessRelation[];
+  /**
+   * Add the built-in agents to the list. The `access` filter does not apply to
+   * them: they have no author and are listed only to agent admins.
+   */
+  includeBuiltIn?: boolean;
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
@@ -2116,20 +2121,17 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
     }
 
+    const includeBuiltIn =
+      filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
     if (filters?.scope === "built_in") {
-      whereConditions.push(eq(schema.agentsTable.builtIn, true));
-      if (config.openappa.enabled) {
-        whereConditions.push(
-          notInArray(
-            sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-            [
-              BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-              BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-            ],
-          ),
-        );
-      }
+      whereConditions.push(listedBuiltInAgentCondition());
+    } else if (includeBuiltIn) {
+      whereConditions.push(
+        or(
+          eq(schema.agentsTable.builtIn, false),
+          listedBuiltInAgentCondition(),
+        ) as SQL,
+      );
     } else if (
       filters?.scope === "personal" ||
       filters?.scope === "team" ||
@@ -2171,7 +2173,12 @@ class AgentModel {
         principals,
         relations: filters.access,
       });
-      if (accessCondition) whereConditions.push(accessCondition);
+      if (accessCondition)
+        whereConditions.push(
+          includeBuiltIn
+            ? (or(eq(schema.agentsTable.builtIn, true), accessCondition) as SQL)
+            : accessCondition,
+        );
     }
     if (filters?.labels) {
       for (const [key, values] of Object.entries(filters.labels)) {
@@ -5065,4 +5072,21 @@ function agentGrantedTeamIds() {
         AND team_entry->'subject'->>'type' = 'team'
     ) granted_team
   ), array[]::text[])`;
+}
+
+/**
+ * The built-in agents the Agents page lists. With OpenAPPA on, the policy
+ * configuration and dual-LLM agents are internal and stay hidden.
+ */
+function listedBuiltInAgentCondition(): SQL {
+  const builtIn = eq(schema.agentsTable.builtIn, true);
+  if (!config.openappa.enabled) return builtIn;
+  return and(
+    builtIn,
+    notInArray(sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`, [
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+    ]),
+  ) as SQL;
 }

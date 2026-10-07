@@ -1,12 +1,8 @@
-import { render, renderHook, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
+import { renderHook } from "@testing-library/react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
-import {
-  ResourceScopeFilter,
-  useScopeFilterParams,
-} from "./resource-scope-filter";
+import { useScopeFilterParams } from "./resource-scope-filter";
 
 vi.mock("next/navigation");
 vi.mock("@/lib/auth/auth.query");
@@ -60,37 +56,7 @@ describe("resource list origin filters", () => {
       renderHook(() => useScopeFilterParams()).result.current.scope,
     ).toBeUndefined();
   });
-  it("selects built-in origin without retaining obsolete sharing filters or resetting search", async () => {
-    setQuery("scope=team&teamIds=team-a&authorIds=user-a&page=4&name=example");
-    render(<ResourceScopeFilter showBuiltIn />);
-    const user = userEvent.setup();
-    await user.click(
-      screen.getByRole("combobox", { name: "Filter by origin" }),
-    );
-    expect(
-      screen.queryByRole("option", { name: "Personal" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("option", { name: "Team" }),
-    ).not.toBeInTheDocument();
-    expect(
-      screen.queryByRole("option", { name: "Organization" }),
-    ).not.toBeInTheDocument();
-    await user.click(screen.getByRole("option", { name: "Built-in" }));
-    // Assert the parameters, not the order they happen to serialize in. What
-    // matters is that the retired sharing filters are dropped, the page resets
-    // and the search survives.
-    expect(push).toHaveBeenCalledTimes(1);
-    const [href, options] = push.mock.calls[0] as [string, unknown];
-    const [path, query] = href.split("?");
-    expect(path).toBe("/agents");
-    expect(Object.fromEntries(new URLSearchParams(query))).toEqual({
-      name: "example",
-      scope: "built_in",
-    });
-    expect(options).toEqual({ scroll: false });
-  });
-  it("reads and writes the built-in origin through a namespaced query adapter", async () => {
+  it("reads a bookmarked built-in origin through a namespaced query adapter", () => {
     setQuery("scope=team&page=7&externalScope=built_in&externalPage=3");
     const paramNames = {
       scope: "externalScope",
@@ -106,24 +72,5 @@ describe("resource list origin filters", () => {
       }),
     );
     expect(result.current.scope).toBe("built_in");
-
-    function ExternalOriginFilter() {
-      return (
-        <ResourceScopeFilter
-          showBuiltIn
-          queryParamsAdapter={useQueryParamsAdapter({ paramNames })}
-        />
-      );
-    }
-    render(<ExternalOriginFilter />);
-    const user = userEvent.setup();
-    await user.click(
-      screen.getByRole("combobox", { name: "Filter by origin" }),
-    );
-    await user.click(screen.getByRole("option", { name: "All origins" }));
-    // Only the namespaced keys change; the page's own scope and page survive.
-    expect(push).toHaveBeenCalledWith("/agents?scope=team&page=7", {
-      scroll: false,
-    });
   });
 });

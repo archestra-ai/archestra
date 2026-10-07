@@ -32,6 +32,15 @@ const {
   validateDeploymentYaml,
 } = archestraApiSdk;
 
+/** How many registry servers a "Show" selection holds, for the filter's counts. */
+export async function countInternalMcpCatalog(params: {
+  access: ResourceAccessRelation[];
+}): Promise<number> {
+  const { data, error } = await getInternalMcpCatalog({ query: params });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.length ?? 0;
+}
+
 type InternalMcpCatalogParams = {
   initialData?: archestraApiTypes.GetInternalMcpCatalogResponses["200"];
   enabled?: boolean;

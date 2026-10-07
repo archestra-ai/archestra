@@ -47657,6 +47657,15 @@
           },
           {
             "schema": {
+              "type": "boolean"
+            },
+            "in": "query",
+            "name": "includeBuiltIn",
+            "required": false,
+            "description": "Also list the built-in agents. Applies to agent admins only, and the access filter does not apply to these agents."
+          },
+          {
+            "schema": {
               "type": "array",
               "items": {
                 "type": "string"

@@ -78,6 +78,7 @@ import {
 } from "@/lib/projects/project-permissions";
 import { sortProjectsPinnedFirst } from "@/lib/projects/project-sort";
 import {
+  countProjects,
   useBulkDeleteProjects,
   useCreateProject,
   useDeleteProject,
@@ -309,7 +310,13 @@ function ProjectsList() {
             >
               {/* Hidden in the trash: the backend serves that slice whole, ignoring
               search and scope, so live controls would read as broken filters. */}
-              {!isDeletedView && <ResourceAccessFilter resource="project" />}
+              {!isDeletedView && (
+                <ResourceAccessFilter
+                  resource="project"
+                  noun="projects"
+                  countItems={countProjects}
+                />
+              )}
               {!isDeletedView && (
                 <EntityLabelFilter
                   useLabelKeys={useProjectLabelKeys}

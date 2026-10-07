@@ -1,9 +1,13 @@
-import { render, renderHook, screen } from "@testing-library/react";
+import type { ResourceAccessRelation } from "@archestra/shared";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { render, renderHook, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import type { ComponentProps } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
+  type ResourceAccessCountParams,
   ResourceAccessFilter,
   useResourceAccessParam,
 } from "./resource-access-filter";
@@ -65,12 +69,12 @@ describe("resource access filter", () => {
     });
   });
 
-  it("adds others to the URL and resets the page", async () => {
+  it("adds the admin option to the URL and resets the page", async () => {
     setQuery("page=3&name=x");
-    render(<ResourceAccessFilter resource="agent" />);
+    renderFilter();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Filter by access" }));
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /Others/ }));
+    await openFilter(user);
+    await user.click(option(/Not shared with me/));
     expect(push).toHaveBeenCalledWith(
       "/agents?name=x&access=mine%2Cshared%2Corg%2Cothers",
       { scroll: false },
@@ -79,46 +83,140 @@ describe("resource access filter", () => {
 
   it("drops the parameter when the selection returns to the default", async () => {
     setQuery("access=mine,shared,org,others");
-    render(<ResourceAccessFilter resource="agent" />);
-    expect(
-      screen.getByRole("button", { name: "Filter by access" }),
-    ).toHaveTextContent("All");
+    renderFilter();
+    expect(trigger()).toHaveTextContent("All agents");
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Filter by access" }));
-    await user.click(screen.getByRole("menuitemcheckbox", { name: /Others/ }));
+    await openFilter(user);
+    await user.click(option(/Not shared with me/));
     expect(push).toHaveBeenCalledWith("/agents?", { scroll: false });
   });
 
-  it("offers others only to a viewer who reads every object of the type", async () => {
+  it("names the default selection after the listed objects", () => {
+    renderFilter({ noun: "knowledge bases" });
+    expect(trigger()).toHaveTextContent("Knowledge bases I can access");
+  });
+
+  it("offers the admin option only to a viewer who reads every object of the type", async () => {
     setReadsEveryObject(false);
-    render(<ResourceAccessFilter resource="agent" />);
+    renderFilter();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Filter by access" }));
-    expect(screen.getAllByRole("menuitemcheckbox")).toHaveLength(3);
+    await openFilter(user);
+    expect(screen.getAllByRole("checkbox")).toHaveLength(3);
     expect(
-      screen.queryByRole("menuitemcheckbox", { name: /Others/ }),
+      screen.queryByRole("checkbox", { name: /Not shared with me/ }),
     ).not.toBeInTheDocument();
     expect(useHasPermissions).toHaveBeenCalledWith({ agent: ["read"] }, "*");
   });
 
-  it("keeps a bookmarked others selection clearable without that access", async () => {
+  it("keeps a bookmarked admin selection clearable without that access", async () => {
     setReadsEveryObject(false);
     setQuery("access=mine,others");
-    render(<ResourceAccessFilter resource="agent" />);
+    renderFilter();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Filter by access" }));
-    expect(
-      screen.getByRole("menuitemcheckbox", { name: /Others/ }),
-    ).toBeInTheDocument();
+    await openFilter(user);
+    expect(option(/Not shared with me/)).toBeInTheDocument();
   });
 
   it("keeps the last remaining relation selected", async () => {
     setQuery("access=mine");
-    render(<ResourceAccessFilter resource="agent" />);
+    renderFilter();
     const user = userEvent.setup();
-    await user.click(screen.getByRole("button", { name: "Filter by access" }));
+    await openFilter(user);
+    expect(option(/^Mine/)).toHaveAttribute("aria-disabled", "true");
+    await user.click(option(/^Mine/));
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("counts each option and the selection only once the filter is open", async () => {
+    const countItems = vi.fn(async ({ access }: ResourceAccessCountParams) =>
+      access.reduce((sum, relation) => sum + COUNTS[relation], 0),
+    );
+    renderFilter({ countItems });
+    expect(countItems).not.toHaveBeenCalled();
+    const user = userEvent.setup();
+    await openFilter(user);
+    expect(await screen.findByText(fullText("1 of 11 agents"))).toBeVisible();
+    expect(option(/^Mine/)).toHaveTextContent("1");
+    expect(option(/Not shared with me/)).toHaveTextContent("10");
+  });
+
+  it("adds the built-in agents on top of the selection", async () => {
+    const countItems = vi.fn(
+      async ({ access, includeBuiltIn }: ResourceAccessCountParams) =>
+        access.reduce((sum, relation) => sum + COUNTS[relation], 0) +
+        (includeBuiltIn ? 5 : 0),
+    );
+    renderFilter({ countItems, offerBuiltIn: true });
+    const user = userEvent.setup();
+    await openFilter(user);
+    await waitFor(() => expect(option(/Built-in/)).toHaveTextContent("5"));
+    await user.click(option(/Built-in/));
+    expect(push).toHaveBeenCalledWith("/agents?builtIn=true", {
+      scroll: false,
+    });
+  });
+
+  it("offers built-in agents only to agent admins", async () => {
+    setReadsEveryObject(false);
+    renderFilter({ offerBuiltIn: true });
+    const user = userEvent.setup();
+    await openFilter(user);
     expect(
-      screen.getByRole("menuitemcheckbox", { name: /^Mine/ }),
-    ).toHaveAttribute("aria-disabled", "true");
+      screen.queryByRole("checkbox", { name: /Built-in/ }),
+    ).not.toBeInTheDocument();
+  });
+
+  it("resets the selection and the built-in option together", async () => {
+    setQuery("access=mine&builtIn=true&name=x");
+    renderFilter({ offerBuiltIn: true });
+    expect(trigger()).toHaveTextContent("+ Built-in");
+    const user = userEvent.setup();
+    await openFilter(user);
+    await user.click(screen.getByRole("button", { name: "Reset" }));
+    expect(push).toHaveBeenCalledWith("/agents?name=x", { scroll: false });
   });
 });
+
+const COUNTS: Record<ResourceAccessRelation, number> = {
+  mine: 1,
+  shared: 0,
+  org: 0,
+  others: 10,
+};
+
+function renderFilter(
+  props: Partial<ComponentProps<typeof ResourceAccessFilter>> = {},
+) {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <ResourceAccessFilter
+        resource="agent"
+        noun="agents"
+        countItems={async () => 0}
+        {...props}
+      />
+    </QueryClientProvider>,
+  );
+}
+
+function trigger() {
+  return screen.getByRole("button", { name: "Filter by access" });
+}
+
+async function openFilter(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(trigger());
+}
+
+/** Matches the innermost element whose whole text, across spans, is `text`. */
+function fullText(text: string) {
+  return (_: string, element: Element | null) =>
+    element?.textContent === text &&
+    [...element.children].every((child) => child.textContent !== text);
+}
+
+function option(name: RegExp) {
+  return screen.getByRole("checkbox", { name });
+}

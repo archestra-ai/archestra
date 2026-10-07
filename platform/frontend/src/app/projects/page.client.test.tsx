@@ -258,6 +258,7 @@ vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/organization.query");
 
 vi.mock("@/lib/projects/projects.query", () => ({
+  countProjects: async () => 0,
   // Records its filters: which slice the page asks for is the whole difference
   // between the trash and the active list, so a mock that dropped them would
   // stay green if the page stopped passing `status: "deleted"` and listed live

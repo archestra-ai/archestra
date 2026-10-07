@@ -14177,6 +14177,10 @@ export type GetAgentCatalogData = {
     query?: {
         name?: string;
         scope?: 'personal' | 'team' | 'org' | 'built_in';
+        /**
+         * Also list the built-in agents. Applies to agent admins only, and the access filter does not apply to these agents.
+         */
+        includeBuiltIn?: boolean;
         teamIds?: Array<string>;
         authorIds?: Array<string>;
         excludeAuthorIds?: Array<string>;

@@ -3,6 +3,7 @@ import {
   type archestraApiTypes,
   MAX_PROJECT_UPLOAD_BYTES,
   MAX_PROJECT_UPLOAD_MB,
+  type ResourceAccessRelation,
 } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -42,6 +43,15 @@ const {
   updateProject,
   uploadProjectFiles,
 } = archestraApiSdk;
+
+/** How many projects a "Show" selection holds, for the filter's counts. */
+export async function countProjects(params: {
+  access: ResourceAccessRelation[];
+}): Promise<number> {
+  const { data, error } = await getProjects({ query: params });
+  throwOnApiError(error, { toastOnError: false });
+  return data?.length ?? 0;
+}
 
 type ProjectListFilters = NonNullable<
   archestraApiTypes.GetProjectsData["query"]

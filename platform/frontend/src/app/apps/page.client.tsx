@@ -45,6 +45,7 @@ import {
 } from "@/components/ui/select";
 import {
   APPS_FIRST_PAGE,
+  countApps,
   useAppLabelKeys,
   useAppLabelValues,
   useApps,
@@ -200,7 +201,11 @@ export default function AppsPage() {
               />
             }
           >
-            <ResourceAccessFilter resource="app" />
+            <ResourceAccessFilter
+              resource="app"
+              noun="apps"
+              countItems={countApps}
+            />
             <Select
               value={kind}
               onValueChange={(value) =>

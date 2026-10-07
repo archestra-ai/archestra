@@ -691,39 +691,11 @@ function ConnectArea({
           {/* What happens next, right above the prompt it's about. */}
           <div className="mt-2 space-y-1 px-1 text-xs text-muted-foreground">
             {script ? (
-              <>
-                <p>
-                  Run it in a terminal on the computer where you use{" "}
-                  {nameOf(client)}. It needs Node.js 18 or newer, opens a
-                  browser page, and changes nothing until you approve.
-                </p>
-                {/* Both labels always show, so switching never moves the text. */}
-                <div className="flex justify-end pt-1">
-                  <div className="inline-flex rounded-lg border bg-muted/60 p-0.5">
-                    {(
-                      [
-                        [false, "macOS / Linux"],
-                        [true, "Windows"],
-                      ] as const
-                    ).map(([value, label]) => (
-                      <UnstyledButton
-                        key={label}
-                        type="button"
-                        onClick={() => setWindows(value)}
-                        aria-pressed={windows === value}
-                        className={cn(
-                          "rounded-md px-2.5 py-1 text-xs transition-colors",
-                          windows === value
-                            ? "bg-background font-semibold text-foreground shadow-sm"
-                            : "text-muted-foreground hover:text-foreground",
-                        )}
-                      >
-                        {label}
-                      </UnstyledButton>
-                    ))}
-                  </div>
-                </div>
-              </>
+              <p>
+                Run it in a terminal on the computer where you use{" "}
+                {nameOf(client)}. It needs Node.js 18 or newer, opens a browser
+                page, and changes nothing until you approve.
+              </p>
             ) : (
               <p>
                 {nameOf(client) === "your agent"
@@ -782,7 +754,7 @@ function ConnectArea({
           )}
 
           {script && (
-            <div className="mt-3 px-1 text-xs text-muted-foreground">
+            <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
               <div>
                 <p className="font-semibold text-foreground">
                   When it finishes
@@ -796,6 +768,15 @@ function ConnectArea({
                   </li>
                 </ol>
               </div>
+              <UnstyledButton
+                type="button"
+                onClick={() => setWindows(!windows)}
+                className="self-start rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              >
+                {windows
+                  ? "Use the macOS / Linux command"
+                  : "Use the Windows command"}
+              </UnstyledButton>
             </div>
           )}
         </>

@@ -140,19 +140,20 @@ export function ProviderKeyPicker({
         <div className="flex min-w-0 flex-col overflow-y-auto">
           {focusedProvider ? (
             <>
-              <div className="flex items-center justify-between gap-2 px-3 pb-2 pt-3">
+              <div className="flex items-center justify-between gap-2 px-3 py-2">
                 <span className="font-semibold text-sm">
                   {catalog.label(focusedProvider)} key
                 </span>
                 {chosenKeyIds.length > 0 && (
                   <Button
                     type="button"
-                    variant="link"
-                    size="sm"
-                    className="h-auto px-0 text-destructive"
+                    variant="ghost"
+                    size="xs"
+                    aria-label={`Remove ${catalog.label(focusedProvider)} provider`}
                     onClick={() => stopUsing(focusedProvider)}
                   >
-                    Stop using {catalog.label(focusedProvider)}
+                    <X />
+                    <span>Remove</span>
                   </Button>
                 )}
               </div>
@@ -185,7 +186,7 @@ export function ProviderKeyPicker({
                         )}
                         onClick={() => choose(focusedProvider, key.id)}
                       >
-                        <td className="px-3 py-2.5">
+                        <td className="px-3 py-1.5">
                           {several ? (
                             <Checkbox
                               aria-label={key.name}
@@ -197,21 +198,22 @@ export function ProviderKeyPicker({
                             />
                           ) : (
                             <RadioGroupItem
+                              onClick={(event) => event.stopPropagation()}
                               value={key.id}
                               aria-label={key.name}
                             />
                           )}
                         </td>
-                        <td className="min-w-0 px-2 py-2.5">
+                        <td className="min-w-0 px-2 py-1.5">
                           <div className="truncate font-medium">{key.name}</div>
                           <div className="truncate text-xs text-muted-foreground">
                             {ownerLabel(key)}
                           </div>
                         </td>
-                        <td className="px-2 py-2.5">
+                        <td className="px-2 py-1.5">
                           {isSubscriptionKey(key) ? "Subscription" : "Metered"}
                         </td>
-                        <td className="px-3 py-2.5 text-right tabular-nums">
+                        <td className="px-3 py-1.5 text-right tabular-nums">
                           {modelIdsByKey.get(key.id)?.length ?? 0}
                         </td>
                       </tr>

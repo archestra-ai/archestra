@@ -2,12 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Loader2, Network, Server, Users } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
-import {
-  type ProfileLabel,
-  ProfileLabels,
-  type ProfileLabelsRef,
-} from "@/components/agent-labels";
+import { useEffect, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import {
   BudgetFields,
@@ -22,16 +17,14 @@ import {
 } from "@/components/credential-billing/review-list";
 import { WizardSteps } from "@/components/credential-billing/wizard-steps";
 import { FormDialog } from "@/components/form-dialog";
-import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ChoiceCards } from "@/components/oauth-client/choice-cards";
-import { GatewayChecklist } from "@/components/oauth-client/gateway-checklist";
+import { GatewayPicker } from "@/components/oauth-client/gateway-picker";
 import {
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
-import { ResourceAccessSection } from "@/components/resource-access-section";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -87,11 +80,6 @@ export function CreateOAuthClientDialog({
   const [redirectUrisText, setRedirectUrisText] = useState("");
   const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
-  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
-    [],
-  );
-  const [labels, setLabels] = useState<ProfileLabel[]>([]);
-  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [step, setStep] = useState<Step>("kind");
 
   useEffect(() => {
@@ -106,8 +94,6 @@ export function CreateOAuthClientDialog({
       setRedirectUrisText("");
       setBillingTeamId(null);
       setSpendCap(null);
-      setInitialGrants([]);
-      setLabels([]);
     }
   }, [open, fixedClientType, defaultClientType, defaultAllowedGatewayIds]);
 
@@ -134,12 +120,11 @@ export function CreateOAuthClientDialog({
     isAuthorizationCode && !grantsGateways ? [] : selectedGatewayIds;
 
   const submit = async () => {
-    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     const shared = {
       name: name.trim(),
       grantType,
-      initialGrants: initialGrants.map(({ name: _name, ...grant }) => grant),
-      labels: finalLabels,
+      initialGrants: [],
+      labels: [],
     };
     if (isMcp) {
       await onSubmit({
@@ -187,8 +172,20 @@ export function CreateOAuthClientDialog({
           if (ready[step]) setStep(steps[stepIndex + 1]?.id ?? step);
         }}
       >
-        <DialogBody className="space-y-5">
-          <WizardSteps steps={steps} activeStep={step} onStepClick={setStep} />
+        <DialogBody className="space-y-4">
+          <WizardSteps
+            steps={steps}
+            activeStep={step}
+            onStepClick={setStep}
+            canVisitStep={(next) =>
+              steps
+                .slice(
+                  0,
+                  steps.findIndex((item) => item.id === next),
+                )
+                .every((item) => ready[item.id])
+            }
+          />
 
           {step === "kind" && (
             <>
@@ -209,9 +206,6 @@ export function CreateOAuthClientDialog({
                   value={clientType}
                   onValueChange={(next) => {
                     setClientType(next);
-                    // The two kinds are separate permission namespaces, so a
-                    // grant chosen under one type means nothing under the other.
-                    setInitialGrants([]);
                   }}
                   options={[
                     {
@@ -289,9 +283,8 @@ export function CreateOAuthClientDialog({
                   ]}
                 />
                 {grantsGateways && (
-                  <GatewayChecklist
+                  <GatewayPicker
                     label="Gateways to grant"
-                    idPrefix="oauth-client-gateway"
                     gateways={gateways}
                     value={selectedGatewayIds}
                     onValueChange={setSelectedGatewayIds}
@@ -299,9 +292,8 @@ export function CreateOAuthClientDialog({
                 )}
               </>
             ) : (
-              <GatewayChecklist
+              <GatewayPicker
                 label="Gateways and agents it can call"
-                idPrefix="oauth-client-gateway"
                 gateways={gateways}
                 value={selectedGatewayIds}
                 onValueChange={setSelectedGatewayIds}
@@ -348,25 +340,9 @@ export function CreateOAuthClientDialog({
               providerApiKeys={providerApiKeys as LlmProviderApiKeyResponse[]}
               billingTeamId={billingTeamId}
               spendCap={spendCap}
-              labels={labels}
-              onLabelsChange={setLabels}
-              labelsRef={labelsRef}
               onEdit={setStep}
             />
           )}
-          {/* Mounted on every step so grants chosen on review survive Back. */}
-          <div hidden={step !== "review"}>
-            {/* SPDX-SnippetBegin
-                  SPDX-SnippetCopyrightText: 2026 Archestra Inc.
-                  SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-            <ResourceAccessSection
-              resource={isMcp ? "mcpOauthClient" : "llmOauthClient"}
-              grants={initialGrants}
-              onGrantsChange={setInitialGrants}
-              standalone
-            />
-            {/* SPDX-SnippetEnd */}
-          </div>
         </DialogBody>
         <DialogStickyFooter className="mt-0">
           {stepIndex > 0 && (
@@ -455,9 +431,6 @@ function OAuthClientReview({
   providerApiKeys,
   billingTeamId,
   spendCap,
-  labels,
-  onLabelsChange,
-  labelsRef,
   onEdit,
 }: {
   name: string;
@@ -469,9 +442,6 @@ function OAuthClientReview({
   providerApiKeys: LlmProviderApiKeyResponse[];
   billingTeamId: string | null;
   spendCap: SpendCapValue;
-  labels: ProfileLabel[];
-  onLabelsChange: (labels: ProfileLabel[]) => void;
-  labelsRef: React.RefObject<ProfileLabelsRef | null>;
   onEdit: (step: Step) => void;
 }) {
   const catalog = useModelProviderCatalog();
@@ -534,13 +504,6 @@ function OAuthClientReview({
           </>
         )}
       </ReviewList>
-      <div>
-        <ProfileLabels
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={onLabelsChange}
-        />
-      </div>
     </div>
   );
 }

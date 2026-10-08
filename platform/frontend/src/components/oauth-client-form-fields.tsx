@@ -24,15 +24,19 @@ export function RedirectUrisField({
     <div className="space-y-2">
       <Label htmlFor="oauth-client-redirect-uris">Redirect URIs</Label>
       <FieldDescription>
-        The registering application's own callback URL(s) — where users are sent
-        after they authorize, not an address on this server. Must match the
-        <code className="mx-1">redirect_uri</code>the app sends. One per line.
+        Enter the callback URL supplied by the application you are connecting.
+        After sign-in, users return to that application. This server cannot
+        infer its hostname or callback path. The URL must match the
+        <code className="mx-1">redirect_uri</code>sent by the application. One
+        per line.
       </FieldDescription>
       <Textarea
         id="oauth-client-redirect-uris"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        placeholder={"https://your-app.example.com/oauth/callback"}
+        placeholder={
+          "https://your-app.example.com/oauth/callback\nhttp://localhost:8080/oauth/callback"
+        }
         rows={3}
       />
     </div>

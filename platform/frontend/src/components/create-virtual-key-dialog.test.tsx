@@ -196,28 +196,48 @@ describe("CreateVirtualKeyDialog", () => {
     });
   });
 
-  it("adds labels from their own row and saves the in-progress label", async () => {
+  it("creates a passthrough key with its budget in one dialog", async () => {
     const user = userEvent.setup();
     renderDialog("passthrough");
-
+    expect(
+      screen.queryByRole("list", { name: "Steps" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Continue" }),
+    ).not.toBeInTheDocument();
     expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
-
     await user.type(screen.getByLabelText("Name"), "Regional key");
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    await user.click(screen.getByRole("button", { name: "Continue" }));
-    await user.type(screen.getByLabelText("Label key"), "region");
-    await user.type(screen.getByLabelText("Label value"), "eu");
+    await user.type(screen.getByLabelText("Spend cap in dollars"), "250");
     await user.click(screen.getByRole("button", { name: "Create key" }));
-
     expect(mutateAsync).toHaveBeenCalledWith({
-      data: {
+      data: expect.objectContaining({
         name: "Regional key",
         keyType: "passthrough",
-        expiresAt: undefined,
-        labels: [{ key: "region", value: "eu" }],
-        billingTeamId: undefined,
-        spendCap: undefined,
-      },
+        labels: [],
+        spendCap: { limitValue: 250, cleanupInterval: "calendar_month" },
+      }),
+    });
+  });
+
+  it("lets valid wizard steps be visited directly and preserves edits", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard");
+    await user.click(screen.getByRole("button", { name: "3. Review" }));
+    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "2. Budget" }));
+    await user.type(screen.getByLabelText("Spend cap in dollars"), "75");
+    await user.click(screen.getByRole("button", { name: "1. Key" }));
+    await user.clear(screen.getByLabelText("Name"));
+    expect(screen.getByRole("button", { name: "3. Review" })).toBeDisabled();
+    await user.type(screen.getByLabelText("Name"), "Build key");
+    await user.click(screen.getByRole("button", { name: "3. Review" }));
+    expect(screen.getByText("$75 this month")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+    expect(mutateAsync).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        name: "Build key",
+        spendCap: { limitValue: 75, cleanupInterval: "calendar_month" },
+      }),
     });
   });
 

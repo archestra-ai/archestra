@@ -8,7 +8,7 @@ import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import { CreatedByHeader } from "@/components/credential-billing/created-by-header";
 import { ChoiceCards } from "@/components/oauth-client/choice-cards";
-import { GatewayChecklist } from "@/components/oauth-client/gateway-checklist";
+import { GatewayPicker } from "@/components/oauth-client/gateway-picker";
 import { OAuthClientIdentityFields } from "@/components/oauth-client/identity-fields";
 import {
   parseRedirectUris,
@@ -120,23 +120,6 @@ export function EditOAuthClientDialog({
       activeSection={activeSection}
       navItems={[
         { id: "general", label: "General", status: oauthClient.clientId },
-        ...(isAuthorizationCode
-          ? [
-              {
-                id: "signin" as const,
-                label: "Sign-in",
-                status: `${redirectUris.length} redirect ${redirectUris.length === 1 ? "URI" : "URIs"}`,
-              },
-            ]
-          : []),
-        {
-          id: "access",
-          label: "Access",
-          status:
-            grantedGatewayIds.length > 0
-              ? `${grantedGatewayIds.length} ${grantedGatewayIds.length === 1 ? "gateway" : "gateways"}`
-              : "Each user's own access",
-        },
         {
           id: "permissions",
           label: "Permissions",
@@ -192,59 +175,58 @@ export function EditOAuthClientDialog({
             onRotateSecret ? () => onRotateSecret(oauthClient) : undefined
           }
         />
+
+        {isAuthorizationCode && (
+          <div>
+            <RedirectUrisField
+              value={redirectUrisText}
+              onChange={setRedirectUrisText}
+            />
+          </div>
+        )}
+
+        <div className="space-y-4">
+          {isAuthorizationCode && (
+            <ChoiceCards
+              label="What can signed-in users reach?"
+              idPrefix="edit-oauth-client-access"
+              columns={1}
+              value={grantsGateways ? "grant" : "own"}
+              onValueChange={(next) => setGrantsGateways(next === "grant")}
+              options={[
+                {
+                  value: "own",
+                  title: "Only what each user can already reach",
+                  description:
+                    "Access stays governed by each user's own role and teams.",
+                },
+                {
+                  value: "grant",
+                  title: "Also these gateways, for everyone who signs in",
+                  description:
+                    "Adds the gateways below on top of each user's own access.",
+                },
+              ]}
+            />
+          )}
+          {(!isAuthorizationCode || grantsGateways) && (
+            <GatewayPicker
+              label={
+                isAuthorizationCode
+                  ? "Gateways to grant"
+                  : "Gateways and agents it can call"
+              }
+              gateways={gateways}
+              value={selectedGatewayIds}
+              onValueChange={setSelectedGatewayIds}
+            />
+          )}
+        </div>
         <AdvancedLabelsSection
           ref={labelsRef}
           labels={labels}
           onLabelsChange={setLabels}
         />
-      </div>
-
-      {isAuthorizationCode && (
-        <div hidden={activeSection !== "signin"}>
-          <RedirectUrisField
-            value={redirectUrisText}
-            onChange={setRedirectUrisText}
-          />
-        </div>
-      )}
-
-      <div hidden={activeSection !== "access"} className="space-y-4">
-        {isAuthorizationCode && (
-          <ChoiceCards
-            label="What can signed-in users reach?"
-            idPrefix="edit-oauth-client-access"
-            columns={1}
-            value={grantsGateways ? "grant" : "own"}
-            onValueChange={(next) => setGrantsGateways(next === "grant")}
-            options={[
-              {
-                value: "own",
-                title: "Only what each user can already reach",
-                description:
-                  "Access stays governed by each user's own role and teams.",
-              },
-              {
-                value: "grant",
-                title: "Also these gateways, for everyone who signs in",
-                description:
-                  "Adds the gateways below on top of each user's own access.",
-              },
-            ]}
-          />
-        )}
-        {(!isAuthorizationCode || grantsGateways) && (
-          <GatewayChecklist
-            label={
-              isAuthorizationCode
-                ? "Gateways to grant"
-                : "Gateways and agents it can call"
-            }
-            idPrefix="edit-oauth-client-gateway"
-            gateways={gateways}
-            value={selectedGatewayIds}
-            onValueChange={setSelectedGatewayIds}
-          />
-        )}
       </div>
 
       {/* Kept mounted on every tab, so Save Changes commits its edits. */}
@@ -265,4 +247,4 @@ export function EditOAuthClientDialog({
   );
 }
 
-type Section = "general" | "signin" | "access" | "permissions";
+type Section = "general" | "permissions";

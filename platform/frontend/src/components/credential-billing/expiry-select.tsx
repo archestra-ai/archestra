@@ -52,7 +52,7 @@ export function ExpirySelect({
           }
         }}
       >
-        <SelectTrigger id={id} aria-label="Expires" className="w-44">
+        <SelectTrigger id={id} aria-label="Expires" className="w-full">
           <SelectValue />
         </SelectTrigger>
         <SelectContent>

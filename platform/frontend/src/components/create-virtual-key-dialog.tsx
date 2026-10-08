@@ -4,11 +4,6 @@ import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
 import { Loader2 } from "lucide-react";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
-  type ProfileLabel,
-  ProfileLabels,
-  type ProfileLabelsRef,
-} from "@/components/agent-labels";
-import {
   BudgetFields,
   describeWindow,
   type SpendCapValue,
@@ -142,11 +137,9 @@ export function CreateVirtualKeyDialog({
 
   const [newKeyName, setNewKeyName] = useState("");
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
-  const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [step, setStep] = useState<CreateStep>("key");
   const [billingTeamId, setBillingTeamId] = useState<string | null>(null);
   const [spendCap, setSpendCap] = useState<SpendCapValue>(null);
-  const labelsRef = useRef<ProfileLabelsRef>(null);
   const [providerApiKeyIds, setProviderApiKeyIds] =
     useState<ProviderApiKeyMappings>([]);
   const [createdKey, setCreatedKey] = useState<CreatedVirtualKey | null>(null);
@@ -187,7 +180,7 @@ export function CreateVirtualKeyDialog({
       setNewKeyName(generatedName);
       generatedNameRef.current = generatedName;
       setExpiresAt(initialExpiresAt);
-      setLabels([]);
+
       const initialMappings =
         keyType === "passthrough"
           ? []
@@ -201,7 +194,6 @@ export function CreateVirtualKeyDialog({
         newKeyName: generatedName,
         expiresAt: initialExpiresAt,
         providerApiKeyIds: initialMappings,
-        labels: [],
         billingTeamId: null,
         spendCap: null,
       };
@@ -239,14 +231,13 @@ export function CreateVirtualKeyDialog({
       newKeyName,
       expiresAt,
       providerApiKeyIds,
-      labels,
+
       billingTeamId,
       spendCap,
     });
 
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
-    const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
     try {
       const result = await createMutation.mutateAsync({
         data: isPassthrough
@@ -254,7 +245,7 @@ export function CreateVirtualKeyDialog({
               name: newKeyName.trim(),
               keyType: "passthrough",
               expiresAt: expiresAt ?? undefined,
-              labels: finalLabels,
+              labels: [],
               billingTeamId: billingTeamId ?? undefined,
               spendCap: spendCap ?? undefined,
             }
@@ -263,7 +254,7 @@ export function CreateVirtualKeyDialog({
               keyType: "standard",
               expiresAt: expiresAt ?? undefined,
               providerApiKeys: providerApiKeyIds,
-              labels: finalLabels,
+              labels: [],
               billingTeamId: billingTeamId ?? undefined,
               spendCap: spendCap ?? undefined,
             },
@@ -284,7 +275,7 @@ export function CreateVirtualKeyDialog({
     createMutation,
     expiresAt,
     isPassthrough,
-    labels,
+
     providerApiKeyIds,
     newKeyName,
     onCreated,
@@ -332,16 +323,16 @@ export function CreateVirtualKeyDialog({
         onSubmit={(event) => {
           event.preventDefault();
           if (createdKeyValue) return;
-          if (step !== "review") {
+          if (!isPassthrough && step !== "review") {
             if (keyStepReady) goNext();
             return;
           }
-          void handleCreate();
+          if (canSubmit) void handleCreate();
         }}
         className="flex min-h-0 flex-col"
       >
         <DialogBody
-          className="space-y-5"
+          className="space-y-4"
           data-testid={E2eTestId.VirtualKeyCreateDialog}
         >
           {createdKey ? (
@@ -358,11 +349,14 @@ export function CreateVirtualKeyDialog({
             />
           ) : (
             <>
-              <WizardSteps
-                steps={steps}
-                activeStep={step}
-                onStepClick={setStep}
-              />
+              {!isPassthrough && (
+                <WizardSteps
+                  steps={steps}
+                  activeStep={step}
+                  onStepClick={setStep}
+                  canVisitStep={(next) => next === "key" || keyStepReady}
+                />
+              )}
               {step === "key" && (
                 <>
                   <div className="space-y-2">
@@ -389,7 +383,7 @@ export function CreateVirtualKeyDialog({
                   )}
                 </>
               )}
-              {step === "budget" && (
+              {(isPassthrough || step === "budget") && (
                 <>
                   <BudgetFields
                     subject="key"
@@ -418,9 +412,6 @@ export function CreateVirtualKeyDialog({
                   billingTeamId={billingTeamId}
                   spendCap={spendCap}
                   expiresAt={expiresAt}
-                  labels={labels}
-                  onLabelsChange={setLabels}
-                  labelsRef={labelsRef}
                   onEdit={setStep}
                 />
               )}
@@ -428,7 +419,7 @@ export function CreateVirtualKeyDialog({
           )}
         </DialogBody>
         <DialogStickyFooter className="mt-0">
-          {!createdKeyValue && stepIndex > 0 && (
+          {!createdKeyValue && !isPassthrough && stepIndex > 0 && (
             <Button
               type="button"
               variant="ghost"
@@ -441,12 +432,12 @@ export function CreateVirtualKeyDialog({
           <DialogCancelButton>
             {createdKeyValue ? "Close" : "Cancel"}
           </DialogCancelButton>
-          {!createdKeyValue && step !== "review" && (
+          {!createdKeyValue && !isPassthrough && step !== "review" && (
             <Button type="submit" disabled={!keyStepReady}>
               Continue
             </Button>
           )}
-          {!createdKeyValue && step === "review" && (
+          {!createdKeyValue && (isPassthrough || step === "review") && (
             <Button type="submit" disabled={!canSubmit}>
               {createMutation.isPending && (
                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -471,9 +462,6 @@ function VirtualKeyReview({
   billingTeamId,
   spendCap,
   expiresAt,
-  labels,
-  onLabelsChange,
-  labelsRef,
   onEdit,
 }: {
   isPassthrough: boolean;
@@ -483,9 +471,6 @@ function VirtualKeyReview({
   billingTeamId: string | null;
   spendCap: SpendCapValue;
   expiresAt: Date | null;
-  labels: ProfileLabel[];
-  onLabelsChange: (labels: ProfileLabel[]) => void;
-  labelsRef: React.RefObject<ProfileLabelsRef | null>;
   onEdit: (step: CreateStep) => void;
 }) {
   const catalog = useModelProviderCatalog();
@@ -527,13 +512,6 @@ function VirtualKeyReview({
           {expiresAt ? formatExpiration(expiresAt) : "Never"}
         </ReviewListRow>
       </ReviewList>
-      <div>
-        <ProfileLabels
-          ref={labelsRef}
-          labels={labels}
-          onLabelsChange={onLabelsChange}
-        />
-      </div>
     </div>
   );
 }

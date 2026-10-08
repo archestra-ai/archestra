@@ -26,6 +26,8 @@ vi.mock("@/lib/teams/team.query", () => ({
   useMyTeams: vi.fn(),
 }));
 
+Element.prototype.scrollIntoView = vi.fn();
+
 const base = {
   id: "client-1",
   clientId: "oc_123",
@@ -163,7 +165,13 @@ describe("MCP OAuth client edit", () => {
       />,
     );
 
-    await user.click(screen.getByRole("button", { name: "Access" }));
+    expect(
+      screen.queryByRole("button", { name: "Access" }),
+    ).not.toBeInTheDocument();
+    expect(
+      screen.queryByRole("button", { name: "Sign-in" }),
+    ).not.toBeInTheDocument();
+    expect(screen.getByLabelText("Redirect URIs")).toBeVisible();
     expect(
       screen.getByRole("radio", {
         name: /Only what each user can already reach/,
@@ -173,7 +181,8 @@ describe("MCP OAuth client edit", () => {
       screen.getByRole("radio", { name: /Also these gateways/ }),
     );
     expect(screen.getByRole("button", { name: "Save Changes" })).toBeDisabled();
-    await user.click(screen.getByLabelText("Prod Gateway"));
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: /Prod Gateway/ }));
     await user.click(screen.getByRole("button", { name: "Save Changes" }));
 
     await waitFor(() =>

@@ -147,17 +147,15 @@ export function EditOAuthClientDialog({
       activeSection={activeSection}
       navItems={[
         { id: "general", label: "General", status: oauthClient.clientId },
-        isAuthorizationCode
-          ? {
-              id: "signin",
-              label: "Sign-in",
-              status: `${redirectUris.length} redirect ${redirectUris.length === 1 ? "URI" : "URIs"}`,
-            }
-          : {
-              id: "keys",
-              label: "Provider keys",
-              status: `${providerCount} ${providerCount === 1 ? "provider" : "providers"}`,
-            },
+        ...(!isAuthorizationCode
+          ? [
+              {
+                id: "keys" as const,
+                label: "Provider keys",
+                status: `${providerCount} ${providerCount === 1 ? "provider" : "providers"}`,
+              },
+            ]
+          : []),
         {
           id: "budget",
           label: "Budget",
@@ -241,6 +239,12 @@ export function EditOAuthClientDialog({
             onRotateSecret ? () => onRotateSecret(oauthClient) : undefined
           }
         />
+        {isAuthorizationCode && (
+          <RedirectUrisField
+            value={redirectUrisText}
+            onChange={setRedirectUrisText}
+          />
+        )}
         <AdvancedLabelsSection
           ref={labelsRef}
           labels={labels}
@@ -248,14 +252,7 @@ export function EditOAuthClientDialog({
         />
       </div>
 
-      {isAuthorizationCode ? (
-        <div hidden={activeSection !== "signin"}>
-          <RedirectUrisField
-            value={redirectUrisText}
-            onChange={setRedirectUrisText}
-          />
-        </div>
-      ) : (
+      {!isAuthorizationCode && (
         <div hidden={activeSection !== "keys"} className="space-y-3">
           <p className="text-sm text-muted-foreground">
             <span>
@@ -304,4 +301,4 @@ export function EditOAuthClientDialog({
   );
 }
 
-type Section = "general" | "keys" | "signin" | "budget" | "permissions";
+type Section = "general" | "keys" | "budget" | "permissions";

@@ -112,9 +112,11 @@ describe("CreateOAuthClientDialog", () => {
     await user.type(screen.getByLabelText("Name"), "marketing-bot");
     await continueStep(user);
 
-    expect(screen.getByLabelText("Marketing Agent")).toBeChecked();
+    expect(screen.getByRole("combobox")).toHaveTextContent("Marketing Agent");
     expect(screen.getByText("1 of 2 selected")).toBeVisible();
     await continueStep(user);
+    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Permissions")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create client" }));
 
     await waitFor(() =>
@@ -139,7 +141,8 @@ describe("CreateOAuthClientDialog", () => {
     await continueStep(user);
 
     expect(screen.getByRole("button", { name: "Continue" })).toBeDisabled();
-    await user.click(screen.getByLabelText("Prod Gateway"));
+    await user.click(screen.getByRole("combobox"));
+    await user.click(screen.getByRole("option", { name: /Prod Gateway/ }));
     expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
   });
 
@@ -163,6 +166,8 @@ describe("CreateOAuthClientDialog", () => {
     await user.click(await screen.findByRole("option", { name: /^Platform/ }));
     await user.type(screen.getByLabelText("Spend cap in dollars"), "200");
     await continueStep(user);
+    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Permissions")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create client" }));
 
     await waitFor(() =>
@@ -196,6 +201,8 @@ describe("CreateOAuthClientDialog", () => {
       screen.queryByLabelText("Who pays for this client?"),
     ).not.toBeInTheDocument();
     await continueStep(user);
+    expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
+    expect(screen.queryByText("Permissions")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create client" }));
 
     await waitFor(() =>

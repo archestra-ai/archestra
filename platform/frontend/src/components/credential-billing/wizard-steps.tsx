@@ -5,23 +5,27 @@ import { cn } from "@/lib/utils/tailwind";
 
 /**
  * The step bars at the top of a create dialog: one bar per step, filled up to
- * the current one. Steps behind the current one can be revisited.
+ * the current one. Valid steps can be visited directly, including earlier steps.
  */
 export function WizardSteps<Id extends string>({
   steps,
   activeStep,
   onStepClick,
+  canVisitStep,
 }: {
   steps: Array<{ id: Id; title: string }>;
   activeStep: Id;
   onStepClick?: (step: Id) => void;
+  canVisitStep?: (step: Id) => boolean;
 }) {
   const activeIndex = steps.findIndex((step) => step.id === activeStep);
   return (
     <ol className="flex gap-2" aria-label="Steps">
       {steps.map((step, index) => {
         const reached = index <= activeIndex;
-        const canGoBack = !!onStepClick && index < activeIndex;
+        const canVisit = canVisitStep
+          ? canVisitStep(step.id)
+          : index <= activeIndex;
         const content = (
           <>
             <span
@@ -46,9 +50,10 @@ export function WizardSteps<Id extends string>({
                 : "text-muted-foreground",
             )}
           >
-            {canGoBack ? (
+            {onStepClick ? (
               <UnstyledButton
-                className="flex flex-col gap-1.5 text-left hover:text-foreground"
+                className="flex flex-col gap-1.5 rounded-sm text-left outline-none hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring disabled:cursor-not-allowed disabled:opacity-50"
+                disabled={!canVisit}
                 onClick={() => onStepClick(step.id)}
               >
                 {content}

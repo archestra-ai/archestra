@@ -152,8 +152,8 @@ export function BudgetFields({
             Optional
           </Badge>
         </div>
-        <div className="flex flex-wrap items-center gap-2">
-          <InputGroup className="w-36">
+        <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
+          <InputGroup className="w-full">
             <InputGroupAddon>
               <InputGroupText>$</InputGroupText>
             </InputGroupAddon>
@@ -186,7 +186,7 @@ export function BudgetFields({
               })
             }
           >
-            <SelectTrigger aria-label="Cap resets" className="w-44">
+            <SelectTrigger aria-label="Cap resets" className="w-full">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>

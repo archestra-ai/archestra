@@ -14,6 +14,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
@@ -42,6 +43,7 @@ import {
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import {
   azureAdapterFactory,
+  azureResponsesAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
   geminiEmbeddingsAdapterFactory,
@@ -635,6 +637,12 @@ function getModelRouterEmbeddingsProvider(
  * Prefer OpenAI's native Responses surface even when a model also supports
  * chat. Other providers retain their existing compatibility routing.
  *
+ * Azure deployments of OpenAI models get Azure's native Responses surface too:
+ * Azure Chat Completions rejects function tools combined with reasoning on
+ * GPT reasoning deployments, so a chat round trip cannot serve those requests.
+ * Azure's Responses API answers other deployments (most open models) with
+ * "Model not supported", so they keep the chat translation.
+ *
  * Keyed off the model's published surfaces where available. OpenAI does not
  * publish those surfaces, so its known Responses-only model families use the
  * same model-id discriminator as foreground Agent chat.
@@ -642,6 +650,12 @@ function getModelRouterEmbeddingsProvider(
 function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
   if (resolution.provider === "openai") {
     return openAiResponsesAdapterFactory;
+  }
+  if (
+    resolution.provider === "azure" &&
+    isAzureOpenAiFirstPartyModelName(resolution.modelId)
+  ) {
+    return azureResponsesAdapterFactory;
   }
   if (!modelRequiresResponses(resolution)) {
     return null;

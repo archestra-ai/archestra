@@ -429,7 +429,7 @@ export function CreateVirtualKeyDialog({
                     spendCap={spendCap}
                     onSpendCapChange={setSpendCap}
                   />
-                  <div className="grid gap-4 sm:grid-cols-2">
+                  <div className="grid items-start gap-4 sm:grid-cols-2">
                     <div className="space-y-2">
                       <Label htmlFor="virtual-key-expires">Expires</Label>
                       <ExpirySelect
@@ -439,8 +439,7 @@ export function CreateVirtualKeyDialog({
                       />
                     </div>
                     {showOwnerField && (
-                      <div className="space-y-2">
-                        <span className="font-medium text-sm">Owner</span>
+                      <div>
                         <OwnerSelectField
                           value={ownerId}
                           onChange={setOwnerId}
@@ -583,8 +582,7 @@ function VirtualKeyReview({
           {ownerName ?? "You"}
         </ReviewListRow>
       </ReviewList>
-      <div className="space-y-2">
-        <span className="font-medium text-sm">Labels</span>
+      <div>
         <ProfileLabels
           ref={labelsRef}
           labels={labels}

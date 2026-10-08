@@ -56,7 +56,9 @@ describe("ProviderKeyPicker", () => {
     const user = userEvent.setup();
     renderPicker([]);
 
-    await user.click(screen.getByRole("button", { name: /OpenAI-compatible\s*2 keys/ }));
+    await user.click(
+      screen.getByRole("button", { name: /OpenAI-compatible\s*2 keys/ }),
+    );
     await user.click(screen.getByRole("checkbox", { name: "GLM gateway" }));
     await user.click(
       screen.getByRole("checkbox", { name: "DeepSeek gateway" }),

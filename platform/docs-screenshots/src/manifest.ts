@@ -33,7 +33,9 @@ export const SHOTS: Shot[] = [
       await page
         .getByPlaceholder("Describe what this MCP server does...")
         .fill("Design files, components, and comments");
-      await page.getByPlaceholder("https://api.example.com/mcp").fill("https://mcp.figma.com/mcp");
+      await page
+        .getByPlaceholder("https://api.example.com/mcp")
+        .fill("https://mcp.figma.com/mcp");
       await page.getByText("OAuth 2.1", { exact: true }).click();
     },
   },
@@ -113,14 +115,19 @@ export const SHOTS: Shot[] = [
     target: (page) => page.getByRole("dialog"),
   },
   {
-    asset: "automated_screenshots/platform-agent-skills-sharing_connection-setup",
+    asset:
+      "automated_screenshots/platform-agent-skills-sharing_connection-setup",
     route: () => "/connection?clientId=claude-code",
     prepare: async (page) => {
-      await page.getByText(/shared skills?/).first().waitFor();
+      await page
+        .getByText(/shared skills?/)
+        .first()
+        .waitFor();
     },
   },
   {
-    asset: "automated_screenshots/platform-agent-skills-sharing_marketplace-link",
+    asset:
+      "automated_screenshots/platform-agent-skills-sharing_marketplace-link",
     route: () => "/connection?clientId=generic",
     prepare: async (page) => {
       await page.getByTestId("skills-marketplace-credential-toggle").click();
@@ -128,11 +135,13 @@ export const SHOTS: Shot[] = [
     target: (page) => page.getByTestId("skills-marketplace-static"),
   },
   {
-    asset: "automated_screenshots/platform-identity-providers_sso-providers-overview",
+    asset:
+      "automated_screenshots/platform-identity-providers_sso-providers-overview",
     route: () => "/settings/identity-providers",
   },
   {
-    asset: "automated_screenshots/platform-supported-llm-providers_model-providers",
+    asset:
+      "automated_screenshots/platform-supported-llm-providers_model-providers",
     route: () => "/llm/model-providers",
   },
   {
@@ -215,7 +224,9 @@ export const SHOTS: Shot[] = [
       await page.locator("input").first().blur();
       // Runtime icons load after the picker renders.
       await page.waitForTimeout(1_000);
-      await page.getByText("Choose what runs your agent", { exact: false }).scrollIntoViewIfNeeded();
+      await page
+        .getByText("Choose what runs your agent", { exact: false })
+        .scrollIntoViewIfNeeded();
     },
   },
   {
@@ -224,7 +235,9 @@ export const SHOTS: Shot[] = [
     prepare: async (page) => {
       await page.getByRole("combobox", { name: "Add subagent" }).click();
       await page.getByRole("option", { name: /Research Assistant/ }).click();
-      await page.getByRole("heading", { name: "Subagents", exact: true }).click();
+      await page
+        .getByRole("heading", { name: "Subagents", exact: true })
+        .click();
     },
     target: (page) =>
       page.locator("section").filter({
@@ -254,7 +267,9 @@ export const SHOTS: Shot[] = [
           }
         `,
       });
-      await page.getByRole("heading", { name: "Hooks", exact: true }).scrollIntoViewIfNeeded();
+      await page
+        .getByRole("heading", { name: "Hooks", exact: true })
+        .scrollIntoViewIfNeeded();
       await page.getByText("pre-tool-use.py").waitFor();
       await page.getByRole("button", { name: "Edit pre-tool-use.py" }).click();
       await page.locator(".monaco-editor").first().waitFor();
@@ -274,12 +289,14 @@ export const SHOTS: Shot[] = [
     route: () => "/agents/a2a/new",
   },
   {
-    asset: "automated_screenshots/agents-triggers-and-channels-webhook-a2a_a2a-tab",
+    asset:
+      "automated_screenshots/agents-triggers-and-channels-webhook-a2a_a2a-tab",
     route: (seed) => `/agents/${seed.agents["Support Triage"]}?section=connect`,
   },
   {
     asset: "automated_screenshots/agents-triggers-and-channels_agent-channels",
-    route: (seed) => `/agents/${seed.agents["Support Triage"]}?section=messaging`,
+    route: (seed) =>
+      `/agents/${seed.agents["Support Triage"]}?section=messaging`,
     prepare: async (page) => {
       await page.getByText("support-escalations").first().waitFor();
     },
@@ -366,4 +383,3 @@ async function showGuardrailsEnforced(page: Page) {
   await page.getByText("Policy coverage", { exact: true }).waitFor();
   await page.waitForLoadState("networkidle");
 }
-

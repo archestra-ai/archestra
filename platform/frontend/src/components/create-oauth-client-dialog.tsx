@@ -355,8 +355,7 @@ export function CreateOAuthClientDialog({
             />
           )}
           {/* Mounted on every step so grants chosen on review survive Back. */}
-          <div hidden={step !== "review"} className="space-y-2">
-            <span className="font-medium text-sm">Permissions</span>
+          <div hidden={step !== "review"}>
             {/* SPDX-SnippetBegin
                   SPDX-SnippetCopyrightText: 2026 Archestra Inc.
                   SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
@@ -535,8 +534,7 @@ function OAuthClientReview({
           </>
         )}
       </ReviewList>
-      <div className="space-y-2">
-        <span className="font-medium text-sm">Labels</span>
+      <div>
         <ProfileLabels
           ref={labelsRef}
           labels={labels}

@@ -619,13 +619,20 @@ describe("a battery attached to a detected server", () => {
       await openappaBatteriesService.getEffectivePolicy(organizationId);
     expect(stub.content).not.toContain("/helpers/");
 
-    const sightings = await observeLocalAcme({ organizationId, userId });
-    expect(sightings).toEqual([
-      { toolName: "mcp__acme__list", externalAgentId: CLAUDE_CODE_CLIENT_ID },
-    ]);
-    await openappaBatteriesService.onToolsObserved({
+    // A request before any member's client declared the server composes
+    // nothing new: the stub stands, and the next request tries again.
+    await openappaBatteriesService.composeForDeclaredServers({
       organizationId,
-      sightings,
+      toolNames: ["mcp__acme__list"],
+    });
+    expect(
+      (await openappaBatteriesService.policyDeclarations(organizationId))
+        .batteries,
+    ).toEqual([expect.objectContaining({ status: "server_missing" })]);
+    await observeLocalAcme({ organizationId, userId });
+    await openappaBatteriesService.composeForDeclaredServers({
+      organizationId,
+      toolNames: ["mcp__acme__list"],
     });
 
     const [row] = await OpenAppaBatteryInstallModel.list(organizationId);
@@ -658,13 +665,10 @@ describe("a battery attached to a detected server", () => {
 
     const colleague = (await makeUser()).id;
     await makeMember(colleague, organizationId);
-    const sightings = await observeLocalAcme({
+    await observeLocalAcme({ organizationId, userId: colleague });
+    await openappaBatteriesService.composeForDeclaredServers({
       organizationId,
-      userId: colleague,
-    });
-    await openappaBatteriesService.onToolsObserved({
-      organizationId,
-      sightings,
+      toolNames: ["mcp__acme__list"],
     });
 
     expect(

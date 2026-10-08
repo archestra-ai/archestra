@@ -268,34 +268,29 @@ class OpenAppaBatteriesService {
   }
 
   /**
-   * The proxy saw a client declare tools for the first time. A policy may
-   * already name their server as an alias target, composed as a stub while no
-   * such server was known; it recomposes now so the battery takes effect
-   * without a policy edit. The hot reader keeps a stored composition while the
-   * root revision stands, which is why this has to be pushed.
+   * A request declared tools; if the policy names one of their servers as a
+   * detected target the organization has not composed with yet, recompose now
+   * so the call that follows finds the battery, not its stub. The hot reader
+   * keeps a stored composition while the root revision stands, which is why
+   * this is pushed, and it runs on every request so a recompose that failed
+   * or lost a race is tried again by the next one. Which client sent the
+   * request does not matter here: every family the spelling fits is checked.
    */
-  async onToolsObserved(params: {
+  async composeForDeclaredServers(params: {
     organizationId: string;
-    sightings: ReadonlyArray<{ toolName: string; externalAgentId: string }>;
+    toolNames: readonly string[];
   }): Promise<void> {
-    if (!config.openappa.enabled) return;
-    const { organizationId, sightings } = params;
+    if (!config.openappa.enabled || params.toolNames.length === 0) return;
+    const { organizationId, toolNames } = params;
     try {
       const root = await guardrailsPolicyService.get(organizationId);
       const declared = (
         await openappaDeclarations.aliasTargets(root.content)
       ).filter(isDetectedServerId);
-      if (declared.length === 0) return;
-      const seen = new Set(
-        sightings.flatMap((sighting) =>
-          detectedIdsOf({ ...sighting, declared }),
-        ),
+      const named = declared.filter((target) =>
+        targetNamedBy(target, toolNames, declared),
       );
-      const named = declared.filter((target) => seen.has(target));
       if (named.length === 0) return;
-      // Another member's first sighting of a server the policy already
-      // composes with changes nothing; only a server new to the organization
-      // moves a battery off its stub.
       const present = new Set(
         (await OpenAppaBatteryInstallModel.list(organizationId)).flatMap(
           (install) =>
@@ -307,7 +302,7 @@ class OpenAppaBatteriesService {
     } catch (error) {
       logger.warn(
         { organizationId, error },
-        "OpenAPPA recompose after a detected server was first observed failed",
+        "OpenAPPA recompose for a declared detected server failed; the next request tries again",
       );
     }
   }
@@ -2086,24 +2081,24 @@ function targetAttachments(server: {
 }
 
 /**
- * The detected-server ids a first sighting of a tool can stand for: its
- * client's unambiguous spelling, or, for OpenCode's `<label>_<tool>`, a split
- * against the labels the policy already declares for OpenCode.
+ * Whether one of the request's tool names spells a tool of the server a
+ * declared target names, in that target's family. OpenCode's `<label>_<tool>`
+ * reads against the OpenCode labels the policy declares.
  */
-function detectedIdsOf(params: {
-  toolName: string;
-  externalAgentId: string;
-  declared: readonly string[];
-}): string[] {
-  const family = clientForExternalAgentIds([params.externalAgentId])?.filter;
-  if (!family || !isDetectedClientFamily(family)) return [];
-  const parsed = parseDetectedToolName(
-    family,
-    params.toolName,
-    params.declared.flatMap((target) => {
-      const id = parseDetectedServerId(target);
-      return id?.family === "opencode" ? [id.label] : [];
-    }),
+function targetNamedBy(
+  target: string,
+  toolNames: readonly string[],
+  declared: readonly string[],
+): boolean {
+  const id = parseDetectedServerId(target);
+  if (!id) return false;
+  const openCodeLabels = declared.flatMap((candidate) => {
+    const parsed = parseDetectedServerId(candidate);
+    return parsed?.family === "opencode" ? [parsed.label] : [];
+  });
+  return toolNames.some(
+    (name) =>
+      parseDetectedToolName(id.family, name, openCodeLabels)?.label ===
+      id.label,
   );
-  return parsed ? [detectedServerId(family, parsed.label)] : [];
 }

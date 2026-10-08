@@ -818,7 +818,7 @@ describe("canonicalizeDetected", () => {
   const POLICY = `include = []
 
 [server_aliases]
-slack = ["claude-code.slack", "opencode.slack", "codex.slack", "claude-code.sl ack"]
+slack = ["claude-code.slack", "opencode.slack", "codex.slack", "claude-code.sl ack", "opencode.trail_"]
 
 [policy]
 version = 2
@@ -983,6 +983,18 @@ url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
     ).toBe("claude-code.slack__send");
     // A label the policy does not name is still learned, as before.
     expect(identity.canonicalize("mcp__other__list")).toBe("list");
+    // An OpenCode label ending in an underscore decorates as `trail__`,
+    // which is not learned either.
+    const trailing = await resolve(
+      [{ name: "trail__archestra__run_tool" }, { name: "trail__send" }],
+      { organizationId },
+    );
+    expect(
+      trailing.canonicalizeDetected(
+        trailing.canonicalize("trail__send"),
+        "opencode",
+      ),
+    ).toBe("opencode.trail___send");
   });
 
   test("a detected tool named like a control tool stays an ordinary tool", async ({

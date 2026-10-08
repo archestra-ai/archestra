@@ -371,15 +371,15 @@ async function compatIdentity(params: {
   // A local server the policy names is ruled under its own target; a prefix
   // of its label must not be learned as the gateway's decoration, or a
   // branded lookalike behind it would strip that identity off its siblings.
-  const declaredLabels = new Set(
+  const declaredDecorations = new Set(
     [...params.detectedTargets].flatMap((target) => {
       const parsed = parseDetectedServerId(target);
-      return parsed ? [parsed.label] : [];
+      return parsed ? clientDecorations(parsed.label) : [];
     }),
   );
   const learnedPrefixes = learnGatewayDecorationPrefixes(
     spelledDeclarations,
-  ).filter((prefix) => !declaredLabels.has(decorationLabel(prefix)));
+  ).filter((prefix) => !declaredDecorations.has(prefix));
   // Learned prefixes and gateway-label collisions can come from local tools.
   // Require a built-in spelling under a configured label (or bare branding).
   const gatewayConnected = spelledDeclarations.some((name) => {
@@ -648,17 +648,12 @@ function canonicalizeDetected(params: {
     : canonicalName;
 }
 
-/** The client label a learned decoration prefix (`mcp__<label>__` or `<label>_`) carries. */
-function decorationLabel(prefix: string): string {
-  const clientPrefix = `mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
-  const unprefixed = prefix.startsWith(clientPrefix)
-    ? prefix.slice(clientPrefix.length)
-    : prefix;
-  if (unprefixed.endsWith(MCP_SERVER_TOOL_NAME_SEPARATOR))
-    return unprefixed.slice(0, -MCP_SERVER_TOOL_NAME_SEPARATOR.length);
-  if (unprefixed.endsWith(OPENCODE_LABEL_SEPARATOR))
-    return unprefixed.slice(0, -OPENCODE_LABEL_SEPARATOR.length);
-  return unprefixed;
+/** The prefixes a client puts in front of a server's tools: Claude Code's and Codex's `mcp__<label>__`, OpenCode's `<label>_`. */
+function clientDecorations(label: string): string[] {
+  return [
+    `mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}${label}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
+    `${label}${OPENCODE_LABEL_SEPARATOR}`,
+  ];
 }
 
 function declaredLabels(

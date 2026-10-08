@@ -10,7 +10,7 @@ import { isProxyDiscoveredTool } from "@/database/schemas/tool";
 import logger from "@/logging";
 
 /** An observation this request was the first to record: the sighting of a tool by a client. */
-export type RecordedObservation = { toolName: string; externalAgentId: string };
+type RecordedObservation = { toolName: string; externalAgentId: string };
 
 export type ProxyToolObservation = {
   toolId: string;

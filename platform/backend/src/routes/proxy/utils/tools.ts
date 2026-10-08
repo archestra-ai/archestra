@@ -8,7 +8,6 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { ToolModel, ToolObservationModel } from "@/models";
-import type { RecordedObservation } from "@/models/tool-observation";
 import type { ToolInvocation, TrustedData } from "@/types";
 
 /**
@@ -46,7 +45,7 @@ export const persistTools = async (
     userId?: string;
     externalAgentId?: string | null;
   },
-): Promise<RecordedObservation[]> => {
+) => {
   logger.debug(
     { agentId, toolCount: tools.length },
     "[tools] persistTools: starting tool persistence",
@@ -54,7 +53,7 @@ export const persistTools = async (
 
   if (tools.length === 0) {
     logger.debug({ agentId }, "[tools] persistTools: no tools to persist");
-    return [];
+    return;
   }
 
   // Get names of tools that already exist in the database (any type: catalog, proxy, etc.)
@@ -170,7 +169,7 @@ export const persistTools = async (
       .map(({ toolName }) => toolName);
     if (observableToolNames.length > 0) {
       try {
-        return await ToolObservationModel.recordObservations({
+        await ToolObservationModel.recordObservations({
           toolNames: observableToolNames,
           userId: observer.userId,
           externalAgentId: observer.externalAgentId,
@@ -183,7 +182,6 @@ export const persistTools = async (
       }
     }
   }
-  return [];
 };
 
 // === Internal helpers ===

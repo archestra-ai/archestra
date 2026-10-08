@@ -279,15 +279,15 @@ function TeamUsageBar({
     0,
   );
   const total = teamLimit.limitValue;
-  const reserved = Math.min(
-    spendCap?.limitValue ?? 0,
-    Math.max(total - used, 0),
-  );
-  const left = Math.max(total - used - reserved, 0);
+  const teamInterval = (teamLimit.cleanupInterval ??
+    "calendar_month") as LimitCleanupInterval;
+  const left = Math.max(total - used, 0);
+  // The cap fits inside the team's bar only when both reset on the same
+  // window. Otherwise their amounts measure different periods.
+  const sameWindow = !!spendCap && spendCap.cleanupInterval === teamInterval;
+  const keyMost = sameWindow ? Math.min(spendCap.limitValue, left) : 0;
   const pct = (value: number) => `${total > 0 ? (value / total) * 100 : 0}%`;
-  const window = describeWindow(
-    (teamLimit.cleanupInterval ?? "calendar_month") as LimitCleanupInterval,
-  );
+  const window = describeWindow(teamInterval);
 
   return (
     <div className="space-y-2 border-t pt-3">
@@ -308,25 +308,72 @@ function TeamUsageBar({
           className="bg-foreground"
           style={{ width: pct(Math.min(used, total)) }}
         />
-        <div className="bg-foreground/35" style={{ width: pct(reserved) }} />
+        {sameWindow && (
+          <div className="bg-foreground/35" style={{ width: pct(keyMost) }} />
+        )}
       </div>
-      <dl className="grid grid-cols-3 gap-2 text-xs">
+      <dl
+        className={cn(
+          "grid gap-2 text-xs",
+          sameWindow ? "grid-cols-3" : "grid-cols-2",
+        )}
+      >
         <LegendItem swatch="bg-foreground" label="Used" value={used} />
-        <LegendItem
-          swatch="bg-foreground/35"
-          label={`This ${subject}, at most`}
-          value={spendCap?.limitValue ?? null}
-        />
-        <LegendItem swatch="bg-muted" label="Left" value={left} />
+        {sameWindow && (
+          <LegendItem
+            swatch="bg-foreground/35"
+            label={`This ${subject}, at most`}
+            value={keyMost}
+          />
+        )}
+        <LegendItem swatch="bg-muted" label="Team has left" value={left} />
       </dl>
       <p className="text-xs text-muted-foreground">
         <span>
-          The team limit still applies. The {subject} stops at whichever limit
-          it reaches first.
+          {describeCapAgainstTeam({
+            subject,
+            spendCap,
+            sameWindow,
+            left,
+            teamName: team.name,
+            teamLimit: `${formatWholeDollars(total)}${PERIOD_SUFFIXES[teamInterval]}`,
+            window,
+          })}
         </span>
       </p>
     </div>
   );
+}
+
+/** The sentence under the team bar that relates the cap to the team limit. */
+function describeCapAgainstTeam({
+  subject,
+  spendCap,
+  sameWindow,
+  left,
+  teamName,
+  teamLimit,
+  window,
+}: {
+  subject: "key" | "client";
+  spendCap: SpendCapValue;
+  sameWindow: boolean;
+  left: number;
+  teamName: string;
+  teamLimit: string;
+  window: string;
+}): string {
+  const first = `The ${subject} stops at whichever limit it reaches first.`;
+  if (!spendCap) {
+    return `The ${subject} can spend what ${teamName} has left ${window}.`;
+  }
+  if (!sameWindow) {
+    return `This ${subject}'s cap (${formatWholeDollars(spendCap.limitValue)}${PERIOD_SUFFIXES[spendCap.cleanupInterval]}) and ${teamName}'s limit (${teamLimit}) reset on different periods. ${first}`;
+  }
+  if (spendCap.limitValue > left) {
+    return `${teamName} has less left ${window} than this ${subject}'s cap, so the team limit stops it first.`;
+  }
+  return `The team limit still applies. ${first}`;
 }
 
 function LegendItem({

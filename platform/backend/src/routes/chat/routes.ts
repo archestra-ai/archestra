@@ -196,7 +196,10 @@ import {
   injectPluginSkillActivation,
   injectSkillActivation,
 } from "./inject-skill-activation";
-import { applyStepPromptCacheBreakpoint } from "./normalization/apply-prompt-cache";
+import {
+  applyStepPromptCacheBreakpoint,
+  usesStepPromptCache,
+} from "./normalization/apply-prompt-cache";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { assertWithinContextWindow } from "./normalization/enforce-context-window-limit";
 import {
@@ -1348,17 +1351,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 const streamTextConfig: ChatStreamTextConfig = {
                   model,
                   messages: modelMessages,
-                  ...(provider === "anthropic" &&
-                    anthropicNativeEndpoint && {
-                      prepareStep: ({ messages }) => ({
-                        messages: applyStepPromptCacheBreakpoint({
-                          provider,
-                          model: selectedModel,
-                          anthropicNativeEndpoint,
-                          messages,
-                        }),
+                  ...(usesStepPromptCache({
+                    provider,
+                    anthropicNativeEndpoint,
+                  }) && {
+                    prepareStep: ({ messages }) => ({
+                      messages: applyStepPromptCacheBreakpoint({
+                        provider,
+                        model: selectedModel,
+                        anthropicNativeEndpoint,
+                        messages,
                       }),
                     }),
+                  }),
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
                   abortSignal: chatAbortController.signal,

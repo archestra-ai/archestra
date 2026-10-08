@@ -10272,13 +10272,33 @@
                               },
                               "text": {
                                 "type": "string"
+                              },
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
                               }
                             },
                             "required": [
                               "type",
                               "text"
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                            ]
                           }
                         }
                       ]
@@ -10291,13 +10311,33 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
                     }
                   },
                   "required": [
                     "content",
                     "role"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936"
+                  ]
                 },
                 {
                   "type": "object",
@@ -10320,13 +10360,33 @@
                               },
                               "text": {
                                 "type": "string"
+                              },
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
                               }
                             },
                             "required": [
                               "type",
                               "text"
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                            ]
                           }
                         }
                       ]
@@ -10339,13 +10399,33 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
                     }
                   },
                   "required": [
                     "content",
                     "role"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318"
+                  ]
                 },
                 {
                   "type": "object",
@@ -10370,13 +10450,33 @@
                                   },
                                   "text": {
                                     "type": "string"
+                                  },
+                                  "cache_control": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "ephemeral"
+                                        ]
+                                      },
+                                      "ttl": {
+                                        "type": "string",
+                                        "enum": [
+                                          "5m",
+                                          "1h"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "text"
-                                ],
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                                ]
                               },
                               {
                                 "type": "object",
@@ -10481,8 +10581,7 @@
                                 ],
                                 "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L722"
                               }
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711"
+                            ]
                           }
                         }
                       ]
@@ -10495,13 +10594,33 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
                     }
                   },
                   "required": [
                     "content",
                     "role"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1434"
+                  ]
                 },
                 {
                   "type": "object",
@@ -10543,13 +10662,33 @@
                               },
                               "text": {
                                 "type": "string"
+                              },
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ]
                               }
                             },
                             "required": [
                               "type",
                               "text"
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                            ]
                           }
                         },
                         {
@@ -10683,12 +10822,32 @@
                         ],
                         "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
                       }
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
                     }
                   },
                   "required": [
                     "role"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374"
+                  ]
                 },
                 {
                   "type": "object",
@@ -10719,13 +10878,33 @@
                                   },
                                   "text": {
                                     "type": "string"
+                                  },
+                                  "cache_control": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "ephemeral"
+                                        ]
+                                      },
+                                      "ttl": {
+                                        "type": "string",
+                                        "enum": [
+                                          "5m",
+                                          "1h"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ]
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "text"
-                                ],
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                                ]
                               },
                               {
                                 "type": "object",
@@ -10770,14 +10949,34 @@
                     },
                     "tool_call_id": {
                       "type": "string"
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ]
                     }
                   },
                   "required": [
                     "role",
                     "content",
                     "tool_call_id"
-                  ],
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413"
+                  ]
                 },
                 {
                   "type": "object",
@@ -10803,8 +11002,7 @@
                   ],
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L968"
                 }
-              ],
-              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186"
+              ]
             }
           },
           "tools": {
@@ -31317,14 +31515,35 @@
                               },
                               "text": {
                                 "type": "string"
+                              },
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [
                               "type",
                               "text"
                             ],
-                            "additionalProperties": false,
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                            "additionalProperties": false
                           }
                         }
                       ]
@@ -31337,14 +31556,35 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L936"
+                  "additionalProperties": false
                 },
                 {
                   "type": "object",
@@ -31367,14 +31607,35 @@
                               },
                               "text": {
                                 "type": "string"
+                              },
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [
                               "type",
                               "text"
                             ],
-                            "additionalProperties": false,
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                            "additionalProperties": false
                           }
                         }
                       ]
@@ -31387,14 +31648,35 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1318"
+                  "additionalProperties": false
                 },
                 {
                   "type": "object",
@@ -31419,14 +31701,35 @@
                                   },
                                   "text": {
                                     "type": "string"
+                                  },
+                                  "cache_control": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "ephemeral"
+                                        ]
+                                      },
+                                      "ttl": {
+                                        "type": "string",
+                                        "enum": [
+                                          "5m",
+                                          "1h"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "text"
                                 ],
-                                "additionalProperties": false,
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                                "additionalProperties": false
                               },
                               {
                                 "type": "object",
@@ -31537,8 +31840,7 @@
                                 "additionalProperties": false,
                                 "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L722"
                               }
-                            ],
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L711"
+                            ]
                           }
                         }
                       ]
@@ -31551,14 +31853,35 @@
                     },
                     "name": {
                       "type": "string"
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "content",
                     "role"
                   ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1434"
+                  "additionalProperties": false
                 },
                 {
                   "type": "object",
@@ -31601,14 +31924,35 @@
                               },
                               "text": {
                                 "type": "string"
+                              },
+                              "cache_control": {
+                                "type": "object",
+                                "properties": {
+                                  "type": {
+                                    "type": "string",
+                                    "enum": [
+                                      "ephemeral"
+                                    ]
+                                  },
+                                  "ttl": {
+                                    "type": "string",
+                                    "enum": [
+                                      "5m",
+                                      "1h"
+                                    ]
+                                  }
+                                },
+                                "required": [
+                                  "type"
+                                ],
+                                "additionalProperties": false
                               }
                             },
                             "required": [
                               "type",
                               "text"
                             ],
-                            "additionalProperties": false,
-                            "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                            "additionalProperties": false
                           }
                         },
                         {
@@ -31748,13 +32092,34 @@
                         ],
                         "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1197"
                       }
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
                     "role"
                   ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L374"
+                  "additionalProperties": false
                 },
                 {
                   "type": "object",
@@ -31785,14 +32150,35 @@
                                   },
                                   "text": {
                                     "type": "string"
+                                  },
+                                  "cache_control": {
+                                    "type": "object",
+                                    "properties": {
+                                      "type": {
+                                        "type": "string",
+                                        "enum": [
+                                          "ephemeral"
+                                        ]
+                                      },
+                                      "ttl": {
+                                        "type": "string",
+                                        "enum": [
+                                          "5m",
+                                          "1h"
+                                        ]
+                                      }
+                                    },
+                                    "required": [
+                                      "type"
+                                    ],
+                                    "additionalProperties": false
                                   }
                                 },
                                 "required": [
                                   "type",
                                   "text"
                                 ],
-                                "additionalProperties": false,
-                                "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L821"
+                                "additionalProperties": false
                               },
                               {
                                 "type": "object",
@@ -31839,6 +32225,28 @@
                     },
                     "tool_call_id": {
                       "type": "string"
+                    },
+                    "cache_control": {
+                      "type": "object",
+                      "properties": {
+                        "type": {
+                          "type": "string",
+                          "enum": [
+                            "ephemeral"
+                          ]
+                        },
+                        "ttl": {
+                          "type": "string",
+                          "enum": [
+                            "5m",
+                            "1h"
+                          ]
+                        }
+                      },
+                      "required": [
+                        "type"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -31846,8 +32254,7 @@
                     "content",
                     "tool_call_id"
                   ],
-                  "additionalProperties": false,
-                  "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1413"
+                  "additionalProperties": false
                 },
                 {
                   "type": "object",
@@ -31874,8 +32281,7 @@
                   "additionalProperties": false,
                   "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L968"
                 }
-              ],
-              "description": "https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186"
+              ]
             }
           },
           "tools": {

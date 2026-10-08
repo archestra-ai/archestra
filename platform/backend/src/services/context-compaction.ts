@@ -225,7 +225,9 @@ export function uiMessageTranscriptEntries(message: {
           ? record.result
           : typeof record.errorText === "string"
             ? { error: record.errorText }
-            : undefined;
+            : record.state === "output-denied"
+              ? { denied: deniedReason(record.approval) }
+              : undefined;
     return output === undefined
       ? [call]
       : [call, { kind: "tool_result", toolName, output }];
@@ -303,6 +305,15 @@ function modelWrittenInput(toolName: string, input: unknown): unknown {
   return Object.fromEntries(
     Object.entries(input).filter(([key]) => !hidden.includes(key)),
   );
+}
+
+function deniedReason(approval: unknown): string {
+  return typeof approval === "object" &&
+    approval !== null &&
+    "reason" in approval &&
+    typeof approval.reason === "string"
+    ? approval.reason
+    : "the user denied this tool call";
 }
 
 /** Keep the start and the end (where errors usually are) within maxChars. */

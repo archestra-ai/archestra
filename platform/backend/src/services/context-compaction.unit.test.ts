@@ -32,6 +32,12 @@ describe("uiMessageTranscriptEntries", () => {
           errorText: "permission denied",
         },
         {
+          type: "tool-delete_repo",
+          state: "output-denied",
+          input: { repo: "x" },
+          approval: { id: "ap-1", approved: false, reason: "not this one" },
+        },
+        {
           type: "tool-lookup",
           state: "output-available",
           input: { id: 7 },
@@ -52,6 +58,12 @@ describe("uiMessageTranscriptEntries", () => {
         kind: "tool_result",
         toolName: "write_file",
         output: { error: "permission denied" },
+      },
+      { kind: "tool_call", toolName: "delete_repo", input: { repo: "x" } },
+      {
+        kind: "tool_result",
+        toolName: "delete_repo",
+        output: { denied: "not this one" },
       },
       { kind: "tool_call", toolName: "lookup", input: { id: 7 } },
       { kind: "tool_result", toolName: "lookup", output: null },

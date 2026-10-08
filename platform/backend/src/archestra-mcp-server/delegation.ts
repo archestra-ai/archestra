@@ -1,7 +1,5 @@
 import {
-  ADVISOR_DELEGATION_GUIDANCE,
   AGENT_TOOL_PREFIX,
-  BUILT_IN_AGENT_IDS,
   SELF_FORK_TOOL_NAME,
   slugify,
 } from "@archestra/shared";
@@ -10,7 +8,6 @@ import { convertToModelMessages, type ModelMessage } from "ai";
 import { z } from "zod";
 import { executeA2AMessage } from "@/agents/a2a-executor";
 import { DelegationLoopError } from "@/agents/errors";
-import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { startDelegatedTask } from "@/archestra-mcp-server/tasks";
 import type { RequestLookups } from "@/auth/request-lookups";
 import {
@@ -96,8 +93,7 @@ export async function getAgentTools(context: {
 
   // Delegation never crosses environment boundaries (null is the Default
   // environment), mirroring tool isolation: in both modes only same-environment
-  // targets are advertised. The advisor is the one exception — its org-wide
-  // (env-less) row is reachable from every environment.
+  // targets are advertised.
   const environmentId = lookups
     ? await lookups.agentEnvironmentId(agentId)
     : await AgentModel.findEnvironmentId(agentId);
@@ -152,7 +148,7 @@ export async function getAgentTools(context: {
   }
 
   // Custom mode: only explicitly-configured delegation targets, restricted to
-  // the calling agent's environment (advisor excepted).
+  // the calling agent's environment.
   const allToolsWithDetails = (
     await ToolModel.getDelegationToolsByAgent(agentId)
   ).filter((t) => isReachableDelegationTarget(t.targetAgent, environmentId));
@@ -299,7 +295,7 @@ export async function handleDelegation(
   }
 
   // Same environment restriction as the advertised surface: delegation never
-  // crosses environment boundaries, advisor excepted.
+  // crosses environment boundaries.
   // Resolve the delegation target, mirroring getAgentTools: Auto mode resolves
   // dynamically against the caller-accessible set (minus exclusions); Custom
   // mode resolves against explicit delegation rows. Keeping resolution symmetric
@@ -391,9 +387,6 @@ export async function handleDelegation(
       sessionId,
       // Pass the current delegation chain so the child can extend it
       parentDelegationChain,
-      // The advisor's row is env-less, so the executor needs the caller's
-      // environment to bill the consultation to it.
-      callerEnvironmentId: environmentId,
       // Propagate the real conversation id (absent in headless executions) and
       // the isolation scope separately: the child must never mistake an
       // execution key for a persisted conversation.
@@ -600,13 +593,13 @@ async function buildAutoDelegationTools(params: {
   const seenNames = new Set<string>();
   const tools: Tool[] = [];
 
-  for (const targetAgent of preferAdvisorOnSlugTies(targets)) {
+  for (const targetAgent of sortDelegationTargets(targets)) {
     if (excluded.has(targetAgent.id)) {
       continue;
     }
     const name = `${AGENT_TOOL_PREFIX}${slugify(targetAgent.name)}`;
     // Two agents can slugify to the same tool name; keep the first (targets
-    // share preferAdvisorOnSlugTies's order with dispatch) so the advertised
+    // share sortDelegationTargets's order with dispatch) so the advertised
     // name resolves deterministically.
     if (seenNames.has(name)) {
       continue;
@@ -672,7 +665,7 @@ async function resolveAutoDelegationTarget(params: {
   ]);
 
   const excluded = new Set(excludedIds);
-  const match = preferAdvisorOnSlugTies(targets).find(
+  const match = sortDelegationTargets(targets).find(
     (t) => !excluded.has(t.id) && slugify(t.name) === targetAgentSlug,
   );
 
@@ -729,13 +722,6 @@ async function resolveExplicitDelegationTarget(params: {
   return { id: delegation.targetAgent.id, name: delegation.targetAgent.name };
 }
 
-/**
- * Delegation never crosses environment boundaries, with one exception: the
- * advisor's org-wide row is reachable from every environment. The exception is
- * pinned to `environmentId === null` so only the genuine env-less advisor
- * crosses — an environment-scoped row carrying the advisor discriminator (stray
- * residue) stays fenced to its own environment.
- */
 function isReachableDelegationTarget(
   targetAgent: {
     environmentId: string | null;
@@ -743,32 +729,17 @@ function isReachableDelegationTarget(
   },
   environmentId: string | null,
 ): boolean {
-  if (targetAgent.environmentId === environmentId) {
-    return true;
-  }
-  return (
-    targetAgent.environmentId === null &&
-    targetAgent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
-  );
+  return targetAgent.environmentId === environmentId;
 }
 
-/**
- * Deterministic Auto-mode ordering shared by the surface builder and dispatch:
- * slug order, with the built-in advisor winning any slug tie. A user agent
- * named "Advisor" in any environment collides with the built-in on
- * `agent__advisor`; the built-in wins, and both dedup (first-wins) and
- * `.find()` dispatch read this order so they never disagree.
- */
-function preferAdvisorOnSlugTies<
+/** Stable slug ordering shared by tool advertisement and dispatch. */
+function sortDelegationTargets<
   T extends Pick<Agent, "id" | "name" | "builtInAgentConfig">,
 >(targets: T[]): T[] {
   return [...targets].sort((a, b) => {
     const slugA = slugify(a.name);
     const slugB = slugify(b.name);
     if (slugA !== slugB) return slugA < slugB ? -1 : 1;
-    const advisorA = a.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR;
-    const advisorB = b.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR;
-    if (advisorA !== advisorB) return advisorA ? -1 : 1;
     if (a.name !== b.name) return a.name < b.name ? -1 : 1;
     return a.id < b.id ? -1 : 1;
   });
@@ -799,16 +770,9 @@ function buildDelegationToolDescriptor(params: {
     params.attestable === true &&
     !externalA2a &&
     !targetAgent.builtInAgentConfig;
-  // The advisor answers with shipped guidance rather than the administrator's
-  // description: that field is a one-line summary written for a person, while
-  // the calling model needs the cases where consulting pays for itself. Being
-  // ours, it is not truncated the way a user-authored description is.
-  const description =
-    targetAgent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
-      ? archestraMcpBranding.brandBuiltInText(ADVISOR_DELEGATION_GUIDANCE)
-      : targetAgent.description
-        ? `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
-        : `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}`;
+  const description = targetAgent.description
+    ? `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}. ${targetAgent.description.substring(0, 400)}`
+    : `Delegate task to ${externalA2a ? "external A2A " : ""}agent: ${targetAgent.name}`;
 
   return {
     name,

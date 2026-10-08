@@ -504,14 +504,16 @@ describe("guardrails policy authoring", () => {
       payload: { content: granted, expectedRevision: 1 },
     });
     expect(refused.statusCode).toBe(403);
-    // The agent path is the same authorization, not a way around it.
-    await expect(
-      executeArchestraTool(
-        "archestra__update_guardrails_policy",
-        { content: granted, expectedRevision: 1 },
-        context,
-      ),
-    ).rejects.toMatchObject({ statusCode: 403 });
+    // The agent path is no way around it: agents bind with the bind tool.
+    const viaAgent = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content: granted, expectedRevision: 1 },
+      context,
+    );
+    expect(viaAgent.isError).toBe(true);
+    expect(JSON.stringify(viaAgent.content)).toContain(
+      "with bind_guardrails_credential instead of a [credentials] line",
+    );
     expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
 
     const binder = await makeUser();

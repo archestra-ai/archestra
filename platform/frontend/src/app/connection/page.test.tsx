@@ -1,9 +1,11 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
+  cleanup,
   fireEvent,
   render as rtlRender,
   screen,
+  within,
 } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
@@ -16,6 +18,7 @@ import {
 } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useConfig } from "@/lib/config/config.query";
+import { postConnected } from "@/lib/connect-signal";
 import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
@@ -36,6 +39,7 @@ const connectionFlowMock = vi.fn((_props: unknown) => (
 const refetchOrganizationMock = vi.fn();
 
 vi.mock("next/navigation");
+vi.mock("@/lib/clipboard");
 vi.mock("@/lib/agent.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -801,6 +805,142 @@ describe("ConnectPage loading", () => {
     render(<ConnectionPage />);
     expect(
       screen.queryByRole("heading", { name: /Connect your agent/ }),
+    ).toBeNull();
+  });
+});
+
+describe("ConnectPage after copying the prompt", () => {
+  const welcome =
+    "Read http://localhost:3000/welcome.md and show me what I can do with Example Platform.";
+
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  function show(clientIds: string[], query = "") {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams(query) as ReturnType<typeof useSearchParams>,
+    );
+    // A gateway, so other agents' prompt has something to set up.
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useProfile).mockReturnValue({
+      data: { id: "gw-1", name: "Team gateway", slug: "team", tools: [] },
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfile>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: clientIds,
+        connectionDefaultMcpGatewayId: "gw-1",
+      },
+    });
+    render(<ConnectionPage />);
+  }
+
+  const copyPrompt = () =>
+    userEvent.click(
+      screen.getByRole("button", { name: /^(Copy prompt|Copied)$/ }),
+    );
+  const status = () =>
+    screen.queryByRole("region", { name: "Connection status" });
+  const approveElsewhere = async () => {
+    postConnected();
+    await screen.findByText(/^Connected\./);
+  };
+
+  it("waits for approval once the prompt is copied, then offers the welcome prompt", async () => {
+    show(["cursor"]);
+    expect(status()).toBeNull();
+    await copyPrompt();
+    expect(status()).toHaveTextContent(
+      "Waiting for approvalCursor opens a browser page. Approve there and this card moves on by itself.",
+    );
+
+    await approveElsewhere();
+    expect(status()).toHaveTextContent(
+      "Connected. Next, ask Cursor what it can do now",
+    );
+    expect(status()).toHaveTextContent(
+      "Once Cursor says setup is done, paste this into a new Cursor session.",
+    );
+    expect(screen.getByText(welcome)).toBeVisible();
+    // The connect band steps back.
+    expect(screen.getByRole("region", { name: "Connect" })).toHaveClass(
+      "opacity-50",
+    );
+    // Copying the welcome prompt doesn't start waiting again.
+    await userEvent.click(
+      within(status() as HTMLElement).getByRole("button", {
+        name: "Copy prompt",
+      }),
+    );
+    expect(status()).toHaveTextContent("Connected.");
+
+    await userEvent.click(screen.getByRole("button", { name: "Close" }));
+    expect(status()).toBeNull();
+    expect(
+      screen.getByRole("button", { name: "Show the starter prompt" }),
+    ).toBeVisible();
+  });
+
+  it("starts waiting when the prompt text is copied by hand", () => {
+    show(["cursor"]);
+    fireEvent.copy(screen.getByText(/connect\.md\?client=cursor/));
+    expect(status()).toHaveTextContent("Waiting for approval");
+  });
+
+  it("moves on with Done, and goes back to the link on Cancel", async () => {
+    show(["cursor"]);
+    await copyPrompt();
+    await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
+    expect(status()).toBeNull();
+
+    await copyPrompt();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Done? Show the next step" }),
+    );
+    expect(status()).toHaveTextContent("Connected.");
+  });
+
+  it("stops waiting when the agent changes, but keeps a connection it saw", async () => {
+    show(["cursor", "codex"]);
+    await copyPrompt();
+    await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
+    expect(status()).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: /Cursor/ }));
+    await copyPrompt();
+    await approveElsewhere();
+    await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
+    expect(status()).toHaveTextContent(
+      "Connected. Next, ask Cursor what it can do now",
+    );
+  });
+
+  it("shows the starter prompt from the link", async () => {
+    show(["generic"]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Show the starter prompt" }),
+    );
+    const card = screen.getByRole("region", { name: "Starter prompt" });
+    expect(card).toHaveTextContent(
+      "Works once your agent is connected. If it isn't yet, it points you back to the connect prompt.",
+    );
+    expect(within(card).getByText(welcome)).toBeVisible();
+    await userEvent.click(within(card).getByRole("button", { name: "Close" }));
+    expect(screen.queryByRole("region", { name: "Starter prompt" })).toBeNull();
+  });
+
+  it("offers the starter prompt in manual setup, but not for n8n", () => {
+    show(["generic"], "clientId=generic&mode=manual");
+    expect(
+      screen.getByRole("button", { name: "Show the starter prompt" }),
+    ).toBeVisible();
+    cleanup();
+    show(["n8n"]);
+    expect(
+      screen.queryByRole("button", { name: "Show the starter prompt" }),
     ).toBeNull();
   });
 });

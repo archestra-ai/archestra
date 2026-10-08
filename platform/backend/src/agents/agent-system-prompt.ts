@@ -1,6 +1,4 @@
 import {
-  ADVISOR_CONSULT_INSTRUCTION,
-  ADVISOR_DELEGATION_TOOL_NAME,
   type ArchestraToolShortName,
   buildElicitationMandateInstruction,
   buildUserSystemPromptContext,
@@ -281,13 +279,6 @@ export async function buildAgentSystemPrompt(params: {
     ? buildProjectFilesInstruction(projectFileNames, mcpTools)
     : null;
 
-  // Keyed off the tool's presence, so any agent that can reach the Advisor
-  // (chat or A2A) gets the policy and no one else does.
-  const advisorConsultInstruction =
-    ADVISOR_DELEGATION_TOOL_NAME in mcpTools
-      ? archestraMcpBranding.brandBuiltInText(ADVISOR_CONSULT_INSTRUCTION)
-      : null;
-
   return (
     [
       toolLoadingInstructions,
@@ -298,7 +289,6 @@ export async function buildAgentSystemPrompt(params: {
       skillCatalogPrompt,
       fileHandlingInstruction,
       knowledgeSearchInstruction,
-      advisorConsultInstruction,
       toolDenialInstruction,
       appaRemedyInstruction,
       toolResultInstructions,

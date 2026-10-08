@@ -189,6 +189,26 @@ describe("source-aware validation proposals", () => {
     ).toMatchObject({ version, files: [existing] });
   });
 
+  test("an unparseable scenario makes the proposal invalid and publication refuses it", async () => {
+    const broken = {
+      path: "traces/broken.appa",
+      content: "mcp/files/read {}\nexpect maybe\n",
+    };
+    const changes = { upsert: [broken], delete: [] };
+    const preview = await previewOpenAppaValidationChange({
+      ...request(),
+      changes,
+    });
+    expect(preview.tests.validation.valid).toBe(false);
+    expect(preview.tests.validation.errors).toHaveLength(1);
+    await expect(
+      publishOpenAppaValidationChange({ ...publish(), changes }),
+    ).rejects.toMatchObject({ statusCode: 400 });
+    expect(
+      await OpenAppaPolicyTestsModel.find(ctx.organizationId),
+    ).toMatchObject({ version, files: [existing] });
+  });
+
   test("stale specification versions fail without a policy revision", async () => {
     await expect(
       publishOpenAppaValidationChange({

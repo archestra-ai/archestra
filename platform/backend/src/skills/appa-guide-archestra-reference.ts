@@ -1,7 +1,7 @@
 /**
  * `references/archestra.md` of the built-in appa-guide skill: what an OpenAPPA
  * policy looks like in Archestra. OpenAPPA's own semantics live in the
- * verbatim `references/contracts.md`; this file holds only what Archestra adds.
+ * `references/contracts/` parts; this file holds only what Archestra adds.
  */
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const ARCHESTRA_REFERENCE = `# OpenAPPA in Archestra
@@ -42,21 +42,22 @@ annotator = "noop"
 
 Keep the existing \`[externals.annotators.noop]\` URL. It also declares the \`archestra.run-command\` annotator (\`builtin = "archestra"\`) and routes \`archestra__run_command\` to it, so the organization's default model ranks each sandbox command \`suspicious\` or \`trusted\`. Explicit rules take precedence over the catch-all, and the first matching rule for a tool applies, so put a narrow rule with an argument selector before the broad rule for the same tool.
 
-Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
+A rule declares either \`annotator\` or static fields such as \`requires\`, never both. To block \`archestra__run_command\` outright, replace its annotator rule with \`delta = {}\` and \`requires = { attention = ["blocked"] }\`; to block only some commands, put a selector rule with \`requires\` before the annotated rule.
+
+Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_skill\`, \`mcp/appa/yell\`, and the policy tools with \`delta = {}\` so agents can still find tools, load skills, and change the policy.
 
 ## Batteries
 
-A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[server_aliases]\` points each battery namespace at an installed server's tool prefixes, and \`[credentials]\` binds each credential variable to a runtime credential key. The value never appears in the policy, only the key:
+A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[server_aliases]\` points each battery namespace at an installed server's tool prefixes:
 
 \`\`\`toml
 include = ["batteries/github/appa.toml"]
 
 [server_aliases]
 github = ["github_prod"]
-
-[credentials]
-APPA_PROVIDER_GITHUB_TOKEN = "github-token"
 \`\`\`
+
+Each credential variable a battery reads is bound to a runtime credential key with \`archestra__bind_guardrails_credential\`, for example \`{ "variable": "APPA_PROVIDER_GITHUB_TOKEN", "key": "github-token" }\`. The binding lives outside the policy text and never holds the value, only the key. A \`[credentials]\` line in the text overrides the binding and locks it in the Batteries dialog; do not add one.
 
 A battery governs calls only when \`effective.batteries\` marks it \`active\`. Removing its \`include\` entry turns it off.
 

@@ -1,9 +1,13 @@
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { publishOpenAppaPolicyChange } from "@/services/openappa-policy-change";
+import {
+  publishOpenAppaPolicyChange,
+  refuseCredentialLines,
+} from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
+  inspectOpenAppaPolicyTests,
   replayOpenAppaValidationProposal,
 } from "@/services/openappa-policy-tests";
 import { ApiError } from "@/types";
@@ -70,24 +74,48 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
     [...filesByPath.values()].sort((a, b) => a.path.localeCompare(b.path)),
   );
   const policyContent = request.policyContent ?? root.content;
-  const tests = await replayOpenAppaValidationProposal(
-    {
+  if (request.policyContent !== undefined)
+    await refuseCredentialLines({
       organizationId,
-      userId,
-      files,
-      sourceVersion: collection.version,
-      directory: collection.directory,
-      ...(request.policyContent !== undefined
-        ? {
-            proposedPolicy: {
-              content: policyContent,
-              expectedRevision: root.revision,
-            },
-          }
-        : {}),
-    },
-    collection,
+      before: root.content,
+      after: request.policyContent,
+    });
+  const [replayed, inspection] = await Promise.all([
+    replayOpenAppaValidationProposal(
+      {
+        organizationId,
+        userId,
+        files,
+        sourceVersion: collection.version,
+        directory: collection.directory,
+        ...(request.policyContent !== undefined
+          ? {
+              proposedPolicy: {
+                content: policyContent,
+                expectedRevision: root.revision,
+              },
+            }
+          : {}),
+      },
+      collection,
+    ),
+    request.changes.upsert.length
+      ? inspectOpenAppaPolicyTests(request.changes.upsert)
+      : { files: [] },
+  ]);
+  const parseErrors = inspection.files.flatMap((file) =>
+    file.error === null ? [] : [file.error],
   );
+  const tests = parseErrors.length
+    ? {
+        ...replayed,
+        validation: {
+          ...replayed.validation,
+          valid: false,
+          errors: [...replayed.validation.errors, ...parseErrors],
+        },
+      }
+    : replayed;
   const [currentRoot, currentSource, currentSuite] = await Promise.all([
     guardrailsPolicyService.get(organizationId),
     OpenAppaGithubSyncModel.find(organizationId),

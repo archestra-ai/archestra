@@ -1,6 +1,7 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test, vi } from "vitest";
+import { anthropicStreamPromise } from "@/test/llm-provider-stubs";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
 
@@ -1836,8 +1837,10 @@ describe("anthropicAdapterFactory - unsupported sampling params", () => {
     async function* emptyStream(): AsyncGenerator<never> {}
     const create = vi
       .fn()
-      .mockRejectedValueOnce(deprecatedTemperatureError())
-      .mockResolvedValueOnce(emptyStream());
+      .mockImplementationOnce(() =>
+        anthropicStreamPromise(Promise.reject(deprecatedTemperatureError())),
+      )
+      .mockImplementationOnce(() => anthropicStreamPromise(emptyStream()));
     const client = { messages: { create } };
 
     await anthropicAdapterFactory.executeStream(

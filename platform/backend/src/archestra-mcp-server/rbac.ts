@@ -44,6 +44,7 @@ export const TOOL_PERMISSIONS: Record<
     resource: "openappaDiagnostics",
     action: "update",
   },
+  list_openappa_yells: { resource: "openappaDiagnostics", action: "read" },
   list_openappa_consults: { resource: "openappaDiagnostics", action: "read" },
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
@@ -63,6 +64,8 @@ export const TOOL_PERMISSIONS: Record<
     action: "read",
   },
   update_guardrails_policy: { resource: "openappaPolicy", action: "update" },
+  // The handler also requires credential:update, as the REST route does.
+  bind_guardrails_credential: { resource: "openappaPolicy", action: "update" },
   get_guardrails_policy_change_status: {
     resource: "openappaPolicy",
     action: "read",

@@ -72,7 +72,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tags: ["LLM Proxy"],
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
-        response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
+        response: constructResponseSchema(
+          Anthropic.API.MessagesResponseWireSchema,
+        ),
       },
     },
     async (request, reply) => {
@@ -113,7 +115,9 @@ const anthropicProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }),
         body: Anthropic.API.MessagesRequestSchema,
         headers: Anthropic.API.MessagesHeadersSchema,
-        response: constructResponseSchema(Anthropic.API.MessagesResponseSchema),
+        response: constructResponseSchema(
+          Anthropic.API.MessagesResponseWireSchema,
+        ),
       },
     },
     async (request, reply) => {

@@ -1,7 +1,5 @@
 import {
   ADMIN_ROLE_NAME,
-  ADVISOR_AGENT_DESCRIPTION,
-  ADVISOR_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_TOOL_PREFIX,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
@@ -123,7 +121,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(30);
+    expect(originalToolIds).toHaveLength(32);
     const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("resolve_openappa_yell"),
     ]);
@@ -355,7 +353,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(30);
+    ).toHaveLength(32);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -480,7 +478,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(30);
+    expect(managedToolIds).toHaveLength(32);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -526,7 +524,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(27);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(29);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -536,7 +534,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(30);
+    expect(assigned).toHaveLength(32);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 
@@ -603,109 +601,6 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     expect(titleAgent?.systemPrompt).toBe(CHAT_TITLE_GENERATION_SYSTEM_PROMPT);
   });
 
-  test("seeds the advisor with the description callers are steered by", async ({
-    makeOrganization,
-  }) => {
-    const organization = await makeOrganization();
-
-    await syncBuiltInAgents();
-
-    const advisor = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.ADVISOR,
-      organization.id,
-    );
-
-    expect(advisor?.systemPrompt).toBe(ADVISOR_SYSTEM_PROMPT);
-    // Reaches the calling model as the delegation tool's description, so an
-    // empty or generic one leaves it with no idea when to consult.
-    expect(advisor?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
-    // An advisor that can act is no longer only an advisor.
-    expect(await AgentToolModel.findToolIdsByAgent(advisor?.id ?? "")).toEqual(
-      [],
-    );
-  });
-
-  test("seeds one org-wide advisor even when environments exist", async ({
-    makeOrganization,
-  }) => {
-    const organization = await makeOrganization();
-    await db
-      .insert(schema.environmentsTable)
-      .values({ organizationId: organization.id, name: "Staging" })
-      .returning();
-
-    await syncBuiltInAgents();
-
-    // Delegation carries an explicit advisor exception across environment
-    // boundaries, so one env-less row serves every environment.
-    const advisors = await db
-      .select({
-        id: schema.agentsTable.id,
-        environmentId: schema.agentsTable.environmentId,
-      })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organization.id),
-          eq(
-            sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-            BUILT_IN_AGENT_IDS.ADVISOR,
-          ),
-          isNull(schema.agentsTable.deletedAt),
-        ),
-      );
-    expect(advisors).toHaveLength(1);
-    expect(advisors[0].environmentId).toBeNull();
-  });
-
-  test("retires a stray environment-scoped advisor left by a pre-collapse replica", async ({
-    makeOrganization,
-  }) => {
-    const organization = await makeOrganization();
-    await syncBuiltInAgents();
-
-    const [staging] = await db
-      .insert(schema.environmentsTable)
-      .values({ organizationId: organization.id, name: "Staging" })
-      .returning();
-    // What an old replica's createEnvironment hook used to write.
-    const [stray] = await db
-      .insert(schema.agentsTable)
-      .values({
-        organizationId: organization.id,
-        name: BUILT_IN_AGENT_NAMES.ADVISOR,
-        agentType: "agent",
-        scope: "org",
-        systemPrompt: ADVISOR_SYSTEM_PROMPT,
-        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-        environmentId: staging.id,
-      })
-      .returning({ id: schema.agentsTable.id });
-
-    await syncBuiltInAgents();
-
-    const [strayAfter] = await db
-      .select({ deletedAt: schema.agentsTable.deletedAt })
-      .from(schema.agentsTable)
-      .where(eq(schema.agentsTable.id, stray.id));
-    expect(strayAfter.deletedAt).not.toBeNull();
-
-    const liveAdvisors = await db
-      .select({ environmentId: schema.agentsTable.environmentId })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organization.id),
-          eq(
-            sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-            BUILT_IN_AGENT_IDS.ADVISOR,
-          ),
-          isNull(schema.agentsTable.deletedAt),
-        ),
-      );
-    expect(liveAdvisors).toEqual([{ environmentId: null }]);
-  });
-
   test("carries a renamed or reworded built-in to an org that already has it", async ({
     makeOrganization,
   }) => {
@@ -713,7 +608,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     await syncBuiltInAgents();
 
     const seeded = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.ADVISOR,
+      BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       organization.id,
     );
     // What an environment seeded by an earlier release looks like. Neither
@@ -721,28 +616,31 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     // deploy that predates the current text.
     await db
       .update(schema.agentsTable)
-      .set({ name: "Advisor Agent", description: "an older description" })
+      .set({
+        name: "Old Compaction Agent",
+        description: "an older description",
+      })
       .where(eq(schema.agentsTable.id, seeded?.id ?? ""));
     const staleDelegation = await ToolModel.findOrCreateDelegationTool(
       seeded?.id ?? "",
     );
-    expect(staleDelegation.name).toBe("agent__advisor_agent");
+    expect(staleDelegation.name).toBe("agent__old_compaction_agent");
 
     await syncBuiltInAgents();
 
     const reconciled = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.ADVISOR,
+      BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
       organization.id,
     );
-    expect(reconciled?.name).toBe(BUILT_IN_AGENT_NAMES.ADVISOR);
-    expect(reconciled?.description).toBe(ADVISOR_AGENT_DESCRIPTION);
+    expect(reconciled?.name).toBe(BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION);
+    expect(reconciled?.description).toBe(seeded?.description);
     // A delegation tool is named for its target, so callers would otherwise
     // keep reaching a name the agent no longer answers to.
     const [delegationTool] = await db
       .select({ name: schema.toolsTable.name })
       .from(schema.toolsTable)
       .where(eq(schema.toolsTable.id, staleDelegation.id));
-    expect(delegationTool.name).toBe("agent__advisor");
+    expect(delegationTool.name).toBe("agent__context_compaction_subagent");
   });
 
   test("seeds the dual LLM main agent with the current maxRounds default", async ({

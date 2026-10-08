@@ -9,12 +9,19 @@ import {
   Check,
   ChevronDown,
   ChevronRight,
+  Copy,
   History,
   Search,
 } from "lucide-react";
 import dynamic from "next/dynamic";
 import Link from "next/link";
-import { type ReactNode, useEffect, useState } from "react";
+import {
+  type ComponentProps,
+  type ReactNode,
+  useEffect,
+  useState,
+} from "react";
+import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { SCOPE_META } from "@/components/scope-vocabulary";
 import { Badge } from "@/components/ui/badge";
@@ -43,6 +50,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
+import { copyToClipboard } from "@/lib/clipboard";
 import { useSkill } from "@/lib/skills/skill.query";
 import { cn } from "@/lib/utils/tailwind";
 import { skillDetailHref } from "../skills/_parts/skill-page-config";
@@ -524,6 +532,91 @@ function Empty({ children }: { children: ReactNode }) {
   );
 }
 
+// === Shared bits: text links, the prompt row ===
+
+/** A quiet underlined button, for links within a line of muted text. */
+export function TextButton({
+  className,
+  ...props
+}: ComponentProps<typeof UnstyledButton>) {
+  return (
+    <UnstyledButton
+      type="button"
+      className={cn(
+        "rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+        className,
+      )}
+      {...props}
+    />
+  );
+}
+
+/** Copies text with a brief "Copied" on the button, or a toast on failure. */
+export function useCopy() {
+  const [copied, setCopied] = useState(false);
+  const copy = async (text: string) => {
+    try {
+      await copyToClipboard(text);
+    } catch {
+      toast.error("Could not copy. Select the prompt and copy it manually.");
+      return false;
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1800);
+    return true;
+  };
+  return { copied, copy };
+}
+
+/** A prompt shown whole, wrapped, so it can be read before copying. */
+export function PromptRow({
+  text,
+  placeholder,
+  copied,
+  disabled,
+  onCopy,
+  onSelectionCopy,
+  className,
+}: {
+  /** null shows the placeholder instead. */
+  text: string | null;
+  placeholder?: string;
+  copied: boolean;
+  disabled?: boolean;
+  onCopy: () => void;
+  /** The text was selected and copied by hand. */
+  onSelectionCopy?: () => void;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn(
+        "flex min-h-16 items-center gap-3 rounded-2xl border bg-background py-2 pr-2 pl-5 shadow-sm",
+        className,
+      )}
+    >
+      <code
+        onCopy={onSelectionCopy}
+        className={cn(
+          "min-w-0 flex-1 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]",
+          !text && "font-sans text-muted-foreground",
+        )}
+      >
+        {text ?? placeholder}
+      </code>
+      <Button
+        size="lg"
+        onClick={onCopy}
+        disabled={!text || disabled}
+        className="h-12 shrink-0 rounded-xl px-6"
+      >
+        {copied ? <Check /> : <Copy />}
+        {copied ? "Copied" : "Copy prompt"}
+      </Button>
+    </div>
+  );
+}
+
 // === Helpers ===
 
 /**
@@ -541,6 +634,12 @@ export function agentsInPickerOrder(data: ConnectPageData): ConnectClient[] {
 
 export function nameOf(client: ConnectClient) {
   return client.id === "generic" ? "your agent" : client.label;
+}
+
+/** nameOf, to start a sentence: "Your agent", "Cursor". */
+export function sentenceNameOf(client: ConnectClient) {
+  const name = nameOf(client);
+  return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
 export function plural(n: number, word: string) {

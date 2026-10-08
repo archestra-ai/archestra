@@ -89,11 +89,14 @@ export function InlineChatError({
   // An empty turn that survived the backend's auto-retries is the model's
   // answer for this conversation, not a system failure — render it as a
   // neutral outcome rather than a destructive error.
-  const isEmptyModelTurn = chatError.code === ChatErrorCode.EmptyResponse;
-  const isNeutralOutcome = isUsageLimitExceeded || isEmptyModelTurn;
+  // A cut-short reply is shown next to the reply itself — same neutral tone.
+  const isModelTurnOutcome =
+    chatError.code === ChatErrorCode.EmptyResponse ||
+    chatError.code === ChatErrorCode.IncompleteResponse;
+  const isNeutralOutcome = isUsageLimitExceeded || isModelTurnOutcome;
   const StatusIcon = isUsageLimitExceeded
     ? Gauge
-    : isEmptyModelTurn
+    : isModelTurnOutcome
       ? MessageSquareDashed
       : AlertCircle;
   // Padding is explicit: assistant MessageContent is flat/unpadded by default,

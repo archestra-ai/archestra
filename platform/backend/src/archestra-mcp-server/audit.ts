@@ -17,6 +17,7 @@ import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import McpServerModel from "@/models/mcp-server";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import PluginModel from "@/models/plugin";
@@ -361,6 +362,13 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     action: "guardrailsPolicy.updated",
     useOrganizationAsResource: true,
     fetchById: (id, orgId) => GuardrailsPolicyModel.findByIdForAudit(id, orgId),
+  },
+  bind_guardrails_credential: {
+    resourceType: "openappaCredentialBinding",
+    action: "openappaCredentialBinding.updated",
+    idFromArgs: (args) => str(args.variable),
+    fetchById: (variable, orgId) =>
+      OpenAppaCredentialBindingModel.findByIdForAudit(variable, orgId),
   },
   create_guardrails_repository: {
     resourceType: "organization",

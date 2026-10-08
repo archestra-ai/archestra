@@ -339,18 +339,6 @@ export const APPA_SESSION_HEADER = "X-Appa-Session-ID";
 export const APPA_PARENT_HEADER = "X-Appa-Parent-ID";
 
 /**
- * Environment the delegating caller runs in, set by the in-process A2A
- * executor on advisor consultations so the proxy bills the spend to the
- * caller's environment (the advisor's own row is org-wide and env-less).
- * Honored only over the loopback socket, only when the executing agent is
- * the advisor built-in, and only for an environment of the agent's own
- * organization — external clients cannot use it to shift spend between
- * environment budgets.
- */
-export const DELEGATION_BILLING_ENVIRONMENT_HEADER =
-  "X-Archestra-Delegation-Environment-Id";
-
-/**
  * MCP App whose runtime is making this LLM call (`archestra.llm.complete()`),
  * set by the in-process app-runtime tool so the interaction records which app
  * spent the tokens instead of collapsing into the shared App Runtime agent.

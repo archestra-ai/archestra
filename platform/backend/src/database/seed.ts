@@ -1,7 +1,5 @@
 import {
   ADMIN_ROLE_NAME,
-  ADVISOR_AGENT_DESCRIPTION,
-  ADVISOR_SYSTEM_PROMPT,
   APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
@@ -27,7 +25,7 @@ import {
   SupportedProviders,
   testMcpServerCommand,
 } from "@archestra/shared";
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { verifyJwksSigningKey } from "@/auth/jwks-signing-key-guard";
 import config, {
@@ -195,13 +193,7 @@ export async function syncBuiltInAgents(): Promise<void> {
           name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
         } as const,
       },
-      advisorAgentDefinition(),
     ];
-
-    // The advisor used to have a row per environment; a replica still running
-    // the old code can recreate one mid-rolling-deploy. Retire strays before
-    // the sync below so the org-wide lookup never picks one.
-    await retireEnvironmentScopedAdvisors(organization.id);
 
     for (const builtInAgent of builtInAgents) {
       await syncBuiltInAgentRow({
@@ -392,11 +384,13 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "publish_openappa_validation_change",
     "get_openappa_yell",
     "resolve_openappa_yell",
+    "list_openappa_yells",
     "list_openappa_consults",
     "list_guardrails_battery_fits",
     "validate_guardrails_policy",
     "preview_guardrails_policy_change",
     "update_guardrails_policy",
+    "bind_guardrails_credential",
     "get_guardrails_policy_change_status",
     "list_runtime_credentials",
     "get_runtime_credential",
@@ -1233,50 +1227,6 @@ type BuiltInAgentDefinition = {
   systemPrompt: string;
   builtInAgentConfig: BuiltInAgentConfig;
 };
-
-/** Built per call, not at module load, so branding resolves against live config. */
-function advisorAgentDefinition(): BuiltInAgentDefinition {
-  return {
-    builtInAgentId: BUILT_IN_AGENT_IDS.ADVISOR,
-    name: BUILT_IN_AGENT_NAMES.ADVISOR,
-    description: archestraMcpBranding.brandBuiltInText(
-      ADVISOR_AGENT_DESCRIPTION,
-    ),
-    systemPrompt: archestraMcpBranding.brandBuiltInText(ADVISOR_SYSTEM_PROMPT),
-    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-  };
-}
-
-/**
- * Soft-deletes advisor rows carrying an environment_id. The advisor is
- * org-wide; an environment-scoped row can only be residue recreated by a
- * replica still running pre-collapse code. Soft rather than hard delete:
- * anything pointing at the stray stays inert behind notDeleted() filters,
- * and nothing configured on it is worth remapping.
- */
-async function retireEnvironmentScopedAdvisors(
-  organizationId: string,
-): Promise<void> {
-  const retired = await db
-    .update(schema.agentsTable)
-    .set({ deletedAt: new Date() })
-    .where(
-      and(
-        eq(schema.agentsTable.organizationId, organizationId),
-        sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.ADVISOR}`,
-        isNotNull(schema.agentsTable.environmentId),
-        isNull(schema.agentsTable.deletedAt),
-      ),
-    )
-    .returning({ id: schema.agentsTable.id });
-
-  if (retired.length > 0) {
-    logger.warn(
-      { organizationId, retiredAdvisorIds: retired.map((row) => row.id) },
-      "Retired stray environment-scoped advisor rows",
-    );
-  }
-}
 
 /**
  * Reconciles one built-in agent row per organization against its shipped

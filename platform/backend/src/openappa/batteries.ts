@@ -1653,7 +1653,7 @@ type CatalogBattery =
       include: string;
       description: string;
       namespaces: string[];
-      /** Credential variables `[credentials]` must bind to a runtime credential key. */
+      /** Credential variables that need a runtime credential key bound. */
       credentials: string[];
       benefit: string | null;
       setup: string[];

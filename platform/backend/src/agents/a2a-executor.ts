@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import {
-  BUILT_IN_AGENT_IDS,
   type ChatUploadRejectionReason,
   chatUploadRejectionReason,
   getModelReadableMimeTypes,
@@ -54,6 +53,7 @@ import {
   ProviderError,
   SubagentProviderError,
 } from "@/routes/chat/errors";
+import { usesStepPromptCache } from "@/routes/chat/normalization/apply-prompt-cache";
 import { prepareMessagesForProvider } from "@/routes/chat/normalization/prepare-for-provider";
 import { buildOllamaNativeProviderOptions } from "@/routes/chat/ollama-native-params";
 import { createToolCallRepair } from "@/routes/chat/tool-call-repair";
@@ -159,12 +159,6 @@ export interface A2AExecuteParams {
   chatOpsThreadId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
-  /**
-   * Environment of the delegating caller (null = Default). Only consumed when
-   * the executed agent is the advisor built-in: its own row is org-wide and
-   * env-less, so consultations bill to the caller's environment instead.
-   */
-  callerEnvironmentId?: string | null;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
 
@@ -318,14 +312,6 @@ export async function executeA2AMessage(
     await assertCallerMayStartTurn({ agentId, userId });
   }
 
-  // The advisor's row is env-less, so without this its spend would escape
-  // environment budgets entirely; every other agent bills to its own row's
-  // environment as usual.
-  const delegationBillingEnvironmentId =
-    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
-      ? (params.callerEnvironmentId ?? null)
-      : null;
-
   const { selectedModel, selectedProvider: provider } =
     await resolveConversationLlmSelectionForAgent({
       agent: {
@@ -414,7 +400,6 @@ export async function executeA2AMessage(
         externalAgentId: delegationChain,
         agentLlmApiKeyId: agent.llmApiKeyId,
         contextIsTrusted: parentContextIsTrusted,
-        delegationBillingEnvironmentId,
         appaSubagentToken: params.appaSubagent?.token,
       });
 
@@ -573,7 +558,6 @@ export async function executeA2AMessage(
               externalAgentId: delegationChain,
               agentLlmApiKeyId: agent.llmApiKeyId,
               contextIsTrusted: parentContextIsTrusted,
-              delegationBillingEnvironmentId,
               appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,
@@ -635,16 +619,15 @@ export async function executeA2AMessage(
         logContext: { agentId: agent.id, sessionId },
         // runAgentStream marks only the initial messages. Without a breakpoint
         // that moves with the tool loop, every later step pays the full input
-        // price for all earlier tool calls and results. Native Anthropic only,
-        // as in the chat route.
-        ...(provider === "anthropic" &&
-          anthropicNativeEndpoint && {
-            promptCache: {
-              provider,
-              model: selectedModel,
-              anthropicNativeEndpoint,
-            },
-          }),
+        // price for all earlier tool calls and results. Same providers as the
+        // chat route.
+        ...(usesStepPromptCache({ provider, anthropicNativeEndpoint }) && {
+          promptCache: {
+            provider,
+            model: selectedModel,
+            anthropicNativeEndpoint,
+          },
+        }),
       }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =

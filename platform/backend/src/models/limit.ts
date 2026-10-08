@@ -925,12 +925,6 @@ export class LimitValidationService {
     userId?: string;
     virtualKeyId?: string;
     passthroughVirtualKeyId?: string;
-    /**
-     * Environment to check instead of the agent row's own — the proxy sets it
-     * for advisor consultations, which bill to the delegating caller's
-     * environment because the advisor's row is org-wide and env-less.
-     */
-    environmentIdOverride?: string;
     /** The agent row this request already read. */
     agent?: { environmentId: string | null };
     teamSource?: AgentTeamSource;
@@ -967,11 +961,9 @@ export class LimitValidationService {
 
       // Resolve the agent's environment (nullable). Used for environment-scoped
       // limits and per-environment default-user limits.
-      const environmentId =
-        params.environmentIdOverride ??
-        (params.agent
-          ? params.agent.environmentId
-          : await AgentModel.findEnvironmentId(agentId));
+      const environmentId = params.agent
+        ? params.agent.environmentId
+        : await AgentModel.findEnvironmentId(agentId);
 
       const entities: LimitsCleanupOptionsEntities = {
         agent: agentId,

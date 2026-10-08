@@ -3638,8 +3638,15 @@
     {
       "idx": 519,
       "version": "7",
-      "when": 1791466007852,
-      "tag": "0519_easy_luke_cage",
+      "when": 1791466964206,
+      "tag": "0519_retire_advisor",
+      "breakpoints": true
+    },
+    {
+      "idx": 520,
+      "version": "7",
+      "when": 1791469737528,
+      "tag": "0520_easy_luke_cage",
       "breakpoints": true
     }
   ]

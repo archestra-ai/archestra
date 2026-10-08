@@ -113,6 +113,13 @@ describe("isOAuthClientForConnectClient", () => {
       }),
     ).toBe(true);
     expect(
+      isOAuthClientForConnectClient("opencode", {
+        clientId: "https://opencode.ai/oauth/opencode/client.json",
+        name: "opencode",
+        redirectUris: ["http://127.0.0.1:51675/callback"],
+      }),
+    ).toBe(true);
+    expect(
       isOAuthClientForConnectClient("copilot-cli", {
         ...dcr,
         clientId: "https://github.com/copilot/cli/client-metadata.json",

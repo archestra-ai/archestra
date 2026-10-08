@@ -175,8 +175,16 @@ export const BatteryPolicySourceSchema = z.object({
   content: z.string(),
 });
 
-/** What a catalog entry was matched on; a name alone is a weak signal. */
-export const BatteryMatchEvidenceSchema = z.enum(["host", "image", "name"]);
+/**
+ * What a server was matched on: a catalog entry's host or image, its name
+ * alone (weak), or, for a detected server, the tools its battery's rules name.
+ */
+export const BatteryMatchEvidenceSchema = z.enum([
+  "host",
+  "image",
+  "name",
+  "tool",
+]);
 export type BatteryMatchEvidence = z.infer<typeof BatteryMatchEvidenceSchema>;
 
 /** A battery a catalog entry stands for, with the install it already has. */
@@ -199,7 +207,19 @@ export const AttachReadinessSchema = z.enum([
 ]);
 export type AttachReadiness = z.infer<typeof AttachReadinessSchema>;
 
-/** The batteries a catalog entry stands for, and whether one can be attached. */
+/** The server whose batteries are asked for: a catalog entry or a detected server, one of the two. */
+export const BatteryMatchesQuerySchema = z
+  .object({
+    catalogId: z.uuid().optional(),
+    detectedId: z.string().min(1).optional(),
+  })
+  .refine(
+    (query) =>
+      (query.catalogId === undefined) !== (query.detectedId === undefined),
+    "Name exactly one of catalogId and detectedId",
+  );
+
+/** The batteries a server stands for, and whether one can be attached. */
 export const BatteryMatchesSchema = z.object({
   attach: AttachReadinessSchema,
   matches: z.array(BatteryMatchSchema),
@@ -306,8 +326,8 @@ export type UploadedBatteryPackage = z.infer<
 
 export const CreateBatteryInstallSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),
-  /** The catalog to govern; absent for a battery made of annotators alone. */
-  catalogId: z.string().uuid().optional(),
+  /** The server to govern; absent for a battery made of annotators alone. */
+  attachment: BatteryServerAttachmentSchema.optional(),
   /** The stored package to include; absent spells the bundled battery. */
   packageHash: z
     .string()

@@ -10,20 +10,29 @@ import { useFeature } from "@/lib/config/config.query";
 import {
   ATTACH_NOTES,
   type BatteryMatch,
+  type BatteryServerAttachment,
   useBatteries,
   useBatteryMatches,
   useSetBatteryEnabled,
 } from "@/lib/openappa-batteries.query";
 
 /**
- * "Add to APPA" checkboxes for the guardrails batteries a catalog entry stands
- * for. Every box is off until someone turns it on, whatever the match's
- * evidence; turning it on is what includes the battery in the policy.
+ * "Add to APPA" checkboxes for the guardrails batteries a server stands for:
+ * a catalog entry, or a client's own detected server. Every box is off until
+ * someone turns it on, whatever the match's evidence; turning it on is what
+ * includes the battery in the policy.
  */
-export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
+export function BatteryAttachToggles({
+  attachment,
+  emptyMessage,
+}: {
+  attachment: BatteryServerAttachment;
+  /** Shown when no battery matches; nothing is shown without one. */
+  emptyMessage?: string;
+}) {
   const openappaEnabled = useFeature("openappaEnabled") === true;
   const { data, isError, refetch } = useBatteryMatches(
-    catalogId,
+    attachment,
     openappaEnabled,
   );
   const { data: canManage } = useHasPermissions({
@@ -36,7 +45,7 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
     credential: ["update"],
   });
   const batteries = useBatteries(openappaEnabled);
-  const setEnabled = useSetBatteryEnabled(catalogId);
+  const setEnabled = useSetBatteryEnabled(attachment);
   // A failed lookup must not read as "no battery applies".
   if (isError)
     return (
@@ -52,7 +61,10 @@ export function CatalogBatteryToggles({ catalogId }: { catalogId: string }) {
         </Button>
       </p>
     );
-  if (!data?.matches.length) return null;
+  if (!data?.matches.length)
+    return emptyMessage ? (
+      <p className="text-sm text-muted-foreground">{emptyMessage}</p>
+    ) : null;
   const attachNote = data.attach === "ready" ? null : ATTACH_NOTES[data.attach];
   return (
     <div className="space-y-2">
@@ -148,6 +160,7 @@ const EVIDENCE_NOTES: Record<BatteryMatch["evidence"], string> = {
   host: "Matched by the server's host.",
   image: "Matched by the server's image.",
   name: "Matched by name only.",
+  tool: "Its rules name tools this server declares.",
 };
 
 function describe(match: BatteryMatch): string {

@@ -7,9 +7,11 @@ import {
   ChevronDown,
   ChevronUp,
   MessageCircle,
+  Plug,
   Radar,
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
+import { BatteryAttachToggles } from "@/app/mcp/registry/_parts/battery-attach-toggles";
 import { AgentIcon } from "@/components/agent-icon";
 import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
@@ -25,7 +27,13 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { DEFAULT_FILTER_ALL } from "@/consts";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import {
@@ -199,7 +207,9 @@ export function EntitiesTable() {
         header: "Actions",
         size: 100,
         cell: ({ row }) =>
-          isDetected(row.original) ? null : (
+          isDetected(row.original) ? (
+            <DetectedAttachPopover entity={row.original} />
+          ) : (
             <OpenAppaChatButton
               permissions={
                 row.original.type === "mcp_server"
@@ -386,6 +396,45 @@ function isTypeFilter(value: string | null): value is TypeFilter {
 
 function isDetected(entity: CoverageEntity): entity is DetectedCoverageEntity {
   return entity.type === "detected_mcp_server";
+}
+
+/** Attach a battery to a client's own server, from the suggestions its tool names earn. */
+function DetectedAttachPopover({ entity }: { entity: DetectedCoverageEntity }) {
+  const { data: canWrite } = useHasPermissions({ openappaPolicy: ["update"] });
+  if (canWrite !== true) return null;
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7"
+          aria-label={`Attach a battery to ${entity.name}`}
+          onClick={(event) => event.stopPropagation()}
+        >
+          <Plug />
+          <span>Attach</span>
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        align="end"
+        className="w-96"
+        onClick={(event) => event.stopPropagation()}
+      >
+        <div className="space-y-2">
+          <p className="text-sm font-medium">Batteries for {entity.name}</p>
+          <p className="text-xs text-muted-foreground">
+            Suggested from the tools this server declares. Attaching points the
+            battery's rules at {entity.id}.
+          </p>
+          <BatteryAttachToggles
+            attachment={{ kind: "detected", detectedId: entity.id }}
+            emptyMessage="No battery names this server's tools."
+          />
+        </div>
+      </PopoverContent>
+    </Popover>
+  );
 }
 
 function DetectedClientBadge({ entity }: { entity: DetectedCoverageEntity }) {

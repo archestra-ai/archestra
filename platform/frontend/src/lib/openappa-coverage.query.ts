@@ -80,3 +80,26 @@ export function useCoverageSummary() {
     },
   });
 }
+
+/**
+ * The servers people connected directly to their coding clients, as the
+ * Guardrails list shows them: the detected rows of the entities endpoint.
+ * Bounded by the endpoint's page size, which is more than an organization's
+ * client labels.
+ */
+export function useDetectedMcpServers({ enabled = true } = {}) {
+  return useQuery({
+    queryKey: [coverageQueryPrefix, "entities", "detected"],
+    enabled,
+    queryFn: async () => {
+      const { data, error } = await archestraApiSdk.getOpenappaCoverageEntities(
+        { query: { type: "detected_mcp_server", limit: 100, offset: 0 } },
+      );
+      throwOnApiError(error, { toastOnError: false });
+      return (data?.data ?? []).filter(
+        (entity): entity is DetectedCoverageEntity =>
+          entity.type === "detected_mcp_server",
+      );
+    },
+  });
+}

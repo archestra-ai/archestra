@@ -62,6 +62,7 @@ import {
   workloadSpenderMayUseOffer,
 } from "@/services/agent-runtime/runtime-identity";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { listDetectedMcpServers } from "@/services/detected-mcp-servers";
 import {
   firstPolicyRefusal,
   getGuardrailsDeployment,
@@ -569,6 +570,39 @@ const registry = defineArchestraTools([
           catalogId: args.mcpServerId ?? undefined,
           ...visibility,
         }),
+      });
+    },
+  }),
+  defineArchestraTool({
+    shortName: "list_detected_mcp_servers",
+    title: "List detected MCP servers",
+    annotations: { readOnlyHint: true },
+    description:
+      "List the MCP servers people connected directly to their coding clients (Claude Code, Codex, OpenCode), as the LLM proxy saw them declare tools: one per client and server label, with its tool names. Each server's `id`, `<client>.<label>` such as `claude-code.slack`, is the `[server_aliases]` target a policy names to govern it, the way a catalog server's tool prefix is. `batteryMatches` lists the undeclared batteries whose rules name its tools, by name overlap only; propose them, never attach without the operator. A battery already attached to the server is marked `declared`. This changes nothing.",
+    schema: z.strictObject({}),
+    async handler({ context }) {
+      if (!context.organizationId)
+        throw new ApiError(401, "Organization context is required");
+      const organizationId = context.organizationId;
+      const servers = await listDetectedMcpServers(organizationId);
+      return result({
+        servers: await Promise.all(
+          servers.map(async (server) => ({
+            id: server.id,
+            label: server.label,
+            client: server.clientFamily,
+            toolNames: server.tools.map((tool) => tool.toolName),
+            batteryMatches: (
+              await openappaBatteriesService.matchesForDetected({
+                organizationId,
+                detectedId: server.id,
+              })
+            ).matches.map((match) => ({
+              battery: match.battery,
+              declared: match.install !== null,
+            })),
+          })),
+        ),
       });
     },
   }),

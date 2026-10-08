@@ -1,6 +1,7 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
   ARCHESTRA_MCP_SERVER_NAME,
+  CLAUDE_CODE_CLIENT_ID,
   extractMcpHumanRuling,
   MCP_HUMAN_RULING_META_KEY,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
@@ -9,8 +10,12 @@ import {
 } from "@archestra/shared";
 import { vi } from "vitest";
 import config from "@/config";
+import ToolModel from "@/models/tool";
+import ToolObservationModel from "@/models/tool-observation";
 import { scopedSessionId } from "@/openappa/actor";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { currentTrajectory } from "@/openappa/current-trajectory";
+import { openappaDeclarations } from "@/openappa/declarations";
 import {
   consumeHitlRuling,
   getHitlAskUserArguments,
@@ -19,6 +24,7 @@ import {
   stageHitlReview,
 } from "@/openappa/hitl-review";
 import { signPeerProof } from "@/openappa/peer-claims";
+import { toolEntries } from "@/openappa/policy-text";
 import * as openappaService from "@/openappa/service";
 import { workloadPrincipal } from "@/services/agent-runtime/runtime-identity";
 import * as guardrailsDeployment from "@/services/guardrails-deployment";
@@ -1720,6 +1726,105 @@ describe("OpenAPPA tool execution", () => {
         offerId: "offer-child",
       }),
     ).toBe("deny");
+  });
+});
+
+describe("list_detected_mcp_servers", () => {
+  const toolFullName = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}list_detected_mcp_servers`;
+  const originalOpenappaConfig = { ...config.openappa };
+  afterEach(() => {
+    config.openappa = originalOpenappaConfig;
+  });
+
+  test("lists each client's own servers with the batteries that name their tools, marked once attached", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    config.openappa = { ...originalOpenappaConfig, enabled: true };
+    const org = await makeOrganization();
+    const user = await makeUser();
+    await makeMember(user.id, org.id, { role: "admin" });
+    const battery = await openappaDeclarations.resolveInstalled({
+      organizationId: org.id,
+      name: "github",
+      packageHash: null,
+    });
+    const named = toolEntries(battery?.policy ?? "")
+      .map((entry) => /^mcp\/[^/]+\/([^/*][^/]*)$/.exec(entry.name)?.[1])
+      .find((name): name is string => name !== undefined);
+    if (!named) throw new Error("the github battery names no tool");
+    await ToolModel.bulkCreateProxyToolsIfNotExists(
+      [
+        { name: `mcp__github__${named}`, description: null, parameters: {} },
+        { name: "mcp__weather__forecast", description: null, parameters: {} },
+      ],
+      "",
+    );
+    await ToolObservationModel.recordObservations({
+      toolNames: [`mcp__github__${named}`, "mcp__weather__forecast"],
+      userId: user.id,
+      externalAgentId: CLAUDE_CODE_CLIENT_ID,
+    });
+    const context: ArchestraContext = {
+      agent: { id: "agent", name: "Agent" },
+      userId: user.id,
+      organizationId: org.id,
+    };
+
+    const result = await executeArchestraTool(toolFullName, {}, context);
+    expect(result.isError).toBeFalsy();
+    expect((result.structuredContent as any).servers).toEqual([
+      {
+        id: "claude-code.github",
+        label: "github",
+        client: "claude-code",
+        toolNames: [named],
+        batteryMatches: [{ battery: "github", declared: false }],
+      },
+      {
+        id: "claude-code.weather",
+        label: "weather",
+        client: "claude-code",
+        toolNames: ["forecast"],
+        batteryMatches: [],
+      },
+    ]);
+
+    await openappaBatteriesService.createInstall({
+      userId: user.id,
+      organizationId: org.id,
+      install: {
+        batteryName: "github",
+        attachment: { kind: "detected", detectedId: "claude-code.github" },
+        packageHash: null,
+      },
+    });
+    const after = await executeArchestraTool(toolFullName, {}, context);
+    expect((after.structuredContent as any).servers[0].batteryMatches).toEqual([
+      { battery: "github", declared: true },
+    ]);
+  });
+
+  test("a caller without openappaPolicy:read is refused", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    config.openappa = { ...originalOpenappaConfig, enabled: true };
+    const org = await makeOrganization();
+    // Not a member of the organization: no permission on its policy.
+    const user = await makeUser();
+    const refused = await executeArchestraTool(
+      toolFullName,
+      {},
+      {
+        agent: { id: "agent", name: "Agent" },
+        userId: user.id,
+        organizationId: org.id,
+      },
+    );
+    expect(refused.isError).toBe(true);
+    expect(refused.structuredContent).toBeUndefined();
   });
 });
 

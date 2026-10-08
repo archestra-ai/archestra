@@ -20,7 +20,7 @@ import {
 } from "vitest";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
-import { CatalogBatteryToggles } from "./catalog-battery-toggles";
+import { BatteryAttachToggles } from "./battery-attach-toggles";
 
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
@@ -144,7 +144,9 @@ function show() {
   });
   return render(
     <QueryClientProvider client={client}>
-      <CatalogBatteryToggles catalogId={catalogId} />
+      <BatteryAttachToggles
+        attachment={{ kind: "catalog", catalogId: catalogId }}
+      />
     </QueryClientProvider>,
   );
 }
@@ -192,7 +194,7 @@ test("a battery matched by name alone starts off and is installed when turned on
       async ({ request }) => {
         expect(await request.json()).toEqual({
           batteryName: "slack",
-          catalogId,
+          attachment: { kind: "catalog", catalogId },
         });
         const created = install({
           id: "install-2",
@@ -407,7 +409,7 @@ test("a battery the policy already includes is added under that entry's package"
   );
   expect(body).toEqual({
     batteryName: "slack",
-    catalogId,
+    attachment: { kind: "catalog", catalogId },
     packageHash: uploadedHash,
   });
 });
@@ -446,7 +448,7 @@ test("an uploaded battery the policy does not include yet is added under its new
   );
   expect(body).toEqual({
     batteryName: "slack",
-    catalogId,
+    attachment: { kind: "catalog", catalogId },
     packageHash: newerHash,
   });
 });

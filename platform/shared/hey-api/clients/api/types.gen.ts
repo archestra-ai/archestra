@@ -86540,8 +86540,9 @@ export type GetOpenappaEffectivePolicyResponse = GetOpenappaEffectivePolicyRespo
 export type GetOpenappaBatteryMatchesData = {
     body?: never;
     path?: never;
-    query: {
-        catalogId: string;
+    query?: {
+        catalogId?: string;
+        detectedId?: string;
     };
     url: '/api/openappa/battery-matches';
 };
@@ -86619,7 +86620,7 @@ export type GetOpenappaBatteryMatchesResponses = {
         attach: 'ready' | 'unsynced' | 'conflicting';
         matches: Array<{
             battery: string;
-            evidence: 'host' | 'image' | 'name';
+            evidence: 'host' | 'image' | 'name' | 'tool';
             install: {
                 id: string;
                 organizationId: string;
@@ -86646,7 +86647,13 @@ export type GetOpenappaBatteryMatchesResponse = GetOpenappaBatteryMatchesRespons
 export type CreateOpenappaBatteryInstallData = {
     body: {
         batteryName: string;
-        catalogId?: string;
+        attachment?: {
+            kind: 'catalog';
+            catalogId: string;
+        } | {
+            kind: 'detected';
+            detectedId: string;
+        };
         packageHash?: string | null;
     };
     path?: never;

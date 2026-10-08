@@ -1,5 +1,8 @@
 import { describe, expect, test } from "vitest";
-import { matchBatteries } from "./openappa-battery-match";
+import {
+  matchBatteries,
+  matchBatteriesByToolNames,
+} from "./openappa-battery-match";
 
 const available = new Set(["github", "notion", "slack", "linear"]);
 
@@ -127,5 +130,31 @@ describe("matchBatteries", () => {
         available,
       ),
     ).toEqual([]);
+  });
+});
+
+describe("matchBatteriesByToolNames", () => {
+  const rules = new Map<string, ReadonlySet<string>>([
+    ["slack", new Set(["slack_send_message", "slack_list_channels"])],
+    ["github", new Set(["create_issue", "list"])],
+    ["linear", new Set(["create_issue"])],
+  ]);
+
+  test("names the batteries whose rules address the server's tools, most named first", () => {
+    expect(
+      matchBatteriesByToolNames(
+        new Set(["slack_send_message", "slack_list_channels", "create_issue"]),
+        rules,
+      ),
+    ).toEqual([
+      { battery: "slack", evidence: "tool" },
+      { battery: "github", evidence: "tool" },
+      { battery: "linear", evidence: "tool" },
+    ]);
+  });
+
+  test("a server none of the rules address matches nothing", () => {
+    expect(matchBatteriesByToolNames(new Set(["forecast"]), rules)).toEqual([]);
+    expect(matchBatteriesByToolNames(new Set(), rules)).toEqual([]);
   });
 });

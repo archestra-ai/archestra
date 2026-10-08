@@ -4,7 +4,11 @@ import type {
   BatteryPackage as NativeBatteryPackage,
   PolicyEditInput,
 } from "@archestra/openappa-rs";
-import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import {
+  matchBatteries,
+  matchBatteriesByToolNames,
+  parseFullToolName,
+} from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
@@ -26,6 +30,7 @@ import {
   guardrailsPolicyService,
 } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
+import type { DetectedMcpServer } from "@/types/detected-mcp-server";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import {
   type AttachReadiness,
@@ -72,6 +77,7 @@ import {
   batteryBackedDetectedTargets,
   openCodeLabelsOf,
 } from "./detected-targets";
+import { toolEntries } from "./policy-text";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -206,6 +212,46 @@ class OpenAppaBatteriesService {
             ) ?? null,
         }),
       ),
+    };
+  }
+
+  /**
+   * The batteries a detected server stands for: those whose rules name tools
+   * it declared. Name overlap is the only evidence a client's own server
+   * offers, so these are suggestions; attaching is the caller's decision.
+   */
+  async matchesForDetected(params: {
+    organizationId: string;
+    detectedId: string;
+  }): Promise<BatteryMatches> {
+    const { organizationId, detectedId } = params;
+    const server = await this.requireDetectedServer({
+      organizationId,
+      attachment: { detectedId },
+    });
+    const { installs } = await this.current(organizationId);
+    const available = await this.availableBatteries(organizationId);
+    const ruleToolNames = new Map(
+      [...available].map(([name, found]) => [
+        name,
+        batteryRuleToolNames(found.package.policy),
+      ]),
+    );
+    const attachment: BatteryAttachment = { kind: "detected", detectedId };
+    return {
+      attach: "ready",
+      matches: matchBatteriesByToolNames(
+        new Set(server.tools.map((tool) => tool.toolName)),
+        ruleToolNames,
+      ).map((match) => ({
+        ...match,
+        install:
+          installs.find(
+            (install) =>
+              install.batteryName === match.battery &&
+              sameAttachment(attachmentOf(install), attachment),
+          ) ?? null,
+      })),
     };
   }
 
@@ -490,10 +536,10 @@ class OpenAppaBatteriesService {
     });
     if (!battery)
       throw new ApiError(404, `Unknown battery ${install.batteryName}`);
-    const catalog = await this.installCatalog({
+    const server = await this.installServer({
       organizationId,
       battery,
-      catalogId: install.catalogId ?? null,
+      attachment: install.attachment ?? null,
     });
     await this.editRoot({
       organizationId,
@@ -515,12 +561,12 @@ class OpenAppaBatteriesService {
             409,
             `${install.batteryName} is already included as ${included.entry}. Install it under that entry, or upload the bytes it should run.`,
           );
-        if (catalog === null) return [{ kind: "addInclude", entry }];
+        if (server === null) return [{ kind: "addInclude", entry }];
         const { targets, readiness } = await this.attachTargets({
           organizationId,
-          server: { kind: "catalog", id: catalog.id, name: catalog.name },
+          server,
         });
-        assertAttachable({ server: catalog.name, readiness });
+        assertAttachable({ server: server.name, readiness });
         return [
           { kind: "addInclude", entry },
           ...bindEdits({ resolution, namespaces: battery.namespaces, targets }),
@@ -530,10 +576,7 @@ class OpenAppaBatteriesService {
     return this.batteryView({
       organizationId,
       name: install.batteryName,
-      attachment:
-        catalog === null
-          ? { kind: "organization" }
-          : { kind: "catalog", catalogId: catalog.id },
+      attachment: install.attachment ?? { kind: "organization" },
     });
   }
 
@@ -1532,29 +1575,43 @@ class OpenAppaBatteriesService {
   }
 
   /**
-   * The catalog an install governs, or null for a battery made of annotators
-   * alone, which governs the organization. Each kind refuses the other's request.
+   * The server an install governs, or null for a battery made of annotators
+   * alone, which governs the organization. Each kind refuses the other's
+   * request. A detected server must be one the organization has seen.
    */
-  private async installCatalog(params: {
+  private async installServer(params: {
     organizationId: string;
     battery: NativeBatteryPackage;
-    catalogId: string | null;
-  }) {
-    const { organizationId, battery, catalogId } = params;
+    attachment: BatteryServerAttachment | null;
+  }): Promise<AttachedServer | null> {
+    const { organizationId, battery, attachment } = params;
     const organizationWide = batteryScope(battery) === "organization";
-    if (organizationWide && catalogId !== null)
+    if (organizationWide && attachment !== null)
       throw new ApiError(
         400,
-        `${battery.name} is made of annotators alone and governs the organization, not a catalog. Install it without one.`,
+        `${battery.name} is made of annotators alone and governs the organization, not a server. Install it without one.`,
       );
-    if (!organizationWide && catalogId === null)
+    if (!organizationWide && attachment === null)
       throw new ApiError(
         400,
-        `${battery.name} governs MCP servers. Name the catalog to attach it to.`,
+        `${battery.name} governs MCP servers. Name the server to attach it to.`,
       );
-    return catalogId === null
-      ? null
-      : this.requireCatalog({ organizationId, catalogId });
+    if (attachment === null) return null;
+    if (attachment.kind === "detected")
+      await this.requireDetectedServer({ organizationId, attachment });
+    return this.attachedServer({ organizationId, attachment });
+  }
+
+  /** A detected server the organization has seen, by the id a target spells. */
+  private async requireDetectedServer(params: {
+    organizationId: string;
+    attachment: { detectedId: string };
+  }): Promise<DetectedMcpServer> {
+    const server = (await listDetectedMcpServers(params.organizationId)).find(
+      (candidate) => candidate.id === params.attachment.detectedId,
+    );
+    if (!server) throw new ApiError(404, "Detected MCP server not found");
+    return server;
   }
 
   /** The alias edits that attach or detach one server from an included battery. */
@@ -2151,3 +2208,19 @@ const presentDetected = new LRUCacheManager<{
   revision: number;
   present: Set<string>;
 }>({ maxSize: 500, defaultTtl: 10 * 60_000 });
+
+/**
+ * The tool names a battery's own rules address: the leaf of each canonical
+ * `mcp/<namespace>/<tool>` rule. A wildcard or a rule on another family
+ * names no tool a server could declare.
+ */
+function batteryRuleToolNames(policy: string): ReadonlySet<string> {
+  const names = new Set<string>();
+  for (const entry of toolEntries(policy)) {
+    const canonical = BATTERY_RULE_TOOL.exec(entry.name);
+    if (canonical?.[1]) names.add(canonical[1]);
+  }
+  return names;
+}
+
+const BATTERY_RULE_TOOL = /^mcp\/[^/]+\/([^/*][^/]*)$/;

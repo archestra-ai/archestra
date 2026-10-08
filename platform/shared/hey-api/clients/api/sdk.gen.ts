@@ -8077,7 +8077,7 @@ export const getOpenappaEffectivePolicy = <ThrowOnError extends boolean = false>
  *
  * `openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage
  */
-export const getOpenappaBatteryMatches = <ThrowOnError extends boolean = false>(options: Options<GetOpenappaBatteryMatchesData, ThrowOnError>) => (options.client ?? client).get<GetOpenappaBatteryMatchesResponses, GetOpenappaBatteryMatchesErrors, ThrowOnError>({ url: '/api/openappa/battery-matches', ...options });
+export const getOpenappaBatteryMatches = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaBatteryMatchesData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaBatteryMatchesResponses, GetOpenappaBatteryMatchesErrors, ThrowOnError>({ url: '/api/openappa/battery-matches', ...options });
 
 /**
  * Authentication:

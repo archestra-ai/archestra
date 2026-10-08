@@ -1,5 +1,8 @@
-/** What a catalog entry was matched on; a name alone is a weak signal. */
-type BatteryMatchEvidence = "host" | "image" | "name";
+/**
+ * What a server was matched on: a catalog entry's host or image, its name
+ * alone (weak), or, for a client's own server, the tools a battery's rules name.
+ */
+type BatteryMatchEvidence = "host" | "image" | "name" | "tool";
 
 type BatteryMatchCatalog = {
   name: string;
@@ -41,6 +44,26 @@ export function matchBatteries(
       weak.push({ battery: rule.battery, evidence: "name" });
   }
   return strong.length > 0 ? strong : weak;
+}
+
+/**
+ * The batteries whose rules name tools of a server known only by its tool
+ * names, the one with the most named tools first. A battery that names none
+ * of them is no match: the evidence is name overlap and nothing stronger, so
+ * callers offer these as suggestions, never attach on them.
+ */
+export function matchBatteriesByToolNames(
+  toolNames: ReadonlySet<string>,
+  ruleToolNames: ReadonlyMap<string, ReadonlySet<string>>,
+): BatteryMatch[] {
+  return [...ruleToolNames]
+    .map(([battery, named]) => ({
+      battery,
+      named: [...named].filter((name) => toolNames.has(name)).length,
+    }))
+    .filter(({ named }) => named > 0)
+    .sort((a, b) => b.named - a.named || a.battery.localeCompare(b.battery))
+    .map(({ battery }) => ({ battery, evidence: "tool" as const }));
 }
 
 type BatteryMatchRule = {

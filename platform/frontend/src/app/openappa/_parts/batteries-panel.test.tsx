@@ -593,7 +593,7 @@ test("attaching a second server carries the package hash the entry already names
   await waitFor(() =>
     expect(body).toEqual({
       batteryName: "github",
-      catalogId: otherCatalogId,
+      attachment: { kind: "catalog", catalogId: otherCatalogId },
       packageHash: uploadHash,
     }),
   );
@@ -615,7 +615,10 @@ test("attaching a bundled battery that is not included yet names no package", as
   show();
   await attach("github", "Code");
   await waitFor(() =>
-    expect(body).toEqual({ batteryName: "github", catalogId }),
+    expect(body).toEqual({
+      batteryName: "github",
+      attachment: { kind: "catalog", catalogId },
+    }),
   );
 });
 

@@ -162,7 +162,10 @@ describe("guardrails batteries", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/openappa/battery-installs",
-      payload: { batteryName: "github", catalogId: catalog.id },
+      payload: {
+        batteryName: "github",
+        attachment: { kind: "catalog", catalogId: catalog.id },
+      },
     });
     expect(created.statusCode).toBe(200);
     expect(created.json()).toMatchObject({
@@ -309,7 +312,10 @@ describe("guardrails batteries", () => {
           await app.inject({
             method: "POST",
             url: "/api/openappa/battery-installs",
-            payload: { batteryName: "github", catalogId: catalog.id },
+            payload: {
+              batteryName: "github",
+              attachment: { kind: "catalog", catalogId: catalog.id },
+            },
           })
         ).statusCode,
       ).toBe(200);
@@ -362,7 +368,7 @@ describe("guardrails batteries", () => {
         url: "/api/openappa/battery-installs",
         payload: {
           batteryName: name,
-          catalogId: catalog.id,
+          attachment: { kind: "catalog", catalogId: catalog.id },
           packageHash: uploaded.json().contentHash,
         },
       });
@@ -441,10 +447,13 @@ describe("guardrails batteries", () => {
     });
     expect(uploaded.statusCode, uploaded.body).toBe(200);
     for (const install of [
-      { batteryName: "github", catalogId: github.id },
+      {
+        batteryName: "github",
+        attachment: { kind: "catalog", catalogId: github.id },
+      },
       {
         batteryName: "github-token",
-        catalogId: acme.id,
+        attachment: { kind: "catalog", catalogId: acme.id },
         packageHash: uploaded.json().contentHash,
       },
     ]) {
@@ -524,7 +533,7 @@ describe("guardrails batteries", () => {
       url: "/api/openappa/battery-installs",
       payload: {
         batteryName: "github",
-        catalogId: catalogs[0].id,
+        attachment: { kind: "catalog", catalogId: catalogs[0].id },
         packageHash,
       },
     });
@@ -534,7 +543,10 @@ describe("guardrails batteries", () => {
     const other = await app.inject({
       method: "POST",
       url: "/api/openappa/battery-installs",
-      payload: { batteryName: "github", catalogId: catalogs[1].id },
+      payload: {
+        batteryName: "github",
+        attachment: { kind: "catalog", catalogId: catalogs[1].id },
+      },
     });
     expect(other.statusCode, other.body).toBe(409);
     expect((await guardrailsPolicyService.get(organizationId)).revision).toBe(
@@ -545,7 +557,7 @@ describe("guardrails batteries", () => {
       url: "/api/openappa/battery-installs",
       payload: {
         batteryName: "github",
-        catalogId: catalogs[1].id,
+        attachment: { kind: "catalog", catalogId: catalogs[1].id },
         packageHash,
       },
     });
@@ -580,7 +592,10 @@ describe("guardrails batteries", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/openappa/battery-installs",
-      payload: { batteryName: "notion", catalogId: catalog.id },
+      payload: {
+        batteryName: "notion",
+        attachment: { kind: "catalog", catalogId: catalog.id },
+      },
     });
     expect(created.statusCode).toBe(409);
     expect(await declarations()).toMatchObject({ batteries: [] });
@@ -597,7 +612,10 @@ describe("guardrails batteries", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/openappa/battery-installs",
-      payload: { batteryName: "github", catalogId: catalog.id },
+      payload: {
+        batteryName: "github",
+        attachment: { kind: "catalog", catalogId: catalog.id },
+      },
     });
     expect(created.statusCode).toBe(409);
     expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
@@ -622,7 +640,10 @@ describe("guardrails batteries", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/openappa/battery-installs",
-      payload: { batteryName: "github", catalogId: catalog.id },
+      payload: {
+        batteryName: "github",
+        attachment: { kind: "catalog", catalogId: catalog.id },
+      },
     });
     expect(created.statusCode, created.body).toBe(200);
     const [row] = await installRows();
@@ -768,7 +789,10 @@ describe("guardrails batteries", () => {
     const created = await app.inject({
       method: "POST",
       url: "/api/openappa/battery-installs",
-      payload: { batteryName: "notion", catalogId: catalogs[0].id },
+      payload: {
+        batteryName: "notion",
+        attachment: { kind: "catalog", catalogId: catalogs[0].id },
+      },
     });
     expect(created.statusCode).toBe(200);
     expect(created.json()).toMatchObject({
@@ -792,7 +816,10 @@ describe("guardrails batteries", () => {
         await app.inject({
           method: "POST",
           url: "/api/openappa/battery-installs",
-          payload: { batteryName: "github", catalogId: catalog.id },
+          payload: {
+            batteryName: "github",
+            attachment: { kind: "catalog", catalogId: catalog.id },
+          },
         })
       ).statusCode,
     ).toBe(200);
@@ -870,7 +897,7 @@ describe("guardrails batteries", () => {
       url: "/api/openappa/battery-installs",
       payload: {
         batteryName: "github",
-        catalogId: catalog.id,
+        attachment: { kind: "catalog", catalogId: catalog.id },
         packageHash: first,
       },
     });
@@ -966,7 +993,10 @@ describe("guardrails batteries", () => {
       const unbound = await managerApp.inject({
         method: "POST",
         url: "/api/openappa/battery-installs",
-        payload: { batteryName: "github", catalogId: catalog.id },
+        payload: {
+          batteryName: "github",
+          attachment: { kind: "catalog", catalogId: catalog.id },
+        },
       });
       expect(unbound.statusCode).toBe(200);
       expect(unbound.json()).toMatchObject({ status: "missing_credentials" });
@@ -1060,7 +1090,10 @@ describe("guardrails batteries", () => {
 
     // Each kind of battery refuses the other kind's request.
     for (const payload of [
-      { batteryName: "jev", catalogId: catalog.id },
+      {
+        batteryName: "jev",
+        attachment: { kind: "catalog", catalogId: catalog.id },
+      },
       { batteryName: "github" },
     ]) {
       const refused = await app.inject({
@@ -1087,6 +1120,7 @@ describe("guardrails batteries", () => {
     const [row] = await installRows();
     expect(row).toMatchObject({
       batteryName: "jev",
+      kind: "organization",
       catalogId: null,
       status: "missing_credentials",
     });
@@ -1234,7 +1268,7 @@ describe("guardrails batteries", () => {
     for (const payload of [
       {
         batteryName: "acme",
-        catalogId: catalog.id,
+        attachment: { kind: "catalog", catalogId: catalog.id },
         packageHash: uploaded.json().contentHash,
       },
       { batteryName: "jev" },
@@ -1379,7 +1413,10 @@ describe("guardrails batteries", () => {
             url: "/api/openappa/battery-installs",
             payload: {
               batteryName: "github",
-              catalogId: "00000000-0000-0000-0000-000000000000",
+              attachment: {
+                kind: "catalog",
+                catalogId: "00000000-0000-0000-0000-000000000000",
+              },
             },
           })
         ).statusCode,

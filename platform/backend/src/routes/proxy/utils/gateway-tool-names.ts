@@ -16,6 +16,7 @@ import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, OrganizationModel, ToolModel } from "@/models";
 import { openappaDeclarations } from "@/openappa/declarations";
+import { declaredDetectedTargets } from "@/openappa/detected-targets";
 import type { DeclaredToolSpelling } from "@/openappa/wire";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
@@ -665,33 +666,6 @@ function declaredLabels(
     return parsed?.family === family ? [parsed.label] : [];
   });
 }
-
-/**
- * The detected-server targets the organization's root policy declares, read
- * from the text alone (no include is resolved) and kept per revision so the
- * proxy parses a policy once per change, not per request.
- */
-async function declaredDetectedTargets(
-  organizationId: string,
-): Promise<ReadonlySet<string>> {
-  if (!config.openappa.enabled) return new Set();
-  const root = await guardrailsPolicyService.get(organizationId);
-  const key = `${organizationId}\u0000${root.revision}\u0000${root.contentHash}`;
-  const cached = detectedTargetsCache.get(key);
-  if (cached) return cached;
-  const targets = new Set(
-    (await openappaDeclarations.aliasTargets(root.content)).filter(
-      (target) => parseDetectedServerId(target) !== undefined,
-    ),
-  );
-  detectedTargetsCache.set(key, targets);
-  return targets;
-}
-
-const detectedTargetsCache = new LRUCacheManager<ReadonlySet<string>>({
-  maxSize: 500,
-  defaultTtl: 10 * 60_000,
-});
 
 /**
  * One entry per (namespace, name), preferring one that carries a marker: a

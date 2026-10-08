@@ -71,6 +71,7 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
+import { declaredDetectedTargets, openCodeLabelsOf } from "./detected-targets";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -283,10 +284,7 @@ class OpenAppaBatteriesService {
     if (!config.openappa.enabled || params.toolNames.length === 0) return;
     const { organizationId, toolNames } = params;
     try {
-      const root = await guardrailsPolicyService.get(organizationId);
-      const declared = (
-        await openappaDeclarations.aliasTargets(root.content)
-      ).filter(isDetectedServerId);
+      const declared = [...(await declaredDetectedTargets(organizationId))];
       const named = declared.filter((target) =>
         targetNamedBy(target, toolNames, declared),
       );
@@ -2059,7 +2057,11 @@ async function detectedTargetsPresent(
   const declared = targets.filter(isDetectedServerId);
   if (declared.length === 0) return new Set();
   const present = new Set(
-    (await listDetectedMcpServers(organizationId)).map((server) => server.id),
+    (
+      await listDetectedMcpServers(organizationId, {
+        openCodeLabels: openCodeLabelsOf(declared),
+      })
+    ).map((server) => server.id),
   );
   return new Set(declared.filter((target) => present.has(target)));
 }

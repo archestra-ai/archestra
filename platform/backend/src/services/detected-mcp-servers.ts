@@ -1,15 +1,15 @@
 import { clientForExternalAgentIds } from "@archestra/shared";
-import config from "@/config";
 import { ToolObservationModel } from "@/models";
 import type { ProxyToolObservation } from "@/models/tool-observation";
-import { openappaDeclarations } from "@/openappa/declarations";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
+import {
+  declaredDetectedTargets,
+  openCodeLabelsOf,
+} from "@/openappa/detected-targets";
 import type { DetectedMcpServer } from "@/types";
 import {
   type DetectedClientFamily,
   detectedServerId,
   isDetectedClientFamily,
-  parseDetectedServerId,
   parseDetectedToolName,
 } from "@/utils/detected-mcp-server-names";
 
@@ -22,10 +22,11 @@ import {
  */
 export async function listDetectedMcpServers(
   organizationId: string,
+  options: { openCodeLabels?: readonly string[] } = {},
 ): Promise<DetectedMcpServer[]> {
   const [observations, openCodeLabels] = await Promise.all([
     ToolObservationModel.listProxyToolObservations(organizationId),
-    declaredOpenCodeLabels(organizationId),
+    options.openCodeLabels ?? declaredOpenCodeLabels(organizationId),
   ]);
   return groupDetectedServers(observations, openCodeLabels);
 }
@@ -35,19 +36,14 @@ export async function listDetectedMcpServers(
 /**
  * OpenCode spells a local tool `<label>_<tool>`, which only a declared
  * `opencode.<label>` alias target can split; the policy is the one source of
- * those labels. Nothing is learned from the names themselves.
+ * those labels. Nothing is learned from the names themselves. A caller that
+ * already holds one policy revision's targets passes their labels instead, so
+ * what it derives does not straddle two revisions.
  */
 async function declaredOpenCodeLabels(
   organizationId: string,
 ): Promise<string[]> {
-  if (!config.openappa.enabled) return [];
-  const root = await guardrailsPolicyService.get(organizationId);
-  return (await openappaDeclarations.aliasTargets(root.content)).flatMap(
-    (target) => {
-      const id = parseDetectedServerId(target);
-      return id?.family === "opencode" ? [id.label] : [];
-    },
-  );
+  return openCodeLabelsOf(await declaredDetectedTargets(organizationId));
 }
 
 function groupDetectedServers(

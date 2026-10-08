@@ -50,6 +50,7 @@ export function nestLimits<T extends NestableLimit>({
     ordered.push({
       limit,
       depth,
+      children,
       allocation: children.length > 0 ? allocate(limit, children) : null,
     });
     for (const child of children) visit(child, depth + 1);
@@ -61,6 +62,8 @@ export function nestLimits<T extends NestableLimit>({
 export type NestedLimit<T> = {
   limit: T;
   depth: number;
+  /** Limits nested directly under this one. */
+  children: T[];
   /** How much of this limit its direct children's caps take. */
   allocation: LimitAllocation | null;
 };

@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import LimitsPage, { getLimitModels } from "./page";
 
@@ -583,6 +583,28 @@ describe("LimitsPage", () => {
     ).not.toBeInTheDocument();
   });
 
+  it("shows the three worst limits that need attention until asked for more", () => {
+    mockUseLimits.mockReturnValue({
+      data: [80, 99, 85, 120, 95].map((cost, index) =>
+        limitRow({ id: `limit-${index}`, limitValue: 100, cost }),
+      ),
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const cards = () => screen.queryAllByTestId(/^limits-attention-/);
+    expect(cards().map((card) => card.dataset.testid)).toEqual([
+      "limits-attention-limit-3",
+      "limits-attention-limit-1",
+      "limits-attention-limit-4",
+    ]);
+
+    fireEvent.click(screen.getByRole("button", { name: "Show 2 more" }));
+
+    expect(cards()).toHaveLength(5);
+  });
+
   it("nests a virtual key's limit under the limit of the team that pays for it", () => {
     vi.mocked(useTeams).mockReturnValue({
       data: [{ id: "team-1", name: "Platform" }],
@@ -629,9 +651,18 @@ describe("LimitsPage", () => {
       "data-table-row-limit-team",
       "data-table-row-limit-key",
     ]);
-    expect(screen.getByTestId("data-table-row-limit-team")).toHaveTextContent(
-      "Nested caps: $250 of $800 (1 limit)",
-    );
+    expect(
+      within(screen.getByTestId("data-table-row-limit-team")).getByRole(
+        "button",
+        { name: "1 limit under this one" },
+      ),
+    ).toBeInTheDocument();
+    expect(
+      within(screen.getByTestId("data-table-row-limit-key")).queryByRole(
+        "button",
+        { name: /under this one/ },
+      ),
+    ).not.toBeInTheDocument();
   });
 
   it("shows multiple model badges for limits with multiple models", () => {

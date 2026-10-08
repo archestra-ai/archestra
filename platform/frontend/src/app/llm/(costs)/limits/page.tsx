@@ -11,10 +11,12 @@ import {
   Info,
   Key,
   KeyRound,
+  ListTree,
   type LucideIcon,
   Network,
   Plus,
   Trash2,
+  TriangleAlert,
   User,
   Users,
 } from "lucide-react";
@@ -69,6 +71,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { UserSearchableSelect } from "@/components/user-searchable-select";
 import { VirtualKeySearchableSelect } from "@/components/virtual-key-searchable-select";
 import { useProfiles } from "@/lib/agent.query";
@@ -676,6 +679,7 @@ export default function LimitsPage() {
           <LimitUsage
             nested={row.original}
             usage={getUsageStatus(row.original.limit)}
+            labelOf={getEntityLabel}
           />
         ),
       },
@@ -1210,52 +1214,60 @@ export default function LimitsPage() {
               />
             </div>
 
-            <div className="space-y-2">
-              <Label>Limit value ($)</Label>
-              <Input
-                aria-label="Limit value"
-                value={formatNumericInput(formState.limitValue)}
-                onChange={(event) =>
-                  setFormState((current) => ({
-                    ...current,
-                    limitValue: event.target.value.replace(/[^0-9]/g, ""),
-                  }))
-                }
-                placeholder="1,000"
-                inputMode="numeric"
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center gap-1.5">
-                <Label>Cleanup interval</Label>
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Button
-                      type="button"
-                      variant="ghost"
-                      size="icon-sm"
-                      className="h-5 w-5 text-muted-foreground hover:text-foreground"
-                      aria-label="Cleanup interval help"
-                    >
-                      <Info className="h-3.5 w-3.5" />
-                    </Button>
-                  </TooltipTrigger>
-                  <TooltipContent side="top" align="start" className="max-w-72">
-                    Rolling resets after elapsed time. Calendar resets at the
-                    next day, week, or month boundary.
-                  </TooltipContent>
-                </Tooltip>
+            <div className="grid gap-4 sm:grid-cols-2">
+              <div className="space-y-2">
+                <div className="flex h-5 items-center">
+                  <Label>Limit value ($)</Label>
+                </div>
+                <Input
+                  aria-label="Limit value"
+                  value={formatNumericInput(formState.limitValue)}
+                  onChange={(event) =>
+                    setFormState((current) => ({
+                      ...current,
+                      limitValue: event.target.value.replace(/[^0-9]/g, ""),
+                    }))
+                  }
+                  placeholder="1,000"
+                  inputMode="numeric"
+                />
               </div>
-              <LimitCleanupIntervalSelect
-                value={formState.cleanupInterval}
-                onValueChange={(value) =>
-                  setFormState((current) => ({
-                    ...current,
-                    cleanupInterval: value,
-                  }))
-                }
-              />
+
+              <div className="space-y-2">
+                <div className="flex h-5 items-center gap-1.5">
+                  <Label>Cleanup interval</Label>
+                  <Tooltip>
+                    <TooltipTrigger asChild>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="icon-sm"
+                        className="h-5 w-5 text-muted-foreground hover:text-foreground"
+                        aria-label="Cleanup interval help"
+                      >
+                        <Info className="h-3.5 w-3.5" />
+                      </Button>
+                    </TooltipTrigger>
+                    <TooltipContent
+                      side="top"
+                      align="start"
+                      className="max-w-72"
+                    >
+                      Rolling resets after elapsed time. Calendar resets at the
+                      next day, week, or month boundary.
+                    </TooltipContent>
+                  </Tooltip>
+                </div>
+                <LimitCleanupIntervalSelect
+                  value={formState.cleanupInterval}
+                  onValueChange={(value) =>
+                    setFormState((current) => ({
+                      ...current,
+                      cleanupInterval: value,
+                    }))
+                  }
+                />
+              </div>
             </div>
 
             <AdvancedLabelsSection
@@ -1434,6 +1446,9 @@ function getNextCalendarResetDate(
 
 const USAGE_STATUSES: UsageStatus[] = ["safe", "warning", "danger"];
 
+// One row of cards at wide widths. Items come sorted, worst first.
+const NEEDS_ATTENTION_PREVIEW_COUNT = 3;
+
 // The labels keep this page's existing thresholds (see getUsageStatus).
 const USAGE_STATUS_META: Record<
   UsageStatus,
@@ -1452,7 +1467,7 @@ const USAGE_STATUS_META: Record<
     dotClassName: "bg-amber-500",
   },
   danger: {
-    label: "Exceeded",
+    label: "Critical",
     hint: "90% or more used",
     barClassName: "bg-destructive",
     dotClassName: "bg-destructive",
@@ -1602,54 +1617,112 @@ function LimitModels({
 function LimitUsage({
   nested,
   usage,
+  labelOf,
 }: {
   nested: NestedLimit<LimitData>;
   usage: UsageSummary;
+  labelOf: (limit: LimitData) => string;
 }) {
-  const { limit, allocation } = nested;
+  const { limit } = nested;
   const cleanupInterval =
     (limit.cleanupInterval as LimitCleanupInterval | null) ??
     DEFAULT_LIMIT_CLEANUP_INTERVAL;
-  const overAllocated = allocation
-    ? allocation.total > limit.limitValue
-    : false;
   return (
     <div className="min-w-0 w-full space-y-1 overflow-hidden">
       <UsageBar percentage={usage.percentage} status={usage.status} />
-      <p className="truncate text-xs">
-        <span>{formatCurrency(usage.actualUsage, 2)}</span>
-        <span className="text-muted-foreground">
-          {` of ${formatCurrency(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
-        </span>
-      </p>
+      <div className="flex min-w-0 items-center gap-1.5 text-xs">
+        <p className="truncate">
+          <span>{formatCurrency(usage.actualUsage, 2)}</span>
+          <span className="text-muted-foreground">
+            {` of ${formatCurrency(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
+          </span>
+        </p>
+        {nested.allocation && (
+          <NestedLimitsHint nested={nested} labelOf={labelOf} />
+        )}
+      </div>
       <p className="truncate text-xs text-muted-foreground">
         {`${CLEANUP_INTERVAL_LABELS[cleanupInterval]} · ${formatNextLimitReset(limit.lastCleanup, cleanupInterval)}`}
       </p>
-      {allocation && allocation.count > 0 && (
-        <p
+    </div>
+  );
+}
+
+/**
+ * An icon on a parent row. Its tooltip lists the limits under this one and
+ * whether their caps fit inside it. It turns amber when they do not fit.
+ */
+function NestedLimitsHint({
+  nested,
+  labelOf,
+}: {
+  nested: NestedLimit<LimitData>;
+  labelOf: (limit: LimitData) => string;
+}) {
+  const { limit, children, allocation } = nested;
+  if (!allocation) return null;
+  const overAllocated = allocation.total > limit.limitValue;
+  const periodOf = (candidate: LimitData) =>
+    (candidate.cleanupInterval as LimitCleanupInterval | null) ??
+    DEFAULT_LIMIT_CLEANUP_INTERVAL;
+  const samePeriod = (candidate: LimitData) =>
+    candidate.cleanupInterval === limit.cleanupInterval;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <UnstyledButton
+          aria-label={`${children.length} ${children.length === 1 ? "limit" : "limits"} under this one`}
           className={cn(
-            "text-xs",
+            "inline-flex shrink-0 items-center gap-0.5 rounded px-1 tabular-nums hover:bg-muted",
             overAllocated
               ? "text-amber-600 dark:text-amber-400"
               : "text-muted-foreground",
           )}
+          onClick={(event) => event.stopPropagation()}
         >
-          {overAllocated
-            ? `Nested caps: ${formatCurrency(allocation.total)}, more than this limit`
-            : `Nested caps: ${formatCurrency(allocation.total)} of ${formatCurrency(limit.limitValue)}`}
-          {` (${allocation.count} ${allocation.count === 1 ? "limit" : "limits"})`}
-          {allocation.otherPeriodCount > 0 &&
-            ` · ${allocation.otherPeriodCount} more on another period`}
-        </p>
-      )}
-      {allocation &&
-        allocation.count === 0 &&
-        allocation.otherPeriodCount > 0 && (
-          <p className="text-xs text-muted-foreground">
-            {`${allocation.otherPeriodCount} nested ${allocation.otherPeriodCount === 1 ? "limit resets" : "limits reset"} on another period`}
+          {overAllocated ? (
+            <TriangleAlert className="size-3" />
+          ) : (
+            <ListTree className="size-3" />
+          )}
+          {children.length}
+        </UnstyledButton>
+      </TooltipTrigger>
+      <TooltipContent className="max-w-80 space-y-2 p-3">
+        <p className="font-medium">Limits under this one</p>
+        <ul className="space-y-0.5">
+          {children.map((child) => (
+            <li key={child.id} className="flex justify-between gap-4">
+              <span className="truncate">{labelOf(child)}</span>
+              <span
+                className={cn(
+                  "shrink-0 tabular-nums",
+                  !samePeriod(child) && "opacity-60",
+                )}
+              >
+                {formatCurrency(child.limitValue)}
+                {!samePeriod(child) &&
+                  ` · ${CLEANUP_INTERVAL_LABELS[periodOf(child)]}`}
+              </span>
+            </li>
+          ))}
+        </ul>
+        {allocation.count > 0 && (
+          <p>
+            {overAllocated
+              ? `Their caps add up to ${formatCurrency(allocation.total)}. This limit is ${formatCurrency(limit.limitValue)}, so it can block them before they reach their caps.`
+              : `Their caps add up to ${formatCurrency(allocation.total)} of this ${formatCurrency(limit.limitValue)} limit.`}
           </p>
         )}
-    </div>
+        {allocation.otherPeriodCount > 0 && (
+          <p className="opacity-70">
+            {allocation.otherPeriodCount === 1
+              ? "1 limit resets on another period, so it is not in the total."
+              : `${allocation.otherPeriodCount} limits reset on another period, so they are not in the total.`}
+          </p>
+        )}
+      </TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -1688,10 +1761,15 @@ function NeedsAttention({
   }>;
   onEdit: (limit: LimitData) => void;
 }) {
+  const [showAll, setShowAll] = useState(false);
+  const visibleItems = showAll
+    ? items
+    : items.slice(0, NEEDS_ATTENTION_PREVIEW_COUNT);
+  const hiddenCount = items.length - visibleItems.length;
   return (
     <section
       aria-labelledby="limits-needs-attention"
-      className="mb-6 space-y-3"
+      className="mb-4 space-y-2"
     >
       <h2
         id="limits-needs-attention"
@@ -1702,57 +1780,68 @@ function NeedsAttention({
           {items.length}
         </span>
       </h2>
-      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {items.map(({ limit, usage, label, scopeLabel, icon, models }) => {
-          const cleanupInterval =
-            (limit.cleanupInterval as LimitCleanupInterval | null) ??
-            DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          const reset = formatNextLimitReset(
-            limit.lastCleanup,
-            cleanupInterval,
-          );
-          const over = usage.actualUsage >= usage.actualLimit;
-          return (
-            <article
-              key={limit.id}
-              className="space-y-3 rounded-lg border p-4"
-              data-testid={`limits-attention-${limit.id}`}
-            >
-              <div className="flex items-start gap-3">
-                <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted">
-                  {icon}
-                </span>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-medium">{label}</div>
-                  <div className="truncate text-xs text-muted-foreground">
-                    {scopeLabel} ·{" "}
-                    {models.length > 0 ? models.join(", ") : "All models"}
-                  </div>
-                </div>
-                <span className="flex shrink-0 items-center gap-1.5 text-xs">
-                  <UsageStatusDot status={usage.status} />
-                  {USAGE_STATUS_META[usage.status].label}
-                </span>
-              </div>
-              <UsageBar percentage={usage.percentage} status={usage.status} />
-              <p className="text-sm text-muted-foreground">
-                {over
-                  ? `Over by ${formatCurrency(usage.actualUsage - usage.actualLimit, 2)}. Requests are blocked. ${reset}.`
-                  : `${formatCurrency(usage.actualLimit - usage.actualUsage, 2)} of ${formatCurrency(usage.actualLimit)} left. ${reset}.`}
-              </p>
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
+      <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-3">
+        {visibleItems.map(
+          ({ limit, usage, label, scopeLabel, icon, models }) => {
+            const cleanupInterval =
+              (limit.cleanupInterval as LimitCleanupInterval | null) ??
+              DEFAULT_LIMIT_CLEANUP_INTERVAL;
+            const reset = formatNextLimitReset(
+              limit.lastCleanup,
+              cleanupInterval,
+            );
+            const over = usage.actualUsage >= usage.actualLimit;
+            return (
+              <UnstyledButton
+                key={limit.id}
                 onClick={() => onEdit(limit)}
+                className="group space-y-2 rounded-lg border p-3 text-left transition-colors hover:bg-muted/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"
+                data-testid={`limits-attention-${limit.id}`}
               >
-                <Edit className="h-4 w-4" />
-                Edit limit
-              </Button>
-            </article>
-          );
-        })}
+                <div className="flex items-center gap-2">
+                  <span className="flex size-5 shrink-0 items-center justify-center rounded bg-muted [&_svg]:size-3.5">
+                    {icon}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-sm font-medium">
+                    {label}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-1.5 text-xs">
+                    <UsageStatusDot status={usage.status} />
+                    {USAGE_STATUS_META[usage.status].label}
+                  </span>
+                  <Edit
+                    aria-hidden
+                    className="size-3.5 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+                  />
+                  <span className="sr-only">Edit limit</span>
+                </div>
+                <div className="truncate text-xs text-muted-foreground">
+                  {scopeLabel} ·{" "}
+                  {models.length > 0 ? models.join(", ") : "All models"}
+                </div>
+                <UsageBar percentage={usage.percentage} status={usage.status} />
+                <p className="text-xs text-muted-foreground">
+                  {over
+                    ? `Over by ${formatCurrency(usage.actualUsage - usage.actualLimit, 2)}. Requests are blocked. ${reset}.`
+                    : `${formatCurrency(usage.actualLimit - usage.actualUsage, 2)} of ${formatCurrency(usage.actualLimit)} left. ${reset}.`}
+                </p>
+              </UnstyledButton>
+            );
+          },
+        )}
       </div>
+      {(hiddenCount > 0 || showAll) &&
+        items.length > NEEDS_ATTENTION_PREVIEW_COUNT && (
+          <Button
+            type="button"
+            variant="ghost"
+            size="sm"
+            className="text-muted-foreground"
+            onClick={() => setShowAll((current) => !current)}
+          >
+            {showAll ? "Show less" : `Show ${hiddenCount} more`}
+          </Button>
+        )}
     </section>
   );
 }

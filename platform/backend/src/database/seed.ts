@@ -5,6 +5,7 @@ import {
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
   BUILT_IN_AGENT_IDS,
   BUILT_IN_AGENT_NAMES,
+  BUILT_IN_CATALOG_IDS,
   CHAT_TITLE_GENERATION_SYSTEM_PROMPT,
   CONTEXT_COMPACTION_SYSTEM_PROMPT,
   DUAL_LLM_DEFAULT_MAX_ROUNDS,
@@ -25,7 +26,7 @@ import {
   SupportedProviders,
   testMcpServerCommand,
 } from "@archestra/shared";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, ne, notInArray } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { verifyJwksSigningKey } from "@/auth/jwks-signing-key-guard";
 import config, {
@@ -43,6 +44,7 @@ import {
   InternalMcpCatalogModel,
   LlmProviderApiKeyModel,
   McpHttpSessionModel,
+  McpServerModel,
   MemberModel,
   OrganizationModel,
   PlaywrightRuntimeModel,
@@ -55,6 +57,7 @@ import {
 } from "@/models";
 import AgentSuggestedPromptModel from "@/models/agent-suggested-prompt";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import { secretManager } from "@/secrets-manager";
 import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-guard";
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
@@ -66,7 +69,8 @@ import {
   builtInSkillVersion,
   getEnabledBuiltInSkills,
 } from "@/skills/built-in-skills";
-import type { BuiltInAgentConfig, Organization } from "@/types";
+import type { BuiltInAgentConfig, McpServer, Organization } from "@/types";
+import { trackBackgroundWork } from "@/utils/background-work";
 import {
   encryptSecretValue,
   ensureEncryptionKeyAvailable,
@@ -1194,6 +1198,116 @@ export async function seedDefaultAppsForPristineOrgs(): Promise<void> {
   }
 }
 
+/**
+ * Installs the public Archestra docs MCP server (list_docs, read_doc,
+ * search_docs at archestra.ai/mcp) on a fresh community instance, and adds a
+ * "What can Archestra do?" suggested prompt to the admin's personal assistant,
+ * so a first chat can answer from the current docs.
+ *
+ * Seeded once. The catalog row has a fixed id and deleting it only soft-deletes
+ * it, so the row is the durable marker: an admin who deletes the server never
+ * sees it come back. Uninstalling the server (deleting its install) is honored
+ * the same way.
+ *
+ * Skipped on instances with an enterprise license (the raw env flag, not the
+ * effective tier, which also covers small teams), and on instances whose MCP
+ * registry is not pristine, so upgrades do not add it to registries an admin
+ * already curates. Tool discovery calls archestra.ai, so it runs in the
+ * background: an offline or air-gapped instance still starts, and discovery
+ * is retried on the next start while the install has no tools.
+ *
+ * @public — exported for testability
+ */
+export async function seedArchestraDocsMcpServer(): Promise<void> {
+  if (config.enterpriseFeatures.core) return;
+
+  try {
+    // Deliberately includes soft-deleted rows (see above).
+    const [existing] = await db
+      .select({ deletedAt: schema.internalMcpCatalogTable.deletedAt })
+      .from(schema.internalMcpCatalogTable)
+      .where(
+        eq(schema.internalMcpCatalogTable.id, ARCHESTRA_DOCS_MCP_CATALOG_ID),
+      )
+      .limit(1);
+    if (existing) {
+      if (!existing.deletedAt) await retryArchestraDocsToolDiscovery();
+      return;
+    }
+
+    if (!(await isMcpRegistryPristine())) return;
+
+    const org = await OrganizationModel.getOrCreateDefaultOrganization();
+    // The catalog row and install need an author: the org's earliest admin.
+    const [admin] = await db
+      .select({ userId: schema.membersTable.userId })
+      .from(schema.membersTable)
+      .where(
+        and(
+          eq(schema.membersTable.organizationId, org.id),
+          eq(schema.membersTable.role, ADMIN_ROLE_NAME),
+        ),
+      )
+      .orderBy(asc(schema.membersTable.createdAt))
+      .limit(1);
+    if (!admin) return;
+
+    const catalogItem = await InternalMcpCatalogModel.create(
+      {
+        id: ARCHESTRA_DOCS_MCP_CATALOG_ID,
+        name: ARCHESTRA_DOCS_MCP_SERVER_NAME,
+        description:
+          "The Archestra documentation: list, search, and read the docs pages. Installed by default; delete it if you do not need it.",
+        serverType: "remote",
+        serverUrl: ARCHESTRA_DOCS_MCP_SERVER_URL,
+        docsUrl: "https://archestra.ai/docs",
+        requiresAuth: false,
+      },
+      {
+        organizationId: org.id,
+        authorId: admin.userId,
+        publishToOrganization: true,
+      },
+    );
+
+    // One org-wide install: the server needs no credentials, so every member
+    // (and every agent with access to all tools) can use it.
+    const mcpServer = await McpServerModel.create({
+      name: catalogItem.name,
+      catalogId: catalogItem.id,
+      serverType: "remote",
+      scope: "org",
+      ownerId: admin.userId,
+      teamId: null,
+    });
+
+    const agentId = await AgentModel.ensurePersonalChatAgent({
+      userId: admin.userId,
+      organizationId: org.id,
+    });
+    if (
+      agentId &&
+      (await AgentSuggestedPromptModel.getForAgent(agentId)).length === 0
+    ) {
+      await AgentSuggestedPromptModel.syncForAgent({
+        agentId,
+        prompts: [ARCHESTRA_DOCS_SUGGESTED_PROMPT],
+      });
+    }
+
+    trackBackgroundWork(discoverArchestraDocsTools(mcpServer));
+    logger.info(
+      { organizationId: org.id, mcpServerId: mcpServer.id },
+      "Seeded the Archestra docs MCP server",
+    );
+  } catch (error) {
+    logger.error(
+      { err: error },
+      "Failed to seed the Archestra docs MCP server",
+    );
+  }
+}
+
 export async function seedRequiredStartingData(): Promise<void> {
   ensureEncryptionKeyAvailable();
   // Abort startup on an auth-secret / encryption-key mismatch BEFORE
@@ -1223,6 +1337,9 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Ensure all existing members have a personal MCP gateway
   await ensureExistingUsersHavePersonalMcpGateways();
   await seedDefaultAppsForPristineOrgs();
+  // Runs after the personal chat agents exist: it adds a suggested prompt to
+  // the admin's assistant.
+  await seedArchestraDocsMcpServer();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }
@@ -1551,3 +1668,101 @@ const SUPERSEDED_POLICY_CONFIG_SYSTEM_PROMPTS: readonly string[] = [
   LEGACY_POLICY_CONFIG_SYSTEM_PROMPT,
   PREVIOUS_POLICY_CONFIG_SYSTEM_PROMPT,
 ];
+
+// =============================================================================
+// Archestra docs MCP server
+// =============================================================================
+
+const ARCHESTRA_DOCS_MCP_CATALOG_ID = "00000000-0000-4000-8000-000000000003";
+const ARCHESTRA_DOCS_MCP_SERVER_NAME = "Archestra Docs";
+const ARCHESTRA_DOCS_MCP_SERVER_URL = "https://archestra.ai/mcp";
+const ARCHESTRA_DOCS_SUGGESTED_PROMPT = {
+  summaryTitle: "What can Archestra do?",
+  prompt:
+    "What can Archestra do? Use the Archestra Docs tools to read the current documentation, then give me a short tour of the main features, with links to the docs pages.",
+};
+// Seeded only in development and CI (see seedTestMcpServer).
+const TEST_MCP_SERVER_NAME = "internal-dev-test-server";
+
+/** No MCP server was ever added to the registry, deleted ones included. */
+async function isMcpRegistryPristine(): Promise<boolean> {
+  const [row] = await db
+    .select({ id: schema.internalMcpCatalogTable.id })
+    .from(schema.internalMcpCatalogTable)
+    .where(
+      and(
+        inArray(schema.internalMcpCatalogTable.serverType, ["local", "remote"]),
+        notInArray(schema.internalMcpCatalogTable.id, [
+          ...BUILT_IN_CATALOG_IDS,
+        ]),
+        ne(schema.internalMcpCatalogTable.name, TEST_MCP_SERVER_NAME),
+      ),
+    )
+    .limit(1);
+  return !row;
+}
+
+/** Re-runs discovery when an earlier start could not reach archestra.ai. */
+async function retryArchestraDocsToolDiscovery(): Promise<void> {
+  const [tool] = await db
+    .select({ id: schema.toolsTable.id })
+    .from(schema.toolsTable)
+    .where(
+      and(
+        eq(schema.toolsTable.catalogId, ARCHESTRA_DOCS_MCP_CATALOG_ID),
+        isNull(schema.toolsTable.deletedAt),
+      ),
+    )
+    .limit(1);
+  if (tool) return;
+
+  const [mcpServer] = await db
+    .select()
+    .from(schema.mcpServersTable)
+    .where(
+      and(
+        eq(schema.mcpServersTable.catalogId, ARCHESTRA_DOCS_MCP_CATALOG_ID),
+        isNull(schema.mcpServersTable.deletedAt),
+      ),
+    )
+    .limit(1);
+  // No live install: an admin uninstalled it, which must stick.
+  if (!mcpServer) return;
+
+  trackBackgroundWork(discoverArchestraDocsTools(mcpServer));
+}
+
+async function discoverArchestraDocsTools(mcpServer: McpServer): Promise<void> {
+  try {
+    const tools = await McpServerModel.getToolsFromServer(mcpServer);
+    await ToolModel.bulkCreateToolsIfNotExists(
+      tools.map((tool) => ({
+        name: ToolModel.slugifyName(mcpServer.name, tool.name),
+        rawToolName: tool.name,
+        description: tool.description,
+        parameters: tool.inputSchema,
+        meta: { _meta: tool._meta, annotations: tool.annotations },
+        catalogId: ARCHESTRA_DOCS_MCP_CATALOG_ID,
+      })),
+    );
+    await McpServerModel.update(mcpServer.id, {
+      localInstallationStatus: "success",
+      localInstallationError: null,
+    });
+    trackBackgroundWork(
+      openappaBatteriesService.onCatalogToolsChanged(
+        ARCHESTRA_DOCS_MCP_CATALOG_ID,
+      ),
+    );
+  } catch (error) {
+    logger.warn(
+      { err: error, mcpServerId: mcpServer.id },
+      "Could not discover the Archestra docs MCP tools; retrying on next start",
+    );
+    await McpServerModel.update(mcpServer.id, {
+      localInstallationStatus: "error",
+      localInstallationError:
+        error instanceof Error ? error.message : "Unknown error",
+    });
+  }
+}

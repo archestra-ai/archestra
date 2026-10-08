@@ -32,7 +32,11 @@ import {
   renderCompactionTranscript,
   type TranscriptEntry,
 } from "@/services/context-compaction";
-import { MAX_TOOL_RESULT_CONTEXT_CHARS } from "@/utils/tool-result-cap";
+import {
+  MAX_TOOL_RESULT_CONTEXT_BYTES,
+  sliceUtf8,
+  utf8Length,
+} from "@/utils/tool-result-cap";
 
 /**
  * Create a `prepareStep` guard bound to one agent run. State (the memoized
@@ -255,13 +259,14 @@ function capOversizedToolResults(messages: ModelMessage[]): ModelMessage[] {
         part.output.type === "text"
           ? part.output.value
           : JSON.stringify(part.output);
-      if (serialized.length <= MAX_TOOL_RESULT_CONTEXT_CHARS) return part;
+      const size = utf8Length(serialized);
+      if (size <= MAX_TOOL_RESULT_CONTEXT_BYTES) return part;
       messageChanged = true;
       return {
         ...part,
         output: {
           type: "text" as const,
-          value: `${serialized.slice(0, MAX_TOOL_RESULT_CONTEXT_CHARS)}\n[tool result truncated: ${serialized.length} chars exceeded the ${MAX_TOOL_RESULT_CONTEXT_CHARS}-char limit for model context]`,
+          value: `${sliceUtf8(serialized, MAX_TOOL_RESULT_CONTEXT_BYTES)}\n[tool result truncated: ${size} bytes exceeded the ${MAX_TOOL_RESULT_CONTEXT_BYTES}-byte limit for model context]`,
         },
       };
     });

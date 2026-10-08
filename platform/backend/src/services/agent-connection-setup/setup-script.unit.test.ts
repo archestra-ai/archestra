@@ -1585,6 +1585,78 @@ esac
     expect(script).not.toContain("Set-ArchProp $archCfg 'model'");
   });
 
+  test.each([
+    ["opencode v2.0.25", 'id: "archestra.llm-proxy"'],
+    ["1.18.30", "export const ArchestraLlmProxy"],
+    ["", "export const ArchestraLlmProxy"],
+  ])("opencode setup installs the routing plugin for the reported version (%j)", async (version, expected) => {
+    const script = renderSetupScript({
+      ...fullContext("opencode", "linux"),
+      proxy: OPENAI_PASSTHROUGH_PROXY,
+    });
+    const detectStart = script.indexOf("ARCHESTRA_OPENCODE_MAJOR=");
+    const detectEnd = script.indexOf(
+      "ARCHESTRA_OPENCODE_MAJOR=1",
+      detectStart + 1,
+    );
+    const pluginStart = script.indexOf("ARCHESTRA_OC_PLUGIN=");
+    const pluginEnd = script.indexOf(
+      'ok "Installed the OpenCode LLM proxy routing guard"',
+    );
+    expect(detectStart).toBeGreaterThan(-1);
+    expect(detectEnd).toBeGreaterThan(detectStart);
+    expect(pluginStart).toBeGreaterThan(detectEnd);
+    expect(pluginEnd).toBeGreaterThan(pluginStart);
+
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-version-"));
+    const home = path.join(root, "home");
+    const bin = path.join(root, "bin");
+    try {
+      await mkdir(home);
+      await mkdir(bin);
+      await writeFile(
+        path.join(bin, "opencode"),
+        `#!/usr/bin/env bash
+[ "$1" = "--version" ] && [ -n "$FAKE_OPENCODE_VERSION" ] && printf '%s\\n' "$FAKE_OPENCODE_VERSION" && exit 0
+exit 1
+`,
+      );
+      await chmod(path.join(bin, "opencode"), 0o755);
+      const block = path.join(root, "plugin.sh");
+      await writeFile(
+        block,
+        `set -euo pipefail
+err() { :; }
+ok() { :; }
+ARCHESTRA_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+${script.slice(detectStart, detectEnd + "ARCHESTRA_OPENCODE_MAJOR=1".length)}
+${script.slice(pluginStart, pluginEnd)}
+`,
+      );
+      await execFileAsync("bash", [block], {
+        env: {
+          ...process.env,
+          HOME: home,
+          PATH: `${bin}:${process.env.PATH}`,
+          FAKE_OPENCODE_VERSION: version,
+        },
+      });
+      const plugin = await readFile(
+        path.join(
+          home,
+          ".config",
+          "opencode",
+          "plugins",
+          "archestra-llm-proxy.js",
+        ),
+        "utf8",
+      );
+      expect(plugin).toContain(expected);
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
+
   test("opencode provider-key merge preserves local auth options and model selection", async () => {
     const script = renderSetupScript({
       ...fullContext("opencode", "linux"),
@@ -1643,6 +1715,7 @@ say() { :; }
 ok() { :; }
 warn() { :; }
 ARCHESTRA_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+ARCHESTRA_OPENCODE_MAJOR=1
 ${script.slice(start, end)}
 `,
       );

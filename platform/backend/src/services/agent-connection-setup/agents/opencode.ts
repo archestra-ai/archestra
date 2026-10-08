@@ -7,7 +7,10 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { OPENCODE_GUARD_CLIENT } from "../guard/clients";
-import { renderOpenCodeRoutingPlugin } from "../payloads/opencode-routing-plugin";
+import {
+  renderOpenCodeRoutingPlugin,
+  renderOpenCodeRoutingPluginV2,
+} from "../payloads/opencode-routing-plugin";
 import { legacyServerNames } from "../steps/mcp";
 import { psq, sh } from "../steps/quoting";
 import {
@@ -364,6 +367,10 @@ function opencodeRoutingPluginBash(params: {
     renderOpenCodeRoutingPlugin(params),
     "utf8",
   ).toString("base64");
+  const encodedV2 = Buffer.from(
+    renderOpenCodeRoutingPluginV2(params),
+    "utf8",
+  ).toString("base64");
   const python = `import base64, json, pathlib, sys
 plugin, state = map(pathlib.Path, sys.argv[1:3])
 content = sys.argv[3]
@@ -378,10 +385,16 @@ plugin.chmod(0o600)`;
 ARCHESTRA_OC_PLUGIN_STATE="$HOME/.archestra/opencode-routing-plugin-state.json"
 mkdir -p "$(dirname "$ARCHESTRA_OC_PLUGIN")"
 mkdir -p "$(dirname "$ARCHESTRA_OC_PLUGIN_STATE")"
+# OpenCode 2 loads only its own plugin API, so install the variant that matches.
+if [ "$ARCHESTRA_OPENCODE_MAJOR" -ge 2 ]; then
+  ARCHESTRA_OC_PLUGIN_CONTENT=${sh(encodedV2)}
+else
+  ARCHESTRA_OC_PLUGIN_CONTENT=${sh(encoded)}
+fi
 if command -v node >/dev/null 2>&1; then
-  node -e 'const fs=require("node:fs"); const [plugin,state,content]=process.argv.slice(1); if(!fs.existsSync(state)){const existed=fs.existsSync(plugin); const previous=existed?fs.readFileSync(plugin).toString("base64"):null; fs.writeFileSync(state,JSON.stringify({existed,contentBase64:previous})+"\\n",{mode:0o600});} fs.writeFileSync(plugin,Buffer.from(content,"base64"),{mode:0o600});' "$ARCHESTRA_OC_PLUGIN" "$ARCHESTRA_OC_PLUGIN_STATE" ${sh(encoded)}
+  node -e 'const fs=require("node:fs"); const [plugin,state,content]=process.argv.slice(1); if(!fs.existsSync(state)){const existed=fs.existsSync(plugin); const previous=existed?fs.readFileSync(plugin).toString("base64"):null; fs.writeFileSync(state,JSON.stringify({existed,contentBase64:previous})+"\\n",{mode:0o600});} fs.writeFileSync(plugin,Buffer.from(content,"base64"),{mode:0o600});' "$ARCHESTRA_OC_PLUGIN" "$ARCHESTRA_OC_PLUGIN_STATE" "$ARCHESTRA_OC_PLUGIN_CONTENT"
 elif command -v python3 >/dev/null 2>&1; then
-  python3 -c ${sh(python)} "$ARCHESTRA_OC_PLUGIN" "$ARCHESTRA_OC_PLUGIN_STATE" ${sh(encoded)}
+  python3 -c ${sh(python)} "$ARCHESTRA_OC_PLUGIN" "$ARCHESTRA_OC_PLUGIN_STATE" "$ARCHESTRA_OC_PLUGIN_CONTENT"
 else
   err "Node.js or python3 is required to install the OpenCode routing guard"
   exit 1
@@ -397,6 +410,10 @@ function opencodeRoutingPluginPowerShell(params: {
     renderOpenCodeRoutingPlugin(params),
     "utf8",
   ).toString("base64");
+  const encodedV2 = Buffer.from(
+    renderOpenCodeRoutingPluginV2(params),
+    "utf8",
+  ).toString("base64");
   return `$archPluginDir = Join-Path $archOcDir 'plugins'
 $archPluginFile = Join-Path $archPluginDir 'archestra-llm-proxy.js'
 $archPluginState = Join-Path $env:USERPROFILE '.archestra/opencode-routing-plugin-state.json'
@@ -408,13 +425,18 @@ if (-not (Test-Path $archPluginState)) {
   $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $archPluginState)
   [IO.File]::WriteAllText($archPluginState, ($archPluginStateValue | ConvertTo-Json -Depth 4), (New-Object System.Text.UTF8Encoding $false))
 }
-[IO.File]::WriteAllBytes($archPluginFile, [Convert]::FromBase64String(${psq(encoded)}))
+# OpenCode 2 loads only its own plugin API, so install the variant that matches.
+$archPluginContent = if ($archOcMajor -ge 2) { ${psq(encodedV2)} } else { ${psq(encoded)} }
+[IO.File]::WriteAllBytes($archPluginFile, [Convert]::FromBase64String($archPluginContent))
 Ok 'Installed the OpenCode LLM proxy routing guard'`;
 }
 
 function opencodeBashSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [
-    `ARCHESTRA_OPENCODE_CONFIG="\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"`,
+    `ARCHESTRA_OPENCODE_CONFIG="\${XDG_CONFIG_HOME:-$HOME/.config}/opencode/opencode.json"
+# OpenCode 2 changed its plugin API and \`debug config\` output; steps below branch on it.
+ARCHESTRA_OPENCODE_MAJOR="$( { opencode --version 2>/dev/null || true; } </dev/null | sed -n '1s/^[^0-9]*\\([0-9][0-9]*\\)\\..*$/\\1/p')"
+[ -n "$ARCHESTRA_OPENCODE_MAJOR" ] || ARCHESTRA_OPENCODE_MAJOR=1`,
   ];
 
   if (ctx.mcp) {
@@ -459,7 +481,7 @@ ${opencodeOwnedMergeBash(
   },
   manual,
 )}
-if command -v python3 >/dev/null 2>&1; then
+if [ "$ARCHESTRA_OPENCODE_MAJOR" -lt 2 ] && command -v python3 >/dev/null 2>&1; then
   EFFECTIVE_CONFIG=$(cd "$HOME" && opencode debug config 2>/dev/null || true)
   ROUTE_MISMATCHES=$(printf '%s' "$EFFECTIVE_CONFIG" | ARCHESTRA_OC_PROVIDER_ROUTES=${sh(JSON.stringify(routes))} python3 -c ${sh(OPENCODE_EFFECTIVE_ROUTES_PY)} || true)
   if [ -z "$ROUTE_MISMATCHES" ]; then
@@ -505,7 +527,7 @@ ${opencodeOwnedMergeBash(
     2,
   ),
 )}
-if command -v python3 >/dev/null 2>&1; then
+if [ "$ARCHESTRA_OPENCODE_MAJOR" -lt 2 ] && command -v python3 >/dev/null 2>&1; then
   EFFECTIVE_CONFIG=$(cd "$HOME" && opencode debug config 2>/dev/null || true)
   EFFECTIVE_BASE_URL=$(printf '%s' "$EFFECTIVE_CONFIG" | ARCHESTRA_OC_PROVIDER_ID=${sh(target.id)} python3 -c ${sh(OPENCODE_EFFECTIVE_BASE_URL_PY)} || true)
   if [ "$EFFECTIVE_BASE_URL" = ${sh(target.baseUrl)} ]; then
@@ -543,6 +565,9 @@ function opencodePowerShellSections(ctx: SetupScriptContext): string[] {
   const sections: string[] = [
     `$archOcDir = if ($env:XDG_CONFIG_HOME) { Join-Path $env:XDG_CONFIG_HOME 'opencode' } else { Join-Path $env:USERPROFILE '.config/opencode' }
 $archOcFile = Join-Path $archOcDir 'opencode.json'
+# OpenCode 2 changed its plugin API and \`debug config\` output; steps below branch on it.
+$archOcMajor = 1
+try { if ((& opencode --version 2>$null | Out-String) -match '(\\d+)\\.\\d+') { $archOcMajor = [int]$Matches[1] } } catch { }
 function Read-ArchOcOwned {
   if (Test-Path $archOcFile) {
     $raw = Get-Content -Raw -Path $archOcFile
@@ -689,14 +714,16 @@ ${opencodeProviderMergePowerShell({
   apiKeyRef,
 })}
 Write-ArchOcOwned $archCfg
-$archEffective = $null
-try {
-  Push-Location $env:USERPROFILE
-  $archResolved = (& opencode debug config 2>$null | Out-String) | ConvertFrom-Json
-  $archEffective = $archResolved.provider.${psq(target.id)}.options.baseURL
-} catch { } finally { Pop-Location }
-if ($archEffective -eq ${psq(target.baseUrl)}) { Ok ${psq(`OpenCode resolves "${target.id}" through the LLM proxy`)} }
-else { Warn ('Another OpenCode config overrides provider.${target.id}.options.baseURL (resolved: ' + $archEffective + '). Remove that override to use the proxy.') }`);
+if ($archOcMajor -lt 2) {
+  $archEffective = $null
+  try {
+    Push-Location $env:USERPROFILE
+    $archResolved = (& opencode debug config 2>$null | Out-String) | ConvertFrom-Json
+    $archEffective = $archResolved.provider.${psq(target.id)}.options.baseURL
+  } catch { } finally { Pop-Location }
+  if ($archEffective -eq ${psq(target.baseUrl)}) { Ok ${psq(`OpenCode resolves "${target.id}" through the LLM proxy`)} }
+  else { Warn ('Another OpenCode config overrides provider.${target.id}.options.baseURL (resolved: ' + $archEffective + '). Remove that override to use the proxy.') }
+}`);
     }
   }
 

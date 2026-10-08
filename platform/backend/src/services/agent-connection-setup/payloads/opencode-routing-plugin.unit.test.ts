@@ -4,7 +4,10 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { OPENCODE_AGENT_HEADER } from "@archestra/shared/consts";
 import { describe, expect, test, vi } from "vitest";
-import { renderOpenCodeRoutingPlugin } from "./opencode-routing-plugin";
+import {
+  renderOpenCodeRoutingPlugin,
+  renderOpenCodeRoutingPluginV2,
+} from "./opencode-routing-plugin";
 
 describe("OpenCode routing plugin", () => {
   test("reapplies managed routes and fails closed for unsupported or overridden providers", async () => {
@@ -252,4 +255,100 @@ describe("OpenCode routing plugin", () => {
       await rm(root, { recursive: true, force: true });
     }
   });
+
+  test("OpenCode 2 variant disables unrouted providers and routes every model request", async () => {
+    const root = await mkdtemp(path.join(tmpdir(), "opencode-plugin-v2-"));
+    const file = path.join(root, "archestra-llm-proxy.mjs");
+    const routes = {
+      anthropic: "https://example.com/v1/anthropic/v1",
+      openai: "https://example.com/v1/openai",
+    };
+    const headers = {
+      "X-Archestra-Agent-Id": "opencode",
+      "X-Archestra-Virtual-Key": "arch_passthroughcafe",
+    };
+    try {
+      await writeFile(file, renderOpenCodeRoutingPluginV2({ routes, headers }));
+      const { default: plugin } = await import(
+        `${pathToFileURL(file).href}?t=${Date.now()}`
+      );
+      expect(plugin.id).toBe("archestra.llm-proxy");
+
+      const providers: Record<string, { id: string; activation: string }> = {
+        anthropic: { id: "anthropic", activation: "auto" },
+        opencode: { id: "opencode", activation: "auto" },
+      };
+      let modelRequest: ((event: ModelRequest) => void) | undefined;
+      await plugin.setup({
+        provider: {
+          transform: async (
+            callback: (editor: Record<string, unknown>) => void,
+          ) => {
+            callback({
+              list: () =>
+                Object.values(providers).map((provider) => ({ provider })),
+              update: (
+                id: string,
+                update: (provider: { activation: string }) => void,
+              ) => update(providers[id]),
+            });
+            return { dispose: async () => {} };
+          },
+        },
+        session: {
+          hook: async (name: string, callback: typeof modelRequest) => {
+            if (name === "model.request") modelRequest = callback;
+            return { dispose: async () => {} };
+          },
+        },
+      });
+
+      expect(providers.anthropic.activation).toBe("auto");
+      expect(providers.opencode.activation).toBe("disabled");
+
+      const anthropic = modelEvent("anthropic", "https://api.anthropic.com/v1");
+      modelRequest?.(anthropic);
+      expect(anthropic.baseURL).toBe(routes.anthropic);
+      expect(anthropic.headers).toEqual({
+        ...headers,
+        [OPENCODE_AGENT_HEADER]: "build",
+      });
+
+      const chatGpt = modelEvent(
+        "openai",
+        "https://chatgpt.com/backend-api/codex",
+      );
+      modelRequest?.(chatGpt);
+      expect(chatGpt.baseURL).toBe(routes.openai);
+      expect(chatGpt.headers["x-archestra-opencode-oauth-bridge"]).toBe("true");
+
+      const apiKey = modelEvent("openai", "https://api.openai.com/v1");
+      modelRequest?.(apiKey);
+      expect(apiKey.headers).not.toHaveProperty(
+        "x-archestra-opencode-oauth-bridge",
+      );
+
+      expect(() =>
+        modelRequest?.(modelEvent("opencode", "https://opencode.ai/zen/v1")),
+      ).toThrow('OpenCode provider "opencode" is not supported');
+    } finally {
+      await rm(root, { recursive: true, force: true });
+    }
+  });
 });
+
+interface ModelRequest {
+  model: { providerID: string; id: string };
+  agent: string;
+  baseURL?: string;
+  headers: Record<string, string>;
+}
+
+function modelEvent(providerID: string, baseURL: string): ModelRequest {
+  return {
+    model: { providerID, id: "model" },
+    agent: "build",
+    baseURL,
+    headers: {},
+  };
+}

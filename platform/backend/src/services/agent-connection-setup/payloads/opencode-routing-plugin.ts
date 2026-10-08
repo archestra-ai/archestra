@@ -190,6 +190,65 @@ export const ArchestraOpenAiOAuth = async () => ({
 `;
 }
 
+/**
+ * OpenCode 2 replaced the V1 plugin API: the loader reads only a default export
+ * with an `id` and a `setup(ctx)` function, and V1 hook objects never run. The
+ * setup script installs this variant when `opencode --version` reports 2 or
+ * later, at the same path, so disconnect restores either one the same way.
+ *
+ * V2 keeps credentials in its own store and applies its own sign-in transport,
+ * so the plugin only has to send every model request to the managed route:
+ * - providers without a managed route are disabled, matching V1's
+ *   enabled_providers list;
+ * - the `model.request` hook swaps the base URL and adds the attribution
+ *   headers, and fails closed for a provider the proxy cannot route;
+ * - a ChatGPT sign-in (OpenAI requests bound for the Codex backend) is marked
+ *   with the OAuth bridge header, as V1's fetch bridge did.
+ *
+ * Inject values only with JSON.stringify. The return value is JavaScript source.
+ */
+export function renderOpenCodeRoutingPluginV2(
+  params: RenderOpenCodeRoutingPluginParams,
+): string {
+  return `const routes = ${JSON.stringify(params.routes)};
+const managedHeaders = ${JSON.stringify(params.headers)};
+// white-label-ok: This constant is a stable wire header identifier.
+const openCodeAgentHeader = ${JSON.stringify(OPENCODE_AGENT_HEADER)};
+const openAiOAuthBridgeHeader = "x-archestra-opencode-oauth-bridge";
+const chatGptBaseUrl = "https://chatgpt.com/backend-api/codex";
+const normalizeUrl = (value) => String(value ?? "").replace(/\\/+$/, "");
+
+export default {
+  id: "archestra.llm-proxy",
+  async setup(ctx) {
+    await ctx.provider.transform((editor) => {
+      for (const record of editor.list()) {
+        const providerId = record.provider.id;
+        if (Object.hasOwn(routes, providerId)) continue;
+        editor.update(providerId, (provider) => {
+          provider.activation = "disabled";
+        });
+      }
+    });
+    await ctx.session.hook("model.request", (event) => {
+      const providerId = event.model.providerID;
+      const route = Object.hasOwn(routes, providerId) ? routes[providerId] : undefined;
+      if (!route) {
+        throw new Error(
+          'OpenCode provider "' + providerId + '" is not supported by the connected Archestra LLM proxy. Disconnect or reconfigure the proxy before using it.',
+        );
+      }
+      const chatGptSignIn = providerId === "openai" && normalizeUrl(event.baseURL) === chatGptBaseUrl;
+      event.baseURL = route;
+      Object.assign(event.headers, managedHeaders);
+      event.headers[openCodeAgentHeader] = event.agent;
+      if (chatGptSignIn) event.headers[openAiOAuthBridgeHeader] = "true";
+    });
+  },
+};
+`;
+}
+
 const OPENCODE_CREDENTIAL_ENV_BY_PROVIDER: Record<string, readonly string[]> = {
   anthropic: ["ANTHROPIC_API_KEY"],
   google: ["GOOGLE_API_KEY", "GOOGLE_GENERATIVE_AI_API_KEY", "GEMINI_API_KEY"],

@@ -48373,6 +48373,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -48470,6 +48471,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -48715,6 +48717,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -48833,6 +48836,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -48951,6 +48955,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -49069,6 +49074,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 input: string | Array<string>;
@@ -49187,6 +49193,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: GeminiGenerateContentRequest | {
                 [key: string]: unknown;
             };
@@ -49284,6 +49291,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: AnthropicMessagesRequest | {
                 [key: string]: unknown;
             };
@@ -49381,6 +49389,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 modelId: string;
                 messages?: Array<{
@@ -49919,6 +49928,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model?: string;
                 messages: Array<{
@@ -50556,6 +50566,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -50653,6 +50664,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -50750,6 +50762,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: PerplexityChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -50847,6 +50860,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -50944,6 +50958,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -51041,6 +51056,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: OpenrouterChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -51138,6 +51154,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: VllmChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -51235,6 +51252,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: OllamaChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -51332,6 +51350,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: OllamaNativeChatRequest | {
                 [key: string]: unknown;
             };
@@ -51429,6 +51448,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: CohereChatRequest | {
                 [key: string]: unknown;
             };
@@ -51526,6 +51546,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: ZhipuaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -51623,6 +51644,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: DeepSeekChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -51720,6 +51742,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 /**
@@ -52531,6 +52554,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 /**
@@ -53342,6 +53366,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 /**
@@ -54153,6 +54178,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: MinimaxChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -54250,6 +54276,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: XaiChatCompletionRequest | {
                 [key: string]: unknown;
             };
@@ -54415,6 +54442,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -54619,6 +54647,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -54823,6 +54852,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: {
                 model: string;
                 input?: string | Array<{
@@ -55027,6 +55057,7 @@ export type GetInteractionsResponses = {
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
             authenticatedAppName: string | null;
+            billingTeamId: string | null;
             request: JevDecisionsRequest | {
                 [key: string]: unknown;
             };
@@ -55750,6 +55781,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -55847,6 +55879,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -56092,6 +56125,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -56210,6 +56244,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -56328,6 +56363,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -56446,6 +56482,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             input: string | Array<string>;
@@ -56564,6 +56601,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: GeminiGenerateContentRequest | {
             [key: string]: unknown;
         };
@@ -56661,6 +56699,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: AnthropicMessagesRequest | {
             [key: string]: unknown;
         };
@@ -56758,6 +56797,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             modelId: string;
             messages?: Array<{
@@ -57296,6 +57336,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model?: string;
             messages: Array<{
@@ -57933,6 +57974,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -58030,6 +58072,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -58127,6 +58170,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: PerplexityChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -58224,6 +58268,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -58321,6 +58366,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -58418,6 +58464,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: OpenrouterChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -58515,6 +58562,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: VllmChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -58612,6 +58660,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: OllamaChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -58709,6 +58758,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: OllamaNativeChatRequest | {
             [key: string]: unknown;
         };
@@ -58806,6 +58856,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: CohereChatRequest | {
             [key: string]: unknown;
         };
@@ -58903,6 +58954,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: ZhipuaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -59000,6 +59052,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: DeepSeekChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -59097,6 +59150,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             /**
@@ -59908,6 +59962,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             /**
@@ -60719,6 +60774,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             /**
@@ -61530,6 +61586,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: MinimaxChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -61627,6 +61684,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: XaiChatCompletionRequest | {
             [key: string]: unknown;
         };
@@ -61792,6 +61850,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -61996,6 +62055,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -62200,6 +62260,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: {
             model: string;
             input?: string | Array<{
@@ -62404,6 +62465,7 @@ export type GetInteractionResponses = {
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
         authenticatedAppName: string | null;
+        billingTeamId: string | null;
         request: JevDecisionsRequest | {
             [key: string]: unknown;
         };
@@ -73794,7 +73856,7 @@ export type GetLimitsData = {
     body?: never;
     path?: never;
     query?: {
-        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
+        entityType?: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId?: string;
         limitType?: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         /**
@@ -73876,7 +73938,7 @@ export type GetLimitsResponses = {
      */
     200: Array<{
         id: string;
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -73906,7 +73968,7 @@ export type GetLimitsResponse = GetLimitsResponses[keyof GetLimitsResponses];
 
 export type CreateLimitData = {
     body: {
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -73998,7 +74060,7 @@ export type CreateLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -74179,7 +74241,7 @@ export type GetLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -74301,7 +74363,7 @@ export type UpdateLimitResponses = {
      */
     200: {
         id: string;
-        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment';
+        entityType: 'organization' | 'team' | 'agent' | 'user' | 'virtual_key' | 'environment' | 'llm_oauth_client';
         entityId: string;
         limitType: 'token_cost' | 'mcp_server_calls' | 'tool_calls';
         limitValue: number;
@@ -75482,6 +75544,16 @@ export type GetLlmOauthClientsResponses = {
             }>;
             createdAt: string;
             updatedAt: string;
+            billingTeam: {
+                id: string;
+                name: string;
+            } | null;
+            spendCap: {
+                limitValue: number;
+                cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+                limitId: string;
+                currentUsage: number;
+            } | null;
         }>;
         pagination: {
             currentPage: number;
@@ -75514,6 +75586,17 @@ export type CreateLlmOauthClientData = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * Team a client_credentials client's spend is charged to. Omit to keep it; null stops billing a team. Signed-in users of an authorization_code client pay for themselves.
+         */
+        billingTeamId?: string | null;
+        /**
+         * Spend cap for the whole client, stored as a token_cost limit on it. Omit to keep it; null removes it.
+         */
+        spendCap?: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        } | null;
         /**
          * Who else starts with access, beside the creator who always gets full access.
          */
@@ -75640,6 +75723,16 @@ export type CreateLlmOauthClientResponses = {
         }>;
         createdAt: string;
         updatedAt: string;
+        billingTeam: {
+            id: string;
+            name: string;
+        } | null;
+        spendCap: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+            limitId: string;
+            currentUsage: number;
+        } | null;
         clientSecret: string;
     };
 };
@@ -75749,6 +75842,17 @@ export type UpdateLlmOauthClientData = {
             keyId?: string;
             valueId?: string;
         }>;
+        /**
+         * Team a client_credentials client's spend is charged to. Omit to keep it; null stops billing a team. Signed-in users of an authorization_code client pay for themselves.
+         */
+        billingTeamId?: string | null;
+        /**
+         * Spend cap for the whole client, stored as a token_cost limit on it. Omit to keep it; null removes it.
+         */
+        spendCap?: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        } | null;
     };
     path: {
         id: string;
@@ -75855,6 +75959,16 @@ export type UpdateLlmOauthClientResponses = {
         }>;
         createdAt: string;
         updatedAt: string;
+        billingTeam: {
+            id: string;
+            name: string;
+        } | null;
+        spendCap: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+            limitId: string;
+            currentUsage: number;
+        } | null;
     };
 };
 
@@ -75967,6 +76081,16 @@ export type RotateLlmOauthClientSecretResponses = {
         }>;
         createdAt: string;
         updatedAt: string;
+        billingTeam: {
+            id: string;
+            name: string;
+        } | null;
+        spendCap: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+            limitId: string;
+            currentUsage: number;
+        } | null;
         clientSecret: string;
     };
 };
@@ -111502,6 +111626,7 @@ export type GetAllVirtualApiKeysResponses = {
             authorId: string | null;
             expiresAt: string | null;
             createdByServiceAccountId: string | null;
+            billingTeamId: string | null;
             createdAt: string;
             lastUsedAt: string | null;
             teams: Array<{
@@ -111526,6 +111651,16 @@ export type GetAllVirtualApiKeysResponses = {
                 keyId?: string;
                 valueId?: string;
             }>;
+            billingTeam: {
+                id: string;
+                name: string;
+            } | null;
+            spendCap: {
+                limitValue: number;
+                cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+                limitId: string;
+                currentUsage: number;
+            } | null;
         }>;
         pagination: {
             currentPage: number;
@@ -111555,6 +111690,11 @@ export type CreateVirtualApiKeyData = {
             keyId?: string;
             valueId?: string;
         }>;
+        billingTeamId?: string | null;
+        spendCap?: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        } | null;
         ownerId?: string;
         initialGrants?: Array<{
             subject: {
@@ -111661,6 +111801,7 @@ export type CreateVirtualApiKeyResponses = {
         authorId: string | null;
         expiresAt: string | null;
         createdByServiceAccountId: string | null;
+        billingTeamId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         value: string;
@@ -111686,6 +111827,16 @@ export type CreateVirtualApiKeyResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        billingTeam: {
+            id: string;
+            name: string;
+        } | null;
+        spendCap: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+            limitId: string;
+            currentUsage: number;
+        } | null;
     };
 };
 
@@ -111865,6 +112016,7 @@ export type GetVirtualApiKeyResponses = {
         authorId: string | null;
         expiresAt: string | null;
         createdByServiceAccountId: string | null;
+        billingTeamId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{
@@ -111889,6 +112041,16 @@ export type GetVirtualApiKeyResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        billingTeam: {
+            id: string;
+            name: string;
+        } | null;
+        spendCap: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+            limitId: string;
+            currentUsage: number;
+        } | null;
     };
 };
 
@@ -111909,6 +112071,11 @@ export type UpdateVirtualApiKeyData = {
             keyId?: string;
             valueId?: string;
         }>;
+        billingTeamId?: string | null;
+        spendCap?: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+        } | null;
     };
     path: {
         id: string;
@@ -111997,6 +112164,7 @@ export type UpdateVirtualApiKeyResponses = {
         authorId: string | null;
         expiresAt: string | null;
         createdByServiceAccountId: string | null;
+        billingTeamId: string | null;
         createdAt: string;
         lastUsedAt: string | null;
         teams: Array<{
@@ -112021,6 +112189,16 @@ export type UpdateVirtualApiKeyResponses = {
             keyId?: string;
             valueId?: string;
         }>;
+        billingTeam: {
+            id: string;
+            name: string;
+        } | null;
+        spendCap: {
+            limitValue: number;
+            cleanupInterval: '1h' | '12h' | '24h' | '1w' | '1m' | 'calendar_day' | 'calendar_week_sunday' | 'calendar_week_monday' | 'calendar_month';
+            limitId: string;
+            currentUsage: number;
+        } | null;
     };
 };
 

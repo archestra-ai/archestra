@@ -4,6 +4,7 @@ import {
   SupportedProvidersSchema,
 } from "@archestra/shared";
 import { z } from "zod";
+import { CredentialBillingSchema } from "./credential-billing";
 import { LabelWithDetailsSchema } from "./label";
 
 export const LLM_OAUTH_CLIENT_METADATA_TYPE = "llm_oauth_client";
@@ -41,6 +42,8 @@ export const LlmOauthClientMetadataSchema = z.object({
   // Rows created before authorship was recorded have no author. Who can see
   // or manage a client is its grants' business, not this metadata's.
   authorId: z.string().nullable().default(null),
+  /** Team a client-credentials client's spend is charged to. */
+  billingTeamId: z.string().nullable().default(null),
 });
 
 export const LlmOauthClientSchema = z.object({
@@ -63,7 +66,7 @@ export const LlmOauthClientSchema = z.object({
   labels: z.array(LabelWithDetailsSchema),
   createdAt: z.date(),
   updatedAt: z.date(),
-});
+}).merge(CredentialBillingSchema);
 
 export const LlmOauthClientWithSecretSchema = LlmOauthClientSchema.extend({
   clientSecret: z.string(),

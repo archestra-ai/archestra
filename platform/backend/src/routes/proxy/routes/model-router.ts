@@ -129,6 +129,7 @@ type ModelRouterVirtualKeyAuth = {
   virtualKeyId: string;
   virtualKeyIsPersonal: boolean;
   virtualKeyAuthorId: string | null;
+  billingTeamId: string | null;
   /** In preference order; see `selectMappedProviderKey`. */
   providerApiKeys: ModelRouterMappedProviderKey[];
   oauthClient?: never;
@@ -137,6 +138,7 @@ type ModelRouterVirtualKeyAuth = {
 type ModelRouterOAuthClientAuth = {
   authMethod: "oauth_client_credentials";
   organizationId: string;
+  billingTeamId: string | null;
   /** In preference order; see `selectMappedProviderKey`. */
   providerApiKeys: ModelRouterMappedProviderKey[];
   oauthClient: {
@@ -941,6 +943,7 @@ async function getModelRouterAuth(
         resolved.virtualKey,
       ),
       virtualKeyAuthorId: resolved.virtualKey.authorId,
+      billingTeamId: resolved.virtualKey.billingTeamId,
       providerApiKeys: mappings,
     };
   } catch (error) {
@@ -1059,6 +1062,10 @@ async function applyModelRouterAuthOverride(params: {
             params.auth.virtualKeyIsPersonal
           ? (params.auth.virtualKeyAuthorId ?? undefined)
           : undefined,
+    billingTeamId:
+      params.auth.authMethod === "oauth_user"
+        ? undefined
+        : (params.auth.billingTeamId ?? undefined),
   };
 }
 
@@ -1105,6 +1112,7 @@ async function getModelRouterOAuthClientAuth(
   return {
     authMethod: "oauth_client_credentials",
     organizationId: oauthClient.organizationId,
+    billingTeamId: oauthClient.billingTeamId,
     oauthClient: {
       id: oauthClient.id,
       name: oauthClient.name,

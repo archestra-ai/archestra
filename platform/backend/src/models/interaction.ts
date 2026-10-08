@@ -1241,9 +1241,10 @@ class InteractionModel {
         );
         return;
       }
-      const teamIds = await AgentTeamModel.getTeamsForAgent(
-        interaction.profileId,
-      );
+      // A credential's billing team takes the place of the agent's teams.
+      const teamIds = interaction.billingTeamId
+        ? [interaction.billingTeamId]
+        : await AgentTeamModel.getTeamsForAgent(interaction.profileId);
       if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
@@ -1256,8 +1257,17 @@ class InteractionModel {
         entityType: LimitEntityType;
         entityId: string | null | undefined;
       }> = [
-        { entityType: "user", entityId: interaction.userId },
+        // The billing team pays instead of the caller, so a team-billed
+        // interaction leaves the caller's personal limit untouched.
+        {
+          entityType: "user",
+          entityId: interaction.billingTeamId ? null : interaction.userId,
+        },
         { entityType: "virtual_key", entityId: interaction.virtualKeyId },
+        {
+          entityType: "llm_oauth_client",
+          entityId: interaction.authenticatedAppId,
+        },
         {
           entityType: "virtual_key",
           entityId: interaction.passthroughVirtualKeyId,

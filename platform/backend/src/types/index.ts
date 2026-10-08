@@ -39,6 +39,7 @@ export * from "./connection-setup";
 export * from "./conversation";
 export * from "./conversation-chat-error";
 export * from "./conversation-compaction";
+export * from "./credential-billing";
 export * from "./dual-llm";
 export * from "./enterprise-managed-credentials";
 export * from "./environment";

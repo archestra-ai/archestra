@@ -173605,6 +173605,10 @@
                                 "nullable": true,
                                 "type": "string"
                               },
+                              "billingTeamId": {
+                                "nullable": true,
+                                "type": "string"
+                              },
                               "request": {
                                 "anyOf": [
                                   {
@@ -174097,6 +174101,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -174239,6 +174244,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -175338,6 +175347,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -175480,6 +175490,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -176095,6 +176109,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -176237,6 +176252,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -176852,6 +176871,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -176994,6 +177014,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -177609,6 +177633,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -177751,6 +177776,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -178366,6 +178395,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -178508,6 +178538,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -179003,6 +179037,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -179145,6 +179180,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -179640,6 +179679,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -179782,6 +179822,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -182331,6 +182375,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -182473,6 +182518,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -185758,6 +185807,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -185900,6 +185950,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -186395,6 +186449,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -186537,6 +186592,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -187032,6 +187091,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -187174,6 +187234,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -187669,6 +187733,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -187811,6 +187876,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -188306,6 +188375,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -188448,6 +188518,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -188943,6 +189017,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -189085,6 +189160,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -189580,6 +189659,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -189722,6 +189802,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -190217,6 +190301,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -190359,6 +190444,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -190854,6 +190943,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -190996,6 +191086,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -191491,6 +191585,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -191633,6 +191728,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -192128,6 +192227,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -192270,6 +192370,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -192765,6 +192869,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -192907,6 +193012,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -193402,6 +193511,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -193544,6 +193654,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -196441,6 +196555,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -196583,6 +196698,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -199475,6 +199594,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -199617,6 +199737,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -202514,6 +202638,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -202656,6 +202781,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -203151,6 +203280,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -203293,6 +203423,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -204024,6 +204158,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -204166,6 +204301,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -205083,6 +205222,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -205225,6 +205365,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -206142,6 +206286,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -206284,6 +206429,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -207192,6 +207341,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -207334,6 +207484,10 @@
                                 "type": "string"
                               },
                               "authenticatedAppName": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "billingTeamId": {
                                 "nullable": true,
                                 "type": "string"
                               },
@@ -207822,6 +207976,7 @@
                               "billingMode",
                               "authenticatedAppId",
                               "authenticatedAppName",
+                              "billingTeamId",
                               "request",
                               "response",
                               "type",
@@ -210399,6 +210554,10 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "billingTeamId": {
+                          "nullable": true,
+                          "type": "string"
+                        },
                         "request": {
                           "anyOf": [
                             {
@@ -210891,6 +211050,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -211033,6 +211193,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -212132,6 +212296,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -212274,6 +212439,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -212889,6 +213058,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -213031,6 +213201,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -213646,6 +213820,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -213788,6 +213963,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -214403,6 +214582,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -214545,6 +214725,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -215160,6 +215344,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -215302,6 +215487,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -215797,6 +215986,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -215939,6 +216129,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -216434,6 +216628,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -216576,6 +216771,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -219125,6 +219324,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -219267,6 +219467,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -222552,6 +222756,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -222694,6 +222899,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -223189,6 +223398,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -223331,6 +223541,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -223826,6 +224040,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -223968,6 +224183,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -224463,6 +224682,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -224605,6 +224825,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -225100,6 +225324,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -225242,6 +225467,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -225737,6 +225966,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -225879,6 +226109,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -226374,6 +226608,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -226516,6 +226751,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -227011,6 +227250,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -227153,6 +227393,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -227648,6 +227892,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -227790,6 +228035,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -228285,6 +228534,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -228427,6 +228677,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -228922,6 +229176,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -229064,6 +229319,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -229559,6 +229818,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -229701,6 +229961,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -230196,6 +230460,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -230338,6 +230603,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -233235,6 +233504,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -233377,6 +233647,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -236269,6 +236543,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -236411,6 +236686,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -239308,6 +239587,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -239450,6 +239730,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -239945,6 +240229,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -240087,6 +240372,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -240818,6 +241107,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -240960,6 +241250,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -241877,6 +242171,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -242019,6 +242314,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -242936,6 +243235,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -243078,6 +243378,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -243986,6 +244290,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -244128,6 +244433,10 @@
                           "type": "string"
                         },
                         "authenticatedAppName": {
+                          "nullable": true,
+                          "type": "string"
+                        },
+                        "billingTeamId": {
                           "nullable": true,
                           "type": "string"
                         },
@@ -244616,6 +244925,7 @@
                         "billingMode",
                         "authenticatedAppId",
                         "authenticatedAppName",
+                        "billingTeamId",
                         "request",
                         "response",
                         "type",
@@ -288397,7 +288707,8 @@
                 "agent",
                 "user",
                 "virtual_key",
-                "environment"
+                "environment",
+                "llm_oauth_client"
               ]
             },
             "in": "query",
@@ -288458,7 +288769,8 @@
                           "agent",
                           "user",
                           "virtual_key",
-                          "environment"
+                          "environment",
+                          "llm_oauth_client"
                         ]
                       },
                       "entityId": {
@@ -288856,7 +289168,8 @@
                       "agent",
                       "user",
                       "virtual_key",
-                      "environment"
+                      "environment",
+                      "llm_oauth_client"
                     ]
                   },
                   "entityId": {
@@ -288971,7 +289284,8 @@
                         "agent",
                         "user",
                         "virtual_key",
-                        "environment"
+                        "environment",
+                        "llm_oauth_client"
                       ]
                     },
                     "entityId": {
@@ -289329,7 +289643,8 @@
                         "agent",
                         "user",
                         "virtual_key",
-                        "environment"
+                        "environment",
+                        "llm_oauth_client"
                       ]
                     },
                     "entityId": {
@@ -289833,7 +290148,8 @@
                         "agent",
                         "user",
                         "virtual_key",
-                        "environment"
+                        "environment",
+                        "llm_oauth_client"
                       ]
                     },
                     "entityId": {
@@ -294679,6 +294995,61 @@
                           "updatedAt": {
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "billingTeam": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "spendCap": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "limitValue": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "cleanupInterval": {
+                                "type": "string",
+                                "enum": [
+                                  "1h",
+                                  "12h",
+                                  "24h",
+                                  "1w",
+                                  "1m",
+                                  "calendar_day",
+                                  "calendar_week_sunday",
+                                  "calendar_week_monday",
+                                  "calendar_month"
+                                ]
+                              },
+                              "limitId": {
+                                "type": "string"
+                              },
+                              "currentUsage": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "limitValue",
+                              "cleanupInterval",
+                              "limitId",
+                              "currentUsage"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -294695,7 +295066,9 @@
                           "createdBy",
                           "labels",
                           "createdAt",
-                          "updatedAt"
+                          "updatedAt",
+                          "billingTeam",
+                          "spendCap"
                         ],
                         "additionalProperties": false
                       }
@@ -295095,6 +295468,41 @@
                       ]
                     }
                   },
+                  "billingTeamId": {
+                    "description": "Team a client_credentials client's spend is charged to. Omit to keep it; null stops billing a team. Signed-in users of an authorization_code client pay for themselves.",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "spendCap": {
+                    "description": "Spend cap for the whole client, stored as a token_cost limit on it. Omit to keep it; null removes it.",
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "limitValue": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "limitValue",
+                      "cleanupInterval"
+                    ]
+                  },
                   "initialGrants": {
                     "description": "Who else starts with access, beside the creator who always gets full access.",
                     "maxItems": 200,
@@ -295400,6 +295808,61 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
+                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -295419,6 +295882,8 @@
                     "labels",
                     "createdAt",
                     "updatedAt",
+                    "billingTeam",
+                    "spendCap",
                     "clientSecret"
                   ],
                   "additionalProperties": false
@@ -295773,6 +296238,41 @@
                         "value"
                       ]
                     }
+                  },
+                  "billingTeamId": {
+                    "description": "Team a client_credentials client's spend is charged to. Omit to keep it; null stops billing a team. Signed-in users of an authorization_code client pay for themselves.",
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "spendCap": {
+                    "description": "Spend cap for the whole client, stored as a token_cost limit on it. Omit to keep it; null removes it.",
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "limitValue": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "limitValue",
+                      "cleanupInterval"
+                    ]
                   }
                 },
                 "required": [
@@ -295956,6 +296456,61 @@
                     "updatedAt": {
                       "type": "string",
                       "format": "date-time"
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -295972,7 +296527,9 @@
                     "createdBy",
                     "labels",
                     "createdAt",
-                    "updatedAt"
+                    "updatedAt",
+                    "billingTeam",
+                    "spendCap"
                   ],
                   "additionalProperties": false
                 }
@@ -296667,6 +297224,61 @@
                       "type": "string",
                       "format": "date-time"
                     },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
+                    },
                     "clientSecret": {
                       "type": "string"
                     }
@@ -296686,6 +297298,8 @@
                     "labels",
                     "createdAt",
                     "updatedAt",
+                    "billingTeam",
+                    "spendCap",
                     "clientSecret"
                   ],
                   "additionalProperties": false
@@ -427965,6 +428579,10 @@
                             "format": "uuid",
                             "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                           },
+                          "billingTeamId": {
+                            "nullable": true,
+                            "type": "string"
+                          },
                           "createdAt": {
                             "type": "string",
                             "format": "date-time"
@@ -428108,6 +428726,61 @@
                               ],
                               "additionalProperties": false
                             }
+                          },
+                          "billingTeam": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
+                          },
+                          "spendCap": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "limitValue": {
+                                "type": "integer",
+                                "exclusiveMinimum": true,
+                                "maximum": 9007199254740991
+                              },
+                              "cleanupInterval": {
+                                "type": "string",
+                                "enum": [
+                                  "1h",
+                                  "12h",
+                                  "24h",
+                                  "1w",
+                                  "1m",
+                                  "calendar_day",
+                                  "calendar_week_sunday",
+                                  "calendar_week_monday",
+                                  "calendar_month"
+                                ]
+                              },
+                              "limitId": {
+                                "type": "string"
+                              },
+                              "currentUsage": {
+                                "type": "number"
+                              }
+                            },
+                            "required": [
+                              "limitValue",
+                              "cleanupInterval",
+                              "limitId",
+                              "currentUsage"
+                            ],
+                            "additionalProperties": false
                           }
                         },
                         "required": [
@@ -428121,13 +428794,16 @@
                           "authorId",
                           "expiresAt",
                           "createdByServiceAccountId",
+                          "billingTeamId",
                           "createdAt",
                           "lastUsedAt",
                           "teams",
                           "authorName",
                           "createdBy",
                           "providerApiKeys",
-                          "labels"
+                          "labels",
+                          "billingTeam",
+                          "spendCap"
                         ],
                         "additionalProperties": false
                       }
@@ -428523,6 +429199,39 @@
                       ]
                     }
                   },
+                  "billingTeamId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "spendCap": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "limitValue": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "limitValue",
+                      "cleanupInterval"
+                    ]
+                  },
                   "ownerId": {
                     "type": "string"
                   },
@@ -428725,6 +429434,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "billingTeamId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -428871,6 +429584,61 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -428884,6 +429652,7 @@
                     "authorId",
                     "expiresAt",
                     "createdByServiceAccountId",
+                    "billingTeamId",
                     "createdAt",
                     "lastUsedAt",
                     "value",
@@ -428891,7 +429660,9 @@
                     "authorName",
                     "createdBy",
                     "providerApiKeys",
-                    "labels"
+                    "labels",
+                    "billingTeam",
+                    "spendCap"
                   ],
                   "additionalProperties": false
                 }
@@ -429213,6 +429984,10 @@
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
                     },
+                    "billingTeamId": {
+                      "nullable": true,
+                      "type": "string"
+                    },
                     "createdAt": {
                       "type": "string",
                       "format": "date-time"
@@ -429356,6 +430131,61 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -429369,13 +430199,16 @@
                     "authorId",
                     "expiresAt",
                     "createdByServiceAccountId",
+                    "billingTeamId",
                     "createdAt",
                     "lastUsedAt",
                     "teams",
                     "authorName",
                     "createdBy",
                     "providerApiKeys",
-                    "labels"
+                    "labels",
+                    "billingTeam",
+                    "spendCap"
                   ],
                   "additionalProperties": false
                 }
@@ -429722,6 +430555,39 @@
                         "value"
                       ]
                     }
+                  },
+                  "billingTeamId": {
+                    "nullable": true,
+                    "type": "string"
+                  },
+                  "spendCap": {
+                    "nullable": true,
+                    "type": "object",
+                    "properties": {
+                      "limitValue": {
+                        "type": "integer",
+                        "exclusiveMinimum": true,
+                        "maximum": 9007199254740991
+                      },
+                      "cleanupInterval": {
+                        "type": "string",
+                        "enum": [
+                          "1h",
+                          "12h",
+                          "24h",
+                          "1w",
+                          "1m",
+                          "calendar_day",
+                          "calendar_week_sunday",
+                          "calendar_week_monday",
+                          "calendar_month"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "limitValue",
+                      "cleanupInterval"
+                    ]
                   }
                 },
                 "required": [
@@ -429801,6 +430667,10 @@
                       "type": "string",
                       "format": "uuid",
                       "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                    },
+                    "billingTeamId": {
+                      "nullable": true,
+                      "type": "string"
                     },
                     "createdAt": {
                       "type": "string",
@@ -429945,6 +430815,61 @@
                         ],
                         "additionalProperties": false
                       }
+                    },
+                    "billingTeam": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "id",
+                        "name"
+                      ],
+                      "additionalProperties": false
+                    },
+                    "spendCap": {
+                      "nullable": true,
+                      "type": "object",
+                      "properties": {
+                        "limitValue": {
+                          "type": "integer",
+                          "exclusiveMinimum": true,
+                          "maximum": 9007199254740991
+                        },
+                        "cleanupInterval": {
+                          "type": "string",
+                          "enum": [
+                            "1h",
+                            "12h",
+                            "24h",
+                            "1w",
+                            "1m",
+                            "calendar_day",
+                            "calendar_week_sunday",
+                            "calendar_week_monday",
+                            "calendar_month"
+                          ]
+                        },
+                        "limitId": {
+                          "type": "string"
+                        },
+                        "currentUsage": {
+                          "type": "number"
+                        }
+                      },
+                      "required": [
+                        "limitValue",
+                        "cleanupInterval",
+                        "limitId",
+                        "currentUsage"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
@@ -429958,13 +430883,16 @@
                     "authorId",
                     "expiresAt",
                     "createdByServiceAccountId",
+                    "billingTeamId",
                     "createdAt",
                     "lastUsedAt",
                     "teams",
                     "authorName",
                     "createdBy",
                     "providerApiKeys",
-                    "labels"
+                    "labels",
+                    "billingTeam",
+                    "spendCap"
                   ],
                   "additionalProperties": false
                 }

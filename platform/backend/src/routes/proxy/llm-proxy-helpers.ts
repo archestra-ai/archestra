@@ -547,6 +547,7 @@ export function buildInteractionRecord(params: {
     name: string;
     clientId: string;
   };
+  billingTeamId?: string;
   runId?: string;
   userId?: string;
   virtualKeyId?: string;
@@ -578,6 +579,7 @@ export function buildInteractionRecord(params: {
     billingMode: params.billingMode,
     authenticatedAppId: params.authenticatedApp?.id,
     authenticatedAppName: params.authenticatedApp?.name,
+    billingTeamId: params.billingTeamId,
     runId: params.runId,
     userId: params.userId,
     virtualKeyId: params.virtualKeyId,

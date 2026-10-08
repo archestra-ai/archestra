@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils/tailwind";
 export interface TabbedDialogNavItem<TSection extends string> {
   id: TSection;
   label: string;
+  /** A short state line under the label, e.g. "2 providers". */
+  status?: string;
 }
 
 interface TabbedDialogShellProps<TSection extends string> {
@@ -113,12 +115,18 @@ export function TabbedDialogShell<TSection extends string>({
                 data-testid={getNavItemTestId?.(navItem.id)}
                 className={cn(
                   "justify-start font-normal w-full",
+                  navItem.status && "h-auto flex-col items-start gap-0 py-1.5",
                   activeSection === navItem.id &&
                     "bg-accent text-accent-foreground font-medium",
                 )}
                 onClick={() => onActiveSectionChange(navItem.id)}
               >
-                {navItem.label}
+                <span>{navItem.label}</span>
+                {navItem.status && (
+                  <span className="max-w-full truncate text-xs font-normal text-muted-foreground">
+                    {navItem.status}
+                  </span>
+                )}
               </Button>
             ))}
           </div>

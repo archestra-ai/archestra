@@ -305,6 +305,8 @@ export interface LLMProxyContext<TRequest> {
     name: string;
     clientId: string;
   };
+  /** Team the authenticating credential's spend is charged to. */
+  billingTeamId?: string;
   userId?: string;
   resolvedUser?: { id: string; email: string; name: string } | null;
   virtualKeyId?: string;
@@ -360,6 +362,8 @@ export type LLMProxyAuthOverride = {
     clientId: string;
   };
   userId?: string;
+  /** Team the authenticating credential's spend is charged to. */
+  billingTeamId?: string;
 };
 
 function getProviderMessagesCount(messages: unknown): number | null {
@@ -771,6 +775,9 @@ export async function handleLLMProxy<
   let resolvedUser = userId ? await UserModel.getById(userId) : null;
   let virtualKeyId = authOverride?.virtualKeyId;
   let passthroughVirtualKeyId: string | undefined;
+  // The first credential that names a billing team pays; the passthrough key
+  // resolves first, matching its precedence for per-key limits.
+  let billingTeamId = authOverride?.billingTeamId;
   // Authenticated user identities, tracked per source for the consistency check.
   let passthroughUserId: string | undefined;
   let jwksUserId: string | undefined;
@@ -924,6 +931,7 @@ export async function handleLLMProxy<
       });
       passthroughVirtualKeyId = passthroughResult.passthroughVirtualKeyId;
       passthroughUserId = passthroughResult.userId;
+      billingTeamId ??= passthroughResult.billingTeamId;
       // Authenticated identity → overrides the unauthenticated X-Archestra-User-Id.
       userId = passthroughResult.userId;
       resolvedUser = await UserModel.getById(userId);
@@ -1065,6 +1073,7 @@ export async function handleLLMProxy<
       wasOAuthAuthenticated = true;
       authMethod = oauthResult.authMethod;
       authenticatedApp = oauthResult.authenticatedApp;
+      billingTeamId ??= oauthResult.billingTeamId;
       if (oauthResult.userId) {
         oauthUserId = oauthResult.userId;
         userId = oauthResult.userId;
@@ -1095,6 +1104,7 @@ export async function handleLLMProxy<
       perKeyChatApiKeyId = virtualResult.chatApiKeyId;
       wasVirtualKeyResolved = true;
       virtualKeyId = virtualResult.virtualKeyId;
+      billingTeamId ??= virtualResult.billingTeamId;
       // A personal standard virtual key identifies its owner; include it in the
       // cross-credential consistency check.
       if (virtualResult.virtualKeyIsPersonal) {
@@ -1315,6 +1325,8 @@ export async function handleLLMProxy<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
+        llmOauthClientId: authenticatedApp?.id,
+        billingTeamId,
         agent: resolvedAgent,
         teamSource: lookups,
       });
@@ -2513,6 +2525,7 @@ export async function handleLLMProxy<
       billingMode,
       getBillingMode: () => billingMode,
       authenticatedApp,
+      billingTeamId,
       userId,
       resolvedUser,
       virtualKeyId,
@@ -2594,6 +2607,7 @@ export async function handleLLMProxy<
         authMethod,
         authenticatedAppId: authenticatedApp?.id,
         authenticatedAppName: authenticatedApp?.name,
+        billingTeamId,
         type: provider.interactionType,
         request: requestAdapter.getOriginalRequest() as InteractionRequest,
         processedRequest: null,
@@ -2718,6 +2732,7 @@ async function handleStreaming<
     billingMode: initialBillingMode,
     getBillingMode,
     authenticatedApp,
+    billingTeamId,
     userId,
     virtualKeyId,
     passthroughVirtualKeyId,
@@ -2891,6 +2906,7 @@ async function handleStreaming<
         authMethod,
         authenticatedAppId: authenticatedApp?.id,
         authenticatedAppName: authenticatedApp?.name,
+        billingTeamId,
         type: provider.interactionType,
         request: originalRequest as InteractionRequest,
         processedRequest: request as InteractionRequest,
@@ -3608,6 +3624,7 @@ async function handleStreaming<
           authMethod,
           billingMode,
           authenticatedApp,
+          billingTeamId,
           runId,
           userId,
           virtualKeyId,
@@ -3687,6 +3704,7 @@ async function handleNonStreaming<
     billingMode: initialBillingMode,
     getBillingMode,
     authenticatedApp,
+    billingTeamId,
     userId,
     virtualKeyId,
     passthroughVirtualKeyId,
@@ -4062,6 +4080,7 @@ async function handleNonStreaming<
         authMethod,
         billingMode,
         authenticatedApp,
+        billingTeamId,
         runId,
         userId,
         virtualKeyId,
@@ -4207,6 +4226,7 @@ async function handleNonStreaming<
       authMethod,
       billingMode,
       authenticatedApp,
+      billingTeamId,
       runId,
       userId,
       virtualKeyId,

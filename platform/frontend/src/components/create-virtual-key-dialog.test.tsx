@@ -30,31 +30,6 @@ vi.mock("@/lib/teams/team.query", () => ({
   useMyTeams: vi.fn(),
 }));
 vi.mock("@/lib/hooks/use-app-name");
-vi.mock("@/components/owner-select-field", async () => {
-  const actual = await vi.importActual<
-    typeof import("@/components/owner-select-field")
-  >("@/components/owner-select-field");
-  return {
-    ...actual,
-    OwnerSelectField: ({
-      onChange,
-      onSelectedOwnerChange,
-    }: {
-      onChange: (userId: string) => void;
-      onSelectedOwnerChange?: (owner: { userId: string; name: string }) => void;
-    }) => (
-      <button
-        type="button"
-        onClick={() => {
-          onSelectedOwnerChange?.({ userId: "u-bob", name: "Bob Brown" });
-          onChange("u-bob");
-        }}
-      >
-        Choose Bob
-      </button>
-    ),
-  };
-});
 const mutateAsync = vi.fn();
 
 beforeEach(() => {
@@ -149,7 +124,6 @@ describe("CreateVirtualKeyDialog", () => {
         name: "My passthrough key",
         keyType: "passthrough",
         expiresAt: undefined,
-        ownerId: undefined,
         labels: [],
         billingTeamId: undefined,
         spendCap: undefined,
@@ -190,7 +164,6 @@ describe("CreateVirtualKeyDialog", () => {
         providerApiKeys: [
           { provider: "openai", providerApiKeyId: "provider-key-1" },
         ],
-        ownerId: undefined,
         labels: [],
         billingTeamId: undefined,
         spendCap: undefined,
@@ -241,7 +214,6 @@ describe("CreateVirtualKeyDialog", () => {
         name: "Regional key",
         keyType: "passthrough",
         expiresAt: undefined,
-        ownerId: undefined,
         labels: [{ key: "region", value: "eu" }],
         billingTeamId: undefined,
         spendCap: undefined,
@@ -335,26 +307,26 @@ describe("CreateVirtualKeyDialog", () => {
     expect(dialog).toHaveTextContent("X-Archestra-Virtual-Key: arch_created");
   });
 
-  it("updates the generated name when the key owner changes", async () => {
+  it("makes the creator the owner, even for an admin", async () => {
     const user = userEvent.setup();
     renderDialog("standard", {
-      isVirtualKeyAdmin: true,
       existingKeys: [
         { authorId: "u-self", keyType: "standard" },
         { authorId: "u-bob", keyType: "standard" },
       ],
     });
 
+    // Only the creator's own keys count toward the generated name.
     expect(screen.getByLabelText("Name")).toHaveValue(
       "Self Admin's virtual key (2)",
     );
-
     await user.click(screen.getByRole("button", { name: "Continue" }));
-    await user.click(screen.getByRole("button", { name: "Choose Bob" }));
-    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.queryByText("Key owner")).not.toBeInTheDocument();
+    await createFromAnyStep(user);
 
-    expect(screen.getByText("Bob Brown's virtual key (2)")).toBeVisible();
-    expect(screen.getByText("Bob Brown")).toBeVisible();
+    expect(mutateAsync).toHaveBeenCalledWith({
+      data: expect.not.objectContaining({ ownerId: expect.anything() }),
+    });
   });
 });
 
@@ -393,7 +365,6 @@ function createdKey(
 function renderDialog(
   keyType: "standard" | "passthrough",
   options: {
-    isVirtualKeyAdmin?: boolean;
     existingKeys?: Array<{
       authorId: string;
       keyType: "standard" | "passthrough";
@@ -421,7 +392,6 @@ function renderDialog(
         }
         connectionBaseUrl="https://proxy.example.com"
         defaultExpirationSeconds={null}
-        isVirtualKeyAdmin={options.isVirtualKeyAdmin ?? false}
         currentUser={{ id: "u-self", name: "Self Admin" }}
         existingKeys={
           (options.existingKeys ?? [

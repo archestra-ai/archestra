@@ -44,7 +44,7 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 - The key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Model Router](/docs/llm-proxy/model-router), the model's prefix picks the mapping.
 - Self-hosted providers can map several endpoints. Archestra sends each request to the endpoint that serves the model.
 - **To share a key** with a team, open its **Permissions** tab.
-- To bill a team, pick it under **Who pays for this key?**. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget), not the owner's. A spend cap there limits the key itself.
+- To bill a team, pick it under **Who pays for this key?**. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget), not its creator's. A spend cap there limits the key itself.
 
 <span id="creating-passthrough-virtual-keys"></span><span id="configuring-claude-code-and-claude-desktop"></span>
 

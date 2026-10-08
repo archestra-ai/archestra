@@ -22,10 +22,6 @@ import {
 import { WizardSteps } from "@/components/credential-billing/wizard-steps";
 import { FormDialog } from "@/components/form-dialog";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import {
-  OwnerSelectField,
-  shouldShowOwnerField,
-} from "@/components/owner-select-field";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
 import { DialogBody, DialogStickyFooter } from "@/components/ui/dialog";
@@ -35,7 +31,7 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import { useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -89,10 +85,6 @@ export function CreateVirtualKeyDialogWithData({
     enabled: open && keyType === "standard",
     toastOnError: false,
   });
-  const { data: isVirtualKeyAdmin } = useHasPermissions(
-    { llmVirtualKey: ["update"] },
-    "*",
-  );
   const defaultExpirationSeconds = useFeature(
     "virtualKeyDefaultExpirationSeconds",
   );
@@ -105,7 +97,6 @@ export function CreateVirtualKeyDialogWithData({
       parentableKeys={apiKeys}
       connectionBaseUrl={connectionBaseUrl}
       defaultExpirationSeconds={defaultExpirationSeconds ?? null}
-      isVirtualKeyAdmin={!!isVirtualKeyAdmin}
       currentUser={
         session?.user
           ? {
@@ -129,7 +120,6 @@ export function CreateVirtualKeyDialog({
   parentableKeys,
   connectionBaseUrl,
   defaultExpirationSeconds,
-  isVirtualKeyAdmin,
   currentUser,
   existingKeys,
   initialProviderApiKeys,
@@ -142,7 +132,6 @@ export function CreateVirtualKeyDialog({
   parentableKeys: LlmProviderApiKeyResponse[];
   connectionBaseUrl: string;
   defaultExpirationSeconds: number | null;
-  isVirtualKeyAdmin: boolean;
   currentUser: { id: string; name: string | null } | null;
   existingKeys: VirtualKeySummary[];
   initialProviderApiKeys?: ProviderApiKeyMappings;
@@ -152,10 +141,6 @@ export function CreateVirtualKeyDialog({
   const createMutation = useCreateVirtualApiKey();
 
   const [newKeyName, setNewKeyName] = useState("");
-  const [ownerId, setOwnerId] = useState("");
-  const [selectedOwnerName, setSelectedOwnerName] = useState<string | null>(
-    null,
-  );
   const [expiresAt, setExpiresAt] = useState<Date | null>(null);
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const [step, setStep] = useState<CreateStep>("key");
@@ -177,23 +162,18 @@ export function CreateVirtualKeyDialog({
   const generatedNameRef = useRef("");
 
   const isPassthrough = keyType === "passthrough";
-  // Passthrough keys are always personal. Admins can mint a key on behalf of
-  // another org member; left unset, the key belongs to the creator.
-  const showOwnerField = shouldShowOwnerField(isVirtualKeyAdmin, "personal");
-  const effectiveOwnerId =
-    showOwnerField && ownerId ? ownerId : currentUser?.id;
-  const effectiveOwnerName =
-    showOwnerField && ownerId ? selectedOwnerName : currentUser?.name;
+  // A new key belongs to its creator. Who else may use it is set by its
+  // permissions, and who pays for it by its billing team.
   const generatedName = useMemo(
     () =>
       isPassthrough
         ? ""
         : getGeneratedVirtualKeyName({
-            ownerId: effectiveOwnerId,
-            ownerName: effectiveOwnerName,
+            ownerId: currentUser?.id,
+            ownerName: currentUser?.name,
             existingKeys,
           }),
-    [effectiveOwnerId, effectiveOwnerName, existingKeys, isPassthrough],
+    [currentUser?.id, currentUser?.name, existingKeys, isPassthrough],
   );
 
   useEffect(() => {
@@ -216,12 +196,9 @@ export function CreateVirtualKeyDialog({
       setStep("key");
       setBillingTeamId(null);
       setSpendCap(null);
-      setOwnerId("");
-      setSelectedOwnerName(null);
       initialSnapshotRef.current = {
         keyType,
         newKeyName: generatedName,
-        ownerId: "",
         expiresAt: initialExpiresAt,
         providerApiKeyIds: initialMappings,
         labels: [],
@@ -260,7 +237,6 @@ export function CreateVirtualKeyDialog({
     hasUnsavedChanges(initialSnapshotRef.current, {
       keyType,
       newKeyName,
-      ownerId,
       expiresAt,
       providerApiKeyIds,
       labels,
@@ -271,7 +247,6 @@ export function CreateVirtualKeyDialog({
   const handleCreate = useCallback(async () => {
     if (!newKeyName.trim()) return;
     const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
-    const owner = showOwnerField && ownerId ? ownerId : undefined;
     try {
       const result = await createMutation.mutateAsync({
         data: isPassthrough
@@ -279,7 +254,6 @@ export function CreateVirtualKeyDialog({
               name: newKeyName.trim(),
               keyType: "passthrough",
               expiresAt: expiresAt ?? undefined,
-              ownerId: owner,
               labels: finalLabels,
               billingTeamId: billingTeamId ?? undefined,
               spendCap: spendCap ?? undefined,
@@ -289,7 +263,6 @@ export function CreateVirtualKeyDialog({
               keyType: "standard",
               expiresAt: expiresAt ?? undefined,
               providerApiKeys: providerApiKeyIds,
-              ownerId: owner,
               labels: finalLabels,
               billingTeamId: billingTeamId ?? undefined,
               spendCap: spendCap ?? undefined,
@@ -314,8 +287,6 @@ export function CreateVirtualKeyDialog({
     labels,
     providerApiKeyIds,
     newKeyName,
-    showOwnerField,
-    ownerId,
     onCreated,
     onOpenChange,
     billingTeamId,
@@ -381,10 +352,9 @@ export function CreateVirtualKeyDialog({
               connectionBaseUrl={connectionBaseUrl}
               name={createdKey.name}
               expiration={formatExpiration(createdKey.expiresAt)}
-              visibleTo={getVisibleToLabel({
-                keyType: createdKey.keyType,
-                ownerName: ownerId ? selectedOwnerName : null,
-              })}
+              visibleTo={
+                createdKey.keyType === "passthrough" ? null : "Only you"
+              }
             />
           ) : (
             <>
@@ -429,30 +399,13 @@ export function CreateVirtualKeyDialog({
                     spendCap={spendCap}
                     onSpendCapChange={setSpendCap}
                   />
-                  <div className="grid items-start gap-4 sm:grid-cols-2">
-                    <div className="space-y-2">
-                      <Label htmlFor="virtual-key-expires">Expires</Label>
-                      <ExpirySelect
-                        id="virtual-key-expires"
-                        value={expiresAt}
-                        onChange={setExpiresAt}
-                      />
-                    </div>
-                    {showOwnerField && (
-                      <div>
-                        <OwnerSelectField
-                          value={ownerId}
-                          onChange={setOwnerId}
-                          onSelectedOwnerChange={(owner) =>
-                            setSelectedOwnerName(
-                              owner.userId === currentUser?.id
-                                ? null
-                                : (owner.name ?? owner.email ?? null),
-                            )
-                          }
-                        />
-                      </div>
-                    )}
+                  <div className="space-y-2">
+                    <Label htmlFor="virtual-key-expires">Expires</Label>
+                    <ExpirySelect
+                      id="virtual-key-expires"
+                      value={expiresAt}
+                      onChange={setExpiresAt}
+                    />
                   </div>
                 </>
               )}
@@ -465,9 +418,6 @@ export function CreateVirtualKeyDialog({
                   billingTeamId={billingTeamId}
                   spendCap={spendCap}
                   expiresAt={expiresAt}
-                  ownerName={
-                    showOwnerField && ownerId ? selectedOwnerName : null
-                  }
                   labels={labels}
                   onLabelsChange={setLabels}
                   labelsRef={labelsRef}
@@ -521,7 +471,6 @@ function VirtualKeyReview({
   billingTeamId,
   spendCap,
   expiresAt,
-  ownerName,
   labels,
   onLabelsChange,
   labelsRef,
@@ -534,7 +483,6 @@ function VirtualKeyReview({
   billingTeamId: string | null;
   spendCap: SpendCapValue;
   expiresAt: Date | null;
-  ownerName: string | null;
   labels: ProfileLabel[];
   onLabelsChange: (labels: ProfileLabel[]) => void;
   labelsRef: React.RefObject<ProfileLabelsRef | null>;
@@ -578,9 +526,6 @@ function VirtualKeyReview({
         <ReviewListRow label="Expires" onEdit={() => onEdit("budget")}>
           {expiresAt ? formatExpiration(expiresAt) : "Never"}
         </ReviewListRow>
-        <ReviewListRow label="Owner" onEdit={() => onEdit("budget")}>
-          {ownerName ?? "You"}
-        </ReviewListRow>
       </ReviewList>
       <div>
         <ProfileLabels
@@ -591,18 +536,6 @@ function VirtualKeyReview({
       </div>
     </div>
   );
-}
-
-/**
- * Who can use a freshly created key. A new key is shared with no one yet: its
- * owner grants access from the Permissions tab afterwards.
- */
-function getVisibleToLabel(params: {
-  keyType: VirtualKeyType;
-  ownerName: string | null;
-}): string | null {
-  if (params.keyType === "passthrough") return null;
-  return params.ownerName ? `Only ${params.ownerName}` : "Only you";
 }
 
 export function formatExpiration(date: Date | string | null): string {

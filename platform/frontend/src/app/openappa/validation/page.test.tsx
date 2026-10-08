@@ -529,10 +529,14 @@ test.each([
   fireEvent.click(
     await screen.findByRole("button", { name: "Discard changes" }),
   );
-  fireEvent.click(
+  const role = kind === "file" ? "link" : "button";
+  const name = kind === "file" ? scenario.path : "Add validation";
+  await screen.findByRole(role, { name });
+  fireEvent.click(screen.getByRole(role, { name }));
+  expect(currentHref).toBe(
     kind === "file"
-      ? await screen.findByRole("link", { name: scenario.path })
-      : await screen.findByRole("button", { name: "Add validation" }),
+      ? "/openappa/validation/file?path=scenario.appa"
+      : "/openappa/validation/new",
   );
   expect(await screen.findByRole("textbox", { name: label })).toHaveValue(
     kind === "file" ? scenario.content : "",

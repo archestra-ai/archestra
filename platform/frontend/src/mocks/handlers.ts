@@ -136,6 +136,7 @@ export const handlers: HttpHandler[] = [
       { name: "self", kind: "builtin" },
     ],
   }),
+  ...getJson("/api/openappa/policy-tests/runs", []),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
   ...getJson("/api/openappa/yells", {
     data: [],

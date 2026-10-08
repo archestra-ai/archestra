@@ -1,5 +1,6 @@
 import type { ModelMessage } from "ai";
 import { describe, expect, test, vi } from "vitest";
+import { MAX_TOOL_RESULT_CONTEXT_BYTES } from "@/utils/tool-result-cap";
 import { createStepContextGuard } from "./step-context-guard";
 
 type SummarizeParams = { transcript: string; previousSummary: string | null };
@@ -61,7 +62,7 @@ describe("createStepContextGuard — tool result capping", () => {
 
   test("leaves a text result at the cap intact, keeping its tail", async () => {
     const atCap = `${'"q"\n'.repeat(25_000)}[hook feedback] stop`.slice(
-      -100_000,
+      -MAX_TOOL_RESULT_CONTEXT_BYTES,
     );
     const messages: ModelMessage[] = [
       { role: "user", content: "list the workflow runs" },

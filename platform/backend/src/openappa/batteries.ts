@@ -5,6 +5,7 @@ import type {
   PolicyEditInput,
 } from "@archestra/openappa-rs";
 import {
+  batteryRuleToolName,
   matchBatteries,
   matchBatteriesByToolNames,
   parseFullToolName,
@@ -24,7 +25,10 @@ import OrganizationModel from "@/models/organization";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
-import { listDetectedMcpServers } from "@/services/detected-mcp-servers";
+import {
+  findDetectedMcpServer,
+  listDetectedMcpServers,
+} from "@/services/detected-mcp-servers";
 import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
@@ -229,11 +233,11 @@ class OpenAppaBatteriesService {
       organizationId,
       attachment: { detectedId },
     });
-    const matches = await this.matchesForDetectedServers({
+    const { byServer } = await this.matchesForDetectedServers({
       organizationId,
       servers: [server],
     });
-    return matches.get(server.id) ?? { attach: "ready", matches: [] };
+    return byServer.get(server.id) ?? { attach: "ready", matches: [] };
   }
 
   /**
@@ -247,24 +251,41 @@ class OpenAppaBatteriesService {
   async matchesForDetectedServers(params: {
     organizationId: string;
     servers: readonly DetectedMcpServer[];
-  }): Promise<Map<string, BatteryMatches>> {
+  }): Promise<{
+    byServer: Map<string, BatteryMatches>;
+    /** What declaring each matched battery takes, by battery name. */
+    batteries: Map<string, BatteryDeclarationHint>;
+  }> {
     const { organizationId, servers } = params;
     const result = new Map<string, BatteryMatches>();
-    if (servers.length === 0) return result;
+    const hints = new Map<string, BatteryDeclarationHint>();
+    if (servers.length === 0) return { byServer: result, batteries: hints };
     const { installs, resolution } = await this.current(organizationId);
     const available = await this.availableBatteries(organizationId);
-    const ruleToolNames = new Map(
-      [...available].map(([name, found]) => [
-        name,
-        batteryRuleToolNames(found.package.policy),
-      ]),
-    );
+    const ruleToolNames = new Map<string, ReadonlySet<string>>();
+    for (const [name, found] of available) {
+      ruleToolNames.set(name, batteryRuleToolNames(found.package.policy));
+      hints.set(name, {
+        include:
+          found.source === "bundled" || found.contentHash === null
+            ? bundledEntry(name)
+            : uploadedEntry({ name, contentHash: found.contentHash }),
+        namespaces: found.package.namespaces,
+        credentials: found.package.credentials,
+      });
+    }
     for (const entry of resolution.entries)
-      if (entry.battery)
+      if (entry.battery) {
         ruleToolNames.set(
           entry.name,
           batteryRuleToolNames(entry.battery.policy),
         );
+        hints.set(entry.name, {
+          include: entry.entry,
+          namespaces: entry.battery.namespaces,
+          credentials: entry.battery.credentials,
+        });
+      }
     for (const server of servers) {
       const attachment: BatteryAttachment = {
         kind: "detected",
@@ -292,7 +313,7 @@ class OpenAppaBatteriesService {
           });
       result.set(server.id, { attach: "ready", matches });
     }
-    return result;
+    return { byServer: result, batteries: hints };
   }
 
   /** What the root declares, what came of each declaration, and what holds it back. */
@@ -1647,8 +1668,9 @@ class OpenAppaBatteriesService {
     organizationId: string;
     attachment: { detectedId: string };
   }): Promise<DetectedMcpServer> {
-    const server = (await listDetectedMcpServers(params.organizationId)).find(
-      (candidate) => candidate.id === params.attachment.detectedId,
+    const server = await findDetectedMcpServer(
+      params.organizationId,
+      params.attachment.detectedId,
     );
     if (!server) throw new ApiError(404, "Detected MCP server not found");
     return server;
@@ -2257,10 +2279,15 @@ const presentDetected = new LRUCacheManager<{
 function batteryRuleToolNames(policy: string): ReadonlySet<string> {
   const names = new Set<string>();
   for (const entry of toolEntries(policy)) {
-    const canonical = BATTERY_RULE_TOOL.exec(entry.name);
-    if (canonical?.[1]) names.add(canonical[1]);
+    const name = batteryRuleToolName(entry.name);
+    if (name !== undefined) names.add(name);
   }
   return names;
 }
 
-const BATTERY_RULE_TOOL = /^mcp\/[^/]+\/([^/*][^/]*)$/;
+/** What declaring a battery takes: its include entry, namespaces and credential variables. */
+type BatteryDeclarationHint = {
+  include: string;
+  namespaces: readonly string[];
+  credentials: readonly string[];
+};

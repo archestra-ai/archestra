@@ -1,5 +1,6 @@
 import { describe, expect, test } from "vitest";
 import {
+  batteryRuleToolName,
   matchBatteries,
   matchBatteriesByToolNames,
 } from "./openappa-battery-match";
@@ -156,5 +157,23 @@ describe("matchBatteriesByToolNames", () => {
   test("a server none of the rules address matches nothing", () => {
     expect(matchBatteriesByToolNames(new Set(["forecast"]), rules)).toEqual([]);
     expect(matchBatteriesByToolNames(new Set(), rules)).toEqual([]);
+  });
+});
+
+describe("batteryRuleToolName", () => {
+  test("names the leaf of a canonical rule, with or without a selector", () => {
+    expect(batteryRuleToolName("mcp/github/create_issue")).toBe("create_issue");
+    expect(batteryRuleToolName("mcp/github/create_issue(arguments:*)")).toBe(
+      "create_issue",
+    );
+    expect(
+      batteryRuleToolName('mcp/github/get_file(arguments.path:"*.md")'),
+    ).toBe("get_file");
+  });
+
+  test("a wildcard leaf or another family names no tool", () => {
+    expect(batteryRuleToolName("mcp/github/*")).toBeUndefined();
+    expect(batteryRuleToolName("host/archestra/run_tool")).toBeUndefined();
+    expect(batteryRuleToolName("mcp/github")).toBeUndefined();
   });
 });

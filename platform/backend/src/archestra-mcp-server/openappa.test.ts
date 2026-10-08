@@ -1772,24 +1772,56 @@ describe("list_detected_mcp_servers", () => {
       organizationId: org.id,
     };
 
-    const result = await executeArchestraTool(toolFullName, {}, context);
+    const result = await executeArchestraTool(
+      toolFullName,
+      { serverId: null },
+      context,
+    );
     expect(result.isError).toBeFalsy();
     expect((result.structuredContent as any).servers).toEqual([
       {
         id: "claude-code.github",
         label: "github",
         client: "claude-code",
+        toolCount: 1,
         toolNames: [named],
-        batteryMatches: [{ battery: "github", declared: false }],
+        batteryMatches: [
+          {
+            battery: "github",
+            declared: false,
+            include: "batteries/github/appa.toml",
+            namespaces: battery?.namespaces,
+            credentials: battery?.credentials,
+          },
+        ],
       },
       {
         id: "claude-code.weather",
         label: "weather",
         client: "claude-code",
+        toolCount: 1,
         toolNames: ["forecast"],
         batteryMatches: [],
       },
     ]);
+    // One server by id reads only its own observations.
+    const one = await executeArchestraTool(
+      toolFullName,
+      { serverId: "claude-code.weather" },
+      context,
+    );
+    expect(
+      (one.structuredContent as any).servers.map((server: any) => server.id),
+    ).toEqual(["claude-code.weather"]);
+    expect(
+      (
+        await executeArchestraTool(
+          toolFullName,
+          { serverId: "codex.weather" },
+          context,
+        )
+      ).structuredContent,
+    ).toEqual({ servers: [] });
 
     await openappaBatteriesService.createInstall({
       userId: user.id,
@@ -1800,10 +1832,16 @@ describe("list_detected_mcp_servers", () => {
         packageHash: null,
       },
     });
-    const after = await executeArchestraTool(toolFullName, {}, context);
-    expect((after.structuredContent as any).servers[0].batteryMatches).toEqual([
-      { battery: "github", declared: true },
-    ]);
+    const after = await executeArchestraTool(
+      toolFullName,
+      { serverId: null },
+      context,
+    );
+    expect(
+      (after.structuredContent as any).servers[0].batteryMatches.map(
+        (match: any) => [match.battery, match.declared],
+      ),
+    ).toEqual([["github", true]]);
   });
 
   test("a caller without openappaPolicy:read is refused", async ({

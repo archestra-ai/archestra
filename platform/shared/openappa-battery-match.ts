@@ -47,6 +47,15 @@ export function matchBatteries(
 }
 
 /**
+ * The tool a battery rule names: the leaf of a canonical `mcp/<namespace>/<tool>`
+ * rule, its argument selector dropped. A wildcard leaf, or a rule on another
+ * family, names no tool a server could declare.
+ */
+export function batteryRuleToolName(ruleName: string): string | undefined {
+  return /^mcp\/[^/]+\/([^/*(][^/(]*)(?:\(.*\))?$/.exec(ruleName)?.[1];
+}
+
+/**
  * The batteries whose rules name tools of a server known only by its tool
  * names, the one with the most named tools first. A battery that names none
  * of them is no match: the evidence is name overlap and nothing stronger, so

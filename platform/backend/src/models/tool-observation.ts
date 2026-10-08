@@ -3,7 +3,7 @@ import {
   clientForExternalAgentIds,
   TimeInMs,
 } from "@archestra/shared";
-import { and, eq, inArray } from "drizzle-orm";
+import { and, eq, inArray, or, sql } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
 import { isProxyDiscoveredTool } from "@/database/schemas/tool";
@@ -93,7 +93,26 @@ class ToolObservationModel {
    */
   static async listProxyToolObservations(
     organizationId: string,
+    /** Narrow to the clients and tool-name shapes of one server, when asked for one. */
+    only?: {
+      externalAgentIds: readonly string[];
+      /** SQL LIKE patterns, `\\` the escape character; any may match. */
+      toolNameLike: readonly string[];
+    },
   ): Promise<ProxyToolObservation[]> {
+    const narrowed = only
+      ? [
+          inArray(schema.toolObservationsTable.externalAgentId, [
+            ...only.externalAgentIds,
+          ]),
+          or(
+            ...only.toolNameLike.map(
+              (pattern) =>
+                sql`${schema.toolsTable.name} LIKE ${pattern} ESCAPE '\\'`,
+            ),
+          ),
+        ]
+      : [];
     return db
       .select({
         toolId: schema.toolsTable.id,
@@ -113,7 +132,7 @@ class ToolObservationModel {
           eq(schema.membersTable.organizationId, organizationId),
         ),
       )
-      .where(isProxyDiscoveredTool(schema.toolsTable));
+      .where(and(isProxyDiscoveredTool(schema.toolsTable), ...narrowed));
   }
 
   /**

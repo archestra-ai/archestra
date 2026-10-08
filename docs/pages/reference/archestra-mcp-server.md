@@ -3131,7 +3131,7 @@ Required RBAC permission: [`toolPolicy:delete`](/docs/reference/permissions#tool
 | `get_guardrails_policy` | Read organization.appa.toml and its revision before changing guardrails. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `inspect_guardrails_server` | Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `list_guardrails_battery_fits` | List the batteries that fit the MCP servers you can see and are not declared yet, or only those fitting one server when mcpServerId is a catalog ID. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
-| `list_detected_mcp_servers` | List the MCP servers people connected directly to their coding clients (Claude Code, Codex, OpenCode), as the LLM proxy saw them declare tools: one per client and server label, with its tool names. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `list_detected_mcp_servers` | List the MCP servers people connected directly to their coding clients (Claude Code, Codex, OpenCode), as the LLM proxy saw them declare tools: one per client and server label, with its tool names ... | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `preview_guardrails_policy_change` | Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `update_guardrails_policy` | Publish a change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
@@ -3259,7 +3259,11 @@ Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#op
 
 Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
 
-This tool takes no arguments.
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `serverId` | `string \| null` | Yes | A detected server's id, `<client>.<label>`, to list only it; null for every server |
 
 
 #### validate_guardrails_policy

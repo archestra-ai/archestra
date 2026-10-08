@@ -70,6 +70,9 @@ export function installAttachment(
         : { kind: "detected", detectedId: install.detectedId };
     case "organization":
       return null;
+    default:
+      // A row from a backend that stamps no kind attaches to nothing here.
+      return null;
   }
 }
 

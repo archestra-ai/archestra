@@ -98,6 +98,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
 import { ProposedGuardrailsPolicySchema } from "@/types/guardrails-policy-proposal";
+import { BATTERY_CREDENTIAL_VARIABLE } from "@/types/openappa-batteries";
 import type { CoverageTool } from "@/types/openappa-coverage";
 import {
   type ExternalConsult,
@@ -761,6 +762,54 @@ const registry = defineArchestraTools([
             revision: saved.revision,
           }),
         });
+      }),
+  }),
+  defineArchestraTool({
+    shortName: "bind_guardrails_credential",
+    title: "Bind OpenAPPA battery credential",
+    description:
+      "Bind one battery credential variable to a runtime credential key, or pass key null to unbind it. The binding is stored beside the policy, not in its text, so it needs no policy change and works while GitHub sync owns the policy. One variable has one key for the whole organization: every battery whose `credentials` list it is in reads that key. Use the variable names list_guardrails_battery_fits returns and keys from list_runtime_credentials that have an organization value. A variable bound by a `[credentials]` line in the policy text is refused; that line wins and is removed on the Policy tab. Returns every declared battery with its credentials and their source.",
+    schema: z.strictObject({
+      variable: z
+        .string()
+        .regex(BATTERY_CREDENTIAL_VARIABLE)
+        .describe(
+          "The battery's credential variable, e.g. APPA_PROVIDER_GITHUB_TOKEN.",
+        ),
+      key: z
+        .string()
+        .min(1)
+        .max(200)
+        .nullable()
+        .describe("The runtime credential key to bind, or null to unbind."),
+    }),
+    handler: ({ args, context }) =>
+      refusalAsResult(async () => {
+        const { organizationId, userId } = context;
+        if (!organizationId || !userId)
+          throw new ApiError(401, "Organization and user context are required");
+        // TOOL_PERMISSIONS checks openappaPolicy:update; a binding also hands
+        // a credential's value to helper code, as the REST route requires.
+        if (
+          !(await userHasPermission(
+            userId,
+            organizationId,
+            "credential",
+            "update",
+          ))
+        )
+          throw new ApiError(
+            403,
+            "Credential update permission is required to bind a battery credential",
+          );
+        return result(
+          await openappaBatteriesService.setCredentialBinding({
+            userId,
+            organizationId,
+            variable: args.variable,
+            key: args.key,
+          }),
+        );
       }),
   }),
   defineArchestraTool({
@@ -1518,6 +1567,7 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === "validate_guardrails_policy" ||
     shortName === "preview_guardrails_policy_change" ||
     shortName === "update_guardrails_policy" ||
+    shortName === "bind_guardrails_credential" ||
     shortName === "get_guardrails_policy_change_status" ||
     shortName === "create_guardrails_repository" ||
     shortName === "connect_guardrails_repository"

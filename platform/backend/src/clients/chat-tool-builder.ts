@@ -12,6 +12,7 @@ import {
   isBrowserMcpTool,
   MCP_EXECUTED_AS_META_KEY,
   MCP_HUMAN_RULING_META_KEY,
+  OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   parseFullToolName,
   platformExecutedAs,
   stripReservedPlatformMeta,
@@ -783,7 +784,7 @@ export async function buildArchestraToolOutput(params: {
     // names who the platform ran this for and, on a reviewed remedy, the
     // ruling the viewer gave. ask_user keeps the user's recorded answer,
     // which its card reads back after a reload; the battery credential card
-    // reads its batteries the same way.
+    // reads its batteries the same way, and a policy change its diff.
     const humanRuling = extractMcpHumanRuling(response);
     return {
       content: text,
@@ -791,8 +792,8 @@ export async function buildArchestraToolOutput(params: {
         ...executedAsMeta,
         ...(humanRuling ? { [MCP_HUMAN_RULING_META_KEY]: humanRuling } : {}),
       },
-      ...((targetShortName === TOOL_ASK_USER_SHORT_NAME ||
-        targetShortName === TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME) &&
+      ...(targetShortName !== null &&
+      STRUCTURED_RESULT_TOOL_SHORT_NAMES.has(targetShortName) &&
       isRecord(response.structuredContent)
         ? { structuredContent: response.structuredContent }
         : {}),
@@ -936,6 +937,13 @@ function collectKbChunksForVerification(params: {
  * `text/html;profile=mcp-app` is the canonical type per the spec;
  */
 const RENDERABLE_UI_MIME_TYPES = [RESOURCE_MIME_TYPE];
+
+/** Direct tool calls whose chat card reads the result's structuredContent. */
+const STRUCTURED_RESULT_TOOL_SHORT_NAMES: ReadonlySet<string> = new Set([
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
+  ...OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
+]);
 
 function getChatExternalAgentId(): string {
   return `${archestraMcpBranding.catalogName} Chat`;

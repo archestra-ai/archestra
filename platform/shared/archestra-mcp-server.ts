@@ -913,6 +913,14 @@ const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
   IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES,
 );
 
+/** Tools whose chat card renders a policy diff from the result's structuredContent. */
+export const OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES = [
+  "preview_guardrails_policy_change",
+  "update_guardrails_policy",
+  "preview_openappa_validation_change",
+  "publish_openappa_validation_change",
+] as const satisfies readonly ArchestraToolShortName[];
+
 export function isImplicitOpenAppaReadToolShortName(
   shortName: string | null | undefined,
 ): boolean {

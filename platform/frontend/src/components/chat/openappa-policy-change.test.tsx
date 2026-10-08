@@ -55,6 +55,26 @@ test("shows a reviewable policy diff and the pull request link", () => {
   );
 });
 
+test("shows the whole policy when a first preview keeps the starter as is", () => {
+  render(
+    <OpenAppaPolicyChange
+      output={{
+        structuredContent: {
+          stage: "preview",
+          delivery: "revision",
+          before: "[policy]\nversion = 2\n",
+          after: "[policy]\nversion = 2\n",
+        },
+      }}
+    />,
+  );
+
+  expect(screen.queryByLabelText("Policy diff")).not.toBeInTheDocument();
+  expect(screen.getByLabelText("Policy")).toHaveTextContent(
+    "[policy] version = 2",
+  );
+});
+
 const saved = {
   delivery: "revision",
   revision: 1,

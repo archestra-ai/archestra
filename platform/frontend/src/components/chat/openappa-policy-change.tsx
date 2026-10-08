@@ -44,7 +44,8 @@ export function OpenAppaPolicyChange({
     ? parseReplayCounts(parseOutput(output)?.counts)
     : null;
   const path = change.path ?? "organization.appa.toml";
-  const diff = policyDiff(change.before, change.after, path);
+  // Previewing the unsaved starter changes no line; show the policy itself.
+  const unchanged = change.before === change.after;
   const pullUrl =
     change.delivery === "pull_request" &&
     change.url?.startsWith("https://github.com/")
@@ -76,9 +77,19 @@ export function OpenAppaPolicyChange({
         )}
       </div>
       <p className="font-mono text-xs text-muted-foreground">{path}</p>
-      <CodeBlock code={diff} language="diff" aria-label="Policy diff">
-        <CodeBlockCopyButton />
-      </CodeBlock>
+      {unchanged ? (
+        <CodeBlock code={change.after} language="toml" aria-label="Policy">
+          <CodeBlockCopyButton />
+        </CodeBlock>
+      ) : (
+        <CodeBlock
+          code={policyDiff(change.before, change.after, path)}
+          language="diff"
+          aria-label="Policy diff"
+        >
+          <CodeBlockCopyButton />
+        </CodeBlock>
+      )}
       {counts && (
         <InlineNotice variant={replayPassed(counts) ? "success" : "warning"}>
           {replayPassed(counts) ? <CheckCircle2 /> : <TriangleAlert />}

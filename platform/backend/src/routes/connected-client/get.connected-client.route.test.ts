@@ -77,6 +77,7 @@ describe("GET /api/connected-clients", () => {
     expect(body).toHaveLength(1);
     expect(body[0]).toEqual({
       clientId: "claude-code",
+      name: "Claude Code",
       lastConnectedAt: expect.any(String),
       deviceNames: [],
       lastSeenAt: null,

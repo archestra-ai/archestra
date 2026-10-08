@@ -3,10 +3,7 @@ import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import {
-  ConnectionSetupModel,
-  SkillMarketplaceCredentialModel,
-} from "@/models";
+import { ConnectionSetupModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent, ConnectionSetupClientId, User } from "@/types";
 
@@ -43,22 +40,30 @@ describe("GET /api/connected-clients/adoption", () => {
     await app.close();
   });
 
-  const getAdoption = async () => {
+  const getAdoption = async (search = "") => {
     const response = await app.inject({
       method: "GET",
-      url: "/api/connected-clients/adoption",
+      url: `/api/connected-clients/adoption${search}`,
     });
     expect(response.statusCode).toBe(200);
     return response.json() as {
-      lookbackDays: number;
+      since: string;
+      until: string;
       members: {
         userId: string;
         status: string;
         gatewayUses: { agent: { clientId: string | null; name: string } }[];
         llmUses: { agent: { clientId: string | null; name: string } }[];
-        skillSyncs: { agent: { clientId: string | null; name: string } }[];
         gatewayLastSeenAt: string | null;
         llmLastSeenAt: string | null;
+        agents: {
+          clientId: string | null;
+          name: string;
+          status: string;
+          setupAt: string | null;
+          signedIn: boolean;
+          viaToken: boolean;
+        }[];
       }[];
     };
   };
@@ -66,7 +71,7 @@ describe("GET /api/connected-clients/adoption", () => {
   const memberById = async (userId: string) =>
     (await getAdoption()).members.find((m) => m.userId === userId);
 
-  test("a member with no setup and no traffic is inactive", async ({
+  test("a member with no setup and no traffic is not connected", async ({
     makeUser,
     makeMember,
   }) => {
@@ -75,12 +80,70 @@ describe("GET /api/connected-clients/adoption", () => {
 
     const body = await getAdoption();
 
-    expect(body).toMatchObject({ lookbackDays: 30 });
+    // The last 30 days by default.
+    const since = new Date(body.since).getTime();
+    const until = new Date(body.until).getTime();
+    expect(Math.round((until - since) / DAY_MS)).toBe(30);
     expect(body.members.find((m) => m.userId === ada.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
       gatewayLastSeenAt: null,
       llmLastSeenAt: null,
     });
+  });
+
+  test("lists each agent a member set up and has not disconnected", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await redeem(ada.id, "codex");
+    const cursor = await redeem(ada.id, "cursor");
+    await db
+      .update(schema.connectionSetupsTable)
+      .set({ revokedAt: new Date() })
+      .where(eq(schema.connectionSetupsTable.id, cursor.id));
+    const bob = await makeUser({ name: "Bob" });
+    await makeMember(bob.id, organizationId);
+
+    // A setup that never reached the gateway or proxy is not connected.
+    expect((await memberById(ada.id))?.agents).toEqual([
+      expect.objectContaining({
+        clientId: "codex",
+        name: "Codex",
+        status: "notConnected",
+        setupAt: expect.any(String),
+        signedIn: false,
+        viaToken: false,
+      }),
+    ]);
+    expect((await memberById(bob.id))?.agents).toEqual([]);
+  });
+
+  test("states ignore the picked window; per-gateway calls follow it", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 10 });
+
+    const iso = (daysAgo: number) =>
+      new Date(Date.now() - daysAgo * DAY_MS).toISOString();
+    const member = async (search: string) =>
+      (await getAdoption(search)).members.find((m) => m.userId === ada.id);
+
+    for (const search of [
+      "",
+      `?startDate=${iso(5)}`,
+      `?startDate=${iso(12)}&endDate=${iso(8)}`,
+    ]) {
+      expect(await member(search)).toMatchObject({ status: "active" });
+    }
+    expect((await member(`?startDate=${iso(5)}`))?.gatewayUses).toEqual([]);
+    expect(
+      (await member(`?startDate=${iso(12)}&endDate=${iso(8)}`))?.gatewayUses,
+    ).toHaveLength(1);
   });
 
   test("a redeemed setup with no traffic is still inactive", async ({
@@ -92,7 +155,7 @@ describe("GET /api/connected-clients/adoption", () => {
     await redeem(ada.id, "codex");
 
     expect(await memberById(ada.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
       llmLastSeenAt: null,
     });
   });
@@ -121,7 +184,7 @@ describe("GET /api/connected-clients/adoption", () => {
     await gatewayCall(ada.id, { authMethod: "user_token", daysAgo: 1 });
 
     expect(await memberById(ada.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
       gatewayLastSeenAt: null,
     });
   });
@@ -151,9 +214,106 @@ describe("GET /api/connected-clients/adoption", () => {
         }),
       ],
     });
+    // Older traffic: inactive, with its last call still shown.
     expect(await memberById(bob.id)).toMatchObject({
       status: "inactive",
+      gatewayLastSeenAt: expect.any(String),
+      gatewayUses: [],
+    });
+  });
+
+  test("starting an agent is inactive; a tool call within 30 days is active", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    const bob = await makeUser({ name: "Bob" });
+    await makeMember(ada.id, organizationId);
+    await makeMember(bob.id, organizationId);
+    await gatewayCall(ada.id, {
+      authMethod: "oauth",
+      daysAgo: 0,
+      method: "initialize",
+    });
+    await gatewayCall(ada.id, {
+      authMethod: "oauth",
+      daysAgo: 0,
+      method: "tools/list",
+    });
+    await gatewayCall(bob.id, { authMethod: "oauth", daysAgo: 29 });
+
+    // Starting up reached the gateway, but it isn't shown as a tool call.
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "inactive",
       gatewayLastSeenAt: null,
+    });
+    expect(await memberById(bob.id)).toMatchObject({ status: "active" });
+  });
+
+  test("a pasted-token agent with recent calls is active, under Unknown agent", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await gatewayCall(ada.id, {
+      authMethod: "user_token",
+      daysAgo: 1,
+      source: "api",
+    });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "active",
+      agents: [
+        expect.objectContaining({
+          name: "Unknown agent",
+          status: "active",
+          viaToken: true,
+          setupAt: null,
+        }),
+      ],
+    });
+  });
+
+  test("a user whose only agent was disconnected is not connected", async ({
+    makeUser,
+    makeMember,
+    makeOAuthClient,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    // Amp's sign-in was deleted on disconnect; its calls remain.
+    const amp = await makeOAuthClient({
+      name: "Amp MCP Client (archestra)",
+      redirectUris: ["http://localhost:41592/oauth/callback"],
+    });
+    await gatewayCall(ada.id, {
+      authMethod: "oauth",
+      daysAgo: 1,
+      oauthClientId: amp.clientId,
+      source: "api",
+    });
+
+    // Its last call is still shown.
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "notConnected",
+      gatewayLastSeenAt: expect.any(String),
+      agents: [],
+    });
+  });
+
+  test("a call older than 180 days is not read", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const ada = await makeUser({ name: "Ada" });
+    await makeMember(ada.id, organizationId);
+    await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 200 });
+
+    expect(await memberById(ada.id)).toMatchObject({
+      status: "notConnected",
+      gatewayLastSeenAt: null,
+      agents: [],
     });
   });
 
@@ -180,7 +340,7 @@ describe("GET /api/connected-clients/adoption", () => {
 
     expect(await memberById(ada.id)).toMatchObject({ status: "active" });
     expect(await memberById(bob.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
     });
   });
 
@@ -194,7 +354,7 @@ describe("GET /api/connected-clients/adoption", () => {
     await makeInteraction(gateway.id, { userId: ada.id, source: "chat" });
 
     expect(await memberById(ada.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
     });
   });
 
@@ -218,7 +378,7 @@ describe("GET /api/connected-clients/adoption", () => {
     });
 
     expect(await memberById(ada.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
     });
   });
 
@@ -255,7 +415,7 @@ describe("GET /api/connected-clients/adoption", () => {
     });
 
     expect(await memberById(ada.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
       gatewayLastSeenAt: null,
       llmLastSeenAt: null,
     });
@@ -296,40 +456,6 @@ describe("GET /api/connected-clients/adoption", () => {
     ]);
   });
 
-  test("skills marketplace syncs are reported per agent, without making a member active", async ({
-    makeUser,
-    makeMember,
-  }) => {
-    const ada = await makeUser({ name: "Ada" });
-    await makeMember(ada.id, organizationId);
-    const setup = await redeem(ada.id, "codex");
-    const synced = async (
-      connectionSetupId: string | undefined,
-      daysAgo: number,
-    ) => {
-      const { credential } = await SkillMarketplaceCredentialModel.create({
-        organizationId,
-        userId: ada.id,
-        connectionSetupId,
-      });
-      await db
-        .update(schema.skillMarketplaceCredentialsTable)
-        .set({ lastUsedAt: new Date(Date.now() - daysAgo * DAY_MS) })
-        .where(eq(schema.skillMarketplaceCredentialsTable.id, credential.id));
-    };
-    await synced(setup.id, 1);
-    await synced(undefined, 2);
-    await synced(undefined, 40);
-
-    expect(await memberById(ada.id)).toMatchObject({
-      status: "inactive",
-      skillSyncs: [
-        { agent: { clientId: "codex", name: "Codex" } },
-        { agent: { clientId: null, name: "An earlier setup" } },
-      ],
-    });
-  });
-
   test("an OAuth sign-in without calls is still inactive", async ({
     makeUser,
     makeMember,
@@ -350,7 +476,7 @@ describe("GET /api/connected-clients/adoption", () => {
     });
 
     expect(await memberById(ada.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
       gatewayLastSeenAt: null,
     });
   });
@@ -383,7 +509,7 @@ describe("GET /api/connected-clients/adoption", () => {
       ],
     });
     expect(await memberById(bob.id)).toMatchObject({
-      status: "inactive",
+      status: "notConnected",
       gatewayLastSeenAt: null,
     });
   });
@@ -464,6 +590,12 @@ describe("GET /api/connected-clients/adoption", () => {
     await gatewayCall(ada.id, { authMethod: "oauth", daysAgo: 0 });
     await gatewayCall(ada.id, { authMethod: "user_token", daysAgo: 0 });
     await gatewayCall(bob.id, { authMethod: "oauth", daysAgo: 2 });
+    // Starting an agent isn't counted as a call.
+    await gatewayCall(bob.id, {
+      authMethod: "oauth",
+      daysAgo: 0,
+      method: "tools/list",
+    });
     await makeInteraction(gateway.id, { userId: bob.id, source: "api" });
     await makeInteraction(gateway.id, { userId: bob.id, source: "chat" });
 
@@ -474,7 +606,6 @@ describe("GET /api/connected-clients/adoption", () => {
       });
       expect(response.statusCode).toBe(200);
       return response.json() as {
-        lookbackDays: number;
         days: { date: string; gatewayCalls: number; llmCalls: number }[];
       };
     };
@@ -488,7 +619,8 @@ describe("GET /api/connected-clients/adoption", () => {
       );
 
     const everyone = await usage();
-    expect(everyone.days).toHaveLength(30);
+    // Every UTC day the last 30 days touch, today last.
+    expect(everyone.days).toHaveLength(31);
     expect(everyone.days.at(-1)).toMatchObject({
       date: new Date().toISOString().slice(0, 10),
       gatewayCalls: 2,
@@ -520,12 +652,14 @@ describe("GET /api/connected-clients/adoption", () => {
       agentId?: string;
       oauthClientId?: string;
       source?: "api" | "chat";
+      /** A tool call by default: doing something, not just starting up. */
+      method?: string;
     },
   ) {
     await db.insert(schema.mcpToolCallsTable).values({
       agentId: options.agentId ?? gateway.id,
       mcpServerName: "mcp-gateway",
-      method: "tools/list",
+      method: options.method ?? "tools/call",
       userId,
       authMethod: options.authMethod,
       oauthClientId: options.oauthClientId ?? null,

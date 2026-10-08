@@ -3752,7 +3752,7 @@ export const getConnectedClients = <ThrowOnError extends boolean = false>(option
 export const getConnectedClientLog = <ThrowOnError extends boolean = false>(options?: Options<GetConnectedClientLogData, ThrowOnError>) => (options?.client ?? client).get<GetConnectedClientLogResponses, GetConnectedClientLogErrors, ThrowOnError>({ url: '/api/connected-clients/log', ...options });
 
 /**
- * Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the last 30 days; setups and sign-ins alone only show the installer ran.
+ * Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.
  *
  * Authentication:
  *
@@ -3766,7 +3766,7 @@ export const getConnectedClientLog = <ThrowOnError extends boolean = false>(opti
 export const getAgentAdoption = <ThrowOnError extends boolean = false>(options?: Options<GetAgentAdoptionData, ThrowOnError>) => (options?.client ?? client).get<GetAgentAdoptionResponses, GetAgentAdoptionErrors, ThrowOnError>({ url: '/api/connected-clients/adoption', ...options });
 
 /**
- * MCP gateway and LLM proxy calls from members' agents per day over the last 30 days, for one member or the whole organization. Counts the same traffic as the adoption summary.
+ * MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.
  *
  * Authentication:
  *
@@ -4565,7 +4565,7 @@ export const groqChatCompletionsWithAgent = <ThrowOnError extends boolean = fals
  *
  * Authorization:
  *
- * `organizationSettings:read`: View every organization settings page, including messaging channels
+ * None (no additional RBAC permission required)
  */
 export const getGuardrailsDeployment = <ThrowOnError extends boolean = false>(options?: Options<GetGuardrailsDeploymentData, ThrowOnError>) => (options?.client ?? client).get<GetGuardrailsDeploymentResponses, GetGuardrailsDeploymentErrors, ThrowOnError>({ url: '/api/guardrails-deployment', ...options });
 

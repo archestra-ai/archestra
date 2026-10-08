@@ -97,7 +97,11 @@ describe("DELETE /api/connected-clients/:clientId", () => {
       organizationId,
       userId: user.id,
     });
-    expect(remaining.map((c) => c.clientId)).toEqual(["codex"]);
+    // An app nobody listed stays, under its own OAuth client.
+    expect(remaining.map((c) => c.clientId).sort()).toEqual([
+      "codex",
+      `oauth:${unrelated.clientId}`,
+    ]);
     expect(await OAuthRefreshTokenModel.getById(refresh.id)).toBeNull();
     // Both access tokens, including the one not minted from a refresh token.
     expect(await accessTokenCount(user.id, CLAUDE_CODE_OAUTH_CLIENT_ID)).toBe(
@@ -219,9 +223,17 @@ describe("DELETE /api/connected-clients/:clientId", () => {
       organizationId,
       userId: user.id,
     });
-    expect(listed).toEqual([
-      expect.objectContaining({ clientId: "amp", platform: null }),
-    ]);
+    // The lookalike shows separately, as an agent nobody listed.
+    expect(listed).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          clientId: "amp",
+          name: "Amp",
+          platform: null,
+        }),
+        expect.objectContaining({ clientId: `oauth:${lookalike.clientId}` }),
+      ]),
+    );
 
     const response = await app.inject({
       method: "DELETE",
@@ -233,10 +245,34 @@ describe("DELETE /api/connected-clients/:clientId", () => {
     expect(await OAuthRefreshTokenModel.getById(refresh.id)).toBeNull();
     expect(await OAuthRefreshTokenModel.getById(kept.id)).not.toBeNull();
     expect(
-      await listConnectedClients({
-        organizationId,
-        userId: user.id,
-      }),
+      (await listConnectedClients({ organizationId, userId: user.id })).map(
+        (c) => c.clientId,
+      ),
+    ).toEqual([`oauth:${lookalike.clientId}`]);
+  });
+
+  test("lists and disconnects an agent nobody listed by its own OAuth client", async ({
+    makeOAuthClient,
+  }) => {
+    const hermes = await makeOAuthClient({ name: "Hermes Agent" });
+    const refresh = await token(user.id, hermes.clientId);
+    const id = `oauth:${hermes.clientId}`;
+
+    expect(
+      await listConnectedClients({ organizationId, userId: user.id }),
+    ).toEqual([
+      expect.objectContaining({ clientId: id, name: "Hermes Agent" }),
+    ]);
+
+    const response = await app.inject({
+      method: "DELETE",
+      url: `/api/connected-clients/${encodeURIComponent(id)}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(await OAuthRefreshTokenModel.getById(refresh.id)).toBeNull();
+    expect(
+      await listConnectedClients({ organizationId, userId: user.id }),
     ).toEqual([]);
   });
 

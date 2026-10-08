@@ -68,6 +68,7 @@ function show(
     proxyUsesVirtualKey: true,
     skillsSelected: true,
   },
+  setupId: string | null = "setup",
 ) {
   render(
     <QueryClientProvider
@@ -82,7 +83,7 @@ function show(
     >
       <ClientConnectionApproval
         requestId="request"
-        setupId="setup"
+        setupId={setupId ?? undefined}
         clientId={clientId}
         platform="linux"
         gatewayName="My Gateway"
@@ -91,6 +92,92 @@ function show(
     </QueryClientProvider>,
   );
 }
+
+test("loading a request announces its state and offers no decision actions", async () => {
+  server.use(
+    http.get(
+      `${origin}/api/client-connections/request`,
+      () => new Promise<Response>(() => {}),
+    ),
+  );
+  show();
+  expect(screen.getByRole("status")).toHaveTextContent(
+    "Loading connection request",
+  );
+  expect(screen.queryByRole("button")).not.toBeInTheDocument();
+  expect(requests).toEqual([]);
+});
+
+test("a missing prepared setup blocks approval while denial remains available", async () => {
+  show("cursor", undefined, null);
+  await screen.findByText("ABCD-1234");
+  fireEvent.click(screen.getByRole("checkbox"));
+  expect(
+    screen.getByRole("button", { name: "Approve connection" }),
+  ).toBeDisabled();
+  expect(screen.getByRole("button", { name: "Deny" })).toBeEnabled();
+  expect(requests).toEqual([]);
+});
+
+test("a pending decision disables both actions and waits for the result", async () => {
+  let completeDecision: (response: Response) => void = () => {};
+  server.use(
+    http.post(
+      `${origin}/api/client-connections/request/decision`,
+      () =>
+        new Promise<Response>((resolve) => {
+          completeDecision = resolve;
+        }),
+    ),
+  );
+  show();
+  await screen.findByText("ABCD-1234");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
+  await waitFor(() =>
+    expect(screen.getByRole("button", { name: "Deny" })).toBeDisabled(),
+  );
+  expect(
+    screen.getByRole("button", { name: "Approve connection" }),
+  ).toBeDisabled();
+  completeDecision(
+    HttpResponse.json({
+      status: "approved",
+      clientId: "cursor",
+      platform: "linux",
+    }),
+  );
+  await screen.findByText(
+    "Connection approved. Return to your terminal to finish setup.",
+  );
+});
+
+test("a failed decision keeps confirmation visible and permits retry", async () => {
+  server.use(
+    http.post(
+      `${origin}/api/client-connections/request/decision`,
+      async ({ request }) => {
+        requests.push(await request.json());
+        return HttpResponse.json(
+          { error: { message: "Request failed" } },
+          { status: 500 },
+        );
+      },
+    ),
+  );
+  show();
+  await screen.findByText("ABCD-1234");
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(screen.getByRole("button", { name: "Approve connection" }));
+  await waitFor(() => expect(requests).toHaveLength(1));
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Approve connection" }),
+    ).toBeEnabled(),
+  );
+  expect(screen.getByText("ABCD-1234")).toBeVisible();
+  expect(screen.queryByText(/Connection approved\./)).not.toBeInTheDocument();
+});
 
 test("approval requires matching the terminal code, then submits the reviewed setup", async () => {
   show();

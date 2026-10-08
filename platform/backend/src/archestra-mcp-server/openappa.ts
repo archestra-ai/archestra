@@ -259,7 +259,7 @@ const registry = defineArchestraTools([
     shortName: "resolve_openappa_yell",
     title: "Resolve an OpenAPPA yell",
     description:
-      "Mark an OpenAPPA yell resolved, or reopen it with resolved=false. Resolve only after the user confirms the fix, or when the user asks you to. Resolving does not change policy.",
+      "Mark an OpenAPPA yell resolved, or reopen it with resolved=false. Call it when the operator says the yell is resolved, or after the operator accepts your policy fix and it is published. Resolving does not change policy.",
     schema: z.strictObject({
       id: z.uuid(),
       resolved: z
@@ -395,7 +395,7 @@ const registry = defineArchestraTools([
     shortName: "create_guardrails_repository",
     title: "Create OpenAPPA GitHub repository",
     description:
-      "Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. List credentials first and choose a connected organization GitHub App. Ask the user for the GitHub owner and repository name before calling. Future policy edits open pull requests.",
+      "Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. If repository rules block the initial commit, open a pull request instead. List credentials first and choose a connected organization GitHub App. Ask the user for the GitHub owner and repository name before calling. When source.setupPullRequestNumber is present, return its PR link using source.repo and ask the user to merge it. Sync checks for the merge every minute and keeps the current policy active until then. Future policy edits open pull requests.",
     schema: z.strictObject({
       owner: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/),
       name: z.string().regex(/^[a-zA-Z0-9_.-]+$/),
@@ -562,7 +562,7 @@ const registry = defineArchestraTools([
         .array(z.string())
         .optional()
         .describe(
-          "Only these tools, by name or full name (`<prefix>__<name>`).",
+          "Only these tools, by name or full name (`<prefix>__<name>`). Empty or omitted means every tool.",
         ),
       offset: z
         .number()
@@ -654,7 +654,8 @@ const registry = defineArchestraTools([
           ...(coverageByTool.get(row.toolId) ?? []),
           row,
         ]);
-      const named = args.tools && new Set(args.tools);
+      // Strict-mode clients send `[]` for an omitted optional array.
+      const named = args.tools?.length ? new Set(args.tools) : null;
       const entries = tools
         .filter(
           (tool) =>
@@ -716,7 +717,7 @@ const registry = defineArchestraTools([
     title: "Validate OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
+      "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. The text is also composed as this deployment would compose it, with every battery held back by a missing server, credential or package composed as empty: a refusal the text introduces is an error, and one the current revision already meets is a warning naming the held-back battery to fix. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
     schema: ValidateGuardrailsPolicySchema,
     async handler({ args, context }) {
       if (!context.organizationId)

@@ -76,6 +76,7 @@ export function makeOrganization(
     connectionDefaultLlmProxyId: null,
     connectionDefaultClientId: null,
     connectionShownClientIds: null,
+    connectionClientOrder: null,
     connectionShownProviders: null,
     connectionBaseUrls: null,
     connectionDefaultProviderKeys: null,

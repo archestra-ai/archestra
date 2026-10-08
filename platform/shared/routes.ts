@@ -873,6 +873,8 @@ export const RouteId = {
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",
   GetOpenappaTrustAudience: "getOpenappaTrustAudience",
+  GetOpenappaRemedies: "getOpenappaRemedies",
+  GetOpenappaRemediesActivity: "getOpenappaRemediesActivity",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",

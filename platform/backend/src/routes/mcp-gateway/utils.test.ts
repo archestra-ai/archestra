@@ -1572,6 +1572,80 @@ describe("createAgentServer tools/list", () => {
     archestraMcpBranding.syncFromOrganization(null);
   });
 
+  test("lists an assigned tool only to callers who can access its MCP server", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeTeam,
+    makeTeamMember,
+    makeTool,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    const teamMember = await makeUser();
+    const outsider = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    await makeMember(teamMember.id, org.id, { role: "member" });
+    await makeMember(outsider.id, org.id, { role: "member" });
+    const team = await makeTeam(org.id, admin.id);
+    await makeTeamMember(team.id, teamMember.id);
+
+    const gateway = await makeAgent({
+      organizationId: org.id,
+      agentType: "mcp_gateway",
+      toolExposureMode: "full",
+      access: "org",
+    });
+    const teamCatalog = await makeInternalMcpCatalog({
+      organizationId: org.id,
+      authorId: admin.id,
+      access: { teams: [team.id] },
+    });
+    const orgCatalog = await makeInternalMcpCatalog({ organizationId: org.id });
+    const teamTool = await makeTool({
+      name: "team_server__lookup",
+      catalogId: teamCatalog.id,
+    });
+    const orgTool = await makeTool({
+      name: "org_server__lookup",
+      catalogId: orgCatalog.id,
+    });
+    await makeAgentTool(gateway.id, teamTool.id);
+    await makeAgentTool(gateway.id, orgTool.id);
+
+    const listFor = async (userId: string) => {
+      const { server } = await createAgentServer({
+        agentId: gateway.id,
+        tokenAuth: {
+          tokenId: crypto.randomUUID(),
+          teamId: null,
+          isOrganizationToken: false,
+          organizationId: org.id,
+          isUserToken: true,
+          userId,
+        },
+      });
+      const handler = (
+        server.server as unknown as {
+          _requestHandlers: Map<string, TestListToolsHandler>;
+        }
+      )._requestHandlers.get("tools/list");
+      if (!handler) throw new Error("Expected tools/list handler");
+      const response = await handler({ method: "tools/list", params: {} });
+      return response.tools.map((tool) => tool.name);
+    };
+
+    expect(await listFor(teamMember.id)).toEqual(
+      expect.arrayContaining([teamTool.name, orgTool.name]),
+    );
+    const outsiderTools = await listFor(outsider.id);
+    expect(outsiderTools).toContain(orgTool.name);
+    expect(outsiderTools).not.toContain(teamTool.name);
+  });
+
   test("returns implicit search_tools and run_tool when toolExposureMode is search_and_run_only", async ({
     makeAgent,
     makeOrganization,

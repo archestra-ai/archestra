@@ -237,6 +237,7 @@ async function evaluateOpenAppaPolicyTests(
   const replayInput = JSON.stringify({
     content: effective.content,
     files: params.files,
+    noopAnnotator: guardrailsPolicyService.noopAnnotator(),
   });
   const capacityError =
     Buffer.byteLength(effective.content) > 262144

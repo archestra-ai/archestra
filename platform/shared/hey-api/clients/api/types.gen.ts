@@ -88331,6 +88331,7 @@ export type GetAppaGithubSyncResponses = {
             githubAppConfigId: string | null;
             revision: string;
             sourceCommit: string | null;
+            setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             declarationsPendingPublish: boolean;
@@ -88440,6 +88441,7 @@ export type UpdateAppaGithubSyncResponses = {
             githubAppConfigId: string | null;
             revision: string;
             sourceCommit: string | null;
+            setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             declarationsPendingPublish: boolean;
@@ -88550,6 +88552,7 @@ export type ConfigureAppaGithubSyncResponses = {
             githubAppConfigId: string | null;
             revision: string;
             sourceCommit: string | null;
+            setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             declarationsPendingPublish: boolean;
@@ -88657,6 +88660,7 @@ export type CreateAppaGithubRepositoryResponses = {
             githubAppConfigId: string | null;
             revision: string;
             sourceCommit: string | null;
+            setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             declarationsPendingPublish: boolean;
@@ -88765,6 +88769,7 @@ export type AcceptHeldAppaGithubPullResponses = {
                 githubAppConfigId: string | null;
                 revision: string;
                 sourceCommit: string | null;
+                setupPullRequestNumber: number | null;
                 lastSyncedAt: string | null;
                 lastSyncError: string | null;
                 declarationsPendingPublish: boolean;
@@ -89512,6 +89517,238 @@ export type PreviewOpenAppaPolicyTestResponses = {
 };
 
 export type PreviewOpenAppaPolicyTestResponse = PreviewOpenAppaPolicyTestResponses[keyof PreviewOpenAppaPolicyTestResponses];
+
+export type GetOpenappaRemediesData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/remedies';
+};
+
+export type GetOpenappaRemediesErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaRemediesError = GetOpenappaRemediesErrors[keyof GetOpenappaRemediesErrors];
+
+export type GetOpenappaRemediesResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        authorities: Array<{
+            name: string;
+            source: {
+                entry: string | null;
+                battery: string | null;
+                line: number | null;
+            };
+            implementation: {
+                kind: 'hitl' | 'approve' | 'llm' | 'claude_code' | 'builtin' | 'module' | 'url' | 'command';
+                detail: string | null;
+            } | null;
+            tags: Array<string>;
+            lastConsult: {
+                outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+                at: string;
+            } | null;
+            kind: 'authority';
+            permits: {
+                attention: Array<string>;
+                audienceMissing: Array<string>;
+                trustBelow: string | null;
+                effectsContaining: Array<string>;
+            };
+        }>;
+        sanitizers: Array<{
+            name: string;
+            source: {
+                entry: string | null;
+                battery: string | null;
+                line: number | null;
+            };
+            implementation: {
+                kind: 'hitl' | 'approve' | 'llm' | 'claude_code' | 'builtin' | 'module' | 'url' | 'command';
+                detail: string | null;
+            } | null;
+            tags: Array<string>;
+            lastConsult: {
+                outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+                at: string;
+            } | null;
+            kind: 'sanitizer';
+            on: Array<'tool_output' | 'tool_input'>;
+            permits: {
+                kind: 'audience';
+                from: Array<string>;
+                to: Array<string>;
+            } | {
+                kind: 'trust';
+                from: string;
+                to: string;
+            } | null;
+        }>;
+        blocks: Array<{
+            kind: 'trust' | 'audience' | 'effects' | 'approvals';
+            rules: number;
+            approvers: number;
+            cleaners: number;
+            unservedMarks: Array<string>;
+            covered: boolean;
+        }>;
+    };
+};
+
+export type GetOpenappaRemediesResponse = GetOpenappaRemediesResponses[keyof GetOpenappaRemediesResponses];
+
+export type GetOpenappaRemediesActivityData = {
+    body?: never;
+    path?: never;
+    query?: {
+        timeZone?: string;
+    };
+    url: '/api/openappa/remedies/activity';
+};
+
+export type GetOpenappaRemediesActivityErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaRemediesActivityError = GetOpenappaRemediesActivityErrors[keyof GetOpenappaRemediesActivityErrors];
+
+export type GetOpenappaRemediesActivityResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        timeZone: string;
+        days: Array<{
+            date: string;
+            blocked: number;
+            remedied: number;
+        }>;
+    };
+};
+
+export type GetOpenappaRemediesActivityResponse = GetOpenappaRemediesActivityResponses[keyof GetOpenappaRemediesActivityResponses];
 
 export type GetOpenappaTrustAudienceData = {
     body?: never;
@@ -90880,6 +91117,7 @@ export type GetOrganizationResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -91205,6 +91443,7 @@ export type UpdateAppearanceSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -91413,6 +91652,7 @@ export type UpdateSecuritySettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -91616,6 +91856,7 @@ export type UpdateMcpSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -91819,6 +92060,7 @@ export type UpdateSkillsSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92023,6 +92265,7 @@ export type UpdateAgentSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92087,6 +92330,7 @@ export type UpdateConnectionSettingsData = {
             [key: string]: string;
         } | null;
         connectionDefaultClientId?: string | null;
+        connectionClientOrder?: Array<string> | null;
         connectionShownClientIds?: Array<string> | null;
         connectionShownProviders?: unknown;
         connectionSkillsEnabled?: boolean;
@@ -92242,6 +92486,7 @@ export type UpdateConnectionSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92476,6 +92721,7 @@ export type UpdateIntegrationSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92689,6 +92935,7 @@ export type UpdateDefaultEnvironmentResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92897,6 +93144,7 @@ export type UpdateAuthSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -93107,6 +93355,7 @@ export type UpdateKnowledgeSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -93307,6 +93556,7 @@ export type DropEmbeddingConfigResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -93857,6 +94107,7 @@ export type CompleteOnboardingResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;

@@ -199,11 +199,14 @@ export const OAUTH_AGENTS = {
       { clientId: "https://github.com/copilot/cli/client-metadata.json" },
     ],
   },
-  // DCR as "OpenCode"; its redirect port is configurable (sst/opencode,
-  // mcp/oauth-provider.ts).
+  // CIMD at opencode.ai (captured 2026-10-08), or DCR as "OpenCode" on a
+  // configurable redirect port (sst/opencode, mcp/oauth-provider.ts).
   opencode: {
     label: "OpenCode",
-    identities: [{ clientNamePattern: "^OpenCode$" }],
+    identities: [
+      { clientId: "https://opencode.ai/oauth/opencode/client.json" },
+      { clientNamePattern: "^OpenCode$" },
+    ],
   },
   // Registers each install as "Amp MCP Client (<server name>)" with this
   // redirect (captured from amp 0.0.1791201662).

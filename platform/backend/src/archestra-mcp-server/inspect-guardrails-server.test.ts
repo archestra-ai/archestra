@@ -184,6 +184,20 @@ describe("inspect_guardrails_server", () => {
     });
   });
 
+  test("an empty tools list inspects every tool, like omitting it", async ({
+    makeTool,
+  }) => {
+    await makeTool({ catalogId, name: "named__first" });
+    await makeTool({ catalogId, name: "named__second" });
+    const omitted = await inspect(context, catalogId, { detail: "full" });
+    const empty = await inspect(context, catalogId, {
+      detail: "full",
+      tools: [],
+    });
+    expect(omitted.structuredContent).toMatchObject({ total: 2 });
+    expect(empty.structuredContent).toEqual(omitted.structuredContent);
+  });
+
   test("pages rows that exceed the result budget until nextOffset is null", async ({
     makeTool,
   }) => {

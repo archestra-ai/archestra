@@ -1,5 +1,5 @@
 {
-  "id": "9af7e507-04cb-44d3-8b29-b72f0ebe88af",
+  "id": "f852ccc5-2cfa-4da4-bdaa-ba07bf0913fd",
   "prevId": "3e071983-7897-464c-9e6b-05a98eb294f3",
   "version": "7",
   "dialect": "postgresql",
@@ -10446,12 +10446,6 @@
         "authenticated_app_name": {
           "name": "authenticated_app_name",
           "type": "varchar",
-          "primaryKey": false,
-          "notNull": false
-        },
-        "billing_team_id": {
-          "name": "billing_team_id",
-          "type": "text",
           "primaryKey": false,
           "notNull": false
         },
@@ -26785,12 +26779,6 @@
           "primaryKey": false,
           "notNull": false
         },
-        "billing_team_id": {
-          "name": "billing_team_id",
-          "type": "text",
-          "primaryKey": false,
-          "notNull": false
-        },
         "created_at": {
           "name": "created_at",
           "type": "timestamp",
@@ -26900,19 +26888,6 @@
           "tableTo": "service_accounts",
           "columnsFrom": [
             "created_by_service_account_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
-          "onDelete": "set null",
-          "onUpdate": "no action"
-        },
-        "virtual_api_keys_billing_team_id_team_id_fk": {
-          "name": "virtual_api_keys_billing_team_id_team_id_fk",
-          "tableFrom": "virtual_api_keys",
-          "tableTo": "team",
-          "columnsFrom": [
-            "billing_team_id"
           ],
           "columnsTo": [
             "id"
@@ -27631,6 +27606,27 @@
           ],
           "isUnique": false,
           "where": "\"openappa_operations\".\"status\" = 'pending'",
+          "concurrently": false,
+          "method": "btree",
+          "with": {}
+        },
+        "openappa_operations_org_created_idx": {
+          "name": "openappa_operations_org_created_idx",
+          "columns": [
+            {
+              "expression": "organization_id",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            },
+            {
+              "expression": "created_at",
+              "isExpression": false,
+              "asc": true,
+              "nulls": "last"
+            }
+          ],
+          "isUnique": false,
           "concurrently": false,
           "method": "btree",
           "with": {}

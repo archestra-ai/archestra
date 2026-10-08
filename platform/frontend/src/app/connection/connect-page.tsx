@@ -398,10 +398,13 @@ function DotField() {
 // Up to this many tiles sit in one centered row instead of the grid.
 const ROW_MAX = 3;
 
-/** Non-featured agents the admin allows (Generic client alone doesn't count). */
+/** Agents offered behind the overflow tile. */
 function hasOtherAgents(data: ConnectPageData) {
   const featuredIds = new Set(data.featuredClients.map((c) => c.id));
-  return data.clients.some((c) => !featuredIds.has(c.id) && c.id !== "generic");
+  return data.clients.some(
+    (c) =>
+      !featuredIds.has(c.id) && (c.id !== "generic" || data.hasClientOrder),
+  );
 }
 
 function tileCount(data: ConnectPageData) {
@@ -1135,7 +1138,7 @@ function guardrailsStatus(
     return {
       tone: "ok",
       label: "Enforced",
-      detail: `Guardrails recognize ${client.label}, so each of its tool calls is checked against your org's policy.`,
+      detail: `Each of ${client.label}'s tool calls is checked against your organization's policy.`,
     };
   return state === "block"
     ? {
@@ -1365,10 +1368,7 @@ function ProfileCard({
       label: "Guardrails",
       tip: (
         <InfoTip label="What the guardrails do">
-          <TipBody
-            reason={guard.detail}
-            about={`Guardrails check each tool call against your org's policy before it runs, to stop leaks like sending private data out after reading an untrusted page. A blocked call doesn't run. Powered by ${data.guardrails.name}.`}
-          />
+          <TipBody reason={guard.detail} />
         </InfoTip>
       ),
       state: guard.label,
@@ -1758,14 +1758,9 @@ function cardIntro(
   return "You left out every tool and skill, so your agent gets nothing yet.";
 }
 
-/** A status tooltip: why this state, then what the feature is. */
-function TipBody({ reason, about }: { reason: string; about?: string }) {
-  return (
-    <span className="block space-y-1.5">
-      <span className="block">{reason}</span>
-      {about && <span className="block opacity-75">{about}</span>}
-    </span>
-  );
+/** A status tooltip explaining why this state applies. */
+function TipBody({ reason }: { reason: string }) {
+  return <span className="block">{reason}</span>;
 }
 
 function InfoTip({ label, children }: { label: string; children: ReactNode }) {

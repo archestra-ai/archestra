@@ -256,7 +256,13 @@ describe("gapLines", () => {
       {
         key: "trust",
         label: "Trust",
-        text: "41 rules need trusted data · no remedy",
+        text: "41 rules need trusted data · none approve or clean",
+        covered: false,
+      },
+      {
+        key: "approvals",
+        label: "Approvals",
+        text: "2 marks nobody gives: monday-review, sentry-review",
         covered: false,
       },
       {
@@ -265,16 +271,10 @@ describe("gapLines", () => {
         text: "88 rules · 3 approve, 12 clean",
         covered: true,
       },
-      {
-        key: "approvals",
-        label: "Approvals",
-        text: "2 marks nobody gives: monday-review, sentry-review",
-        covered: false,
-      },
     ]);
   });
 
-  test("a declared but unwired remedy adds a wiring line, and every uncovered line counts as a gap", () => {
+  test("a declared but unwired authority adds a wiring line, and every uncovered line counts as a gap", () => {
     const current = view({
       authorities: [
         authority(),
@@ -315,10 +315,15 @@ describe("gapLines", () => {
         },
       ],
     });
-    expect(gapLines(current).at(-1)).toEqual({
+    expect(gapLines(current).map((line) => line.key)).toEqual([
+      "trust",
+      "wiring",
+      "approvals",
+    ]);
+    expect(gapLines(current)[1]).toEqual({
       key: "wiring",
       label: "Wiring",
-      text: "1 remedy declared but not wired: legal-reviewer",
+      text: "1 declared but not wired: legal-reviewer",
       covered: false,
     });
     expect(gapCount(current)).toBe(2);

@@ -18,13 +18,14 @@ import {
 } from "./blocked-calls.utils";
 
 const chartConfig = {
-  remedied: { label: "got through with a remedy", color: "var(--chart-1)" },
+  remedied: { label: "approved or cleaned", color: "var(--chart-1)" },
   stayed: { label: "stayed blocked", color: "var(--muted-foreground)" },
 } satisfies ChartConfig;
 
 /**
  * The calls the runtime denied on each of the last seven days, split into
- * the ones a remedy then let through and the ones that stayed blocked.
+ * the ones an authority or sanitizer then let through and the ones that
+ * stayed blocked.
  */
 export function BlockedCallsChart() {
   const activity = useRemediesActivity();

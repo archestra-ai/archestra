@@ -49,7 +49,7 @@ const RUNS_AS: Record<RunsAs["key"], RunsAs> = {
   },
 };
 
-/** Null when the remedy is declared but no `[externals.*]` entry wires it. */
+/** Null when the declaration has no `[externals.*]` entry wiring it. */
 export function runsAs(remedy: Remedy): RunsAs | null {
   switch (remedy.implementation?.kind) {
     case "hitl":
@@ -70,7 +70,7 @@ export function runsAs(remedy: Remedy): RunsAs | null {
   }
 }
 
-/** How many wired remedies each kind of implementation runs, for a bar; empty groups left out. */
+/** How many wired declarations each kind of implementation runs, for a bar; empty groups left out. */
 export function runsAsBreakdown(
   remedies: Remedy[],
 ): (RunsAs & { count: number })[] {
@@ -212,14 +212,23 @@ const BLOCK_NEED: Record<BlockCoverage["kind"], string> = {
   approvals: "need an approval mark",
 };
 
+/** What is missing when no wired authority or sanitizer lifts the block. */
+const BLOCK_MISSING: Record<BlockCoverage["kind"], string> = {
+  trust: "none approve or clean",
+  audience: "none approve or clean",
+  effects: "none approve",
+  approvals: "none approve",
+};
+
 const rules = (count: number) => `${count} ${count === 1 ? "rule" : "rules"}`;
 const plural = (count: number, one: string, many: string) =>
   `${count} ${count === 1 ? one : many}`;
 
 /**
  * The lines the Gaps panel shows: every kind of block some rule can cause,
- * then the wiring check when a remedy is declared but not wired. A kind no
- * rule uses is left out.
+ * then the wiring check when an authority or sanitizer is declared but not
+ * wired. A kind no rule uses is left out. Gaps come first, so the number
+ * above them is explained before the kinds that are covered.
  */
 export function gapLines(view: RemediesView): GapLine[] {
   const lines = view.blocks.flatMap((block): GapLine[] => {
@@ -251,7 +260,7 @@ export function gapLines(view: RemediesView): GapLine[] {
         label,
         text: block.covered
           ? `${rules(block.rules)} · ${lifts.join(", ")}`
-          : `${rules(block.rules)} ${BLOCK_NEED[block.kind]} · no remedy`,
+          : `${rules(block.rules)} ${BLOCK_NEED[block.kind]} · ${BLOCK_MISSING[block.kind]}`,
         covered: block.covered,
       },
     ];
@@ -263,10 +272,13 @@ export function gapLines(view: RemediesView): GapLine[] {
     lines.push({
       key: "wiring",
       label: "Wiring",
-      text: `${plural(unwired.length, "remedy", "remedies")} declared but not wired: ${unwired.map((each) => each.name).join(", ")}`,
+      text: `${unwired.length} declared but not wired: ${unwired.map((each) => each.name).join(", ")}`,
       covered: false,
     });
-  return lines;
+  return [
+    ...lines.filter((line) => !line.covered),
+    ...lines.filter((line) => line.covered),
+  ];
 }
 
 /** How many Gaps lines are not covered: the panel's number. */

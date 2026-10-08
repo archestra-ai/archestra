@@ -392,7 +392,7 @@ function YellsCard() {
         </span>
       }
       title="Yells"
-      description="Reports of confusing blocks or remedies. Investigate them with the configuration agent."
+      description="Agent reports of blocks it could not make sense of or get past. Investigate them with the configuration agent."
       action={
         <Button size="sm" variant="outline" asChild>
           <Link href="/openappa/yells">

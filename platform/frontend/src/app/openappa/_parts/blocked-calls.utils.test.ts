@@ -40,7 +40,7 @@ describe("blockedCallsBars", () => {
 describe("blockedCallsHeadline", () => {
   test("reads as the legend does, and says so when nothing was blocked", () => {
     expect(blockedCallsHeadline(blockedCallsTotals(days))).toBe(
-      "5 blocked · 3 got through with a remedy",
+      "5 blocked · 3 approved or cleaned",
     );
     expect(blockedCallsHeadline(blockedCallsTotals([]))).toBe(
       "nothing blocked",

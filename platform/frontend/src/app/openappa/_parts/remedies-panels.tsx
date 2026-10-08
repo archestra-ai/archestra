@@ -29,7 +29,7 @@ export function RemediesPanels() {
       <Card className="py-5 xl:col-span-3">
         <CardContent className="px-5">
           <QueryLoadError
-            title="Could not load remedies"
+            title="Could not load authorities and sanitizers"
             onRetry={() => view.refetch()}
           />
         </CardContent>
@@ -196,7 +196,7 @@ function GapsPanel({ view }: { view: RemediesView }) {
           : "kinds of block with no way out"}
       </p>
       {lines.length > 0 && (
-        <ul className="text-muted-foreground mt-auto space-y-1.5 pt-2 text-xs">
+        <ul className="text-muted-foreground space-y-1.5 pt-1 text-xs">
           {lines.map((line) => (
             <li key={line.key} className="flex gap-1.5">
               {line.covered ? (
@@ -210,8 +210,13 @@ function GapsPanel({ view }: { view: RemediesView }) {
                   className="mt-0.5 size-3 shrink-0 text-amber-600 dark:text-amber-400"
                 />
               )}
-              <span>
-                <span className="text-foreground font-medium">
+              <span className="min-w-0">
+                <span
+                  className={cn(
+                    "font-medium",
+                    line.covered ? "text-muted-foreground" : "text-foreground",
+                  )}
+                >
                   {line.label}
                 </span>
                 <span>{` · ${line.text}`}</span>

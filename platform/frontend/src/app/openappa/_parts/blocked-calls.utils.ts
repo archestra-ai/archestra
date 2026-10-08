@@ -44,5 +44,5 @@ export function blockedCallsBars(
 /** The headline beside the title, in the words the panel's legend uses. */
 export function blockedCallsHeadline(totals: BlockedCallsTotals): string {
   if (totals.blocked === 0) return "nothing blocked";
-  return `${totals.blocked.toLocaleString()} blocked · ${totals.remedied.toLocaleString()} got through with a remedy`;
+  return `${totals.blocked.toLocaleString()} blocked · ${totals.remedied.toLocaleString()} approved or cleaned`;
 }

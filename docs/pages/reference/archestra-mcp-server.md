@@ -3276,6 +3276,7 @@ Required RBAC permission: [`openappaDiagnostics:read`](/docs/reference/permissio
 | `status` | `"unresolved" \| "resolved" \| "all"` | No | Only unresolved or resolved yells; all by default. |
 | `sessionId` | `string` | No | Only the yells of this session. |
 | `search` | `string` | No | Only yells whose message contains this text. |
+| `cursor` | `string` | No | The nextCursor of the previous call, with the same filters, for the next page. |
 
 
 #### list_openappa_consults

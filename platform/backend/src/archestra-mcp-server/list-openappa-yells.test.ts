@@ -118,6 +118,12 @@ describe("list_openappa_yells", () => {
     expect(page.yells).toHaveLength(20);
     expect(page.yells[0].message.length).toBeLessThan(1000);
     expect(page.yells[0].message.startsWith("m".repeat(300))).toBe(true);
+    const rest = await list({ cursor: page.nextCursor });
+    expect(rest).toMatchObject({ hasMore: false, nextCursor: null });
+    expect(rest.yells).toHaveLength(1);
+    expect(
+      new Set([...page.yells, ...rest.yells].map((yell) => yell.id)).size,
+    ).toBe(21);
   });
 
   test("refuses a caller without openappaDiagnostics:read", async ({
@@ -170,6 +176,7 @@ describe("list_openappa_yells", () => {
     return result.structuredContent as {
       yells: ListedYell[];
       hasMore: boolean;
+      nextCursor: string | null;
     };
   }
 });

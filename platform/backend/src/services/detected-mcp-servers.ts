@@ -31,7 +31,7 @@ function groupDetectedServers(
 ): DetectedMcpServer[] {
   const servers = new Map<
     string,
-    DetectedMcpServer & { toolIds: Set<string> }
+    DetectedMcpServer & { toolNames: Set<string> }
   >();
   for (const observation of observations) {
     const family = clientFamilyOf(observation.externalAgentId);
@@ -47,12 +47,14 @@ function groupDetectedServers(
         clientFamily: family,
         tools: [],
         firstObservedAt: observation.observedAt,
-        toolIds: new Set(),
+        toolNames: new Set(),
       };
       servers.set(id, server);
     }
-    if (!server.toolIds.has(observation.toolId)) {
-      server.toolIds.add(observation.toolId);
+    // Two proxy requests can discover one name at once and leave two rows;
+    // the server has one tool of that name.
+    if (!server.toolNames.has(observation.toolName)) {
+      server.toolNames.add(observation.toolName);
       server.tools.push({
         id: observation.toolId,
         name: observation.toolName,
@@ -64,7 +66,7 @@ function groupDetectedServers(
     }
   }
   return [...servers.values()]
-    .map(({ toolIds: _toolIds, ...server }) => ({
+    .map(({ toolNames: _toolNames, ...server }) => ({
       ...server,
       tools: server.tools.sort((a, b) => a.name.localeCompare(b.name)),
     }))

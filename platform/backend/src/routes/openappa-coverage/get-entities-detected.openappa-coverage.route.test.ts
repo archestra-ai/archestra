@@ -150,6 +150,30 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     ]);
   });
 
+  test("two rows discovered for one name at once count as one tool", async () => {
+    await ToolModel.bulkCreateProxyToolsIfNotExists(
+      [proxyTool("mcp__slack__send")],
+      "",
+    );
+    await ToolModel.create({
+      name: "mcp__slack__send",
+      description: null,
+      parameters: { type: "object" },
+      catalogId: null,
+      agentId: null,
+    });
+    await observe(["mcp__slack__send"], ctx.user.id, CLAUDE_CODE_CLIENT_ID);
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/coverage/entities?type=detected_mcp_server",
+    });
+
+    expect(response.json().data).toMatchObject([
+      { id: "claude-code.slack", toolCount: 1 },
+    ]);
+  });
+
   test("a target filter names a registry server, so a detected-only list under one is empty", async () => {
     await ToolModel.bulkCreateProxyToolsIfNotExists(
       [proxyTool("mcp__slack__send")],

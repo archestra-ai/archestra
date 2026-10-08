@@ -146,6 +146,11 @@ export const guardrailsPolicyService = {
     };
   },
 
+  /** The no-op annotator endpoint and the answer it serves, for offline replay. */
+  noopAnnotator() {
+    return { url: noopAnnotatorUrl(), response: this.annotate() };
+  },
+
   /**
    * Check a document by composing it, the way a recompose composes it: the
    * batteries its `include` list names are resolved and composed under it, and the
@@ -296,6 +301,9 @@ function requireEnabled() {
   if (!config.openappa.enabled)
     throw new ApiError(404, "Guardrails v2 is disabled");
 }
+function noopAnnotatorUrl() {
+  return `http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}`;
+}
 function hash(content: string) {
   return createHash("sha256").update(content).digest("hex");
 }
@@ -359,6 +367,6 @@ name = "*"
 annotator = "noop"
 
 [externals.annotators.noop]
-url = "http://127.0.0.1:${config.api.port}${GUARDRAILS_NOOP_ANNOTATOR_PATH}"
+url = "${noopAnnotatorUrl()}"
 `;
 }

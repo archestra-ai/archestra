@@ -25,7 +25,7 @@ toml = "1.1"
 # The runtime's own editor speaks this document type; reading a root's declarations
 # with their spans needs the same version the runtime holds.
 toml_edit = "0.25"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "rt", "net", "io-util"] }
 futures-util = "0.3"
 # Stream bounded receipt lookups through the store's existing PostgreSQL client.
 postgres = "0.19"

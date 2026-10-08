@@ -165,7 +165,10 @@ function CompactCircle({
           : state === "denied"
             ? " (denied)"
             : "";
-  const accessibleName = `${parseFullToolName(toolName).toolName.replace(/_/g, " ")}${stateSuffix}`;
+  const label =
+    getToolCardTitle(toolName) ??
+    parseFullToolName(toolName).toolName.replace(/_/g, " ");
+  const accessibleName = `${label}${stateSuffix}`;
 
   return (
     <TooltipProvider delayDuration={200}>
@@ -209,7 +212,7 @@ function CompactCircle({
           </UnstyledButton>
         </TooltipTrigger>
         <TooltipContent side="top" className="text-xs">
-          <span>{parseFullToolName(toolName).toolName.replace(/_/g, " ")}</span>
+          <span>{label}</span>
           {isCancelled ? (
             <span>{" (cancelled)"}</span>
           ) : isBackground ? (

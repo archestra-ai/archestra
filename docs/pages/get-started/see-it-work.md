@@ -23,12 +23,12 @@ A response containing `"status":"ok"` confirms the backend API and gateway are a
 
 1. Open **Chat** in the Archestra sidebar.
 2. Connect a model provider: click **Sign in with ChatGPT**, another subscription, or **Add API Key** (such as Anthropic, OpenAI, or Gemini) and follow the dialog.
-3. Click the **What can Archestra do?** suggestion. The assistant searches the current Archestra docs and answers with links to the pages. With an enterprise license, send a message such as *"What tools can you use?"* instead.
+3. Click the **What can Archestra do?** suggestion. The assistant searches the current Archestra docs and answers with links to the pages. **How does OpenAPPA protect agents?** does the same with the OpenAPPA docs. With an enterprise license, send a message such as *"What tools can you use?"* instead.
 
 What to know:
 
-- A fresh install without an enterprise license comes with the **Archestra Docs** MCP server, which reads the public docs at `https://archestra.ai/mcp`. The suggestion uses it.
-- To remove it, delete **Archestra Docs** from the **MCP Registry**. It does not come back after a restart or an upgrade.
+- A fresh install without an enterprise license comes with two MCP servers for the suggestions: **Archestra Docs** (`https://archestra.ai/mcp`) and **OpenAPPA Docs** (`https://www.openappa.com/mcp`). Both read public docs and need no credentials.
+- To remove one, delete it from the **MCP Registry**. It does not come back after a restart or an upgrade.
 
 ## From Your Client
 

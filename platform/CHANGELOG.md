@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.3.71](https://github.com/archestra-ai/archestra/compare/platform-v1.3.70...platform-v1.3.71) (2026-10-08)
+
+
+### Bug Fixes
+
+* **deps:** backport sharp, MCP SDK, zlib, and next CVE fixes to release/1.3 ([#8607](https://github.com/archestra-ai/archestra/issues/8607)) ([085541f](https://github.com/archestra-ai/archestra/commit/085541f4cff6c08201c69dc0c8999e1f186ec47e))
+* **mcp:** limit the assigned tools of an agent to MCP servers the caller can access (backport release/1.3) ([#8602](https://github.com/archestra-ai/archestra/issues/8602)) ([f3187a4](https://github.com/archestra-ai/archestra/commit/f3187a49c7b68278b594226badc95f455ab2b4b0))
+
 ## [1.3.70](https://github.com/archestra-ai/archestra/compare/platform-v1.3.69...platform-v1.3.70) (2026-10-06)
 
 

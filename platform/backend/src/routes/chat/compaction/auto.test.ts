@@ -1,4 +1,4 @@
-import { generateText, jsonSchema, tool } from "ai";
+import { generateText } from "ai";
 import { vi } from "vitest";
 import { ConversationCompactionModel, ModelModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
@@ -222,23 +222,6 @@ describe("compactMessagesForChat auto trigger", () => {
 
     expect(result.status).toBe("created");
     expect(result.messages.slice(1)).toEqual([MESSAGES[2]]);
-  });
-
-  test("summarizes in context with the turn's tools available but never called", async () => {
-    mockGenerateText.mockResolvedValue(generated("<summary>S-TOOLS</summary>"));
-    const tools = {
-      lookup: tool({
-        description: "Look up a record.",
-        inputSchema: jsonSchema({ type: "object", properties: {} }),
-      }),
-    };
-
-    const result = await compactMessagesForChat({ ...params, tools });
-
-    expect(result.status).toBe("created");
-    const call = mockGenerateText.mock.calls[0][0];
-    expect(call.tools).toBe(tools);
-    expect(call.toolChoice).toBe("none");
   });
 
   test("keeps the recent exchange verbatim when it fits the tail budget", async () => {

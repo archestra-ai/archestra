@@ -3,12 +3,7 @@ import {
   getModelReadableMimeTypes,
   type SupportedProvider,
 } from "@archestra/shared";
-import {
-  convertToModelMessages,
-  generateText,
-  type ToolSet,
-  type UIMessage,
-} from "ai";
+import { convertToModelMessages, generateText, type UIMessage } from "ai";
 import { isAnthropicNativeEndpoint } from "@/clients/anthropic-endpoint";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
@@ -47,7 +42,6 @@ export async function summarizeInContext(params: {
   previousSummary: string | null;
   compactableMessages: ChatMessage[];
   systemPrompt?: string;
-  tools?: ToolSet;
   abortSignal?: AbortSignal;
 }): Promise<string | null> {
   try {
@@ -142,9 +136,6 @@ export async function summarizeInContext(params: {
       await generateText({
         model,
         ...(params.systemPrompt ? { system: params.systemPrompt } : {}),
-        // same system + tools prefix as the main turn, so the provider's
-        // prompt cache is reused; the summary call never runs a tool
-        ...(params.tools ? { tools: params.tools, toolChoice: "none" } : {}),
         messages: await convertToModelMessages(messages),
         temperature: 0,
         maxOutputTokens: CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS,

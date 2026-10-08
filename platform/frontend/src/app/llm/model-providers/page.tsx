@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -853,6 +854,17 @@ export default function ApiKeysPage() {
           ]}
           onActiveSectionChange={setEditSection}
           onSubmit={handleEdit}
+          headerExtra={
+            editingApiKey?.createdBy && (
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="shrink-0">Created by</span>
+                <CreatedByCell
+                  createdBy={editingApiKey.createdBy}
+                  className="max-w-48"
+                />
+              </span>
+            )
+          }
           footer={
             <>
               <DialogCancelButton>Cancel</DialogCancelButton>

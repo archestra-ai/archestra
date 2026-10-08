@@ -19,6 +19,12 @@ Go to **Model Providers → Add API Key**, select **Anthropic**, and configure t
 - **Authentication**: Pass your Anthropic API key in the `x-api-key` header
 - **Messages path**: `POST /v1/anthropic/v1/messages`
 
+### Claude Code Features Through the Proxy
+
+New Claude Code features work through the proxy with no setup. One example is auto mode with its no-charge, server-side safety checks. The proxy sends request fields and `anthropic-beta` values to the provider unchanged. It also returns response keys and stream events that it does not recognize. This applies on Anthropic, Microsoft Foundry, Vertex AI, and [Amazon Bedrock](/docs/llm-proxy/providers/bedrock).
+
+If Claude Code says "this session isn't eligible" for auto mode's no-charge checks, update Archestra. Older versions removed the fields that these checks use.
+
 ### Anthropic on Microsoft Foundry
 
 Claude models deployed in Microsoft Foundry use the Anthropic Messages API at `https://<resource>.services.ai.azure.com/anthropic`. Set [`ARCHESTRA_ANTHROPIC_BASE_URL`](/docs/reference/configuration#ARCHESTRA_ANTHROPIC_BASE_URL) to that `/anthropic` base URL. For keyless Microsoft Entra ID authentication, also set [`ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_ANTHROPIC_AZURE_FOUNDRY_ENTRA_ID_ENABLED); Archestra sends a bearer token scoped to `https://ai.azure.com/.default`.

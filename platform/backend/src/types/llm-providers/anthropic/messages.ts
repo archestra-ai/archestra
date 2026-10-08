@@ -6,13 +6,14 @@ import { z } from "zod";
 // top-level `system` field.
 const RoleSchema = z.enum(["user", "assistant", "system"]);
 
-const TextBlockSchema = z.object({
+// Response blocks stay loose: the response serializer drops unlisted keys.
+const TextBlockSchema = z.looseObject({
   citations: z.array(z.any()).nullable(),
   text: z.string(),
   type: z.enum(["text"]),
 });
 
-const ToolUseBlockSchema = z.object({
+const ToolUseBlockSchema = z.looseObject({
   id: z.string(),
   input: z.any(),
   name: z.string(),
@@ -29,7 +30,7 @@ export const MessageContentBlockSchema = z.union([
   WebSearchToolResultBlockSchema,
 ]);
 
-const TextBlockParamSchema = z.object({
+const TextBlockParamSchema = z.looseObject({
   text: z.string(),
   type: z.enum(["text"]),
   cache_control: z.any().nullable().optional(),

@@ -1308,6 +1308,7 @@ export type AnthropicMessagesRequestInput = {
             type: 'text';
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | {
             type: 'image';
             source: {
@@ -1339,6 +1340,7 @@ export type AnthropicMessagesRequestInput = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -1380,6 +1382,7 @@ export type AnthropicMessagesRequestInput = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -1411,6 +1414,7 @@ export type AnthropicMessagesRequestInput = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -1448,7 +1452,8 @@ export type AnthropicMessagesRequestInput = {
     } | null;
     mcp_servers?: Array<unknown>;
     metadata?: {
-        user_id: string | null;
+        user_id?: string | null;
+        [key: string]: unknown;
     };
     output_config?: {
         effort?: string | null;
@@ -1458,6 +1463,7 @@ export type AnthropicMessagesRequestInput = {
                 [key: string]: unknown;
             };
         } | null;
+        [key: string]: unknown;
     };
     service_tier?: unknown;
     speed?: 'fast' | 'standard';
@@ -1468,11 +1474,13 @@ export type AnthropicMessagesRequestInput = {
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | null;
+        [key: string]: unknown;
     } | Array<{
         type: 'text';
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | null;
+        [key: string]: unknown;
     }>;
     temperature?: number;
     thinking?: {
@@ -1558,6 +1566,7 @@ export type AnthropicMessagesRequestInput = {
     }>;
     top_k?: number;
     top_p?: number;
+    [key: string]: unknown;
 };
 
 export type AnthropicMessagesResponseInput = {
@@ -1566,11 +1575,13 @@ export type AnthropicMessagesResponseInput = {
         citations: Array<unknown> | null;
         text: string;
         type: 'text';
+        [key: string]: unknown;
     } | {
         id: string;
         input: unknown;
         name: string;
         type: 'tool_use';
+        [key: string]: unknown;
     }>;
     model: string;
     role: 'assistant';
@@ -1586,7 +1597,9 @@ export type AnthropicMessagesResponseInput = {
             ephemeral_1h_input_tokens?: number | null;
             ephemeral_5m_input_tokens?: number | null;
         } | null;
+        [key: string]: unknown;
     };
+    [key: string]: unknown;
 };
 
 export type CerebrasChatCompletionRequestInput = {
@@ -7671,6 +7684,7 @@ export type AnthropicMessagesRequest = {
             type: 'text';
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | {
             type: 'image';
             source: {
@@ -7702,6 +7716,7 @@ export type AnthropicMessagesRequest = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -7743,6 +7758,7 @@ export type AnthropicMessagesRequest = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -7774,6 +7790,7 @@ export type AnthropicMessagesRequest = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -7807,11 +7824,12 @@ export type AnthropicMessagesRequest = {
     max_tokens: number;
     container?: string | null;
     context_management?: {
-        [key: string]: never;
+        [key: string]: unknown;
     } | null;
     mcp_servers?: Array<unknown>;
     metadata?: {
-        user_id: string | null;
+        user_id?: string | null;
+        [key: string]: unknown;
     };
     output_config?: {
         effort?: string | null;
@@ -7821,6 +7839,7 @@ export type AnthropicMessagesRequest = {
                 [key: string]: unknown;
             };
         } | null;
+        [key: string]: unknown;
     };
     service_tier?: unknown;
     speed?: 'fast' | 'standard';
@@ -7831,11 +7850,13 @@ export type AnthropicMessagesRequest = {
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | null;
+        [key: string]: unknown;
     } | Array<{
         type: 'text';
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | null;
+        [key: string]: unknown;
     }>;
     temperature?: number;
     thinking?: {
@@ -7921,6 +7942,7 @@ export type AnthropicMessagesRequest = {
     }>;
     top_k?: number;
     top_p?: number;
+    [key: string]: unknown;
 };
 
 export type AnthropicMessagesResponse = {
@@ -7929,11 +7951,13 @@ export type AnthropicMessagesResponse = {
         citations: Array<unknown> | null;
         text: string;
         type: 'text';
+        [key: string]: unknown;
     } | {
         id: string;
         input: unknown;
         name: string;
         type: 'tool_use';
+        [key: string]: unknown;
     }>;
     model: string;
     role: 'assistant';
@@ -7949,7 +7973,9 @@ export type AnthropicMessagesResponse = {
             ephemeral_1h_input_tokens?: number | null;
             ephemeral_5m_input_tokens?: number | null;
         } | null;
+        [key: string]: unknown;
     };
+    [key: string]: unknown;
 };
 
 export type CerebrasChatCompletionRequest = {
@@ -33527,6 +33553,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -33558,6 +33585,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -33599,6 +33627,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -33630,6 +33659,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -33667,7 +33697,8 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         } | null;
         mcp_servers?: Array<unknown>;
         metadata?: {
-            user_id: string | null;
+            user_id?: string | null;
+            [key: string]: unknown;
         };
         output_config?: {
             effort?: string | null;
@@ -33677,6 +33708,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                     [key: string]: unknown;
                 };
             } | null;
+            [key: string]: unknown;
         };
         service_tier?: unknown;
         speed?: 'fast' | 'standard';
@@ -33687,11 +33719,13 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | Array<{
             type: 'text';
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         }>;
         temperature?: number;
         thinking?: {
@@ -33780,6 +33814,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         anthropic_version?: string;
         anthropic_beta?: Array<string>;
         _isStreaming?: boolean;
+        [key: string]: unknown;
     };
     headers?: {
         /**
@@ -33881,6 +33916,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -33912,6 +33948,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -33953,6 +33990,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -33984,6 +34022,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -34021,7 +34060,8 @@ export type BedrockInvokeWithAgentAndModelData = {
         } | null;
         mcp_servers?: Array<unknown>;
         metadata?: {
-            user_id: string | null;
+            user_id?: string | null;
+            [key: string]: unknown;
         };
         output_config?: {
             effort?: string | null;
@@ -34031,6 +34071,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                     [key: string]: unknown;
                 };
             } | null;
+            [key: string]: unknown;
         };
         service_tier?: unknown;
         speed?: 'fast' | 'standard';
@@ -34041,11 +34082,13 @@ export type BedrockInvokeWithAgentAndModelData = {
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | Array<{
             type: 'text';
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         }>;
         temperature?: number;
         thinking?: {
@@ -34134,6 +34177,7 @@ export type BedrockInvokeWithAgentAndModelData = {
         anthropic_version?: string;
         anthropic_beta?: Array<string>;
         _isStreaming?: boolean;
+        [key: string]: unknown;
     };
     headers?: {
         /**
@@ -34236,6 +34280,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -34267,6 +34312,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -34308,6 +34354,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -34339,6 +34386,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -34376,7 +34424,8 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         } | null;
         mcp_servers?: Array<unknown>;
         metadata?: {
-            user_id: string | null;
+            user_id?: string | null;
+            [key: string]: unknown;
         };
         output_config?: {
             effort?: string | null;
@@ -34386,6 +34435,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                     [key: string]: unknown;
                 };
             } | null;
+            [key: string]: unknown;
         };
         service_tier?: unknown;
         speed?: 'fast' | 'standard';
@@ -34396,11 +34446,13 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | Array<{
             type: 'text';
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         }>;
         temperature?: number;
         thinking?: {
@@ -34489,6 +34541,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         anthropic_version?: string;
         anthropic_beta?: Array<string>;
         _isStreaming?: boolean;
+        [key: string]: unknown;
     };
     headers?: {
         /**
@@ -34523,6 +34576,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -34554,6 +34608,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -34595,6 +34650,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -34626,6 +34682,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -34663,7 +34720,8 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         } | null;
         mcp_servers?: Array<unknown>;
         metadata?: {
-            user_id: string | null;
+            user_id?: string | null;
+            [key: string]: unknown;
         };
         output_config?: {
             effort?: string | null;
@@ -34673,6 +34731,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                     [key: string]: unknown;
                 };
             } | null;
+            [key: string]: unknown;
         };
         service_tier?: unknown;
         speed?: 'fast' | 'standard';
@@ -34683,11 +34742,13 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | Array<{
             type: 'text';
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         }>;
         temperature?: number;
         thinking?: {
@@ -34776,6 +34837,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         anthropic_version?: string;
         anthropic_beta?: Array<string>;
         _isStreaming?: boolean;
+        [key: string]: unknown;
     };
     headers?: {
         /**
@@ -49798,6 +49860,7 @@ export type GetInteractionsResponses = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -49829,6 +49892,7 @@ export type GetInteractionsResponses = {
                                 type: 'text';
                                 cache_control?: unknown;
                                 citations?: Array<unknown> | null;
+                                [key: string]: unknown;
                             } | {
                                 type: 'image';
                                 source: {
@@ -49870,6 +49934,7 @@ export type GetInteractionsResponses = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -49901,6 +49966,7 @@ export type GetInteractionsResponses = {
                                     type: 'text';
                                     cache_control?: unknown;
                                     citations?: Array<unknown> | null;
+                                    [key: string]: unknown;
                                 } | {
                                     type: 'image';
                                     source: {
@@ -49934,11 +50000,12 @@ export type GetInteractionsResponses = {
                 max_tokens: number;
                 container?: string | null;
                 context_management?: {
-                    [key: string]: never;
+                    [key: string]: unknown;
                 } | null;
                 mcp_servers?: Array<unknown>;
                 metadata?: {
-                    user_id: string | null;
+                    user_id?: string | null;
+                    [key: string]: unknown;
                 };
                 output_config?: {
                     effort?: string | null;
@@ -49948,6 +50015,7 @@ export type GetInteractionsResponses = {
                             [key: string]: unknown;
                         };
                     } | null;
+                    [key: string]: unknown;
                 };
                 service_tier?: unknown;
                 speed?: 'fast' | 'standard';
@@ -49958,11 +50026,13 @@ export type GetInteractionsResponses = {
                     text: string;
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | Array<{
                     type: 'text';
                     text: string;
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 }>;
                 temperature?: number;
                 thinking?: {
@@ -50051,6 +50121,7 @@ export type GetInteractionsResponses = {
                 anthropic_version?: string;
                 anthropic_beta?: Array<string>;
                 _isStreaming?: boolean;
+                [key: string]: unknown;
             } | {
                 [key: string]: unknown;
             };
@@ -50062,6 +50133,7 @@ export type GetInteractionsResponses = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -50093,6 +50165,7 @@ export type GetInteractionsResponses = {
                                 type: 'text';
                                 cache_control?: unknown;
                                 citations?: Array<unknown> | null;
+                                [key: string]: unknown;
                             } | {
                                 type: 'image';
                                 source: {
@@ -50134,6 +50207,7 @@ export type GetInteractionsResponses = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -50165,6 +50239,7 @@ export type GetInteractionsResponses = {
                                     type: 'text';
                                     cache_control?: unknown;
                                     citations?: Array<unknown> | null;
+                                    [key: string]: unknown;
                                 } | {
                                     type: 'image';
                                     source: {
@@ -50198,11 +50273,12 @@ export type GetInteractionsResponses = {
                 max_tokens: number;
                 container?: string | null;
                 context_management?: {
-                    [key: string]: never;
+                    [key: string]: unknown;
                 } | null;
                 mcp_servers?: Array<unknown>;
                 metadata?: {
-                    user_id: string | null;
+                    user_id?: string | null;
+                    [key: string]: unknown;
                 };
                 output_config?: {
                     effort?: string | null;
@@ -50212,6 +50288,7 @@ export type GetInteractionsResponses = {
                             [key: string]: unknown;
                         };
                     } | null;
+                    [key: string]: unknown;
                 };
                 service_tier?: unknown;
                 speed?: 'fast' | 'standard';
@@ -50222,11 +50299,13 @@ export type GetInteractionsResponses = {
                     text: string;
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | Array<{
                     type: 'text';
                     text: string;
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 }>;
                 temperature?: number;
                 thinking?: {
@@ -50315,6 +50394,7 @@ export type GetInteractionsResponses = {
                 anthropic_version?: string;
                 anthropic_beta?: Array<string>;
                 _isStreaming?: boolean;
+                [key: string]: unknown;
             } | {
                 [key: string]: unknown;
             } | null;
@@ -57157,6 +57237,7 @@ export type GetInteractionResponses = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -57188,6 +57269,7 @@ export type GetInteractionResponses = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -57229,6 +57311,7 @@ export type GetInteractionResponses = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -57260,6 +57343,7 @@ export type GetInteractionResponses = {
                                 type: 'text';
                                 cache_control?: unknown;
                                 citations?: Array<unknown> | null;
+                                [key: string]: unknown;
                             } | {
                                 type: 'image';
                                 source: {
@@ -57293,11 +57377,12 @@ export type GetInteractionResponses = {
             max_tokens: number;
             container?: string | null;
             context_management?: {
-                [key: string]: never;
+                [key: string]: unknown;
             } | null;
             mcp_servers?: Array<unknown>;
             metadata?: {
-                user_id: string | null;
+                user_id?: string | null;
+                [key: string]: unknown;
             };
             output_config?: {
                 effort?: string | null;
@@ -57307,6 +57392,7 @@ export type GetInteractionResponses = {
                         [key: string]: unknown;
                     };
                 } | null;
+                [key: string]: unknown;
             };
             service_tier?: unknown;
             speed?: 'fast' | 'standard';
@@ -57317,11 +57403,13 @@ export type GetInteractionResponses = {
                 text: string;
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | Array<{
                 type: 'text';
                 text: string;
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             }>;
             temperature?: number;
             thinking?: {
@@ -57410,6 +57498,7 @@ export type GetInteractionResponses = {
             anthropic_version?: string;
             anthropic_beta?: Array<string>;
             _isStreaming?: boolean;
+            [key: string]: unknown;
         } | {
             [key: string]: unknown;
         };
@@ -57421,6 +57510,7 @@ export type GetInteractionResponses = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -57452,6 +57542,7 @@ export type GetInteractionResponses = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -57493,6 +57584,7 @@ export type GetInteractionResponses = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -57524,6 +57616,7 @@ export type GetInteractionResponses = {
                                 type: 'text';
                                 cache_control?: unknown;
                                 citations?: Array<unknown> | null;
+                                [key: string]: unknown;
                             } | {
                                 type: 'image';
                                 source: {
@@ -57557,11 +57650,12 @@ export type GetInteractionResponses = {
             max_tokens: number;
             container?: string | null;
             context_management?: {
-                [key: string]: never;
+                [key: string]: unknown;
             } | null;
             mcp_servers?: Array<unknown>;
             metadata?: {
-                user_id: string | null;
+                user_id?: string | null;
+                [key: string]: unknown;
             };
             output_config?: {
                 effort?: string | null;
@@ -57571,6 +57665,7 @@ export type GetInteractionResponses = {
                         [key: string]: unknown;
                     };
                 } | null;
+                [key: string]: unknown;
             };
             service_tier?: unknown;
             speed?: 'fast' | 'standard';
@@ -57581,11 +57676,13 @@ export type GetInteractionResponses = {
                 text: string;
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | Array<{
                 type: 'text';
                 text: string;
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             }>;
             temperature?: number;
             thinking?: {
@@ -57674,6 +57771,7 @@ export type GetInteractionResponses = {
             anthropic_version?: string;
             anthropic_beta?: Array<string>;
             _isStreaming?: boolean;
+            [key: string]: unknown;
         } | {
             [key: string]: unknown;
         } | null;

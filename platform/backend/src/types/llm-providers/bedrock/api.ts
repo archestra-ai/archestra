@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   MessagesRequestSchema as AnthropicMessagesRequestSchema,
   MessagesResponseSchema as AnthropicMessagesResponseSchema,
+  MessagesResponseWireSchema as AnthropicMessagesResponseWireSchema,
 } from "../anthropic/api";
 import {
   MessageSchema,
@@ -111,6 +112,7 @@ export const InvokeRequestSchema = AnthropicMessagesRequestSchema.extend({
  * Messages API response.
  */
 export const InvokeResponseSchema = AnthropicMessagesResponseSchema;
+export const InvokeResponseWireSchema = AnthropicMessagesResponseWireSchema;
 
 // =============================================================================
 // RESPONSE SCHEMAS

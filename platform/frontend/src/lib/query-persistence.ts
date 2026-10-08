@@ -69,6 +69,11 @@ export function startPersistingQueryCache(client: QueryClient): () => void {
   };
 }
 
+/** Save cache evictions before an immediate reload can restore the old snapshot. */
+export function flushPersistedQueryCache(client: QueryClient): void {
+  writeSnapshot(client);
+}
+
 /**
  * Point the snapshot at `scope` — a stable id for "this user in this
  * workspace". A scope that does not match the stored one means the browser is
@@ -200,7 +205,9 @@ function writeSnapshot(client: QueryClient): void {
 
   const state = dehydrate(client, {
     shouldDehydrateQuery: (query) =>
-      query.state.status === "success" && query.meta?.persist === true,
+      query.state.status === "success" &&
+      !query.state.isInvalidated &&
+      query.meta?.persist === true,
     shouldDehydrateMutation: () => false,
   });
 

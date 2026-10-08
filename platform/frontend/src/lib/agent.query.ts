@@ -21,6 +21,7 @@ import { incomingEmailKeys } from "@/lib/chatops/incoming-email.query";
 import { useAllMatching } from "@/lib/hooks/use-all-matching";
 import {
   BOOTSTRAP_QUERY_RETRY,
+  flushPersistedQueryCache,
   PERSISTED_QUERY_META,
 } from "@/lib/query-persistence";
 import { reportApiError, throwOnApiError } from "@/lib/utils/api";
@@ -445,10 +446,14 @@ export function useUpdateProfile(options?: { successMessage?: string }) {
     },
     onSuccess: (data, variables) => {
       if (!data) return;
+      queryClient.removeQueries({ queryKey: ["agents"], type: "inactive" });
       // Immediately update the specific agent's cache so navigating to
       // chat (or any other page using useProfile) shows fresh data
       queryClient.setQueryData(["agents", variables.id], data);
       queryClient.invalidateQueries({ queryKey: ["agents"] });
+      queryClient.invalidateQueries({
+        queryKey: ["chat", "agents", variables.id, "mcp-tools"],
+      });
       if (options?.successMessage) {
         toast.success(options.successMessage);
       }
@@ -465,6 +470,7 @@ export function useUpdateProfile(options?: { successMessage?: string }) {
       if (variables.data?.knowledgeBaseIds !== undefined) {
         queryClient.invalidateQueries({ queryKey: ["knowledge-bases"] });
       }
+      flushPersistedQueryCache(queryClient);
     },
   });
 }

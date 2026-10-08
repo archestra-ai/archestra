@@ -5,10 +5,11 @@ import {
   providerRequiresPerUserCredential,
   type SupportedProvider,
 } from "@archestra/shared";
+import { INSTALLER_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import Link from "next/link";
 import { type ReactNode, useEffect, useMemo, useState } from "react";
 import { ClientIcon } from "@/app/connection/client-icon";
-import { CONNECT_CLIENTS } from "@/app/connection/clients";
+import { CONNECT_CLIENTS, orderedClients } from "@/app/connection/clients";
 import {
   applyDefaultBaseUrl,
   applyVisibility,
@@ -27,7 +28,6 @@ import {
 } from "@/components/settings/settings-block";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MultiSelectCombobox } from "@/components/ui/multi-select-combobox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { SingleSelectCombobox } from "@/components/ui/single-select-combobox";
 import { Switch } from "@/components/ui/switch";
@@ -42,10 +42,20 @@ import {
   useUpdateConnectionSettings,
 } from "@/lib/organization.query";
 
+import { AvailableAgentsList } from "./available-agents-list";
+
 const DEFAULT_VALUE = "__default__";
 // "Any client" is always visible on the connection page; admins cannot hide it.
 const FILTERABLE_CLIENTS = CONNECT_CLIENTS.filter((c) => c.id !== "generic");
 const ALL_CLIENT_IDS = FILTERABLE_CLIENTS.map((c) => c.id);
+const DEFAULT_CLIENT_ORDER = [
+  ...INSTALLER_CLIENT_IDS,
+  ...FILTERABLE_CLIENTS.filter(
+    (client) => !INSTALLER_CLIENT_IDS.some((id) => id === client.id),
+  )
+    .sort((a, b) => a.label.localeCompare(b.label))
+    .map((client) => client.id),
+];
 const NO_DEFAULT_URL = "__none__";
 
 export function ConnectionSettingsForm() {
@@ -59,6 +69,8 @@ export function ConnectionSettingsForm() {
   // UI stores the set of visible clients/providers; null in DB = show all.
   const [shownClientIds, setShownClientIds] =
     useState<string[]>(ALL_CLIENT_IDS);
+  const [clientOrder, setClientOrder] =
+    useState<string[]>(DEFAULT_CLIENT_ORDER);
   const [baseUrlMeta, setBaseUrlMeta] = useState<
     Record<
       string,
@@ -89,6 +101,11 @@ export function ConnectionSettingsForm() {
     setGatewayId(organization.connectionDefaultMcpGatewayId ?? null);
     setDefaultClientId(organization.connectionDefaultClientId ?? null);
     setShownClientIds(organization.connectionShownClientIds ?? ALL_CLIENT_IDS);
+    setClientOrder(
+      orderedClients(organization.connectionClientOrder ?? DEFAULT_CLIENT_ORDER)
+        .filter((c) => c.id !== "generic")
+        .map((c) => c.id),
+    );
     setBaseUrlMeta(buildBaseUrlMeta(organization.connectionBaseUrls ?? null));
     setDefaultProviderKeys(
       (organization.connectionDefaultProviderKeys ?? {}) as Record<
@@ -120,6 +137,19 @@ export function ConnectionSettingsForm() {
   )
     .slice()
     .sort();
+  const serverClientOrder = orderedClients(
+    organization?.connectionClientOrder ?? DEFAULT_CLIENT_ORDER,
+  )
+    .filter((c) => c.id !== "generic")
+    .map((c) => c.id);
+  const selectedClientOrder = orderedClients(clientOrder)
+    .filter((c) => shownClientIds.includes(c.id))
+    .map((c) => c.id);
+  const clientOrderDirty =
+    JSON.stringify(selectedClientOrder) !==
+    JSON.stringify(
+      serverClientOrder.filter((id) => serverShownClients.includes(id)),
+    );
   const serverBaseUrlMeta = useMemo(
     () => buildBaseUrlMeta(organization?.connectionBaseUrls ?? null),
     [organization?.connectionBaseUrls],
@@ -161,6 +191,7 @@ export function ConnectionSettingsForm() {
     defaultClientId !== serverDefaultClientId ||
     JSON.stringify([...shownClientIds].sort()) !==
       JSON.stringify(serverShownClients) ||
+    clientOrderDirty ||
     skillsEnabled !== serverSkillsEnabled ||
     llmProxyEnabled !== serverLlmProxyEnabled ||
     runtimeHandoffEnabled !== serverRuntimeHandoffEnabled ||
@@ -188,6 +219,9 @@ export function ConnectionSettingsForm() {
           ? null
           : runtimeHandoffInstructions.trim(),
       connectionShownClientIds: collapseIfAll(shownClientIds, ALL_CLIENT_IDS),
+      ...(clientOrderDirty
+        ? { connectionClientOrder: selectedClientOrder }
+        : {}),
       connectionBaseUrls: collapseBaseUrlMeta(envBaseUrls, baseUrlMeta),
       connectionDefaultProviderKeys:
         Object.keys(defaultProviderKeys).length > 0
@@ -209,6 +243,7 @@ export function ConnectionSettingsForm() {
     setGatewayId(serverGatewayId);
     setDefaultClientId(serverDefaultClientId);
     setShownClientIds(serverShownClients);
+    setClientOrder(serverClientOrder);
     setBaseUrlMeta(serverBaseUrlMeta);
     setDefaultProviderKeys(serverDefaultProviderKeys);
     setSkillsEnabled(serverSkillsEnabled);
@@ -532,19 +567,16 @@ export function ConnectionSettingsForm() {
               )}
 
               <SettingSection
-                title="Available clients"
-                description="Which clients this deployment offers setup instructions for. “Any client” is always shown."
+                title="Available agents"
+                description="Add the agents you want to offer on Connect, then drag their pills or use left/right arrow keys to reorder. Generic client is always shown last."
               >
-                <MultiSelectCombobox
-                  options={FILTERABLE_CLIENTS.map((c) => ({
-                    value: c.id,
-                    label: c.label,
-                    icon: <ClientIcon client={c} size={18} />,
-                  }))}
-                  value={shownClientIds}
-                  onChange={setShownClientIds}
-                  placeholder="Select clients…"
-                  emptyMessage="No clients found."
+                <AvailableAgentsList
+                  clients={orderedClients(clientOrder).filter(
+                    (c) => c.id !== "generic",
+                  )}
+                  shownClientIds={shownClientIds}
+                  onShownClientIdsChange={setShownClientIds}
+                  onOrderChange={setClientOrder}
                   disabled={locked}
                 />
               </SettingSection>

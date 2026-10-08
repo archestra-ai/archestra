@@ -83,18 +83,16 @@ export function AgentSearch({
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const featuredIds = new Set((tiled ?? data.featuredClients).map((c) => c.id));
-  // One flat list of the agents without a tile by name, filtered here (not
-  // by cmdk, which reorders by score) so Generic client always stays last,
-  // whatever the search, as the fallback.
+  // Filter here instead of cmdk so search preserves the picker order.
   const needle = query.trim().toLowerCase();
-  const agents = data.clients
-    .filter(
-      (c) =>
-        !featuredIds.has(c.id) &&
-        c.id !== "generic" &&
-        `${c.label} ${c.sub}`.toLowerCase().includes(needle),
-    )
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const agents = data.clients.filter(
+    (c) =>
+      !featuredIds.has(c.id) &&
+      c.id !== "generic" &&
+      `${c.label} ${c.sub}`.toLowerCase().includes(needle),
+  );
+  if (!data.hasClientOrder)
+    agents.sort((a, b) => a.label.localeCompare(b.label));
   const generic = data.clients.find((c) => c.id === "generic");
   const shown = generic ? [...agents, generic] : agents;
   const choose = (id: string) => {
@@ -528,13 +526,15 @@ function Empty({ children }: { children: ReactNode }) {
 
 /**
  * Every agent the picker offers, in its order: the featured tiles, then the
- * Other agents list by name, with Generic client last.
+ * Other agents list, with Generic client last.
  */
 export function agentsInPickerOrder(data: ConnectPageData): ConnectClient[] {
   const featuredIds = new Set(data.featuredClients.map((c) => c.id));
-  const others = data.clients
-    .filter((c) => !featuredIds.has(c.id) && c.id !== "generic")
-    .sort((a, b) => a.label.localeCompare(b.label));
+  const others = data.clients.filter(
+    (c) => !featuredIds.has(c.id) && c.id !== "generic",
+  );
+  if (!data.hasClientOrder)
+    others.sort((a, b) => a.label.localeCompare(b.label));
   const generic = data.clients.find((c) => c.id === "generic");
   return [...data.featuredClients, ...others, ...(generic ? [generic] : [])];
 }

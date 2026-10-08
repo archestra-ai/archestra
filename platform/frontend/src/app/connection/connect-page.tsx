@@ -388,10 +388,13 @@ function DotField() {
 // Up to this many tiles sit in one centered row instead of the grid.
 const ROW_MAX = 3;
 
-/** Non-featured agents the admin allows (Generic client alone doesn't count). */
+/** Agents offered behind the overflow tile. */
 function hasOtherAgents(data: ConnectPageData) {
   const featuredIds = new Set(data.featuredClients.map((c) => c.id));
-  return data.clients.some((c) => !featuredIds.has(c.id) && c.id !== "generic");
+  return data.clients.some(
+    (c) =>
+      !featuredIds.has(c.id) && (c.id !== "generic" || data.hasClientOrder),
+  );
 }
 
 function tileCount(data: ConnectPageData) {

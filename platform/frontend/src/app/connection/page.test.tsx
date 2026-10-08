@@ -115,6 +115,7 @@ function mockOrganization(overrides: Record<string, unknown>) {
 
 beforeEach(() => {
   vi.clearAllMocks();
+  Element.prototype.scrollIntoView = vi.fn();
   vi.mocked(useAppName).mockReturnValue("Example Platform");
   vi.mocked(useHasPermissions).mockReturnValue({
     data: false,
@@ -153,6 +154,91 @@ beforeEach(() => {
   vi.mocked(useGuardrailsDeployment).mockReturnValue({
     data: undefined,
   } as ReturnType<typeof useGuardrailsDeployment>);
+});
+
+describe("ConnectPage saved agent order", () => {
+  it("renders saved order in tiles, including agents previously in Other agents", async () => {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    mockOrganization({
+      data: {
+        connectionClientOrder: ["n8n", "codex", "claude-code"],
+        connectionDefaultClientId: "codex",
+        connectionShownClientIds: ["claude-code", "n8n", "codex"],
+      },
+    });
+    render(<ConnectionPage />);
+    const names = screen
+      .getAllByRole("button")
+      .map((button) => button.textContent?.trim());
+    const tileNames = names.filter((name) =>
+      ["n8n", "Codex", "Claude Code"].includes(name ?? ""),
+    );
+    expect(tileNames).toEqual(["n8n", "Codex", "Claude Code"]);
+    expect(screen.getByRole("button", { name: /Codex$/ })).toHaveAttribute(
+      "aria-pressed",
+      "true",
+    );
+    await userEvent
+      .setup()
+      .click(screen.getByRole("button", { name: "Other agents" }));
+    expect(
+      screen.getByRole("option", { name: /Generic client/ }),
+    ).toBeVisible();
+    await userEvent
+      .setup()
+      .click(screen.getByRole("option", { name: /Generic client/ }));
+    expect(
+      screen.getByRole("button", { name: "Generic client, change agent" }),
+    ).toHaveAttribute("aria-pressed", "true");
+  });
+
+  it("keeps saved order in the overflow search when tiles do not fit", async () => {
+    const width = vi
+      .spyOn(Element.prototype, "clientWidth", "get")
+      .mockReturnValue(320);
+    try {
+      vi.mocked(useSearchParams).mockReturnValue(
+        new URLSearchParams() as ReturnType<typeof useSearchParams>,
+      );
+      mockOrganization({
+        data: {
+          connectionClientOrder: [
+            "n8n",
+            "codex",
+            "openclaw",
+            "cursor",
+            "claude-code",
+          ],
+          connectionShownClientIds: [
+            "claude-code",
+            "cursor",
+            "codex",
+            "n8n",
+            "openclaw",
+          ],
+        },
+      });
+      render(<ConnectionPage />);
+      const user = userEvent.setup();
+      await user.click(screen.getByRole("button", { name: "Other agents" }));
+      expect(
+        screen
+          .getAllByRole("option")
+          .map((option) => option.getAttribute("data-value")),
+      ).toEqual(["openclaw", "cursor", "claude-code", "generic"]);
+      await user.type(screen.getByPlaceholderText("Search agents"), "c");
+      expect(
+        screen
+          .getAllByRole("option")
+          .map((option) => option.getAttribute("data-value")),
+      ).toEqual(["openclaw", "cursor", "claude-code", "generic"]);
+    } finally {
+      width.mockRestore();
+    }
+  });
 });
 
 describe("ConnectPage guardrails chip", () => {

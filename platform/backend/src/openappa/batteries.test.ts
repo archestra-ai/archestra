@@ -577,6 +577,7 @@ describe("a battery attached to a detected server", () => {
           {
             target: "claude-code.acme",
             attachment: { kind: "detected", detectedId: "claude-code.acme" },
+            catalogId: null,
           },
         ],
       }),
@@ -635,6 +636,40 @@ describe("a battery attached to a detected server", () => {
       await openappaBatteriesService.getEffectivePolicy(organizationId);
     expect(hot.rootRevision).toBe(stub.rootRevision);
     expect(hot.content).toContain(helperUrlBase(row.id));
+  });
+
+  test("a later member's first sighting of a server the policy already composes with recomposes nothing", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    await observeLocalAcme({ organizationId, userId });
+    const { entry } = await uploadAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["claude-code.acme"]),
+    });
+    const composed =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+
+    const colleague = (await makeUser()).id;
+    await makeMember(colleague, organizationId);
+    const sightings = await observeLocalAcme({
+      organizationId,
+      userId: colleague,
+    });
+    await openappaBatteriesService.onToolsObserved({
+      organizationId,
+      sightings,
+    });
+
+    expect(
+      await openappaBatteriesService.getEffectivePolicy(organizationId),
+    ).toEqual(composed);
   });
 
   test("a catalog and a detected server under one namespace each get a row, and detaching one leaves the other's target and every tool row", async ({

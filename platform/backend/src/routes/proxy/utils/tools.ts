@@ -46,7 +46,7 @@ export const persistTools = async (
     userId?: string;
     externalAgentId?: string | null;
   },
-): Promise<{ firstSightings: RecordedObservation[] }> => {
+): Promise<RecordedObservation[]> => {
   logger.debug(
     { agentId, toolCount: tools.length },
     "[tools] persistTools: starting tool persistence",
@@ -54,7 +54,7 @@ export const persistTools = async (
 
   if (tools.length === 0) {
     logger.debug({ agentId }, "[tools] persistTools: no tools to persist");
-    return { firstSightings: [] };
+    return [];
   }
 
   // Get names of tools that already exist in the database (any type: catalog, proxy, etc.)
@@ -170,13 +170,11 @@ export const persistTools = async (
       .map(({ toolName }) => toolName);
     if (observableToolNames.length > 0) {
       try {
-        return {
-          firstSightings: await ToolObservationModel.recordObservations({
-            toolNames: observableToolNames,
-            userId: observer.userId,
-            externalAgentId: observer.externalAgentId,
-          }),
-        };
+        return await ToolObservationModel.recordObservations({
+          toolNames: observableToolNames,
+          userId: observer.userId,
+          externalAgentId: observer.externalAgentId,
+        });
       } catch (error) {
         logger.warn(
           { err: error, agentId },
@@ -185,7 +183,7 @@ export const persistTools = async (
       }
     }
   }
-  return { firstSightings: [] };
+  return [];
 };
 
 // === Internal helpers ===

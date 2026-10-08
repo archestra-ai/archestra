@@ -1402,7 +1402,7 @@ export async function handleLLMProxy<
         );
         // Apply the org's configured default policies to every newly
         // discovered tool persisted below.
-        const { firstSightings } = await utils.tools.persistTools(
+        const firstSightings = await utils.tools.persistTools(
           tools.map((t) => ({
             // A namespaced tool is persisted under its one-string spelling,
             // `<namespace>__<name>`, the way the client's call is evaluated.
@@ -1432,14 +1432,14 @@ export async function handleLLMProxy<
             : undefined,
           { userId, externalAgentId },
         );
-        // A server seen for the first time may already be named by the policy.
+        // A server seen for the first time may already be named by the
+        // policy: its first call must find the battery composed, so the
+        // recompose is waited for, not started on the side.
         if (firstSightings.length > 0)
-          trackBackgroundWork(
-            openappaBatteriesService.onToolsObserved({
-              organizationId: resolvedAgent.organizationId,
-              sightings: firstSightings,
-            }),
-          );
+          await openappaBatteriesService.onToolsObserved({
+            organizationId: resolvedAgent.organizationId,
+            sightings: firstSightings,
+          });
       }
     }
 

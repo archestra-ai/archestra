@@ -1539,15 +1539,17 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding: AppaPluginBinding,
     call: { name: string; namespace?: string },
   ): string {
+    if (binding.identity.attestationOf(call.name, call.namespace))
+      return binding.identity.canonicalize(call.name, call.namespace);
     const canonical =
-      !binding.identity.attestationOf(call.name, call.namespace) &&
       binding.adapter?.classifyToolName(call.name, call.namespace) === "local"
         ? binding.identity.canonicalize(
             binding.adapter.normalizeLocalToolName(call.name),
           )
         : binding.identity.canonicalize(call.name, call.namespace);
     // A client's own MCP server the policy names as an alias target is ruled
-    // under that target's name, the way the gateway's servers are.
+    // under that target's name, the way the gateway's servers are. Only a
+    // call the gateway did not attest gets here.
     const family = detectedClientFamilyOf(binding.adapter?.id);
     return family
       ? binding.identity.canonicalizeDetected(canonical, family)

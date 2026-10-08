@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { vi } from "vitest";
+import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
@@ -152,6 +153,85 @@ url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
     }
   });
 });
+
+test("a gateway tool the client spells like a local one keeps its attested name", async ({
+  makeOrganization,
+  makeUser,
+  makeAgent,
+}) => {
+  config.openappa.enabled = true;
+  await GuardrailsDeploymentModel.setEnabled(true);
+  const organizationId = (await makeOrganization()).id;
+  const user = await makeUser();
+  await GuardrailsPolicyModel.save({
+    organizationId,
+    content: ATTESTED_POLICY,
+    contentHash: createHash("sha256").update(ATTESTED_POLICY).digest("hex"),
+    updatedBy: user.id,
+    expectedRevision: 0,
+  });
+  const gateway = await makeAgent({
+    organizationId,
+    name: "gw",
+    agentType: "mcp_gateway",
+  });
+  const plugin = new AppaPluginArchestra([new AppaClaudeCodeAdapter()]);
+  const identity = await resolveGatewayToolIdentity({
+    organizationId,
+    declarations: [
+      {
+        name: "mcp__slack__send",
+        marker: attestToolDescription({
+          organizationId,
+          gatewayId: gateway.id,
+          advertisedName: "mcp__slack__send",
+          kind: "t",
+          description: undefined,
+        }),
+      },
+    ],
+    internalChat: false,
+  });
+  const context = pluginContext({
+    organizationId,
+    identity,
+    headers: { "user-agent": "claude-cli/2.0.0" },
+  });
+  const evaluate = vi
+    .spyOn(appaService, "evaluateToolCalls")
+    .mockResolvedValue([{ kind: "allow" }]);
+  try {
+    await plugin.onSessionInit(context);
+    await plugin.onToolCalls({
+      ...context,
+      toolCalls: [{ id: "call", name: "mcp__slack__send", arguments: {} }],
+    });
+    expect(evaluate.mock.calls[0]?.[2]?.canonicalize("mcp__slack__send")).toBe(
+      "mcp__slack__send",
+    );
+  } finally {
+    evaluate.mockRestore();
+  }
+});
+
+const ATTESTED_POLICY = `include = []
+
+[server_aliases]
+slack = ["claude-code.slack"]
+
+[policy]
+version = 2
+
+[[policy.annotator]]
+name = "noop"
+
+[[policy.tool]]
+name = "*"
+annotator = "noop"
+
+[externals.annotators.noop]
+url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
+`;
 
 function pluginContext(params: {
   organizationId: string;

@@ -26,43 +26,29 @@ type DetectedToolName = { label: string; toolName: string };
  *
  * - Claude Code and Codex: `mcp__<label>__<tool>` (a Codex namespace member
  *   is persisted in this spelling).
- * - OpenCode: `mcp:<label>:<tool>`. Its other spelling, `<label>_<tool>`,
- *   cannot be split without knowing the label, so it is not read here.
+ * - OpenCode: `mcp:<label>:<tool>`, or `<label>_<tool>` against the labels
+ *   the policy already declares for OpenCode (`openCodeLabels`), the longest
+ *   declared label winning. Nothing is learned from the name itself.
+ *
+ * A tool part holding `__` is refused on every client: the runtime splits
+ * `<target>__<tool>` at its last `__`, so such a tool could not be ruled
+ * under its server.
  */
 export function parseDetectedToolName(
   family: DetectedClientFamily,
   name: string,
+  openCodeLabels: Iterable<string> = [],
 ): DetectedToolName | undefined {
   switch (family) {
     case "claude-code":
     case "codex":
       return parseDoubleUnderscoreSpelling(name);
     case "opencode":
-      return parseOpenCodeColonSpelling(name);
+      return (
+        parseOpenCodeColonSpelling(name) ??
+        parseOpenCodeLabeledToolName(name, openCodeLabels)
+      );
   }
-}
-
-/**
- * OpenCode's `<label>_<tool>` spelling, resolved against labels an alias
- * target already declares for OpenCode. The longest declared label wins;
- * nothing is learned from the name itself.
- */
-export function parseOpenCodeLabeledToolName(
-  name: string,
-  declaredLabels: Iterable<string>,
-): DetectedToolName | undefined {
-  let best: DetectedToolName | undefined;
-  for (const label of declaredLabels) {
-    const prefix = `${label}_`;
-    if (
-      name.length > prefix.length &&
-      name.startsWith(prefix) &&
-      (best === undefined || label.length > best.label.length)
-    ) {
-      best = { label, toolName: name.slice(prefix.length) };
-    }
-  }
-  return best;
 }
 
 /** Splits a detected server id at its first `.`; the family set has no dots. */
@@ -131,15 +117,8 @@ function parseDoubleUnderscoreSpelling(
   const toolName = rest.slice(
     separator + MCP_SERVER_TOOL_NAME_SEPARATOR.length,
   );
-  // A second `__` leaves the split ambiguous, and the runtime splits a
-  // canonical name at its last `__`, so such a tool could not be governed.
-  if (
-    toolName === "" ||
-    toolName.includes(MCP_SERVER_TOOL_NAME_SEPARATOR) ||
-    !isValidDetectedLabel(label)
-  ) {
+  if (!isValidDetectedToolPart(toolName) || !isValidDetectedLabel(label))
     return undefined;
-  }
   return { label, toolName };
 }
 
@@ -152,6 +131,34 @@ function parseOpenCodeColonSpelling(
   if (separator <= 0) return undefined;
   const label = rest.slice(0, separator);
   const toolName = rest.slice(separator + 1);
-  if (toolName === "" || !isValidDetectedLabel(label)) return undefined;
+  if (!isValidDetectedToolPart(toolName) || !isValidDetectedLabel(label))
+    return undefined;
   return { label, toolName };
+}
+
+function parseOpenCodeLabeledToolName(
+  name: string,
+  declaredLabels: Iterable<string>,
+): DetectedToolName | undefined {
+  let best: DetectedToolName | undefined;
+  for (const label of declaredLabels) {
+    const prefix = `${label}_`;
+    if (
+      name.startsWith(prefix) &&
+      isValidDetectedToolPart(name.slice(prefix.length)) &&
+      (best === undefined || label.length > best.label.length)
+    ) {
+      best = { label, toolName: name.slice(prefix.length) };
+    }
+  }
+  return best;
+}
+
+/** A tool part the runtime can keep under its server: non-empty, no `__`, no leading `_`. */
+function isValidDetectedToolPart(toolName: string): boolean {
+  return (
+    toolName.length > 0 &&
+    !toolName.startsWith("_") &&
+    !toolName.includes(MCP_SERVER_TOOL_NAME_SEPARATOR)
+  );
 }

@@ -11,7 +11,6 @@ import {
   isDetectedClientFamily,
   parseDetectedServerId,
   parseDetectedToolName,
-  parseOpenCodeLabeledToolName,
 } from "@/utils/detected-mcp-server-names";
 
 /**
@@ -62,11 +61,11 @@ function groupDetectedServers(
   for (const observation of observations) {
     const family = clientFamilyOf(observation.externalAgentId);
     if (!family) continue;
-    const parsed =
-      parseDetectedToolName(family, observation.toolName) ??
-      (family === "opencode"
-        ? parseOpenCodeLabeledToolName(observation.toolName, openCodeLabels)
-        : undefined);
+    const parsed = parseDetectedToolName(
+      family,
+      observation.toolName,
+      openCodeLabels,
+    );
     if (!parsed) continue;
     const id = detectedServerId(family, parsed.label);
     let server = servers.get(id);

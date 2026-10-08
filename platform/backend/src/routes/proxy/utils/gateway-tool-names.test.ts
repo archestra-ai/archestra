@@ -954,6 +954,37 @@ url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
     expect(openCode("linear_create")).toBe("linear_create");
   });
 
+  test("compat mode: a declared server's label is never learned as the gateway's decoration", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organizationId = await declaringOrganization({
+      makeOrganization,
+      makeUser,
+    });
+    // The local server exposes a branded lookalike beside its own tools. With
+    // no gateway attested, compat would learn `mcp__slack__` as a decoration
+    // and strip it off `send`; the declared target keeps that from happening.
+    const identity = await resolve(
+      [
+        { name: "mcp__slack__archestra__run_tool" },
+        { name: "mcp__slack__send" },
+        { name: "mcp__other__archestra__run_tool" },
+        { name: "mcp__other__list" },
+      ],
+      { organizationId },
+    );
+    expect(identity.mode).toBe("compat");
+    expect(
+      identity.canonicalizeDetected(
+        identity.canonicalize("mcp__slack__send"),
+        "claude-code",
+      ),
+    ).toBe("claude-code.slack__send");
+    // A label the policy does not name is still learned, as before.
+    expect(identity.canonicalize("mcp__other__list")).toBe("list");
+  });
+
   test("a detected tool named like a control tool stays an ordinary tool", async ({
     makeOrganization,
     makeUser,

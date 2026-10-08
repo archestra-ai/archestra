@@ -60,7 +60,6 @@ import {
   isDetectedServerId,
   parseDetectedServerId,
   parseDetectedToolName,
-  parseOpenCodeLabeledToolName,
 } from "@/utils/detected-mcp-server-names";
 import {
   addedGrants,
@@ -292,7 +291,18 @@ class OpenAppaBatteriesService {
           detectedIdsOf({ ...sighting, declared }),
         ),
       );
-      if (!declared.some((target) => seen.has(target))) return;
+      const named = declared.filter((target) => seen.has(target));
+      if (named.length === 0) return;
+      // Another member's first sighting of a server the policy already
+      // composes with changes nothing; only a server new to the organization
+      // moves a battery off its stub.
+      const present = new Set(
+        (await OpenAppaBatteryInstallModel.list(organizationId)).flatMap(
+          (install) =>
+            install.kind === "detected" ? [install.detectedId] : [],
+        ),
+      );
+      if (named.every((target) => present.has(target))) return;
       await this.recompile(organizationId);
     } catch (error) {
       logger.warn(
@@ -1084,8 +1094,11 @@ class OpenAppaBatteriesService {
         .flatMap((namespace) => aliases.get(namespace) ?? [])
         .map((target) => ({
           target,
-          catalogs: prefixes.byPrefix.get(target) ?? new Set<string>(),
-          detected: detected.has(target),
+          attachments: targetAttachments({
+            target,
+            catalogs: prefixes.byPrefix.get(target) ?? new Set<string>(),
+            detected: detected.has(target),
+          }),
         }));
       const credentials = (entry.battery?.credentials ?? []).map(
         (variable) => ({
@@ -1095,7 +1108,13 @@ class OpenAppaBatteriesService {
         }),
       );
       const catalogIds = [
-        ...new Set(servers.flatMap(({ catalogs }) => [...catalogs])),
+        ...new Set(
+          servers.flatMap(({ attachments }) =>
+            attachments.flatMap((attachment) =>
+              attachment.kind === "catalog" ? [attachment.catalogId] : [],
+            ),
+          ),
+        ),
       ];
       const status = batteryStatus({
         resolved: entry.battery !== null && !duplicated.has(entry.name),
@@ -1150,8 +1169,10 @@ class OpenAppaBatteriesService {
         scope,
         composed: composes({ status, scope }),
         helpers: entry.battery?.helpers ?? [],
-        servers: servers.map(({ target, catalogs, detected }) => {
-          const attachment = serverAttachment({ target, catalogs, detected });
+        servers: servers.map(({ target, attachments }) => {
+          // A target that resolved to exactly one server names it; one that
+          // resolved to none or to several names nothing the view can show.
+          const attachment = attachments.length === 1 ? attachments[0] : null;
           return {
             target,
             attachment,
@@ -1163,22 +1184,7 @@ class OpenAppaBatteriesService {
       });
       const attachments: BatteryAttachment[] = organizationWide
         ? [{ kind: "organization" }]
-        : [
-            ...catalogIds.map(
-              (catalogId): BatteryAttachment => ({
-                kind: "catalog",
-                catalogId,
-              }),
-            ),
-            ...servers
-              .filter((server) => server.detected)
-              .map(
-                (server): BatteryAttachment => ({
-                  kind: "detected",
-                  detectedId: server.target,
-                }),
-              ),
-          ];
+        : servers.flatMap((server) => server.attachments);
       for (const attachment of attachments) {
         const key = rowKey({ batteryName: entry.name, attachment });
         if (rows.has(key)) continue;
@@ -1771,13 +1777,14 @@ function batteryStatus(params: {
       const { servers, conflicting } = governs;
       // Exactly one attachment per target: a catalog the prefix names, or the
       // detected server the target is the id of.
-      const attachments = (server: (typeof servers)[number]) =>
-        server.catalogs.size + (server.detected ? 1 : 0);
-      if (conflicting || servers.some((server) => attachments(server) > 1))
+      if (
+        conflicting ||
+        servers.some((server) => server.attachments.length > 1)
+      )
         return "naming_conflict";
       if (
         servers.length === 0 ||
-        servers.some((server) => attachments(server) === 0)
+        servers.some((server) => server.attachments.length === 0)
       )
         return "server_missing";
       return "active";
@@ -1796,8 +1803,7 @@ type BatteryGovernance =
       kind: "catalogs";
       servers: ReadonlyArray<{
         target: string;
-        catalogs: ReadonlySet<string>;
-        detected: boolean;
+        attachments: readonly BatteryServerAttachment[];
       }>;
       conflicting: boolean;
     };
@@ -2063,17 +2069,20 @@ async function detectedTargetsPresent(
   return new Set(declared.filter((target) => present.has(target)));
 }
 
-/** The one server an alias target resolved to, if it resolved to exactly one. */
-function serverAttachment(server: {
+/** Every server an alias target resolves to: the catalogs carrying it as a prefix, and the detected server it is the id of. */
+function targetAttachments(server: {
   target: string;
   catalogs: ReadonlySet<string>;
   detected: boolean;
-}): BatteryServerAttachment | null {
-  if (server.catalogs.size === 1 && !server.detected)
-    return { kind: "catalog", catalogId: [...server.catalogs][0] as string };
-  if (server.catalogs.size === 0 && server.detected)
-    return { kind: "detected", detectedId: server.target };
-  return null;
+}): BatteryServerAttachment[] {
+  return [
+    ...[...server.catalogs].map(
+      (catalogId): BatteryServerAttachment => ({ kind: "catalog", catalogId }),
+    ),
+    ...(server.detected
+      ? [{ kind: "detected" as const, detectedId: server.target }]
+      : []),
+  ];
 }
 
 /**
@@ -2088,16 +2097,13 @@ function detectedIdsOf(params: {
 }): string[] {
   const family = clientForExternalAgentIds([params.externalAgentId])?.filter;
   if (!family || !isDetectedClientFamily(family)) return [];
-  const parsed =
-    parseDetectedToolName(family, params.toolName) ??
-    (family === "opencode"
-      ? parseOpenCodeLabeledToolName(
-          params.toolName,
-          params.declared.flatMap((target) => {
-            const id = parseDetectedServerId(target);
-            return id?.family === "opencode" ? [id.label] : [];
-          }),
-        )
-      : undefined);
+  const parsed = parseDetectedToolName(
+    family,
+    params.toolName,
+    params.declared.flatMap((target) => {
+      const id = parseDetectedServerId(target);
+      return id?.family === "opencode" ? [id.label] : [];
+    }),
+  );
   return parsed ? [detectedServerId(family, parsed.label)] : [];
 }

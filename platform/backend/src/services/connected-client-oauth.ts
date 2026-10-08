@@ -42,7 +42,9 @@ export function connectClientForOAuthClientSql(columns: {
     const test =
       "clientId" in identity
         ? sql`${columns.clientId} = ${identity.clientId}`
-        : sql`${columns.name} ~ ${identity.clientNamePattern}
+        : "clientIdPattern" in identity
+          ? sql`${columns.clientId} ~ ${identity.clientIdPattern}`
+          : sql`${columns.name} ~ ${identity.clientNamePattern}
             AND ${identity.redirectUri} = ANY(${columns.redirectUris})`;
     return sql`WHEN ${test} THEN ${id}::text`;
   });
@@ -64,8 +66,11 @@ function matchesIdentity(
   identity: OAuthAgentIdentity,
   oauthClient: OAuthClientIdentity,
 ): boolean {
-  return "clientId" in identity
-    ? oauthClient.clientId === identity.clientId
-    : new RegExp(identity.clientNamePattern).test(oauthClient.name ?? "") &&
-        oauthClient.redirectUris.includes(identity.redirectUri);
+  if ("clientId" in identity) return oauthClient.clientId === identity.clientId;
+  if ("clientIdPattern" in identity)
+    return new RegExp(identity.clientIdPattern).test(oauthClient.clientId);
+  return (
+    new RegExp(identity.clientNamePattern).test(oauthClient.name ?? "") &&
+    oauthClient.redirectUris.includes(identity.redirectUri)
+  );
 }

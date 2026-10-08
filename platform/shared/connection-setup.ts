@@ -131,11 +131,13 @@ export const CLAUDE_DESKTOP_PROFILE_ID = "aa157426-f6a9-5ac5-8471-3b30b42bbe8f";
 
 /**
  * How the gateway tells an agent apart by its OAuth client: a fixed CIMD
- * client id that every install shares, or, for an agent that registers each
+ * client id that every install shares, a CIMD client id pattern for an agent
+ * whose metadata URL varies per login, or, for an agent that registers each
  * install (DCR), its client name pattern and fixed loopback redirect.
  */
 export type OAuthAgentIdentity =
   | { clientId: string }
+  | { clientIdPattern: string }
   | { clientNamePattern: string; redirectUri: string };
 
 /**
@@ -164,6 +166,16 @@ export const OAUTH_AGENTS = {
   droid: {
     label: "Droid",
     identity: { clientId: "https://api.factory.ai/mcp/oauth-client" },
+  },
+  // Signs in by CIMD at chatgpt.com/oauth/codex/client.json, or with a
+  // per-login callback id in the path (openai/codex rmcp-client,
+  // oauth_client_registration.rs).
+  codex: {
+    label: "Codex",
+    identity: {
+      clientIdPattern:
+        "^https://chatgpt\\.com/oauth/codex/([^/]+/)?client\\.json$",
+    },
   },
 } as const satisfies Record<
   string,

@@ -35,6 +35,7 @@ import {
   ChatOpsThreadContextModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
+  UserModel,
 } from "@/models";
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
@@ -56,9 +57,13 @@ import {
 import { chatOpsRunRegistry } from "./chatops-run-registry";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
+  CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS,
   CHATOPS_NO_REPLY_SENTINEL,
+  CHATOPS_SESSION_RESET_REPLY,
+  CHATOPS_SESSION_ROLLOVER_HINT,
   THREAD_MUTE_HINT,
 } from "./constants";
+import MSTeamsProvider from "./ms-teams-provider";
 import { buildHistorySkippedAttachmentsNote } from "./utils";
 
 describe("matchesAgentName", () => {
@@ -4845,6 +4850,261 @@ describe("ChatOpsManager server-side sessions", () => {
     expect(texts).toContain("Second reply");
     expect(texts).not.toContain("First reply");
   });
+
+  describe("chat without reply threads", () => {
+    function mockAgentReplies() {
+      let replyIndex = 0;
+      return vi
+        .spyOn(a2aExecutor, "executeA2AMessage")
+        .mockImplementation(async () => {
+          replyIndex += 1;
+          const text = `Agent reply ${replyIndex}`;
+          const id = crypto.randomUUID();
+          return {
+            text,
+            messageId: id,
+            finishReason: "stop",
+            responseUiMessage: {
+              id,
+              role: "assistant",
+              parts: [{ type: "text", text }],
+            },
+          };
+        });
+    }
+
+    async function chatMapping() {
+      return await ChatOpsThreadContextModel.findByThread({
+        provider: "telegram",
+        channelId: "tg-chat-1",
+        workspaceId: null,
+        threadId: "tg-chat-1",
+      });
+    }
+
+    test("a reset command starts a new conversation without running the agent", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const { senderEmail } = await setUpTelegramBinding({
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+      const executeSpy = mockAgentReplies();
+      const replies: ChatReplyOptions[] = [];
+      const provider = createSessionProvider({
+        getUserEmail: async () => senderEmail,
+        sendReply: async (options) => {
+          replies.push(options);
+          return "reply-id";
+        },
+      });
+      const manager = new ChatOpsManager();
+
+      await manager.processMessage({
+        message: sessionMessage({
+          text: "remember 42",
+          rawText: "remember 42",
+        }),
+        provider,
+      });
+      const before = await chatMapping();
+      if (!before) throw new Error("mapping missing");
+
+      const reset = await manager.processMessage({
+        message: sessionMessage({ text: "/reset", rawText: "/reset" }),
+        provider,
+      });
+      expect(reset.success).toBe(true);
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      expect(replies.at(-1)?.text).toBe(CHATOPS_SESSION_RESET_REPLY);
+      expect(await chatMapping()).toBeNull();
+
+      await manager.processMessage({
+        message: sessionMessage({
+          text: "what number?",
+          rawText: "what number?",
+        }),
+        provider,
+      });
+      const after = await chatMapping();
+      expect(after?.contextId).toBeDefined();
+      expect(after?.contextId).not.toBe(before.contextId);
+      // The new conversation starts empty; the old one keeps its history.
+      expect(executeSpy.mock.calls[1][0].messages).toEqual([]);
+      expect(
+        await A2AMessageModel.findByContextId(before.contextId),
+      ).toHaveLength(2);
+    });
+
+    test("rolls over to a new conversation after the chat was idle, and says so once", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const { senderEmail } = await setUpTelegramBinding({
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+      const executeSpy = mockAgentReplies();
+      const replies: ChatReplyOptions[] = [];
+      const provider = createSessionProvider({
+        getUserEmail: async () => senderEmail,
+        sendReply: async (options) => {
+          replies.push(options);
+          return "reply-id";
+        },
+      });
+      const manager = new ChatOpsManager();
+
+      await manager.processMessage({
+        message: sessionMessage({
+          text: "remember 42",
+          rawText: "remember 42",
+        }),
+        provider,
+      });
+      const before = await chatMapping();
+      if (!before) throw new Error("mapping missing");
+      expect(replies.at(-1)?.hint).toBeUndefined();
+
+      // Age the session past the rollover window.
+      await db
+        .update(schema.a2aContextsTable)
+        .set({
+          updatedAt: new Date(
+            Date.now() - CHATOPS_CHAT_SESSION_IDLE_ROLLOVER_MS - 60_000,
+          ),
+        })
+        .where(eq(schema.a2aContextsTable.id, before.contextId));
+
+      await manager.processMessage({
+        message: sessionMessage({
+          text: "what number?",
+          rawText: "what number?",
+        }),
+        provider,
+      });
+      const after = await chatMapping();
+      expect(after?.contextId).not.toBe(before.contextId);
+      expect(executeSpy.mock.calls[1][0].messages).toEqual([]);
+      expect(replies.at(-1)?.hint).toBe(CHATOPS_SESSION_ROLLOVER_HINT);
+
+      // The next turn continues the new session and carries no hint.
+      await manager.processMessage({
+        message: sessionMessage({ text: "and now?", rawText: "and now?" }),
+        provider,
+      });
+      expect((await chatMapping())?.contextId).toBe(after?.contextId);
+      expect(JSON.stringify(executeSpy.mock.calls[2][0].messages)).toContain(
+        "what number?",
+      );
+      expect(replies.at(-1)?.hint).toBeUndefined();
+    });
+
+    test("names the conversation's starter in the footer of group chat replies", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      await setUpTelegramBinding({
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+        extraEmails: ["bob@example.com"],
+      });
+      mockAgentReplies();
+      const replies: ChatReplyOptions[] = [];
+      const provider = createSessionProvider({
+        getUserEmail: async (userId) =>
+          userId === "tg-user-1" ? "alice@example.com" : "bob@example.com",
+        sendReply: async (options) => {
+          replies.push(options);
+          return "reply-id";
+        },
+      });
+      const manager = new ChatOpsManager();
+      const alice = await UserModel.findByEmail("alice@example.com");
+      if (!alice) throw new Error("alice missing");
+      const groupMetadata = {
+        conversationType: "groupChat",
+        botMentioned: true,
+      };
+
+      await manager.processMessage({
+        message: sessionMessage({ metadata: groupMetadata }),
+        provider,
+      });
+      // Bob speaks second: the footer still names Alice, who started it.
+      await manager.processMessage({
+        message: sessionMessage({
+          senderId: "tg-user-2",
+          senderName: "Bob",
+          metadata: groupMetadata,
+        }),
+        provider,
+      });
+      expect(replies).toHaveLength(2);
+      for (const reply of replies) {
+        expect(reply.footer).toContain(`conversation started by ${alice.name}`);
+      }
+
+      // A 1:1 chat needs no owner: it is obviously the sender's.
+      replies.length = 0;
+      await manager.processMessage({
+        message: sessionMessage(),
+        provider,
+      });
+      expect(replies[0]?.footer).not.toContain("conversation started by");
+    });
+
+    test("a reset command inside a thread goes to the agent", async ({
+      makeOrganization,
+      makeUser,
+      makeTeam,
+      makeTeamMember,
+      makeInternalAgent,
+    }) => {
+      const { senderEmail } = await setUpTelegramBinding({
+        makeOrganization,
+        makeUser,
+        makeTeam,
+        makeTeamMember,
+        makeInternalAgent,
+      });
+      const executeSpy = mockAgentReplies();
+      const provider = createSessionProvider({
+        getUserEmail: async () => senderEmail,
+      });
+      const manager = new ChatOpsManager();
+
+      await manager.processMessage({
+        message: sessionMessage({
+          threadId: "topic-7",
+          text: "reset",
+          rawText: "reset",
+        }),
+        provider,
+      });
+      expect(executeSpy).toHaveBeenCalledTimes(1);
+      expect(executeSpy.mock.calls[0][0].message).toContain("reset");
+    });
+  });
 });
 
 // =============================================================================
@@ -5198,5 +5458,168 @@ describe("ChatOpsManager per-channel instructions", () => {
     );
     expect(texts).toContain("first message");
     expect(texts.some((t) => t.includes(INSTRUCTIONS))).toBe(false);
+  });
+});
+
+describe("ChatOpsManager with a Microsoft Teams group chat", () => {
+  const GROUP_CHAT_ID = "19:group-chat-1@thread.v2";
+
+  /**
+   * The real provider, so parsing, the per-message session decision and the
+   * reply wiring are all exercised. Only its network edges are stubbed: the
+   * Bot Framework send, the Graph email lookup, and the typing indicator.
+   */
+  function createTeamsProvider(emailsByAadId: Record<string, string>) {
+    const provider = new MSTeamsProvider({
+      enabled: true,
+      appId: "app-id-123",
+      appSecret: "test-secret",
+      tenantId: "tenant-1",
+      graphTenantId: "tenant-1",
+      graphClientId: "app-id-123",
+      graphClientSecret: "test-secret",
+    });
+    // biome-ignore lint/suspicious/noExplicitAny: test-only — parsing only checks the adapter exists
+    (provider as any).adapter = {};
+    const replies: ChatReplyOptions[] = [];
+    vi.spyOn(provider, "sendReply").mockImplementation(async (options) => {
+      replies.push(options);
+      return `reply-${replies.length}`;
+    });
+    vi.spyOn(provider, "getUserEmail").mockImplementation(
+      async (aadId) => emailsByAadId[aadId] ?? null,
+    );
+    vi.spyOn(provider, "setTypingStatus").mockResolvedValue();
+    return { provider, replies };
+  }
+
+  /** A message as the Bot Framework delivers it from a Teams group chat. */
+  function groupChatActivity(params: {
+    from: { aadObjectId: string; name: string };
+    text: string;
+    replyToId?: string;
+  }) {
+    return {
+      type: "message",
+      id: `msg-${crypto.randomUUID()}`,
+      text: `<at>joey-claw</at> ${params.text}`,
+      channelId: "msteams",
+      conversation: {
+        id: GROUP_CHAT_ID,
+        conversationType: "groupChat",
+        tenantId: "tenant-1",
+      },
+      from: { id: `29:${params.from.aadObjectId}`, ...params.from },
+      recipient: { id: "28:app-id-123", name: "joey-claw" },
+      timestamp: new Date().toISOString(),
+      serviceUrl: "https://smba.trafficmanager.net/amer/",
+      channelData: { tenant: { id: "tenant-1" } },
+      entities: [
+        {
+          type: "mention",
+          mentioned: { id: "28:app-id-123", name: "joey-claw" },
+        },
+      ],
+      ...(params.replyToId && { replyToId: params.replyToId }),
+    };
+  }
+
+  test("members share one conversation, the footer names who started it, and reset starts a new one", async ({
+    makeOrganization,
+    makeUser,
+    makeTeam,
+    makeTeamMember,
+    makeInternalAgent,
+  }) => {
+    const org = await makeOrganization();
+    const alice = await makeUser({ email: "alice@example.com" });
+    const bob = await makeUser({ email: "bob@example.com" });
+    const team = await makeTeam(org.id, alice.id);
+    await makeTeamMember(team.id, alice.id);
+    await makeTeamMember(team.id, bob.id);
+    const agent = await makeInternalAgent({ organizationId: org.id });
+    await AgentTeamModel.assignTeamsToAgent(agent.id, [team.id]);
+    await ChatOpsChannelBindingModel.create({
+      organizationId: org.id,
+      provider: "ms-teams",
+      channelId: GROUP_CHAT_ID,
+      agentId: agent.id,
+    });
+
+    const executeSpy = vi
+      .spyOn(a2aExecutor, "executeA2AMessage")
+      .mockImplementation(async () => {
+        const id = crypto.randomUUID();
+        const text = `Agent reply ${executeSpy.mock.calls.length}`;
+        return {
+          text,
+          messageId: id,
+          finishReason: "stop",
+          responseUiMessage: {
+            id,
+            role: "assistant",
+            parts: [{ type: "text", text }],
+          },
+        };
+      });
+    const { provider, replies } = createTeamsProvider({
+      "aad-alice": "alice@example.com",
+      "aad-bob": "bob@example.com",
+    });
+    const manager = new ChatOpsManager();
+    const send = async (activity: ReturnType<typeof groupChatActivity>) => {
+      const message = await provider.parseWebhookNotification(activity, {});
+      if (!message) throw new Error("activity was not parsed");
+      return manager.processMessage({ message, provider });
+    };
+    const mapping = () =>
+      ChatOpsThreadContextModel.findByThread({
+        provider: "ms-teams",
+        channelId: GROUP_CHAT_ID,
+        workspaceId: null,
+        threadId: GROUP_CHAT_ID,
+      });
+    const ALICE = { aadObjectId: "aad-alice", name: "Alice" };
+    const BOB = { aadObjectId: "aad-bob", name: "Bob" };
+
+    // Alice starts the conversation.
+    await send(groupChatActivity({ from: ALICE, text: "remember 42" }));
+    const first = await mapping();
+    expect(first).not.toBeNull();
+    expect(replies[0]?.footer).toContain(
+      `conversation started by ${alice.name}`,
+    );
+
+    // Bob quote-replies Alice: a group chat has no reply threads, so the
+    // quote stays in the same conversation, which carries Alice's turn.
+    await send(
+      groupChatActivity({
+        from: BOB,
+        text: "what number?",
+        replyToId: "quoted-message-id",
+      }),
+    );
+    expect((await mapping())?.contextId).toBe(first?.contextId);
+    expect(JSON.stringify(executeSpy.mock.calls[1][0].messages)).toContain(
+      "remember 42",
+    );
+    // Bob spoke, but Alice still owns the conversation.
+    expect(replies[1]?.footer).toContain(
+      `conversation started by ${alice.name}`,
+    );
+
+    // Bob resets: no agent run, and the chat forgets the old conversation.
+    await send(groupChatActivity({ from: BOB, text: "reset" }));
+    expect(executeSpy).toHaveBeenCalledTimes(2);
+    expect(replies[2]?.text).toBe(CHATOPS_SESSION_RESET_REPLY);
+    expect(await mapping()).toBeNull();
+
+    // Bob's next message starts a new, empty conversation that he owns.
+    await send(groupChatActivity({ from: BOB, text: "hello again" }));
+    const second = await mapping();
+    expect(second?.contextId).toBeDefined();
+    expect(second?.contextId).not.toBe(first?.contextId);
+    expect(executeSpy.mock.calls[2][0].messages).toEqual([]);
+    expect(replies[3]?.footer).toContain(`conversation started by ${bob.name}`);
   });
 });

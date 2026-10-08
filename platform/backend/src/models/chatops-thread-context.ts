@@ -66,6 +66,64 @@ class ChatOpsThreadContextModel {
     }
     return existing;
   }
+
+  /**
+   * Remove a thread's mapping (a reset), returning the removed row. The
+   * context it pointed at is kept; the next message creates a new one.
+   */
+  static async deleteByThread(params: {
+    provider: ChatOpsThreadContext["provider"];
+    channelId: string;
+    workspaceId: string | null;
+    threadId: string;
+  }): Promise<ChatOpsThreadContext | null> {
+    const [removed] = await db
+      .delete(schema.chatopsThreadContextsTable)
+      .where(
+        and(
+          eq(schema.chatopsThreadContextsTable.provider, params.provider),
+          eq(schema.chatopsThreadContextsTable.channelId, params.channelId),
+          params.workspaceId === null
+            ? isNull(schema.chatopsThreadContextsTable.workspaceId)
+            : eq(
+                schema.chatopsThreadContextsTable.workspaceId,
+                params.workspaceId,
+              ),
+          eq(schema.chatopsThreadContextsTable.threadId, params.threadId),
+        ),
+      )
+      .returning();
+
+    return removed ?? null;
+  }
+
+  /**
+   * Point an existing mapping at a new context (an idle rollover),
+   * only if it still points at `expectedContextId`. Returns null when a
+   * concurrent message already moved it, so the caller re-reads the winner
+   * instead of overwriting it. The old context is kept, not deleted.
+   */
+  static async replaceContext(params: {
+    id: string;
+    expectedContextId: string;
+    contextId: string;
+  }): Promise<ChatOpsThreadContext | null> {
+    const [updated] = await db
+      .update(schema.chatopsThreadContextsTable)
+      .set({ contextId: params.contextId })
+      .where(
+        and(
+          eq(schema.chatopsThreadContextsTable.id, params.id),
+          eq(
+            schema.chatopsThreadContextsTable.contextId,
+            params.expectedContextId,
+          ),
+        ),
+      )
+      .returning();
+
+    return updated ?? null;
+  }
 }
 
 export default ChatOpsThreadContextModel;

@@ -87,6 +87,31 @@ describe("GET /api/connected-clients", () => {
     );
   });
 
+  test("merges Codex's setup and its per-login CIMD sign-in into one entry", async ({
+    makeOAuthClient,
+  }) => {
+    await redeem(user.id, "codex");
+    const clientId = "https://chatgpt.com/oauth/codex/a1b2c3/client.json";
+    await makeOAuthClient({ clientId, name: "Codex" });
+    await OAuthRefreshTokenModel.create({
+      tokenHash: crypto.randomUUID(),
+      clientId,
+      userId: user.id,
+      scopes: ["mcp"],
+      expiresAt: new Date(Date.now() + 60_000),
+    });
+
+    const response = await app.inject({
+      method: "GET",
+      url: "/api/connected-clients",
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toEqual([
+      expect.objectContaining({ clientId: "codex", name: "Codex" }),
+    ]);
+  });
+
   test("a sign-in counts as a connect when consented, not on each refresh", async ({
     makeOAuthClient,
   }) => {

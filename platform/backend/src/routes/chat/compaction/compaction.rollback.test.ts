@@ -342,14 +342,13 @@ describe("context compaction helpers", () => {
       previousSummary: null,
       conversationId: "test-conversation-id",
       messages: [
-        msg("u1", "user", "Critical original request: keep this exact goal."),
+        msg("u1", "user", "Original request."),
+        msg("u2", "user", "Critical follow-up: keep this exact goal."),
         msg("a1", "assistant", "x".repeat(130_000)),
       ],
     });
 
-    expect(prompt).toContain(
-      "Critical original request: keep this exact goal.",
-    );
+    expect(prompt).toContain("Critical follow-up: keep this exact goal.");
   });
 
   test("compaction prompt extracts text from data URL file parts without mediaType metadata", async () => {

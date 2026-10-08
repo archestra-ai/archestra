@@ -81,7 +81,9 @@ Follow **Cover the remaining tools** and **Ask about ambiguity** in the policy-w
 
 ## Propose
 
-Preview the change, then group the proposal by server:
+If nothing needs to change, say so and how unlisted tools behave (catch-all present or refused) in one or two sentences, offer one next step, and preview nothing.
+
+Otherwise preview the change, then group the proposal by server:
 
 - what the policy does, in plain English
 - batteries to add, each with its sentence from **Propose a battery**
@@ -119,10 +121,10 @@ None of these previews or publishes anything. When the operator then picks a cha
 
 ## Explain
 
-Read the policy with \`archestra__get_guardrails_policy\` and answer in plain language.
+Read the policy with \`archestra__get_guardrails_policy\` and answer in plain language. Do not say agents or data are protected beyond what specific rules cover.
 
 - For the policy: summarize the active rules, protected tools, and included batteries. If asked about subagents, distinguish tool-call rules from the separate child-return boundary.
-- For the security label: list the trust levels from most to least trusted and what lowers a session's trust. Then list the audiences from widest to narrowest, including groups and the audience each sits within, what reading data at each audience stops the agent from doing, and the batteries each audience reads its members from.
+- For the security label: take trust levels and audiences only from the policy and its batteries, and describe each rule from its fields, never from its comment. List the trust levels from most to least trusted and what lowers a session's trust. Then list the audiences from widest to narrowest, including groups and the audience each sits within, what reading data at each audience stops the agent from doing, and the batteries each audience reads its members from.
 
 End by asking in one sentence what the operator would like to change.
 
@@ -131,7 +133,7 @@ End by asking in one sentence what the operator would like to change.
 Inspect, then suggest; change nothing.
 
 1. Read the policy and inspect the servers in scope, the named target or every server you can inspect, with \`archestra__inspect_guardrails_server\` coverage rows and \`archestra__list_guardrails_battery_fits\`.
-2. Open with one sentence: how many of the inspected tools a specific rule covers, and that the rest run as they do now. Name at most two of the riskiest uncovered tools: ones that send data out, change or delete data, or read private data.
+2. Open with one sentence: how many of the inspected tools a specific rule covers, and that the rest run as they do now. Name at most two of the riskiest uncovered tools: ones that send data out, change or delete data, or read private data. The tools **Keep agents working** names are not uncovered risks; suggest restricting them only when the operator names them.
 3. Report each included battery that is not \`active\`, what is wrong, and how to fix it.
 4. Under **Available batteries**, give one line per battery that fits and would cover at least one more tool: its sentence from **Propose a battery**, how many tools it would cover, and whether it needs a token.
 5. End with up to three numbered changes ranked by impact, such as fixing a battery, adding batteries, or adding rules, so the operator can reply with a number.
@@ -202,5 +204,5 @@ Inspect the spawn tool, the child's tool rules, and the return boundary separate
 
 ## Provider-hosted tools
 
-Provider-hosted tools, such as Claude's advisor, run inside the model provider without a client-side call to gate, and an MCP inventory cannot discover them. During \`init\` with connected clients in scope, ask once which clients use them and whether provider-side execution is acceptable; do not ask elsewhere. A \`[[policy.tool]]\` rule cannot refuse their declaration. Do not classify one as a native client tool or promise that a rule gates it. If the operator requires refusing every hosted tool with a signed offer to use a local counterpart, list it as unsupported under **Needed for this to work**; do not invent an offer.
+Provider-hosted tools, such as Claude's advisor, run inside the model provider without a client-side call to gate, and an MCP inventory cannot discover them. During \`init\` with connected clients in scope, ask once which clients use them and whether provider-side execution is acceptable. Elsewhere, mention them only when the operator asks, and ask no follow-up decision about them. A \`[[policy.tool]]\` rule cannot refuse their declaration. Do not classify one as a native client tool or promise that a rule gates it. If the operator requires refusing every hosted tool with a signed offer to use a local counterpart, list it as unsupported under **Needed for this to work**; do not invent an offer.
 `;

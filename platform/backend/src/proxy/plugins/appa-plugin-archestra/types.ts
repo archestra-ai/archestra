@@ -25,7 +25,10 @@ export type AppaTrustedContext = {
   /** Which of the request's tools are this platform's gateway tools, and as what. */
   toolIdentity: Pick<
     GatewayToolIdentity,
-    "canonicalize" | "attestationOf" | "looseRunToolDispatch"
+    | "canonicalize"
+    | "canonicalizeDetected"
+    | "attestationOf"
+    | "looseRunToolDispatch"
   >;
   /** What the proxy prepared for this request before any adapter saw it. */
   request: AppaPreparedRequest;

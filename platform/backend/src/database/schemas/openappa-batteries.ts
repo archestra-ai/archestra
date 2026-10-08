@@ -1,5 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
   boolean,
+  check,
   index,
   integer,
   jsonb,
@@ -63,9 +65,7 @@ export const openappaBatteryInstallsTable = pgTable(
       .notNull()
       .references(() => organizationsTable.id, { onDelete: "cascade" }),
     batteryName: text("battery_name").notNull(),
-    // Null on rows written before the kind existed; `attachmentOf` reads the
-    // catalog column for those. A later release makes it required.
-    kind: text().$type<BatteryAttachmentKind>(),
+    kind: text().$type<BatteryAttachmentKind>().notNull(),
     catalogId: uuid("catalog_id").references(() => internalMcpCatalogTable.id, {
       onDelete: "cascade",
     }),
@@ -91,11 +91,21 @@ export const openappaBatteryInstallsTable = pgTable(
       .defaultNow(),
   },
   (table) => [
-    // Still the identity every writer agrees on until the contract migration
-    // replaces it with (organization, kind, catalog, detected, battery).
-    unique("openappa_battery_installs_org_catalog_battery_uq")
-      .on(table.organizationId, table.catalogId, table.batteryName)
+    // One row per (organization, attachment, battery): the catalog or detected
+    // column is set for its kind and null for the others, so nulls compare equal.
+    unique("openappa_battery_installs_org_attachment_battery_uq")
+      .on(
+        table.organizationId,
+        table.kind,
+        table.catalogId,
+        table.detectedId,
+        table.batteryName,
+      )
       .nullsNotDistinct(),
+    check(
+      "openappa_battery_installs_attachment_check",
+      sql`(${table.kind} = 'catalog' AND ${table.catalogId} IS NOT NULL AND ${table.detectedId} IS NULL) OR (${table.kind} = 'detected' AND ${table.catalogId} IS NULL AND ${table.detectedId} IS NOT NULL) OR (${table.kind} = 'organization' AND ${table.catalogId} IS NULL AND ${table.detectedId} IS NULL)`,
+    ),
     // Tool syncs and catalog deletes look installs up by catalog alone.
     index("openappa_battery_installs_catalog_idx").on(table.catalogId),
   ],

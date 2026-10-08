@@ -86,6 +86,7 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import { scopedSessionId } from "@/openappa/actor";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   type CollectedChildReturns,
   collectAndStripChildReturns,
@@ -1401,7 +1402,7 @@ export async function handleLLMProxy<
         );
         // Apply the org's configured default policies to every newly
         // discovered tool persisted below.
-        await utils.tools.persistTools(
+        const { firstSightings } = await utils.tools.persistTools(
           tools.map((t) => ({
             // A namespaced tool is persisted under its one-string spelling,
             // `<namespace>__<name>`, the way the client's call is evaluated.
@@ -1431,6 +1432,14 @@ export async function handleLLMProxy<
             : undefined,
           { userId, externalAgentId },
         );
+        // A server seen for the first time may already be named by the policy.
+        if (firstSightings.length > 0)
+          trackBackgroundWork(
+            openappaBatteriesService.onToolsObserved({
+              organizationId: resolvedAgent.organizationId,
+              sightings: firstSightings,
+            }),
+          );
       }
     }
 

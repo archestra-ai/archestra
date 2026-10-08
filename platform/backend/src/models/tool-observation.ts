@@ -9,6 +9,9 @@ import db, { schema } from "@/database";
 import { isProxyDiscoveredTool } from "@/database/schemas/tool";
 import logger from "@/logging";
 
+/** An observation this request was the first to record: the sighting of a tool by a client. */
+export type RecordedObservation = { toolName: string; externalAgentId: string };
+
 export type ProxyToolObservation = {
   toolId: string;
   toolName: string;
@@ -27,7 +30,7 @@ class ToolObservationModel {
     toolNames: string[];
     userId: string;
     externalAgentId?: string | null;
-  }): Promise<void> {
+  }): Promise<RecordedObservation[]> {
     const externalAgentId = params.externalAgentId ?? "";
     const unseenNames = [...new Set(params.toolNames)].filter(
       (name) =>
@@ -36,7 +39,7 @@ class ToolObservationModel {
         ),
     );
     if (unseenNames.length === 0) {
-      return;
+      return [];
     }
 
     // Only proxy-discovered rows are observed: a catalog, delegation or
@@ -52,10 +55,10 @@ class ToolObservationModel {
         ),
       );
     if (tools.length === 0) {
-      return;
+      return [];
     }
 
-    await db
+    const inserted = await db
       .insert(schema.toolObservationsTable)
       .values(
         tools.map((tool) => ({
@@ -64,7 +67,9 @@ class ToolObservationModel {
           externalAgentId,
         })),
       )
-      .onConflictDoNothing();
+      .onConflictDoNothing()
+      .returning({ toolId: schema.toolObservationsTable.toolId });
+    const insertedToolIds = new Set(inserted.map((row) => row.toolId));
 
     for (const tool of tools) {
       recordedObservationsCache.set(
@@ -81,6 +86,9 @@ class ToolObservationModel {
       },
       "[toolObservation] recorded tool observations",
     );
+    return tools
+      .filter((tool) => insertedToolIds.has(tool.id))
+      .map((tool) => ({ toolName: tool.name, externalAgentId }));
   }
 
   /**

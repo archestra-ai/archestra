@@ -180,6 +180,7 @@ function request(organizationId: string, runtime = false) {
     claims: { sessionId: "workspace" },
     toolIdentity: {
       canonicalize: (name) => name,
+      canonicalizeDetected: (name) => name,
       attestationOf: () => undefined,
       looseRunToolDispatch: true,
     },

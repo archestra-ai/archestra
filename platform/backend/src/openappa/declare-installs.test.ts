@@ -444,9 +444,12 @@ async function legacyInstall(params: {
       organizationId: params.organizationId,
       batteryName: params.batteryName,
       catalogId: params.catalogId,
-      ...(params.detectedId
-        ? { kind: "detected" as const, detectedId: params.detectedId }
-        : {}),
+      kind: params.detectedId
+        ? ("detected" as const)
+        : params.catalogId === null
+          ? ("organization" as const)
+          : ("catalog" as const),
+      detectedId: params.detectedId ?? null,
       createdAt: new Date(Date.UTC(2026, 0, 1) + written++ * 1000),
       enabled: params.enabled ?? true,
       credentialBindings: params.credentialBindings ?? {},

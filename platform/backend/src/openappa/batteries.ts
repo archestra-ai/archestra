@@ -4,7 +4,11 @@ import type {
   BatteryPackage as NativeBatteryPackage,
   PolicyEditInput,
 } from "@archestra/openappa-rs";
-import { matchBatteries, parseFullToolName } from "@archestra/shared";
+import {
+  clientForExternalAgentIds,
+  matchBatteries,
+  parseFullToolName,
+} from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
@@ -19,6 +23,7 @@ import OrganizationModel from "@/models/organization";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
+import { listDetectedMcpServers } from "@/services/detected-mcp-servers";
 import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
@@ -49,6 +54,14 @@ import {
   type UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
+import {
+  detectedServerId,
+  isDetectedClientFamily,
+  isDetectedServerId,
+  parseDetectedServerId,
+  parseDetectedToolName,
+  parseOpenCodeLabeledToolName,
+} from "@/utils/detected-mcp-server-names";
 import {
   addedGrants,
   bundledEntry,
@@ -253,6 +266,40 @@ class OpenAppaBatteriesService {
       name: included.name,
       content: included.battery.policy,
     };
+  }
+
+  /**
+   * The proxy saw a client declare tools for the first time. A policy may
+   * already name their server as an alias target, composed as a stub while no
+   * such server was known; it recomposes now so the battery takes effect
+   * without a policy edit. The hot reader keeps a stored composition while the
+   * root revision stands, which is why this has to be pushed.
+   */
+  async onToolsObserved(params: {
+    organizationId: string;
+    sightings: ReadonlyArray<{ toolName: string; externalAgentId: string }>;
+  }): Promise<void> {
+    if (!config.openappa.enabled) return;
+    const { organizationId, sightings } = params;
+    try {
+      const root = await guardrailsPolicyService.get(organizationId);
+      const declared = (
+        await openappaDeclarations.aliasTargets(root.content)
+      ).filter(isDetectedServerId);
+      if (declared.length === 0) return;
+      const seen = new Set(
+        sightings.flatMap((sighting) =>
+          detectedIdsOf({ ...sighting, declared }),
+        ),
+      );
+      if (!declared.some((target) => seen.has(target))) return;
+      await this.recompile(organizationId);
+    } catch (error) {
+      logger.warn(
+        { organizationId, error },
+        "OpenAPPA recompose after a detected server was first observed failed",
+      );
+    }
   }
 
   /** The policy the runtime opens for this organization, recomposed when it moved. */
@@ -1002,12 +1049,11 @@ class OpenAppaBatteriesService {
       organizationId,
       content: root.content,
     });
-    const [prefixes, bindable] = await Promise.all([
-      catalogToolPrefixes(organizationId, {
-        targets: resolution.aliases.flatMap((alias) => alias.servers),
-        catalogIds: governed,
-      }),
+    const targets = resolution.aliases.flatMap((alias) => alias.servers);
+    const [prefixes, bindable, detected] = await Promise.all([
+      catalogToolPrefixes(organizationId, { targets, catalogIds: governed }),
       this.bindableKeys(organizationId),
+      detectedTargetsPresent(organizationId, targets),
     ]);
     const aliases = new Map(
       resolution.aliases.map((alias) => [alias.namespace, alias.servers]),
@@ -1039,6 +1085,7 @@ class OpenAppaBatteriesService {
         .map((target) => ({
           target,
           catalogs: prefixes.byPrefix.get(target) ?? new Set<string>(),
+          detected: detected.has(target),
         }));
       const credentials = (entry.battery?.credentials ?? []).map(
         (variable) => ({
@@ -1103,11 +1150,8 @@ class OpenAppaBatteriesService {
         scope,
         composed: composes({ status, scope }),
         helpers: entry.battery?.helpers ?? [],
-        servers: servers.map(({ target, catalogs }) => {
-          const attachment: BatteryServerAttachment | null =
-            catalogs.size === 1
-              ? { kind: "catalog", catalogId: [...catalogs][0] as string }
-              : null;
+        servers: servers.map(({ target, catalogs, detected }) => {
+          const attachment = serverAttachment({ target, catalogs, detected });
           return {
             target,
             attachment,
@@ -1119,7 +1163,22 @@ class OpenAppaBatteriesService {
       });
       const attachments: BatteryAttachment[] = organizationWide
         ? [{ kind: "organization" }]
-        : catalogIds.map((catalogId) => ({ kind: "catalog", catalogId }));
+        : [
+            ...catalogIds.map(
+              (catalogId): BatteryAttachment => ({
+                kind: "catalog",
+                catalogId,
+              }),
+            ),
+            ...servers
+              .filter((server) => server.detected)
+              .map(
+                (server): BatteryAttachment => ({
+                  kind: "detected",
+                  detectedId: server.target,
+                }),
+              ),
+          ];
       for (const attachment of attachments) {
         const key = rowKey({ batteryName: entry.name, attachment });
         if (rows.has(key)) continue;
@@ -1710,11 +1769,15 @@ function batteryStatus(params: {
       return "active";
     case "catalogs": {
       const { servers, conflicting } = governs;
-      if (conflicting || servers.some((server) => server.catalogs.size > 1))
+      // Exactly one attachment per target: a catalog the prefix names, or the
+      // detected server the target is the id of.
+      const attachments = (server: (typeof servers)[number]) =>
+        server.catalogs.size + (server.detected ? 1 : 0);
+      if (conflicting || servers.some((server) => attachments(server) > 1))
         return "naming_conflict";
       if (
         servers.length === 0 ||
-        servers.some((server) => server.catalogs.size === 0)
+        servers.some((server) => attachments(server) === 0)
       )
         return "server_missing";
       return "active";
@@ -1731,7 +1794,11 @@ type BatteryGovernance =
   | { kind: "organization" }
   | {
       kind: "catalogs";
-      servers: ReadonlyArray<{ target: string; catalogs: ReadonlySet<string> }>;
+      servers: ReadonlyArray<{
+        target: string;
+        catalogs: ReadonlySet<string>;
+        detected: boolean;
+      }>;
       conflicting: boolean;
     };
 
@@ -1978,4 +2045,59 @@ function sleep(ms: number): Promise<void> {
 
 function hash(content: string): string {
   return createHash("sha256").update(content).digest("hex");
+}
+
+/**
+ * The declared detected-server targets that name a server the organization
+ * has actually seen. Read only when a target has that form.
+ */
+async function detectedTargetsPresent(
+  organizationId: string,
+  targets: readonly string[],
+): Promise<ReadonlySet<string>> {
+  const declared = targets.filter(isDetectedServerId);
+  if (declared.length === 0) return new Set();
+  const present = new Set(
+    (await listDetectedMcpServers(organizationId)).map((server) => server.id),
+  );
+  return new Set(declared.filter((target) => present.has(target)));
+}
+
+/** The one server an alias target resolved to, if it resolved to exactly one. */
+function serverAttachment(server: {
+  target: string;
+  catalogs: ReadonlySet<string>;
+  detected: boolean;
+}): BatteryServerAttachment | null {
+  if (server.catalogs.size === 1 && !server.detected)
+    return { kind: "catalog", catalogId: [...server.catalogs][0] as string };
+  if (server.catalogs.size === 0 && server.detected)
+    return { kind: "detected", detectedId: server.target };
+  return null;
+}
+
+/**
+ * The detected-server ids a first sighting of a tool can stand for: its
+ * client's unambiguous spelling, or, for OpenCode's `<label>_<tool>`, a split
+ * against the labels the policy already declares for OpenCode.
+ */
+function detectedIdsOf(params: {
+  toolName: string;
+  externalAgentId: string;
+  declared: readonly string[];
+}): string[] {
+  const family = clientForExternalAgentIds([params.externalAgentId])?.filter;
+  if (!family || !isDetectedClientFamily(family)) return [];
+  const parsed =
+    parseDetectedToolName(family, params.toolName) ??
+    (family === "opencode"
+      ? parseOpenCodeLabeledToolName(
+          params.toolName,
+          params.declared.flatMap((target) => {
+            const id = parseDetectedServerId(target);
+            return id?.family === "opencode" ? [id.label] : [];
+          }),
+        )
+      : undefined);
+  return parsed ? [detectedServerId(family, parsed.label)] : [];
 }

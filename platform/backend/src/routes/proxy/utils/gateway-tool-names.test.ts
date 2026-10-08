@@ -1,8 +1,11 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
+import { resolveRunToolDispatch } from "@/archestra-mcp-server/run-tool-target";
 import {
   attestToolDescription,
   type ToolAttestationKind,
 } from "@/archestra-mcp-server/tool-attestation";
+import config from "@/config";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { describe, expect, test } from "@/test";
 import type { GatewayToolDeclaration } from "./gateway-tool-declarations";
 import {
@@ -804,3 +807,213 @@ function transplantMac(params: { from: string; onto: string }): string {
   const payload = params.onto.slice(0, params.onto.lastIndexOf(".") + 1);
   return `${payload}${mac}]]`;
 }
+
+/**
+ * A client's own MCP server the root policy names as `<family>.<label>`:
+ * its tools are ruled under that target, spelled `<target>__<tool>`, in
+ * every mode. Nothing the policy did not name is rewritten, and no rewrite
+ * can produce a built-in or an attested name.
+ */
+describe("canonicalizeDetected", () => {
+  const POLICY = `include = []
+
+[server_aliases]
+slack = ["claude-code.slack", "opencode.slack", "codex.slack", "claude-code.sl ack"]
+
+[policy]
+version = 2
+
+[[policy.annotator]]
+name = "noop"
+
+[[policy.tool]]
+name = "*"
+annotator = "noop"
+
+[externals.annotators.noop]
+url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
+`;
+
+  async function declaringOrganization(params: {
+    makeOrganization: () => Promise<{ id: string }>;
+    makeUser: () => Promise<{ id: string }>;
+  }) {
+    config.openappa.enabled = true;
+    const organizationId = (await params.makeOrganization()).id;
+    const user = await params.makeUser();
+    await GuardrailsPolicyModel.save({
+      organizationId,
+      content: POLICY,
+      contentHash: createHash("sha256").update(POLICY).digest("hex"),
+      updatedBy: user.id,
+      expectedRevision: 0,
+    });
+    return organizationId;
+  }
+
+  test("attested mode: a declared server's tools are ruled under its target; attested and foreign names are not", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organizationId = await declaringOrganization({
+      makeOrganization,
+      makeUser,
+    });
+    const identity = await resolve(
+      [
+        {
+          name: "mcp__gw__archestra__run_tool",
+          marker: markerOf("archestra__run_tool", { organizationId }),
+        },
+        {
+          name: "mcp__gw__slack__send",
+          marker: markerOf("slack__send", { organizationId }),
+        },
+        { name: "mcp__slack__send" },
+        { name: "mcp__slack__run_tool" },
+        { name: "mcp__linear__create" },
+        { name: "mcp__evil__archestra__search_tools" },
+      ],
+      { organizationId },
+    );
+    expect(identity.mode).toBe("attested");
+    const ruled = (name: string, namespace?: string) =>
+      identity.canonicalizeDetected(
+        identity.canonicalize(name, namespace),
+        "claude-code",
+      );
+
+    expect(ruled("mcp__slack__send")).toBe("claude-code.slack__send");
+    // Codex spells the same server as a namespace.
+    expect(
+      identity.canonicalizeDetected(
+        identity.canonicalize("send", "mcp__slack"),
+        "codex",
+      ),
+    ).toBe("codex.slack__send");
+    // An attested third-party tool keeps the gateway's name.
+    expect(ruled("mcp__gw__slack__send")).toBe("slack__send");
+    expect(ruled("mcp__gw__archestra__run_tool")).toBe("archestra__run_tool");
+    // A server the policy does not name keeps the client's spelling.
+    expect(ruled("mcp__linear__create")).toBe("mcp__linear__create");
+    // A lookalike of a built-in is never rehabilitated into a governed name:
+    // its tool part holds a separator, so no detected server spells it, and a
+    // name already marked foreign stays foreign.
+    expect(ruled("mcp__evil__archestra__search_tools")).toBe(
+      identity.canonicalize("mcp__evil__archestra__search_tools"),
+    );
+    expect(
+      identity.canonicalizeDetected(
+        `${FOREIGN_TOOL_NAME_PREFIX}mcp__slack__send`,
+        "claude-code",
+      ),
+    ).toBe(`${FOREIGN_TOOL_NAME_PREFIX}mcp__slack__send`);
+    // A label the alias grammar refuses was never a target.
+    expect(ruled("mcp__sl ack__send")).toBe("mcp__sl ack__send");
+  });
+
+  test("compat mode: the gateway's label wins over a detected rewrite, and OpenCode splits only on a declared label", async ({
+    makeOrganization,
+    makeUser,
+    makeAgent,
+  }) => {
+    const organizationId = await declaringOrganization({
+      makeOrganization,
+      makeUser,
+    });
+    await makeAgent({ organizationId, name: "gw", agentType: "mcp_gateway" });
+    const identity = await resolve(
+      [
+        { name: "mcp__gw__slack__send" },
+        { name: "mcp__slack__send" },
+        { name: "slack_send" },
+        { name: "slack_admin_send" },
+        { name: "linear_create" },
+      ],
+      { organizationId },
+    );
+    expect(identity.mode).toBe("compat");
+
+    expect(
+      identity.canonicalizeDetected(
+        identity.canonicalize("mcp__gw__slack__send"),
+        "claude-code",
+      ),
+    ).toBe("slack__send");
+    expect(
+      identity.canonicalizeDetected(
+        identity.canonicalize("mcp__slack__send"),
+        "claude-code",
+      ),
+    ).toBe("claude-code.slack__send");
+    const openCode = (name: string) =>
+      identity.canonicalizeDetected(identity.canonicalize(name), "opencode");
+    expect(openCode("slack_send")).toBe("opencode.slack__send");
+    // Only `slack` is declared, so the split is after it.
+    expect(openCode("slack_admin_send")).toBe("opencode.slack__admin_send");
+    expect(openCode("linear_create")).toBe("linear_create");
+  });
+
+  test("a detected tool named like a control tool stays an ordinary tool", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    const organizationId = await declaringOrganization({
+      makeOrganization,
+      makeUser,
+    });
+    // Attested: a gateway is connected, so a local server's lookalike of the
+    // branded wrapper is foreign rather than a learned decoration.
+    const identity = await resolve(
+      [
+        {
+          name: "mcp__gw__archestra__run_tool",
+          marker: markerOf("archestra__run_tool", { organizationId }),
+        },
+        { name: "mcp__slack__run_tool" },
+        { name: "mcp__slack__execute_remedy_plan" },
+        { name: "mcp__slack__ask_user" },
+        { name: "mcp__slack__archestra__run_tool" },
+      ],
+      { organizationId },
+    );
+    expect(identity.mode).toBe("attested");
+    const ruled = (name: string) =>
+      identity.canonicalizeDetected(identity.canonicalize(name), "claude-code");
+
+    expect(ruled("mcp__slack__run_tool")).toBe("claude-code.slack__run_tool");
+    expect(ruled("mcp__slack__execute_remedy_plan")).toBe(
+      "claude-code.slack__execute_remedy_plan",
+    );
+    expect(ruled("mcp__slack__ask_user")).toBe("claude-code.slack__ask_user");
+    // A namespaced lookalike of the branded wrapper is not a detected tool.
+    expect(ruled("mcp__slack__archestra__run_tool")).not.toMatch(
+      /^claude-code\./,
+    );
+    for (const loose of [false, true]) {
+      expect(
+        resolveRunToolDispatch({
+          toolName: "claude-code.slack__run_tool",
+          args: { tool_name: "archestra__whoami", tool_args: {} },
+          loose,
+        }),
+      ).toEqual({ kind: "not_dispatch" });
+    }
+  });
+
+  test("without a declared target, nothing is rewritten", async ({
+    makeOrganization,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const identity = await resolve([{ name: "mcp__slack__send" }], {
+      organizationId,
+    });
+    expect(
+      identity.canonicalizeDetected(
+        identity.canonicalize("mcp__slack__send"),
+        "claude-code",
+      ),
+    ).toBe("mcp__slack__send");
+  });
+});

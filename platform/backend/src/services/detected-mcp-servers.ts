@@ -1,12 +1,17 @@
 import { clientForExternalAgentIds } from "@archestra/shared";
+import config from "@/config";
 import { ToolObservationModel } from "@/models";
 import type { ProxyToolObservation } from "@/models/tool-observation";
+import { openappaDeclarations } from "@/openappa/declarations";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import type { DetectedMcpServer } from "@/types";
 import {
   type DetectedClientFamily,
   detectedServerId,
   isDetectedClientFamily,
+  parseDetectedServerId,
   parseDetectedToolName,
+  parseOpenCodeLabeledToolName,
 } from "@/utils/detected-mcp-server-names";
 
 /**
@@ -19,15 +24,36 @@ import {
 export async function listDetectedMcpServers(
   organizationId: string,
 ): Promise<DetectedMcpServer[]> {
-  const observations =
-    await ToolObservationModel.listProxyToolObservations(organizationId);
-  return groupDetectedServers(observations);
+  const [observations, openCodeLabels] = await Promise.all([
+    ToolObservationModel.listProxyToolObservations(organizationId),
+    declaredOpenCodeLabels(organizationId),
+  ]);
+  return groupDetectedServers(observations, openCodeLabels);
 }
 
 // === Internal helpers ===
 
+/**
+ * OpenCode spells a local tool `<label>_<tool>`, which only a declared
+ * `opencode.<label>` alias target can split; the policy is the one source of
+ * those labels. Nothing is learned from the names themselves.
+ */
+async function declaredOpenCodeLabels(
+  organizationId: string,
+): Promise<string[]> {
+  if (!config.openappa.enabled) return [];
+  const root = await guardrailsPolicyService.get(organizationId);
+  return (await openappaDeclarations.aliasTargets(root.content)).flatMap(
+    (target) => {
+      const id = parseDetectedServerId(target);
+      return id?.family === "opencode" ? [id.label] : [];
+    },
+  );
+}
+
 function groupDetectedServers(
   observations: ProxyToolObservation[],
+  openCodeLabels: readonly string[],
 ): DetectedMcpServer[] {
   const servers = new Map<
     string,
@@ -36,7 +62,11 @@ function groupDetectedServers(
   for (const observation of observations) {
     const family = clientFamilyOf(observation.externalAgentId);
     if (!family) continue;
-    const parsed = parseDetectedToolName(family, observation.toolName);
+    const parsed =
+      parseDetectedToolName(family, observation.toolName) ??
+      (family === "opencode"
+        ? parseOpenCodeLabeledToolName(observation.toolName, openCodeLabels)
+        : undefined);
     if (!parsed) continue;
     const id = detectedServerId(family, parsed.label);
     let server = servers.get(id);

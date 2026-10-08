@@ -152,6 +152,19 @@ class OpenAppaDeclarations {
     );
   }
 
+  /**
+   * The `[server_aliases]` targets a root document spells, from the text
+   * alone: no include is resolved. Hand-written rules bind through these
+   * too, so they are what a client spelling is matched against.
+   */
+  async aliasTargets(content: string): Promise<string[]> {
+    const native = await loadNative();
+    const declarations = await native.parseOpenappaDeclarations(content);
+    return [
+      ...new Set(declarations.serverAliases.flatMap((alias) => alias.servers)),
+    ];
+  }
+
   /** Read a root document's declarations and resolve every include entry. */
   async resolve(params: {
     organizationId: string;

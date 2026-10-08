@@ -4528,6 +4528,7 @@ function identityStub(
   return {
     canonicalize: (name, namespace) =>
       namespace ? `${namespace}__${name}` : name,
+    canonicalizeDetected: (name) => name,
     attestationOf: () => undefined,
     looseRunToolDispatch: false,
     ...overrides,

@@ -42,12 +42,58 @@ export function parseDetectedToolName(
   }
 }
 
+/**
+ * OpenCode's `<label>_<tool>` spelling, resolved against labels an alias
+ * target already declares for OpenCode. The longest declared label wins;
+ * nothing is learned from the name itself.
+ */
+export function parseOpenCodeLabeledToolName(
+  name: string,
+  declaredLabels: Iterable<string>,
+): DetectedToolName | undefined {
+  let best: DetectedToolName | undefined;
+  for (const label of declaredLabels) {
+    const prefix = `${label}_`;
+    if (
+      name.length > prefix.length &&
+      name.startsWith(prefix) &&
+      (best === undefined || label.length > best.label.length)
+    ) {
+      best = { label, toolName: name.slice(prefix.length) };
+    }
+  }
+  return best;
+}
+
+/** Splits a detected server id at its first `.`; the family set has no dots. */
+export function parseDetectedServerId(
+  id: string,
+): { family: DetectedClientFamily; label: string } | undefined {
+  const dot = id.indexOf(".");
+  if (dot <= 0) return undefined;
+  const family = id.slice(0, dot);
+  const label = id.slice(dot + 1);
+  if (!isDetectedClientFamily(family) || !isValidDetectedLabel(label)) {
+    return undefined;
+  }
+  return { family, label };
+}
+
 /** `<family>.<label>`: the detected server's id and its alias target. */
 export function detectedServerId(
   family: DetectedClientFamily,
   label: string,
 ): string {
   return `${family}.${label}`;
+}
+
+/**
+ * Whether an alias target names a detected server: `<family>.<label>` with a
+ * known family. A catalog's tool prefix never holds a dot, so the two cannot
+ * be confused.
+ */
+export function isDetectedServerId(target: string): boolean {
+  return parseDetectedServerId(target) !== undefined;
 }
 
 export function isDetectedClientFamily(

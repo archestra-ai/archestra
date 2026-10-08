@@ -6,6 +6,7 @@ import type {
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -51,6 +52,8 @@ import {
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import {
+  DETECTED_CLIENT_FAMILIES,
+  detectedServerId,
   isDetectedServerId,
   parseDetectedServerId,
   parseDetectedToolName,
@@ -65,7 +68,10 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
-import { declaredDetectedTargets, openCodeLabelsOf } from "./detected-targets";
+import {
+  batteryBackedDetectedTargets,
+  openCodeLabelsOf,
+} from "./detected-targets";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -278,16 +284,38 @@ class OpenAppaBatteriesService {
     if (!config.openappa.enabled || params.toolNames.length === 0) return;
     const { organizationId, toolNames } = params;
     try {
-      const declared = [...(await declaredDetectedTargets(organizationId))];
-      const named = declared.filter((target) =>
-        targetNamedBy(target, toolNames, declared),
-      );
+      const { revision, targets } =
+        await batteryBackedDetectedTargets(organizationId);
+      if (targets.size === 0) return;
+      const named = targetsNamedBy(toolNames, targets);
       if (named.length === 0) return;
-      const present = await OpenAppaBatteryInstallModel.detectedIdsPresent({
-        organizationId,
-        detectedIds: named,
-      });
-      if (named.every((target) => present.has(target))) return;
+      // A row seen once stays seen while the revision stands: only a
+      // recompose removes rows, and it clears this.
+      const known = presentDetected.get(organizationId);
+      const present = new Set(
+        known?.revision === revision ? known.present : [],
+      );
+      let missing = named.filter((target) => !present.has(target));
+      if (missing.length > 0) {
+        for (const target of await OpenAppaBatteryInstallModel.detectedIdsPresent(
+          { organizationId, detectedIds: missing },
+        ))
+          present.add(target);
+        presentDetected.set(organizationId, { revision, present });
+        missing = missing.filter((target) => !present.has(target));
+      }
+      if (missing.length === 0) return;
+      // Only a server the organization has a sighting of derives a row: a
+      // request whose sighting could not be recorded names nothing a
+      // composition could change, so none waits on one.
+      const observed = new Set(
+        (
+          await listDetectedMcpServers(organizationId, {
+            openCodeLabels: openCodeLabelsOf(targets),
+          })
+        ).map((server) => server.id),
+      );
+      if (!missing.some((target) => observed.has(target))) return;
       await this.recompile(organizationId);
     } catch (error) {
       logger.warn(
@@ -824,19 +852,27 @@ class OpenAppaBatteriesService {
 
   private async recompose(organizationId: string): Promise<Recomposition> {
     return coalesce(this.recomposing, organizationId, () =>
-      this.recomposeNow(organizationId).catch(async (error) => {
-        // Whatever the caller does with the failure, the stored row may be
-        // behind the write that triggered this; the next read recomposes.
-        await OpenAppaEffectivePolicyModel.invalidate(organizationId).catch(
-          (invalidation) => {
-            logger.warn(
-              { organizationId, error: invalidation },
-              "OpenAPPA effective policy could not be marked stale",
-            );
-          },
-        );
-        throw error;
-      }),
+      this.recomposeNow(organizationId)
+        .then((recomposition) => {
+          presentDetected.set(organizationId, {
+            revision: -1,
+            present: new Set(),
+          });
+          return recomposition;
+        })
+        .catch(async (error) => {
+          // Whatever the caller does with the failure, the stored row may be
+          // behind the write that triggered this; the next read recomposes.
+          await OpenAppaEffectivePolicyModel.invalidate(organizationId).catch(
+            (invalidation) => {
+              logger.warn(
+                { organizationId, error: invalidation },
+                "OpenAPPA effective policy could not be marked stale",
+              );
+            },
+          );
+          throw error;
+        }),
     );
   }
 
@@ -2075,24 +2111,26 @@ function targetAttachments(server: {
 }
 
 /**
- * Whether one of the request's tool names spells a tool of the server a
- * declared target names, in that target's family. OpenCode's `<label>_<tool>`
- * reads against the OpenCode labels the policy declares.
+ * The declared targets whose server one of the request's tool names spells a
+ * tool of, in any family the spelling fits. Each name is parsed once per
+ * family; OpenCode's `<label>_<tool>` reads against the declared labels.
  */
-function targetNamedBy(
-  target: string,
+function targetsNamedBy(
   toolNames: readonly string[],
-  declared: readonly string[],
-): boolean {
-  const id = parseDetectedServerId(target);
-  if (!id) return false;
-  const openCodeLabels = declared.flatMap((candidate) => {
-    const parsed = parseDetectedServerId(candidate);
-    return parsed?.family === "opencode" ? [parsed.label] : [];
-  });
-  return toolNames.some(
-    (name) =>
-      parseDetectedToolName(id.family, name, openCodeLabels)?.label ===
-      id.label,
-  );
+  declared: ReadonlySet<string>,
+): string[] {
+  const openCodeLabels = openCodeLabelsOf(declared);
+  const named = new Set<string>();
+  for (const family of DETECTED_CLIENT_FAMILIES)
+    for (const name of toolNames) {
+      const parsed = parseDetectedToolName(family, name, openCodeLabels);
+      if (parsed) named.add(detectedServerId(family, parsed.label));
+    }
+  return [...declared].filter((target) => named.has(target));
 }
+
+/** Detected install rows a request already found, per organization and root revision. */
+const presentDetected = new LRUCacheManager<{
+  revision: number;
+  present: Set<string>;
+}>({ maxSize: 500, defaultTtl: 10 * 60_000 });

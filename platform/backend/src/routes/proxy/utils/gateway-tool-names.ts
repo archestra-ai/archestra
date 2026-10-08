@@ -12,9 +12,11 @@ import {
   verifyToolAttestation,
 } from "@/archestra-mcp-server/tool-attestation";
 import { LRUCacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, OrganizationModel, ToolModel } from "@/models";
-import { declaredDetectedTargets } from "@/openappa/detected-targets";
+import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaDeclarations } from "@/openappa/declarations";
 import type { DeclaredToolSpelling } from "@/openappa/wire";
 import {
   type DetectedClientFamily,
@@ -127,7 +129,7 @@ export async function resolveGatewayToolIdentity(params: {
   const detectedTargets =
     declarations.length === 0
       ? new Set<string>()
-      : await declaredDetectedTargets(organizationId);
+      : await enforcedDetectedTargets(organizationId);
   const verified: VerifiedToolDeclaration[] = [];
   let unverifiedMarkerCount = 0;
   for (const { marker, ...spelling } of declarations) {
@@ -778,6 +780,35 @@ async function getGatewayServerNames(
  * Per-organization cache of gateway client server names. Gateway renames are
  * rare; a short TTL keeps proxy requests from querying agents on every call.
  */
+/**
+ * The detected servers the policy the runtime enforces names. That is the
+ * stored composition, not the newest root: a revision the runtime refused
+ * leaves the previous one in force, and identity follows what is enforced.
+ * Parsed once per composition.
+ */
+async function enforcedDetectedTargets(
+  organizationId: string,
+): Promise<ReadonlySet<string>> {
+  if (!config.openappa.enabled) return new Set();
+  const policy =
+    await openappaBatteriesService.getEffectivePolicy(organizationId);
+  const key = `${organizationId}\u0000${policy.contentHash}`;
+  const cached = enforcedTargetsCache.get(key);
+  if (cached) return cached;
+  const targets = new Set(
+    (await openappaDeclarations.aliasTargets(policy.content)).filter(
+      (target) => parseDetectedServerId(target) !== undefined,
+    ),
+  );
+  enforcedTargetsCache.set(key, targets);
+  return targets;
+}
+
+const enforcedTargetsCache = new LRUCacheManager<ReadonlySet<string>>({
+  maxSize: 500,
+  defaultTtl: 10 * 60_000,
+});
+
 const gatewayServerNamesCache = new LRUCacheManager<Set<string>>({
   maxSize: 500,
   defaultTtl: 60_000,

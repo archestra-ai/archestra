@@ -113,6 +113,25 @@ class OpenAppaBatteryInstallModel {
     return rows.map((row) => row.organizationId);
   }
 
+  /** Which of these detected servers already hold a row: the proxy asks per request. */
+  static async detectedIdsPresent(params: {
+    organizationId: string;
+    detectedIds: readonly string[];
+  }): Promise<ReadonlySet<string>> {
+    if (params.detectedIds.length === 0) return new Set();
+    const rows = await db
+      .selectDistinct({ detectedId: table.detectedId })
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, params.organizationId),
+          eq(table.kind, "detected"),
+          inArray(table.detectedId, [...params.detectedIds]),
+        ),
+      );
+    return new Set(rows.flatMap((row) => row.detectedId ?? []));
+  }
+
   static async list(organizationId: string): Promise<BatteryInstall[]> {
     return db
       .select()

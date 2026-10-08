@@ -9,6 +9,8 @@ import db, { schema } from "@/database";
 import { isProxyDiscoveredTool } from "@/database/schemas/tool";
 import logger from "@/logging";
 
+/** An observation this request was the first to record: the sighting of a tool by a client. */
+
 export type ProxyToolObservation = {
   toolId: string;
   toolName: string;

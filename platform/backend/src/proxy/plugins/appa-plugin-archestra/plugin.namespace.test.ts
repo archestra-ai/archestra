@@ -267,6 +267,7 @@ function namespaceContext(): LlmProxyRequestContext {
           profileId: "profile",
           toolIdentity: {
             canonicalize: (name: string) => name,
+            canonicalizeDetected: (name: string) => name,
             attestationOf: () => undefined,
             looseRunToolDispatch: false,
           },

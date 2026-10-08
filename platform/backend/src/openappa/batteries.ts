@@ -6,6 +6,7 @@ import type {
 } from "@archestra/openappa-rs";
 import { matchBatteries, parseFullToolName } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
+import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
@@ -19,6 +20,7 @@ import OrganizationModel from "@/models/organization";
 import RuntimeCredentialConnectionModel from "@/models/runtime-credential-connection";
 import RuntimeCredentialDefinitionModel from "@/models/runtime-credential-definition";
 import ToolModel from "@/models/tool";
+import { listDetectedMcpServers } from "@/services/detected-mcp-servers";
 import {
   GUARDRAILS_REVISION_CONFLICT,
   guardrailsPolicyService,
@@ -50,6 +52,13 @@ import {
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import {
+  DETECTED_CLIENT_FAMILIES,
+  detectedServerId,
+  isDetectedServerId,
+  parseDetectedServerId,
+  parseDetectedToolName,
+} from "@/utils/detected-mcp-server-names";
+import {
   addedGrants,
   bundledEntry,
   grantKey,
@@ -59,6 +68,10 @@ import {
   packageContentHash,
   uploadedEntry,
 } from "./declarations";
+import {
+  batteryBackedDetectedTargets,
+  openCodeLabelsOf,
+} from "./detected-targets";
 
 /** A battery after a write, and the derived row that write stands for. */
 type BatteryWriteResult = {
@@ -76,6 +89,8 @@ class OpenAppaBatteriesService {
   private readonly recomposing = new Map<string, Slot<Recomposition>>();
   /** Concurrent dispatches of one organization share a single policy read. */
   private readonly reading = new Map<string, Promise<EffectivePolicy>>();
+  /** Concurrent first requests for a detected server share a single read of the sightings. */
+  private readonly sighting = new Map<string, Promise<ReadonlySet<string>>>();
 
   /** Every battery this organization can include, bundled and uploaded, with its rows. */
   async listBatteries(organizationId: string): Promise<BatterySummary[]> {
@@ -253,6 +268,78 @@ class OpenAppaBatteriesService {
       name: included.name,
       content: included.battery.policy,
     };
+  }
+
+  /**
+   * A request declared tools; if the policy names one of their servers as a
+   * detected target the organization has not composed with yet, recompose now
+   * so the call that follows finds the battery, not its stub. The hot reader
+   * keeps a stored composition while the root revision stands, which is why
+   * this is pushed, and it runs on every request so a recompose that failed
+   * or lost a race is tried again by the next one. Which client sent the
+   * request does not matter here: every family the spelling fits is checked.
+   */
+  async composeForDeclaredServers(params: {
+    organizationId: string;
+    toolNames: readonly string[];
+  }): Promise<void> {
+    if (!config.openappa.enabled || params.toolNames.length === 0) return;
+    const { organizationId, toolNames } = params;
+    try {
+      const { revision, targets } =
+        await batteryBackedDetectedTargets(organizationId);
+      if (targets.size === 0) return;
+      const named = targetsNamedBy(toolNames, targets);
+      if (named.length === 0) return;
+      // A row seen once stays seen while the revision stands: only a
+      // recompose removes rows, and it clears this.
+      const known = presentDetected.get(organizationId);
+      const present = new Set(
+        known?.revision === revision ? known.present : [],
+      );
+      let missing = named.filter((target) => !present.has(target));
+      if (missing.length > 0) {
+        for (const target of await OpenAppaBatteryInstallModel.detectedIdsPresent(
+          { organizationId, detectedIds: missing },
+        ))
+          present.add(target);
+        presentDetected.set(organizationId, { revision, present });
+        missing = missing.filter((target) => !present.has(target));
+      }
+      if (missing.length === 0) return;
+      // Only a server the organization has a sighting of derives a row: a
+      // request whose sighting could not be recorded names nothing a
+      // composition could change, so none waits on one.
+      const observed = await this.sightedServers(organizationId, targets);
+      if (!missing.some((target) => observed.has(target))) return;
+      await this.recompile(organizationId);
+    } catch (error) {
+      logger.warn(
+        { organizationId, error },
+        "OpenAPPA recompose for a declared detected server failed; the next request tries again",
+      );
+    }
+  }
+
+  /**
+   * The detected servers the organization has a sighting of, by id. A burst
+   * of first requests for one server shares a single read of the sightings.
+   */
+  private sightedServers(
+    organizationId: string,
+    targets: ReadonlySet<string>,
+  ): Promise<ReadonlySet<string>> {
+    const inFlight = this.sighting.get(organizationId);
+    if (inFlight) return inFlight;
+    const read = listDetectedMcpServers(organizationId, {
+      openCodeLabels: openCodeLabelsOf(targets),
+    })
+      .then((servers) => new Set(servers.map((server) => server.id)))
+      .finally(() => {
+        this.sighting.delete(organizationId);
+      });
+    this.sighting.set(organizationId, read);
+    return read;
   }
 
   /** The policy the runtime opens for this organization, recomposed when it moved. */
@@ -782,19 +869,27 @@ class OpenAppaBatteriesService {
 
   private async recompose(organizationId: string): Promise<Recomposition> {
     return coalesce(this.recomposing, organizationId, () =>
-      this.recomposeNow(organizationId).catch(async (error) => {
-        // Whatever the caller does with the failure, the stored row may be
-        // behind the write that triggered this; the next read recomposes.
-        await OpenAppaEffectivePolicyModel.invalidate(organizationId).catch(
-          (invalidation) => {
-            logger.warn(
-              { organizationId, error: invalidation },
-              "OpenAPPA effective policy could not be marked stale",
-            );
-          },
-        );
-        throw error;
-      }),
+      this.recomposeNow(organizationId)
+        .then((recomposition) => {
+          presentDetected.set(organizationId, {
+            revision: -1,
+            present: new Set(),
+          });
+          return recomposition;
+        })
+        .catch(async (error) => {
+          // Whatever the caller does with the failure, the stored row may be
+          // behind the write that triggered this; the next read recomposes.
+          await OpenAppaEffectivePolicyModel.invalidate(organizationId).catch(
+            (invalidation) => {
+              logger.warn(
+                { organizationId, error: invalidation },
+                "OpenAPPA effective policy could not be marked stale",
+              );
+            },
+          );
+          throw error;
+        }),
     );
   }
 
@@ -1002,12 +1097,11 @@ class OpenAppaBatteriesService {
       organizationId,
       content: root.content,
     });
-    const [prefixes, bindable] = await Promise.all([
-      catalogToolPrefixes(organizationId, {
-        targets: resolution.aliases.flatMap((alias) => alias.servers),
-        catalogIds: governed,
-      }),
+    const targets = resolution.aliases.flatMap((alias) => alias.servers);
+    const [prefixes, bindable, detected] = await Promise.all([
+      catalogToolPrefixes(organizationId, { targets, catalogIds: governed }),
       this.bindableKeys(organizationId),
+      detectedTargetsPresent(organizationId, targets),
     ]);
     const aliases = new Map(
       resolution.aliases.map((alias) => [alias.namespace, alias.servers]),
@@ -1038,7 +1132,11 @@ class OpenAppaBatteriesService {
         .flatMap((namespace) => aliases.get(namespace) ?? [])
         .map((target) => ({
           target,
-          catalogs: prefixes.byPrefix.get(target) ?? new Set<string>(),
+          attachments: targetAttachments({
+            target,
+            catalogs: prefixes.byPrefix.get(target) ?? new Set<string>(),
+            detected: detected.has(target),
+          }),
         }));
       const credentials = (entry.battery?.credentials ?? []).map(
         (variable) => ({
@@ -1048,7 +1146,13 @@ class OpenAppaBatteriesService {
         }),
       );
       const catalogIds = [
-        ...new Set(servers.flatMap(({ catalogs }) => [...catalogs])),
+        ...new Set(
+          servers.flatMap(({ attachments }) =>
+            attachments.flatMap((attachment) =>
+              attachment.kind === "catalog" ? [attachment.catalogId] : [],
+            ),
+          ),
+        ),
       ];
       const status = batteryStatus({
         resolved: entry.battery !== null && !duplicated.has(entry.name),
@@ -1077,7 +1181,7 @@ class OpenAppaBatteriesService {
     const batteries: PlannedBattery[] = [];
     const rows = new Map<string, BatteryInstallRow>();
     for (const draft of drafts) {
-      const { entry, scope, servers, credentials, catalogIds } = draft;
+      const { entry, scope, servers, credentials } = draft;
       const organizationWide = scope === "organization";
       // Nothing consults an organization-wide battery no rule routes to.
       const status =
@@ -1103,11 +1207,10 @@ class OpenAppaBatteriesService {
         scope,
         composed: composes({ status, scope }),
         helpers: entry.battery?.helpers ?? [],
-        servers: servers.map(({ target, catalogs }) => {
-          const attachment: BatteryServerAttachment | null =
-            catalogs.size === 1
-              ? { kind: "catalog", catalogId: [...catalogs][0] as string }
-              : null;
+        servers: servers.map(({ target, attachments }) => {
+          // A target that resolved to exactly one server names it; one that
+          // resolved to none or to several names nothing the view can show.
+          const attachment = attachments.length === 1 ? attachments[0] : null;
           return {
             target,
             attachment,
@@ -1119,7 +1222,7 @@ class OpenAppaBatteriesService {
       });
       const attachments: BatteryAttachment[] = organizationWide
         ? [{ kind: "organization" }]
-        : catalogIds.map((catalogId) => ({ kind: "catalog", catalogId }));
+        : servers.flatMap((server) => server.attachments);
       for (const attachment of attachments) {
         const key = rowKey({ batteryName: entry.name, attachment });
         if (rows.has(key)) continue;
@@ -1710,11 +1813,16 @@ function batteryStatus(params: {
       return "active";
     case "catalogs": {
       const { servers, conflicting } = governs;
-      if (conflicting || servers.some((server) => server.catalogs.size > 1))
+      // Exactly one attachment per target: a catalog the prefix names, or the
+      // detected server the target is the id of.
+      if (
+        conflicting ||
+        servers.some((server) => server.attachments.length > 1)
+      )
         return "naming_conflict";
       if (
         servers.length === 0 ||
-        servers.some((server) => server.catalogs.size === 0)
+        servers.some((server) => server.attachments.length === 0)
       )
         return "server_missing";
       return "active";
@@ -1731,7 +1839,10 @@ type BatteryGovernance =
   | { kind: "organization" }
   | {
       kind: "catalogs";
-      servers: ReadonlyArray<{ target: string; catalogs: ReadonlySet<string> }>;
+      servers: ReadonlyArray<{
+        target: string;
+        attachments: readonly BatteryServerAttachment[];
+      }>;
       conflicting: boolean;
     };
 
@@ -1979,3 +2090,64 @@ function sleep(ms: number): Promise<void> {
 function hash(content: string): string {
   return createHash("sha256").update(content).digest("hex");
 }
+
+/**
+ * The declared detected-server targets that name a server the organization
+ * has actually seen. Read only when a target has that form.
+ */
+async function detectedTargetsPresent(
+  organizationId: string,
+  targets: readonly string[],
+): Promise<ReadonlySet<string>> {
+  const declared = targets.filter(isDetectedServerId);
+  if (declared.length === 0) return new Set();
+  const present = new Set(
+    (
+      await listDetectedMcpServers(organizationId, {
+        openCodeLabels: openCodeLabelsOf(declared),
+      })
+    ).map((server) => server.id),
+  );
+  return new Set(declared.filter((target) => present.has(target)));
+}
+
+/** Every server an alias target resolves to: the catalogs carrying it as a prefix, and the detected server it is the id of. */
+function targetAttachments(server: {
+  target: string;
+  catalogs: ReadonlySet<string>;
+  detected: boolean;
+}): BatteryServerAttachment[] {
+  return [
+    ...[...server.catalogs].map(
+      (catalogId): BatteryServerAttachment => ({ kind: "catalog", catalogId }),
+    ),
+    ...(server.detected
+      ? [{ kind: "detected" as const, detectedId: server.target }]
+      : []),
+  ];
+}
+
+/**
+ * The declared targets whose server one of the request's tool names spells a
+ * tool of, in any family the spelling fits. Each name is parsed once per
+ * family; OpenCode's `<label>_<tool>` reads against the declared labels.
+ */
+function targetsNamedBy(
+  toolNames: readonly string[],
+  declared: ReadonlySet<string>,
+): string[] {
+  const openCodeLabels = openCodeLabelsOf(declared);
+  const named = new Set<string>();
+  for (const family of DETECTED_CLIENT_FAMILIES)
+    for (const name of toolNames) {
+      const parsed = parseDetectedToolName(family, name, openCodeLabels);
+      if (parsed) named.add(detectedServerId(family, parsed.label));
+    }
+  return [...declared].filter((target) => named.has(target));
+}
+
+/** Detected install rows a request already found, per organization and root revision. */
+const presentDetected = new LRUCacheManager<{
+  revision: number;
+  present: Set<string>;
+}>({ maxSize: 500, defaultTtl: 10 * 60_000 });

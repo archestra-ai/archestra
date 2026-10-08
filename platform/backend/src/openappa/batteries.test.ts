@@ -1,6 +1,11 @@
 import { createHash } from "node:crypto";
-import { ADMIN_ROLE_NAME, ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import {
+  ADMIN_ROLE_NAME,
+  ARCHESTRA_MCP_CATALOG_ID,
+  CLAUDE_CODE_CLIENT_ID,
+} from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
+import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
@@ -8,6 +13,8 @@ import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
 import OpenAppaEffectivePolicyModel from "@/models/openappa-effective-policy";
 import ToolModel from "@/models/tool";
+import ToolObservationModel from "@/models/tool-observation";
+import { resolveGatewayToolIdentity } from "@/routes/proxy/utils/gateway-tool-names";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { openappaBatteriesService } from "./batteries";
@@ -521,6 +528,304 @@ describe("following a catalog rename", () => {
     ).toEqual([
       { namespace: "acme", servers: ["acme_staging", "claude-code.acme_prod"] },
     ]);
+  });
+});
+
+describe("a battery attached to a detected server", () => {
+  beforeEach(() => {
+    config.openappa.enabled = true;
+  });
+
+  /** A member's Claude Code declared the `acme` server's `list` tool to the proxy. */
+  async function observeLocalAcme(params: {
+    organizationId: string;
+    userId: string;
+  }) {
+    await ToolModel.bulkCreateProxyToolsIfNotExists(
+      [{ name: "mcp__acme__list", description: null, parameters: {} }],
+      "",
+    );
+    return ToolObservationModel.recordObservations({
+      toolNames: ["mcp__acme__list"],
+      userId: params.userId,
+      externalAgentId: CLAUDE_CODE_CLIENT_ID,
+    });
+  }
+
+  test("the target names the server: the battery is active, its row is the server's, and the row owns the helper", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    await observeLocalAcme({ organizationId, userId });
+    const { entry } = await uploadAcme({ organizationId, userId });
+
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["claude-code.acme"]),
+    });
+
+    const { batteries } =
+      await openappaBatteriesService.policyDeclarations(organizationId);
+    expect(batteries).toEqual([
+      expect.objectContaining({
+        name: "acme",
+        status: "active",
+        servers: [
+          {
+            target: "claude-code.acme",
+            attachment: { kind: "detected", detectedId: "claude-code.acme" },
+            catalogId: null,
+          },
+        ],
+      }),
+    ]);
+    const [row, ...others] =
+      await OpenAppaBatteryInstallModel.list(organizationId);
+    expect(others).toEqual([]);
+    expect(row).toMatchObject({
+      batteryName: "acme",
+      kind: "detected",
+      detectedId: "claude-code.acme",
+      catalogId: null,
+      status: "active",
+    });
+    const composed = await openappaBatteriesService.recompile(organizationId);
+    expect(composed.lastError).toBeNull();
+    expect(composed.content).toContain(helperUrlBase(row.id));
+  });
+
+  test("a target no client has declared yet is server_missing until its first sighting, which recomposes the hot policy", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const { entry } = await uploadAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["claude-code.acme"]),
+    });
+    expect(
+      (await openappaBatteriesService.policyDeclarations(organizationId))
+        .batteries,
+    ).toEqual([expect.objectContaining({ status: "server_missing" })]);
+    const stub =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(stub.content).not.toContain("/helpers/");
+
+    // A request before any member's client declared the server composes
+    // nothing new: the stub stands, and the next request tries again.
+    await openappaBatteriesService.composeForDeclaredServers({
+      organizationId,
+      toolNames: ["mcp__acme__list"],
+    });
+    expect(
+      (await openappaBatteriesService.policyDeclarations(organizationId))
+        .batteries,
+    ).toEqual([expect.objectContaining({ status: "server_missing" })]);
+    await observeLocalAcme({ organizationId, userId });
+    await openappaBatteriesService.composeForDeclaredServers({
+      organizationId,
+      toolNames: ["mcp__acme__list"],
+    });
+
+    const [row] = await OpenAppaBatteryInstallModel.list(organizationId);
+    expect(row).toMatchObject({ kind: "detected", status: "active" });
+    // The root revision did not move, so only the pushed recompose could
+    // have replaced what the hot reader hands out.
+    const hot =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+    expect(hot.rootRevision).toBe(stub.rootRevision);
+    expect(hot.content).toContain(helperUrlBase(row.id));
+  });
+
+  test("a later member's first sighting of a server the policy already composes with recomposes nothing", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    await observeLocalAcme({ organizationId, userId });
+    const { entry } = await uploadAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["claude-code.acme"]),
+    });
+    const composed =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+
+    const colleague = (await makeUser()).id;
+    await makeMember(colleague, organizationId);
+    await observeLocalAcme({ organizationId, userId: colleague });
+    const recompile = vi.spyOn(openappaBatteriesService, "recompile");
+    try {
+      await openappaBatteriesService.composeForDeclaredServers({
+        organizationId,
+        toolNames: ["mcp__acme__list"],
+      });
+      expect(recompile).not.toHaveBeenCalled();
+    } finally {
+      recompile.mockRestore();
+    }
+
+    expect(
+      await openappaBatteriesService.getEffectivePolicy(organizationId),
+    ).toEqual(composed);
+  });
+
+  test("a target only a hand-written rule names never pushes a recompose", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    await observeLocalAcme({ organizationId, userId });
+    // No battery stands behind the alias: nothing derives a row for it, so
+    // no request may wait on a composition that cannot change.
+    await declare({
+      organizationId,
+      userId,
+      content: root([], ["claude-code.acme"]),
+    });
+    await openappaBatteriesService.getEffectivePolicy(organizationId);
+
+    const recompile = vi.spyOn(openappaBatteriesService, "recompile");
+    try {
+      await openappaBatteriesService.composeForDeclaredServers({
+        organizationId,
+        toolNames: ["mcp__acme__list"],
+      });
+      expect(recompile).not.toHaveBeenCalled();
+    } finally {
+      recompile.mockRestore();
+    }
+  });
+
+  test("gateway identity follows the enforced composition, not a root revision the runtime refused", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    await observeLocalAcme({ organizationId, userId });
+    // Uploaded while the root is empty: a package the root includes would be
+    // validated on upload, and this one binds an annotator no policy declares.
+    const { entry: broken } = await uploadAcme({
+      organizationId,
+      userId,
+      broken: true,
+    });
+    const { entry } = await uploadAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["claude-code.acme"]),
+    });
+    const enforced =
+      await openappaBatteriesService.getEffectivePolicy(organizationId);
+
+    // The next revision moves the alias to another client and answers the
+    // battery twice, which composes to a document the runtime refuses, so
+    // the previous composition stays in force.
+    await declare({
+      organizationId,
+      userId,
+      content: root([broken, entry], ["codex.acme"]),
+      checked: false,
+    });
+    const refused = await openappaBatteriesService.recompile(organizationId);
+    expect(refused.lastError).toBeTruthy();
+    expect(refused.content).toBe(enforced.content);
+
+    const identity = await resolveGatewayToolIdentity({
+      organizationId,
+      declarations: [{ name: "mcp__acme__list" }],
+      internalChat: false,
+    });
+    expect(
+      identity.canonicalizeDetected(
+        identity.canonicalize("mcp__acme__list"),
+        "claude-code",
+      ),
+    ).toBe("claude-code.acme__list");
+  });
+
+  test("a catalog and a detected server under one namespace each get a row, and detaching one leaves the other's target and every tool row", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme",
+    });
+    await makeTool({ catalogId: catalog.id, name: "acme_prod__list" });
+    await observeLocalAcme({ organizationId, userId });
+    const { entry } = await uploadAcme({ organizationId, userId });
+    await declare({
+      organizationId,
+      userId,
+      content: root(entry, ["acme_prod", "claude-code.acme"]),
+    });
+    const toolRowsBefore = await ToolModel.getExistingToolNames([
+      "mcp__acme__list",
+      "acme_prod__list",
+    ]);
+
+    const rows = await OpenAppaBatteryInstallModel.list(organizationId);
+    expect(rows.map((row) => [row.kind, row.status]).sort()).toEqual([
+      ["catalog", "active"],
+      ["detected", "active"],
+    ]);
+    const detected = rows.find((row) => row.kind === "detected");
+    if (!detected) throw new Error("expected a detected row");
+
+    await openappaBatteriesService.updateInstall({
+      userId,
+      organizationId,
+      id: detected.id,
+      changes: { enabled: false },
+    });
+
+    const latest = await guardrailsPolicyService.get(organizationId);
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: latest.content,
+    });
+    expect(resolution.aliases.map(({ servers }) => servers)).toEqual([
+      ["acme_prod"],
+    ]);
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).map(
+        (row) => row.kind,
+      ),
+    ).toEqual(["catalog"]);
+    expect(
+      await ToolModel.getExistingToolNames([
+        "mcp__acme__list",
+        "acme_prod__list",
+      ]),
+    ).toEqual(toolRowsBefore);
   });
 });
 

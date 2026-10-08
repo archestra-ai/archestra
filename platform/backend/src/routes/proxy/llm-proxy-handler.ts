@@ -86,6 +86,7 @@ import {
   type SpanTeamInfo,
 } from "@/observability/tracing";
 import { scopedSessionId } from "@/openappa/actor";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   type CollectedChildReturns,
   collectAndStripChildReturns,
@@ -1429,8 +1430,21 @@ export async function handleLLMProxy<
                 resultAction: organization.defaultDiscoveredToolResultPolicy,
               }
             : undefined,
-          { userId, externalAgentId },
+          {
+            userId,
+            externalAgentId,
+            organizationId: resolvedAgent.organizationId,
+          },
         );
+        // A server the policy names may be composed with for the first time
+        // on this request: its first call must find the battery, so the
+        // recompose is waited for, not started on the side.
+        await openappaBatteriesService.composeForDeclaredServers({
+          organizationId: resolvedAgent.organizationId,
+          toolNames: tools.map((t) =>
+            t.namespace ? buildFullToolName(t.namespace, t.name) : t.name,
+          ),
+        });
       }
     }
 

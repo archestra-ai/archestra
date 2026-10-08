@@ -1,6 +1,10 @@
 import { clientForExternalAgentIds } from "@archestra/shared";
 import { ToolObservationModel } from "@/models";
 import type { ProxyToolObservation } from "@/models/tool-observation";
+import {
+  declaredDetectedTargets,
+  openCodeLabelsOf,
+} from "@/openappa/detected-targets";
 import type { DetectedMcpServer } from "@/types";
 import {
   type DetectedClientFamily,
@@ -18,25 +22,57 @@ import {
  */
 export async function listDetectedMcpServers(
   organizationId: string,
+  options: { openCodeLabels?: readonly string[] } = {},
 ): Promise<DetectedMcpServer[]> {
-  const observations =
-    await ToolObservationModel.listProxyToolObservations(organizationId);
-  return groupDetectedServers(observations);
+  const [observations, openCodeLabels] = await Promise.all([
+    ToolObservationModel.listProxyToolObservations(organizationId),
+    options.openCodeLabels ?? declaredOpenCodeLabels(organizationId),
+  ]);
+  return groupDetectedServers(observations, openCodeLabels);
 }
 
 // === Internal helpers ===
 
+/**
+ * OpenCode spells a local tool `<label>_<tool>`, which only a declared
+ * `opencode.<label>` alias target can split; the policy is the one source of
+ * those labels. Nothing is learned from the names themselves. A caller that
+ * already holds one policy revision's targets passes their labels instead, so
+ * what it derives does not straddle two revisions.
+ */
+async function declaredOpenCodeLabels(
+  organizationId: string,
+): Promise<string[]> {
+  return openCodeLabelsOf(await declaredDetectedTargets(organizationId));
+}
+
 function groupDetectedServers(
   observations: ProxyToolObservation[],
+  openCodeLabels: readonly string[],
 ): DetectedMcpServer[] {
   const servers = new Map<
     string,
     DetectedMcpServer & { toolNames: Set<string> }
   >();
+  // Observations repeat one (client, tool name) once per member and per
+  // sighting; the name is parsed once per such pair.
+  const parsedByName = new Map<
+    string,
+    ReturnType<typeof parseDetectedToolName>
+  >();
   for (const observation of observations) {
     const family = clientFamilyOf(observation.externalAgentId);
     if (!family) continue;
-    const parsed = parseDetectedToolName(family, observation.toolName);
+    const nameKey = `${family}\u0000${observation.toolName}`;
+    let parsed = parsedByName.get(nameKey);
+    if (!parsedByName.has(nameKey)) {
+      parsed = parseDetectedToolName(
+        family,
+        observation.toolName,
+        openCodeLabels,
+      );
+      parsedByName.set(nameKey, parsed);
+    }
     if (!parsed) continue;
     const id = detectedServerId(family, parsed.label);
     let server = servers.get(id);

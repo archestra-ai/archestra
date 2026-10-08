@@ -12,9 +12,18 @@ import {
   verifyToolAttestation,
 } from "@/archestra-mcp-server/tool-attestation";
 import { LRUCacheManager } from "@/cache-manager";
+import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, OrganizationModel, ToolModel } from "@/models";
+import { openappaBatteriesService } from "@/openappa/batteries";
+import { openappaDeclarations } from "@/openappa/declarations";
 import type { DeclaredToolSpelling } from "@/openappa/wire";
+import {
+  type DetectedClientFamily,
+  detectedServerId,
+  parseDetectedServerId,
+  parseDetectedToolName,
+} from "@/utils/detected-mcp-server-names";
 import type { GatewayToolDeclaration } from "./gateway-tool-declarations";
 
 /**
@@ -81,6 +90,18 @@ export type GatewayToolIdentity = ToolNameResolution & {
   verified: readonly VerifiedToolDeclaration[];
   /** Declarations whose marker did not verify. */
   unverifiedMarkerCount: number;
+  /**
+   * A client's own MCP tool, spelled the way the policy's alias target names
+   * its server: `mcp__slack__send` from Claude Code becomes
+   * `claude-code.slack__send` when the root policy's `[server_aliases]`
+   * names `claude-code.slack`. Applied to what `canonicalize` left as the
+   * client spelled it, never to an attested or foreign name. The target is
+   * the declared one, so a label grants nothing a policy did not write.
+   */
+  canonicalizeDetected: (
+    canonicalName: string,
+    family: DetectedClientFamily,
+  ) => string;
 };
 
 /**
@@ -105,6 +126,10 @@ export async function resolveGatewayToolIdentity(params: {
 }): Promise<GatewayToolIdentity> {
   const { organizationId, internalChat } = params;
   const declarations = dedupeDeclarations(params.declarations);
+  const detectedTargets =
+    declarations.length === 0
+      ? new Set<string>()
+      : await enforcedDetectedTargets(organizationId);
   const verified: VerifiedToolDeclaration[] = [];
   let unverifiedMarkerCount = 0;
   for (const { marker, ...spelling } of declarations) {
@@ -121,6 +146,7 @@ export async function resolveGatewayToolIdentity(params: {
       verified,
       unverifiedMarkerCount,
       internalChat,
+      detectedTargets,
     });
   }
   if (internalChat) {
@@ -132,12 +158,14 @@ export async function resolveGatewayToolIdentity(params: {
       declarations,
       verified,
       unverifiedMarkerCount,
+      detectedTargets,
     });
   }
   return await compatIdentity({
     organizationId,
     declarations,
     unverifiedMarkerCount,
+    detectedTargets,
   });
 }
 
@@ -157,6 +185,7 @@ async function attestedIdentity(params: {
   verified: readonly VerifiedToolDeclaration[];
   unverifiedMarkerCount: number;
   internalChat: boolean;
+  detectedTargets: ReadonlySet<string>;
 }): Promise<GatewayToolIdentity> {
   const effective = new Map(
     params.verified.map((declaration) => [
@@ -238,6 +267,7 @@ async function attestedIdentity(params: {
     canonicalize,
     effective,
     declarations: params.declarations,
+    detectedTargets: params.detectedTargets,
     verified: params.verified,
     unverifiedMarkerCount: params.unverifiedMarkerCount,
   });
@@ -332,12 +362,26 @@ async function compatIdentity(params: {
   organizationId: string;
   declarations: readonly GatewayToolDeclaration[];
   unverifiedMarkerCount: number;
+  detectedTargets: ReadonlySet<string>;
 }): Promise<GatewayToolIdentity> {
   const serverNames = await getGatewayServerNames(params.organizationId);
   const spelledDeclarations = params.declarations.map(({ name, namespace }) =>
     spelledName(name, namespace),
   );
-  const learnedPrefixes = learnGatewayDecorationPrefixes(spelledDeclarations);
+  // A local server the policy names is ruled under its own target; the
+  // decoration its client puts on its label must not be learned as the
+  // gateway's, or a branded lookalike behind it would strip that identity
+  // off its siblings. Only that client's spelling is held back: a target for
+  // OpenCode says nothing about what Claude Code spells `mcp__<label>__`.
+  const declaredDecorations = new Set(
+    [...params.detectedTargets].flatMap((target) => {
+      const parsed = parseDetectedServerId(target);
+      return parsed ? [clientDecoration(parsed.family, parsed.label)] : [];
+    }),
+  );
+  const learnedPrefixes = learnGatewayDecorationPrefixes(
+    spelledDeclarations,
+  ).filter((prefix) => !declaredDecorations.has(prefix));
   // Learned prefixes and gateway-label collisions can come from local tools.
   // Require a built-in spelling under a configured label (or bare branding).
   const gatewayConnected = spelledDeclarations.some((name) => {
@@ -396,6 +440,7 @@ async function compatIdentity(params: {
     declarations: params.declarations,
     verified: [],
     unverifiedMarkerCount: params.unverifiedMarkerCount,
+    detectedTargets: params.detectedTargets,
   });
 }
 
@@ -546,6 +591,7 @@ function identityOf(params: {
   declarations: readonly DeclaredToolSpelling[];
   verified: readonly VerifiedToolDeclaration[];
   unverifiedMarkerCount: number;
+  detectedTargets: ReadonlySet<string>;
 }): GatewayToolIdentity {
   // Canonical name → the one declaration spelling it, or null once a second
   // declaration spells it too.
@@ -569,7 +615,57 @@ function identityOf(params: {
     spellingOf: (canonicalName) => spellings.get(canonicalName) ?? undefined,
     verified: params.verified,
     unverifiedMarkerCount: params.unverifiedMarkerCount,
+    canonicalizeDetected: (canonicalName, family) =>
+      canonicalizeDetected({
+        canonicalName,
+        family,
+        targets: params.detectedTargets,
+      }),
   };
+}
+
+/**
+ * Rewrites a client's own tool spelling to `<target>__<tool>` when the root
+ * policy's `[server_aliases]` names its server as `<family>.<label>`. Any
+ * other name, including a `foreign:` one and an attested name (which no
+ * longer carries the client's spelling), comes back as it is.
+ */
+function canonicalizeDetected(params: {
+  canonicalName: string;
+  family: DetectedClientFamily;
+  targets: ReadonlySet<string>;
+}): string {
+  const { canonicalName, family, targets } = params;
+  if (targets.size === 0 || canonicalName.startsWith(FOREIGN_TOOL_NAME_PREFIX))
+    return canonicalName;
+  const parsed = parseDetectedToolName(
+    family,
+    canonicalName,
+    declaredLabels(targets, "opencode"),
+  );
+  if (!parsed) return canonicalName;
+  const target = detectedServerId(family, parsed.label);
+  return targets.has(target)
+    ? `${target}${MCP_SERVER_TOOL_NAME_SEPARATOR}${parsed.toolName}`
+    : canonicalName;
+}
+
+/** The prefixes a client puts in front of a server's tools: Claude Code's and Codex's `mcp__<label>__`, OpenCode's `<label>_`. */
+/** The prefix a client family puts on a local server's tools. */
+function clientDecoration(family: DetectedClientFamily, label: string): string {
+  return family === "opencode"
+    ? `${label}${OPENCODE_LABEL_SEPARATOR}`
+    : `mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}${label}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
+}
+
+function declaredLabels(
+  targets: ReadonlySet<string>,
+  family: DetectedClientFamily,
+): string[] {
+  return [...targets].flatMap((target) => {
+    const parsed = parseDetectedServerId(target);
+    return parsed?.family === family ? [parsed.label] : [];
+  });
 }
 
 /**
@@ -684,6 +780,35 @@ async function getGatewayServerNames(
  * Per-organization cache of gateway client server names. Gateway renames are
  * rare; a short TTL keeps proxy requests from querying agents on every call.
  */
+/**
+ * The detected servers the policy the runtime enforces names. That is the
+ * stored composition, not the newest root: a revision the runtime refused
+ * leaves the previous one in force, and identity follows what is enforced.
+ * Parsed once per composition.
+ */
+async function enforcedDetectedTargets(
+  organizationId: string,
+): Promise<ReadonlySet<string>> {
+  if (!config.openappa.enabled) return new Set();
+  const policy =
+    await openappaBatteriesService.getEffectivePolicy(organizationId);
+  const key = `${organizationId}\u0000${policy.contentHash}`;
+  const cached = enforcedTargetsCache.get(key);
+  if (cached) return cached;
+  const targets = new Set(
+    (await openappaDeclarations.aliasTargets(policy.content)).filter(
+      (target) => parseDetectedServerId(target) !== undefined,
+    ),
+  );
+  enforcedTargetsCache.set(key, targets);
+  return targets;
+}
+
+const enforcedTargetsCache = new LRUCacheManager<ReadonlySet<string>>({
+  maxSize: 500,
+  defaultTtl: 10 * 60_000,
+});
+
 const gatewayServerNamesCache = new LRUCacheManager<Set<string>>({
   maxSize: 500,
   defaultTtl: 60_000,

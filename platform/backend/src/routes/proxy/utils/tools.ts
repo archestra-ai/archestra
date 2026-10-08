@@ -8,7 +8,12 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import logger from "@/logging";
 import { ToolModel, ToolObservationModel } from "@/models";
+import {
+  declaredDetectedTargets,
+  openCodeLabelsOf,
+} from "@/openappa/detected-targets";
 import type { ToolInvocation, TrustedData } from "@/types";
+import { parseDetectedToolName } from "@/utils/detected-mcp-server-names";
 
 /**
  * Persist tools if present in the request
@@ -44,6 +49,12 @@ export const persistTools = async (
   observer?: {
     userId?: string;
     externalAgentId?: string | null;
+    /**
+     * The organization whose policy names detected servers: an OpenCode tool
+     * spelled `<label>_<tool>` under a declared `opencode.<label>` is that
+     * server's, not a native tool.
+     */
+    organizationId?: string;
   },
 ) => {
   logger.debug(
@@ -124,10 +135,20 @@ export const persistTools = async (
       observer?.externalAgentId,
     ]);
     const isOpenCodeClient = isOpenCodeClientAgentId(observer?.externalAgentId);
+    // OpenCode also spells a local server's tools `<label>_<tool>`; the labels
+    // the policy declares tell those apart from native tools.
+    const openCodeLabels =
+      isOpenCodeClient && observer?.organizationId
+        ? openCodeLabelsOf(
+            await declaredDetectedTargets(observer.organizationId),
+          )
+        : [];
     const nativeClientToolOverride = (toolName: string) =>
       (observerClientFamily || isOpenCodeClient) &&
       !(isOpenCodeClient
-        ? toolName.startsWith(OPENCODE_MCP_TOOL_NAME_PREFIX)
+        ? toolName.startsWith(OPENCODE_MCP_TOOL_NAME_PREFIX) ||
+          parseDetectedToolName("opencode", toolName, openCodeLabels) !==
+            undefined
         : toolName.startsWith(CLIENT_MCP_TOOL_NAME_PREFIX))
         ? {
             action: "allow_when_context_is_untrusted" as const,

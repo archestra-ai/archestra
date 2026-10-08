@@ -43,6 +43,36 @@ describe("parseDetectedToolName", () => {
   });
 });
 
+describe("parseDetectedToolName for OpenCode's labelled spelling", () => {
+  test("splits only against a declared label, the longest one winning", () => {
+    const declared = ["slack", "slack_admin"];
+    expect(
+      parseDetectedToolName("opencode", "slack_send_message", declared),
+    ).toEqual({ label: "slack", toolName: "send_message" });
+    expect(
+      parseDetectedToolName("opencode", "slack_admin_ban_user", declared),
+    ).toEqual({ label: "slack_admin", toolName: "ban_user" });
+  });
+
+  // The runtime splits `<target>__<tool>` at its last `__`, so a tool part
+  // holding one would be ruled under a server nobody declared.
+  test.each([
+    "slack_foo__bar",
+    "slack__send",
+    "slack_",
+    "slack__",
+    "linear_create",
+  ])("reads nothing from %s", (name) => {
+    expect(parseDetectedToolName("opencode", name, ["slack"])).toBeUndefined();
+  });
+
+  test("reads nothing without a declared label", () => {
+    expect(
+      parseDetectedToolName("opencode", "slack_send_message"),
+    ).toBeUndefined();
+  });
+});
+
 describe("detectedServerId", () => {
   test("joins family and label with a dot, the family being dot-free", () => {
     expect(detectedServerId("claude-code", "my.server")).toBe(

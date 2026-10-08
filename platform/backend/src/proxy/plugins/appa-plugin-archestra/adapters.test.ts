@@ -2915,6 +2915,7 @@ function delegated(params: {
       profileId: "profile",
       toolIdentity: {
         canonicalize: (name) => name,
+        canonicalizeDetected: (name) => name,
         attestationOf: () => undefined,
         looseRunToolDispatch: false,
       },

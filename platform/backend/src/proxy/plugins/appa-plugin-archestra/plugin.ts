@@ -118,6 +118,10 @@ import { collectDeclaredToolNames } from "@/routes/proxy/utils/declared-tool-nam
 import type { ToolNameResolution } from "@/routes/proxy/utils/gateway-tool-names";
 import { readGuardrailsV2Activation } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
+import {
+  type DetectedClientFamily,
+  isDetectedClientFamily,
+} from "@/utils/detected-mcp-server-names";
 import { claudeCodeNativeChildIds } from "./adapters/claude-code";
 import {
   appendPeerMessageMarker,
@@ -1535,15 +1539,21 @@ export class AppaPluginArchestra implements LlmProxyPlugin {
     binding: AppaPluginBinding,
     call: { name: string; namespace?: string },
   ): string {
-    if (
-      !binding.identity.attestationOf(call.name, call.namespace) &&
+    if (binding.identity.attestationOf(call.name, call.namespace))
+      return binding.identity.canonicalize(call.name, call.namespace);
+    const canonical =
       binding.adapter?.classifyToolName(call.name, call.namespace) === "local"
-    ) {
-      return binding.identity.canonicalize(
-        binding.adapter.normalizeLocalToolName(call.name),
-      );
-    }
-    return binding.identity.canonicalize(call.name, call.namespace);
+        ? binding.identity.canonicalize(
+            binding.adapter.normalizeLocalToolName(call.name),
+          )
+        : binding.identity.canonicalize(call.name, call.namespace);
+    // A client's own MCP server the policy names as an alias target is ruled
+    // under that target's name, the way the gateway's servers are. Only a
+    // call the gateway did not attest gets here.
+    const family = detectedClientFamilyOf(binding.adapter?.id);
+    return family
+      ? binding.identity.canonicalizeDetected(canonical, family)
+      : canonical;
   }
 
   /** The name resolution this binding's calls are ruled under. */
@@ -3773,6 +3783,15 @@ function parseAskUserArguments(
 }
 
 /** Codex names the namespace of an MCP server's tools `mcp__<server>`. */
+/** The detected-server family an adapter's calls belong to, for the three clients that have one. */
+function detectedClientFamilyOf(
+  adapterId: string | undefined,
+): DetectedClientFamily | undefined {
+  return adapterId !== undefined && isDetectedClientFamily(adapterId)
+    ? adapterId
+    : undefined;
+}
+
 const CODEX_MCP_NAMESPACE_PREFIX = "mcp__";
 
 /**

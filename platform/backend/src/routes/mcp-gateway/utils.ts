@@ -88,6 +88,7 @@ import {
   appLaunchToolTitle,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
 import { MCP_RESOURCE_REFERENCE_PREFIX } from "@/services/identity-providers/enterprise-managed/authorization";
 import {
   discoverOidcJwksUrl,
@@ -341,8 +342,15 @@ export async function createAgentServer(params: {
     // filter runs BEFORE filterExposedTools, so an excluded always-exposed
     // built-in is dropped here and never re-admitted below. Empty (no-op)
     // unless the agent's accessAllTools setting is on.
-    const { tools: fetchedMcpTools } =
+    const { tools: agentMcpTools } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+    // Assigned tools whose MCP server the calling user cannot see are not
+    // theirs to use (tools/call refuses them too); dropping them here also
+    // keeps their catalogs out of the search_tools description below.
+    const fetchedMcpTools = await filterToolsByCallerCatalogAccess(
+      agentMcpTools,
+      { userId: tokenAuth?.userId, organizationId: agent.organizationId },
+    );
 
     // SEP-2243: a tool definition with an invalid x-mcp-header annotation must
     // be excluded from tools/list (with a warning), so one malformed upstream

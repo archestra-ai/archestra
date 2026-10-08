@@ -473,6 +473,9 @@ async function createProtectedEnterpriseManagedCatalogItem(params: {
         resourceIdentifier: KEYCLOAK_OIDC.clientId,
         tokenInjectionMode: "authorization_bearer",
       },
+      // Sharing an agent does not share its MCP servers: members reach the
+      // assigned tool only when they can use the server itself.
+      scope: "org",
     },
   });
 

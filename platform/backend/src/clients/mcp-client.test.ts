@@ -1714,12 +1714,15 @@ describe("McpClient", () => {
     // org connection it can access; a pinned mcp_servers.id = a service account
     // every call uses regardless of the caller.
     describe("agent connections (catalog dynamic-connection policy)", () => {
-      async function makeDynamicCatalogTool() {
-        const catalogItem = await InternalMcpCatalogModel.create({
-          name: `connected-server-${randomUUID().slice(0, 8)}`,
-          serverType: "remote",
-          serverUrl: "https://example.com/mcp",
-        });
+      async function makeDynamicCatalogTool(organizationId: string) {
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `connected-server-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+          },
+          { organizationId },
+        );
         const tool = await ToolModel.createToolIfNotExists({
           name: `${catalogItem.name}__do_thing`,
           description: "Connection-policy tool",
@@ -1756,7 +1759,7 @@ describe("McpClient", () => {
         const { TeamModel } = await import("@/models");
         await TeamModel.addMember(team.id, user.id, "member");
 
-        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        const { catalogItem, tool } = await makeDynamicCatalogTool(org.id);
         // The user has not connected their own account, but a connection for a
         // team they belong to exists — resolution falls back to it.
         await McpServerModel.create({
@@ -1789,7 +1792,7 @@ describe("McpClient", () => {
         const user = await makeUser();
         await makeMember(user.id, org.id, { role: "member" });
 
-        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        const { catalogItem, tool } = await makeDynamicCatalogTool(org.id);
         await McpServerModel.create({
           name: `${catalogItem.name}-personal`,
           catalogId: catalogItem.id,
@@ -1820,7 +1823,7 @@ describe("McpClient", () => {
         const user = await makeUser();
         await makeMember(user.id, org.id, { role: "member" });
 
-        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        const { catalogItem, tool } = await makeDynamicCatalogTool(org.id);
         const serviceAccount = await McpServerModel.create({
           name: `${catalogItem.name}-org`,
           catalogId: catalogItem.id,
@@ -1854,7 +1857,7 @@ describe("McpClient", () => {
         const user = await makeUser();
         await makeMember(user.id, org.id, { role: "member" });
 
-        const { catalogItem, tool } = await makeDynamicCatalogTool();
+        const { catalogItem, tool } = await makeDynamicCatalogTool(org.id);
         // Pin points at a connection that no longer exists; the caller's own
         // connection takes over.
         await InternalMcpCatalogModel.update(catalogItem.id, {
@@ -1881,7 +1884,7 @@ describe("McpClient", () => {
         expect(mockCallTool).toHaveBeenCalledTimes(1);
       });
 
-      test("no self-service install link when the tool's catalog item is another user's personal server", async ({
+      test("refuses an assigned tool whose catalog item the caller cannot access, as if it were not assigned", async ({
         makeMember,
         makeOrganization,
         makeUser,
@@ -1892,7 +1895,10 @@ describe("McpClient", () => {
         const caller = await makeUser();
         await makeMember(caller.id, org.id, { role: "member" });
 
-        // A personal-scope catalog item owned by `owner`, invisible to `caller`.
+        // A catalog item shared with its author only, invisible to `caller`,
+        // with the author's own connection. Assigning its tool to the agent
+        // does not share the server: the caller reaches neither the tool nor
+        // the author's credential, and learns nothing about the server.
         const catalogItem = await InternalMcpCatalogModel.create(
           {
             name: `personal-${randomUUID().slice(0, 8)}`,
@@ -1908,29 +1914,44 @@ describe("McpClient", () => {
           parameters: {},
           catalogId: catalogItem.id,
         });
+        const ownerServer = await McpServerModel.create({
+          name: `${catalogItem.name}-owner`,
+          catalogId: catalogItem.id,
+          serverType: "remote",
+          ownerId: owner.id,
+        });
         await AgentToolModel.create(agentId, tool.id, {
-          credentialResolutionMode: "dynamic",
+          credentialResolutionMode: "static",
+          mcpServerId: ownerServer.id,
         });
 
         const result = await mcpClient.executeToolCallForOwner(
-          { id: "call_deadend", name: tool.name, arguments: {} },
+          { id: "call_no_access", name: tool.name, arguments: {} },
           agentOwner(agentId),
           userToken(caller.id, org.id),
         );
 
         expect(result.isError).toBe(true);
+        expect(mockCallTool).not.toHaveBeenCalled();
         const archestraError = result?._meta?.archestraError as
-          | { type?: string; action?: string; actionUrl?: string }
+          | { code?: string; actionUrl?: string }
           | undefined;
-        expect(archestraError?.type).toBe("auth_required");
-        // The caller cannot install another user's personal item, so no
-        // self-service install link is offered.
+        expect(archestraError?.code).toBe("unknown_tool");
         expect(archestraError?.actionUrl).toBeUndefined();
-        expect(archestraError?.action).toBeUndefined();
-        expect(result?.error).not.toContain("/mcp/registry?install=");
-        expect(result?.error).not.toMatch(/visit[^.]*https?:\/\//i);
-        // ...and it names a remediation the caller can actually pursue.
-        expect(result?.error).toMatch(/owner|administrator|share/i);
+        expect(result?.error).not.toContain(catalogItem.id);
+
+        // The author, who can access the item, still runs it.
+        mockCallTool.mockResolvedValueOnce({
+          content: [{ type: "text", text: "ran" }],
+          isError: false,
+        });
+        const ownerResult = await mcpClient.executeToolCallForOwner(
+          { id: "call_owner", name: tool.name, arguments: {} },
+          agentOwner(agentId),
+          userToken(owner.id, org.id),
+        );
+        expect(ownerResult.isError).toBe(false);
+        expect(mockCallTool).toHaveBeenCalledTimes(1);
       });
 
       test("still offers the install link when the caller can access the catalog (org-scoped, no install yet)", async ({
@@ -2056,11 +2077,14 @@ describe("McpClient", () => {
           accessAllTools: true,
         });
 
-        const catalogItem = await InternalMcpCatalogModel.create({
-          name: `connected-server-${randomUUID().slice(0, 8)}`,
-          serverType: "remote",
-          serverUrl: "https://example.com/mcp",
-        });
+        const catalogItem = await InternalMcpCatalogModel.create(
+          {
+            name: `connected-server-${randomUUID().slice(0, 8)}`,
+            serverType: "remote",
+            serverUrl: "https://example.com/mcp",
+          },
+          { organizationId: org.id },
+        );
         const tool = await ToolModel.createToolIfNotExists({
           name: `${catalogItem.name}__do_thing`,
           description: "Connection-policy tool",
@@ -3911,11 +3935,14 @@ describe("McpClient", () => {
         const caller = await makeUser({ email: "org-member@example.com" });
         await makeMember(caller.id, org.id);
 
-        const dynCatalog = await InternalMcpCatalogModel.create({
-          name: "linear-org",
-          serverType: "remote",
-          serverUrl: "https://mcp.linear.app/sse",
-        });
+        const dynCatalog = await InternalMcpCatalogModel.create(
+          {
+            name: "linear-org",
+            serverType: "remote",
+            serverUrl: "https://mcp.linear.app/sse",
+          },
+          { organizationId: org.id },
+        );
 
         const orgSecret = await secretManager().createSecret(
           { access_token: "linear-org-token" },
@@ -3998,11 +4025,14 @@ describe("McpClient", () => {
         const admin = await makeUser({ email: "org-admin-2@example.com" });
         await makeMember(caller.id, org.id);
 
-        const dynCatalog = await InternalMcpCatalogModel.create({
-          name: "linear-priority",
-          serverType: "remote",
-          serverUrl: "https://mcp.linear.app/sse",
-        });
+        const dynCatalog = await InternalMcpCatalogModel.create(
+          {
+            name: "linear-priority",
+            serverType: "remote",
+            serverUrl: "https://mcp.linear.app/sse",
+          },
+          { organizationId: org.id },
+        );
 
         const personalSecret = await secretManager().createSecret(
           { access_token: "linear-personal-token" },
@@ -10010,12 +10040,18 @@ describe("executed-as identity", () => {
     ...overrides,
   });
 
-  async function makeRemoteCatalogTool(agentId: string) {
-    const catalogItem = await InternalMcpCatalogModel.create({
-      name: `executed-as-${randomUUID().slice(0, 8)}`,
-      serverType: "remote",
-      serverUrl: "https://example.com/mcp",
-    });
+  async function makeRemoteCatalogTool(
+    agentId: string,
+    organizationId: string,
+  ) {
+    const catalogItem = await InternalMcpCatalogModel.create(
+      {
+        name: `executed-as-${randomUUID().slice(0, 8)}`,
+        serverType: "remote",
+        serverUrl: "https://example.com/mcp",
+      },
+      { organizationId },
+    );
     const tool = await ToolModel.createToolIfNotExists({
       name: `${catalogItem.name}__do_thing`,
       description: "Executed-as tool",
@@ -10087,7 +10123,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser({ name: "Ada Lovelace" });
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     await makeConnection({
       catalogId: catalogItem.id,
       ownerId: caller.id,
@@ -10120,7 +10156,7 @@ describe("executed-as identity", () => {
     await makeMember(owner.id, org.id, { role: "admin" });
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     // The caller has their own connection, but the catalog pins everyone to the
     // owner's — so the call runs as the owner, not as the caller.
     await makeConnection({
@@ -10164,7 +10200,7 @@ describe("executed-as identity", () => {
     const { TeamModel } = await import("@/models");
     await TeamModel.addMember(team.id, caller.id, "member");
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     await makeConnection({
       catalogId: catalogItem.id,
       teamId: team.id,
@@ -10195,7 +10231,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser();
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     await makeConnection({
       catalogId: catalogItem.id,
       scope: "org",
@@ -10221,7 +10257,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser();
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     // No stored credential, so the transport forwards the caller's own JWT and
     // the upstream server sees the caller, not the connection's owner.
     await makeConnection({ catalogId: catalogItem.id, scope: "org" });
@@ -10251,7 +10287,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser();
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     await makeConnection({
       catalogId: catalogItem.id,
       scope: "org",
@@ -10280,7 +10316,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser();
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     await makeConnection({ catalogId: catalogItem.id, scope: "org" });
 
     const result = await callTool({
@@ -10307,7 +10343,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser({ name: "Ada Lovelace" });
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     await makeConnection({
       catalogId: catalogItem.id,
       ownerId: caller.id,
@@ -10348,7 +10384,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser({ name: "Ada Lovelace" });
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     await makeConnection({
       catalogId: catalogItem.id,
       ownerId: caller.id,
@@ -10390,7 +10426,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser();
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id);
+    const { catalogItem, tool } = await makeRemoteCatalogTool(agent.id, org.id);
     await makeConnection({
       catalogId: catalogItem.id,
       scope: "org",
@@ -10421,7 +10457,7 @@ describe("executed-as identity", () => {
     const caller = await makeUser();
     await makeMember(caller.id, org.id, { role: "member" });
     const agent = await makeAgent({ organizationId: org.id });
-    const { tool } = await makeRemoteCatalogTool(agent.id);
+    const { tool } = await makeRemoteCatalogTool(agent.id, org.id);
     // No connection exists, so the call is refused before any credential is
     // chosen — but the platform still ran it on the caller's behalf.
 
@@ -10452,11 +10488,14 @@ describe("task-mode upstream timeout", () => {
     await makeMember(caller.id, org.id);
     const agent = await makeAgent({ organizationId: org.id });
 
-    const catalog = await InternalMcpCatalogModel.create({
-      name: "timeout-lab",
-      serverType: "remote",
-      serverUrl: "https://mcp.timeout.example/mcp",
-    });
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "timeout-lab",
+        serverType: "remote",
+        serverUrl: "https://mcp.timeout.example/mcp",
+      },
+      { organizationId: org.id },
+    );
     const secret = await secretManager().createSecret(
       { access_token: "tl-token" },
       "tl-secret",
@@ -10532,11 +10571,14 @@ describe("x-mcp-header mirroring (SEP-2243)", () => {
     await makeMember(caller.id, org.id);
     const agent = await makeAgent({ organizationId: org.id });
 
-    const catalog = await InternalMcpCatalogModel.create({
-      name: "spanner",
-      serverType: "remote",
-      serverUrl: "https://mcp.spanner.example/mcp",
-    });
+    const catalog = await InternalMcpCatalogModel.create(
+      {
+        name: "spanner",
+        serverType: "remote",
+        serverUrl: "https://mcp.spanner.example/mcp",
+      },
+      { organizationId: org.id },
+    );
     const secret = await secretManager().createSecret(
       { access_token: "spanner-token" },
       "spanner-secret",

@@ -7,6 +7,7 @@ import {
   CLEANUP_INTERVAL_LABELS,
   type LimitCleanupInterval,
 } from "@/components/limit-cleanup-interval-select";
+import { TeamSelect } from "@/components/team-select";
 import { Badge } from "@/components/ui/badge";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
@@ -101,29 +102,19 @@ export function BudgetFields({
           <Label htmlFor={`${idPrefix}-billing-team`}>
             Who pays for this {subject}?
           </Label>
-          <Select
-            value={billingTeamId ?? NO_TEAM}
-            onValueChange={(value) =>
-              onBillingTeamIdChange(value === NO_TEAM ? null : value)
-            }
-          >
-            <SelectTrigger id={`${idPrefix}-billing-team`} className="w-full">
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem
-                value={NO_TEAM}
-                description="Usage counts toward the LLM proxy's teams and the owner's limits."
-              >
-                No team
-              </SelectItem>
-              {teams.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.name}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+          <TeamSelect
+            id={`${idPrefix}-billing-team`}
+            ariaLabel={`Who pays for this ${subject}?`}
+            className="w-full"
+            value={billingTeamId}
+            onValueChange={onBillingTeamIdChange}
+            teams={teams}
+            noneOption={{
+              label: "No team",
+              description:
+                "Usage counts toward the LLM proxy's teams and the owner's limits.",
+            }}
+          />
           <p className="text-xs text-muted-foreground">
             {team ? (
               <span>
@@ -389,8 +380,6 @@ function useBillableTeams(currentTeamId: string | null) {
     return [...candidates].sort((a, b) => a.name.localeCompare(b.name));
   }, [allTeams, currentTeamId, isCostManager, myTeams, userId]);
 }
-
-const NO_TEAM = "__none__";
 
 const CAP_PERIODS: LimitCleanupInterval[] = [
   "calendar_month",

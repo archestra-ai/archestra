@@ -160,7 +160,7 @@ describe("CreateOAuthClientDialog", () => {
     await user.click(screen.getByRole("radio", { name: "Main OpenAI" }));
     await continueStep(user);
     await user.click(screen.getByLabelText("Who pays for this client?"));
-    await user.click(await screen.findByRole("option", { name: "Platform" }));
+    await user.click(await screen.findByRole("option", { name: /^Platform/ }));
     await user.type(screen.getByLabelText("Spend cap in dollars"), "200");
     await continueStep(user);
     await user.click(screen.getByRole("button", { name: "Create client" }));

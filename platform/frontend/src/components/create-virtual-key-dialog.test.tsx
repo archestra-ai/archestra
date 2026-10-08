@@ -204,7 +204,7 @@ describe("CreateVirtualKeyDialog", () => {
 
     await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.click(screen.getByLabelText("Who pays for this key?"));
-    await user.click(await screen.findByRole("option", { name: "Platform" }));
+    await user.click(await screen.findByRole("option", { name: /^Platform/ }));
     expect(
       screen.getByText(/The owner's personal limit does not apply/),
     ).toBeVisible();

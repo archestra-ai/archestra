@@ -350,7 +350,7 @@ export async function syncBuiltInSkillsForOrganization(
  * ToolModel.seedArchestraTools upserts the catalog and built-in tools idempotently.
  * Tools are NOT automatically assigned to agents - users must assign them manually.
  */
-async function seedArchestraCatalogAndTools(): Promise<void> {
+export async function seedArchestraCatalogAndTools(): Promise<void> {
   const newlyCreatedToolNames = await ToolModel.seedArchestraTools(
     ARCHESTRA_MCP_CATALOG_ID,
   );

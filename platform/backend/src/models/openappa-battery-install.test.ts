@@ -66,6 +66,40 @@ describe("OpenAppaBatteryInstallModel.replaceAll", () => {
     );
   });
 
+  test("a recompose that derives what is stored leaves the rows untouched", async ({
+    makeOrganization,
+    makeInternalMcpCatalog,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const catalog = await makeInternalMcpCatalog({ organizationId });
+    const rows = [
+      row({
+        catalogId: catalog.id,
+        credentialBindings: { APPA_PROVIDER_GITHUB_TOKEN: "github_token" },
+      }),
+      row({ catalogId: catalog.id, batteryName: "linear" }),
+    ];
+
+    const before = await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows,
+    });
+    const again = await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows: rows.map((planned) => ({
+        ...planned,
+        credentialBindings: { ...planned.credentialBindings },
+      })),
+    });
+
+    const byName = (a: { batteryName: string }, b: { batteryName: string }) =>
+      a.batteryName.localeCompare(b.batteryName);
+    expect(again).toEqual(before);
+    expect(
+      (await OpenAppaBatteryInstallModel.list(organizationId)).sort(byName),
+    ).toEqual([...before].sort(byName));
+  });
+
   test("an organization-wide row is upserted in place rather than duplicated", async ({
     makeOrganization,
     makeInternalMcpCatalog,

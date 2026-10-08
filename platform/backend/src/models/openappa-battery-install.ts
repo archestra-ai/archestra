@@ -1,3 +1,4 @@
+import { isDeepStrictEqual } from "node:util";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import {
@@ -51,6 +52,12 @@ class OpenAppaBatteryInstallModel {
         const current = byIdentity.get(
           identityOf({ batteryName: row.batteryName, ...columns }),
         );
+        // A recompose that derives what is stored touches nothing: most
+        // recomposes change one row of many.
+        if (current && carries(current, values)) {
+          saved.push(current);
+          continue;
+        }
         const [written] = current
           ? await tx
               .update(table)
@@ -228,6 +235,33 @@ function attachmentColumns(attachment: BatteryAttachment): {
     case "organization":
       return { kind: "organization", catalogId: null, detectedId: null };
   }
+}
+
+/** Whether a stored row already carries everything a planned row would write. */
+function carries(
+  current: BatteryInstall,
+  values: Pick<
+    BatteryInstall,
+    | "status"
+    | "packageHash"
+    | "lastError"
+    | "credentialBindings"
+    | "enabled"
+    | "kind"
+    | "catalogId"
+    | "detectedId"
+  >,
+): boolean {
+  return (
+    current.status === values.status &&
+    current.packageHash === values.packageHash &&
+    current.lastError === values.lastError &&
+    current.enabled === values.enabled &&
+    current.kind === values.kind &&
+    current.catalogId === values.catalogId &&
+    current.detectedId === values.detectedId &&
+    isDeepStrictEqual(current.credentialBindings, values.credentialBindings)
+  );
 }
 
 function identityOf(

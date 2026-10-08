@@ -1277,21 +1277,16 @@ function policyChangeResult<
   T extends { before: string; after: string; path?: string },
 >(value: T) {
   const { before, after, ...rest } = value;
+  const diff = policyDiff({
+    before,
+    after,
+    path: value.path ?? "organization.appa.toml",
+  });
   return {
     content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify({
-          ...rest,
-          ...policyDiff({
-            before,
-            after,
-            path: value.path ?? "organization.appa.toml",
-          }),
-        }),
-      },
+      { type: "text" as const, text: JSON.stringify({ ...rest, ...diff }) },
     ],
-    structuredContent: { ...value },
+    structuredContent: { ...value, ...diff },
   };
 }
 

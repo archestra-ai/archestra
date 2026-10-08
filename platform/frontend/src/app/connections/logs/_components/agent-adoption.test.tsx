@@ -17,6 +17,8 @@ global.ResizeObserver = class ResizeObserver {
   unobserve() {}
   disconnect() {}
 };
+// Picking a state scrolls to the users table; jsdom lacks scrollIntoView.
+Element.prototype.scrollIntoView = vi.fn();
 
 const mockUseAgentAdoption = vi.fn();
 const mockReplace = vi.fn();

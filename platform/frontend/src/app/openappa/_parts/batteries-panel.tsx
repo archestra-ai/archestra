@@ -1135,20 +1135,30 @@ function CredentialRow({
           ))}
         </SelectContent>
       </Select>
-      {credential.source === "policy" && (
-        <p className="text-xs text-muted-foreground">
-          <span>
-            Set in the policy repository. Remove its line there to manage it
-            here.
-          </span>
-          {managedInGithub && (
-            <>
-              <span> </span>
-              <PolicyFileLink />
-            </>
-          )}
-        </p>
-      )}
+      {credential.source === "policy" &&
+        (managedInGithub ? (
+          <p className="text-xs text-muted-foreground">
+            <span>
+              Set in the policy repository. Remove its line there to manage it
+              here.
+            </span>
+            <span> </span>
+            <PolicyFileLink />
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            <span>
+              Set by a [credentials] line in the policy text. Remove it on the{" "}
+            </span>
+            <Link
+              href="/openappa/policy"
+              className="underline underline-offset-2 hover:no-underline"
+            >
+              Policy tab
+            </Link>
+            <span> to manage it here.</span>
+          </p>
+        ))}
       {others.length > 0 && (
         <p className="text-xs text-muted-foreground">
           Also read by: {others.join(", ")}

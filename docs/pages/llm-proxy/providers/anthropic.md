@@ -2,7 +2,7 @@
 title: Anthropic
 description: Connect Claude with an Anthropic API key, Microsoft Foundry, Vertex AI, or workload identity federation.
 order: 3
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

@@ -31,11 +31,6 @@ skills. Give the user a short guided tour. Keep the whole reply under 25 lines.
 5. If a server needs the user to sign in, say which one and how.
 6. End by asking what they want to do first.
 `,
-    {
-      headers: {
-        "Content-Type": "text/plain; charset=utf-8",
-        "Cache-Control": "no-store",
-      },
-    },
+    { headers: { "Content-Type": "text/plain; charset=utf-8" } },
   );
 }

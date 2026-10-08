@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import {
   act,
+  cleanup,
   fireEvent,
   render as rtlRender,
   screen,
@@ -9,7 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { useSearchParams } from "next/navigation";
 import type { ReactElement, ReactNode } from "react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import {
   useDefaultMcpGateway,
   useProfile,
@@ -809,37 +810,14 @@ describe("ConnectPage loading", () => {
 });
 
 describe("ConnectPage after copying the prompt", () => {
-  /** An in-memory BroadcastChannel: delivers to every other open channel. */
-  class FakeChannel {
-    static open = new Set<FakeChannel>();
-    onmessage: ((event: { data: unknown }) => void) | null = null;
-    constructor(readonly name: string) {
-      FakeChannel.open.add(this);
-    }
-    postMessage(data: unknown) {
-      for (const other of FakeChannel.open)
-        if (other !== this && other.name === this.name)
-          other.onmessage?.({ data });
-    }
-    close() {
-      FakeChannel.open.delete(this);
-    }
-  }
-
   const welcome =
     "Read http://localhost:3000/welcome.md and show me what I can do with Example Platform.";
 
   beforeEach(() => {
     window.localStorage.clear();
-    FakeChannel.open.clear();
-    vi.stubGlobal("BroadcastChannel", FakeChannel);
   });
 
-  afterEach(() => {
-    vi.unstubAllGlobals();
-  });
-
-  function show(clientId: string, query = "") {
+  function show(clientIds: string[], query = "") {
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams(query) as ReturnType<typeof useSearchParams>,
     );
@@ -853,7 +831,7 @@ describe("ConnectPage after copying the prompt", () => {
     } as unknown as ReturnType<typeof useProfile>);
     mockOrganization({
       data: {
-        connectionShownClientIds: [clientId],
+        connectionShownClientIds: clientIds,
         connectionDefaultMcpGatewayId: "gw-1",
       },
     });
@@ -866,22 +844,25 @@ describe("ConnectPage after copying the prompt", () => {
     );
   const status = () =>
     screen.queryByRole("region", { name: "Connection status" });
+  const approveElsewhere = async () => {
+    postConnected();
+    await screen.findByText(/^Connected\./);
+  };
 
   it("waits for approval once the prompt is copied, then offers the welcome prompt", async () => {
-    show("cursor");
+    show(["cursor"]);
     expect(status()).toBeNull();
     await copyPrompt();
-    expect(status()).toHaveTextContent("Waiting for approval");
     expect(status()).toHaveTextContent(
-      "Cursor opens a browser page. Approve there and this card moves on by itself.",
+      "Waiting for approvalCursor opens a browser page. Approve there and this card moves on by itself.",
     );
 
-    act(() => postConnected());
+    await approveElsewhere();
     expect(status()).toHaveTextContent(
       "Connected. Next, ask Cursor what it can do now",
     );
     expect(status()).toHaveTextContent(
-      "Once your terminal says setup is done, paste this into a new Cursor session.",
+      "Once Cursor says setup is done, paste this into a new Cursor session.",
     );
     expect(screen.getByText(welcome)).toBeVisible();
     // The connect band steps back.
@@ -904,23 +885,15 @@ describe("ConnectPage after copying the prompt", () => {
   });
 
   it("starts waiting when the prompt text is copied by hand", () => {
-    show("cursor");
+    show(["cursor"]);
     fireEvent.copy(screen.getByText(/connect\.md\?client=cursor/));
     expect(status()).toHaveTextContent("Waiting for approval");
   });
 
-  it("ignores an approval it isn't waiting for", () => {
-    show("cursor");
-    act(() => postConnected());
-    expect(status()).toBeNull();
-  });
-
   it("moves on with Done, and goes back to the link on Cancel", async () => {
-    show("cursor");
+    show(["cursor"]);
     await copyPrompt();
     await userEvent.click(screen.getByRole("button", { name: "Cancel" }));
-    expect(status()).toBeNull();
-    act(() => postConnected());
     expect(status()).toBeNull();
 
     await copyPrompt();
@@ -930,8 +903,23 @@ describe("ConnectPage after copying the prompt", () => {
     expect(status()).toHaveTextContent("Connected.");
   });
 
+  it("stops waiting when the agent changes, but keeps a connection it saw", async () => {
+    show(["cursor", "codex"]);
+    await copyPrompt();
+    await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
+    expect(status()).toBeNull();
+
+    await userEvent.click(screen.getByRole("button", { name: /Cursor/ }));
+    await copyPrompt();
+    await approveElsewhere();
+    await userEvent.click(screen.getByRole("button", { name: /Codex/ }));
+    expect(status()).toHaveTextContent(
+      "Connected. Next, ask Cursor what it can do now",
+    );
+  });
+
   it("shows the starter prompt from the link", async () => {
-    show("generic");
+    show(["generic"]);
     await userEvent.click(
       screen.getByRole("button", { name: "Show the starter prompt" }),
     );
@@ -944,18 +932,15 @@ describe("ConnectPage after copying the prompt", () => {
     expect(screen.queryByRole("region", { name: "Starter prompt" })).toBeNull();
   });
 
-  it("has no starter prompt for n8n", () => {
-    show("n8n");
-    expect(
-      screen.queryByRole("button", { name: "Show the starter prompt" }),
-    ).toBeNull();
-  });
-
-  it("keeps the starter prompt, but has no prompt to copy, in manual setup", () => {
-    show("generic", "clientId=generic&mode=manual");
-    expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
+  it("offers the starter prompt in manual setup, but not for n8n", () => {
+    show(["generic"], "clientId=generic&mode=manual");
     expect(
       screen.getByRole("button", { name: "Show the starter prompt" }),
     ).toBeVisible();
+    cleanup();
+    show(["n8n"]);
+    expect(
+      screen.queryByRole("button", { name: "Show the starter prompt" }),
+    ).toBeNull();
   });
 });

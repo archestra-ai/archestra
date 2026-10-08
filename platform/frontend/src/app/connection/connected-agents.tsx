@@ -49,7 +49,13 @@ import {
   usesGenericInstructions,
 } from "./clients";
 import type { ConnectPageData } from "./connect-page-data";
-import { agentsInPickerOrder, fmt, nameOf, plural } from "./connect-page-parts";
+import {
+  agentsInPickerOrder,
+  fmt,
+  nameOf,
+  plural,
+  TextButton,
+} from "./connect-page-parts";
 import { setupModeFor } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
 
@@ -163,13 +169,7 @@ export function ManageAgents({
   if (agents.length === 0) return null;
   return (
     <>
-      <UnstyledButton
-        type="button"
-        onClick={() => setOpen(true)}
-        className={LINK}
-      >
-        Manage
-      </UnstyledButton>
+      <TextButton onClick={() => setOpen(true)}>Manage</TextButton>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader className="px-4">
@@ -222,16 +222,14 @@ export function ManageAgents({
             {onHowItWorks && (
               <p className="mt-3 text-xs text-muted-foreground">
                 Disconnecting an agent you haven't connected yet?{" "}
-                <UnstyledButton
-                  type="button"
-                  className={LINK}
+                <TextButton
                   onClick={() => {
                     setOpen(false);
                     onHowItWorks();
                   }}
                 >
                   How it works
-                </UnstyledButton>
+                </TextButton>
               </p>
             )}
           </DialogBody>
@@ -344,9 +342,6 @@ function DisconnectDialog({
 
 // === Before connecting: how a connection comes off again ===
 
-const LINK =
-  "rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
-
 /**
  * Beside the picker: that a connection comes off again, then one link. With
  * nothing connected it opens How to disconnect; once something is, Manage
@@ -367,13 +362,7 @@ export function DisconnectLine({
     <span className="text-xs text-muted-foreground">
       You can disconnect at any time ·{" "}
       {agents.length === 0 ? (
-        <UnstyledButton
-          type="button"
-          className={LINK}
-          onClick={() => setHowTo(true)}
-        >
-          How it works
-        </UnstyledButton>
+        <TextButton onClick={() => setHowTo(true)}>How it works</TextButton>
       ) : (
         <>
           {fmt(agents.length)} connected ·{" "}

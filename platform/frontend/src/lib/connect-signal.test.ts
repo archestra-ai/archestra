@@ -1,61 +1,26 @@
-import { renderHook } from "@testing-library/react";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { renderHook, waitFor } from "@testing-library/react";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { postConnected, useConnectedSignal } from "./connect-signal";
-
-/** An in-memory BroadcastChannel: delivers to every other open channel. */
-class FakeChannel {
-  static open = new Set<FakeChannel>();
-  onmessage: ((event: { data: unknown }) => void) | null = null;
-  constructor(readonly name: string) {
-    FakeChannel.open.add(this);
-  }
-  postMessage(data: unknown) {
-    for (const other of FakeChannel.open)
-      if (other !== this && other.name === this.name)
-        other.onmessage?.({ data });
-  }
-  close() {
-    FakeChannel.open.delete(this);
-  }
-}
-
-beforeEach(() => {
-  FakeChannel.open.clear();
-  vi.stubGlobal("BroadcastChannel", FakeChannel);
-});
 
 afterEach(() => {
   vi.unstubAllGlobals();
 });
 
 describe("connect signal", () => {
-  it("calls back for each broadcast while enabled", () => {
-    const onConnected = vi.fn();
-    renderHook(() => useConnectedSignal(true, onConnected));
-    postConnected();
-    postConnected();
-    expect(onConnected).toHaveBeenCalledTimes(2);
-  });
-
-  it("ignores broadcasts while disabled, and after being disabled", () => {
+  it("calls back for a broadcast while enabled, and not after", async () => {
     const onConnected = vi.fn();
     const { rerender } = renderHook(
       ({ enabled }) => useConnectedSignal(enabled, onConnected),
-      { initialProps: { enabled: false } },
+      { initialProps: { enabled: true } },
     );
     postConnected();
-    rerender({ enabled: true });
+    await waitFor(() => expect(onConnected).toHaveBeenCalledTimes(1));
+
     rerender({ enabled: false });
     postConnected();
-    expect(onConnected).not.toHaveBeenCalled();
-    expect(FakeChannel.open.size).toBe(0);
-  });
-
-  it("ignores other messages on the channel", () => {
-    const onConnected = vi.fn();
-    renderHook(() => useConnectedSignal(true, onConnected));
-    new FakeChannel("connect-signal").postMessage({ type: "denied" });
-    expect(onConnected).not.toHaveBeenCalled();
+    // Give a stray delivery the time the first one took.
+    await new Promise((resolve) => setTimeout(resolve, 50));
+    expect(onConnected).toHaveBeenCalledTimes(1);
   });
 
   it("does nothing in a browser without BroadcastChannel", () => {

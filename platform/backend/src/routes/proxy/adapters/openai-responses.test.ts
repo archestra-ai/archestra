@@ -561,6 +561,77 @@ describe("OpenAiResponsesRequestAdapter.getMessages", () => {
   });
 });
 
+describe("OpenAiResponsesRequestAdapter.getTools", () => {
+  // Codex declares an MCP server's tools as members of an `mcp__<label>`
+  // namespace and calls each by its bare name inside that namespace. The
+  // proxy persists and observes tools from this list, so a namespace that is
+  // dropped here is a server the proxy never sees.
+  test("flattens MCP namespace members under their namespace, in every container", () => {
+    const request = {
+      model: "gpt-5.5-pro",
+      tools: [
+        { type: "function", name: "top_level", parameters: { type: "object" } },
+        {
+          type: "namespace",
+          name: "mcp__slack",
+          tools: [
+            {
+              type: "function",
+              name: "slack_send_message",
+              description: "Send a message",
+              parameters: { type: "object" },
+            },
+            { type: "custom", name: "not_a_function" },
+          ],
+        },
+        {
+          type: "namespace",
+          name: "functions",
+          tools: [{ type: "function", name: "shell", parameters: {} }],
+        },
+      ],
+      additional_tools: [
+        {
+          type: "namespace",
+          name: "mcp__linear",
+          tools: [{ type: "function", name: "create_issue", parameters: {} }],
+        },
+      ],
+      input: [
+        {
+          type: "tool_search_output",
+          tools: [{ type: "function", name: "searched", parameters: {} }],
+        },
+      ],
+    } as unknown as OpenAi.Types.ResponsesRequest;
+
+    const tools = openAiResponsesAdapterFactory
+      .createRequestAdapter(request)
+      .getTools();
+
+    expect(tools).toEqual([
+      {
+        name: "top_level",
+        description: undefined,
+        inputSchema: { type: "object" },
+      },
+      {
+        name: "slack_send_message",
+        namespace: "mcp__slack",
+        description: "Send a message",
+        inputSchema: { type: "object" },
+      },
+      {
+        name: "create_issue",
+        namespace: "mcp__linear",
+        description: undefined,
+        inputSchema: {},
+      },
+      { name: "searched", description: undefined, inputSchema: {} },
+    ]);
+  });
+});
+
 describe("OpenAiResponsesRequestAdapter.toProviderRequest", () => {
   test.each([
     ["true", { is_error: true }, true],

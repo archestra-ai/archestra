@@ -78296,6 +78296,99 @@ export type GetMcpServerAutoModeAgentsResponses = {
 
 export type GetMcpServerAutoModeAgentsResponse = GetMcpServerAutoModeAgentsResponses[keyof GetMcpServerAutoModeAgentsResponses];
 
+export type GetDetectedMcpServersData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/mcp_server/detected';
+};
+
+export type GetDetectedMcpServersErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetDetectedMcpServersError = GetDetectedMcpServersErrors[keyof GetDetectedMcpServersErrors];
+
+export type GetDetectedMcpServersResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        label: string;
+        clientFamily: 'claude-code' | 'codex' | 'opencode';
+        tools: Array<{
+            id: string;
+            name: string;
+            toolName: string;
+            description: string | null;
+        }>;
+        observerCount: number;
+        firstObservedAt: string;
+    }>;
+};
+
+export type GetDetectedMcpServersResponse = GetDetectedMcpServersResponses[keyof GetDetectedMcpServersResponses];
+
 export type GetMcpServersData = {
     body?: never;
     path?: never;

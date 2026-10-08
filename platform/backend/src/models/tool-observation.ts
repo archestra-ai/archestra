@@ -3,10 +3,20 @@ import {
   clientForExternalAgentIds,
   TimeInMs,
 } from "@archestra/shared";
-import { eq, inArray } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 import { LRUCacheManager } from "@/cache-manager";
 import db, { schema } from "@/database";
+import { isProxyDiscoveredTool } from "@/database/schemas/tool";
 import logger from "@/logging";
+
+export type ProxyToolObservation = {
+  toolId: string;
+  toolName: string;
+  toolDescription: string | null;
+  userId: string;
+  externalAgentId: string;
+  observedAt: Date;
+};
 
 class ToolObservationModel {
   /**
@@ -31,10 +41,18 @@ class ToolObservationModel {
       return;
     }
 
+    // Only proxy-discovered rows are observed: a catalog, delegation or
+    // soft-deleted row that happens to share a name is not what the client
+    // declared.
     const tools = await db
       .select({ id: schema.toolsTable.id, name: schema.toolsTable.name })
       .from(schema.toolsTable)
-      .where(inArray(schema.toolsTable.name, unseenNames));
+      .where(
+        and(
+          inArray(schema.toolsTable.name, unseenNames),
+          isProxyDiscoveredTool(schema.toolsTable),
+        ),
+      );
     if (tools.length === 0) {
       return;
     }
@@ -65,6 +83,39 @@ class ToolObservationModel {
       },
       "[toolObservation] recorded tool observations",
     );
+  }
+
+  /**
+   * Every observation of a proxy-discovered tool by a member of the
+   * organization, with the tool's name and the client that declared it. The
+   * detected-server view is derived from these rows; observations carry no
+   * organization of their own, so membership of the observer scopes them.
+   */
+  static async listProxyToolObservations(
+    organizationId: string,
+  ): Promise<ProxyToolObservation[]> {
+    return db
+      .select({
+        toolId: schema.toolsTable.id,
+        toolName: schema.toolsTable.name,
+        toolDescription: schema.toolsTable.description,
+        userId: schema.toolObservationsTable.userId,
+        externalAgentId: schema.toolObservationsTable.externalAgentId,
+        observedAt: schema.toolObservationsTable.createdAt,
+      })
+      .from(schema.toolObservationsTable)
+      .innerJoin(
+        schema.toolsTable,
+        eq(schema.toolsTable.id, schema.toolObservationsTable.toolId),
+      )
+      .innerJoin(
+        schema.membersTable,
+        and(
+          eq(schema.membersTable.userId, schema.toolObservationsTable.userId),
+          eq(schema.membersTable.organizationId, organizationId),
+        ),
+      )
+      .where(isProxyDiscoveredTool(schema.toolsTable));
   }
 
   /**

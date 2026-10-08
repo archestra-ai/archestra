@@ -71,6 +71,7 @@ import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
+import { useDetectedMcpServers } from "@/lib/mcp/detected-mcp-server.query";
 import {
   countInternalMcpCatalog,
   useInternalMcpCatalog,
@@ -97,8 +98,9 @@ import {
 } from "@/lib/mcp/mcp-server-issues";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
-
 import { resolveCatalogEnvironmentLabel } from "./catalog-environment-label";
+import { filterDetectedServers } from "./detected-servers";
+import { DetectedServersSection } from "./detected-servers-section";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
@@ -159,6 +161,11 @@ export function InternalMCPCatalog({
 
   // Get search query from URL
   const searchQueryFromUrl = searchParams.get("search") || "";
+  const { data: detectedServersData } = useDetectedMcpServers();
+  const detectedServers = useMemo(
+    () => filterDetectedServers(detectedServersData ?? [], searchQueryFromUrl),
+    [detectedServersData, searchQueryFromUrl],
+  );
 
   const {
     data: catalogItems,
@@ -1336,6 +1343,7 @@ export function InternalMCPCatalog({
                 }
               />
             )}
+            <DetectedServersSection servers={detectedServers} />
           </div>
         )}
 

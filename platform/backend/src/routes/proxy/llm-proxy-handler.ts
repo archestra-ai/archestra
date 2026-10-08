@@ -19,6 +19,7 @@ import {
   InteractionSourceSchema,
   isCodexOriginator,
   isProviderApiKeyOptional,
+  MCP_SERVER_TOOL_NAME_SEPARATOR,
   OPENCODE_AGENT_HEADER,
   OPENCODE_CLIENT_ID,
   PROVIDER_BASE_URL_HEADER,
@@ -1402,7 +1403,11 @@ export async function handleLLMProxy<
         // discovered tool persisted below.
         await utils.tools.persistTools(
           tools.map((t) => ({
-            toolName: t.name,
+            // A namespaced tool is persisted under its one-string spelling,
+            // `<namespace>__<name>`, the way the client's call is evaluated.
+            toolName: t.namespace
+              ? `${t.namespace}${MCP_SERVER_TOOL_NAME_SEPARATOR}${t.name}`
+              : t.name,
             toolParameters: t.inputSchema,
             toolDescription: t.description,
             // With attestations, tools served by the gateway are identified
@@ -1411,7 +1416,8 @@ export async function handleLLMProxy<
             ...(toolIdentity.mode === "attested" && !isInternalChat
               ? {
                   servedByGateway:
-                    toolIdentity.attestationOf(t.name) !== undefined,
+                    toolIdentity.attestationOf(t.name, t.namespace) !==
+                    undefined,
                 }
               : {}),
           })),

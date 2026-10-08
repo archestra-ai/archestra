@@ -1,16 +1,22 @@
-import { and, asc, eq, notInArray, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, sql } from "drizzle-orm";
 import db, { schema } from "@/database";
-import type {
-  BatteryInstall,
-  BatteryInstallRow,
+import {
+  attachmentKey,
+  attachmentOf,
+  type BatteryAttachment,
+  type BatteryInstall,
+  type BatteryInstallRow,
 } from "@/types/openappa-batteries";
 
 const table = schema.openappaBatteryInstallsTable;
 
 class OpenAppaBatteryInstallModel {
   /**
-   * Rewrite the organization's derived installs: every row upserted by
-   * (organization, catalog, battery) so its id survives, every other row deleted.
+   * Rewrite the organization's derived installs: a row whose (battery,
+   * attachment) is still derived keeps its id, a new one is inserted, the rest
+   * go. The organization's rows are locked for the transaction so two
+   * recomposes cannot both insert the same identity; the writer infers no
+   * unique constraint, so the next contract migration can replace it.
    */
   static async replaceAll(params: {
     organizationId: string;
@@ -18,43 +24,57 @@ class OpenAppaBatteryInstallModel {
   }): Promise<BatteryInstall[]> {
     const { organizationId, rows } = params;
     return db.transaction(async (tx) => {
+      await tx.execute(
+        sql`select pg_advisory_xact_lock(hashtext(${LOCK_SCOPE}), hashtext(${organizationId}))`,
+      );
       const now = new Date();
-      const saved =
-        rows.length === 0
-          ? []
+      const existing = await tx
+        .select()
+        .from(table)
+        .where(eq(table.organizationId, organizationId))
+        .for("update");
+      const byIdentity = new Map(existing.map((row) => [identityOf(row), row]));
+      const saved: BatteryInstall[] = [];
+      for (const row of rows) {
+        const columns = attachmentColumns(row.attachment);
+        const values = {
+          status: row.status,
+          packageHash: row.packageHash,
+          lastError: row.lastError,
+          credentialBindings: row.credentialBindings,
+          // `enabled` is true for every declared battery; absence is how one is off.
+          enabled: true,
+          updatedAt: now,
+          ...columns,
+        };
+        const current = byIdentity.get(
+          identityOf({ batteryName: row.batteryName, ...columns }),
+        );
+        const [written] = current
+          ? await tx
+              .update(table)
+              .set(values)
+              .where(eq(table.id, current.id))
+              .returning()
           : await tx
               .insert(table)
-              // `enabled` is true for every declared battery; absence is how one is off.
-              .values(
-                rows.map((row) => ({ organizationId, enabled: true, ...row })),
-              )
-              .onConflictDoUpdate({
-                target: [
-                  table.organizationId,
-                  table.catalogId,
-                  table.batteryName,
-                ],
-                set: {
-                  status: sql`excluded.status`,
-                  packageHash: sql`excluded.package_hash`,
-                  lastError: sql`excluded.last_error`,
-                  credentialBindings: sql`excluded.credential_bindings`,
-                  enabled: true,
-                  updatedAt: now,
-                },
+              .values({
+                organizationId,
+                batteryName: row.batteryName,
+                ...values,
               })
               .returning();
-      await tx.delete(table).where(
-        saved.length === 0
-          ? eq(table.organizationId, organizationId)
-          : and(
-              eq(table.organizationId, organizationId),
-              notInArray(
-                table.id,
-                saved.map((install) => install.id),
-              ),
-            ),
-      );
+        saved.push(written);
+      }
+      const kept = new Set(saved.map((row) => row.id));
+      const stale = existing.filter((row) => !kept.has(row.id));
+      if (stale.length > 0)
+        await tx.delete(table).where(
+          inArray(
+            table.id,
+            stale.map((row) => row.id),
+          ),
+        );
       return saved;
     });
   }
@@ -125,7 +145,7 @@ class OpenAppaBatteryInstallModel {
       ? {
           id: row.id,
           name: row.batteryName,
-          catalogId: row.catalogId,
+          attachment: attachmentOf(row),
           enabled: row.enabled,
           credentialBindings: row.credentialBindings,
         }
@@ -134,3 +154,40 @@ class OpenAppaBatteryInstallModel {
 }
 
 export default OpenAppaBatteryInstallModel;
+
+// === Internal helpers ===
+
+/** Keys the per-organization advisory lock apart from any other use of `hashtext`. */
+const LOCK_SCOPE = "openappa_battery_installs";
+
+function attachmentColumns(attachment: BatteryAttachment): {
+  kind: BatteryAttachment["kind"];
+  catalogId: string | null;
+  detectedId: string | null;
+} {
+  switch (attachment.kind) {
+    case "catalog":
+      return {
+        kind: "catalog",
+        catalogId: attachment.catalogId,
+        detectedId: null,
+      };
+    case "detected":
+      return {
+        kind: "detected",
+        catalogId: null,
+        detectedId: attachment.detectedId,
+      };
+    case "organization":
+      return { kind: "organization", catalogId: null, detectedId: null };
+  }
+}
+
+function identityOf(
+  row: Pick<
+    BatteryInstall,
+    "batteryName" | "kind" | "catalogId" | "detectedId"
+  >,
+): string {
+  return `${row.batteryName}\u0000${attachmentKey(attachmentOf(row))}`;
+}

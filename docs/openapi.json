@@ -332672,11 +332672,24 @@
                             "batteryName": {
                               "type": "string"
                             },
+                            "kind": {
+                              "nullable": true,
+                              "type": "string",
+                              "enum": [
+                                "catalog",
+                                "detected",
+                                "organization"
+                              ]
+                            },
                             "catalogId": {
                               "nullable": true,
                               "type": "string",
                               "format": "uuid",
                               "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                            },
+                            "detectedId": {
+                              "nullable": true,
+                              "type": "string"
                             },
                             "enabled": {
                               "type": "boolean"
@@ -332722,7 +332735,9 @@
                             "id",
                             "organizationId",
                             "batteryName",
+                            "kind",
                             "catalogId",
+                            "detectedId",
                             "enabled",
                             "status",
                             "packageHash",
@@ -333061,14 +333076,56 @@
                                 "target": {
                                   "type": "string"
                                 },
-                                "catalogId": {
+                                "attachment": {
                                   "nullable": true,
-                                  "type": "string"
+                                  "oneOf": [
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "catalog"
+                                          ]
+                                        },
+                                        "catalogId": {
+                                          "type": "string",
+                                          "format": "uuid",
+                                          "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "catalogId"
+                                      ],
+                                      "additionalProperties": false
+                                    },
+                                    {
+                                      "type": "object",
+                                      "properties": {
+                                        "kind": {
+                                          "type": "string",
+                                          "enum": [
+                                            "detected"
+                                          ]
+                                        },
+                                        "detectedId": {
+                                          "type": "string",
+                                          "minLength": 1
+                                        }
+                                      },
+                                      "required": [
+                                        "kind",
+                                        "detectedId"
+                                      ],
+                                      "additionalProperties": false
+                                    }
+                                  ]
                                 }
                               },
                               "required": [
                                 "target",
-                                "catalogId"
+                                "attachment"
                               ],
                               "additionalProperties": false
                             }
@@ -333123,7 +333180,7 @@
                         "additionalProperties": false
                       }
                     },
-                    "unusedAliases": {
+                    "aliasesWithoutIncludedBattery": {
                       "type": "array",
                       "items": {
                         "type": "object",
@@ -333190,7 +333247,7 @@
                   },
                   "required": [
                     "batteries",
-                    "unusedAliases",
+                    "aliasesWithoutIncludedBattery",
                     "rootRevision",
                     "lastError",
                     "managedInGithub",
@@ -334086,11 +334143,24 @@
                               "batteryName": {
                                 "type": "string"
                               },
+                              "kind": {
+                                "nullable": true,
+                                "type": "string",
+                                "enum": [
+                                  "catalog",
+                                  "detected",
+                                  "organization"
+                                ]
+                              },
                               "catalogId": {
                                 "nullable": true,
                                 "type": "string",
                                 "format": "uuid",
                                 "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "detectedId": {
+                                "nullable": true,
+                                "type": "string"
                               },
                               "enabled": {
                                 "type": "boolean"
@@ -334136,7 +334206,9 @@
                               "id",
                               "organizationId",
                               "batteryName",
+                              "kind",
                               "catalogId",
+                              "detectedId",
                               "enabled",
                               "status",
                               "packageHash",
@@ -334500,14 +334572,56 @@
                           "target": {
                             "type": "string"
                           },
-                          "catalogId": {
+                          "attachment": {
                             "nullable": true,
-                            "type": "string"
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "catalog"
+                                    ]
+                                  },
+                                  "catalogId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "catalogId"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "detected"
+                                    ]
+                                  },
+                                  "detectedId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "detectedId"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
                           }
                         },
                         "required": [
                           "target",
-                          "catalogId"
+                          "attachment"
                         ],
                         "additionalProperties": false
                       }
@@ -334902,14 +335016,56 @@
                           "target": {
                             "type": "string"
                           },
-                          "catalogId": {
+                          "attachment": {
                             "nullable": true,
-                            "type": "string"
+                            "oneOf": [
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "catalog"
+                                    ]
+                                  },
+                                  "catalogId": {
+                                    "type": "string",
+                                    "format": "uuid",
+                                    "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "catalogId"
+                                ],
+                                "additionalProperties": false
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "kind": {
+                                    "type": "string",
+                                    "enum": [
+                                      "detected"
+                                    ]
+                                  },
+                                  "detectedId": {
+                                    "type": "string",
+                                    "minLength": 1
+                                  }
+                                },
+                                "required": [
+                                  "kind",
+                                  "detectedId"
+                                ],
+                                "additionalProperties": false
+                              }
+                            ]
                           }
                         },
                         "required": [
                           "target",
-                          "catalogId"
+                          "attachment"
                         ],
                         "additionalProperties": false
                       }

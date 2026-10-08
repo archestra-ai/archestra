@@ -478,10 +478,12 @@ export function BatteriesPanel() {
           onClose={() => setDeletingPackage(null)}
         />
       )}
-      {declarations.data.unusedAliases.length > 0 && (
+      {declarations.data.aliasesWithoutIncludedBattery.length > 0 && (
         <div className="space-y-2 border-t pt-3">
-          <h3 className="text-sm font-medium">Unused aliases</h3>
-          {declarations.data.unusedAliases.map((alias) => (
+          <h3 className="text-sm font-medium">
+            Aliases no included battery declares
+          </h3>
+          {declarations.data.aliasesWithoutIncludedBattery.map((alias) => (
             <div
               key={alias.namespace}
               className="flex flex-wrap items-center gap-2 text-sm"
@@ -624,7 +626,7 @@ function BatteryDialog({
   const servers = included?.servers ?? [];
   const governed = new Set(
     servers
-      .map((server) => server.catalogId)
+      .map((server) => attachedCatalogId(server))
       .filter((id): id is string => id !== null),
   );
   // An entry not in the policy yet reads the organization's credential table
@@ -708,25 +710,28 @@ function BatteryDialog({
           ) : (
             <ul className="divide-y rounded-md border">
               {servers.map((server) => {
+                const catalogId = attachedCatalogId(server);
                 const install =
                   installs.find(
-                    ({ catalogId }) => catalogId === server.catalogId,
+                    (candidate) =>
+                      catalogId !== null && candidate.catalogId === catalogId,
                   ) ?? null;
                 const name =
-                  server.catalogId === null
+                  server.attachment === null
                     ? "Removed server"
-                    : catalogName(server.catalogId);
+                    : server.attachment.kind === "catalog"
+                      ? catalogName(server.attachment.catalogId)
+                      : server.attachment.detectedId;
                 return (
                   <ServerRow
                     key={server.target}
                     catalogEntry={
-                      catalog.find((entry) => entry.id === server.catalogId) ??
-                      null
+                      catalog.find((entry) => entry.id === catalogId) ?? null
                     }
                     name={name}
                     detail={`${server.target}__*`}
                     action={
-                      writable && install !== null && server.catalogId ? (
+                      writable && install !== null && catalogId ? (
                         <Button
                           type="button"
                           variant="ghost"
@@ -1566,4 +1571,16 @@ async function readPackage(files: File[]) {
       text: await file.text(),
     })),
   );
+}
+
+/** The catalog an alias target resolved to, when it resolved to one. */
+function attachedCatalogId(server: {
+  attachment:
+    | { kind: "catalog"; catalogId: string }
+    | { kind: "detected" }
+    | null;
+}): string | null {
+  return server.attachment?.kind === "catalog"
+    ? server.attachment.catalogId
+    : null;
 }

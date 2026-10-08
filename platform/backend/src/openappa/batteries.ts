@@ -25,25 +25,30 @@ import {
 } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
-import type {
-  AttachReadiness,
-  BatteryCredentialBindings,
-  BatteryInstall,
-  BatteryInstallRow,
-  BatteryInstallStatus,
-  BatteryMatchEvidence,
-  BatteryMatches,
-  BatteryPackageFile,
-  BatteryScope,
-  BatterySummary,
-  CreateBatteryInstall,
-  EffectivePolicy,
-  PolicyBatteryView,
-  PolicyDeclarationsView,
-  UpdateBatteryInstall,
-  UploadedBatteryPackage,
+import {
+  type AttachReadiness,
+  attachmentKey,
+  attachmentOf,
+  type BatteryAttachment,
+  type BatteryCredentialBindings,
+  type BatteryInstall,
+  type BatteryInstallRow,
+  type BatteryInstallStatus,
+  type BatteryMatchEvidence,
+  type BatteryMatches,
+  type BatteryPackageFile,
+  type BatteryScope,
+  type BatterySummary,
+  type CreateBatteryInstall,
+  type EffectivePolicy,
+  type PolicyBatteryView,
+  type PolicyDeclarationsView,
+  sameAttachment,
+  type UpdateBatteryInstall,
+  type UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
+import { isDetectedServerId } from "@/utils/detected-mcp-server-names";
 import {
   addedGrants,
   bundledEntry,
@@ -119,7 +124,9 @@ class OpenAppaBatteriesService {
     const result = new Map<string, CatalogBattery>();
     for (const catalogId of catalogIds) {
       const installed = installs
-        .filter((install) => install.catalogId === catalogId)
+        .filter((install) =>
+          sameAttachment(attachmentOf(install), { kind: "catalog", catalogId }),
+        )
         .sort(
           (a, b) =>
             Number(b.status === "active") - Number(a.status === "active"),
@@ -166,7 +173,7 @@ class OpenAppaBatteriesService {
     const available = await this.availableBatteries(organizationId);
     const { readiness } = await this.attachTargets({
       organizationId,
-      catalogId,
+      server: { kind: "catalog", id: catalog.id, name: catalog.name },
     });
     return {
       attach: readiness,
@@ -176,8 +183,11 @@ class OpenAppaBatteriesService {
           install:
             installs.find(
               (install) =>
-                install.catalogId === catalogId &&
-                install.batteryName === match.battery,
+                install.batteryName === match.battery &&
+                sameAttachment(attachmentOf(install), {
+                  kind: "catalog",
+                  catalogId,
+                }),
             ) ?? null,
         }),
       ),
@@ -188,12 +198,12 @@ class OpenAppaBatteriesService {
   async policyDeclarations(
     organizationId: string,
   ): Promise<PolicyDeclarationsView> {
-    const { policy, batteries, unusedAliases } =
+    const { policy, batteries, aliasesWithoutIncludedBattery } =
       await this.current(organizationId);
     const sync = await OpenAppaGithubSyncModel.find(organizationId);
     return {
       batteries,
-      unusedAliases,
+      aliasesWithoutIncludedBattery,
       rootRevision: policy.rootRevision,
       lastError: policy.lastError,
       managedInGithub: sync?.interval != null,
@@ -420,9 +430,9 @@ class OpenAppaBatteriesService {
         if (catalog === null) return [{ kind: "addInclude", entry }];
         const { targets, readiness } = await this.attachTargets({
           organizationId,
-          catalogId: catalog.id,
+          server: { kind: "catalog", id: catalog.id, name: catalog.name },
         });
-        assertAttachable({ catalog: catalog.name, readiness });
+        assertAttachable({ server: catalog.name, readiness });
         return [
           { kind: "addInclude", entry },
           ...bindEdits({ resolution, namespaces: battery.namespaces, targets }),
@@ -432,7 +442,10 @@ class OpenAppaBatteriesService {
     return this.batteryView({
       organizationId,
       name: install.batteryName,
-      catalogId: catalog?.id ?? null,
+      attachment:
+        catalog === null
+          ? { kind: "organization" }
+          : { kind: "catalog", catalogId: catalog.id },
     });
   }
 
@@ -452,17 +465,12 @@ class OpenAppaBatteriesService {
       organizationId,
     });
     if (!existing) throw new ApiError(404, "Battery install not found");
-    const catalog =
-      existing.catalogId === null
-        ? null
-        : await this.requireCatalog({
-            organizationId,
-            catalogId: existing.catalogId,
-          });
-    if (catalog === null && changes.enabled === false)
+    const attachment = attachmentOf(existing);
+    const server = await this.attachedServer({ organizationId, attachment });
+    if (server === null && changes.enabled === false)
       throw new ApiError(
         409,
-        `${existing.batteryName} governs the organization, not a catalog, so there is nothing to detach. Remove the install to drop it.`,
+        `${existing.batteryName} governs the organization, not a server, so there is nothing to detach. Remove the install to drop it.`,
       );
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId,
@@ -478,12 +486,12 @@ class OpenAppaBatteriesService {
           content: latest.content,
         });
         const edits: PolicyEditInput[] = [];
-        if (catalog !== null)
+        if (server !== null)
           edits.push(
-            ...(await this.catalogBindingEdits({
+            ...(await this.serverBindingEdits({
               organizationId,
               resolution,
-              catalog,
+              server,
               batteryName: existing.batteryName,
               namespaces: battery?.namespaces ?? [],
               enabled: changes.enabled,
@@ -513,7 +521,7 @@ class OpenAppaBatteriesService {
     return this.batteryView({
       organizationId,
       name: existing.batteryName,
-      catalogId: existing.catalogId,
+      attachment,
     });
   }
 
@@ -532,13 +540,10 @@ class OpenAppaBatteriesService {
       organizationId,
     });
     if (!existing) throw new ApiError(404, "Battery install not found");
-    const catalog =
-      existing.catalogId === null
-        ? null
-        : await this.requireCatalog({
-            organizationId,
-            catalogId: existing.catalogId,
-          });
+    const server = await this.attachedServer({
+      organizationId,
+      attachment: attachmentOf(existing),
+    });
     const battery = await openappaDeclarations.resolveInstalled({
       organizationId,
       name: existing.batteryName,
@@ -557,12 +562,12 @@ class OpenAppaBatteriesService {
         );
         if (!included) return [];
         // An organization-wide row stands for the include alone.
-        if (catalog === null)
+        if (server === null)
           return [{ kind: "removeInclude", entry: included.entry }];
         const namespaces = battery?.namespaces ?? [];
         const { targets } = await this.attachTargets({
           organizationId,
-          catalogId: catalog.id,
+          server,
         });
         const remaining = namespaces.some(
           (namespace) =>
@@ -580,7 +585,7 @@ class OpenAppaBatteriesService {
         assertDetaches({
           edits,
           battery: existing.batteryName,
-          catalog: catalog.name,
+          server: server.name,
         });
         return edits;
       },
@@ -1099,16 +1104,22 @@ class OpenAppaBatteriesService {
         helpers: entry.battery?.helpers ?? [],
         servers: servers.map(({ target, catalogs }) => ({
           target,
-          catalogId: catalogs.size === 1 ? ([...catalogs][0] as string) : null,
+          attachment:
+            catalogs.size === 1
+              ? { kind: "catalog", catalogId: [...catalogs][0] as string }
+              : null,
         })),
         credentials,
       });
-      for (const catalogId of organizationWide ? [null] : catalogIds) {
-        const key = rowKey({ batteryName: entry.name, catalogId });
+      const attachments: BatteryAttachment[] = organizationWide
+        ? [{ kind: "organization" }]
+        : catalogIds.map((catalogId) => ({ kind: "catalog", catalogId }));
+      for (const attachment of attachments) {
+        const key = rowKey({ batteryName: entry.name, attachment });
         if (rows.has(key)) continue;
         rows.set(key, {
           batteryName: entry.name,
-          catalogId,
+          attachment,
           status,
           packageHash: entry.packageHash,
           lastError: null,
@@ -1124,7 +1135,7 @@ class OpenAppaBatteriesService {
       resolution,
       batteries,
       rows: [...rows.values()],
-      unusedAliases: resolution.aliases.filter(
+      aliasesWithoutIncludedBattery: resolution.aliases.filter(
         (alias) => !declared.has(alias.namespace),
       ),
     };
@@ -1195,7 +1206,7 @@ class OpenAppaBatteriesService {
   private async batteryView(params: {
     organizationId: string;
     name: string;
-    catalogId: string | null;
+    attachment: BatteryAttachment;
   }): Promise<BatteryWriteResult> {
     const { batteries, installs } = await this.recompose(params.organizationId);
     const battery = batteries.find(
@@ -1206,7 +1217,7 @@ class OpenAppaBatteriesService {
     const row = installs.find(
       (install) =>
         install.batteryName === params.name &&
-        install.catalogId === params.catalogId,
+        sameAttachment(attachmentOf(install), params.attachment),
     );
     return { battery, installId: row?.id ?? null };
   }
@@ -1267,8 +1278,12 @@ class OpenAppaBatteriesService {
       organizationId,
       content: latest.content,
     });
+    // A detected server's target is its own id, never a catalog's prefix, so a
+    // rename of a catalog leaves it alone even when the strings coincide.
+    const renamed = (target: string) =>
+      renames.has(target) && !isDetectedServerId(target);
     const stale = resolution.aliases.filter((alias) =>
-      alias.servers.some((target) => renames.has(target)),
+      alias.servers.some(renamed),
     );
     if (stale.length === 0) return;
     if ((await OpenAppaGithubSyncModel.find(organizationId))?.interval) {
@@ -1276,9 +1291,7 @@ class OpenAppaBatteriesService {
         {
           organizationId,
           catalogId,
-          staleTargets: stale.flatMap((alias) =>
-            alias.servers.filter((target) => renames.has(target)),
-          ),
+          staleTargets: stale.flatMap((alias) => alias.servers.filter(renamed)),
         },
         "OpenAPPA alias targets still spell a renamed catalog; the repository owns this policy",
       );
@@ -1294,15 +1307,15 @@ class OpenAppaBatteriesService {
             content: current.content,
           });
           return declarations.aliases
-            .filter((alias) =>
-              alias.servers.some((target) => renames.has(target)),
-            )
+            .filter((alias) => alias.servers.some(renamed))
             .map((alias) => ({
               kind: "bindServers",
               namespace: alias.namespace,
               servers: [
                 ...new Set(
-                  alias.servers.map((target) => renames.get(target) ?? target),
+                  alias.servers.map((target) =>
+                    renamed(target) ? (renames.get(target) as string) : target,
+                  ),
                 ),
               ],
             }));
@@ -1313,9 +1326,7 @@ class OpenAppaBatteriesService {
         {
           organizationId,
           catalogId,
-          staleTargets: stale.flatMap((alias) =>
-            alias.servers.filter((target) => renames.has(target)),
-          ),
+          staleTargets: stale.flatMap((alias) => alias.servers.filter(renamed)),
           error,
         },
         "OpenAPPA alias targets could not follow a catalog rename",
@@ -1361,23 +1372,57 @@ class OpenAppaBatteriesService {
     );
   }
 
-  /** The alias targets an attach to one catalog binds: its synced tool prefixes. */
+  /**
+   * The alias targets an attach to one server binds: a catalog's synced tool
+   * prefixes, or a detected server's own id.
+   */
   private async attachTargets(params: {
     organizationId: string;
-    catalogId: string;
+    server: AttachedServer;
   }): Promise<{ targets: ReadonlySet<string>; readiness: AttachReadiness }> {
-    const { organizationId, catalogId } = params;
+    const { organizationId, server } = params;
+    if (server.kind === "detected")
+      return { targets: new Set([server.id]), readiness: "ready" };
     const prefixes = await catalogToolPrefixes(organizationId, {
       targets: [],
-      catalogIds: [catalogId],
+      catalogIds: [server.id],
     });
-    const targets = prefixes.byCatalog.get(catalogId) ?? new Set<string>();
-    const readiness: AttachReadiness = prefixes.conflicting.has(catalogId)
+    const targets = prefixes.byCatalog.get(server.id) ?? new Set<string>();
+    const readiness: AttachReadiness = prefixes.conflicting.has(server.id)
       ? "conflicting"
       : targets.size === 0
         ? "unsynced"
         : "ready";
     return { targets, readiness };
+  }
+
+  /**
+   * The server an install's attachment names, or null for the organization.
+   * A catalog must still be visible to the organization; a detected server is
+   * named by its id alone, the id being what the alias target spells.
+   */
+  private async attachedServer(params: {
+    organizationId: string;
+    attachment: BatteryAttachment;
+  }): Promise<AttachedServer | null> {
+    const { organizationId, attachment } = params;
+    switch (attachment.kind) {
+      case "organization":
+        return null;
+      case "catalog": {
+        const catalog = await this.requireCatalog({
+          organizationId,
+          catalogId: attachment.catalogId,
+        });
+        return { kind: "catalog", id: catalog.id, name: catalog.name };
+      }
+      case "detected":
+        return {
+          kind: "detected",
+          id: attachment.detectedId,
+          name: attachment.detectedId,
+        };
+    }
   }
 
   /**
@@ -1406,24 +1451,24 @@ class OpenAppaBatteriesService {
       : this.requireCatalog({ organizationId, catalogId });
   }
 
-  /** The alias edits that attach or detach one catalog from an included battery. */
-  private async catalogBindingEdits(params: {
+  /** The alias edits that attach or detach one server from an included battery. */
+  private async serverBindingEdits(params: {
     organizationId: string;
     resolution: PolicyResolution;
-    catalog: { id: string; name: string };
+    server: AttachedServer;
     batteryName: string;
     namespaces: readonly string[];
     enabled: boolean | undefined;
   }): Promise<PolicyEditInput[]> {
-    const { organizationId, resolution, catalog, batteryName, namespaces } =
+    const { organizationId, resolution, server, batteryName, namespaces } =
       params;
     const { targets, readiness } = await this.attachTargets({
       organizationId,
-      catalogId: catalog.id,
+      server,
     });
     switch (params.enabled) {
       case true:
-        assertAttachable({ catalog: catalog.name, readiness });
+        assertAttachable({ server: server.name, readiness });
         return bindEdits({ resolution, namespaces, targets });
       case false: {
         const unbind = unbindEdits({
@@ -1435,7 +1480,7 @@ class OpenAppaBatteriesService {
         assertDetaches({
           edits: unbind,
           battery: batteryName,
-          catalog: catalog.name,
+          server: server.name,
         });
         return unbind;
       }
@@ -1519,7 +1564,12 @@ function rowsSettled(params: {
 }): boolean {
   const { previous, rows, held } = params;
   if (previous.length !== rows.length) return false;
-  const stored = new Map(previous.map((row) => [rowKey(row), row]));
+  const stored = new Map(
+    previous.map((row) => [
+      rowKey({ batteryName: row.batteryName, attachment: attachmentOf(row) }),
+      row,
+    ]),
+  );
   return rows.every((row) => {
     const seen = stored.get(rowKey(row));
     if (!seen || !seen.enabled) return false;
@@ -1537,9 +1587,9 @@ function rowsSettled(params: {
 
 function rowKey(row: {
   batteryName: string;
-  catalogId: string | null;
+  attachment: BatteryAttachment;
 }): string {
-  return `${row.batteryName}\u0000${row.catalogId ?? ""}`;
+  return `${row.batteryName}\u0000${attachmentKey(row.attachment)}`;
 }
 
 function sortedBindings(
@@ -1601,7 +1651,7 @@ type CatalogBattery =
       policy: string;
     };
 
-type CatalogPrefixes = {
+export type CatalogPrefixes = {
   byCatalog: Map<string, Set<string>>;
   byPrefix: Map<string, Set<string>>;
   /** Catalogs whose prefix holds `__`, which a composed alias cannot tell apart. */
@@ -1615,7 +1665,14 @@ type PlannedComposition = {
   resolution: PolicyResolution;
   batteries: PlannedBattery[];
   rows: BatteryInstallRow[];
-  unusedAliases: PolicyDeclarationsView["unusedAliases"];
+  aliasesWithoutIncludedBattery: PolicyDeclarationsView["aliasesWithoutIncludedBattery"];
+};
+
+/** A server an install is attached to, as the binding edits and their errors name it. */
+type AttachedServer = {
+  kind: "catalog" | "detected";
+  id: string;
+  name: string;
 };
 
 type Recomposition = PlannedComposition & {
@@ -1728,20 +1785,20 @@ function helperOwner(
  * catalog with no prefix an alias can point at takes no battery.
  */
 function assertAttachable(params: {
-  catalog: string;
+  server: string;
   readiness: AttachReadiness;
 }): void {
-  const { catalog, readiness } = params;
+  const { server, readiness } = params;
   switch (readiness) {
     case "conflicting":
       throw new ApiError(
         409,
-        `The tools of ${catalog} carry a prefix holding "__", which a composed alias cannot target.`,
+        `The tools of ${server} carry a prefix holding "__", which a composed alias cannot target.`,
       );
     case "unsynced":
       throw new ApiError(
         409,
-        `${catalog} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
+        `${server} has no synced tools, so there is no tool prefix to alias. Sync its tools first.`,
       );
     case "ready":
       return;
@@ -1757,13 +1814,13 @@ function assertAttachable(params: {
 function assertDetaches(params: {
   edits: readonly PolicyEditInput[];
   battery: string;
-  catalog: string;
+  server: string;
 }): void {
-  const { edits, battery, catalog } = params;
+  const { edits, battery, server } = params;
   if (edits.length > 0) return;
   throw new ApiError(
     409,
-    `Detaching ${catalog} leaves the policy as it is: the aliases ${battery} binds are stale or another battery's. Remove the ${battery} include to drop them.`,
+    `Detaching ${server} leaves the policy as it is: the aliases ${battery} binds are stale or another battery's. Remove the ${battery} include to drop them.`,
   );
 }
 

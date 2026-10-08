@@ -39,7 +39,7 @@ const declarationsUrl = `${origin}/api/openappa/policy-declarations`;
 const effectiveUrl = `${origin}/api/openappa/effective-policy`;
 const declarations = {
   batteries: [],
-  unusedAliases: [],
+  aliasesWithoutIncludedBattery: [],
   rootRevision: 1,
   lastError: null,
   managedInGithub: false,

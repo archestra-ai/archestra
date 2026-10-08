@@ -51,7 +51,7 @@ export function policyAnnotations(
       status: enforced ? status : "refused",
     }),
   );
-  const aliases = declarations.unusedAliases.map(
+  const aliases = declarations.aliasesWithoutIncludedBattery.map(
     ({ line, namespace }): PolicyAnnotation => ({
       kind: "unusedAlias",
       line,

@@ -50,6 +50,20 @@ export function detectedServerId(
   return `${family}.${label}`;
 }
 
+/**
+ * Whether an alias target names a detected server: `<family>.<label>` with a
+ * known family. A catalog's tool prefix never holds a dot, so the two cannot
+ * be confused.
+ */
+export function isDetectedServerId(target: string): boolean {
+  const dot = target.indexOf(".");
+  return (
+    dot > 0 &&
+    isDetectedClientFamily(target.slice(0, dot)) &&
+    isValidDetectedLabel(target.slice(dot + 1))
+  );
+}
+
 export function isDetectedClientFamily(
   value: string,
 ): value is DetectedClientFamily {

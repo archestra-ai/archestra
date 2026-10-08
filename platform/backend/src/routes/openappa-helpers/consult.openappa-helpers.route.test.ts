@@ -18,6 +18,7 @@ import { openappaHelperBridge } from "@/openappa/helper-bridge";
 import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
 import { sandboxRuntimeService } from "@/sandbox-runtime/sandbox-runtime-service";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { attachmentOf } from "@/types/openappa-batteries";
 import routes from "./openappa-helpers.routes";
 
 const CREDENTIAL_VALUE = "gh-token-value-under-test";
@@ -562,20 +563,26 @@ async function attach(params: {
   catalogId: string;
   credentialBindings: Record<string, string>;
 }) {
-  const { organizationId, ...row } = params;
+  const { organizationId, catalogId, ...row } = params;
   const existing = await OpenAppaBatteryInstallModel.list(organizationId);
   const rows = await OpenAppaBatteryInstallModel.replaceAll({
     organizationId,
     rows: [
       ...existing.map((install) => ({
         batteryName: install.batteryName,
-        catalogId: install.catalogId,
+        attachment: attachmentOf(install),
         status: install.status,
         packageHash: install.packageHash,
         lastError: install.lastError,
         credentialBindings: install.credentialBindings,
       })),
-      { ...row, status: "active" as const, packageHash: null, lastError: null },
+      {
+        ...row,
+        attachment: { kind: "catalog" as const, catalogId },
+        status: "active" as const,
+        packageHash: null,
+        lastError: null,
+      },
     ],
   });
   const install = rows.at(-1);

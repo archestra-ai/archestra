@@ -8,7 +8,7 @@ function declarations(
 ): PolicyDeclarations {
   return {
     batteries: [],
-    unusedAliases: [],
+    aliasesWithoutIncludedBattery: [],
     rootRevision: 3,
     lastError: null,
     managedInGithub: false,
@@ -44,7 +44,7 @@ test("annotates every declared battery and unclaimed alias, in reading order", (
           battery({ name: "acme", status: "active", line: 9 }),
           battery({ name: "globex", status: "missing_credentials", line: 3 }),
         ],
-        unusedAliases: [
+        aliasesWithoutIncludedBattery: [
           { namespace: "initech", servers: ["initech"], line: 6 },
         ],
       }),

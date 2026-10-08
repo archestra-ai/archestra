@@ -473,6 +473,57 @@ describe("composing an organization's declarations", () => {
   });
 });
 
+describe("following a catalog rename", () => {
+  test("rewrites the alias target a catalog's prefix spells and leaves a detected server's beside it", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const user = await makeUser();
+    await makeMember(user.id, organizationId, { role: ADMIN_ROLE_NAME });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Acme",
+    });
+    await makeTool({ catalogId: catalog.id, name: "acme_prod__list" });
+    const { entry } = await uploadAcme({ organizationId, userId: user.id });
+    // The same string names the catalog's prefix and a detected server's
+    // label; only the catalog's target follows the rename.
+    await declare({
+      organizationId,
+      userId: user.id,
+      content: root(entry, ["acme_prod", "claude-code.acme_prod"]),
+    });
+
+    await openappaBatteriesService.onCatalogPrefixesRenamed({
+      catalogId: catalog.id,
+      organizationId,
+      userId: user.id,
+      renamedTools: [
+        { oldName: "acme_prod__list", newName: "acme_staging__list" },
+      ],
+    });
+
+    const latest = await guardrailsPolicyService.get(organizationId);
+    const resolution = await openappaDeclarations.resolve({
+      organizationId,
+      content: latest.content,
+    });
+    expect(
+      resolution.aliases.map(({ namespace, servers }) => ({
+        namespace,
+        servers,
+      })),
+    ).toEqual([
+      { namespace: "acme", servers: ["acme_staging", "claude-code.acme_prod"] },
+    ]);
+  });
+});
+
 describe("a battery made of annotators alone", () => {
   beforeEach(() => {
     config.openappa.enabled = true;

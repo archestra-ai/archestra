@@ -72,46 +72,45 @@ describe("ToolModel.findCoverageInventory", () => {
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
-    makeMember,
     makeOrganization,
     makeTool,
-    makeUser,
   }) => {
     const organization = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, organization.id, { role: "admin" });
-    const { catalogIds, toolIds, agentIds } = await seedCoverage({
+    const scopedCatalog = await makeInternalMcpCatalog({
       organizationId: organization.id,
-      userId: user.id,
-      fixtures: { makeAgent, makeAgentTool, makeInternalMcpCatalog, makeTool },
+      name: "Scoped",
     });
+    const otherCatalog = await makeInternalMcpCatalog({
+      organizationId: organization.id,
+      name: "Other",
+    });
+    const scopedTool = await makeTool({
+      catalogId: scopedCatalog.id,
+      name: "scoped__lookup",
+    });
+    const otherTool = await makeTool({
+      catalogId: otherCatalog.id,
+      name: "other__lookup",
+    });
+    const agent = await makeAgent({ organizationId: organization.id });
+    await makeAgentTool(agent.id, scopedTool.id);
+    await makeAgentTool(agent.id, otherTool.id);
 
     const whole = await ToolModel.findCoverageInventory(organization.id);
     const scoped = await ToolModel.findCoverageInventory(organization.id, {
-      catalogId: catalogIds.acme,
+      catalogId: scopedCatalog.id,
     });
 
+    expect(whole.tools.map((tool) => tool.id).sort()).toEqual(
+      [scopedTool.id, otherTool.id].sort(),
+    );
     expect(scoped.catalogs.map((catalog) => catalog.id)).toEqual([
-      catalogIds.acme,
+      scopedCatalog.id,
     ]);
-    expect(scoped.tools.map((tool) => tool.id).sort()).toEqual(
-      [
-        toolIds.acme__list_items,
-        toolIds.acme__create_item,
-        toolIds.acme__delete_item,
-        toolIds.acme__ping,
-      ].sort(),
-    );
-    expect(
-      scoped.assignments
-        .map(({ toolId, agentId }) => `${toolId}:${agentId}`)
-        .sort(),
-    ).toEqual(
-      [
-        `${toolIds.acme__list_items}:${agentIds.alpha}`,
-        `${toolIds.acme__ping}:${agentIds.beta}`,
-      ].sort(),
-    );
+    expect(scoped.tools.map((tool) => tool.id)).toEqual([scopedTool.id]);
+    expect(scoped.assignments).toEqual([
+      expect.objectContaining({ toolId: scopedTool.id, agentId: agent.id }),
+    ]);
     expect(scoped.entities).toEqual(whole.entities);
   });
 });

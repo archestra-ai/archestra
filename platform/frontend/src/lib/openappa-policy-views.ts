@@ -3,8 +3,9 @@ import type { QueryClient } from "@tanstack/react-query";
 /**
  * The query keys of every read of the organization's policy: the text, what it
  * declares, what it composes to, the batteries, each catalog entry's matches,
- * the coverage it gives each tool, its trust and audience levels and the
- * GitHub source that may own the text. A write to one moves the rest.
+ * the coverage it gives each tool, its trust and audience levels, its
+ * remedies and the GitHub source that may own the text. A write to one moves
+ * the rest.
  */
 export const guardrailsPolicyQueryKey = ["guardrails-policy"];
 export const appaGithubSyncQueryKey = ["openappa-github-sync"];
@@ -15,6 +16,7 @@ export const batteryMatchesPrefix = "openappa-battery-matches";
 /** Every coverage read: visible policy targets and their tools. */
 export const coverageQueryPrefix = "openappa-coverage";
 export const trustAudienceQueryKey = ["openappa-trust-audience"];
+export const remediesQueryKey = ["openappa-remedies"];
 
 export function invalidatePolicyViews(client: QueryClient) {
   return Promise.all([
@@ -28,5 +30,6 @@ export function invalidatePolicyViews(client: QueryClient) {
     client.invalidateQueries({ queryKey: [batteryMatchesPrefix] }),
     client.invalidateQueries({ queryKey: [coverageQueryPrefix] }),
     client.invalidateQueries({ queryKey: trustAudienceQueryKey }),
+    client.invalidateQueries({ queryKey: remediesQueryKey }),
   ]);
 }

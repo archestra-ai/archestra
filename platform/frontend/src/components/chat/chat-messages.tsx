@@ -22,6 +22,7 @@ import {
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
+  TURN_NOTICE_PART_TYPE,
 } from "@archestra/shared";
 import type { ChatStatus, DynamicToolUIPart, ToolUIPart } from "ai";
 import { BotIcon, CheckCircleIcon, ClockIcon } from "lucide-react";
@@ -1537,6 +1538,27 @@ export function ChatMessages({
                           // call, not a separate event in the transcript.
                           if (part.type === MCP_TASK_PART_TYPE) {
                             return null;
+                          }
+
+                          // Non-fatal notice the backend appends to a reply the
+                          // model ended early (e.g. output limit reached).
+                          if (part.type === TURN_NOTICE_PART_TYPE) {
+                            return (
+                              <InlineChatError
+                                key={partKey}
+                                error={
+                                  new Error(
+                                    JSON.stringify(
+                                      (part as { data?: unknown }).data,
+                                    ),
+                                  )
+                                }
+                                conversationId={conversationId}
+                                slimChatErrorUi={
+                                  organization?.slimChatErrorUi ?? false
+                                }
+                              />
+                            );
                           }
 
                           // Inline hook-run debug entry (a model-invisible

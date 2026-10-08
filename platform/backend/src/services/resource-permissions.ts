@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
 import {
-  BUILT_IN_AGENT_IDS,
   canDelegateScopedPermissions,
   hasScopedPermission,
   isBuiltInCatalogId,
@@ -22,7 +21,6 @@ import { roleActionResourceFor } from "@archestra/shared/access-control";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import { getPermissionsForUserContext } from "@/auth/utils";
 import { enterpriseTier } from "@/enterprise-tier";
-import AgentModel from "@/models/agent";
 import KbFileModel from "@/models/kb-file";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
@@ -435,7 +433,6 @@ export class ResourcePermissions {
       if (target?.enabled === false)
         throw new ApiError(400, "Encrypted chats cannot be shared");
     }
-    await ResourcePermissions.assertAdvisorStaysOrganizationWide(params);
     const effective = await ResourcePermissions.getEffective(params);
     await ResourcePermissions.assertNoStaticPinsBroken({
       ...params,
@@ -644,28 +641,6 @@ export class ResourcePermissions {
    * an agent or app out of the connection's team would leave the pin using a
    * credential its audience no longer shares, so the edit is refused.
    */
-  /**
-   * The advisor is one row that every agent in the organization reaches
-   * through delegation. Grants that no longer reach the whole organization
-   * would hide it from everyone outside them, so they are refused.
-   */
-  private static async assertAdvisorStaysOrganizationWide(
-    params: PermissionContext & { grants: ResourcePermissionGrant[] },
-  ) {
-    if (params.resource !== "agent" || params.scope === "*") return;
-    const advisor = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.ADVISOR,
-      params.organizationId,
-    );
-    if (advisor?.id !== params.scope) return;
-    const next = ResourcePermissionPolicyModel.audienceOfGrants(params.grants);
-    if (next.audience !== "org")
-      throw new ApiError(
-        400,
-        "The Advisor is shared by the whole organization and cannot be narrowed",
-      );
-  }
-
   private static async assertNoStaticPinsBroken(
     params: PermissionContext & {
       grants: ResourcePermissionGrant[];

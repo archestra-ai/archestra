@@ -14,6 +14,7 @@ import {
 import type { FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
+import { isAzureOpenAiFirstPartyModelName } from "@/clients/azure-url";
 import { getProviderConfiguredBaseUrl } from "@/config";
 import logger from "@/logging";
 import {
@@ -35,12 +36,14 @@ import type { GatewayAgent, LLMProvider } from "@/types";
 import {
   ApiError,
   constructResponseSchema,
+  GithubCopilot,
   OpenAi,
   UuidIdSchema,
 } from "@/types";
 import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import {
   azureAdapterFactory,
+  azureResponsesAdapterFactory,
   cerebrasAdapterFactory,
   deepseekAdapterFactory,
   geminiEmbeddingsAdapterFactory,
@@ -207,6 +210,14 @@ type TranslatedModelRouterProvider =
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
 const EMBEDDINGS_SUFFIX = "/embeddings";
+
+// The router fronts every OpenAI-wire provider, and some (GitHub Copilot) omit
+// or vary `object`/`created` on an otherwise valid completion. The strict
+// OpenAI schema turned those into a 500 during response serialization. The
+// Copilot schema is the OpenAI schema with those two fields relaxed and
+// provider extensions passed through, so it accepts every standard reply too.
+const ModelRouterChatCompletionResponseSchema =
+  GithubCopilot.API.ChatCompletionResponseSchema;
 
 const openAiWireProviders = {
   openai: openaiAdapterFactory,
@@ -412,7 +423,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          OpenAi.API.ChatCompletionResponseSchema,
+          ModelRouterChatCompletionResponseSchema,
         ),
       },
     },
@@ -436,7 +447,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          OpenAi.API.ChatCompletionResponseSchema,
+          ModelRouterChatCompletionResponseSchema,
         ),
       },
     },
@@ -626,6 +637,12 @@ function getModelRouterEmbeddingsProvider(
  * Prefer OpenAI's native Responses surface even when a model also supports
  * chat. Other providers retain their existing compatibility routing.
  *
+ * Azure deployments of OpenAI models get Azure's native Responses surface too:
+ * Azure Chat Completions rejects function tools combined with reasoning on
+ * GPT reasoning deployments, so a chat round trip cannot serve those requests.
+ * Azure's Responses API answers other deployments (most open models) with
+ * "Model not supported", so they keep the chat translation.
+ *
  * Keyed off the model's published surfaces where available. OpenAI does not
  * publish those surfaces, so its known Responses-only model families use the
  * same model-id discriminator as foreground Agent chat.
@@ -633,6 +650,12 @@ function getModelRouterEmbeddingsProvider(
 function getNativeResponsesAdapter(resolution: ModelRouterResolution) {
   if (resolution.provider === "openai") {
     return openAiResponsesAdapterFactory;
+  }
+  if (
+    resolution.provider === "azure" &&
+    isAzureOpenAiFirstPartyModelName(resolution.modelId)
+  ) {
+    return azureResponsesAdapterFactory;
   }
   if (!modelRequiresResponses(resolution)) {
     return null;

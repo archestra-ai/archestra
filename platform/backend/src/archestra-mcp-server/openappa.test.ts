@@ -1774,11 +1774,11 @@ describe("list_guardrails_battery_fits", () => {
     return (result.structuredContent as any).fits;
   };
 
-  test("advertises a required nullable server ID for strict tool schemas", () => {
+  test("advertises an optional server ID that strict tool schemas can pass as null", () => {
     const tool = getAllArchestraMcpTools().find(
       (candidate) => candidate.name === toolFullName,
     );
-    expect(tool?.inputSchema.required).toContain("mcpServerId");
+    expect(tool?.inputSchema.required ?? []).not.toContain("mcpServerId");
     expect(tool?.inputSchema.properties?.mcpServerId).toMatchObject({
       anyOf: [{ type: "string", format: "uuid" }, { type: "null" }],
     });
@@ -1880,6 +1880,9 @@ describe("list_guardrails_battery_fits", () => {
     expect(
       await fits({ mcpServerId: catalogIds.linear }, context),
     ).toHaveLength(1);
+    expect(await fits({}, context)).toEqual(
+      await fits({ mcpServerId: null }, context),
+    );
     expect(await fits({ mcpServerId: catalogIds.acme }, context)).toEqual([]);
   });
 

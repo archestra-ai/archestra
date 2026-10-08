@@ -12,10 +12,7 @@ Split big tasks across specialists. An agent, the parent, can hand part of a tas
 A subagent can be:
 
 - An agent you built, such as a researcher or a reviewer.
-- A [built-in subagent](/docs/agents/subagents/built-in), such as the Advisor, which reviews an agent's answer.
 - **An [external agent](/docs/agents/subagents/external)** on another system, over A2A.
-
-![The Subagents settings on an agent](/docs/automated_screenshots/agents-subagents_agent-subagents.webp)
 
 ## Add Subagents
 
@@ -48,4 +45,4 @@ What to know:
 
 - The parent names the answer's shape when it delegates. Every field must be bounded: a number in a range, a yes or no, or a fixed list of values. Free text is never accepted.
 - An answer that does not match is withheld. The parent gets an error, never the raw text.
-- Built-in subagents and external agents cannot return structured answers.
+- External agents cannot return structured answers.

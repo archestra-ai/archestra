@@ -13,6 +13,7 @@ import {
   EnvironmentModel,
   InternalMcpCatalogModel,
 } from "@/models";
+import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { seedCoverage } from "@/test/openappa-coverage";
 import { ApiError } from "@/types";
@@ -300,6 +301,58 @@ describe("inspect_guardrails_server", () => {
     );
   });
 
+  test("judges app catalog tools by the root rule that names them, or the catch-all", async ({
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const organizationId = context.organizationId as string;
+    const app = await makeInternalMcpCatalog({
+      organizationId,
+      environmentId,
+      serverType: "app",
+      name: "Clock App",
+    });
+    await makeTool({ catalogId: app.id, name: "clock_app__open" });
+    await makeTool({ catalogId: app.id, name: "clock_app__tick" });
+    const current = await guardrailsPolicyService.get(organizationId);
+    await guardrailsPolicyService.update({
+      organizationId,
+      userId: context.userId as string,
+      content: `${current.content}\n[[policy.tool]]\nname = "clock_app__open"\ndelta = {}\n`,
+      expectedRevision: current.revision,
+    });
+    const result = await inspect(context, app.id);
+    expect(result.isError).toBeFalsy();
+    expect(result.structuredContent).toMatchObject({
+      total: 2,
+      tools: [
+        {
+          name: "clock_app__open",
+          kind: "neutral",
+          rules: [
+            {
+              policySource: "root",
+              rule: expect.objectContaining({
+                source: "root",
+                name: "clock_app__open",
+              }),
+            },
+          ],
+        },
+        {
+          name: "clock_app__tick",
+          kind: "unlisted",
+          rules: [
+            {
+              policySource: "not_covered",
+              rule: expect.objectContaining({ source: "catchall", name: "*" }),
+            },
+          ],
+        },
+      ],
+    });
+  });
+
   test("does not grant other agents cross-environment access through copied names, assignments or Auto mode", async ({
     makeAgent,
     makeTool,
@@ -310,7 +363,7 @@ describe("inspect_guardrails_server", () => {
     for (const overrides of [
       { name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG },
       { name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG, accessAllTools: true },
-      { builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR } },
+      { builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION } },
     ]) {
       const agent = await makeAgent({
         agentType: "agent",
@@ -343,7 +396,7 @@ describe("inspect_guardrails_server", () => {
       { agentType: "mcp_gateway" as const },
       {
         agentType: "agent" as const,
-        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
       },
     ]) {
       const agent = await makeAgent({

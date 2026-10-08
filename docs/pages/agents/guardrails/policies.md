@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub
 order: 1
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-07
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -63,11 +63,12 @@ With GitHub sync, the policy lives in a repository. The agent opens a pull reque
 
 1. On **Overview**, click **Create repository** on the **GitHub sync** card.
 2. Choose a GitHub App, and enter the owner and repository name.
-3. Archestra creates a private repository from the [configuration template](https://github.com/archestra-ai/openappa-config) and starts syncing.
+3. Archestra creates a private repository from the [configuration template](https://github.com/archestra-ai/openappa-config) and commits your current policy. If repository rules block the commit, it opens a pull request instead.
+4. If a pull request is needed, click **Review and merge PR**, wait for the repository checks to pass, and merge it. Sync checks for the merge automatically; your current policy stays active until then.
 
 To use a repository you already have, click **Connect existing repository** in the same dialog, or ask the setup chat. The policy file in that repository replaces the current policy.
 
-The **GitHub sync** card shows **Connected**. Manage it under **Settings → OpenAPPA**.
+The **GitHub sync** card shows **Connected** after setup. When a pull request is needed, it shows **Awaiting initial merge** until the initial policy is merged and synced. Manage it under **Settings → OpenAPPA**.
 
 What to know:
 
@@ -89,7 +90,7 @@ Each file describes ordered tool calls and expected decisions. Calls in one file
 
 What to know:
 
-- **Results:** the table shows **Passed** or **Failed** and the last run time. A file that cannot run appears as **Failed**, with its reason. Open a history run for details; results apply to the policy and files captured by that run.
+- **Results:** the table shows **Passed** or **Failed** and the last run time. A file that cannot run appears as **Failed**, with its reason: replay stops at the first call that needs a live answer, such as the [`run_command`](/docs/reference/archestra-mcp-server#run_command) model label or a team membership lookup. Open a history run for details; results apply to the policy and files captured by that run.
 - **Drafts:** **Run file** checks only the current editor text. Its temporary result does not change saved suite results or history. Search filters and unsaved drafts do not change **Run all**.
 - **Policy changes:** accepted changes from local saves or GitHub sync automatically queue the full suite. Unchanged syncs and validation-only edits do not trigger runs. Validation failures do not block or roll back a policy; configure repository CI if failures should block merges.
 

@@ -1,9 +1,23 @@
 import type { ChatMessage } from "@/types";
 
-// ~25k tokens at typical densities — generous enough for legitimate large
-// outputs (file reads, API listings) while keeping a single result from
-// consuming a meaningful fraction of the context window.
-export const MAX_TOOL_RESULT_CONTEXT_CHARS = 100_000;
+// UTF-8 bytes, the unit OpenAPPA measures a result body in: its 64 KiB host
+// default `max_body_bytes` (archestra-rs/openappa-rs/src/policy.rs) drops a
+// longer result outright. ~16k tokens, still ample for legitimate large outputs.
+export const MAX_TOOL_RESULT_CONTEXT_BYTES = 65_536;
+
+export function utf8Length(text: string): number {
+  return Buffer.byteLength(text, "utf8");
+}
+
+/** The longest prefix of `text` within `maxBytes`, never splitting a character. */
+export function sliceUtf8(text: string, maxBytes: number): string {
+  const bytes = Buffer.from(text, "utf8");
+  if (bytes.length <= maxBytes) return text;
+  let end = Math.max(0, maxBytes);
+  // Back off continuation bytes (10xxxxxx) to a character boundary.
+  while (end > 0 && (bytes[end] & 0xc0) === 0x80) end--;
+  return bytes.subarray(0, end).toString("utf8");
+}
 
 export interface CappedToolResult {
   totalChars: number;
@@ -12,7 +26,7 @@ export interface CappedToolResult {
 }
 
 /**
- * Bounds a tool result's model-facing text to {@link MAX_TOOL_RESULT_CONTEXT_CHARS}.
+ * Bounds a tool result's model-facing text to {@link MAX_TOOL_RESULT_CONTEXT_BYTES}.
  * The notice leads so it survives any later prefix slice; `suffix` (hook
  * feedback) trails and is always kept.
  */
@@ -25,13 +39,13 @@ export function capToolResultText(params: {
   const notice = path
     ? `[Tool result too large: ${text.length} chars. The full result is saved in the sandbox at ${path} — inspect it with run_command (e.g. grep -n, sed -n 'START,ENDp', jq). Beginning of the result:]\n\n`
     : `[Tool result too large: ${text.length} chars. Only the beginning is shown:]\n\n`;
-  const keptSuffix = suffix.slice(
-    0,
-    MAX_TOOL_RESULT_CONTEXT_CHARS - notice.length,
+  const keptSuffix = sliceUtf8(
+    suffix,
+    MAX_TOOL_RESULT_CONTEXT_BYTES - utf8Length(notice),
   );
   const headBudget =
-    MAX_TOOL_RESULT_CONTEXT_CHARS - notice.length - keptSuffix.length;
-  return `${notice}${text.slice(0, headBudget)}${keptSuffix}`;
+    MAX_TOOL_RESULT_CONTEXT_BYTES - utf8Length(notice) - utf8Length(keptSuffix);
+  return `${notice}${sliceUtf8(text, headBudget)}${keptSuffix}`;
 }
 
 /** Marker `_meta` key on a rich tool result whose `content` was capped. */

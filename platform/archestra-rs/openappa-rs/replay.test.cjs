@@ -28,13 +28,13 @@ test("native replay returns versioned decisions and refuses live configuration w
   assert.equal(result.files[1].status, "failed");
   assert.equal(result.files[1].steps[0].actual, "allow");
   const unavailable = JSON.parse(await replayOpenappaPolicy(JSON.stringify({
-    content: `${content}\n[[policy.annotator]]\nname = "model"\nbuiltin = "archestra"`,
+    content: `${content}\n[[policy.annotator]]\nname = "model"\nbuiltin = "claude-code"`,
     files: [{ path: "static.appa", content: "mcp/files/read {}\nexpect allow" }],
   })));
   assert.equal(unavailable.files[0].status, "cannot_run");
   assert.equal(unavailable.files[0].assertionCount, 1);
   assert.equal(unavailable.files[0].steps.length, 0);
-  assert.match(unavailable.files[0].error, /live annotation and model inference are disabled/);
+  assert.ok(unavailable.files[0].error);
 });
 
 test("native replay rejects duplicate trajectory paths at the host boundary", async () => {

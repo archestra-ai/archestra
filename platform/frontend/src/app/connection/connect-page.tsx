@@ -72,10 +72,15 @@ import {
 } from "@/components/ui/tooltip";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { copyToClipboard } from "@/lib/clipboard";
+import { useConnectedSignal } from "@/lib/connect-signal";
 import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
+import {
+  AfterConnect,
+  type AfterConnectPhase,
+  type AfterConnectRun,
+} from "./after-connect";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -90,6 +95,7 @@ import {
   type ConnectPlugin,
   type ConnectServer,
   useConnectPageData,
+  welcomePrompt,
 } from "./connect-page-data";
 import {
   AgentSearch,
@@ -98,7 +104,11 @@ import {
   fmt,
   InfoDialog,
   nameOf,
+  PromptRow,
   plural,
+  sentenceNameOf,
+  TextButton,
+  useCopy,
 } from "./connect-page-parts";
 import {
   type ConnectedAgent,
@@ -639,7 +649,7 @@ function ConnectArea({
   onManual: (v: boolean) => void;
   onCursorNote: () => void;
 }) {
-  const [copied, setCopied] = useState(false);
+  const { copied, copy: copyText } = useCopy();
   const [origin, setOrigin] = useState("");
   useEffect(() => setOrigin(window.location.origin), []);
   // Claude Code, Codex and OpenCode: copying opens a short setup window for
@@ -654,36 +664,57 @@ function ConnectArea({
     : null;
   // What the box shows and the button copies.
   const text = script ? command : prompt;
-  const copy = async () => {
-    if (!text) return;
-    try {
-      // The terminal command asks for browser approval itself.
-      if (sessionClientId && !script) {
-        const refreshed = await session.refetch();
-        if (
-          refreshed.isError ||
-          !refreshed.data ||
-          Date.parse(refreshed.data.expiresAt) <= Date.now()
-        ) {
-          toast.error("Could not start connection setup. Try again.");
-          return;
-        }
-      }
-      await copyToClipboard(text);
-      setCopied(true);
-      window.setTimeout(() => setCopied(false), 1800);
-    } catch {
-      toast.error("Could not copy. Select the prompt and copy it manually.");
-    }
-  };
   // Other agents read the generic prompt, with or without a manual option.
   const generic = setup === "prompt-or-manual" || setup === "generic-prompt";
   const leftOutParts = (
     Object.keys(choices) as (keyof ConnectChoices)[]
   ).filter((part) => !choices[part]);
 
-  return (
-    <Band busy={data.revalidating}>
+  // After copying: the status card under the band. A changed pick or choice
+  // sends it back to idle, except once connected.
+  const setupKey = [
+    client.id,
+    script,
+    manual,
+    download,
+    ...leftOutParts,
+  ].join();
+  const [run, setRun] = useState<AfterConnectRun>({
+    phase: "idle",
+    key: setupKey,
+    client,
+    script,
+  });
+  const phase =
+    run.phase === "connected" || run.key === setupKey ? run.phase : "idle";
+  const setPhase = (next: AfterConnectPhase) =>
+    setRun({ phase: next, key: setupKey, client, script });
+  // Only a copied prompt or command starts it: Manual setup and Claude
+  // Desktop's download have nothing to copy.
+  const startWaiting = () => {
+    if (!manual && !download && text) setPhase("waiting");
+  };
+  useConnectedSignal(phase === "waiting", () => setPhase("connected"));
+
+  const copy = async () => {
+    if (!text) return;
+    // The terminal command asks for browser approval itself.
+    if (sessionClientId && !script) {
+      const refreshed = await session.refetch();
+      if (
+        refreshed.isError ||
+        !refreshed.data ||
+        Date.parse(refreshed.data.expiresAt) <= Date.now()
+      ) {
+        toast.error("Could not start connection setup. Try again.");
+        return;
+      }
+    }
+    if (await copyText(text)) startWaiting();
+  };
+
+  const band = (
+    <Band busy={data.revalidating} dim={phase === "connected"}>
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         <StepHeading step={step} />
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -759,9 +790,7 @@ function ConnectArea({
                 </>
               ) : (
                 <>
-                  {nameOf(client) === "your agent"
-                    ? "Your agent"
-                    : nameOf(client)}{" "}
+                  {sentenceNameOf(client)}{" "}
                   {generic
                     ? "checks what it supports and asks before changing anything."
                     : "opens a browser page. Nothing changes until you approve."}
@@ -773,13 +802,7 @@ function ConnectArea({
                 <TriangleAlert className="size-3.5 shrink-0 text-amber-500" />
                 Cursor keeps its own models. Routing them through {data.appName}{" "}
                 takes one manual step after setup.
-                <UnstyledButton
-                  type="button"
-                  onClick={onCursorNote}
-                  className="rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                >
-                  How
-                </UnstyledButton>
+                <TextButton onClick={onCursorNote}>How</TextButton>
               </p>
             )}
           </div>
@@ -790,29 +813,19 @@ function ConnectArea({
               copied={copied}
               disabled={!origin || data.revalidating}
               onCopy={copy}
+              onSelectionCopy={startWaiting}
             />
           ) : (
-            // The whole prompt shows, wrapped, so it can be read before copying.
-            <div className="mt-2 flex min-h-16 items-center gap-3 rounded-2xl border bg-background py-2 pr-2 pl-5 shadow-sm">
-              <code
-                className={cn(
-                  "min-w-0 flex-1 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]",
-                  !text && "font-sans text-muted-foreground",
-                )}
-              >
-                {text ??
-                  "Everything is left out. Choose at least one thing to include."}
-              </code>
-              <Button
-                size="lg"
-                onClick={copy}
-                disabled={!text || !origin || data.revalidating}
-                className="h-12 shrink-0 rounded-xl px-6"
-              >
-                {copied ? <Check /> : <Copy />}
-                {copied ? "Copied" : "Copy prompt"}
-              </Button>
-            </div>
+            <PromptRow
+              className="mt-2"
+              text={text}
+              placeholder="Everything is left out. Choose at least one thing to include."
+              copied={copied}
+              disabled={!origin || data.revalidating}
+              onCopy={copy}
+              // Copying the selected text counts like the button.
+              onSelectionCopy={startWaiting}
+            />
           )}
 
           {script && (
@@ -830,20 +843,34 @@ function ConnectArea({
                   </li>
                 </ol>
               </div>
-              <UnstyledButton
-                type="button"
+              <TextButton
                 onClick={() => setWindows(!windows)}
-                className="self-start rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+                className="self-start"
               >
                 {windows
                   ? "Use the macOS / Linux command"
                   : "Use the Windows command"}
-              </UnstyledButton>
+              </TextButton>
             </div>
           )}
         </>
       )}
     </Band>
+  );
+
+  return (
+    <>
+      {band}
+      <AfterConnect
+        phase={phase}
+        client={run.client}
+        script={run.script}
+        welcome={origin ? welcomePrompt(origin, data.appName) : null}
+        // n8n has no prompt to follow up on; neither does "everything left out".
+        showLink={setup !== "manual" && prompt !== null}
+        onPhase={setPhase}
+      />
+    </>
   );
 }
 
@@ -856,11 +883,14 @@ function ScriptBlock({
   copied,
   disabled,
   onCopy,
+  onSelectionCopy,
 }: {
   command: string;
   copied: boolean;
   disabled: boolean;
   onCopy: () => void;
+  /** The command text was selected and copied by hand. */
+  onSelectionCopy: () => void;
 }) {
   return (
     <div className="relative mt-2 rounded-2xl border bg-background shadow-sm">
@@ -874,7 +904,10 @@ function ScriptBlock({
         {copied ? <Check /> : <Copy />}
         {copied ? "Copied" : "Copy"}
       </Button>
-      <pre className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-sm leading-relaxed">
+      <pre
+        onCopy={onSelectionCopy}
+        className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-sm leading-relaxed"
+      >
         <span className="text-muted-foreground select-none">$ </span>
         {command}
       </pre>
@@ -939,10 +972,13 @@ function currentStep(
 
 function Band({
   busy,
+  dim,
   children,
 }: {
   /** Settings are being re-read: hold actions until they land. */
   busy?: boolean;
+  /** Connected: the next step is in the card below. */
+  dim?: boolean;
   children: ReactNode;
 }) {
   // Same accent as the heading's marker.
@@ -951,7 +987,10 @@ function Band({
       aria-label="Connect"
       aria-busy={busy}
       inert={busy}
-      className="relative rounded-3xl border border-primary/40 bg-card p-5 shadow-sm ring-1 ring-primary/15 transition-colors duration-300"
+      className={cn(
+        "relative rounded-3xl border border-primary/40 bg-card p-5 shadow-sm ring-1 ring-primary/15 transition-[color,background-color,border-color,opacity] duration-300",
+        dim && "opacity-50",
+      )}
     >
       {children}
     </section>
@@ -1631,13 +1670,12 @@ function ListBlock({
           )}
           {children}
           {seeAll && onTitle && (
-            <UnstyledButton
-              type="button"
+            <TextButton
               onClick={onTitle}
-              className="mt-0.5 inline-flex h-6.5 items-center rounded-sm text-muted-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              className="mt-0.5 inline-flex h-6.5 items-center text-muted-foreground"
             >
               {seeAll}
-            </UnstyledButton>
+            </TextButton>
           )}
         </div>
       )}

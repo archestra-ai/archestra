@@ -176,7 +176,7 @@ impl FromIterator<ConsultRecord> for Columns {
 
 // The stored names are the runtime's own serde names. The backend's zod enums
 // list the same strings.
-fn role_name(role: ExternalRole) -> &'static str {
+pub(crate) fn role_name(role: ExternalRole) -> &'static str {
     match role {
         ExternalRole::Authority => "authority",
         ExternalRole::Sanitizer => "sanitizer",

@@ -3638,8 +3638,29 @@
     {
       "idx": 519,
       "version": "7",
-      "when": 1791464516902,
-      "tag": "0519_square_jean_grey",
+      "when": 1791466964206,
+      "tag": "0519_retire_advisor",
+      "breakpoints": true
+    },
+    {
+      "idx": 520,
+      "version": "7",
+      "when": 1791469737528,
+      "tag": "0520_easy_luke_cage",
+      "breakpoints": true
+    },
+    {
+      "idx": 521,
+      "version": "7",
+      "when": 1791471692141,
+      "tag": "0521_lumpy_ironclad",
+      "breakpoints": true
+    },
+    {
+      "idx": 522,
+      "version": "7",
+      "when": 1791476885942,
+      "tag": "0522_square_jean_grey",
       "breakpoints": true
     }
   ]

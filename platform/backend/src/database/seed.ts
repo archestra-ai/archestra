@@ -1,7 +1,5 @@
 import {
   ADMIN_ROLE_NAME,
-  ADVISOR_AGENT_DESCRIPTION,
-  ADVISOR_SYSTEM_PROMPT,
   APP_RUNTIME_SYSTEM_PROMPT,
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_DEFAULT_SYSTEM_PROMPTS,
@@ -27,7 +25,7 @@ import {
   SupportedProviders,
   testMcpServerCommand,
 } from "@archestra/shared";
-import { and, asc, eq, inArray, isNotNull, isNull, sql } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { verifyJwksSigningKey } from "@/auth/jwks-signing-key-guard";
 import config, {
@@ -101,18 +99,29 @@ export async function seedDefaultUserAndOrg(
   return user;
 }
 
-/** @public — exported for testability */
-export async function syncBuiltInAgents(): Promise<void> {
-  const organizations = await getOrganizationsForBuiltInAgentSync();
+/**
+ * Reconciles the built-in agents, and the built-in skills they reference, into
+ * the given organizations (every organization by default). The two are synced
+ * together so no path can provision an organization's built-in agents while
+ * leaving it without their skills.
+ *
+ * @public — exported for testability
+ */
+export async function syncBuiltInAgents(
+  organizationIds?: string[],
+): Promise<void> {
+  const ids =
+    organizationIds ??
+    (await getOrganizationsForBuiltInAgentSync()).map(({ id }) => id);
 
-  for (const organization of organizations) {
+  for (const organizationId of ids) {
+    const organization = await OrganizationModel.getById(organizationId);
+    if (!organization) continue;
     // Every shipped string below is branded for the organization being
     // seeded, and the branding singleton holds one organization at a time —
     // so it has to be synced before the definitions are built, not once for
     // the whole sweep.
-    archestraMcpBranding.syncFromOrganization(
-      await OrganizationModel.getById(organization.id),
-    );
+    archestraMcpBranding.syncFromOrganization(organization);
 
     const builtInAgents = [
       {
@@ -195,13 +204,7 @@ export async function syncBuiltInAgents(): Promise<void> {
           name: BUILT_IN_AGENT_IDS.APP_RUNTIME,
         } as const,
       },
-      advisorAgentDefinition(),
     ];
-
-    // The advisor used to have a row per environment; a replica still running
-    // the old code can recreate one mid-rolling-deploy. Retire strays before
-    // the sync below so the org-wide lookup never picks one.
-    await retireEnvironmentScopedAdvisors(organization.id);
 
     for (const builtInAgent of builtInAgents) {
       await syncBuiltInAgentRow({
@@ -209,6 +212,7 @@ export async function syncBuiltInAgents(): Promise<void> {
         builtInAgent,
       });
     }
+    await syncBuiltInSkillsForOrganization(organization);
   }
 }
 
@@ -235,7 +239,7 @@ export async function syncBuiltInSkills(): Promise<void> {
 
 /**
  * Reconcile the built-in skills into a single organization, branded under its
- * white-label app name. Called per-org by {@link syncBuiltInSkills} on startup
+ * white-label app name. Called per-org by {@link syncBuiltInAgents} on startup
  * and directly when an admin changes the app name (so list_skills/load_skill
  * reflect the new brand immediately, mirroring the built-in MCP tool re-seed).
  *
@@ -392,6 +396,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "publish_openappa_validation_change",
     "get_openappa_yell",
     "resolve_openappa_yell",
+    "list_openappa_yells",
     "list_openappa_consults",
     "list_guardrails_battery_fits",
     "validate_guardrails_policy",
@@ -419,16 +424,33 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
   ] as const;
 
   for (const organization of await getOrganizationsForBuiltInAgentSync()) {
+    const enabled = config.openappa.enabled;
+    const findBuiltIns = async () => ({
+      guide: enabled
+        ? await SkillModel.findBuiltIn({
+            organizationId: organization.id,
+            sourceRef: builtInSkillSourceRef("appa-guide"),
+          })
+        : null,
+      agent: await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        organization.id,
+      ),
+    });
+    let found = await findBuiltIns();
+    // An organization created after the built-in pass (the fallback in
+    // getOrganizationsForBuiltInAgentSync, or a reseed racing startup) has
+    // neither yet; provision it now instead of only on the next restart.
+    if (!found.agent || (enabled && !found.guide)) {
+      await syncBuiltInAgents([organization.id]);
+      found = await findBuiltIns();
+    }
+    const { guide, agent } = found;
+    if (!agent) continue;
+
     archestraMcpBranding.syncFromOrganization(
       await OrganizationModel.getById(organization.id),
     );
-    const enabled = config.openappa.enabled;
-    const guide = enabled
-      ? await SkillModel.findBuiltIn({
-          organizationId: organization.id,
-          sourceRef: builtInSkillSourceRef("appa-guide"),
-        })
-      : null;
     const liveGuide = guide && !guide.deletedAt ? guide : null;
     const toolIds = enabled
       ? await ToolModel.findBuiltInToolIdsByNames(
@@ -437,12 +459,6 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
           ),
         )
       : [];
-
-    const agent = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-      organization.id,
-    );
-    if (!agent) continue;
 
     const agentId = await withDbTransaction(async (tx) => {
       await AgentModel.lockRowForUpdate(agent.id, tx);
@@ -1193,7 +1209,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Every organization gets its LLM Proxy row before internal agents seed
   await AgentModel.ensureLlmProxiesForAllOrganizations();
   await syncBuiltInAgents();
-  await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
   await syncOpenAppaConfigAgentCapabilities();
   await enableSkillToolsForExistingOrgs();
@@ -1234,50 +1249,6 @@ type BuiltInAgentDefinition = {
   systemPrompt: string;
   builtInAgentConfig: BuiltInAgentConfig;
 };
-
-/** Built per call, not at module load, so branding resolves against live config. */
-function advisorAgentDefinition(): BuiltInAgentDefinition {
-  return {
-    builtInAgentId: BUILT_IN_AGENT_IDS.ADVISOR,
-    name: BUILT_IN_AGENT_NAMES.ADVISOR,
-    description: archestraMcpBranding.brandBuiltInText(
-      ADVISOR_AGENT_DESCRIPTION,
-    ),
-    systemPrompt: archestraMcpBranding.brandBuiltInText(ADVISOR_SYSTEM_PROMPT),
-    builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-  };
-}
-
-/**
- * Soft-deletes advisor rows carrying an environment_id. The advisor is
- * org-wide; an environment-scoped row can only be residue recreated by a
- * replica still running pre-collapse code. Soft rather than hard delete:
- * anything pointing at the stray stays inert behind notDeleted() filters,
- * and nothing configured on it is worth remapping.
- */
-async function retireEnvironmentScopedAdvisors(
-  organizationId: string,
-): Promise<void> {
-  const retired = await db
-    .update(schema.agentsTable)
-    .set({ deletedAt: new Date() })
-    .where(
-      and(
-        eq(schema.agentsTable.organizationId, organizationId),
-        sql`${schema.agentsTable.builtInAgentConfig}->>'name' = ${BUILT_IN_AGENT_IDS.ADVISOR}`,
-        isNotNull(schema.agentsTable.environmentId),
-        isNull(schema.agentsTable.deletedAt),
-      ),
-    )
-    .returning({ id: schema.agentsTable.id });
-
-  if (retired.length > 0) {
-    logger.warn(
-      { organizationId, retiredAdvisorIds: retired.map((row) => row.id) },
-      "Retired stray environment-scoped advisor rows",
-    );
-  }
-}
 
 /**
  * Reconciles one built-in agent row per organization against its shipped

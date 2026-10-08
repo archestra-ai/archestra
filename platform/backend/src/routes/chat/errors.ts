@@ -109,6 +109,22 @@ export class EmptyModelResponseError extends Error {
   }
 }
 
+/**
+ * The model stream produced no parsed chunk within the idle deadline (SSE
+ * comments and proxy keep-alives never reach the parser output, so they do not
+ * count as progress). Emitted as a stream error part by the idle-timeout
+ * middleware; mapProviderError turns it into the retryable UpstreamStalled card.
+ */
+export class ModelStreamStalledError extends Error {
+  public readonly idleTimeoutMs: number;
+
+  constructor(idleTimeoutMs: number) {
+    super(`Model stream sent no data for ${idleTimeoutMs} ms`);
+    this.name = "ModelStreamStalledError";
+    this.idleTimeoutMs = idleTimeoutMs;
+  }
+}
+
 // =============================================================================
 // Unavailable tool errors — model called a tool that doesn't exist
 // =============================================================================
@@ -1644,6 +1660,36 @@ export function buildAbortiveTurnError(
 }
 
 /**
+ * Build the non-fatal notice attached to a reply the model finished for a
+ * reason other than a clean stop: `length` means the output cap cut it short,
+ * anything else (`other`, `error`, `unknown`, `content-filter`) that the model
+ * stopped early. Null for a clean finish, which needs no notice.
+ */
+export function buildIncompleteResponseNotice(
+  finishReason: string | undefined,
+): ChatErrorResponse | null {
+  switch (finishReason) {
+    case undefined:
+    case "stop":
+    case "tool-calls":
+      return null;
+    case "length":
+      return {
+        code: ChatErrorCode.IncompleteResponse,
+        message:
+          "The model reached its output limit, so this reply was cut short.",
+        isRetryable: false,
+      };
+    default:
+      return {
+        code: ChatErrorCode.IncompleteResponse,
+        message: ChatErrorMessages[ChatErrorCode.IncompleteResponse],
+        isRetryable: false,
+      };
+  }
+}
+
+/**
  * Map a provider error to a normalized ChatErrorResponse.
  * Uses provider-specific parsing and mapping for accurate error classification.
  *
@@ -1763,6 +1809,17 @@ export function mapProviderError(
         rawFinishReason: error.rawFinishReason,
         attempts: error.attempts,
       },
+    );
+  }
+
+  if (error instanceof ModelStreamStalledError) {
+    return createErrorResponse(
+      ChatErrorCode.UpstreamStalled,
+      provider,
+      undefined,
+      error.message,
+      "ModelStreamStalledError",
+      { idleTimeoutMs: error.idleTimeoutMs },
     );
   }
 

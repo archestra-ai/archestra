@@ -3,7 +3,6 @@ export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
   CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
-  ConsultAdvisorSwitch: "consult-advisor-switch",
   CloneAgentButton: "clone-agent-button",
   AgentVersionHistoryButton: "agent-version-history-button",
   DeleteAgentButton: "delete-agent-button",

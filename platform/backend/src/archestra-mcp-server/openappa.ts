@@ -470,9 +470,9 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "yell",
-    title: "Report OpenAPPA feedback",
+    title: "Report a confusing OpenAPPA block",
     description:
-      "Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: do not include secrets, personal data, or task content. This does not change policy or grant permission.",
+      "Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: describe the block itself (the tool call, the ruling, the offered remedies, and what was confusing or wrong about them). Never use it to pass on the user's request or feedback, and do not include secrets, personal data, or task content. This does not change policy or grant permission.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
       const id = context.sessionId ?? context.conversationId;
@@ -1241,7 +1241,7 @@ async function enforced(organizationId: string) {
 }
 
 const PREVIEW_APPROVAL_INSTRUCTION =
-  "Nothing is saved yet. In this same turn, explain the change and ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
+  "Nothing is saved yet. In this same turn, summarize in 2-4 short bullets what the change does to agents and tools (not the TOML), then ask the user to approve it with the ask_user tool, or the client's own question tool. Do not end the turn without that question, even when the user said not to publish until they approve: the question is how they approve. After approval, call update_guardrails_policy with the same edits or content and expectedRevision.";
 
 const YELL_LIST_LIMIT = 20;
 const YELL_MESSAGE_LIMIT = 300;

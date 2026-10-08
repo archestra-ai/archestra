@@ -2054,7 +2054,9 @@ const MessageTool = memo(
       shortName: getToolShortName(displayToolName),
       input: approvalDisplay.input,
     });
-    const hasInput = displayInput && Object.keys(displayInput).length > 0;
+    // The policy change card already shows the proposed policy.
+    const hasInput =
+      !policyChange && displayInput && Object.keys(displayInput).length > 0;
     const hasNestedToolCalls = Boolean(nestedToolCalls);
     const hasContent = Boolean(
       hasInput ||

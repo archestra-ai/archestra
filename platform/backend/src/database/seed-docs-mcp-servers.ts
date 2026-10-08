@@ -261,7 +261,7 @@ const DOCS_MCP_SERVERS: DocsMcpServer[] = [
   {
     catalogId: "00000000-0000-4000-8000-000000000003",
     name: "Archestra Docs",
-    description: "The Archestra documentation.",
+    description: "The Archestra documentation",
     serverUrl: "https://archestra.ai/mcp",
     docsUrl: "https://archestra.ai/docs",
     icon: svgDataUrl(ARCHESTRA_LOGO_SVG),
@@ -274,7 +274,7 @@ const DOCS_MCP_SERVERS: DocsMcpServer[] = [
   {
     catalogId: "00000000-0000-4000-8000-000000000004",
     name: "OpenAPPA Docs",
-    description: "The OpenAPPA documentation.",
+    description: "The OpenAPPA documentation",
     serverUrl: "https://www.openappa.com/mcp",
     docsUrl: "https://www.openappa.com",
     icon: svgDataUrl(OPENAPPA_LOGO_SVG),

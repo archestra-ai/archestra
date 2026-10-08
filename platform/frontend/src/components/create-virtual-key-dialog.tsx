@@ -284,6 +284,8 @@ export function CreateVirtualKeyDialog({
     spendCap,
   ]);
 
+  // Opening focuses the name, not the first step bar above it.
+  const nameInputRef = useRef<HTMLInputElement>(null);
   const steps = [
     { id: "key" as const, title: "Key" },
     { id: "budget" as const, title: "Budget" },
@@ -299,6 +301,7 @@ export function CreateVirtualKeyDialog({
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
+      initialFocusRef={nameInputRef}
       title={
         createdKeyValue
           ? isPassthrough
@@ -363,7 +366,7 @@ export function CreateVirtualKeyDialog({
                     <Label htmlFor="virtual-key-name">Name</Label>
                     <Input
                       id="virtual-key-name"
-                      autoFocus
+                      ref={nameInputRef}
                       value={newKeyName}
                       onChange={(event) => setNewKeyName(event.target.value)}
                       placeholder={

@@ -2,7 +2,7 @@
 
 import type { archestraApiTypes } from "@archestra/shared";
 import { Bot, Loader2, Network, Server, Users } from "lucide-react";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { AgentSelectorAgent } from "@/components/agent-selector";
 import {
   BudgetFields,
@@ -152,10 +152,14 @@ export function CreateOAuthClientDialog({
     });
   };
 
+  // Opening focuses the name, not the first step bar above it.
+  const nameInputRef = useRef<HTMLInputElement>(null);
+
   return (
     <FormDialog
       open={open}
       onOpenChange={onOpenChange}
+      initialFocusRef={nameInputRef}
       title="New OAuth client"
       description={describeClientType(fixedClientType)}
       size="small"
@@ -193,7 +197,7 @@ export function CreateOAuthClientDialog({
                 <Label htmlFor="oauth-client-name">Name</Label>
                 <Input
                   id="oauth-client-name"
-                  autoFocus
+                  ref={nameInputRef}
                   value={name}
                   onChange={(event) => setName(event.target.value)}
                   placeholder="support-assistant-prod"

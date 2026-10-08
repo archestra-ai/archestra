@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
@@ -217,6 +217,12 @@ describe("CreateVirtualKeyDialog", () => {
         spendCap: { limitValue: 250, cleanupInterval: "calendar_month" },
       }),
     });
+  });
+
+  it("focuses the name rather than the step bars when it opens", async () => {
+    renderDialog("standard");
+
+    await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
   });
 
   it("lets valid wizard steps be visited directly and preserves edits", async () => {

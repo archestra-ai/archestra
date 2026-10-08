@@ -133,6 +133,12 @@ describe("CreateOAuthClientDialog", () => {
     );
   });
 
+  it("focuses the name rather than the step bars when it opens", async () => {
+    renderDialog();
+
+    await waitFor(() => expect(screen.getByLabelText("Name")).toHaveFocus());
+  });
+
   it("needs a gateway before an MCP client acting as itself can continue", async () => {
     const user = userEvent.setup();
     renderDialog();

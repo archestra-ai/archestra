@@ -1025,6 +1025,7 @@ async function makeInteraction(
       | "passthroughVirtualKeyId"
       | "authenticatedAppId"
       | "authenticatedAppName"
+      | "billingTeamId"
       | "billingMode"
       | "sessionId"
       | "cacheReadTokens"

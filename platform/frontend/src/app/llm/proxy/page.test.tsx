@@ -238,9 +238,13 @@ describe("LlmProxyPage connect steps", () => {
     expect(
       await within(dialog).findByText("Jev · TypeSafe"),
     ).toBeInTheDocument();
+    // Both keys are offered, but a virtual key maps only one per provider.
     expect(
-      within(dialog).queryByText("Via OpenRouter"),
-    ).not.toBeInTheDocument();
+      within(dialog).getByRole("radio", { name: "TypeSafe" }),
+    ).toBeChecked();
+    expect(
+      within(dialog).getByRole("radio", { name: "Via OpenRouter" }),
+    ).not.toBeChecked();
   });
 
   it("fills a key created here into the request", async () => {
@@ -271,6 +275,9 @@ describe("LlmProxyPage connect steps", () => {
     const dialog = await screen.findByRole("dialog", {
       name: "New virtual key for Jev",
     });
+    // Defaults are enough: walk Key and Budget, then create from Review.
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }));
+    await user.click(within(dialog).getByRole("button", { name: "Continue" }));
     await user.click(
       within(dialog).getByRole("button", { name: "Create key" }),
     );

@@ -3662,6 +3662,13 @@
       "when": 1791476885942,
       "tag": "0522_square_jean_grey",
       "breakpoints": true
+    },
+    {
+      "idx": 523,
+      "version": "7",
+      "when": 1791490501912,
+      "tag": "0523_colorful_black_cat",
+      "breakpoints": true
     }
   ]
 }

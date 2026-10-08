@@ -25,14 +25,15 @@ import {
   SupportedProviders,
   testMcpServerCommand,
 } from "@archestra/shared";
-import { and, asc, eq, inArray, isNull } from "drizzle-orm";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { verifyJwksSigningKey } from "@/auth/jwks-signing-key-guard";
 import config, {
   getProviderConfiguredBaseUrl,
   getProviderEnvApiKey,
 } from "@/config";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
+import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
 import {
   AgentActivationSkillRuleModel,
@@ -206,6 +207,24 @@ export async function syncBuiltInAgents(
       },
     ];
 
+    const insertedAgentIds = await withDbTransaction(async (tx) => {
+      // Replicas boot concurrently; the org row lock makes find-then-insert
+      // atomic so they cannot each insert the same built-in.
+      await OrganizationModel.lockRowForUpdate(organization.id, tx);
+      return await insertMissingBuiltInAgents({
+        organizationId: organization.id,
+        builtInAgents,
+        tx,
+      });
+    });
+    // These rows were written to agentsTable directly rather than through
+    // AgentModel, so fork explicitly — otherwise every built-in agent would
+    // sit at latest_version 0 and the first user edit would fold the
+    // platform's seeded config into that user's version 1.
+    for (const agentId of insertedAgentIds) {
+      await AgentVersionModel.forkIfChangedBestEffort(agentId);
+    }
+
     for (const builtInAgent of builtInAgents) {
       await syncBuiltInAgentRow({
         organizationId: organization.id,
@@ -254,16 +273,33 @@ export async function syncBuiltInSkillsForOrganization(
   // reads the synced singleton, so this must run before it.
   archestraMcpBranding.syncFromOrganization(organization);
 
-  for (const builtInSkill of getEnabledBuiltInSkills()) {
-    const sourceRef = builtInSkillSourceRef(builtInSkill.builtInSkillId);
-    const shipped = builtInSkillShippedWrite(builtInSkill);
+  const builtInSkills = getEnabledBuiltInSkills().map((builtInSkill) => ({
+    builtInSkill,
+    sourceRef: builtInSkillSourceRef(builtInSkill.builtInSkillId),
+    shipped: builtInSkillShippedWrite(builtInSkill),
+  }));
 
-    const existing = await SkillModel.findBuiltIn({
-      organizationId: organization.id,
-      sourceRef,
-    });
+  await withDbTransaction(async (tx) => {
+    // Replicas boot concurrently; the org row lock makes find-then-insert
+    // atomic so they cannot each insert the same built-in.
+    await OrganizationModel.lockRowForUpdate(organization.id, tx);
+    // Soft-deleted rows count as present: deleting a built-in is a durable
+    // opt-out, so it is never re-created.
+    const existingRows = await tx
+      .select({ sourceRef: schema.skillsTable.sourceRef })
+      .from(schema.skillsTable)
+      .where(
+        and(
+          eq(schema.skillsTable.organizationId, organization.id),
+          eq(schema.skillsTable.sourceType, "built_in"),
+        ),
+      );
+    const existingSourceRefs = new Set(
+      existingRows.map(({ sourceRef }) => sourceRef),
+    );
 
-    if (!existing) {
+    for (const { builtInSkill, sourceRef, shipped } of builtInSkills) {
+      if (existingSourceRefs.has(sourceRef)) continue;
       const created = await SkillModel.createWithFiles({
         skill: {
           organizationId: organization.id,
@@ -274,6 +310,7 @@ export async function syncBuiltInSkillsForOrganization(
         // A built-in skill ships to every member of the organization.
         publishToOrganization: true,
         files: shipped.files,
+        tx,
       });
       // Skill names are unique per author, and a built-in has none, so a
       // member's skill of the same name no longer blocks it. createWithFiles
@@ -297,13 +334,18 @@ export async function syncBuiltInSkillsForOrganization(
         },
         "Seeded built-in skill",
       );
-      continue;
     }
+  });
 
-    // A soft-deleted built-in is a durable opt-out: the org removed it, so
-    // reconciliation must neither resurrect nor update it (findBuiltIn
-    // includes soft-deleted rows precisely so this check can run).
-    if (existing.deletedAt) {
+  for (const { builtInSkill, sourceRef, shipped } of builtInSkills) {
+    const existing = await SkillModel.findBuiltIn({
+      organizationId: organization.id,
+      sourceRef,
+    });
+
+    // Missing only when its insert conflicted above. A soft-deleted built-in
+    // is a durable opt-out: reconciliation must not update it either.
+    if (!existing || existing.deletedAt) {
       continue;
     }
 
@@ -1251,9 +1293,62 @@ type BuiltInAgentDefinition = {
 };
 
 /**
- * Reconciles one built-in agent row per organization against its shipped
- * definition. Inserts when missing, otherwise carries forward the fields a
- * deploy owns.
+ * Inserts the organization's missing built-in agents. Must run in a
+ * transaction holding the organization row lock. Returns the inserted ids.
+ */
+async function insertMissingBuiltInAgents(params: {
+  organizationId: string;
+  builtInAgents: BuiltInAgentDefinition[];
+  tx: Transaction;
+}): Promise<string[]> {
+  const { organizationId, builtInAgents, tx } = params;
+  const existingRows = await tx
+    .select({
+      builtInAgentId: sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`,
+    })
+    .from(schema.agentsTable)
+    .where(
+      and(
+        eq(schema.agentsTable.organizationId, organizationId),
+        eq(schema.agentsTable.builtIn, true),
+        notDeleted(schema.agentsTable),
+      ),
+    );
+  const existingIds = new Set(
+    existingRows.map(({ builtInAgentId }) => builtInAgentId),
+  );
+  const missing = builtInAgents.filter(
+    ({ builtInAgentId }) => !existingIds.has(builtInAgentId),
+  );
+  if (missing.length === 0) return [];
+
+  const inserted = await tx
+    .insert(schema.agentsTable)
+    .values(
+      missing.map((builtInAgent) => ({
+        organizationId,
+        name: builtInAgent.name,
+        agentType: "agent" as const,
+        scope: "org" as const,
+        description: builtInAgent.description,
+        systemPrompt: builtInAgent.systemPrompt,
+        builtInAgentConfig: builtInAgent.builtInAgentConfig,
+      })),
+    )
+    .returning({ id: schema.agentsTable.id });
+  logger.debug(
+    {
+      builtInAgentIds: missing.map(({ builtInAgentId }) => builtInAgentId),
+      organizationId,
+    },
+    "Seeded built-in agents",
+  );
+  return inserted.map(({ id }) => id);
+}
+
+/**
+ * Reconciles an existing built-in agent row against its shipped definition,
+ * carrying forward the fields a deploy owns.
  */
 async function syncBuiltInAgentRow(params: {
   organizationId: string;
@@ -1265,33 +1360,8 @@ async function syncBuiltInAgentRow(params: {
     organizationId,
   );
 
-  if (!existing) {
-    const [inserted] = await db
-      .insert(schema.agentsTable)
-      .values({
-        organizationId,
-        name: builtInAgent.name,
-        agentType: "agent",
-        scope: "org",
-        description: builtInAgent.description,
-        systemPrompt: builtInAgent.systemPrompt,
-        builtInAgentConfig: builtInAgent.builtInAgentConfig,
-      })
-      .returning({ id: schema.agentsTable.id });
-    // This path writes agentsTable directly rather than through
-    // AgentModel, so it forks explicitly — otherwise every built-in agent
-    // would sit at latest_version 0 and the first user edit would fold the
-    // platform's seeded config into that user's version 1.
-    await AgentVersionModel.forkIfChangedBestEffort(inserted.id);
-    logger.debug(
-      {
-        builtInAgentId: builtInAgent.builtInAgentId,
-        organizationId,
-      },
-      "Seeded built-in agent",
-    );
-    return;
-  }
+  // insertMissingBuiltInAgents has just inserted any that were missing.
+  if (!existing) return;
 
   // Everything a deploy may reconcile on an agent that already exists is
   // gathered first and written once, so one deploy produces one version

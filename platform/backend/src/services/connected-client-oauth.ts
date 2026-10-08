@@ -15,8 +15,7 @@ interface OAuthClientIdentity {
 
 /**
  * Whether an OAuth client (the gateway's `oauth_client` row) belongs to a
- * Connect client listed in {@link OAUTH_AGENTS}. Only stable, verified
- * identities match; any other id returns false.
+ * Connect client listed in {@link OAUTH_AGENTS}; any other id returns false.
  */
 export function isOAuthClientForConnectClient(
   clientId: string,
@@ -24,7 +23,9 @@ export function isOAuthClientForConnectClient(
 ): boolean {
   return (
     isOAuthRecognisedClient(clientId) &&
-    matchesIdentity(OAUTH_AGENTS[clientId].identity, oauthClient)
+    OAUTH_AGENTS[clientId].identities.some((identity) =>
+      matchesIdentity(identity, oauthClient),
+    )
   );
 }
 
@@ -37,21 +38,25 @@ export function connectClientForOAuthClientSql(columns: {
   name: SQL;
   redirectUris: SQL;
 }): SQL {
-  const whens = OAUTH_RECOGNISED_CLIENT_IDS.map((id) => {
-    const identity: OAuthAgentIdentity = OAUTH_AGENTS[id].identity;
-    const test =
-      "clientId" in identity
-        ? sql`${columns.clientId} = ${identity.clientId}`
-        : "clientIdPattern" in identity
-          ? sql`${columns.clientId} ~ ${identity.clientIdPattern}`
-          : sql`${columns.name} ~ ${identity.clientNamePattern}
-            AND ${identity.redirectUri} = ANY(${columns.redirectUris})`;
-    return sql`WHEN ${test} THEN ${id}::text`;
-  });
+  const whens = OAUTH_RECOGNISED_CLIENT_IDS.flatMap((id) =>
+    OAUTH_AGENTS[id].identities.map((identity: OAuthAgentIdentity) => {
+      const tests = [
+        identity.clientId !== undefined &&
+          sql`${columns.clientId} = ${identity.clientId}`,
+        identity.clientIdPattern !== undefined &&
+          sql`${columns.clientId} ~ ${identity.clientIdPattern}`,
+        identity.clientNamePattern !== undefined &&
+          sql`${columns.name} ~ ${identity.clientNamePattern}`,
+        identity.redirectUri !== undefined &&
+          sql`${identity.redirectUri} = ANY(${columns.redirectUris})`,
+      ].filter((test) => test !== false);
+      return sql`WHEN ${sql.join(tests, sql` AND `)} THEN ${id}::text`;
+    }),
+  );
   return sql`CASE ${sql.join(whens, sql` `)} END`;
 }
 
-/** The Connect client an OAuth client verifiably belongs to, if any. */
+/** The Connect client an OAuth client belongs to, if any. */
 export function connectClientForOAuthClient(
   oauthClient: OAuthClientIdentity,
 ): OAuthAgentId | null {
@@ -66,11 +71,14 @@ function matchesIdentity(
   identity: OAuthAgentIdentity,
   oauthClient: OAuthClientIdentity,
 ): boolean {
-  if ("clientId" in identity) return oauthClient.clientId === identity.clientId;
-  if ("clientIdPattern" in identity)
-    return new RegExp(identity.clientIdPattern).test(oauthClient.clientId);
   return (
-    new RegExp(identity.clientNamePattern).test(oauthClient.name ?? "") &&
-    oauthClient.redirectUris.includes(identity.redirectUri)
+    (identity.clientId === undefined ||
+      oauthClient.clientId === identity.clientId) &&
+    (identity.clientIdPattern === undefined ||
+      new RegExp(identity.clientIdPattern).test(oauthClient.clientId)) &&
+    (identity.clientNamePattern === undefined ||
+      new RegExp(identity.clientNamePattern).test(oauthClient.name ?? "")) &&
+    (identity.redirectUri === undefined ||
+      oauthClient.redirectUris.includes(identity.redirectUri))
   );
 }

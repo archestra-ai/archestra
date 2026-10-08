@@ -130,56 +130,91 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
 export const CLAUDE_DESKTOP_PROFILE_ID = "aa157426-f6a9-5ac5-8471-3b30b42bbe8f";
 
 /**
- * How the gateway tells an agent apart by its OAuth client: a fixed CIMD
- * client id that every install shares, a CIMD client id pattern for an agent
- * whose metadata URL varies per login, or, for an agent that registers each
- * install (DCR), its client name pattern and fixed loopback redirect.
+ * One way the gateway tells an agent apart by its OAuth client; every field
+ * given must match. A CIMD agent by its client id (fixed, or a pattern when
+ * the metadata URL varies per login), a DCR agent by the name it registers
+ * and, when fixed, its redirect. Registered names are self-declared, which is
+ * enough here: a sign-in is only ever listed and revoked within its own
+ * user's grants, so a borrowed name can only mislabel that user's own agent.
  */
-export type OAuthAgentIdentity =
-  | { clientId: string }
-  | { clientIdPattern: string }
-  | { clientNamePattern: string; redirectUri: string };
+export interface OAuthAgentIdentity {
+  clientId?: string;
+  clientIdPattern?: string;
+  clientNamePattern?: string;
+  redirectUri?: string;
+}
 
 /**
  * The agents the gateway recognises from their sign-in: the one place to add
  * one. Their ids, names and the backend's sign-in matching all come from
- * here. An agent not listed still shows as connected, under the name it
- * registered, and can still be disconnected; listing it only gives it its
- * Connect page name and logo.
+ * here. A recognised sign-in merges with the agent's setup and its proxy
+ * traffic into one connected agent. An agent not listed still shows as
+ * connected, under the name it registered, and can still be disconnected.
  */
 export const OAUTH_AGENTS = {
   "claude-code": {
     label: "Claude Code",
-    identity: {
-      clientId: "https://claude.ai/oauth/claude-code-client-metadata",
-    },
+    identities: [
+      { clientId: "https://claude.ai/oauth/claude-code-client-metadata" },
+    ],
+  },
+  // CIMD at chatgpt.com/oauth/codex/client.json, with a per-login callback
+  // id in the path or not; DCR as "Codex" on a random loopback port (openai/
+  // codex rmcp-client, oauth_client_registration.rs).
+  codex: {
+    label: "Codex",
+    identities: [
+      {
+        clientIdPattern:
+          "^https://chatgpt\\.com/oauth/codex/([^/]+/)?client\\.json$",
+      },
+      { clientNamePattern: "^Codex$" },
+    ],
+  },
+  // CIMD; also how claude.ai connectors sign in.
+  "claude-desktop": {
+    label: "Claude Desktop",
+    identities: [
+      { clientId: "https://claude.ai/oauth/mcp-oauth-client-metadata" },
+    ],
+  },
+  // DCR with Cursor's own URL scheme as the redirect.
+  cursor: {
+    label: "Cursor",
+    identities: [
+      { redirectUri: "cursor://anysphere.cursor-mcp/oauth/callback" },
+    ],
+  },
+  "copilot-cli": {
+    label: "Copilot CLI",
+    identities: [
+      { clientId: "https://github.com/copilot/cli/client-metadata.json" },
+    ],
+  },
+  // DCR as "OpenCode"; its redirect port is configurable (sst/opencode,
+  // mcp/oauth-provider.ts).
+  opencode: {
+    label: "OpenCode",
+    identities: [{ clientNamePattern: "^OpenCode$" }],
   },
   // Registers each install as "Amp MCP Client (<server name>)" with this
   // redirect (captured from amp 0.0.1791201662).
   amp: {
     label: "Amp",
-    identity: {
-      clientNamePattern: "^Amp MCP Client \\(.*\\)$",
-      redirectUri: "http://localhost:41592/oauth/callback",
-    },
+    identities: [
+      {
+        clientNamePattern: "^Amp MCP Client \\(.*\\)$",
+        redirectUri: "http://localhost:41592/oauth/callback",
+      },
+    ],
   },
   droid: {
     label: "Droid",
-    identity: { clientId: "https://api.factory.ai/mcp/oauth-client" },
-  },
-  // Signs in by CIMD at chatgpt.com/oauth/codex/client.json, or with a
-  // per-login callback id in the path (openai/codex rmcp-client,
-  // oauth_client_registration.rs).
-  codex: {
-    label: "Codex",
-    identity: {
-      clientIdPattern:
-        "^https://chatgpt\\.com/oauth/codex/([^/]+/)?client\\.json$",
-    },
+    identities: [{ clientId: "https://api.factory.ai/mcp/oauth-client" }],
   },
 } as const satisfies Record<
   string,
-  { label: string; identity: OAuthAgentIdentity }
+  { label: string; identities: readonly OAuthAgentIdentity[] }
 >;
 
 export type OAuthAgentId = keyof typeof OAUTH_AGENTS;

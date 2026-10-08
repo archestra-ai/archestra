@@ -1,5 +1,10 @@
+import { sql } from "drizzle-orm";
 import { describe, expect, test } from "vitest";
-import { isOAuthClientForConnectClient } from "./connected-client-oauth";
+import db from "@/database";
+import {
+  connectClientForOAuthClientSql,
+  isOAuthClientForConnectClient,
+} from "./connected-client-oauth";
 
 describe("isOAuthClientForConnectClient", () => {
   const claudeCode = {
@@ -19,11 +24,12 @@ describe("isOAuthClientForConnectClient", () => {
     expect(isOAuthClientForConnectClient("claude-code", other)).toBe(false);
   });
 
-  test("clients without a verified OAuth identity never match", () => {
+  test("an agent never matches another agent's sign-in", () => {
     expect(isOAuthClientForConnectClient("cursor", claudeCode)).toBe(false);
     expect(isOAuthClientForConnectClient("claude-desktop", claudeCode)).toBe(
       false,
     );
+    expect(isOAuthClientForConnectClient("generic", claudeCode)).toBe(false);
   });
 
   test("matches Amp by its client name and fixed loopback redirect", () => {
@@ -69,15 +75,99 @@ describe("isOAuthClientForConnectClient", () => {
         clientId: "https://chatgpt.com/oauth/codex/a1b2c3/client.json",
       }),
     ).toBe(true);
-    // A DCR client that merely calls itself Codex is not trusted.
-    expect(
-      isOAuthClientForConnectClient("codex", { ...codex, clientId: "dcr-1" }),
-    ).toBe(false);
     expect(
       isOAuthClientForConnectClient("codex", {
         ...codex,
         clientId: "https://chatgpt.com.evil.test/oauth/codex/client.json",
+        name: "Other",
       }),
     ).toBe(false);
+  });
+
+  test("matches Codex's DCR sign-in by the name it registers", () => {
+    const codex = {
+      clientId: "dcr-codex",
+      name: "Codex",
+      redirectUris: ["http://127.0.0.1:61234/callback"],
+    };
+    expect(isOAuthClientForConnectClient("codex", codex)).toBe(true);
+    expect(
+      isOAuthClientForConnectClient("codex", { ...codex, name: "Codex Pro" }),
+    ).toBe(false);
+  });
+
+  test("matches every other installer agent's sign-in", () => {
+    const dcr = { clientId: "dcr-1", name: null, redirectUris: [] };
+    expect(
+      isOAuthClientForConnectClient("cursor", {
+        ...dcr,
+        name: "Cursor",
+        redirectUris: ["cursor://anysphere.cursor-mcp/oauth/callback"],
+      }),
+    ).toBe(true);
+    expect(
+      isOAuthClientForConnectClient("opencode", {
+        ...dcr,
+        name: "OpenCode",
+        redirectUris: ["http://127.0.0.1:19876/mcp/oauth/callback"],
+      }),
+    ).toBe(true);
+    expect(
+      isOAuthClientForConnectClient("copilot-cli", {
+        ...dcr,
+        clientId: "https://github.com/copilot/cli/client-metadata.json",
+      }),
+    ).toBe(true);
+    expect(
+      isOAuthClientForConnectClient("claude-desktop", {
+        ...dcr,
+        clientId: "https://claude.ai/oauth/mcp-oauth-client-metadata",
+      }),
+    ).toBe(true);
+  });
+
+  test("the SQL version picks the same agent", async () => {
+    const agentOf = async (client: {
+      clientId: string;
+      name: string | null;
+      redirectUris: string[];
+    }) => {
+      const { rows } = await db.execute<{ id: string | null }>(sql`
+        SELECT ${connectClientForOAuthClientSql({
+          clientId: sql`${client.clientId}::text`,
+          name: sql`${client.name}::text`,
+          redirectUris: sql`ARRAY[${sql.join(
+            client.redirectUris.map((uri) => sql`${uri}`),
+            sql`, `,
+          )}]::text[]`,
+        })} AS id`);
+      return rows[0]?.id ?? null;
+    };
+    expect(await agentOf(claudeCode)).toBe("claude-code");
+    expect(
+      await agentOf({
+        clientId: "https://chatgpt.com/oauth/codex/a1b2c3/client.json",
+        name: "Codex",
+        redirectUris: [],
+      }),
+    ).toBe("codex");
+    expect(
+      await agentOf({ clientId: "dcr-1", name: "Codex", redirectUris: [] }),
+    ).toBe("codex");
+    expect(
+      await agentOf({
+        clientId: "dcr-2",
+        name: "Cursor",
+        redirectUris: ["cursor://anysphere.cursor-mcp/oauth/callback"],
+      }),
+    ).toBe("cursor");
+    expect(
+      await agentOf({
+        clientId: "dcr-3",
+        name: "Amp MCP Client (archestra)",
+        redirectUris: ["http://localhost:41592/oauth/callback"],
+      }),
+    ).toBe("amp");
+    expect(await agentOf(other)).toBeNull();
   });
 });

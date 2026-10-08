@@ -3351,7 +3351,7 @@ Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#op
 |-----------|------|----------|-------------|
 | `mcpServerId` | `string` | Yes | The exact MCP catalog ID to inspect. |
 | `detail` | `"summary" \| "full"` | No | `summary` for a coverage overview; `full` adds input schemas, full descriptions and rule details. |
-| `tools` | `string[]` | No | Only these tools, by name or full name (`<prefix>__<name>`). |
+| `tools` | `string[]` | No | Only these tools, by name or full name (`<prefix>__<name>`). Empty or omitted means every tool. |
 | `offset` | `integer` | No | The first row to return; pass the previous `nextOffset`. |
 
 

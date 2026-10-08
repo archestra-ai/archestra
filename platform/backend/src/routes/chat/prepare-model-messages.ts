@@ -9,6 +9,7 @@ import {
   type ModelMessage,
   type ToolCallPart,
   type ToolResultPart,
+  type ToolSet,
   type UIMessage,
 } from "ai";
 import config from "@/config";
@@ -95,7 +96,7 @@ export async function buildModelMessages(params: {
   agentLlmApiKeyId?: string | null;
   systemPrompt?: string;
   /** AI SDK tool definitions included in the main model request. */
-  tools?: Record<string, unknown>;
+  tools?: ToolSet;
   abortSignal?: AbortSignal;
   emit: (event: CompactionStreamEvent) => void;
   /**

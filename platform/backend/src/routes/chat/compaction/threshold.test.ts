@@ -1,3 +1,4 @@
+import { jsonSchema, tool } from "ai";
 import { ModelModel } from "@/models";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
@@ -60,20 +61,18 @@ test("auto-compaction includes chat-override tool schemas in its context thresho
   const overThreshold = await compactMessagesForChat({
     ...baseParams,
     tools: {
-      large_schema_tool: {
+      large_schema_tool: tool({
         description: "A tool with a large schema.",
-        inputSchema: {
-          jsonSchema: {
-            type: "object",
-            properties: {
-              payload: {
-                type: "string",
-                description: "schema context ".repeat(1_000),
-              },
+        inputSchema: jsonSchema({
+          type: "object",
+          properties: {
+            payload: {
+              type: "string",
+              description: "schema context ".repeat(1_000),
             },
           },
-        },
-      },
+        }),
+      }),
     },
   });
 

@@ -2,6 +2,7 @@ import {
   CONTEXT_COMPACTION_AUTO_THRESHOLD,
   type SupportedProvider,
 } from "@archestra/shared";
+import type { ToolSet } from "ai";
 import logger from "@/logging";
 import { ConversationCompactionModel, ModelModel } from "@/models";
 import { resolveCompactionLlm } from "@/services/compaction-llm";
@@ -49,7 +50,7 @@ type ContextCompactionParams = {
   messages: ChatMessage[];
   systemPrompt?: string;
   /** AI SDK tool definitions included in the main model request. */
-  tools?: Record<string, unknown>;
+  tools?: ToolSet;
   /**
    * `auto` runs on every chat turn: it compacts only past the threshold and
    * first tries summarizing in context. `manual` always compacts, via the

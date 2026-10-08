@@ -160,17 +160,25 @@ export const SHOTS: Shot[] = [
   {
     // Creates a key on each run: the dialog shows connection details only after Create.
     asset: "automated_screenshots/llm-proxy_model-router-key",
-    route: () => "/llm/proxy",
+    // The LLM Proxy page closes the dialog once the key exists; this page
+    // keeps it open on the connection details.
+    route: () => "/llm/proxy/virtual-keys",
     viewport: { width: 1440, height: 1000 },
     prepare: async (page) => {
+      await page.getByRole("button", { name: "Create Virtual Key" }).click();
       await page
-        .getByRole("button", { name: "Create new virtual key" })
-        .first()
+        .getByRole("menuitem", { name: /Standard virtual key/ })
         .click();
       const dialog = page.getByRole("dialog");
       await dialog.getByLabel("Name").fill("Support bot");
-      // The Model Router endpoint starts the key on the first key of every
-      // provider it serves: the seeded ones in CI, local keys elsewhere.
+      // Map the first key of the first two providers: the seeded ones in CI,
+      // local keys elsewhere. Picking a provider shows its keys.
+      await dialog.getByRole("radio").first().click();
+      await dialog
+        .getByTestId("provider-key-picker-available-provider")
+        .first()
+        .click();
+      await dialog.getByRole("radio").first().click();
       await dialog.getByRole("button", { name: "Continue" }).click();
       await dialog.getByRole("button", { name: "Continue" }).click();
       await dialog.getByRole("button", { name: "Create key" }).click();

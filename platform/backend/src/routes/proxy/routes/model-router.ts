@@ -35,6 +35,7 @@ import type { GatewayAgent, LLMProvider } from "@/types";
 import {
   ApiError,
   constructResponseSchema,
+  GithubCopilot,
   OpenAi,
   UuidIdSchema,
 } from "@/types";
@@ -207,6 +208,14 @@ type TranslatedModelRouterProvider =
 const CHAT_COMPLETIONS_SUFFIX = "/chat/completions";
 const RESPONSES_SUFFIX = "/responses";
 const EMBEDDINGS_SUFFIX = "/embeddings";
+
+// The router fronts every OpenAI-wire provider, and some (GitHub Copilot) omit
+// or vary `object`/`created` on an otherwise valid completion. The strict
+// OpenAI schema turned those into a 500 during response serialization. The
+// Copilot schema is the OpenAI schema with those two fields relaxed and
+// provider extensions passed through, so it accepts every standard reply too.
+const ModelRouterChatCompletionResponseSchema =
+  GithubCopilot.API.ChatCompletionResponseSchema;
 
 const openAiWireProviders = {
   openai: openaiAdapterFactory,
@@ -412,7 +421,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          OpenAi.API.ChatCompletionResponseSchema,
+          ModelRouterChatCompletionResponseSchema,
         ),
       },
     },
@@ -436,7 +445,7 @@ const modelRouterProxyRoutes: FastifyPluginAsyncZod = async (fastify) => {
         body: OpenAi.API.ChatCompletionRequestSchema,
         headers: OpenAi.API.ChatCompletionsHeadersSchema,
         response: constructResponseSchema(
-          OpenAi.API.ChatCompletionResponseSchema,
+          ModelRouterChatCompletionResponseSchema,
         ),
       },
     },

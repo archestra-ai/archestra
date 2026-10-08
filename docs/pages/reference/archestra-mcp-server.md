@@ -3198,6 +3198,7 @@ Required RBAC permission: [`toolPolicy:delete`](/docs/reference/permissions#tool
 | `read_peer_message` | Return a held message as text, or refusal feedback with remedy offers. | None (no additional RBAC permission required) |
 | `get_openappa_yell` | Read a saved OpenAPPA report from the current organization, including its originating user or service account. | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `resolve_openappa_yell` | Mark an OpenAPPA yell resolved, or reopen it with resolved=false. | [`openappaDiagnostics:update`](/docs/reference/permissions#openappaDiagnostics:update) |
+| `list_openappa_yells` | List the organization's saved OpenAPPA yells, newest first, with each one's id, session, tool call, a shortened message and whether it is resolved. | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `list_openappa_consults` | List the external consults OpenAPPA recorded for one session, newest first: every annotator, context provider, authority, sanitizer and audience source it asked, with the outcome, the HTTP status, ... | [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read) |
 | `create_guardrails_repository` | Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
 | `connect_guardrails_repository` | Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. | [`organizationSettings:update`](/docs/reference/permissions#organizationSettings:update) |
@@ -3262,6 +3263,19 @@ Required RBAC permission: [`openappaDiagnostics:update`](/docs/reference/permiss
 |-----------|------|----------|-------------|
 | `id` | `string` | Yes |  |
 | `resolved` | `boolean` | No | false reopens a resolved yell |
+
+
+#### list_openappa_yells
+
+Required RBAC permission: [`openappaDiagnostics:read`](/docs/reference/permissions#openappaDiagnostics:read)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `status` | `"unresolved" \| "resolved" \| "all"` | No | Only unresolved or resolved yells; all by default. |
+| `sessionId` | `string` | No | Only the yells of this session. |
+| `search` | `string` | No | Only yells whose message contains this text. |
 
 
 #### list_openappa_consults
@@ -3348,7 +3362,7 @@ Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#op
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `mcpServerId` | `string \| null` | Yes | The catalog ID of one MCP server, or null for every server you can see. |
+| `mcpServerId` | `string \| null` | No | The catalog ID of one MCP server. Omit it for every server you can see. |
 
 
 #### validate_guardrails_policy

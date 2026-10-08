@@ -2889,14 +2889,18 @@ class ToolModel {
   /**
    * Catalog entries, tools, and visible entities used by the OpenAPPA overview.
    * The built-in catalog is included because its tools can be assigned.
+   * App catalogs are left out unless `includeAppCatalogs` is set.
    */
   static async findCoverageInventory(
     organizationId: string,
-    visibility?: {
-      userId: string;
-      agentTypes: Array<"agent" | "mcp_gateway">;
-      excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
-    },
+    options: {
+      visibility?: {
+        userId: string;
+        agentTypes: Array<"agent" | "mcp_gateway">;
+        excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
+      };
+      includeAppCatalogs?: boolean;
+    } = {},
   ): Promise<{
     catalogs: Array<Pick<InternalMcpCatalog, "id" | "name" | "scope" | "icon">>;
     tools: Array<{
@@ -2921,6 +2925,7 @@ class ToolModel {
       accessAllTools: boolean;
     }>;
   }> {
+    const { visibility, includeAppCatalogs = false } = options;
     const principals = visibility
       ? await ResourcePermissionSubjectModel.resolvePrincipals({
           userId: visibility.userId,
@@ -2999,7 +3004,9 @@ class ToolModel {
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),
           ),
-          ne(schema.internalMcpCatalogTable.serverType, "app"),
+          includeAppCatalogs
+            ? undefined
+            : ne(schema.internalMcpCatalogTable.serverType, "app"),
           isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
           notDeleted(schema.internalMcpCatalogTable),
         ),

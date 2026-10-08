@@ -960,7 +960,6 @@ export const RouteId = {
   GetClientConnection: "getClientConnection",
   DecideClientConnection: "decideClientConnection",
   CreateConnectionSetup: "createConnectionSetup",
-  BeginConnectionPromptSession: "beginConnectionPromptSession",
   GetMfilesVafAddOnScript: "getMfilesVafAddOnScript",
   GetMfilesVafAddOnPackage: "getMfilesVafAddOnPackage",
   GetMfilesVafAddOnDistribution: "getMfilesVafAddOnDistribution",

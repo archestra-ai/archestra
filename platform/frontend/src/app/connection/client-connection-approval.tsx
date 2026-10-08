@@ -7,6 +7,7 @@ import {
   useClientConnection,
   useDecideClientConnection,
 } from "@/lib/client-connection.query";
+import { postConnected } from "@/lib/connect-signal";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
 import { CONNECT_CLIENTS } from "./clients";
 
@@ -155,7 +156,15 @@ export function ClientConnectionApproval({
         <Button
           disabled={!confirmed || !matches || !setupId || decision.isPending}
           onClick={() =>
-            decision.mutate({ decision: "approve", setupId: setupId as string })
+            decision.mutate(
+              { decision: "approve", setupId: setupId as string },
+              {
+                // Tell the Connect page in another tab to show what's next.
+                onSuccess: (result) => {
+                  if (result?.status === "approved") postConnected();
+                },
+              },
+            )
           }
         >
           <span>Approve connection</span>

@@ -42,12 +42,13 @@ beforeEach(() => {
 });
 
 describe("ProviderKeyPicker", () => {
-  it("removes a provider and allows selecting it again", async () => {
+  it("removes an in-use provider from its row and allows selecting it again", async () => {
     const user = userEvent.setup();
     renderPicker([{ provider: "openai", providerApiKeyId: "openai-prod" }]);
-    await user.click(
-      screen.getByRole("button", { name: "Remove OpenAI provider" }),
-    );
+    expect(
+      screen.queryByRole("button", { name: "Remove OpenAI provider" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Remove OpenAI" }));
     expect(
       screen.queryByRole("region", { name: "Selected provider keys" }),
     ).not.toBeInTheDocument();

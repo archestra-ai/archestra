@@ -14,7 +14,6 @@ import {
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
 import { ProviderIcon } from "@/components/provider-icon";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
-import { Button } from "@/components/ui/button";
 import { Checkbox } from "@/components/ui/checkbox";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
@@ -99,6 +98,7 @@ export function ProviderKeyPicker({
                 selected
                 focused={focusedProvider === provider}
                 onClick={() => setFocused(provider)}
+                onRemove={() => stopUsing(provider)}
               />
             );
           })}
@@ -140,22 +140,10 @@ export function ProviderKeyPicker({
         <div className="flex min-w-0 flex-col overflow-y-auto">
           {focusedProvider ? (
             <>
-              <div className="flex items-center justify-between gap-2 px-3 py-2">
+              <div className="px-3 py-2">
                 <span className="font-semibold text-sm">
                   {catalog.label(focusedProvider)} key
                 </span>
-                {chosenKeyIds.length > 0 && (
-                  <Button
-                    type="button"
-                    variant="ghost"
-                    size="xs"
-                    aria-label={`Remove ${catalog.label(focusedProvider)} provider`}
-                    onClick={() => stopUsing(focusedProvider)}
-                  >
-                    <X />
-                    <span>Remove</span>
-                  </Button>
-                )}
               </div>
               <RadioGroup
                 value={several ? "" : (chosenKeyIds[0] ?? "")}
@@ -369,6 +357,7 @@ function ProviderRow({
   disabled = false,
   testId,
   onClick,
+  onRemove,
 }: {
   provider: SupportedProvider;
   label: string;
@@ -378,8 +367,10 @@ function ProviderRow({
   disabled?: boolean;
   testId?: string;
   onClick?: () => void;
+  /** Shown over the check on hover, so an in-use provider is removed in place. */
+  onRemove?: () => void;
 }) {
-  return (
+  const row = (
     <UnstyledButton
       disabled={disabled}
       aria-current={focused ? "true" : undefined}
@@ -413,5 +404,18 @@ function ProviderRow({
         </span>
       )}
     </UnstyledButton>
+  );
+  if (!onRemove) return row;
+  return (
+    <div className="group relative">
+      {row}
+      <UnstyledButton
+        aria-label={`Remove ${label}`}
+        onClick={onRemove}
+        className="absolute top-1/2 right-2.5 flex size-4 -translate-y-1/2 items-center justify-center rounded-full bg-destructive text-white opacity-0 outline-none group-hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-2 focus-visible:ring-ring"
+      >
+        <X className="size-3" />
+      </UnstyledButton>
+    </div>
   );
 }

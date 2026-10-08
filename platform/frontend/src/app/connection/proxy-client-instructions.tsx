@@ -299,6 +299,34 @@ export function ProxyClientInstructions({
           reason={`${client.label} doesn't support this provider.`}
         />
       )}
+
+      {client.proxy.kind === "generic" &&
+        client.id !== "generic" &&
+        (routerSelected || selectedProvider) && (
+          <AgentIdHeaderHint agentId={client.id} />
+        )}
+    </div>
+  );
+}
+
+/**
+ * The header that names a generic-instructions agent on the proxy, so its
+ * calls show as that agent rather than as a generic client.
+ */
+function AgentIdHeaderHint({ agentId }: { agentId: string }) {
+  return (
+    <div className="space-y-1.5 rounded-lg border bg-card p-4">
+      <div className="text-xs font-medium text-muted-foreground">
+        Agent header
+      </div>
+      <p className="text-xs text-muted-foreground">
+        If your agent can send custom headers, add this one so its calls show
+        under its name.
+      </p>
+      <CopyableCode
+        value={`${EXTERNAL_AGENT_ID_HEADER}: ${agentId}`}
+        toastMessage="Header copied"
+      />
     </div>
   );
 }

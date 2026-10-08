@@ -88,11 +88,13 @@ export function AppaGithubSyncPanel() {
                 ? "Disabled"
                 : source?.lastSyncError
                   ? "Sync failed"
-                  : connected
-                    ? "Connected"
-                    : hasPolicy
-                      ? "Sync stopped"
-                      : "Managed locally"}
+                  : connected && source?.setupPullRequestNumber
+                    ? "Awaiting initial merge"
+                    : connected
+                      ? "Connected"
+                      : hasPolicy
+                        ? "Sync stopped"
+                        : "Managed locally"}
             </Badge>
           </span>
         }
@@ -230,6 +232,31 @@ export function AppaGithubSyncPanel() {
                     </div>
                   )}
                 </div>
+                {connected && source.setupPullRequestNumber && (
+                  <div className="px-4 pb-4">
+                    <InlineNotice variant="info">
+                      <GitBranch className="size-4 shrink-0" />
+                      <span className="font-medium">
+                        Merge your initial policy
+                      </span>
+                      <InlineNoticeText>
+                        Your current policy stays active until this pull request
+                        merges. Sync is connected and checks for the merge
+                        automatically.
+                      </InlineNoticeText>
+                      <Button variant="outline" size="xs" asChild>
+                        <a
+                          href={`https://github.com/${source.repo}/pull/${source.setupPullRequestNumber}`}
+                          target="_blank"
+                          rel="noreferrer"
+                        >
+                          <span>Review and merge PR</span>
+                          <ExternalLink className="size-3.5" />
+                        </a>
+                      </Button>
+                    </InlineNotice>
+                  </div>
+                )}
                 {source.lastSyncError && (
                   <div className="px-4 pb-4">
                     <InlineNotice variant="error">
@@ -348,7 +375,7 @@ export function OpenAppaCreateRepositoryDialog({
         onOpenChange={onOpenChange}
         isDirty={form.formState.isDirty}
         title="Create OpenAPPA repository"
-        description="Copy the OpenAPPA template into a private GitHub repository. Your current policy, including battery declarations, becomes its first policy."
+        description="Copy the OpenAPPA template into a private GitHub repository. Review and merge a pull request with your current policy, including battery declarations, to finish setup."
         size="medium"
         onSubmit={form.handleSubmit((values) => {
           const [owner, name] = values.repo.trim().split("/");
@@ -376,7 +403,7 @@ export function OpenAppaCreateRepositoryDialog({
               }
             >
               <span>
-                {mutation.isPending ? "Creating…" : "Create and sync"}
+                {mutation.isPending ? "Creating…" : "Create repository and PR"}
               </span>
             </Button>
           </>

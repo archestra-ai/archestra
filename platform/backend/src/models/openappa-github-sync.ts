@@ -25,9 +25,17 @@ class OpenAppaGithubSyncModel {
       .where(eq(table.organizationId, organizationId));
     return row ?? null;
   }
-  static async save(organizationId: string, source: AppaGithubSource) {
-    const { validationDirectory, ...policySource } = source;
+  static async save(
+    organizationId: string,
+    source: AppaGithubSource & { setupPullRequestNumber?: number },
+  ) {
+    const {
+      validationDirectory,
+      setupPullRequestNumber = null,
+      ...policySource
+    } = source;
     const values = {
+      setupPullRequestNumber,
       ...policySource,
       revision: randomUUID(),
       sourceCommit: null,
@@ -96,7 +104,7 @@ class OpenAppaGithubSyncModel {
     organizationId: string;
     revision: string;
     outcome:
-      | { error: string }
+      | { error: string | null }
       | { content: string; contentHash: string; sourceCommit: string };
   }): Promise<boolean> {
     const { organizationId, revision, outcome } = params;
@@ -108,6 +116,7 @@ class OpenAppaGithubSyncModel {
           ...("error" in outcome
             ? { lastSyncError: outcome.error }
             : {
+                setupPullRequestNumber: null,
                 content: outcome.content,
                 sourceCommit: outcome.sourceCommit,
                 lastSyncError: null,
@@ -234,6 +243,7 @@ class OpenAppaGithubSyncModel {
       await tx
         .update(table)
         .set({
+          setupPullRequestNumber: null,
           content: row.heldContent,
           sourceCommit: row.heldSourceCommit,
           lastSyncError: null,

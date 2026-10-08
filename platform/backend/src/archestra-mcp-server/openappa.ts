@@ -395,7 +395,7 @@ const registry = defineArchestraTools([
     shortName: "create_guardrails_repository",
     title: "Create OpenAPPA GitHub repository",
     description:
-      "Copy the OpenAPPA configuration template into a private GitHub repository, seed it with the current policy and battery declarations, and start GitHub sync. List credentials first and choose a connected organization GitHub App. Ask the user for the GitHub owner and repository name before calling. Future policy edits open pull requests.",
+      "Copy the OpenAPPA configuration template into a private GitHub repository, open a pull request with the current policy and battery declarations, and start polling for GitHub sync. List credentials first and choose a connected organization GitHub App. Ask the user for the GitHub owner and repository name before calling. Return the initial PR link from source.repo and source.setupPullRequestNumber and ask the user to merge it. The current policy stays active until that PR merges. Future policy edits open pull requests.",
     schema: z.strictObject({
       owner: z.string().regex(/^[a-zA-Z0-9][a-zA-Z0-9-]*$/),
       name: z.string().regex(/^[a-zA-Z0-9_.-]+$/),

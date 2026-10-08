@@ -4,7 +4,7 @@ sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub
 order: 1
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-07
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -63,11 +63,12 @@ With GitHub sync, the policy lives in a repository. The agent opens a pull reque
 
 1. On **Overview**, click **Create repository** on the **GitHub sync** card.
 2. Choose a GitHub App, and enter the owner and repository name.
-3. Archestra creates a private repository from the [configuration template](https://github.com/archestra-ai/openappa-config) and starts syncing.
+3. Archestra creates a private repository from the [configuration template](https://github.com/archestra-ai/openappa-config) and opens a pull request with your current policy.
+4. Click **Review and merge PR**, wait for the repository checks to pass, and merge it. Sync checks for the merge automatically; your current policy stays active until then.
 
 To use a repository you already have, click **Connect existing repository** in the same dialog, or ask the setup chat. The policy file in that repository replaces the current policy.
 
-The **GitHub sync** card shows **Connected**. Manage it under **Settings → OpenAPPA**.
+The **GitHub sync** card shows **Awaiting initial merge** until the initial policy is merged and synced, then **Connected**. Manage it under **Settings → OpenAPPA**.
 
 What to know:
 

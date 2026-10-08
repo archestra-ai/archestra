@@ -34,6 +34,7 @@ const source = {
   githubAppConfigId: null,
   revision: "revision",
   sourceCommit: "a".repeat(40),
+  setupPullRequestNumber: null,
   lastSyncedAt: "2026-09-15T12:00:00Z",
   lastSyncError: null,
   declarationsPendingPublish: false,
@@ -220,7 +221,7 @@ test("connects an existing repository with an App and renders the saved source",
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
 });
 
-test("creates a repository with a connected App and shows the synced source", async () => {
+test("creates a repository with a connected App and shows the initial merge link", async () => {
   state = {
     validationDirectory: "traces",
     enabled: true,
@@ -251,7 +252,12 @@ test("creates a repository with a connected App and shows the synced source", as
         validationDirectory: "traces",
         enabled: true,
         hasPolicy: true,
-        source: { ...source, repo: "example/openappa-policy" },
+        source: {
+          ...source,
+          repo: "example/openappa-policy",
+          sourceCommit: null,
+          setupPullRequestNumber: 7,
+        },
       };
       return HttpResponse.json(state);
     }),
@@ -264,16 +270,25 @@ test("creates a repository with a connected App and shows the synced source", as
     target: { value: "example/openappa-policy" },
   });
   expect(
-    screen.getByRole("button", { name: "Create and sync" }),
+    screen.getByRole("button", { name: "Create repository and PR" }),
   ).toBeDisabled();
   fireEvent.click(
     screen.getByRole("combobox", { name: "Connected GitHub App" }),
   );
   fireEvent.click(await screen.findByRole("option", { name: "Policy App" }));
-  fireEvent.click(screen.getByRole("button", { name: "Create and sync" }));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Create repository and PR" }),
+  );
   expect(
     await screen.findByRole("link", { name: /example\/openappa-policy/ }),
   ).toBeVisible();
+  expect(
+    await screen.findByRole("link", { name: "Review and merge PR" }),
+  ).toHaveAttribute(
+    "href",
+    "https://github.com/example/openappa-policy/pull/7",
+  );
+  expect(screen.getByText("Awaiting initial merge")).toBeVisible();
 });
 
 test("asks before discarding a GitHub source draft", async () => {
@@ -352,4 +367,28 @@ test("keeps an invalid folder draft open on server rejection and saves an empty 
   fireEvent.click(screen.getByRole("button", { name: "Save source and sync" }));
   await waitFor(() => expect(close).toHaveBeenCalledWith(false));
   expect(saved?.validationDirectory).toBe("");
+});
+
+test("keeps the merge link after reload and removes it once initial sync completes", async () => {
+  state = {
+    ...state,
+    source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
+  };
+  server.use(
+    http.patch(url, () => {
+      state = { ...state, source };
+      return HttpResponse.json(state);
+    }),
+  );
+  show();
+  expect(
+    await screen.findByRole("link", { name: "Review and merge PR" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/7");
+  fireEvent.click(screen.getByRole("button", { name: "Sync now" }));
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("link", { name: "Review and merge PR" }),
+    ).not.toBeInTheDocument(),
+  );
+  expect(screen.getByText("Connected")).toBeVisible();
 });

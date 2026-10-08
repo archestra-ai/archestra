@@ -87,7 +87,7 @@ export async function connectAppaGithubRepository(params: {
   return getAppaGithubSync(params.organizationId);
 }
 
-/** Create a private policy repository and open its initial policy pull request. */
+/** Seed a private policy repository, falling back to a PR when rules block the commit. */
 export async function createAppaGithubRepository(params: {
   organizationId: string;
   userId: string;
@@ -172,45 +172,77 @@ export async function createAppaGithubRepository(params: {
       .update(bytes)
       .digest("hex");
     if (existing.sha !== policyBlob) {
-      const branch = await githubSetupRead<{ object?: { sha?: string } }>({
-        url: `${base}/git/ref/heads/${created.default_branch.split("/").map(encodeURIComponent).join("/")}`,
-        token,
-      });
-      const sha = branch.object?.sha;
-      if (!sha || !/^[a-f0-9]{40}$/.test(sha))
-        throw new ApiError(502, "GitHub returned an invalid default branch");
-      const head = `archestra/openappa-setup-${randomUUID()}`;
-      await githubJson({
-        url: `${base}/git/refs`,
-        token,
-        method: "POST",
-        body: { ref: `refs/heads/${head}`, sha },
-      });
-      await githubJson({
-        url: `${base}/contents/appa.toml`,
-        token,
-        method: "PUT",
-        body: {
-          message: "Seed current OpenAPPA policy",
-          content: bytes.toString("base64"),
-          sha: existing.sha,
-          branch: head,
-        },
-      });
-      const pull = await githubJson<{ number?: number }>({
-        url: `${base}/pulls`,
-        token,
-        method: "POST",
-        body: {
-          title: "Seed current OpenAPPA policy",
-          body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
-          head,
-          base: created.default_branch,
-        },
-      });
-      if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
-        throw new ApiError(502, "GitHub returned an invalid pull request");
-      setupPullRequestNumber = pull.number;
+      let requiresPullRequest = false;
+      try {
+        await githubJson({
+          url: `${base}/contents/appa.toml`,
+          token,
+          method: "PUT",
+          body: {
+            message: "Seed current OpenAPPA policy",
+            content: bytes.toString("base64"),
+            sha: existing.sha,
+            branch: created.default_branch,
+          },
+          onHttpError: (status, message) => {
+            if (
+              [403, 409, 422].includes(status) &&
+              /repository rule violations|protected branch update failed|changes must be made through a pull request|required (?:status check|workflow)/i.test(
+                message ?? "",
+              )
+            )
+              return new GithubRepositoryRulesError();
+            return new ApiError(
+              502,
+              `GitHub returned HTTP ${status} while committing the initial policy. Check repository access and App permissions.`,
+            );
+          },
+        });
+      } catch (error) {
+        if (!(error instanceof GithubRepositoryRulesError)) throw error;
+        requiresPullRequest = true;
+      }
+      if (requiresPullRequest) {
+        const branch = await githubSetupRead<{ object?: { sha?: string } }>({
+          url: `${base}/git/ref/heads/${created.default_branch.split("/").map(encodeURIComponent).join("/")}`,
+          token,
+        });
+        const sha = branch.object?.sha;
+        if (!sha || !/^[a-f0-9]{40}$/.test(sha))
+          throw new ApiError(502, "GitHub returned an invalid default branch");
+        const head = `archestra/openappa-setup-${randomUUID()}`;
+        await githubJson({
+          url: `${base}/git/refs`,
+          token,
+          method: "POST",
+          body: { ref: `refs/heads/${head}`, sha },
+        });
+        await githubJson({
+          url: `${base}/contents/appa.toml`,
+          token,
+          method: "PUT",
+          body: {
+            message: "Seed current OpenAPPA policy",
+            content: bytes.toString("base64"),
+            sha: existing.sha,
+            branch: head,
+          },
+        });
+        const pull = await githubJson<{ number?: number }>({
+          url: `${base}/pulls`,
+          token,
+          method: "POST",
+          body: {
+            title: "Seed current OpenAPPA policy",
+            body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
+            head,
+            base: created.default_branch,
+          },
+        });
+        if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
+          throw new ApiError(502, "GitHub returned an invalid pull request");
+        setupPullRequestNumber = pull.number;
+      }
     }
   } catch (error) {
     if (error instanceof ApiError)
@@ -685,6 +717,12 @@ async function githubJson<T = unknown>(params: {
     return JSON.parse(bytes.toString()) as T;
   } catch {
     throw new ApiError(502, "GitHub returned an invalid response");
+  }
+}
+
+class GithubRepositoryRulesError extends ApiError {
+  constructor() {
+    super(409, "GitHub repository rules block the initial policy commit");
   }
 }
 

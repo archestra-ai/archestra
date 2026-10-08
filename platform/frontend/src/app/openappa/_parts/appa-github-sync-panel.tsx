@@ -375,7 +375,7 @@ export function OpenAppaCreateRepositoryDialog({
         onOpenChange={onOpenChange}
         isDirty={form.formState.isDirty}
         title="Create OpenAPPA repository"
-        description="Copy the OpenAPPA template into a private GitHub repository. Review and merge a pull request with your current policy, including battery declarations, to finish setup."
+        description="Copy the OpenAPPA template into a private GitHub repository with your current policy. If repository rules require a pull request, review and merge it to finish setup."
         size="medium"
         onSubmit={form.handleSubmit((values) => {
           const [owner, name] = values.repo.trim().split("/");
@@ -403,7 +403,7 @@ export function OpenAppaCreateRepositoryDialog({
               }
             >
               <span>
-                {mutation.isPending ? "Creating…" : "Create repository and PR"}
+                {mutation.isPending ? "Creating…" : "Create and sync"}
               </span>
             </Button>
           </>

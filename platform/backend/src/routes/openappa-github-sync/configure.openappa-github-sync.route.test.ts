@@ -246,6 +246,13 @@ describe("APPA GitHub sync", () => {
     "initial PR",
     "matching template",
     "PR failure",
+    "template not ready",
+    "direct commit",
+    "permission denied",
+    "unrelated conflict",
+    "upstream failure",
+    "protected branch 403",
+    "required PR 422",
   ])("creates a policy repository safely: %s", async (scenario) => {
     const current = `${initialPolicy()}\n# Existing battery choices stay in the repository\n`;
     await guardrailsPolicyService.update({
@@ -274,6 +281,7 @@ describe("APPA GitHub sync", () => {
     });
     let seeded = "";
     let templateReads = 0;
+    let pullRequests = 0;
     const matchingTemplate = scenario === "matching template";
     const templateSha = matchingTemplate
       ? createHash("sha1")
@@ -312,7 +320,46 @@ describe("APPA GitHub sync", () => {
             sha: string;
             branch: string;
           };
-          expect(body.branch).toMatch(/^archestra\/openappa-setup-/);
+          if (body.branch === "main" && scenario !== "direct commit") {
+            if (scenario === "permission denied")
+              return HttpResponse.json(
+                { message: "Resource not accessible by integration" },
+                { status: 403 },
+              );
+            if (scenario === "unrelated conflict")
+              return HttpResponse.json(
+                { message: "Conflict: file SHA does not match" },
+                { status: 409 },
+              );
+            if (scenario === "upstream failure")
+              return HttpResponse.json(
+                { message: "Internal Server Error" },
+                { status: 500 },
+              );
+            return HttpResponse.json(
+              {
+                message:
+                  scenario === "protected branch 403"
+                    ? "Protected branch update failed for refs/heads/main"
+                    : scenario === "required PR 422"
+                      ? "Changes must be made through a pull request"
+                      : "Repository rule violations found: Required workflow is not satisfied",
+              },
+              {
+                status:
+                  scenario === "protected branch 403"
+                    ? 403
+                    : scenario === "required PR 422"
+                      ? 422
+                      : 409,
+              },
+            );
+          }
+          expect(body.branch).toMatch(
+            scenario === "direct commit"
+              ? /^main$/
+              : /^archestra\/openappa-setup-/,
+          );
           expect(body.sha).toBe(templateSha);
           seeded = Buffer.from(body.content, "base64").toString();
           return HttpResponse.json({ content: { sha: "c".repeat(40) } });
@@ -334,13 +381,21 @@ describe("APPA GitHub sync", () => {
         },
       ),
     );
-    if (scenario === "PR failure") {
-      server.use(
-        http.post("https://api.github.com/repos/example/new-policy/pulls", () =>
-          HttpResponse.json({ message: "Forbidden" }, { status: 403 }),
-        ),
-      );
-    }
+    server.use(
+      http.post(
+        "https://api.github.com/repos/example/new-policy/pulls",
+        async ({ request }) => {
+          pullRequests++;
+          expect(await request.json()).toMatchObject({
+            base: "main",
+            head: expect.stringMatching(/^archestra\/openappa-setup-/),
+          });
+          return scenario === "PR failure"
+            ? HttpResponse.json({ message: "Forbidden" }, { status: 403 })
+            : HttpResponse.json({ number: 1 });
+        },
+      ),
+    );
     const response = await app.inject({
       method: "POST",
       url: "/api/openappa/github-sync/repository",
@@ -351,8 +406,16 @@ describe("APPA GitHub sync", () => {
         interval: "1h",
       },
     });
-    if (scenario === "PR failure") {
+    if (
+      [
+        "PR failure",
+        "permission denied",
+        "unrelated conflict",
+        "upstream failure",
+      ].includes(scenario)
+    ) {
       expect(response.statusCode).toBe(502);
+      expect(pullRequests).toBe(scenario === "PR failure" ? 1 : 0);
       expect(response.json().error.message).toContain(
         "initial policy setup failed",
       );
@@ -363,8 +426,9 @@ describe("APPA GitHub sync", () => {
       return;
     }
     expect(response.statusCode, response.body).toBe(200);
-    if (matchingTemplate) {
-      expect(seeded).toBe("");
+    if (matchingTemplate || scenario === "direct commit") {
+      expect(pullRequests).toBe(0);
+      expect(seeded).toBe(matchingTemplate ? "" : current);
       expect(response.json().source).toMatchObject({
         setupPullRequestNumber: null,
         sourceCommit: commit,
@@ -375,6 +439,7 @@ describe("APPA GitHub sync", () => {
       );
       return;
     }
+    expect(pullRequests).toBe(1);
     expect(templateReads).toBe(scenario === "template not ready" ? 2 : 1);
     expect(seeded).toBe(current);
     expect(response.json()).toMatchObject({

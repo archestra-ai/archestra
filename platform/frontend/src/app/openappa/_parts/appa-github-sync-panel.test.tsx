@@ -270,15 +270,13 @@ test("creates a repository with a connected App and shows the initial merge link
     target: { value: "example/openappa-policy" },
   });
   expect(
-    screen.getByRole("button", { name: "Create repository and PR" }),
+    screen.getByRole("button", { name: "Create and sync" }),
   ).toBeDisabled();
   fireEvent.click(
     screen.getByRole("combobox", { name: "Connected GitHub App" }),
   );
   fireEvent.click(await screen.findByRole("option", { name: "Policy App" }));
-  fireEvent.click(
-    screen.getByRole("button", { name: "Create repository and PR" }),
-  );
+  fireEvent.click(screen.getByRole("button", { name: "Create and sync" }));
   expect(
     await screen.findByRole("link", { name: /example\/openappa-policy/ }),
   ).toBeVisible();

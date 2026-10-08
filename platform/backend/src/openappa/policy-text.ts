@@ -11,6 +11,8 @@ export type ToolEntry = {
   delta: unknown;
   requires: unknown;
   annotator: unknown;
+  tags: string[];
+  excludes: string[];
 };
 
 /** The parsed document, or null when the text is not valid TOML. */
@@ -35,6 +37,8 @@ export function toolEntries(text: string): ToolEntry[] {
             delta: entry.delta,
             requires: entry.requires,
             annotator: entry.annotator,
+            tags: stringList(entry.tags),
+            excludes: stringList(entry.excludes),
           },
         ]
       : [];
@@ -46,9 +50,16 @@ export function toolEntries(text: string): ToolEntry[] {
  * n-th entry's line whenever every entry is written as a header.
  */
 export function toolHeaderLines(text: string): number[] {
+  return arrayHeaderLines(text, ["policy", "tool"]);
+}
+
+/** The 1-based line of every `[[a.b]]` array-of-tables header for `path`. */
+export function arrayHeaderLines(text: string, path: string[]): number[] {
   return text
     .split("\n")
-    .flatMap((line, index) => (TOOL_HEADER.test(line) ? [index + 1] : []));
+    .flatMap((line, index) =>
+      sameKeyPath(ARRAY_HEADER.exec(line)?.[1], path) ? [index + 1] : [],
+    );
 }
 
 /** The 1-based line of the `[a.b.c]` table header, or null. */
@@ -103,11 +114,16 @@ function sameKeyPath(spelled: string | undefined, path: string[]): boolean {
   return keys.length === path.length && keys.every((key, i) => key === path[i]);
 }
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value)
+    ? value.filter((item): item is string => typeof item === "string")
+    : [];
+}
+
 function unquote(key: string): string {
   return /^(["']).*\1$/.test(key) ? key.slice(1, -1) : key;
 }
 
-const TOOL_HEADER = /^\s*\[\[\s*policy\s*\.\s*tool\s*\]\]/;
 const TABLE_HEADER = /^\s*\[(?!\[)\s*([^\]]+?)\s*\](?!\])/;
 const ARRAY_HEADER = /^\s*\[\[\s*([^\]]+?)\s*\]\]/;
 const KEY_SEGMENT = /"[^"]*"|'[^']*'|[A-Za-z0-9_-]+/g;

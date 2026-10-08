@@ -129,18 +129,77 @@ export const INSTALLER_CLIENT_FOOTPRINT: Record<InstallerClientId, string[]> = {
  */
 export const CLAUDE_DESKTOP_PROFILE_ID = "aa157426-f6a9-5ac5-8471-3b30b42bbe8f";
 
-/** Agents with no installer, recognised only from their gateway OAuth client. */
-export const OAUTH_ONLY_CLIENT_IDS = ["amp"] as const;
+/**
+ * How the gateway tells an agent apart by its OAuth client: a fixed CIMD
+ * client id that every install shares, or, for an agent that registers each
+ * install (DCR), its client name pattern and fixed loopback redirect.
+ */
+export type OAuthAgentIdentity =
+  | { clientId: string }
+  | { clientNamePattern: string; redirectUri: string };
 
 /**
- * Agents the gateway can tell apart by their OAuth client: they show as
- * connected from a gateway sign-in, and revoking signs them out.
+ * The agents the gateway recognises from their sign-in: the one place to add
+ * one. Their ids, names and the backend's sign-in matching all come from
+ * here. An agent not listed still shows as connected, under the name it
+ * registered, and can still be disconnected; listing it only gives it its
+ * Connect page name and logo.
  */
-export const OAUTH_RECOGNISED_CLIENT_IDS = [
-  "claude-code",
-  ...OAUTH_ONLY_CLIENT_IDS,
-] as const;
+export const OAUTH_AGENTS = {
+  "claude-code": {
+    label: "Claude Code",
+    identity: {
+      clientId: "https://claude.ai/oauth/claude-code-client-metadata",
+    },
+  },
+  // Registers each install as "Amp MCP Client (<server name>)" with this
+  // redirect (captured from amp 0.0.1791201662).
+  amp: {
+    label: "Amp",
+    identity: {
+      clientNamePattern: "^Amp MCP Client \\(.*\\)$",
+      redirectUri: "http://localhost:41592/oauth/callback",
+    },
+  },
+  droid: {
+    label: "Droid",
+    identity: { clientId: "https://api.factory.ai/mcp/oauth-client" },
+  },
+} as const satisfies Record<
+  string,
+  { label: string; identity: OAuthAgentIdentity }
+>;
 
-export function isOAuthRecognisedClient(id: string): boolean {
-  return (OAUTH_RECOGNISED_CLIENT_IDS as readonly string[]).includes(id);
+export type OAuthAgentId = keyof typeof OAUTH_AGENTS;
+
+export const OAUTH_RECOGNISED_CLIENT_IDS = Object.keys(
+  OAUTH_AGENTS,
+) as OAuthAgentId[];
+
+export function isOAuthRecognisedClient(id: string): id is OAuthAgentId {
+  return Object.hasOwn(OAUTH_AGENTS, id);
+}
+
+/**
+ * An agent known only from its OAuth client, by that client's id: how the
+ * connected list, the log and disconnect name an agent nobody listed.
+ */
+export function signedInAgentId(oauthClientId: string): string {
+  return `oauth:${oauthClientId}`;
+}
+
+/** The OAuth client id behind {@link signedInAgentId}, or null. */
+export function oauthClientIdOf(agentId: string): string | null {
+  return agentId.startsWith("oauth:") ? agentId.slice("oauth:".length) : null;
+}
+
+/** Whether revoking an agent signs it out of the gateway. */
+export function revokeSignsOut(agentId: string): boolean {
+  return isOAuthRecognisedClient(agentId) || oauthClientIdOf(agentId) !== null;
+}
+
+/** A known agent's name; null for one known only from its sign-in. */
+export function connectAgentLabel(id: string): string | null {
+  if (isInstallerClientId(id)) return INSTALLER_CLIENT_LABELS[id];
+  return isOAuthRecognisedClient(id) ? OAUTH_AGENTS[id].label : null;
 }

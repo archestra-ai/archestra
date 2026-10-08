@@ -1,4 +1,8 @@
-import { OAUTH_RECOGNISED_CLIENT_IDS } from "@archestra/shared/connection-setup";
+import {
+  connectAgentLabel,
+  oauthClientIdOf,
+  signedInAgentId,
+} from "@archestra/shared/connection-setup";
 import { withDbTransaction } from "@/database";
 import logger from "@/logging";
 import {
@@ -6,13 +10,17 @@ import {
   OAuthClientModel,
   SkillShareLinkModel,
 } from "@/models";
+import { lastDays } from "@/models/connected-client";
 import {
   ApiError,
   type ConnectedClientId,
   type ConnectedClientRecord,
   ConnectionSetupClientIdSchema,
 } from "@/types";
-import { isOAuthClientForConnectClient } from "./connected-client-oauth";
+import {
+  connectClientForOAuthClient,
+  isOAuthClientForConnectClient,
+} from "./connected-client-oauth";
 import { dropRevokedSkillShareLinkRepo } from "./skill-share-link";
 
 /** Traffic is read this far back, as on the Agent connections tab. */
@@ -40,7 +48,7 @@ export async function listConnectedClients(params: {
     ConnectedClientModel.getAdoption({
       organizationId: params.organizationId,
       userId: params.userId,
-      lookbackDays: LAST_SEEN_DAYS,
+      window: lastDays(LAST_SEEN_DAYS),
     }),
   ]);
   // Newest gateway or LLM proxy call per Connect client.
@@ -50,43 +58,54 @@ export async function listConnectedClients(params: {
     ...(member?.gatewayUses ?? []),
     ...(member?.llmUses ?? []),
   ]) {
-    const { clientId } = use.agent;
-    if (!clientId) continue;
-    const prev = lastSeen.get(clientId);
-    if (!prev || use.lastSeenAt > prev) lastSeen.set(clientId, use.lastSeenAt);
+    // An agent nobody listed is known to traffic only by its name.
+    const key = use.agent.clientId ?? nameKey(use.agent.name);
+    const prev = lastSeen.get(key);
+    if (!prev || use.lastSeenAt > prev) lastSeen.set(key, use.lastSeenAt);
   }
   const byClient = new Map(redeemed.map((c) => [c.clientId, c]));
-  for (const clientId of OAUTH_RECOGNISED_CLIENT_IDS) {
-    const matches = oauthClients.filter((c) =>
-      isOAuthClientForConnectClient(clientId, c),
-    );
-    if (matches.length === 0) continue;
+  // Every agent signed in to the gateway: a listed one under its Connect id,
+  // any other under its own OAuth client.
+  const signedIn = new Map<string, typeof oauthClients>();
+  for (const c of oauthClients) {
+    const id = connectClientForOAuthClient(c) ?? signedInAgentId(c.clientId);
+    signedIn.set(id, [...(signedIn.get(id) ?? []), c]);
+  }
+  for (const [clientId, matches] of signedIn) {
     const first = Math.min(...matches.map((c) => c.firstIssuedAt.getTime()));
     const consents = matches.flatMap((c) =>
       c.consentedAt ? [c.consentedAt.getTime()] : [],
     );
-    const signedIn = consents.length > 0 ? Math.max(...consents) : first;
+    const consented = consents.length > 0 ? Math.max(...consents) : first;
     const client = byClient.get(clientId);
     if (client) {
       if (first < client.connectedAt.getTime())
         client.connectedAt = new Date(first);
-      if (signedIn > client.lastConnectedAt.getTime())
-        client.lastConnectedAt = new Date(signedIn);
+      if (consented > client.lastConnectedAt.getTime())
+        client.lastConnectedAt = new Date(consented);
       continue;
     }
     byClient.set(clientId, {
       clientId,
+      name:
+        connectAgentLabel(clientId) ??
+        matches[0].name?.trim() ??
+        "Unknown agent",
       platform: null,
       mcpGatewayId: null,
       llmProxyId: null,
-      connectedAt: new Date(Math.min(first, signedIn)),
-      lastConnectedAt: new Date(signedIn),
+      connectedAt: new Date(Math.min(first, consented)),
+      lastConnectedAt: new Date(consented),
       deviceNames: [],
       lastSeenAt: null,
     });
   }
   for (const client of byClient.values()) {
-    client.lastSeenAt = lastSeen.get(client.clientId) ?? null;
+    client.lastSeenAt =
+      lastSeen.get(client.clientId) ??
+      (oauthClientIdOf(client.clientId)
+        ? (lastSeen.get(nameKey(client.name)) ?? null)
+        : null);
   }
   return [...byClient.values()].sort(
     (a, b) => b.lastConnectedAt.getTime() - a.lastConnectedAt.getTime(),
@@ -142,7 +161,10 @@ export async function disconnectClient(params: {
     const oauthClients = (
       await OAuthClientModel.listWithUserTokens({ userId, tx })
     ).filter((oauthClient) =>
-      isOAuthClientForConnectClient(clientId, oauthClient),
+      // An agent nobody listed is disconnected by its own OAuth client.
+      oauthClientIdOf(clientId)
+        ? oauthClient.clientId === oauthClientIdOf(clientId)
+        : isOAuthClientForConnectClient(clientId, oauthClient),
     );
     if (setups === 0 && oauthClients.length === 0) {
       throw new ApiError(404, "Connected client not found");
@@ -190,4 +212,8 @@ export async function disconnectClient(params: {
     "disconnectClient: connected client disconnected",
   );
   return disconnected;
+}
+
+function nameKey(name: string): string {
+  return `name:${name.trim().toLowerCase()}`;
 }

@@ -40775,7 +40775,8 @@ export type GetConnectedClientsResponses = {
      * Default Response
      */
     200: Array<{
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'amp';
+        clientId: string;
+        name: string;
         lastConnectedAt: string;
         deviceNames: Array<string>;
         lastSeenAt: string | null;
@@ -40794,10 +40795,6 @@ export type GetConnectedClientLogData = {
          * Only events for this user's clients
          */
         userId?: string;
-        /**
-         * Only events for this client
-         */
-        clientId?: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         /**
          * Only connects or only disconnects
          */
@@ -40900,8 +40897,12 @@ export type GetConnectedClientLogResponses = {
                 id: string;
                 name: string;
             } | null;
-            modelRouting: boolean;
+            llmProxy: {
+                id: string;
+                name: string;
+            } | null;
             includeSkills: boolean;
+            skillCount: number;
             disconnectedBy: {
                 id: string;
                 name: string;
@@ -40920,7 +40921,16 @@ export type GetConnectedClientLogResponse = GetConnectedClientLogResponses[keyof
 export type GetAgentAdoptionData = {
     body?: never;
     path?: never;
-    query?: never;
+    query?: {
+        /**
+         * Traffic on or after this date (ISO 8601); the last 30 days when left out
+         */
+        startDate?: string;
+        /**
+         * Traffic on or before this date (ISO 8601); now when left out
+         */
+        endDate?: string;
+    };
     url: '/api/connected-clients/adoption';
 };
 
@@ -40994,14 +41004,25 @@ export type GetAgentAdoptionResponses = {
      * Default Response
      */
     200: {
-        lookbackDays: number;
+        since: string;
+        until: string;
         members: Array<{
             userId: string;
             name: string;
             email: string;
-            status: 'active' | 'inactive';
+            status: 'active' | 'inactive' | 'notConnected';
             gatewayLastSeenAt: string | null;
             llmLastSeenAt: string | null;
+            agents: Array<{
+                clientId: string | null;
+                name: string;
+                status: 'active' | 'inactive' | 'notConnected';
+                setupAt: string | null;
+                signedIn: boolean;
+                viaToken: boolean;
+                lastGatewayCallAt: string | null;
+                lastLlmCallAt: string | null;
+            }>;
             gatewayUses: Array<{
                 via: {
                     id: string | null;
@@ -41026,13 +41047,6 @@ export type GetAgentAdoptionResponses = {
                 calls: number;
                 lastSeenAt: string;
             }>;
-            skillSyncs: Array<{
-                agent: {
-                    clientId: string | null;
-                    name: string;
-                };
-                lastSyncedAt: string;
-            }>;
         }>;
     };
 };
@@ -41043,6 +41057,14 @@ export type GetAgentAdoptionUsageData = {
     body?: never;
     path?: never;
     query?: {
+        /**
+         * Traffic on or after this date (ISO 8601); the last 30 days when left out
+         */
+        startDate?: string;
+        /**
+         * Traffic on or before this date (ISO 8601); now when left out
+         */
+        endDate?: string;
         /**
          * Only this member's calls; the whole organization when left out
          */
@@ -41121,7 +41143,8 @@ export type GetAgentAdoptionUsageResponses = {
      * Default Response
      */
     200: {
-        lookbackDays: number;
+        since: string;
+        until: string;
         days: Array<{
             date: string;
             gatewayCalls: number;
@@ -41135,7 +41158,7 @@ export type GetAgentAdoptionUsageResponse = GetAgentAdoptionUsageResponses[keyof
 export type DisconnectConnectedClientData = {
     body?: never;
     path: {
-        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode' | 'amp';
+        clientId: string;
     };
     query?: never;
     url: '/api/connected-clients/{clientId}';

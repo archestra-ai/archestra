@@ -147909,15 +147909,11 @@
                     "properties": {
                       "clientId": {
                         "type": "string",
-                        "enum": [
-                          "claude-code",
-                          "cursor",
-                          "codex",
-                          "claude-desktop",
-                          "copilot-cli",
-                          "opencode",
-                          "amp"
-                        ]
+                        "minLength": 1,
+                        "maxLength": 2048
+                      },
+                      "name": {
+                        "type": "string"
                       },
                       "lastConnectedAt": {
                         "type": "string",
@@ -147937,6 +147933,7 @@
                     },
                     "required": [
                       "clientId",
+                      "name",
                       "lastConnectedAt",
                       "deviceNames",
                       "lastSeenAt"
@@ -148223,23 +148220,6 @@
             "schema": {
               "type": "string",
               "enum": [
-                "claude-code",
-                "cursor",
-                "codex",
-                "claude-desktop",
-                "copilot-cli",
-                "opencode"
-              ]
-            },
-            "in": "query",
-            "name": "clientId",
-            "required": false,
-            "description": "Only events for this client"
-          },
-          {
-            "schema": {
-              "type": "string",
-              "enum": [
                 "connected",
                 "disconnected"
               ]
@@ -148362,11 +148342,28 @@
                             ],
                             "additionalProperties": false
                           },
-                          "modelRouting": {
-                            "type": "boolean"
+                          "llmProxy": {
+                            "nullable": true,
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "name": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name"
+                            ],
+                            "additionalProperties": false
                           },
                           "includeSkills": {
                             "type": "boolean"
+                          },
+                          "skillCount": {
+                            "type": "number"
                           },
                           "disconnectedBy": {
                             "nullable": true,
@@ -148399,8 +148396,9 @@
                           "platform",
                           "deviceName",
                           "mcpGateway",
-                          "modelRouting",
+                          "llmProxy",
                           "includeSkills",
+                          "skillCount",
                           "disconnectedBy"
                         ],
                         "additionalProperties": false
@@ -148683,7 +148681,31 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the last 30 days; setups and sign-ins alone only show the installer ran.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
+        "description": "Every organization member with their agents (set up through the Connect page, signed in to the gateway, or seen calling it or the LLM proxy) and the last MCP gateway and LLM proxy use seen from them. A member is active when their agents made gateway or LLM proxy calls in the window (the last 30 days unless picked); setups and sign-ins alone only show the installer ran.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
+        "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "startDate",
+            "required": false,
+            "description": "Traffic on or after this date (ISO 8601); the last 30 days when left out"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "endDate",
+            "required": false,
+            "description": "Traffic on or before this date (ISO 8601); now when left out"
+          }
+        ],
         "responses": {
           "200": {
             "description": "Default Response",
@@ -148692,8 +148714,13 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "lookbackDays": {
-                      "type": "number"
+                    "since": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "until": {
+                      "type": "string",
+                      "format": "date-time"
                     },
                     "members": {
                       "type": "array",
@@ -148713,7 +148740,8 @@
                             "type": "string",
                             "enum": [
                               "active",
-                              "inactive"
+                              "inactive",
+                              "notConnected"
                             ]
                           },
                           "gatewayLastSeenAt": {
@@ -148725,6 +148753,61 @@
                             "nullable": true,
                             "type": "string",
                             "format": "date-time"
+                          },
+                          "agents": {
+                            "type": "array",
+                            "items": {
+                              "type": "object",
+                              "properties": {
+                                "clientId": {
+                                  "nullable": true,
+                                  "type": "string"
+                                },
+                                "name": {
+                                  "type": "string"
+                                },
+                                "status": {
+                                  "type": "string",
+                                  "enum": [
+                                    "active",
+                                    "inactive",
+                                    "notConnected"
+                                  ]
+                                },
+                                "setupAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "signedIn": {
+                                  "type": "boolean"
+                                },
+                                "viaToken": {
+                                  "type": "boolean"
+                                },
+                                "lastGatewayCallAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                },
+                                "lastLlmCallAt": {
+                                  "nullable": true,
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              },
+                              "required": [
+                                "clientId",
+                                "name",
+                                "status",
+                                "setupAt",
+                                "signedIn",
+                                "viaToken",
+                                "lastGatewayCallAt",
+                                "lastLlmCallAt"
+                              ],
+                              "additionalProperties": false
+                            }
                           },
                           "gatewayUses": {
                             "type": "array",
@@ -148837,40 +148920,6 @@
                               ],
                               "additionalProperties": false
                             }
-                          },
-                          "skillSyncs": {
-                            "type": "array",
-                            "items": {
-                              "type": "object",
-                              "properties": {
-                                "agent": {
-                                  "type": "object",
-                                  "properties": {
-                                    "clientId": {
-                                      "nullable": true,
-                                      "type": "string"
-                                    },
-                                    "name": {
-                                      "type": "string"
-                                    }
-                                  },
-                                  "required": [
-                                    "clientId",
-                                    "name"
-                                  ],
-                                  "additionalProperties": false
-                                },
-                                "lastSyncedAt": {
-                                  "type": "string",
-                                  "format": "date-time"
-                                }
-                              },
-                              "required": [
-                                "agent",
-                                "lastSyncedAt"
-                              ],
-                              "additionalProperties": false
-                            }
                           }
                         },
                         "required": [
@@ -148880,16 +148929,17 @@
                           "status",
                           "gatewayLastSeenAt",
                           "llmLastSeenAt",
+                          "agents",
                           "gatewayUses",
-                          "llmUses",
-                          "skillSyncs"
+                          "llmUses"
                         ],
                         "additionalProperties": false
                       }
                     }
                   },
                   "required": [
-                    "lookbackDays",
+                    "since",
+                    "until",
                     "members"
                   ],
                   "additionalProperties": false
@@ -149141,8 +149191,30 @@
         "tags": [
           "Connection Setups"
         ],
-        "description": "MCP gateway and LLM proxy calls from members' agents per day over the last 30 days, for one member or the whole organization. Counts the same traffic as the adoption summary.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
+        "description": "MCP gateway and LLM proxy calls from members' agents per UTC day over the window (the last 30 days unless picked), for one member or the whole organization. Counts the same traffic as the adoption summary.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`log:admin`: View every LLM and MCP log in your organization (also requires Read)\n`member:read`: View organization members and their roles",
         "parameters": [
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "startDate",
+            "required": false,
+            "description": "Traffic on or after this date (ISO 8601); the last 30 days when left out"
+          },
+          {
+            "schema": {
+              "type": "string",
+              "format": "date-time",
+              "pattern": "^(?:(?:\\d\\d[2468][048]|\\d\\d[13579][26]|\\d\\d0[48]|[02468][048]00|[13579][26]00)-02-29|\\d{4}-(?:(?:0[13578]|1[02])-(?:0[1-9]|[12]\\d|3[01])|(?:0[469]|11)-(?:0[1-9]|[12]\\d|30)|(?:02)-(?:0[1-9]|1\\d|2[0-8])))T(?:(?:[01]\\d|2[0-3]):[0-5]\\d(?::[0-5]\\d(?:\\.\\d+)?)?(?:Z))$"
+            },
+            "in": "query",
+            "name": "endDate",
+            "required": false,
+            "description": "Traffic on or before this date (ISO 8601); now when left out"
+          },
           {
             "schema": {
               "type": "string"
@@ -149161,8 +149233,13 @@
                 "schema": {
                   "type": "object",
                   "properties": {
-                    "lookbackDays": {
-                      "type": "number"
+                    "since": {
+                      "type": "string",
+                      "format": "date-time"
+                    },
+                    "until": {
+                      "type": "string",
+                      "format": "date-time"
                     },
                     "days": {
                       "type": "array",
@@ -149189,7 +149266,8 @@
                     }
                   },
                   "required": [
-                    "lookbackDays",
+                    "since",
+                    "until",
                     "days"
                   ],
                   "additionalProperties": false
@@ -149446,15 +149524,8 @@
           {
             "schema": {
               "type": "string",
-              "enum": [
-                "claude-code",
-                "cursor",
-                "codex",
-                "claude-desktop",
-                "copilot-cli",
-                "opencode",
-                "amp"
-              ]
+              "minLength": 1,
+              "maxLength": 2048
             },
             "in": "path",
             "name": "clientId",
@@ -168434,12 +168505,11 @@
           }
         },
         "x-required-permissions": {
-          "kind": "static",
-          "permissions": [
-            "organizationSettings:read"
-          ]
+          "kind": "none",
+          "note": "None (no additional RBAC permission required)",
+          "permissions": []
         },
-        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`organizationSettings:read`: View every organization settings page, including messaging channels"
+        "description": "Authentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\nNone (no additional RBAC permission required)"
       },
       "put": {
         "operationId": "updateGuardrailsDeployment",

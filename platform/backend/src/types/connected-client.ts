@@ -1,19 +1,15 @@
-import { OAUTH_ONLY_CLIENT_IDS } from "@archestra/shared/connection-setup";
 import { z } from "zod";
 import {
-  ConnectionSetupClientIdSchema,
   type ConnectionSetupPlatform,
   ConnectionSetupPlatformSchema,
 } from "./connection-setup";
 
 /**
- * Agents that can show as connected: every scriptable setup client, plus
- * agents recognised only from their gateway OAuth sign-in.
+ * A connected agent: a Connect client id (a setup client, or an agent the
+ * gateway recognises from its sign-in), or `oauth:<OAuth client id>` for an
+ * agent known only from its gateway sign-in.
  */
-export const ConnectedClientIdSchema = z.enum([
-  ...ConnectionSetupClientIdSchema.options,
-  ...OAUTH_ONLY_CLIENT_IDS,
-]);
+export const ConnectedClientIdSchema = z.string().min(1).max(2048);
 export type ConnectedClientId = z.infer<typeof ConnectedClientIdSchema>;
 
 /**
@@ -23,6 +19,8 @@ export type ConnectedClientId = z.infer<typeof ConnectedClientIdSchema>;
  */
 export const ConnectedClientSchema = z.object({
   clientId: ConnectedClientIdSchema,
+  /** The Connect page name, or the name the agent registered with. */
+  name: z.string(),
   /** Most recent connect for this client. */
   lastConnectedAt: z.date(),
   /** Machines the client was connected on, most recent first; empty when unknown. */
@@ -80,20 +78,29 @@ export const ConnectionEventSchema = z.object({
   deviceName: z.string().nullable(),
   /** Gateway the agent got tools from; null when tools were left out. */
   mcpGateway: z.object({ id: z.string(), name: z.string() }).nullable(),
-  /** Whether model calls were routed through the LLM proxy. */
-  modelRouting: z.boolean(),
+  /** LLM proxy the agent's model calls were routed through; null when not. */
+  llmProxy: z.object({ id: z.string(), name: z.string() }).nullable(),
   includeSkills: z.boolean(),
+  /** How many skills the setup synced; deleted skills drop out. */
+  skillCount: z.number(),
   /** Set when someone other than the user disconnected the agent. */
   disconnectedBy: z.object({ id: z.string(), name: z.string() }).nullable(),
 });
 export type ConnectionEvent = z.infer<typeof ConnectionEventSchema>;
 
 /**
- * Whether a member's agents use Archestra: `active` when they made MCP gateway
- * or LLM proxy calls in the lookback window, `inactive` otherwise. Setups and
- * sign-ins alone don't count, since they only show the installer ran.
+ * Where a user, or one of their agents, stands over the last 30 days, whatever
+ * date range is picked: `active` when an agent did something (a gateway tool
+ * call or an LLM proxy call), `inactive` when it reached the gateway or proxy
+ * (opening it counts) but did nothing, `notConnected` when it never reached
+ * either. A setup or sign-in with no traffic is not connected. A user stands
+ * where their most active connected agent does; disconnected ones don't count.
  */
-export const AgentAdoptionStatusSchema = z.enum(["active", "inactive"]);
+export const AgentAdoptionStatusSchema = z.enum([
+  "active",
+  "inactive",
+  "notConnected",
+]);
 export type AgentAdoptionStatus = z.infer<typeof AgentAdoptionStatusSchema>;
 
 /**
@@ -110,6 +117,23 @@ export const AdoptionUseSchema = z.object({
 });
 export type AdoptionUse = z.infer<typeof AdoptionUseSchema>;
 
+/** One of a member's agents: how it got there, and what it did. */
+export const AdoptionAgentSchema = z.object({
+  /** Connect page client id; null for an agent known only by its name. */
+  clientId: z.string().nullable(),
+  name: z.string(),
+  status: AgentAdoptionStatusSchema,
+  /** First setup, or first gateway sign-in; null when only seen in traffic. */
+  setupAt: z.date().nullable(),
+  /** Set up by hand: known from its gateway sign-in. */
+  signedIn: z.boolean(),
+  /** Seen only calling on a pasted token: no setup and no sign-in. */
+  viaToken: z.boolean(),
+  lastGatewayCallAt: z.date().nullable(),
+  lastLlmCallAt: z.date().nullable(),
+});
+export type AdoptionAgent = z.infer<typeof AdoptionAgentSchema>;
+
 /** One organization member's agent connections and traffic. */
 export const AgentAdoptionMemberSchema = z.object({
   userId: z.string(),
@@ -117,45 +141,41 @@ export const AgentAdoptionMemberSchema = z.object({
   email: z.string(),
   status: AgentAdoptionStatusSchema,
   /**
-   * Newest MCP gateway call from a signed-in agent in the lookback window,
-   * including calls from before the gateway recorded which agent made them.
+   * Newest MCP gateway tool call from the member's agents, however old,
+   * within a 180-day lookback; null when none. Starting an agent isn't one.
    */
   gatewayLastSeenAt: z.date().nullable(),
-  /** Newest LLM proxy call in the lookback window. */
+  /** Newest LLM proxy call, within the same lookback. */
   llmLastSeenAt: z.date().nullable(),
-  /** Gateway calls per gateway and agent, newest first. */
-  gatewayUses: z.array(AdoptionUseSchema),
-  /** LLM proxy calls per proxy and agent, newest first. */
-  llmUses: z.array(AdoptionUseSchema),
   /**
-   * When each agent last cloned or refreshed the skills marketplace in the
-   * lookback window, newest first. Agents run skills locally, so a sync is the
-   * closest Archestra sees to their use.
+   * Each agent the member set up, signed in with, or was seen calling from,
+   * with its own state and last calls.
    */
-  skillSyncs: z.array(
-    z.object({
-      agent: z.object({ clientId: z.string().nullable(), name: z.string() }),
-      lastSyncedAt: z.date(),
-    }),
-  ),
+  agents: z.array(AdoptionAgentSchema),
+  /** Gateway calls in the picked range, per gateway and agent, newest first. */
+  gatewayUses: z.array(AdoptionUseSchema),
+  /** LLM proxy calls in the picked range, per proxy and agent, newest first. */
+  llmUses: z.array(AdoptionUseSchema),
 });
 export type AgentAdoptionMember = z.infer<typeof AgentAdoptionMemberSchema>;
 
 export const AgentAdoptionSchema = z.object({
-  /** How far back traffic is read; calls in this window make a member active. */
-  lookbackDays: z.number(),
+  /** The span traffic is read over; calls in it make a member active. */
+  since: z.date(),
+  until: z.date(),
   members: z.array(AgentAdoptionMemberSchema),
 });
 export type AgentAdoption = z.infer<typeof AgentAdoptionSchema>;
 
 /** Calls from members' agents per UTC day, oldest first. */
 export const AgentAdoptionUsageSchema = z.object({
-  lookbackDays: z.number(),
+  since: z.date(),
+  until: z.date(),
   days: z.array(
     z.object({
       /** UTC day, YYYY-MM-DD. */
       date: z.string(),
-      /** MCP gateway calls from signed-in agents. */
+      /** MCP gateway tool calls from users' agents. */
       gatewayCalls: z.number(),
       /** LLM proxy calls from agents (external API traffic). */
       llmCalls: z.number(),

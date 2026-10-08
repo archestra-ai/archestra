@@ -43,4 +43,16 @@ describe("isOAuthClientForConnectClient", () => {
       false,
     );
   });
+
+  test("matches Droid only by its CIMD client_id", () => {
+    const droid = {
+      clientId: "https://api.factory.ai/mcp/oauth-client",
+      name: "Factory Droid",
+      redirectUris: ["http://127.0.0.1/callback"],
+    };
+    expect(isOAuthClientForConnectClient("droid", droid)).toBe(true);
+    expect(
+      isOAuthClientForConnectClient("droid", { ...droid, clientId: "dcr-1" }),
+    ).toBe(false);
+  });
 });

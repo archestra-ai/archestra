@@ -33,6 +33,7 @@ import {
   ListOrdered,
   MessageSquareText,
   MoreHorizontal,
+  Puzzle,
   Settings,
   ShieldCheck,
   ShieldOff,
@@ -47,8 +48,11 @@ import { useSearchParams } from "next/navigation";
 import {
   type ComponentProps,
   type ReactNode,
+  type RefObject,
   useEffect,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
 } from "react";
 import { toast } from "sonner";
@@ -83,6 +87,7 @@ import {
 import {
   type ConnectPageData,
   type ConnectPageSkill,
+  type ConnectPlugin,
   type ConnectServer,
   useConnectPageData,
 } from "./connect-page-data";
@@ -97,8 +102,8 @@ import {
 } from "./connect-page-parts";
 import {
   type ConnectedAgent,
+  DisconnectLine,
   LastConnectedMark,
-  ManageAgents,
   useConnectedAgents,
 } from "./connected-agents";
 import { type SetupMode, setupModeFor, useManualSteps } from "./manual-setup";
@@ -115,21 +120,14 @@ const ConnectCommandPanel = dynamic(
 type DialogKind = "servers" | "skills" | "plugins" | "cursor";
 
 const MOTION_CSS = `
-@keyframes connect-pop {
-  0% { opacity: 0; transform: translateY(16px) scale(0.92); }
-  55% { opacity: 1; transform: translateY(-5px) scale(1.025); }
-  78% { transform: translateY(1.5px) scale(0.995); }
-  100% { opacity: 1; transform: none; }
-}
 @keyframes connect-icon {
   0% { opacity: 0.3; transform: scale(0.78) rotate(-8deg); }
   60% { opacity: 1; transform: scale(1.07) rotate(2deg); }
   100% { opacity: 1; transform: none; }
 }
-.connect-chip { animation: connect-pop 0.62s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 .connect-icon { animation: connect-icon 0.55s cubic-bezier(0.2, 0.8, 0.2, 1) both; }
 @media (prefers-reduced-motion: reduce) {
-  .connect-chip, .connect-icon { animation: none; }
+  .connect-icon { animation: none; }
 }
 `;
 
@@ -167,14 +165,10 @@ export function ConnectPage() {
     data.clients[0];
   const clientId = client?.id;
   useEffect(() => {
-    // Tools and plugins are always included; skills and model routing can
-    // be left out (Choose what to include).
+    // Tools are always included; skills, plugins and model routing can be
+    // left out (Choose what to include).
     if (!clientId) return;
-    setChoices({
-      ...readConnectChoices(clientId),
-      tools: true,
-      plugins: true,
-    });
+    setChoices({ ...readConnectChoices(clientId), tools: true });
   }, [clientId]);
 
   if (data.loading || !client) return <LoadingState />;
@@ -183,9 +177,8 @@ export function ConnectPage() {
   const routed = parts.proxy && choices.proxy;
   const servers = choices.tools ? data.servers : [];
   const tools = servers.reduce((n, s) => n + s.toolCount, 0);
-  const skillsOn = data.skillsEnabled && data.totalSkills > 0;
-  const skills = skillsOn && choices.skills ? skillsSorted : [];
-  const skillCount = skills.length;
+  const skills = data.skillsEnabled ? skillsSorted : [];
+  const plugins = parts.plugins ? data.pluginsFor(client) : [];
   const prompt = data.connectPrompt(client, choices);
   const setChoice = (part: keyof ConnectChoices, value: boolean) => {
     const next = { ...choices, [part]: value };
@@ -246,54 +239,53 @@ export function ConnectPage() {
               >
                 <Link href="/settings/connection">
                   <Settings />
-                  Connection settings
+                  Settings
                 </Link>
               </Button>
             )}
           </div>
         )}
 
-        <section className="grid items-start gap-6 @min-[66rem]:items-stretch @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16">
-          {/* Left: headline, then the picker. Beside a taller card the tiles
-              grow a little, so the column ends level with the card. */}
-          <div className="min-w-0 @min-[66rem]:flex @min-[66rem]:flex-col">
-            <h1 className="max-w-[11em] text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl @min-[66rem]:text-6xl @7xl:text-[4.25rem]">
-              Connect your agent to {data.appName}
-            </h1>
-            <p className="mt-4 max-w-[34rem] text-sm leading-relaxed text-muted-foreground">
-              The MCP servers and skills your organization runs for itself, now
-              usable in your agent of choice.
-            </p>
+        <header className="mx-auto max-w-3xl pt-4 text-center">
+          <h1 className="text-4xl leading-[1.05] font-semibold tracking-tighter text-balance md:text-5xl">
+            Connect your agent to {data.appName}
+          </h1>
+          <p className="mx-auto mt-3 max-w-[40rem] text-sm leading-relaxed text-muted-foreground">
+            The MCP servers and skills your organization runs for itself, now
+            usable in your agent of choice.
+          </p>
+        </header>
 
-            <div className="mt-6 @min-[66rem]:flex @min-[66rem]:flex-1 @min-[66rem]:flex-col">
-              <div className="flex items-center justify-between gap-3">
-                <h2 className="text-sm font-semibold">
-                  {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
-                </h2>
-                <ManageAgents data={data} agents={connected.agents} />
-              </div>
-              <p className="mt-1 max-w-xl text-sm text-muted-foreground">
-                Your organization's tools and skills get added to the agent you
-                pick.
-              </p>
-              <AgentTiles
-                data={data}
-                selected={client}
-                lastConnected={connected.lastConnected}
-                onPick={pick}
-              />
-            </div>
+        {/* One column, top to bottom: pick, what it gets, connect. A thin line
+            runs down from the picked tile through both steps. */}
+        <div className="relative mt-6">
+          <div className="flex items-end justify-between gap-3">
+            <h2 className="text-sm font-semibold">
+              {tileCount(data) === 1 ? "Your agent" : "Pick your agent"}
+            </h2>
+            <DisconnectLine
+              data={data}
+              picked={client}
+              agents={connected.agents}
+            />
           </div>
+          <AgentTiles
+            data={data}
+            selected={client}
+            lastConnected={connected.lastConnected}
+            onPick={pick}
+          />
 
-          {/* Right: the agent's profile card */}
+          <div aria-hidden style={{ height: STEP_GAP }} />
           <ProfileCard
             data={data}
             client={client}
             servers={servers}
             tools={tools}
             skills={skills}
-            skillCount={skillCount}
             skillsOff={parts.skills && !choices.skills}
+            plugins={plugins}
+            pluginsOff={parts.plugins && !choices.plugins}
             routed={routed}
             choices={choices}
             onChoice={setChoice}
@@ -302,28 +294,28 @@ export function ConnectPage() {
               setDialog(d);
             }}
           />
-        </section>
 
-        {/* Full width under the hero: the prompt, or the manual steps. */}
-        <ConnectArea
-          data={data}
-          client={client}
-          setup={setup}
-          step={step}
-          manual={manual}
-          scriptable={scriptable}
-          script={script}
-          download={download}
-          choices={choices}
-          prompt={prompt}
-          onManual={(v) => {
-            setManualChosen(v);
-            // Only manual setup is bookmarkable; Script is a view of Prompt.
-            if (setup === "prompt-or-manual")
-              updateUrlParams({ mode: v ? "manual" : null });
-          }}
-          onCursorNote={() => setDialog("cursor")}
-        />
+          <Connector />
+          <ConnectArea
+            data={data}
+            client={client}
+            setup={setup}
+            step={step}
+            manual={manual}
+            scriptable={scriptable}
+            script={script}
+            download={download}
+            choices={choices}
+            prompt={prompt}
+            onManual={(v) => {
+              setManualChosen(v);
+              // Only manual setup is bookmarkable; Script is a view of Prompt.
+              if (setup === "prompt-or-manual")
+                updateUrlParams({ mode: v ? "manual" : null });
+            }}
+            onCursorNote={() => setDialog("cursor")}
+          />
+        </div>
       </div>
 
       <BrowseDialog
@@ -371,7 +363,7 @@ function DotField() {
   // the dots never sit under text. Dark mode's border is too faint to see,
   // so its dots use the muted text color, kept low.
   const mask = [
-    "radial-gradient(ellipse 55% 65% at 28% 38%, transparent 35%, black 80%)",
+    "radial-gradient(ellipse 45% 55% at 50% 30%, transparent 35%, black 80%)",
     "linear-gradient(to bottom, black 0%, black 45%, transparent 100%)",
   ].join(", ");
   return (
@@ -421,27 +413,37 @@ function AgentTiles({
     lastConnected?.clientId === id ? (
       <LastConnectedMark agent={lastConnected} />
     ) : undefined;
-  const featuredIds = new Set(data.featuredClients.map((c) => c.id));
-  // Generic client and every non-featured agent live behind the one tile, which
-  // then shows the app you picked there.
-  const otherPicked = featuredIds.has(selected.id) ? null : selected;
-  const showOther = hasOtherAgents(data) || !!otherPicked;
-  const count = data.featuredClients.length + (showOther ? 1 : 0);
-  // An admin limit of 1 to 3 agents: one row of fixed-width tiles, a little
-  // roomier, centered both ways in the space two grid rows would take, with
-  // no box around it.
+  // The tiles stay on one line: featured apps that don't fit fold into the
+  // "Other agents" tile, starting from the right.
+  const ref = useRef<HTMLDivElement>(null);
+  const fits = useTilesThatFit(ref);
+  const all = data.featuredClients.length + (hasOtherAgents(data) ? 1 : 0);
+  const tiled =
+    fits === null || all <= fits
+      ? data.featuredClients
+      : data.featuredClients.slice(0, Math.max(fits - 1, 0));
+  const tiledIds = new Set(tiled.map((c) => c.id));
+  // Generic client and every agent without a tile live behind the one tile,
+  // which then shows the app you picked there.
+  const otherPicked = tiledIds.has(selected.id) ? null : selected;
+  const showOther =
+    tiled.length < data.featuredClients.length ||
+    hasOtherAgents(data) ||
+    !!otherPicked;
+  const count = tiled.length + (showOther ? 1 : 0);
+  // An admin limit of 1 to 3 agents: fixed-width tiles, a little roomier,
+  // centered. More share the full width.
   const row = count <= ROW_MAX;
   const iconSize = row ? 40 : 36;
   return (
     <div
+      ref={ref}
       className={cn(
-        "mt-3 gap-2.5 @min-[66rem]:max-w-xl",
-        row
-          ? "flex min-h-[10.75rem] items-center justify-center [&>*]:w-36"
-          : "grid grid-cols-4 @min-[66rem]:max-h-[13rem] @min-[66rem]:flex-1 @min-[66rem]:auto-rows-fr",
+        "mt-3 flex justify-center gap-2.5",
+        row ? "[&>*]:w-36" : "[&>*]:max-w-44 [&>*]:flex-1 [&>*]:basis-24",
       )}
     >
-      {data.featuredClients.map((c) => (
+      {tiled.map((c) => (
         <Tile
           key={c.id}
           roomy={row}
@@ -455,6 +457,7 @@ function AgentTiles({
       {showOther && (
         <AgentSearch
           data={data}
+          tiled={tiled}
           selectedId={selected.id}
           lastConnectedId={lastConnected?.clientId}
           onPick={onPick}
@@ -494,6 +497,34 @@ function AgentTiles({
       )}
     </div>
   );
+}
+
+// A tile's narrowest width (basis-24) and the gap between tiles (gap-2.5).
+const TILE_MIN = 96;
+const TILE_GAP = 10;
+
+/** How many tiles fit on one line of the picker; null until measured. */
+function useTilesThatFit(ref: RefObject<HTMLDivElement | null>) {
+  const [fits, setFits] = useState<number | null>(null);
+  useLayoutEffect(() => {
+    const row = ref.current;
+    if (!row) return;
+    // No width yet (or no layout, as in tests): show every tile.
+    const measure = () =>
+      setFits(
+        row.clientWidth
+          ? Math.max(
+              1,
+              Math.floor((row.clientWidth + TILE_GAP) / (TILE_MIN + TILE_GAP)),
+            )
+          : null,
+      );
+    measure();
+    const observer = new ResizeObserver(measure);
+    observer.observe(row);
+    return () => observer.disconnect();
+  }, [ref]);
+  return fits;
 }
 
 function Tile({
@@ -544,6 +575,31 @@ function Tile({
         </span>
       )}
     </UnstyledButton>
+  );
+}
+
+// === Between the steps ===
+
+// Same gap between every step.
+const STEP_GAP = 32;
+
+/** The line between the cards, fading in toward the connect card. */
+function Connector() {
+  return (
+    <div
+      aria-hidden
+      className="mx-auto w-px bg-linear-to-b from-transparent to-primary"
+      style={{ height: STEP_GAP }}
+    />
+  );
+}
+
+/** Names a step on its card's top edge, where the connector arrives. */
+function StepPill({ children }: { children: ReactNode }) {
+  return (
+    <span className="absolute top-0 left-1/2 z-10 inline-flex -translate-x-1/2 -translate-y-1/2 items-center gap-1.5 rounded-full border bg-card px-3 py-1 text-xs font-semibold whitespace-nowrap shadow-xs">
+      {children}
+    </span>
   );
 }
 
@@ -690,22 +746,25 @@ function ConnectArea({
         <>
           {/* What happens next, right above the prompt it's about. */}
           <div className="mt-2 space-y-1 px-1 text-xs text-muted-foreground">
-            {script ? (
-              <p>
-                Run it in a terminal on the computer where you use{" "}
-                {nameOf(client)}. It needs Node.js 18 or newer, opens a browser
-                page, and changes nothing until you approve.
-              </p>
-            ) : (
-              <p>
-                {nameOf(client) === "your agent"
-                  ? "Your agent"
-                  : nameOf(client)}{" "}
-                {generic
-                  ? "checks what it supports and asks before changing anything."
-                  : "opens a browser page. Nothing changes until you approve."}
-              </p>
-            )}
+            {/* One line: what happens, then that it comes off again. */}
+            <p>
+              {script ? (
+                <>
+                  Run it in a terminal on the computer where you use{" "}
+                  {nameOf(client)}. It needs Node.js 18 or newer, opens a
+                  browser page, and changes nothing until you approve.
+                </>
+              ) : (
+                <>
+                  {nameOf(client) === "your agent"
+                    ? "Your agent"
+                    : nameOf(client)}{" "}
+                  {generic
+                    ? "checks what it supports and asks before changing anything."
+                    : "opens a browser page. Nothing changes until you approve."}
+                </>
+              )}
+            </p>
             {client.id === "cursor" && (
               <p className="flex items-center gap-1.5">
                 <TriangleAlert className="size-3.5 shrink-0 text-amber-500" />
@@ -730,13 +789,13 @@ function ConnectArea({
               onCopy={copy}
             />
           ) : (
-            <div className="mt-2 flex h-16 items-center gap-3 rounded-2xl border bg-background pr-2 pl-5 shadow-sm">
+            // The whole prompt shows, wrapped, so it can be read before copying.
+            <div className="mt-2 flex min-h-16 items-center gap-3 rounded-2xl border bg-background py-2 pr-2 pl-5 shadow-sm">
               <code
                 className={cn(
-                  "min-w-0 flex-1 truncate font-mono text-sm",
+                  "min-w-0 flex-1 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]",
                   !text && "font-sans text-muted-foreground",
                 )}
-                title={text ?? undefined}
               >
                 {text ??
                   "Everything is left out. Choose at least one thing to include."}
@@ -889,7 +948,7 @@ function Band({
       aria-label="Connect"
       aria-busy={busy}
       inert={busy}
-      className="mt-6 rounded-3xl border border-primary/40 bg-card/80 p-5 shadow-sm ring-1 ring-primary/15 transition-colors duration-300 md:px-7 md:py-6"
+      className="relative rounded-3xl border border-primary/40 bg-card p-5 shadow-sm ring-1 ring-primary/15 transition-colors duration-300"
     >
       {children}
     </section>
@@ -1016,35 +1075,39 @@ function guardrailsStatus(
 } | null {
   const { state } = data.guardrails;
   if (state === null) return null;
-  // The Guardrails page's terms: enforcement is on or off, and requests from
-  // a client Guardrails don't recognize are Allowed or Blocked.
+  // Three states: Enforced, Not enforced (requests bypass the guardrails and
+  // run without checks) and Blocked.
   if (state === "off")
     return {
+      tone: "warn",
       label: "Not enforced",
-      detail: "Your admin hasn't turned on guardrail enforcement.",
+      detail: `Your admin hasn't turned on guardrails, so ${client.label}'s tool calls aren't checked against the policy.`,
     };
   if (!routed)
     return {
+      tone: "warn",
       label: "Not enforced",
       detail:
-        "Guardrails only see requests that go through the LLM proxy, and it's off for this agent.",
+        client.proxy.kind === "unsupported"
+          ? `Guardrails work through the LLM proxy, and ${client.label} sends its model requests to its own service, so its tool calls aren't checked against the policy.`
+          : `Guardrails work through the LLM proxy, and it's off for ${client.label}, so its tool calls aren't checked against the policy.`,
     };
   if (GUARDRAILS_NATIVE.has(client.id))
     return {
       tone: "ok",
       label: "Enforced",
-      detail: `Guardrails recognize ${client.label}, so its tool calls are checked against your org's policy.`,
+      detail: `Guardrails recognize ${client.label}, so each of its tool calls is checked against your org's policy.`,
     };
   return state === "block"
     ? {
         tone: "block",
         label: "Blocked",
-        detail: `Guardrails don't recognize ${client.label}, and your org blocks unrecognized clients, so the LLM proxy rejects its model requests.`,
+        detail: `Guardrails don't recognize ${client.label}, and your org blocks unrecognized agents, so the LLM proxy rejects its model requests.`,
       }
     : {
         tone: "warn",
-        label: "Allowed",
-        detail: `Guardrails don't recognize ${client.label}, and your org allows unrecognized clients, so its requests run without checks.`,
+        label: "Not enforced",
+        detail: `Guardrails don't recognize ${client.label}, and your org lets unrecognized agents through, so its tool calls aren't checked against the policy.`,
       };
 }
 
@@ -1053,11 +1116,13 @@ function guardrailsStatus(
 /** The card's one place to leave parts out; the prompt carries the result. */
 function IncludeMenu({
   skills,
+  plugins,
   routing,
   choices,
   onChoice,
 }: {
   skills: boolean;
+  plugins: boolean;
   routing: boolean;
   choices: ConnectChoices;
   onChoice: (part: keyof ConnectChoices, value: boolean) => void;
@@ -1076,6 +1141,16 @@ function IncludeMenu({
             title: "Skills",
             sub: "Loaded when a task needs one",
             part: "skills" as const,
+          },
+        ]
+      : []),
+    ...(plugins
+      ? [
+          {
+            id: "plugins",
+            title: "Plugins",
+            sub: "The plugins your org approved for this agent",
+            part: "plugins" as const,
           },
         ]
       : []),
@@ -1130,14 +1205,38 @@ function IncludeMenu({
   );
 }
 
-const SERVER_ROWS = 6;
-const SKILL_ROWS = 6;
+/** "See all 5 skills", or "See the skill" when there's one. */
+function seeAllLabel(count: number, noun: string) {
+  return count === 1
+    ? `See the ${noun}`
+    : `See all ${fmt(count)} ${plural(count, noun)}`;
+}
 
-interface StatusChip {
+// Up to this many entries per list; the See all row under them shows the rest.
+const SERVER_ROWS = 4;
+const SKILL_ROWS = 4;
+const PLUGIN_ROWS = 4;
+
+/** How the plugins land in this agent, after the setup. */
+function pluginInstallNote(client: ConnectClient): string {
+  switch (client.id) {
+    case "codex":
+      return "approve their hooks in /hooks after setup";
+    case "cursor":
+      return "you add them in Cursor after setup";
+    default:
+      return "installed with the setup";
+  }
+}
+
+interface StatusItem {
   id: string;
   icon: ReactNode;
-  title: ReactNode;
-  sub: ReactNode;
+  label: string;
+  /** The state in words, or the switch that sets it. */
+  state: ReactNode;
+  /** The info button after the state. */
+  tip: ReactNode;
 }
 
 function ProfileCard({
@@ -1146,8 +1245,9 @@ function ProfileCard({
   servers,
   tools,
   skills,
-  skillCount,
   skillsOff,
+  plugins,
+  pluginsOff,
   routed,
   choices,
   onChoice,
@@ -1157,208 +1257,198 @@ function ProfileCard({
   client: ConnectClient;
   /** This agent's model requests go through the LLM proxy. */
   routed: boolean;
-  /** The user turned skills off (Choose what to include). */
+  /** Every skill on offer; dimmed when the user leaves skills out. */
+  skills: ConnectPageSkill[];
   skillsOff: boolean;
-  choices: ConnectChoices;
-  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
+  /** Every plugin on offer for this agent; dimmed when left out. */
+  plugins: ConnectPlugin[];
+  pluginsOff: boolean;
   servers: ConnectServer[];
   tools: number;
-  skills: ConnectPageSkill[];
-  skillCount: number;
+  choices: ConnectChoices;
+  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
   /** Opens a dialog; for servers and skills, on one row's item. */
   onOpen: (d: DialogKind, item?: string) => void;
 }) {
-  const gatewayName = data.gateway?.name;
-  const skillsOn = data.skillsEnabled && data.totalSkills > 0;
+  // Servers and skills show whenever the org offers them, even empty, so
+  // the card keeps its shape; then they say so in place of a list. Plugins
+  // only show once this agent has one.
+  const skillsOn = data.skillsEnabled;
+  const pluginsOn = data.partsFor(client).plugins;
+  const proxyOn = data.partsFor(client).proxy;
 
-  // Small status chips under the lists. A future capability is one entry.
-  const statusChips: StatusChip[] = [];
+  // One line under the lists. A future capability is one more entry.
+  const status: StatusItem[] = [];
   // The LLM proxy's real state for this agent: the admin setting, whether
   // the agent can use a custom model endpoint, then the user's choice.
-  const proxyOn = data.partsFor(client).proxy;
-  const proxy = !data.llmProxyEnabled
-    ? {
-        label: "Not active",
-        reason: `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`,
-      }
+  const proxyReason = !data.llmProxyEnabled
+    ? `Your admin hasn't turned on ${data.appName}'s LLM proxy, so ${client.label} calls its model provider directly.`
     : client.proxy.kind === "unsupported"
-      ? {
-          label: "Not supported",
-          reason: `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`,
-        }
+      ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
       : !routed
-        ? {
-            label: "Off",
-            reason: `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`,
-          }
-        : {
-            label: "On",
-            reason: `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`,
-          };
-  statusChips.push({
+        ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
+        : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
+  status.push({
     id: "routing",
     icon: (
-      <ChipIcon tone={proxy.label === "On" ? "ok" : undefined}>
-        <Cpu />
-      </ChipIcon>
+      <Cpu className={cn(routed && "text-emerald-600 dark:text-emerald-400")} />
     ),
-    title: (
-      <span className="inline-flex items-center gap-1">
-        LLM proxy
-        <InfoTip label="What the LLM proxy does">
-          <TipBody reason={proxy.reason} />
-        </InfoTip>
-      </span>
+    label: "LLM proxy",
+    tip: (
+      <InfoTip label="What the LLM proxy does">
+        <TipBody reason={proxyReason} />
+      </InfoTip>
     ),
-    sub: proxy.label,
+    state: !data.llmProxyEnabled
+      ? "Not active"
+      : !proxyOn
+        ? "Not supported"
+        : choices.proxy
+          ? "On"
+          : "Off",
   });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)
-    statusChips.push({
+    status.push({
       id: "guardrails",
-      icon: (
-        <ChipIcon tone={guard.tone}>
-          {guard.tone === "ok" ? <ShieldCheck /> : <ShieldOff />}
-        </ChipIcon>
+      icon:
+        guard.tone === "ok" ? (
+          <ShieldCheck className="text-emerald-600 dark:text-emerald-400" />
+        ) : (
+          <ShieldOff
+            className={cn(
+              guard.tone === "block"
+                ? "text-destructive"
+                : "text-amber-600 dark:text-amber-400",
+            )}
+          />
+        ),
+      label: "Guardrails",
+      tip: (
+        <InfoTip label="What the guardrails do">
+          <TipBody
+            reason={guard.detail}
+            about={`Guardrails check each tool call against your org's policy before it runs, to stop leaks like sending private data out after reading an untrusted page. A blocked call doesn't run. Powered by ${data.guardrails.name}.`}
+          />
+        </InfoTip>
       ),
-      title: (
-        <span className="inline-flex items-center gap-1">
-          Guardrails
-          <InfoTip label="What the guardrails do">
-            <TipBody
-              reason={guard.detail}
-              about={`Guardrails check risky tool calls (like deleting data) against your org's rules and can ask you to approve first. Powered by ${data.guardrails.name}.`}
-            />
-          </InfoTip>
-        </span>
-      ),
-      sub: (
-        <span
-          className={cn(
-            guard.tone === "ok" && "text-emerald-600 dark:text-emerald-400",
-            guard.tone === "warn" && "text-amber-600 dark:text-amber-400",
-            guard.tone === "block" && "text-destructive",
-          )}
-        >
-          {guard.label}
-        </span>
-      ),
+      state: guard.label,
     });
+
+  const included =
+    (skillsOn && !skillsOff ? skills.length : 0) +
+    (pluginsOff ? 0 : plugins.length);
 
   return (
     <aside
       aria-label={`What ${client.label} gets`}
-      className="relative min-w-0 rounded-3xl border bg-card p-5 shadow-sm @min-[66rem]:mt-2 @min-[66rem]:self-start"
+      className="relative min-w-0 rounded-3xl border bg-card shadow-sm"
     >
-      <div className="flex items-center gap-3.5">
-        <div key={`icon-${client.id}`} className="connect-icon">
-          <ClientIcon client={client} size={44} />
-        </div>
-        <div className="min-w-0 flex-1 truncate text-sm font-semibold tracking-tight">
-          {client.label}
-        </div>
-        {(skillsOn || proxyOn) && (
-          <IncludeMenu
-            skills={skillsOn}
-            routing={proxyOn}
-            choices={choices}
-            onChoice={onChoice}
-          />
-        )}
-      </div>
+      <StepPill>
+        <span key={`icon-${client.id}`} className="connect-icon">
+          <ClientIcon client={client} size={16} />
+        </span>
+        What {client.label} gets
+      </StepPill>
 
-      {/* One short line; the lists below speak for themselves. */}
-      <p className="mt-4 text-sm leading-snug text-pretty text-foreground">
-        {cardIntro(data, servers, skillsOn ? skillCount : 0)}
-      </p>
+      <div className="px-5 pt-6 pb-5">
+        {/* One short line; the lists below speak for themselves. The card's
+            one place to leave parts out sits across from it. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <p className="text-sm leading-snug text-pretty text-foreground">
+            {cardIntro(data, servers, included)}
+          </p>
+          {(skillsOn || pluginsOn || proxyOn) && (
+            <IncludeMenu
+              skills={skillsOn && skills.length > 0}
+              plugins={pluginsOn}
+              routing={proxyOn}
+              choices={choices}
+              onChoice={onChoice}
+            />
+          )}
+        </div>
 
-      {/* Capability blocks: they stack in once on page load and stay put when
-          another agent is picked (only the header animates per pick). */}
-      <div className="mt-2.5">
-        <ul className="flex flex-col gap-3">
-          <li
-            className="connect-chip relative"
-            style={{ animationDelay: "140ms" }}
-          >
+        {/* Lists keep their height whatever is picked or left out: each
+            holds its rows plus See all, and headers stay on one line, so the
+            card doesn't jump between agents. */}
+        <ul
+          className={cn(
+            "mt-3 grid gap-x-8 gap-y-5",
+            skillsOn && pluginsOn
+              ? "@min-[44rem]:grid-cols-3"
+              : skillsOn || pluginsOn
+                ? "@min-[36rem]:grid-cols-2"
+                : "",
+          )}
+        >
+          <li className="relative min-w-0">
             {data.servers.length === 0 ? (
               <ListBlock
                 icon={<Wrench />}
-                title="Tools on the way"
-                sub="They show up here when your admin adds MCP servers"
+                title="MCP servers"
+                sub="none yet"
                 muted
+                empty="Your admin hasn't added any MCP servers yet. Their tools show up here."
               />
             ) : (
               <ListBlock
                 icon={<Wrench />}
-                title={`Tools from ${fmt(servers.length)} MCP ${plural(servers.length, "server")}`}
-                sub={
-                  <>
-                    ({fmt(tools)} {plural(tools, "tool")}
-                    {data.progressive ? ", loaded on demand" : ""})
-                    <InfoTip label="What MCP servers are">
-                      Tools your agent calls, served through your organization's
-                      gateway{gatewayName ? ` (${gatewayName})` : ""}.
-                    </InfoTip>
-                  </>
-                }
-                more={
-                  servers.length > SERVER_ROWS
-                    ? `See all ${fmt(servers.length)}`
-                    : "See all"
-                }
-                onMore={() => onOpen("servers")}
-                footer={
-                  tools > 0 && (
+                title={`${fmt(servers.length)} MCP ${plural(servers.length, "server")}`}
+                // Many tools reads as a cost; on demand says it isn't.
+                sub={`${fmt(tools)} ${plural(tools, "tool")}${data.progressive ? ", loaded on demand" : ""}`}
+                // The context cost sits on the header, across from the count.
+                aside={
+                  tools > 0 && data.toolTokens?.total ? (
                     <ToolLoadingNote
                       progressive={data.progressive}
                       tools={tools}
-                      tokens={data.toolTokens?.total ?? null}
+                      tokens={data.toolTokens.total}
                     />
-                  )
+                  ) : undefined
                 }
+                onTitle={() => onOpen("servers")}
+                seeAll={seeAllLabel(servers.length, "MCP server")}
               >
-                {servers.length === 0 ? (
-                  <span className="block py-1 text-muted-foreground">
-                    Every server is left out.
-                  </span>
-                ) : (
-                  <span className="grid grid-cols-2 gap-x-2">
-                    {servers.slice(0, SERVER_ROWS).map((s) => (
-                      <UnstyledButton
-                        key={s.key}
-                        type="button"
-                        onClick={() => onOpen("servers", s.key)}
-                        title={`View ${s.name} tools`}
-                        className="group/row -mx-1.5 flex h-6.5 min-w-0 items-center gap-2 rounded-md px-1.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      >
-                        <McpCatalogIcon
-                          icon={s.icon}
-                          catalogId={s.catalogId ?? undefined}
-                          size={15}
-                        />
-                        <span className="min-w-0 flex-1 truncate text-foreground">
-                          {s.name}
-                        </span>
-                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover/row:text-foreground motion-safe:group-hover/row:translate-x-0.5" />
-                      </UnstyledButton>
-                    ))}
-                  </span>
-                )}
+                {servers.slice(0, SERVER_ROWS).map((s) => (
+                  <ListRow
+                    key={s.key}
+                    onClick={() => onOpen("servers", s.key)}
+                    title={`View ${s.name} tools`}
+                  >
+                    <McpCatalogIcon
+                      icon={s.icon}
+                      catalogId={s.catalogId ?? undefined}
+                      size={15}
+                    />
+                    <span className="min-w-0 flex-1 truncate text-foreground">
+                      {s.name}
+                    </span>
+                  </ListRow>
+                ))}
               </ListBlock>
             )}
           </li>
 
-          {skillsOn && (
-            <li
-              className="connect-chip relative"
-              style={{ animationDelay: "250ms" }}
-            >
+          {skillsOn && skills.length === 0 && (
+            <li className="relative min-w-0">
+              <ListBlock
+                icon={<BookOpen />}
+                title="Skills"
+                sub="none yet"
+                muted
+                empty="Your organization hasn't shared any skills yet. They show up here."
+              />
+            </li>
+          )}
+          {skillsOn && skills.length > 0 && (
+            <li className="relative min-w-0">
               <ListBlock
                 icon={<BookOpen />}
                 title={
                   skillsOff
                     ? "Skills off"
-                    : `+${fmt(skillCount)} ${plural(skillCount, "skill")}`
+                    : `+${fmt(skills.length)} ${plural(skills.length, "skill")}`
                 }
                 sub={
                   skillsOff
@@ -1366,66 +1456,88 @@ function ProfileCard({
                     : "loaded when a task needs one"
                 }
                 muted={skillsOff}
-                more={
-                  !skillsOff && skillCount > SKILL_ROWS
-                    ? `See all ${fmt(skillCount)}`
-                    : "See all"
-                }
-                onMore={() => onOpen("skills")}
+                onTitle={() => onOpen("skills")}
+                seeAll={seeAllLabel(skills.length, "skill")}
               >
-                {skillsOff ? null : skills.length === 0 ? (
-                  <span className="block py-1 text-muted-foreground">
-                    No skills yet.
-                  </span>
-                ) : (
-                  <span className="grid grid-cols-2 gap-x-2">
-                    {skills.slice(0, SKILL_ROWS).map((s) => (
-                      <UnstyledButton
-                        key={s.id}
-                        type="button"
-                        onClick={() => onOpen("skills", s.id)}
-                        title={s.description}
-                        className="group/row -mx-1.5 flex h-6.5 min-w-0 items-center gap-2 rounded-md px-1.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
-                      >
-                        <span className="min-w-0 flex-1 truncate text-foreground">
-                          {s.name}
-                        </span>
-                        <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover/row:text-foreground motion-safe:group-hover/row:translate-x-0.5" />
-                      </UnstyledButton>
-                    ))}
-                  </span>
-                )}
+                {skills.slice(0, SKILL_ROWS).map((s) => (
+                  <ListRow
+                    key={s.id}
+                    onClick={() => onOpen("skills", s.id)}
+                    title={s.description}
+                  >
+                    <span className="min-w-0 flex-1 truncate text-foreground">
+                      {s.name}
+                    </span>
+                  </ListRow>
+                ))}
               </ListBlock>
             </li>
           )}
 
-          {statusChips.length > 0 && (
-            <li
-              className="connect-chip relative"
-              style={{ animationDelay: "360ms" }}
-            >
-              <div className="grid gap-3 sm:grid-cols-2">
-                {statusChips.map((c) => (
-                  <div
-                    key={c.id}
-                    className="flex min-w-0 items-center gap-2.5 rounded-xl border bg-background py-2 pr-3 pl-2 text-left"
+          {pluginsOn && (
+            <li className="relative min-w-0">
+              <ListBlock
+                icon={<Puzzle />}
+                title={
+                  pluginsOff
+                    ? "Plugins off"
+                    : `+${fmt(plugins.length)} ${plural(plugins.length, "plugin")}`
+                }
+                sub={
+                  pluginsOff
+                    ? "turn them on in Choose what to include"
+                    : pluginInstallNote(client)
+                }
+                muted={pluginsOff}
+                onTitle={() => onOpen("plugins")}
+                seeAll={seeAllLabel(plugins.length, "plugin")}
+              >
+                {plugins.slice(0, PLUGIN_ROWS).map((p) => (
+                  <ListRow
+                    key={p.id}
+                    onClick={() => onOpen("plugins")}
+                    title={p.description ?? p.name}
                   >
-                    {c.icon}
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-sm font-semibold tracking-tight">
-                        {c.title}
-                      </span>
-                      <span className="block text-xs leading-snug text-muted-foreground">
-                        {c.sub}
-                      </span>
+                    <span className="min-w-0 flex-1 truncate text-foreground">
+                      {p.name}
                     </span>
-                  </div>
+                  </ListRow>
                 ))}
-              </div>
+              </ListBlock>
             </li>
           )}
         </ul>
       </div>
+
+      {/* One line along the bottom: how the agent's requests are handled.
+          The items meet on the card's center, under the line down to the
+          connect card. */}
+      {status.length > 0 && (
+        <div className="grid grid-cols-2 items-center gap-x-8 rounded-b-3xl border-t bg-muted/30 px-5 py-2 text-xs">
+          {status.map((c, i) => (
+            <div
+              key={c.id}
+              data-status-chip
+              className={cn(
+                "flex min-w-0 items-center gap-1.5 [&>svg]:size-3.5 [&>svg]:shrink-0",
+                i === 0 ? "justify-self-end" : "justify-self-start",
+                // A lone item sits on the center.
+                status.length === 1 && "col-span-2 justify-self-center",
+              )}
+            >
+              {c.icon}
+              <span className="font-semibold">{c.label}</span>
+              <span aria-hidden className="text-muted-foreground/60">
+                ·
+              </span>
+              <span className="inline-flex items-center text-muted-foreground">
+                {c.state}
+              </span>
+              {c.tip}
+            </div>
+          ))}
+        </div>
+      )}
     </aside>
   );
 }
@@ -1435,59 +1547,124 @@ function ListBlock({
   title,
   sub,
   muted,
-  more,
-  onMore,
-  footer,
+  onTitle,
+  aside,
+  seeAll,
+  empty,
   children,
 }: {
   icon: ReactNode;
   title: string;
   sub: ReactNode;
   muted?: boolean;
-  more?: string;
-  onMore?: () => void;
-  /** A tinted strip across the bottom of the block. */
-  footer?: ReactNode;
+  /** The title opens the full list. */
+  onTitle?: () => void;
+  /** The title line's right side, e.g. context cost. */
+  aside?: ReactNode;
+  /** A last row, styled apart, that opens the full list. */
+  seeAll?: string;
+  /** Nothing to list yet: this line, in the list's place and room. */
+  empty?: string;
   children?: ReactNode;
 }) {
+  const titleClass = cn(
+    "truncate text-sm font-semibold tracking-tight tabular-nums",
+    muted && "text-muted-foreground",
+  );
   return (
-    <div className="overflow-hidden rounded-xl border bg-background">
-      <div className="py-2 pr-3.5 pl-2">
-        <div className="flex min-w-0 items-center gap-2.5">
-          <ChipIcon>{icon}</ChipIcon>
-          <span className="flex min-w-0 flex-1 flex-wrap items-baseline gap-x-2">
-            <span
-              className={cn(
-                "text-sm font-semibold tracking-tight tabular-nums",
-                muted && "text-muted-foreground",
-              )}
-            >
-              {title}
-            </span>
-            <span className="inline-flex items-center gap-1 text-xs text-muted-foreground">
-              {sub}
-            </span>
+    <div>
+      <div className="flex min-w-0 items-center gap-2.5">
+        <ChipIcon>{icon}</ChipIcon>
+        <span className="flex min-w-0 flex-1 flex-col items-start">
+          {/* The aside shares only the title's line, so the subtitle keeps
+              the full width; in a narrow column it wraps under the title,
+              still on the right. Only the title opens the list. */}
+          <span className="flex w-full min-w-0 flex-wrap items-center justify-between gap-x-2">
+            {onTitle ? (
+              <UnstyledButton
+                type="button"
+                onClick={onTitle}
+                className={cn(
+                  titleClass,
+                  "min-w-0 rounded-sm text-left hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none",
+                )}
+              >
+                {title}
+              </UnstyledButton>
+            ) : (
+              <span className={titleClass}>{title}</span>
+            )}
+            {aside && (
+              <span className="ml-auto shrink-0 text-xs whitespace-nowrap">
+                {aside}
+              </span>
+            )}
           </span>
-          {more && onMore && (
+          <span
+            title={typeof sub === "string" ? sub : undefined}
+            className={cn(
+              "max-w-full truncate text-xs text-muted-foreground",
+              // A longer line wraps rather than hide what it says.
+              typeof sub !== "string" &&
+                "flex min-w-0 flex-wrap items-center gap-x-2.5 whitespace-normal",
+            )}
+          >
+            {sub}
+          </span>
+        </span>
+      </div>
+      {(children || seeAll || empty) && (
+        // Room for every row plus See all, filled or not.
+        <div
+          className={cn(
+            "mt-2 min-h-[8.375rem] border-t pt-1 pl-1 text-xs transition-opacity",
+            muted && !empty && "opacity-50",
+          )}
+        >
+          {empty && (
+            <p className="py-1 pr-2 leading-relaxed text-muted-foreground">
+              {empty}
+            </p>
+          )}
+          {children}
+          {seeAll && onTitle && (
             <UnstyledButton
               type="button"
-              onClick={onMore}
-              className="shrink-0 rounded-sm text-xs text-muted-foreground underline-offset-4 hover:text-foreground hover:underline focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+              onClick={onTitle}
+              className="mt-0.5 inline-flex h-6.5 items-center rounded-sm text-muted-foreground underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
             >
-              {more}
+              {seeAll}
             </UnstyledButton>
           )}
         </div>
-        {children && (
-          <div className="mt-1.5 border-t pt-1 pl-1 text-xs">{children}</div>
-        )}
-      </div>
-      {footer && <div className="border-t px-3 py-1.5 text-xs">{footer}</div>}
+      )}
     </div>
   );
 }
 
-/** How the included tools reach the agent, as the tools block's footer. */
+function ListRow({
+  onClick,
+  title,
+  children,
+}: {
+  onClick: () => void;
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <UnstyledButton
+      type="button"
+      onClick={onClick}
+      title={title}
+      className="group/row -mx-1.5 flex h-6.5 w-[calc(100%+0.75rem)] min-w-0 items-center gap-2 rounded-md px-1.5 text-left hover:bg-muted focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+    >
+      {children}
+      <ChevronRight className="size-3.5 shrink-0 text-muted-foreground/60 transition-transform group-hover/row:text-foreground motion-safe:group-hover/row:translate-x-0.5" />
+    </UnstyledButton>
+  );
+}
+
+/** What the included tools cost in context, beside the servers' header. */
 function ToolLoadingNote({
   progressive,
   tools,
@@ -1505,7 +1682,7 @@ function ToolLoadingNote({
       ? "Tools load on demand"
       : `All ${fmt(tools)} ${plural(tools, "tool")} load when a session starts`;
   return (
-    <p className="flex items-center gap-1.5 text-muted-foreground">
+    <span className="inline-flex items-center gap-1 text-muted-foreground">
       <Gauge className="size-3.5 shrink-0" />
       {label}
       <InfoTip label="How tools load">
@@ -1518,7 +1695,7 @@ function ToolLoadingNote({
           differently.
         </span>
       </InfoTip>
-    </p>
+    </span>
   );
 }
 
@@ -1526,9 +1703,10 @@ function ToolLoadingNote({
 function cardIntro(
   data: ConnectPageData,
   servers: ConnectServer[],
-  skillCount: number,
+  /** Skills and plugins included. */
+  extras: number,
 ): ReactNode {
-  if (servers.length > 0 || skillCount > 0)
+  if (servers.length > 0 || extras > 0)
     return data.gateway ? (
       <>
         Connects to <span className="font-semibold">{data.gateway.name}</span>,
@@ -1598,17 +1776,14 @@ function ChipIcon({
 
 function LoadingState() {
   return (
-    <div className="@container mx-auto w-full max-w-7xl px-6 pt-12 md:px-10 lg:px-14">
-      <div className="grid gap-6 @min-[66rem]:grid-cols-[minmax(0,1fr)_minmax(0,29rem)] @min-[66rem]:gap-12 @7xl:grid-cols-[minmax(0,1fr)_minmax(0,31rem)] @7xl:gap-16">
-        <div className="space-y-5">
-          <Skeleton className="h-16 w-80 max-w-full" />
-          <Skeleton className="h-16 w-64 max-w-full" />
-          <Skeleton className="h-6 w-[30rem] max-w-full" />
-          <Skeleton className="mt-8 h-24 max-w-xl rounded-xl" />
-        </div>
-        <Skeleton className="h-[400px] rounded-3xl" />
+    <div className="mx-auto w-full max-w-7xl px-6 pt-18 md:px-10 lg:px-14">
+      <div className="flex flex-col items-center gap-3">
+        <Skeleton className="h-12 w-[36rem] max-w-full" />
+        <Skeleton className="h-5 w-[30rem] max-w-full" />
       </div>
-      <Skeleton className="mt-8 h-36 rounded-3xl" />
+      <Skeleton className="mt-14 h-24 rounded-xl" />
+      <Skeleton className="mt-9 h-56 rounded-3xl" />
+      <Skeleton className="mt-9 h-36 rounded-3xl" />
     </div>
   );
 }

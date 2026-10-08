@@ -3,7 +3,11 @@
 // Data for the Connect page: gateway, servers, tools and their estimated
 // context cost, skills, apps, admin settings.
 
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  isAgentTool,
+  isSkillTool,
+  type SupportedProvider,
+} from "@archestra/shared";
 import {
   buildConnectionPrompt,
   CONNECT_SETUP_PARTS,
@@ -23,7 +27,6 @@ import { isDeliverablePlugin, usePlugins } from "@/lib/plugins/plugin.query";
 import { type ConnectSkill, useAllSkills } from "@/lib/skills/skill.query";
 import {
   type ConnectClient,
-  isInstallerClientId,
   usesGenericInstructions,
   visibleClients,
 } from "./clients";
@@ -32,6 +35,7 @@ import {
   getConnectableProviders,
   useConnectionBaseUrl,
 } from "./connection-flow.utils";
+import { detectPlatform } from "./platform.utils";
 import { useGatewayServers } from "./use-gateway-servers";
 
 export interface ConnectServer {
@@ -138,10 +142,6 @@ export interface ConnectPageData {
 /** What connect.md?client=generic can set up; it has no plugins. */
 const GENERIC_PARTS = ["tools", "skills", "proxy"] as const;
 
-// Agents besides the installer apps that the page offers for now, while the
-// rest are tested against the LLM proxy. Delete this filter to list them all.
-const OTHER_AGENT_IDS = new Set(["hermes-agent", "openclaw", "n8n", "generic"]);
-
 export function useConnectPageData(): ConnectPageData {
   // A fresh read: these settings decide what a setup may include.
   const orgQuery = useOrganization(true, { fresh: true });
@@ -168,7 +168,8 @@ export function useConnectPageData(): ConnectPageData {
   );
   const { data: appConfig } = useConfig();
 
-  const { data: defaultGateway } = useDefaultMcpGateway();
+  const { data: defaultGateway, isLoading: defaultGatewayLoading } =
+    useDefaultMcpGateway();
   const gatewayId = org?.connectionDefaultMcpGatewayId ?? defaultGateway?.id;
   const {
     gateway: profile,
@@ -189,7 +190,7 @@ export function useConnectPageData(): ConnectPageData {
   const proxyAvailable =
     llmProxyEnabled && canReadLlmProxy === true && !!llmProxy?.id;
 
-  const { data: guardrails } = useGuardrailsDeployment();
+  const { data: guardrails } = useGuardrailsDeployment({ anyMember: true });
 
   const pluginsEnabled = org?.connectionPluginsEnabled === true;
   // Same eligibility and filter the setup uses to bundle plugins.
@@ -198,9 +199,22 @@ export function useConnectPageData(): ConnectPageData {
       appConfig?.features.plugins === true &&
       canDeliverPlugins === true,
   );
+  // The setup only bundles plugins built for the computer's OS.
+  const [pluginPlatform, setPluginPlatform] = useState<"posix" | "windows">(
+    "posix",
+  );
+  useEffect(
+    () =>
+      setPluginPlatform(detectPlatform() === "windows" ? "windows" : "posix"),
+    [],
+  );
   const pluginsFor = (client: ConnectClient): ConnectPlugin[] =>
     (allPlugins ?? [])
-      .filter((p) => isDeliverablePlugin(p, client.id))
+      .filter(
+        (p) =>
+          isDeliverablePlugin(p, client.id) &&
+          p.supportedPlatforms.includes(pluginPlatform),
+      )
       .map((p) => ({
         id: p.id,
         name: p.displayName,
@@ -210,10 +224,7 @@ export function useConnectPageData(): ConnectPageData {
   const baseUrl = useConnectionBaseUrl(org?.connectionBaseUrls);
 
   const clients = useMemo(
-    () =>
-      visibleClients(org?.connectionShownClientIds).filter(
-        (c) => isInstallerClientId(c.id) || OTHER_AGENT_IDS.has(c.id),
-      ),
+    () => visibleClients(org?.connectionShownClientIds),
     [org?.connectionShownClientIds],
   );
   const featuredClients = INSTALLER_CLIENT_IDS.map((id) =>
@@ -251,12 +262,17 @@ export function useConnectPageData(): ConnectPageData {
     const byServer: Record<string, number> = {};
     let total = 0;
     for (const tool of listedTools) {
+      // The chat's list adds agent and skill delegation tools, but an
+      // on-demand gateway never sends those to a connected agent (any agent,
+      // not only Claude Code), so they don't count toward its context.
+      if (progressive && (isAgentTool(tool.name) || isSkillTool(tool.name)))
+        continue;
       total += tool.tokens;
       const key = serverOf.get(tool.name);
       if (key) byServer[key] = (byServer[key] ?? 0) + tool.tokens;
     }
     return { total, byServer };
-  }, [listedTools, profile?.tools]);
+  }, [listedTools, profile?.tools, progressive]);
   const partsFor = (client: ConnectClient): ConnectChoices => ({
     tools: toolsAvailable,
     skills: skillsAvailable,
@@ -275,7 +291,12 @@ export function useConnectPageData(): ConnectPageData {
   };
 
   return {
-    loading: orgPending || (!!gatewayId && profilePending),
+    // Hold the skeleton until the gateway is known too: rendering without it
+    // and then waiting on its profile played the page in twice.
+    loading:
+      orgPending ||
+      (!org?.connectionDefaultMcpGatewayId && defaultGatewayLoading) ||
+      (!!gatewayId && profilePending),
     revalidating: orgQuery.isFetching,
     clients,
     featuredClients,
@@ -299,11 +320,13 @@ export function useConnectPageData(): ConnectPageData {
     partsFor,
     guardrails: {
       name: "OpenAPPA",
-      state: !guardrails
-        ? null
-        : guardrails.active
-          ? guardrails.unsupportedClientAction
-          : "off",
+      // No setting to read, or the guardrails beta is off: no chip at all.
+      state:
+        !guardrails || !guardrails.featureEnabled
+          ? null
+          : guardrails.active
+            ? guardrails.unsupportedClientAction
+            : "off",
     },
     canManage: canManage === true,
     footprintFor: () => footprint,

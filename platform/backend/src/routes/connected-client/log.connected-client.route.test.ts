@@ -88,7 +88,7 @@ describe("GET /api/connected-clients/log", () => {
         platform: "macos",
         deviceName: "home-mac",
         mcpGateway: { id: gateway.id, name: "Engineering tools" },
-        modelRouting: false,
+        llmProxy: null,
         disconnectedBy: null,
       }),
       expect.objectContaining({
@@ -180,7 +180,7 @@ describe("GET /api/connected-clients/log", () => {
     );
   });
 
-  test("filters by user and by agent", async ({ makeUser, makeMember }) => {
+  test("filters by user", async ({ makeUser, makeMember }) => {
     const ada = await makeUser({ name: "Ada Lovelace" });
     await makeMember(ada.id, organizationId);
     const grace = await makeUser({ name: "Grace Hopper" });
@@ -191,7 +191,6 @@ describe("GET /api/connected-clients/log", () => {
 
     const names = (body: { data: { userName: string }[] }) =>
       body.data.map((entry) => entry.userName);
-    expect(names(await getLog("&clientId=cursor"))).toEqual(["Grace Hopper"]);
     expect(names(await getLog(`&userId=${ada.id}`))).toEqual(["Ada Lovelace"]);
   });
 

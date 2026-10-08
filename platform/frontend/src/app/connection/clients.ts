@@ -221,10 +221,10 @@ const FACTORY_PATH =
  * Popular agents without tailored steps. Listing them lets people find their
  * app by name; picking one shows the generic instructions under its label.
  */
-const POPULAR_GENERIC_CLIENTS: Pick<
+const POPULAR_GENERIC_CLIENTS: (Pick<
   ConnectClient,
   "id" | "label" | "sub" | "svg" | "svgViewBox" | "iconColor" | "tileBg"
->[] = [
+> & { proxy?: ProxySupport })[] = [
   {
     id: "amp",
     label: "Amp",
@@ -232,6 +232,10 @@ const POPULAR_GENERIC_CLIENTS: Pick<
     svg: AMP_PATH,
     iconColor: "#f34e3f",
     tileBg: "#fff1ef",
+    proxy: {
+      kind: "unsupported",
+      reason: "Amp sends its model requests to its own service.",
+    },
   },
   {
     id: "antigravity",
@@ -962,7 +966,7 @@ export COPILOT_MODEL="<model-name>"`,
       ...client,
       svgFillRule: client.svgViewBox ? undefined : "evenodd",
       mcp: { kind: "generic", supportedAuth: "both" },
-      proxy: { kind: "generic" },
+      proxy: client.proxy ?? { kind: "generic" },
     }),
   ),
   {

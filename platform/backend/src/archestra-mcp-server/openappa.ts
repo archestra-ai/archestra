@@ -77,6 +77,7 @@ import {
   listExternalConsults,
 } from "@/services/openappa-external-consults";
 import {
+  connectAppaGithubRepository,
   createAppaGithubRepository,
   getAppaGithubSync,
 } from "@/services/openappa-github-sync";
@@ -92,11 +93,13 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
 import { ProposedGuardrailsPolicySchema } from "@/types/guardrails-policy-proposal";
+import type { CoverageTool } from "@/types/openappa-coverage";
 import {
   type ExternalConsult,
   ExternalConsultOutcomeSchema,
   ExternalConsultRoleSchema,
 } from "@/types/openappa-external-consults";
+import { AppaGithubSourceSchema } from "@/types/openappa-github-sync";
 import { resolveCallerScope } from "./caller-scope";
 import { isToolEnabledForConversation } from "./conversation-tool-filter";
 import { getUnassignedDiscoverableTools } from "./dynamic-tools";
@@ -344,6 +347,60 @@ const registry = defineArchestraTools([
     },
   }),
   defineArchestraTool({
+    shortName: "connect_guardrails_repository",
+    title: "Connect existing OpenAPPA GitHub repository",
+    description:
+      "Make a policy file in an existing GitHub repository the organization's OpenAPPA policy source, pull it now, and keep it in sync. The file replaces the current policy, so tell the user that and get their agreement first. List credentials first and choose a connected organization GitHub App installed on the repository owner. Ask the user for the repository and, if it is not appa.toml at the repository root, the file path. Future policy edits open pull requests. A held pull is connected but waits for an operator to accept it in the guardrails panel; report `source.lastSyncError`. If the first pull fails, nothing is connected and the error says why.",
+    // `ref` and `path` stay plain strings here and are checked against the
+    // source schema in the handler: its `ref` pattern uses a Unicode property
+    // escape, which OpenAI refuses in a function schema.
+    schema: z.strictObject({
+      repo: AppaGithubSourceSchema.shape.repo.describe(
+        "The existing repository, as owner/name.",
+      ),
+      path: z
+        .string()
+        .default("appa.toml")
+        .describe("Repository-relative path of the policy file."),
+      ref: z
+        .string()
+        .nullable()
+        .default(null)
+        .describe(
+          "Branch, tag, or commit to follow. Omit to follow the default branch.",
+        ),
+      githubAppConfigId: z.string().uuid(),
+      interval: z.enum(["15m", "1h", "1d"]).default("1h"),
+    }),
+    async handler({ args, context }) {
+      if (!context.organizationId || !context.userId)
+        throw new ApiError(401, "Organization and user context are required");
+      const source = AppaGithubSourceSchema.safeParse({
+        ...args,
+        githubPatId: null,
+      });
+      if (!source.success)
+        return errorResult(
+          source.error.issues.map((issue) => issue.message).join("; "),
+        );
+      try {
+        return result(
+          await connectAppaGithubRepository({
+            organizationId: context.organizationId,
+            userId: context.userId,
+            source: source.data,
+          }),
+        );
+      } catch (error) {
+        // A repository, file, or credential the first pull cannot use is the
+        // agent's to explain; thrown, the chat would report a provider failure.
+        if (error instanceof ApiError && error.statusCode < 500)
+          return errorResult(error.message);
+        throw error;
+      }
+    },
+  }),
+  defineArchestraTool({
     shortName: "yell",
     title: "Report OpenAPPA feedback",
     description:
@@ -422,11 +479,29 @@ const registry = defineArchestraTools([
     title: "Inspect MCP server policy",
     annotations: { readOnlyHint: true },
     description:
-      "Inspect one caller-readable MCP catalog's stored tool names, descriptions, input schemas and current policy coverage. Pass its exact catalog ID. The built-in OpenAPPA configuration agent sees the whole readable catalog across environments (scope: organization); other agents see only their normally accessible tools (scope: agent), which may be a subset. This reads metadata only: it does not connect to the server, execute its tools, reveal credentials, or change configuration. Coverage describes stored policy rules, not a guarantee about a particular runtime call.",
+      "Inspect one caller-readable MCP catalog's stored tools and current policy coverage. Pass its exact catalog ID. By default each tool row gives its name, readOnly hint, the first sentence of its description, its coverage kind, and the rules that judge it. Set detail to `full`, ideally with `tools`, to also get full descriptions, input schemas and each rule's delta, requires and annotator. Rows come in pages: when `nextOffset` is not null, call again with that offset. The built-in OpenAPPA configuration agent sees the whole readable catalog across environments (scope: organization); other agents see only their normally accessible tools (scope: agent), which may be a subset. This reads metadata only: it does not connect to the server, execute its tools, reveal credentials, or change configuration. Coverage describes stored policy rules, not a guarantee about a particular runtime call.",
     schema: z.strictObject({
       mcpServerId: UuidIdSchema.describe(
         "The exact MCP catalog ID to inspect.",
       ),
+      detail: z
+        .enum(["summary", "full"])
+        .default("summary")
+        .describe(
+          "`summary` for a coverage overview; `full` adds input schemas, full descriptions and rule details.",
+        ),
+      tools: z
+        .array(z.string())
+        .optional()
+        .describe(
+          "Only these tools, by name or full name (`<prefix>__<name>`).",
+        ),
+      offset: z
+        .number()
+        .int()
+        .min(0)
+        .default(0)
+        .describe("The first row to return; pass the previous `nextOffset`."),
     }),
     async handler({ args, context }) {
       const { organizationId, userId } = context;
@@ -497,13 +572,33 @@ const registry = defineArchestraTools([
           404,
           "MCP server not found or you don't have access",
         );
-      const inspectedToolIds = new Set(tools.map((tool) => tool.id));
       const visibility = await coverageVisibility(userId, organizationId);
       const coverage = await openappaCoverageService.toolsForCatalog({
         ...visibility,
         organizationId,
         catalogId: catalog.id,
       });
+      const coverageByTool = new Map<string, CoverageTool[]>();
+      for (const row of coverage)
+        coverageByTool.set(row.toolId, [
+          ...(coverageByTool.get(row.toolId) ?? []),
+          row,
+        ]);
+      const named = args.tools && new Set(args.tools);
+      const entries = tools
+        .filter(
+          (tool) =>
+            !named ||
+            named.has(tool.name) ||
+            named.has(tool.name.slice(tool.name.lastIndexOf("__") + 2)),
+        )
+        .sort((a, b) =>
+          a.name === b.name
+            ? a.id.localeCompare(b.id)
+            : a.name.localeCompare(b.name),
+        )
+        .map((tool) => ({ tool, coverage: coverageByTool.get(tool.id) ?? [] }));
+      const page = pageWithinBudget(entries, args.offset, args.detail);
       return result({
         scope,
         mcpServer: {
@@ -511,37 +606,10 @@ const registry = defineArchestraTools([
           name: catalog.name,
           environmentId: catalog.environmentId,
         },
-        tools: tools.map(({ id, name, description, parameters }) => ({
-          id,
-          name,
-          description,
-          parameters,
-        })),
-        coverage: coverage
-          .filter((tool) => inspectedToolIds.has(tool.toolId))
-          .map(
-            ({
-              toolId,
-              fullName,
-              readOnly,
-              kind,
-              policySource,
-              rule,
-              fallbackLine,
-              unlisted,
-              enforced,
-            }) => ({
-              toolId,
-              fullName,
-              readOnly,
-              kind,
-              policySource,
-              rule,
-              fallbackLine,
-              unlisted,
-              enforced,
-            }),
-          ),
+        total: entries.length,
+        offset: args.offset,
+        nextOffset: page.nextOffset,
+        tools: page.rows,
         note: "Stored metadata and policy coverage only; coverage does not guarantee the outcome of a runtime call.",
       });
     },
@@ -1009,6 +1077,111 @@ function consultText(bytes: Uint8Array | null): {
     : { text, cut: false };
 }
 
+/** Leaves room under OpenAPPA's 64 KiB tool-result cap, measured after the result is JSON-encoded twice on its way there. */
+const INSPECT_PAGE_BUDGET_BYTES = 48_000;
+const INSPECT_SUMMARY_DESCRIPTION_CHARS = 160;
+
+type InspectedTool = {
+  tool: {
+    id: string;
+    name: string;
+    description: string | null;
+    parameters: unknown;
+  };
+  coverage: CoverageTool[];
+};
+
+function inspectedToolRow(
+  { tool, coverage }: InspectedTool,
+  detail: "summary" | "full",
+) {
+  const primary =
+    coverage.find((row) => !row.rule?.selector) ?? coverage[0] ?? null;
+  const row = {
+    id: tool.id,
+    name: tool.name,
+    readOnly: primary?.readOnly ?? null,
+    kind: primary?.kind ?? null,
+  };
+  if (detail === "full")
+    return {
+      ...row,
+      description: tool.description,
+      parameters: tool.parameters,
+      rules: coverage.map(({ kind, rule, policySource }) => ({
+        kind,
+        policySource,
+        rule,
+      })),
+    };
+  return {
+    ...row,
+    description: firstSentence(tool.description),
+    rules: coverage.map(({ kind, rule, policySource }) => ({
+      kind,
+      policySource,
+      rule: rule && {
+        source: rule.source,
+        battery: rule.battery,
+        line: rule.line,
+        name: rule.name,
+        selector: rule.selector,
+        enforced: rule.enforced,
+      },
+    })),
+  };
+}
+
+function firstSentence(text: string | null): string | null {
+  if (!text) return text;
+  const end = text.search(/[.!?](\s|$)|\n/);
+  const sentence = (end === -1 ? text : text.slice(0, end + 1)).trim();
+  return sentence.length > INSPECT_SUMMARY_DESCRIPTION_CHARS
+    ? `${sentence.slice(0, INSPECT_SUMMARY_DESCRIPTION_CHARS)}…`
+    : sentence;
+}
+
+function encodedBytes(value: unknown): number {
+  return Buffer.byteLength(JSON.stringify(JSON.stringify(value)), "utf8");
+}
+
+/**
+ * Rows from `offset` while they fit the budget, always at least one. A full
+ * row too large to return on its own falls back to its summary.
+ */
+function pageWithinBudget(
+  entries: InspectedTool[],
+  offset: number,
+  detail: "summary" | "full",
+) {
+  const page: object[] = [];
+  let used = 0;
+  for (const entry of entries.slice(offset)) {
+    let row: object = inspectedToolRow(entry, detail);
+    let size = encodedBytes(row);
+    if (size > INSPECT_PAGE_BUDGET_BYTES) {
+      row = {
+        ...inspectedToolRow(entry, "summary"),
+        fullDetail: "omitted: larger than the tool-result size limit",
+      };
+      size = encodedBytes(row);
+    }
+    if (size > INSPECT_PAGE_BUDGET_BYTES) {
+      row = {
+        id: entry.tool.id,
+        name: entry.tool.name,
+        fullDetail: "omitted: larger than the tool-result size limit",
+      };
+      size = encodedBytes(row);
+    }
+    if (page.length > 0 && used + size > INSPECT_PAGE_BUDGET_BYTES) break;
+    page.push(row);
+    used += size;
+  }
+  const next = offset + page.length;
+  return { rows: page, nextOffset: next < entries.length ? next : null };
+}
+
 function result(value: object) {
   return {
     content: [{ type: "text" as const, text: JSON.stringify(value) }],
@@ -1269,7 +1442,8 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === "preview_guardrails_policy_change" ||
     shortName === "update_guardrails_policy" ||
     shortName === "get_guardrails_policy_change_status" ||
-    shortName === "create_guardrails_repository"
+    shortName === "create_guardrails_repository" ||
+    shortName === "connect_guardrails_repository"
   );
 }
 

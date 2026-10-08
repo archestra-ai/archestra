@@ -192,7 +192,7 @@ export function resourcePermissionPresetsFor(
     return {
       ...resourcePermissionPresets,
       deploy: {
-        label: "Full access + deployment",
+        label: "Full access + deploy",
         actions: [
           ...resourcePermissionPresets.manage.actions,
           "configure-deployment-spec",

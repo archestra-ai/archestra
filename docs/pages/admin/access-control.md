@@ -55,7 +55,7 @@ For grants covering every object of a kind, open the resource list's **More acti
 
 **Can view** permits reading. **Can use** permits execution. **Can edit** permits configuration changes. **Full access** also includes deletion and permission management. Editing does not imply execution or sharing.
 
-MCP registry entries add **Full access + deployment**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
+MCP registry entries add **Full access + deploy**, which permits deployment specification, service account, and secret-source changes. Admin and Platform Admin receive this access by default. The creator's ordinary Full access does not include deployment changes. OAuth client registrations have no **Can use** preset.
 
 A grant applies to one resource or to `*`: every current and future resource of that kind in the organization. Actions and scopes stay paired. Giving someone read access to all entries and edit access to one entry lets them edit only that entry.
 

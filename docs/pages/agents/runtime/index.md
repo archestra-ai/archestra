@@ -25,6 +25,8 @@ A run uses the agent's instructions, tools, skills, and permissions. Its model c
 
 Already have an agent? Open it, turn on **Dedicated runtime** on its **Agent Runtime** tab, and click **Save changes**.
 
+From a connected client, ask your agent to create one. [`create_agent`](/docs/reference/archestra-mcp-server#create_agent) takes the same choice as `runtime: { "template": "claude-code" }`, or a custom `image`. [`list_llm_models`](/docs/reference/archestra-mcp-server#list_llm_models) finds a model to pin.
+
 ### Update the Image
 
 A saved agent keeps its image when Archestra upgrades. To use a newer image, change **Image** on the **Agent Runtime** tab. New runs use it. A continued run keeps its original image.

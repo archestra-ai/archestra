@@ -62,6 +62,10 @@ export const TOOL_PERMISSIONS: Record<
     resource: "organizationSettings",
     action: "update",
   },
+  connect_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
   list_runtime_credentials: { resource: "credential", action: "read" },
   get_runtime_credential: { resource: "credential", action: "read" },
   create_runtime_credential: { resource: "credential", action: "create" },
@@ -77,6 +81,7 @@ export const TOOL_PERMISSIONS: Record<
   create_agent: { resource: "agent", action: "create" },
   get_agent: { resource: "agent", action: "read" },
   list_agents: { resource: "agent", action: "read" },
+  list_llm_models: { resource: "llmModel", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
 
   // Agent lifecycle hooks — mirror the REST hook routes' permissions

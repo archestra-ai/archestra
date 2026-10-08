@@ -24,8 +24,16 @@ let context: ArchestraContext;
 let catalogId: string;
 let environmentId: string;
 
-async function inspect(ctx = context, id = catalogId) {
-  return executeArchestraTool(toolName, { mcpServerId: id }, ctx);
+async function inspect(
+  ctx = context,
+  id = catalogId,
+  options: {
+    detail?: "summary" | "full";
+    tools?: string[];
+    offset?: number;
+  } = {},
+) {
+  return executeArchestraTool(toolName, { mcpServerId: id, ...options }, ctx);
 }
 
 async function expectDenied(ctx: ArchestraContext, id = catalogId) {
@@ -89,14 +97,14 @@ afterEach(() => {
 });
 
 describe("inspect_guardrails_server", () => {
-  test("reads complete cross-environment metadata and coverage without a matching battery; ordinary inspection stays fenced", async ({
+  test("summarizes cross-environment tools and coverage without a matching battery; ordinary inspection stays fenced", async ({
     makeTool,
   }) => {
     for (let index = 0; index < 55; index++) {
       await makeTool({
         catalogId,
         name: `inspection__read_${index}`,
-        description: "Stored description",
+        description: "Reads one record. Long details follow here.",
         parameters: { type: "object", properties: { id: { type: "string" } } },
         meta: { privateMetadata: "must-not-return" },
       });
@@ -106,29 +114,29 @@ describe("inspect_guardrails_server", () => {
     expect(result.structuredContent).toMatchObject({
       scope: "organization",
       mcpServer: { id: catalogId, name: "Inspection target", environmentId },
+      total: 55,
+      offset: 0,
+      nextOffset: null,
       tools: expect.arrayContaining([
-        expect.objectContaining({
+        {
+          id: expect.any(String),
           name: "inspection__read_54",
-          description: "Stored description",
-          parameters: expect.objectContaining({ type: "object" }),
-        }),
-      ]),
-      coverage: expect.arrayContaining([
-        expect.objectContaining({
-          fullName: "inspection__read_54",
-          policySource: "not_covered",
-          rule: expect.objectContaining({
-            source: "catchall",
-            annotator: "noop",
-          }),
-          unlisted: true,
-        }),
+          readOnly: null,
+          kind: "unlisted",
+          description: "Reads one record.",
+          rules: [
+            {
+              kind: "unlisted",
+              policySource: "not_covered",
+              rule: expect.objectContaining({ source: "catchall", name: "*" }),
+            },
+          ],
+        },
       ]),
     });
-    expect(result.structuredContent?.tools).toHaveLength(55);
-    expect(result.structuredContent?.coverage).toHaveLength(55);
     const serialized = JSON.stringify(result.structuredContent);
     expect(serialized).not.toContain("must-not-return");
+    expect(serialized).not.toContain("parameters");
     expect(serialized).not.toContain("assignedAgents");
     expect(result.structuredContent).not.toHaveProperty("servers");
     const ordinary = await executeArchestraTool(
@@ -137,6 +145,103 @@ describe("inspect_guardrails_server", () => {
       context,
     );
     expect(ordinary.isError).toBe(true);
+  });
+
+  test("full detail of named tools carries schemas and rule details", async ({
+    makeTool,
+  }) => {
+    await makeTool({
+      catalogId,
+      name: "named__wanted",
+      description: "First. Second.",
+      parameters: { type: "object", properties: { id: { type: "string" } } },
+    });
+    await makeTool({ catalogId, name: "named__other" });
+    const result = await inspect(context, catalogId, {
+      detail: "full",
+      tools: ["wanted"],
+    });
+    expect(result.structuredContent).toMatchObject({
+      total: 1,
+      nextOffset: null,
+      tools: [
+        {
+          name: "named__wanted",
+          description: "First. Second.",
+          parameters: { type: "object" },
+          rules: [
+            {
+              rule: expect.objectContaining({
+                source: "catchall",
+                annotator: "noop",
+                delta: {},
+              }),
+            },
+          ],
+        },
+      ],
+    });
+  });
+
+  test("pages rows that exceed the result budget until nextOffset is null", async ({
+    makeTool,
+  }) => {
+    const names: string[] = [];
+    for (let index = 0; index < 30; index++) {
+      const name = `paged__tool_${index}`;
+      names.push(name);
+      await makeTool({
+        catalogId,
+        name,
+        parameters: { type: "object", description: `"ж"\n`.repeat(1000) },
+      });
+    }
+    const seen: string[] = [];
+    let offset: number | null = 0;
+    let pages = 0;
+    while (offset !== null) {
+      const { structuredContent } = await inspect(context, catalogId, {
+        detail: "full",
+        offset,
+      });
+      const page = structuredContent as {
+        tools: { name: string }[];
+        nextOffset: number | null;
+      };
+      expect(
+        Buffer.byteLength(JSON.stringify(JSON.stringify(page)), "utf8"),
+      ).toBeLessThan(64 * 1024);
+      seen.push(...page.tools.map((tool) => tool.name));
+      offset = page.nextOffset;
+      pages++;
+    }
+    expect(pages).toBeGreaterThan(1);
+    expect(seen).toEqual([...names].sort());
+  });
+
+  test("a tool too large for one result comes back as its summary", async ({
+    makeTool,
+  }) => {
+    await makeTool({
+      catalogId,
+      name: "huge__schema",
+      description: "Huge. Schema.",
+      parameters: { type: "object", description: "x".repeat(100_000) },
+    });
+    const { structuredContent } = await inspect(context, catalogId, {
+      detail: "full",
+    });
+    expect(structuredContent).toMatchObject({
+      nextOffset: null,
+      tools: [
+        {
+          name: "huge__schema",
+          description: "Huge.",
+          fullDetail: expect.any(String),
+        },
+      ],
+    });
+    expect(JSON.stringify(structuredContent)).not.toContain("xxxx");
   });
 
   test("includes current declared-battery and selector rules, without unrelated catalog metadata", async ({
@@ -159,8 +264,22 @@ describe("inspect_guardrails_server", () => {
       environmentId,
     });
     const result = await inspect(context, fixture.catalogIds.docs);
-    expect(result.structuredContent).toMatchObject({
-      coverage: expect.arrayContaining([
+    const tools = (
+      result.structuredContent as {
+        tools: {
+          kind: string | null;
+          rules: { kind: string; rule: { selector: string | null } | null }[];
+        }[];
+      }
+    ).tools;
+    for (const tool of tools)
+      expect(tool.kind).toBe(
+        (tool.rules.find((row) => !row.rule?.selector) ?? tool.rules[0])
+          ?.kind ?? null,
+      );
+    const rules = tools.flatMap((tool) => tool.rules);
+    expect(rules).toEqual(
+      expect.arrayContaining([
         expect.objectContaining({
           policySource: "battery",
           rule: expect.objectContaining({
@@ -175,7 +294,7 @@ describe("inspect_guardrails_server", () => {
           }),
         }),
       ]),
-    });
+    );
     expect(JSON.stringify(result.structuredContent)).not.toContain(
       fixture.catalogIds.acme,
     );
@@ -242,7 +361,6 @@ describe("inspect_guardrails_server", () => {
       expect(response.structuredContent).toMatchObject({
         scope: "agent",
         tools: [{ id: allowed.id }],
-        coverage: [{ toolId: allowed.id }],
       });
       expect(JSON.stringify(response.structuredContent)).not.toContain(
         sibling.id,
@@ -277,7 +395,6 @@ describe("inspect_guardrails_server", () => {
     expect(response.structuredContent).toMatchObject({
       scope: "agent",
       tools: [{ id: allowed.id }],
-      coverage: [{ toolId: allowed.id }],
     });
     expect(JSON.stringify(response.structuredContent)).not.toContain(
       excluded.name,
@@ -329,12 +446,10 @@ describe("inspect_guardrails_server", () => {
       (await inspect(ctx, otherCatalog.id)).structuredContent,
     ).toMatchObject({
       tools: [{ id: newer.id }],
-      coverage: [{ toolId: newer.id }],
     });
     await makeAgentTool(agent.id, original.id);
     expect((await inspect(ctx)).structuredContent).toMatchObject({
       tools: [{ id: original.id }],
-      coverage: [{ toolId: original.id }],
     });
     await expectDenied(ctx, otherCatalog.id);
   });
@@ -380,7 +495,6 @@ describe("inspect_guardrails_server", () => {
     };
     expect((await inspect(ctx)).structuredContent).toMatchObject({
       tools: [{ id: allowed.id }],
-      coverage: [{ toolId: allowed.id }],
     });
     await ConversationEnabledToolModel.setEnabledTools(conversation.id, []);
     await expectDenied(ctx);
@@ -424,13 +538,6 @@ describe("inspect_guardrails_server", () => {
       expect.arrayContaining([
         expect.objectContaining({
           name: getArchestraToolFullName("create_agent"),
-        }),
-      ]),
-    );
-    expect(response.structuredContent?.coverage).not.toEqual(
-      expect.arrayContaining([
-        expect.objectContaining({
-          fullName: getArchestraToolFullName("create_agent"),
         }),
       ]),
     );

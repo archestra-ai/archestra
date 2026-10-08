@@ -403,6 +403,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "request_runtime_credential_setup",
     "request_battery_credentials",
     "create_guardrails_repository",
+    "connect_guardrails_repository",
     "list_mcp_server_deployments",
     "inspect_guardrails_server",
     "load_skill",

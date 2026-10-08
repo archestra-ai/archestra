@@ -104,7 +104,7 @@ Start from the operator's requested outcome, not a full tool rescan. Approval an
 An ordinary, concrete behavior change normally keeps one small intent check, as \`references/validation.md\` describes; then preview, approve, and publish the policy and the check together there. Skip it when the operator asks, and for policy-only requests.
 
 1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\`, \`revision\`, \`delivery\`, and \`effective\`.
-2. For syntax or rules the current config does not show, read the matching section of \`references/contracts.md\`, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\` and \`"detail": "full"\`.
+2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\` and \`"detail": "full"\`.
 3. If a battery helps, check \`archestra__list_guardrails_battery_fits\` for it and add it to \`include\`. Existing root rules keep priority. Describe it as **Propose a battery** says. When it needs a token, collect it as steps 1–3 of **Add batteries** in \`references/first-policy.md\` say, then continue here.
 4. Preview the change with \`edits\` and the current revision.
 5. Summarize what changes, what stays the same, and any warnings, and whether approval saves locally or opens a GitHub PR. If the operator asked to see the change, show the preview's \`diff\` in a fenced diff block.
@@ -200,7 +200,7 @@ MCP inventory never lists native client tools. Claude Code sends \`Task\` or \`A
 
 ## Subagent returns
 
-Inspect the spawn tool, the child's tool rules, and the return boundary separately: a rule on the spawn tool or on the child's reads does not make its final answer safe for the parent. If native subagents are in scope and \`[policy.deployment] context_control = true\` is absent, propose it and check that the client can receive the return contract before inference. An existing custom policy does not inherit the starting policy's deployment block. Read \`references/contracts.md\` before proposing return protection, and report any return boundary the host cannot support or verify under **Needed for this to work**.
+Inspect the spawn tool, the child's tool rules, and the return boundary separately: a rule on the spawn tool or on the child's reads does not make its final answer safe for the parent. If native subagents are in scope and \`[policy.deployment] context_control = true\` is absent, propose it and check that the client can receive the return contract before inference. An existing custom policy does not inherit the starting policy's deployment block. Read \`references/contracts/returns.md\` before proposing return protection, and report any return boundary the host cannot support or verify under **Needed for this to work**.
 
 ## Provider-hosted tools
 

@@ -1,6 +1,12 @@
 import { readFileSync } from "node:fs";
 import { ARCHESTRA_REFERENCE } from "./appa-guide-archestra-reference";
 import {
+  APPA_CONTRACTS_INDEX,
+  APPA_CONTRACTS_PARTS,
+  appaContractsPartFile,
+  appaContractsPartPath,
+} from "./appa-guide-contracts";
+import {
   ADJUST_WORKFLOW,
   CLIENTS_REFERENCE,
   FIRST_POLICY_WORKFLOW,
@@ -10,12 +16,11 @@ import {
 } from "./appa-guide-workflows";
 import type { BuiltInSkill } from "./built-in-skills";
 
-// OpenAPPA's shared guide rules and policy reference, copied verbatim from the
-// pinned OpenAPPA commit by `pnpm codegen:appa-guide`. Plain files rather than
-// text imports so tsx-run scripts can load them too; the build copies them
-// next to the bundled chunks.
+// OpenAPPA's shared guide rules, copied verbatim, and its policy reference,
+// split into parts, from the pinned OpenAPPA commit by `pnpm
+// codegen:appa-guide`. Plain files rather than text imports so tsx-run scripts
+// can load them too; the build copies them next to the bundled chunks.
 const APPA_GUIDE_CORE = readUpstreamCopy("appa-guide.core.generated.md");
-const APPA_CONTRACTS = readUpstreamCopy("appa-guide.contracts.generated.md");
 
 export const APPA_GUIDE_SKILL: BuiltInSkill = {
   builtInSkillId: "appa-guide",
@@ -37,8 +42,8 @@ You run inside Archestra chat or in a client connected to Archestra (such as Cla
 - This file: which workflow to follow, how approval and publishing work in Archestra, and the rules every workflow shares.
 - One file per workflow, listed in **Workflows**. Load it with \`archestra__load_skill\` before you start that workflow; this file alone does not describe the steps.
 - **Policy-writing rules**, at the end of this file: OpenAPPA's rules for every host. They name operations; **Operations in Archestra** maps them to tools.
-- \`references/contracts.md\`: OpenAPPA's policy reference (tool contracts, argument selectors, audiences, trust, effects, attention marks, annotators, sanitizers, and authorities). Before you write a rule with syntax the current policy does not already show, read its matching section. Explain, review, and client questions do not need it; load it at most once per chat. Never infer a field's meaning from validation errors: a policy that validates can still do something other than what was asked.
-- \`references/archestra.md\`: the tool names Archestra evaluates, its default rules, batteries, and what it cannot enforce. Its tool names replace the examples in \`references/contracts.md\`.
+- \`references/contracts.md\`: index of OpenAPPA's policy reference (tool contracts, audiences, trust, effects, attention marks, annotators, sanitizers, authorities, child returns, and externals). Before you write a rule with syntax the current policy does not already show, load the index, then only the part you need. Explain, review, and client questions do not need it. Never infer a field's meaning from validation errors: a policy that validates can still do something other than what was asked.
+- \`references/archestra.md\`: the tool names Archestra evaluates, its default rules, batteries, and what it cannot enforce. Its tool names replace the examples in \`references/contracts/tools.md\`.
 - \`references/clients.md\`: only when you run in, or the policy covers, a connected CLI client (Claude Code, Codex, OpenCode): native tools, subagent returns, provider-hosted tools, and hosts without Archestra's cards.
 
 In a connected client whose tool names lack the \`archestra__\` prefix, call the matching unprefixed tool, including \`load_skill\`.
@@ -186,8 +191,13 @@ Use get_openappa_policy_tests to obtain the authoritative version and configured
     {
       path: "references/contracts.md",
       kind: "reference",
-      content: APPA_CONTRACTS,
+      content: APPA_CONTRACTS_INDEX,
     },
+    ...APPA_CONTRACTS_PARTS.map(({ slug }) => ({
+      path: appaContractsPartPath(slug),
+      kind: "reference" as const,
+      content: readUpstreamCopy(appaContractsPartFile(slug)),
+    })),
     {
       path: "references/archestra.md",
       kind: "reference",

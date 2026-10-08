@@ -1,7 +1,7 @@
 /**
  * `references/archestra.md` of the built-in appa-guide skill: what an OpenAPPA
  * policy looks like in Archestra. OpenAPPA's own semantics live in the
- * verbatim `references/contracts.md`; this file holds only what Archestra adds.
+ * `references/contracts/` parts; this file holds only what Archestra adds.
  */
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const ARCHESTRA_REFERENCE = `# OpenAPPA in Archestra

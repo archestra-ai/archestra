@@ -30,14 +30,23 @@ export const generateErrorResponseSchema = <
       message: z.string(),
       type: z.literal(errorType),
       internal_code: z.string().optional(),
-      details: z.record(z.string(), z.unknown()).optional(),
     }),
   });
+
+/** A 403 can carry `details` whose shape its `internal_code` sets. */
+const ForbiddenErrorResponseSchema = z.object({
+  error: z.object({
+    message: z.string(),
+    type: z.literal("api_authorization_error"),
+    internal_code: z.string().optional(),
+    details: z.record(z.string(), z.unknown()).optional(),
+  }),
+});
 
 export const ErrorResponsesSchema = {
   400: generateErrorResponseSchema("api_validation_error"),
   401: generateErrorResponseSchema("api_authentication_error"),
-  403: generateErrorResponseSchema("api_authorization_error"),
+  403: ForbiddenErrorResponseSchema,
   404: generateErrorResponseSchema("api_not_found_error"),
   409: generateErrorResponseSchema("api_conflict_error"),
   500: generateErrorResponseSchema("api_internal_server_error"),

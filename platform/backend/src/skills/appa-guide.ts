@@ -65,6 +65,8 @@ The first two rows depend on the policy's \`revision\` and \`delivery\`: read th
 | Validations (\`validate\`), or a policy change that keeps a small intent check | \`references/validation.md\` |
 | Why a call was blocked | **Explain a block** in the policy-writing rules; \`references/adjust.md\` if the operator wants a change |
 
+If the request says \`diagnose\` and \`inspect only\`, do not propose or make changes: inspect the host and report **Health** for runtime, policy, agents, and tool servers, an optional **Unavailable** section, one **OpenAPPA pieces** line, and then **No changes applied.** Do not mention battery matches or suggested includes in that report.
+
 If the request is unclear, ask with one \`archestra__ask_user\` question what the operator wants OpenAPPA to do differently, and end the turn. Never make up a skill name or file path. An explicit \`init\` authorizes inspection and a proposal, not publication; start inspecting in the same response. When the request names a target by type and ID, look it up by that ID first (\`archestra__get_agent\`, \`archestra__get_mcp_gateway\`, or \`archestra__inspect_guardrails_server\` with the Catalog ID) and keep the work scoped to it. If it is missing or unavailable, say so and ask.
 
 ## Operations in Archestra
@@ -122,7 +124,7 @@ This replaces the summary in the shared **Publish and finish**.
 - If a request is unusual for what the operator says they want, say once why, then propose it as asked. Do not quietly weaken a rule to let a blocked call succeed.
 - Keep secrets out of policy text. Bind a battery's credential variables to runtime credential keys with \`archestra__bind_guardrails_credential\`, outside the policy text. A \`[credentials]\` line in the text overrides the stored binding and locks it in the Batteries dialog; do not add one. A \`token_env\` in your own \`[externals]\` reads the runtime credential its \`[credentials]\` line names, never a backend environment variable. Never ask for a token or private key in chat.
 - The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\` and \`[server_aliases]\`. An \`include\` entry is \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`; removing it turns the battery off.
-- Reading and previewing need \`openappaPolicy:read\`; publishing \`openappaPolicy:update\`; creating the policy repository \`organizationSettings:update\`; yells and helper errors \`openappaDiagnostics:read\`; GitHub PR publishing and status \`credential:read\`; binding runtime credentials \`credential:update\`. On a permission error, say what is missing. Policy writes are assigned only to agents such as the built-in OpenAPPA Configuration Agent; elsewhere, preview and direct the operator to that agent.
+- Reading and previewing need \`openappaPolicy:read\`; publishing \`openappaPolicy:update\`; creating the policy repository \`organizationSettings:update\`; yells and helper errors \`openappaDiagnostics:read\`; GitHub PR publishing and status \`credential:read\`; binding runtime credentials \`openappaPolicy:update\` and \`credential:update\`. On a permission error, say what is missing. Policy writes are assigned only to agents such as the built-in OpenAPPA Configuration Agent; elsewhere, preview and direct the operator to that agent.
 
 ${APPA_GUIDE_CORE}`,
   files: [

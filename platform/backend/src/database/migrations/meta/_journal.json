@@ -3655,6 +3655,13 @@
       "when": 1791471692141,
       "tag": "0521_lumpy_ironclad",
       "breakpoints": true
+    },
+    {
+      "idx": 522,
+      "version": "7",
+      "when": 1791476885942,
+      "tag": "0522_square_jean_grey",
+      "breakpoints": true
     }
   ]
 }

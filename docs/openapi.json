@@ -350545,6 +350545,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -350810,6 +350817,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -351648,6 +351656,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -351913,6 +351928,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -353006,6 +353022,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -353271,6 +353294,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -353961,6 +353985,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -354226,6 +354257,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -354916,6 +354948,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -355181,6 +355220,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -355883,6 +355923,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -356148,6 +356195,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -356447,6 +356495,14 @@
                     "nullable": true,
                     "type": "string",
                     "maxLength": 64
+                  },
+                  "connectionClientOrder": {
+                    "nullable": true,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "maxLength": 64
+                    }
                   },
                   "connectionShownClientIds": {
                     "nullable": true,
@@ -356913,6 +356969,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -357178,6 +357241,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -357958,6 +358022,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -358223,6 +358294,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -358983,6 +359055,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -359248,6 +359327,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -359952,6 +360032,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -360217,6 +360304,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -360952,6 +361040,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -361217,6 +361312,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -361889,6 +361985,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -362154,6 +362257,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",
@@ -364014,6 +364118,13 @@
                         "type": "string"
                       }
                     },
+                    "connectionClientOrder": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "connectionShownProviders": {
                       "nullable": true,
                       "type": "array",
@@ -364279,6 +364390,7 @@
                     "connectionDefaultLlmProxyId",
                     "connectionDefaultClientId",
                     "connectionShownClientIds",
+                    "connectionClientOrder",
                     "connectionShownProviders",
                     "connectionBaseUrls",
                     "connectionDefaultProviderKeys",

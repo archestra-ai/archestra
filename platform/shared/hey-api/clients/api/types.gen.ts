@@ -90993,6 +90993,7 @@ export type GetOrganizationResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -91318,6 +91319,7 @@ export type UpdateAppearanceSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -91526,6 +91528,7 @@ export type UpdateSecuritySettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -91729,6 +91732,7 @@ export type UpdateMcpSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -91932,6 +91936,7 @@ export type UpdateSkillsSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92136,6 +92141,7 @@ export type UpdateAgentSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92200,6 +92206,7 @@ export type UpdateConnectionSettingsData = {
             [key: string]: string;
         } | null;
         connectionDefaultClientId?: string | null;
+        connectionClientOrder?: Array<string> | null;
         connectionShownClientIds?: Array<string> | null;
         connectionShownProviders?: unknown;
         connectionSkillsEnabled?: boolean;
@@ -92355,6 +92362,7 @@ export type UpdateConnectionSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92589,6 +92597,7 @@ export type UpdateIntegrationSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -92802,6 +92811,7 @@ export type UpdateDefaultEnvironmentResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -93010,6 +93020,7 @@ export type UpdateAuthSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -93220,6 +93231,7 @@ export type UpdateKnowledgeSettingsResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -93420,6 +93432,7 @@ export type DropEmbeddingConfigResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;
@@ -93970,6 +93983,7 @@ export type CompleteOnboardingResponses = {
         connectionDefaultLlmProxyId: string | null;
         connectionDefaultClientId: string | null;
         connectionShownClientIds: Array<string> | null;
+        connectionClientOrder: Array<string> | null;
         connectionShownProviders: Array<string> | null;
         connectionBaseUrls: Array<{
             url: string;

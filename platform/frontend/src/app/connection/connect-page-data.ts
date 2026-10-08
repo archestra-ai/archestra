@@ -73,8 +73,9 @@ export interface ConnectPageData {
   revalidating: boolean;
   /** Every app the admin shows on the page ("generic" = Any client, always last). */
   clients: ConnectClient[];
-  /** The handful of apps with first-class setup, for hero rows and pickers. */
+  /** Apps offered as tiles, in the admin order or the default installer order. */
   featuredClients: ConnectClient[];
+  hasClientOrder: boolean;
   /** The app the admin picks first, when set. */
   defaultClientId: string | null;
   /** The instance's configured name ("Archestra" unless white-labeled). */
@@ -232,12 +233,16 @@ export function useConnectPageData(): ConnectPageData {
   const baseUrl = useConnectionBaseUrl(org?.connectionBaseUrls);
 
   const clients = useMemo(
-    () => visibleClients(org?.connectionShownClientIds),
-    [org?.connectionShownClientIds],
+    () =>
+      visibleClients(org?.connectionShownClientIds, org?.connectionClientOrder),
+    [org?.connectionShownClientIds, org?.connectionClientOrder],
   );
-  const featuredClients = INSTALLER_CLIENT_IDS.map((id) =>
-    clients.find((c) => c.id === id),
-  ).filter((c): c is ConnectClient => !!c);
+  const hasClientOrder = !!org?.connectionClientOrder?.length;
+  const featuredClients = hasClientOrder
+    ? clients.filter((client) => client.id !== "generic")
+    : INSTALLER_CLIENT_IDS.map((id) => clients.find((c) => c.id === id)).filter(
+        (c): c is ConnectClient => !!c,
+      );
 
   const servers = useMemo<ConnectServer[]>(
     () =>
@@ -308,6 +313,7 @@ export function useConnectPageData(): ConnectPageData {
     revalidating: orgQuery.isFetching,
     clients,
     featuredClients,
+    hasClientOrder,
     defaultClientId: org?.connectionDefaultClientId ?? null,
     appName,
     gateway,

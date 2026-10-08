@@ -6,7 +6,7 @@ import {
   MCP_GATEWAY_OAUTH_SCOPE,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Copy, Pencil, Plus, RefreshCw, Shield, Trash2 } from "lucide-react";
+import { Copy, Pencil, Plus, RefreshCw, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
@@ -30,7 +30,6 @@ import {
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { ResourcePermissionDialog } from "@/components/resource-permission-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Badge } from "@/components/ui/badge";
@@ -153,11 +152,6 @@ function OauthClientsTable() {
   const [editingMcp, setEditingMcp] = useState<McpClient | null>(null);
   const [rotating, setRotating] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
-  const [permissionTarget, setPermissionTarget] = useState<{
-    resource: "llmOauthClient" | "mcpOauthClient";
-    id: string;
-    name: string;
-  } | null>(null);
   const [revealed, setRevealed] = useState<{
     title: string;
     credentials: CreatedCredentials;
@@ -341,16 +335,6 @@ function OauthClientsTable() {
                 onClick: () => setRotating(row.original),
               },
               {
-                icon: <Shield className="h-4 w-4" />,
-                label: "Permissions",
-                onClick: () =>
-                  setPermissionTarget({
-                    resource,
-                    id: row.original.client.id,
-                    name: row.original.client.name,
-                  }),
-              },
-              {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete",
                 permissions: { [resource]: ["delete"] },
@@ -512,17 +496,6 @@ function OauthClientsTable() {
         isSubmitting={mcpUpdate.isPending}
       />
 
-      {permissionTarget && (
-        <ResourcePermissionDialog
-          resource={permissionTarget.resource}
-          scope={permissionTarget.id}
-          title={`${permissionTarget.name} permissions`}
-          open
-          onOpenChange={(open) => {
-            if (!open) setPermissionTarget(null);
-          }}
-        />
-      )}
       <DeleteConfirmDialog
         open={!!rotating}
         onOpenChange={(open) => {

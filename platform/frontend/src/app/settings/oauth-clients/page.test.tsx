@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, within } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -116,7 +116,7 @@ describe("OauthClientsPage", () => {
     ).not.toBeInTheDocument();
   });
 
-  it("opens a client's permissions from its row actions", async () => {
+  it("keeps a client's permissions in its edit dialog, not its row actions", async () => {
     const requested: string[] = [];
     server.use(
       http.get(`${API_ORIGIN}/api/mcp-oauth-clients`, () =>
@@ -167,12 +167,17 @@ describe("OauthClientsPage", () => {
 
     const row = (await screen.findByText("Deploy bot")).closest("tr");
     if (!row) throw new Error("Missing client row");
-    await user.click(within(row).getByRole("button", { name: /Permissions/ }));
+    expect(
+      within(row).queryByRole("button", { name: /Permissions/ }),
+    ).not.toBeInTheDocument();
+    await user.click(within(row).getByRole("button", { name: /Edit/ }));
 
     expect(
-      await screen.findByRole("dialog", { name: /Deploy bot permissions/ }),
+      await screen.findByRole("dialog", { name: /Deploy bot/ }),
     ).toBeVisible();
-    expect(requested).toContain("mcpOauthClient/client-row-1");
+    await waitFor(() =>
+      expect(requested).toContain("mcpOauthClient/client-row-1"),
+    );
   });
 
   it("offers the permissions of both client kinds from the header menu", async () => {

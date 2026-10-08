@@ -87300,7 +87300,6 @@ export type GetOpenappaCoverageEntitiesResponses = {
             id: string;
             label: string;
             clientFamily: 'claude-code' | 'codex' | 'opencode';
-            observerCount: number;
             firstObservedAt: string;
             type: 'detected_mcp_server';
             name: string;

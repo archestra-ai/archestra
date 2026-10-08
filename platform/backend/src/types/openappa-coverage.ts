@@ -196,7 +196,6 @@ export const DetectedCoverageEntitySchema = DetectedMcpServerSchema.pick({
   id: true,
   label: true,
   clientFamily: true,
-  observerCount: true,
   firstObservedAt: true,
 }).extend({
   type: z.literal("detected_mcp_server"),

@@ -14,10 +14,11 @@ import routes from "./openappa-coverage.routes";
  * Detected servers are derived from what the proxy observed clients declare
  * and listed beside the registry's servers. The rules under test: a server is
  * one (client family, label) per organization, shared by every member who
- * connected it; only tools the proxy discovered count, read in the client's
- * own spelling; nothing from another organization, another kind of tool row
- * or an unreadable name leaks in; and one paged list carries registry rows
- * first and detected rows after, with the totals of both.
+ * connected it and never attributed to anyone; only tools the proxy
+ * discovered count, read in the client's own spelling; nothing from another
+ * organization, another kind of tool row or an unreadable name leaks in; and
+ * one paged list carries registry rows first and detected rows after, with
+ * the totals of both.
  */
 describe("GET /api/openappa/coverage/entities with detected servers", () => {
   const ctx = useRouteTestApp(routes);
@@ -27,7 +28,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     await makeMember(ctx.user.id, ctx.organizationId, { role: "admin" });
   });
 
-  test("groups observed proxy tools by client family and label, counting distinct observers", async ({
+  test("groups observed proxy tools by client family and label, shared by every member who declared them", async ({
     makeUser,
     makeMember,
   }) => {
@@ -75,16 +76,8 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
           type: string;
           name: string;
           clientFamily: string;
-          observerCount: number;
           toolCount: number;
-        }) => [
-          s.type,
-          s.id,
-          s.name,
-          s.clientFamily,
-          s.toolCount,
-          s.observerCount,
-        ],
+        }) => [s.type, s.id, s.name, s.clientFamily, s.toolCount],
       ),
     ).toEqual([
       ["detected_mcp_server", "opencode.github", "github", "opencode", 1, 1],

@@ -20,7 +20,6 @@ export const DetectedMcpServerSchema = z.object({
       toolName: z.string(),
     }),
   ),
-  observerCount: z.number().int().nonnegative(),
   firstObservedAt: z.date(),
 });
 

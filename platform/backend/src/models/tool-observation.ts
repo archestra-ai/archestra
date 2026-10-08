@@ -12,7 +12,6 @@ import logger from "@/logging";
 export type ProxyToolObservation = {
   toolId: string;
   toolName: string;
-  userId: string;
   externalAgentId: string;
   observedAt: Date;
 };
@@ -86,7 +85,7 @@ class ToolObservationModel {
 
   /**
    * Every observation of a proxy-discovered tool by a member of the
-   * organization, with the tool's name and the client that declared it. The
+   * organization: the tool's name and the client that declared it. The
    * detected-server view is derived from these rows; observations carry no
    * organization of their own, so membership of the observer scopes them.
    */
@@ -97,7 +96,6 @@ class ToolObservationModel {
       .select({
         toolId: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
-        userId: schema.toolObservationsTable.userId,
         externalAgentId: schema.toolObservationsTable.externalAgentId,
         observedAt: schema.toolObservationsTable.createdAt,
       })

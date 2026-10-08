@@ -133,7 +133,6 @@ function detectedEntities(
       label: server.label,
       clientFamily: server.clientFamily,
       toolCount: server.tools.length,
-      observerCount: server.observerCount,
       firstObservedAt: server.firstObservedAt,
     }))
     .sort((a, b) => {

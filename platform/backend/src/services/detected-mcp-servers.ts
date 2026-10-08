@@ -11,8 +11,10 @@ import {
 
 /**
  * The organization's detected MCP servers, derived from the proxy's tool
- * observations. Two members whose local servers share a label share one
- * detected server: an attachment made to it governs that label for everyone.
+ * observations: an observation ties a proxy-discovered tool to the member
+ * who declared it and to their client. Two members whose local servers
+ * share a label share one detected server: an attachment made to it governs
+ * that label for everyone.
  */
 export async function listDetectedMcpServers(
   organizationId: string,
@@ -29,7 +31,7 @@ function groupDetectedServers(
 ): DetectedMcpServer[] {
   const servers = new Map<
     string,
-    DetectedMcpServer & { observers: Set<string>; toolIds: Set<string> }
+    DetectedMcpServer & { toolIds: Set<string> }
   >();
   for (const observation of observations) {
     const family = clientFamilyOf(observation.externalAgentId);
@@ -44,9 +46,7 @@ function groupDetectedServers(
         label: parsed.label,
         clientFamily: family,
         tools: [],
-        observerCount: 0,
         firstObservedAt: observation.observedAt,
-        observers: new Set(),
         toolIds: new Set(),
       };
       servers.set(id, server);
@@ -59,16 +59,14 @@ function groupDetectedServers(
         toolName: parsed.toolName,
       });
     }
-    server.observers.add(observation.userId);
     if (observation.observedAt < server.firstObservedAt) {
       server.firstObservedAt = observation.observedAt;
     }
   }
   return [...servers.values()]
-    .map(({ observers, toolIds: _toolIds, ...server }) => ({
+    .map(({ toolIds: _toolIds, ...server }) => ({
       ...server,
       tools: server.tools.sort((a, b) => a.name.localeCompare(b.name)),
-      observerCount: observers.size,
     }))
     .sort((a, b) => a.id.localeCompare(b.id));
 }

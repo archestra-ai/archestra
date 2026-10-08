@@ -336655,11 +336655,6 @@
                                   "opencode"
                                 ]
                               },
-                              "observerCount": {
-                                "type": "integer",
-                                "minimum": 0,
-                                "maximum": 9007199254740991
-                              },
                               "firstObservedAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -336683,7 +336678,6 @@
                               "id",
                               "label",
                               "clientFamily",
-                              "observerCount",
                               "firstObservedAt",
                               "type",
                               "name",

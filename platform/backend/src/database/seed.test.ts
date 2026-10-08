@@ -123,7 +123,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(30);
+    expect(originalToolIds).toHaveLength(31);
     const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("resolve_openappa_yell"),
     ]);
@@ -355,7 +355,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(30);
+    ).toHaveLength(31);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -480,7 +480,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(30);
+    expect(managedToolIds).toHaveLength(31);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -526,7 +526,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(27);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(28);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -536,7 +536,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(30);
+    expect(assigned).toHaveLength(31);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 

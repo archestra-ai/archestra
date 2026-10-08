@@ -1,7 +1,10 @@
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
-import { publishOpenAppaPolicyChange } from "@/services/openappa-policy-change";
+import {
+  publishOpenAppaPolicyChange,
+  refuseCredentialLines,
+} from "@/services/openappa-policy-change";
 import {
   getOpenAppaPolicyTests,
   replayOpenAppaValidationProposal,
@@ -70,6 +73,12 @@ async function prepare(params: Caller & PreviewOpenAppaValidationChange) {
     [...filesByPath.values()].sort((a, b) => a.path.localeCompare(b.path)),
   );
   const policyContent = request.policyContent ?? root.content;
+  if (request.policyContent !== undefined)
+    await refuseCredentialLines({
+      organizationId,
+      before: root.content,
+      after: request.policyContent,
+    });
   const tests = await replayOpenAppaValidationProposal(
     {
       organizationId,

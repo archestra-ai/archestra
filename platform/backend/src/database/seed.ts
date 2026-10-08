@@ -397,6 +397,7 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
     "validate_guardrails_policy",
     "preview_guardrails_policy_change",
     "update_guardrails_policy",
+    "bind_guardrails_credential",
     "get_guardrails_policy_change_status",
     "list_runtime_credentials",
     "get_runtime_credential",

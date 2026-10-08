@@ -295,12 +295,13 @@ class OpenAppaBatteriesService {
   /**
    * Compose `content` as a recompose would were it the root now, writing
    * nothing: the batteries this deployment holds back compose as the empty
-   * battery. A refusal names each held-back battery and what brings it back.
+   * battery. `refusal` is what the runtime refuses, empty when it composes;
+   * `heldBack` names each held-back battery and what brings it back.
    */
   async composeInDeployment(params: {
     organizationId: string;
     content: string;
-  }): Promise<{ errors: string[] }> {
+  }): Promise<{ refusal: string[]; heldBack: string[] }> {
     const { organizationId, content } = params;
     const [root, installs] = await Promise.all([
       guardrailsPolicyService.get(organizationId),
@@ -311,20 +312,15 @@ class OpenAppaBatteriesService {
       root: { ...root, content },
       governed: installs.flatMap((install) => install.catalogId ?? []),
     });
+    const held = heldBack(planned.batteries);
     const composed = await openappaDeclarations.composeForCheck({
       root: planned.root.content,
       resolution: planned.resolution,
-      held: new Set(
-        planned.batteries
-          .filter((battery) => !battery.composed)
-          .map((battery) => battery.name),
-      ),
+      held: new Set(held.map((battery) => battery.name)),
     });
     return {
-      errors:
-        (composed.content ?? null) === null
-          ? withHeldBack(composed.errors, planned.batteries)
-          : [],
+      refusal: (composed.content ?? null) === null ? composed.errors : [],
+      heldBack: held.map(heldBackNote),
     };
   }
 
@@ -891,13 +887,11 @@ class OpenAppaBatteriesService {
       root,
       governed: installs.flatMap((install) => install.catalogId ?? []),
     });
-    const fingerprint =
-      hash(
-        JSON.stringify({
-          batteries: this.composeInputs({ planned, installs }),
-          credentials: planned.resolution.credentials,
-        }),
-      ) + (root.revision === 0 ? `:${root.contentHash}` : "");
+    const fingerprint = compositionFingerprint({
+      planned,
+      batteries: this.composeInputs({ planned, installs }),
+      root,
+    });
     // Catalogs, credentials or stored packages moved under the policy; only a
     // recomposition can say what the root composes to now.
     if (fingerprint !== stored.installFingerprint)
@@ -926,13 +920,11 @@ class OpenAppaBatteriesService {
             rows: planned.rows,
           });
       const composed = this.composeInputs({ planned, installs });
-      const installFingerprint =
-        hash(
-          JSON.stringify({
-            batteries: composed,
-            credentials: planned.resolution.credentials,
-          }),
-        ) + (root.revision === 0 ? `:${root.contentHash}` : "");
+      const installFingerprint = compositionFingerprint({
+        planned,
+        batteries: composed,
+        root,
+      });
       // Same inputs give the same bytes, so the stored row already is the answer.
       if (
         expected &&
@@ -955,7 +947,7 @@ class OpenAppaBatteriesService {
       }
       const values = await this.compose({
         root: planned.root,
-        held: planned.batteries,
+        planned: planned.batteries,
         composed,
         installFingerprint,
         previousContent: expected?.content ?? null,
@@ -1038,12 +1030,12 @@ class OpenAppaBatteriesService {
 
   private async compose(params: {
     root: GuardrailsPolicy;
-    held: readonly PlannedBattery[];
+    planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
     previousContent: string | null;
   }): Promise<EffectivePolicyValues> {
-    const { root, held, composed, installFingerprint, previousContent } =
+    const { root, planned, composed, installFingerprint, previousContent } =
       params;
     const native = await loadNative();
     const result = await native.composeOpenappaPolicy({
@@ -1064,7 +1056,11 @@ class OpenAppaBatteriesService {
       rootRevision: root.revision,
       installFingerprint,
       error:
-        accepted === null ? withHeldBack(result.errors, held).join("\n") : null,
+        accepted === null
+          ? [...result.errors, ...heldBack(planned).map(heldBackNote)].join(
+              "\n",
+            )
+          : null,
     };
   }
 
@@ -1797,28 +1793,29 @@ function composes(battery: {
   }
 }
 
-/**
- * A refusal followed by every battery the deployment held back from it. What a
- * held-back battery declares is absent from the composition, so a refusal naming
- * one of its declarations is fixed where the status says, not in the root, which
- * may not redeclare what an included battery declares.
- */
-function withHeldBack(
-  errors: readonly string[],
-  batteries: readonly PlannedBattery[],
-): string[] {
-  return [
-    ...errors,
-    ...batteries
-      .filter((battery) => !battery.composed)
-      .map(
-        (battery) =>
-          `battery ${JSON.stringify(battery.name)} is held back (${battery.status}), so nothing it declares is composed; bring it back rather than redeclaring what it declares in the root: ${heldBackRemedy(battery)}`,
-      ),
-  ];
+type HeldBackStatus = Exclude<
+  BatteryInstallStatus,
+  "active" | "unrouted" | "refused"
+>;
+type HeldBackBattery = PlannedBattery & { status: HeldBackStatus };
+
+/** The batteries a plan composes as the empty battery. */
+function heldBack(batteries: readonly PlannedBattery[]): HeldBackBattery[] {
+  return batteries.filter(
+    (battery): battery is HeldBackBattery => !battery.composed,
+  );
 }
 
-function heldBackRemedy(battery: PlannedBattery): string {
+/**
+ * What a held-back battery declares is absent from the composition, so a
+ * refusal naming one of its declarations is fixed where the status says, not in
+ * the root, which may not redeclare what an included battery declares.
+ */
+function heldBackNote(battery: HeldBackBattery): string {
+  return `battery ${JSON.stringify(battery.name)} is held back (${battery.status}), so nothing it declares is composed; bring it back rather than redeclaring what it declares in the root: ${heldBackRemedy(battery)}`;
+}
+
+function heldBackRemedy(battery: HeldBackBattery): string {
   switch (battery.status) {
     case "unavailable":
       return "no battery package answers its include entry, or another entry answers the same battery";
@@ -1834,11 +1831,29 @@ function heldBackRemedy(battery: PlannedBattery): string {
         ? "point a [server_aliases] target at its namespaces"
         : `no MCP server in this deployment carries the tool prefix ${unserved.join(", ")}; install or restore that server, or point the alias at one that exists`;
     }
-    case "refused":
-    case "unrouted":
-    case "active":
-      return "it composes once its status is active";
   }
+}
+
+/**
+ * What a stored composition answers: the batteries it composed, the credential
+ * table and, when any is held back, the statuses its refusal explains.
+ */
+function compositionFingerprint(params: {
+  planned: PlannedComposition;
+  batteries: ComposeBatteryInput[];
+  root: GuardrailsPolicy;
+}): string {
+  const { planned, batteries, root } = params;
+  const held = heldBack(planned.batteries).map(heldBackNote);
+  return (
+    hash(
+      JSON.stringify({
+        batteries,
+        credentials: planned.resolution.credentials,
+        ...(held.length > 0 ? { held } : {}),
+      }),
+    ) + (root.revision === 0 ? `:${root.contentHash}` : "")
+  );
 }
 
 /** The native package joins its one-line setup steps with newlines. */

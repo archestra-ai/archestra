@@ -688,15 +688,39 @@ describe("validating against this deployment", () => {
     await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
     const acme = await uploadAcme({ organizationId, userId });
 
-    expect(
-      await guardrailsPolicyService.validate(
-        root([acme.entry], ["acme_prod"]),
-        {
-          organizationId,
-          previous: MINIMAL,
-        },
-      ),
-    ).toEqual({ valid: true, errors: [], warnings: [] });
+    const draft = await guardrailsPolicyService.validate(
+      root([acme.entry], ["acme_prod"]),
+      { organizationId, previous: MINIMAL },
+    );
+    expect(draft).toEqual({ valid: true, errors: [], warnings: [] });
+  });
+
+  test("a draft that keeps the current revision's refusal and adds an unrelated not-yet-served battery stays valid", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const userId = (await makeUser()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
+    const acme = await uploadAcme({ organizationId, userId });
+    const starter = (await guardrailsPolicyService.get(organizationId)).content;
+    const native = await import("@archestra/openappa-rs");
+    const edited = await native.editOpenappaPolicy(starter, [
+      { kind: "addInclude", entry: acme.entry },
+      { kind: "bindServers", namespace: "acme", servers: ["acme_prod"] },
+    ]);
+    expect(edited.errors).toEqual([]);
+
+    const current = await guardrailsPolicyService.validate(starter, {
+      organizationId,
+    });
+    const draft = await guardrailsPolicyService.validate(edited.content ?? "", {
+      organizationId,
+    });
+    expect(draft.valid).toBe(true);
+    expect(draft.errors).toEqual([]);
+    expect(draft.warnings).toHaveLength(current.warnings.length + 1);
   });
 });
 

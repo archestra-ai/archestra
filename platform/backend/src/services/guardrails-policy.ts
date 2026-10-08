@@ -68,11 +68,14 @@ function duplicateEntryErrors(resolution: PolicyResolution): string[] {
 }
 
 /**
- * What this deployment's recompose would refuse in a document that composes on
+ * What this deployment's recompose would make of a document that composes on
  * its own: a battery the deployment holds back composes as empty, and the root
  * may name what it declares. A refusal the revision being replaced already
  * meets is a warning, so a write that leaves it as it was is never blocked by
- * it; one the document introduces is an error.
+ * it; one the document introduces is an error. Either way the held-back
+ * batteries are named with it, since they are what the refusal is fixed by.
+ * A held-back battery the document composes without is no refusal; its status
+ * is the effective policy's to report.
  */
 async function deploymentRefusal(params: {
   organizationId: string;
@@ -84,26 +87,31 @@ async function deploymentRefusal(params: {
     organizationId,
     content,
   });
-  if (submitted.errors.length === 0) return { errors: [], warnings: [] };
+  if (submitted.refusal.length === 0) return { errors: [], warnings: [] };
   const kept = new Set(
     previous === content
-      ? submitted.errors
+      ? submitted.refusal
       : (
           await openappaBatteriesService.composeInDeployment({
             organizationId,
             content: previous,
           })
-        ).errors,
+        ).refusal,
   );
-  const refusal = (error: string) => `in this deployment: ${error}`;
+  const introduced = submitted.refusal.filter((error) => !kept.has(error));
+  const inDeployment = (line: string) => `in this deployment: ${line}`;
+  const keptNote =
+    " (the current revision is refused the same way; the runtime keeps enforcing the last composition that opened)";
+  if (introduced.length > 0)
+    return {
+      errors: [...introduced, ...submitted.heldBack].map(inDeployment),
+      warnings: [],
+    };
   return {
-    errors: submitted.errors.filter((error) => !kept.has(error)).map(refusal),
-    warnings: submitted.errors
-      .filter((error) => kept.has(error))
-      .map(
-        (error) =>
-          `${refusal(error)} (the current revision is refused the same way; the runtime keeps enforcing the last composition that opened)`,
-      ),
+    errors: [],
+    warnings: [...submitted.refusal, ...submitted.heldBack].map(
+      (line) => inDeployment(line) + keptNote,
+    ),
   };
 }
 

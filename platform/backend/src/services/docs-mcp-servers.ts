@@ -21,19 +21,23 @@ const OPENAPPA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 
 /**
  * The public docs MCP servers a fresh community instance installs (see
  * seedDocsMcpServers). Each has a fixed catalog id.
+ *
+ * The Archestra entry names the vendor's own public docs site, not this
+ * deployment. It is never seeded on licensed instances, which are the ones
+ * that can white-label the app name.
  */
 export const DOCS_MCP_SERVERS: DocsMcpServer[] = [
   {
     catalogId: "00000000-0000-4000-8000-000000000003",
-    name: "Archestra Docs",
-    description: "The Archestra documentation",
+    name: "Archestra Docs", // white-label-ok: names the vendor's public docs site
+    description: "The Archestra documentation", // white-label-ok: names the vendor's public docs site
     serverUrl: "https://archestra.ai/mcp",
     docsUrl: "https://archestra.ai/docs",
     icon: svgDataUrl(ARCHESTRA_LOGO_SVG),
     suggestedPrompt: {
-      summaryTitle: "What can Archestra do?",
+      summaryTitle: "What can Archestra do?", // white-label-ok: names the vendor's public docs site
       prompt:
-        "What can Archestra do? Use the Archestra Docs tools to read the current documentation, then give me a short tour of the main features, with links to the docs pages.",
+        "What can Archestra do? Use the Archestra Docs tools to read the current documentation, then give me a short tour of the main features, with links to the docs pages.", // white-label-ok: names the vendor's public docs site
     },
   },
   {

@@ -34,6 +34,7 @@ import {
   appLaunchToolDescription,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
@@ -398,8 +399,13 @@ async function getSearchableTools(params: {
   // Per-agent exclusions (Auto-tool mode): loaded once per search and applied
   // to BOTH the assigned contribution and the discoverable widening below.
   // Empty (no-op) unless the agent's accessAllTools setting is on.
-  const { tools: assignedTools, exclusionSets } =
+  const { tools: agentTools, exclusionSets } =
     await agentToolExclusionsService.getFilteredMcpToolsByAgent(agentId);
+  // An assigned tool is searchable only when the user can see its MCP server.
+  const assignedTools = await filterToolsByCallerCatalogAccess(agentTools, {
+    userId,
+    organizationId,
+  });
   const assignedNames = new Set(assignedTools.map((tool) => tool.name));
   // Dynamic tool access: when the agent's "access all tools" setting is on,
   // discovery also spans third-party tools from every catalog the user can

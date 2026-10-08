@@ -840,7 +840,7 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Run Tool Agent",
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const targetTool = await makeTool({
       name: "workspace__find_projects",
       catalogId: catalog.id,
@@ -951,7 +951,7 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Wrapped Approval Agent",
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const targetTool = await makeTool({
       name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
       catalogId: catalog.id,

@@ -1179,6 +1179,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: profileId,
           subscriptionId,
           requested: parseSubscriptionFilter(request.body),
+          caller: {
+            userId: tokenAuth.userId,
+            organizationId: tokenAuth.organizationId,
+          },
         });
         return;
       }

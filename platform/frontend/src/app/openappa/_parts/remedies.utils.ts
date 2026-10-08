@@ -212,12 +212,15 @@ const BLOCK_NEED: Record<BlockCoverage["kind"], string> = {
   approvals: "need an approval mark",
 };
 
-/** What is missing when no wired authority or sanitizer lifts the block. */
+/**
+ * What is missing when nothing wired lifts the block: an authority approves
+ * a call, a sanitizer cleans a result. Effects have no sanitizer.
+ */
 const BLOCK_MISSING: Record<BlockCoverage["kind"], string> = {
-  trust: "none approve or clean",
-  audience: "none approve or clean",
-  effects: "none approve",
-  approvals: "none approve",
+  trust: "no authority approves, no sanitizer cleans",
+  audience: "no authority approves, no sanitizer cleans",
+  effects: "no authority approves",
+  approvals: "no authority approves",
 };
 
 const rules = (count: number) => `${count} ${count === 1 ? "rule" : "rules"}`;
@@ -251,8 +254,12 @@ export function gapLines(view: RemediesView): GapLine[] {
             },
       ];
     const lifts = [
-      block.approvers > 0 ? `${block.approvers} approve` : null,
-      block.cleaners > 0 ? `${block.cleaners} clean` : null,
+      block.approvers > 0
+        ? `${plural(block.approvers, "authority approves", "authorities approve")}`
+        : null,
+      block.cleaners > 0
+        ? `${plural(block.cleaners, "sanitizer cleans", "sanitizers clean")}`
+        : null,
     ].filter((each) => each !== null);
     return [
       {

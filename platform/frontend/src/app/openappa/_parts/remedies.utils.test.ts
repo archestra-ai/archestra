@@ -256,7 +256,7 @@ describe("gapLines", () => {
       {
         key: "trust",
         label: "Trust",
-        text: "41 rules need trusted data · none approve or clean",
+        text: "41 rules need trusted data · no authority approves, no sanitizer cleans",
         covered: false,
       },
       {
@@ -268,7 +268,7 @@ describe("gapLines", () => {
       {
         key: "audience",
         label: "Audience",
-        text: "88 rules · 3 approve, 12 clean",
+        text: "88 rules · 3 authorities approve, 12 sanitizers clean",
         covered: true,
       },
     ]);

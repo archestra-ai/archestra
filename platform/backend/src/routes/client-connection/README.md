@@ -1,7 +1,9 @@
 # Browser-approved client setup
 
-The public `/connect.md` instructions let an existing coding agent bootstrap a
-connection without installing a skill first. `/llms.txt` links to those instructions.
+The Connect page's terminal command runs a public installer that connects a coding
+agent after the user approves it in the browser. The public `/connect.md` points
+agents to the Connect page, and gives agents without an installer
+(`?client=generic`) their own setup steps. `/llms.txt` links to it.
 The frontend root document also links to `/llms.txt` with `rel="describedby"`.
 
 ## Protocol
@@ -46,8 +48,8 @@ continues running when the approved installer restarts Desktop.
 This requires an allowed host-terminal tool. Computer use cannot be assumed
 to type commands into a terminal. Cowork's execution
 sandbox cannot configure the host app. Desktop Code can also deny localhost
-network access. `/connect.md` directs agents to use ordinary permission flows
-or provide the manual Connect command when host access is unavailable.
+network access. The Connect page offers Claude Desktop a downloaded installer,
+with a terminal option for Desktops already on a third-party profile.
 Do not infer the host OS from Cowork's sandbox or report sandbox edits as success.
 
 ## State and failure behavior

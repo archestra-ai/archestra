@@ -10,8 +10,8 @@ routes render inside their claim transaction, and tests assert exact output.
 
 ## Flow
 
-1. **Bootstrap.** The user, or their agent following `/connect.md`, runs the
-   Node.js installer from `GET /api/client-connections/installer`
+1. **Bootstrap.** The user runs the Connect page's terminal command, which runs
+   the Node.js installer from `GET /api/client-connections/installer`
    (`bootstrap/client-connection-installer.ts`). It holds no deployment
    credentials. It starts a connection request and opens the approval page.
 2. **Approval.** The user signs in, checks the displayed code, and approves in

@@ -1,9 +1,12 @@
+import { createHash } from "node:crypto";
 import { OPENCODE_CLIENT_ID } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { afterEach } from "vitest";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import config from "@/config";
 import db, { schema } from "@/database";
 import { AgentToolModel, ToolModel } from "@/models";
+import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { describe, expect, test } from "@/test";
 import { persistTools } from "./tools";
 
@@ -208,6 +211,64 @@ describe("persistTools", () => {
       .where(eq(schema.toolInvocationPoliciesTable.toolId, gatewayTool.id));
     expect(localPolicy.action).toBe("allow_when_context_is_untrusted");
     expect(gatewayPolicy.action).toBe("block_when_context_is_untrusted");
+  });
+
+  test("an OpenCode tool of a server the policy declares keeps the organization's default", async ({
+    makeAgent,
+    makeOrganization,
+    makeUser,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const agent = await makeAgent({ organizationId });
+    const user = await makeUser();
+    const policy = `include = []
+
+[server_aliases]
+slack = ["opencode.slack"]
+
+[policy]
+version = 2
+
+[[policy.annotator]]
+name = "noop"
+
+[[policy.tool]]
+name = "*"
+annotator = "noop"
+`;
+    await GuardrailsPolicyModel.save({
+      organizationId,
+      content: policy,
+      contentHash: createHash("sha256").update(policy).digest("hex"),
+      updatedBy: user.id,
+      expectedRevision: 0,
+    });
+
+    await persistTools(
+      [
+        { toolName: "bash", toolParameters: { type: "object" } },
+        { toolName: "slack_send", toolParameters: { type: "object" } },
+      ],
+      agent.id,
+      { invocationAction: "block_when_context_is_untrusted" },
+      { externalAgentId: OPENCODE_CLIENT_ID, organizationId },
+    );
+
+    const native = await ToolModel.findByName("bash");
+    const detected = await ToolModel.findByName("slack_send");
+    if (!native || !detected)
+      throw new Error("expected OpenCode tools to be persisted");
+    const [nativePolicy] = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, native.id));
+    const [detectedPolicy] = await db
+      .select()
+      .from(schema.toolInvocationPoliciesTable)
+      .where(eq(schema.toolInvocationPoliciesTable.toolId, detected.id));
+    expect(nativePolicy.action).toBe("allow_when_context_is_untrusted");
+    expect(detectedPolicy.action).toBe("block_when_context_is_untrusted");
   });
 
   test("handles empty tools array without errors", async ({ makeAgent }) => {

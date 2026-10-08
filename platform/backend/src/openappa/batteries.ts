@@ -89,6 +89,8 @@ class OpenAppaBatteriesService {
   private readonly recomposing = new Map<string, Slot<Recomposition>>();
   /** Concurrent dispatches of one organization share a single policy read. */
   private readonly reading = new Map<string, Promise<EffectivePolicy>>();
+  /** Concurrent first requests for a detected server share a single read of the sightings. */
+  private readonly sighting = new Map<string, Promise<ReadonlySet<string>>>();
 
   /** Every battery this organization can include, bundled and uploaded, with its rows. */
   async listBatteries(organizationId: string): Promise<BatterySummary[]> {
@@ -308,13 +310,7 @@ class OpenAppaBatteriesService {
       // Only a server the organization has a sighting of derives a row: a
       // request whose sighting could not be recorded names nothing a
       // composition could change, so none waits on one.
-      const observed = new Set(
-        (
-          await listDetectedMcpServers(organizationId, {
-            openCodeLabels: openCodeLabelsOf(targets),
-          })
-        ).map((server) => server.id),
-      );
+      const observed = await this.sightedServers(organizationId, targets);
       if (!missing.some((target) => observed.has(target))) return;
       await this.recompile(organizationId);
     } catch (error) {
@@ -323,6 +319,27 @@ class OpenAppaBatteriesService {
         "OpenAPPA recompose for a declared detected server failed; the next request tries again",
       );
     }
+  }
+
+  /**
+   * The detected servers the organization has a sighting of, by id. A burst
+   * of first requests for one server shares a single read of the sightings.
+   */
+  private sightedServers(
+    organizationId: string,
+    targets: ReadonlySet<string>,
+  ): Promise<ReadonlySet<string>> {
+    const inFlight = this.sighting.get(organizationId);
+    if (inFlight) return inFlight;
+    const read = listDetectedMcpServers(organizationId, {
+      openCodeLabels: openCodeLabelsOf(targets),
+    })
+      .then((servers) => new Set(servers.map((server) => server.id)))
+      .finally(() => {
+        this.sighting.delete(organizationId);
+      });
+    this.sighting.set(organizationId, read);
+    return read;
   }
 
   /** The policy the runtime opens for this organization, recomposed when it moved. */

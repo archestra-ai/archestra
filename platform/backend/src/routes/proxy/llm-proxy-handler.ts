@@ -1430,7 +1430,11 @@ export async function handleLLMProxy<
                 resultAction: organization.defaultDiscoveredToolResultPolicy,
               }
             : undefined,
-          { userId, externalAgentId },
+          {
+            userId,
+            externalAgentId,
+            organizationId: resolvedAgent.organizationId,
+          },
         );
         // A server the policy names may be composed with for the first time
         // on this request: its first call must find the battery, so the

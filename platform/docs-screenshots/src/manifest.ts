@@ -150,13 +150,19 @@ export const SHOTS: Shot[] = [
     viewport: { width: 1440, height: 1000 },
     prepare: async (page) => {
       await page.getByText("Create standard virtual key").click();
-      await page.getByLabel("Name").fill("Support bot");
-      // Map the first two provider keys: the seeded ones in CI, local keys elsewhere.
-      for (let i = 0; i < 2; i++) {
-        await page.getByTestId("virtual-key-parent-key-select").click();
-        await page.getByRole("option").first().click();
-      }
-      await page.getByRole("button", { name: "Create" }).click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Name").fill("Support bot");
+      // Map the first key of the first two providers: the seeded ones in CI,
+      // local keys elsewhere. Picking a provider shows its keys.
+      await dialog.getByRole("radio").first().click();
+      await dialog
+        .getByTestId("provider-key-picker-available-provider")
+        .first()
+        .click();
+      await dialog.getByRole("radio").first().click();
+      await dialog.getByRole("button", { name: "Continue" }).click();
+      await dialog.getByRole("button", { name: "Continue" }).click();
+      await dialog.getByRole("button", { name: "Create key" }).click();
       await page.getByText("Copy your key").waitFor();
     },
     target: (page) => page.getByRole("dialog"),

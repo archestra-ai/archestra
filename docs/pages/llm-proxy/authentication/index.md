@@ -3,7 +3,7 @@ title: LLM Proxy Authentication
 sidebarTitle: Authentication
 description: How apps, agents, and people sign in to the LLM Proxy, and whose provider key each call uses
 order: 1
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -25,9 +25,10 @@ First, add your provider keys on [Model Providers](/docs/llm-proxy/providers). T
 Give each app its own key. To cut off one app, delete its key. Other apps keep working.
 
 1. Go to **LLM Proxy** and click **Create standard virtual key**.
-2. Name it, and map the provider keys it may use. Set **Expires** if the app is temporary.
-3. Copy the key. It shows only once. The dialog then shows a request with your key filled in.
-4. Use the key wherever the app expects a provider API key:
+2. Name it, and pick a provider key for each provider it may use.
+3. On **Budget**, pick who pays for it, and set **Expires** if the app is temporary. Click **Continue**, then **Create key**.
+4. Copy the key. It shows only once. The dialog then shows a request with your key filled in.
+5. Use the key wherever the app expects a provider API key:
 
    ```bash
    curl "https://<archestra-host>/v1/openai/chat/completions" \
@@ -43,6 +44,7 @@ The request shows under **Logs → LLM Proxy**, with the key's name.
 - The key needs a mapping for the route's provider. An OpenAI route needs an OpenAI key. On the [Model Router](/docs/llm-proxy/model-router), the model's prefix picks the mapping.
 - Self-hosted providers can map several endpoints. Archestra sends each request to the endpoint that serves the model.
 - **To share a key** with a team, open its **Permissions** tab.
+- To bill a team, pick it under **Who pays for this key?**. The key's spend then counts toward that team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget), not the owner's. A spend cap there limits the key itself.
 
 <span id="creating-passthrough-virtual-keys"></span><span id="configuring-claude-code-and-claude-desktop"></span>
 
@@ -73,7 +75,7 @@ Use your own subscription or key, and still show up in costs and logs. Claude Co
 
 Use OAuth when your app should get short-lived tokens, not a key that never expires.
 
-Go to **Settings → OAuth Clients → Create OAuth Client**, and pick **LLM Proxy** under **What will this client access?**. Then pick a grant type:
+Go to **Settings → OAuth Clients → Create OAuth Client**, and pick **LLM Proxy** under **What will it reach?**. Then pick how it signs in:
 
 <span id="getting-an-access-token"></span>
 
@@ -81,9 +83,10 @@ Go to **Settings → OAuth Clients → Create OAuth Client**, and pick **LLM Pro
 
 For a bot or a nightly job with no person behind it.
 
-1. Pick **Application** as the **Grant type**, and map the provider keys.
-2. Save the client ID and secret. The secret shows only once.
-3. Get a token. It lasts one hour.
+1. Pick **As itself**, then a provider key for each provider.
+2. On **Budget**, pick the team that pays for it. This is optional.
+3. Save the client ID and secret. The secret shows only once.
+4. Get a token. It lasts one hour.
 
    ```bash
    curl --request POST "https://<archestra-host>/api/auth/oauth2/token" \
@@ -93,8 +96,9 @@ For a bot or a nightly job with no person behind it.
      --data-urlencode 'scope=llm:proxy'
    ```
 
-4. Send `Authorization: Bearer <access_token>` on a provider route or the Model Router.
+5. Send `Authorization: Bearer <access_token>` on a provider route or the Model Router.
 
+- The billing team's [costs](/docs/llm-proxy/costs-and-limits#track-spending) and [limits](/docs/llm-proxy/costs-and-limits#set-a-budget) count the client's spend. A spend cap on **Budget** limits the client itself.
 - Map a metered API key. A personal subscription cannot serve an app.
 - See the [complete example app](https://github.com/archestra-ai/examples/tree/main/model-router-client-credentials).
 
@@ -104,7 +108,7 @@ For a bot or a nightly job with no person behind it.
 
 For an app where people sign in. Each call uses that person's provider keys, cost limits, and policies.
 
-1. Pick **On behalf of users** as the **Grant type**, and add your app's redirect URIs.
+1. Pick **For its users**, and add your app's redirect URIs. Each person pays for their own use. A spend cap on **Budget** limits the whole client.
 2. In your app, run the authorization code flow with PKCE. Ask for `scope=llm:proxy`. Add `offline_access` to get a refresh token.
 3. Send the person's access token on a provider route or the Model Router.
 

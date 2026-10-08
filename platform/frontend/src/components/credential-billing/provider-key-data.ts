@@ -1,8 +1,12 @@
 "use client";
 
-import type { SupportedProvider } from "@archestra/shared";
+import {
+  providerHasEndpointLocalModels,
+  type SupportedProvider,
+} from "@archestra/shared";
 import { useMemo } from "react";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { useSession } from "@/lib/auth/auth.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
 
@@ -38,6 +42,35 @@ export function useKeyOwnerLabel() {
     if (key.userId && key.userId === userId) return "Yours";
     return key.userName ?? "Personal";
   };
+}
+
+/**
+ * Whether a provider takes several keys. Self-hosted providers (vLLM, Ollama,
+ * …) treat each key as another endpoint, and requests go to the one that
+ * serves the model. Every other provider takes one key.
+ */
+export function takesSeveralKeys(provider: SupportedProvider): boolean {
+  return providerHasEndpointLocalModels(provider);
+}
+
+/**
+ * Pick a key for a provider: replaces the provider's key, or, for a provider
+ * that takes several, adds the key or removes it again.
+ */
+export function pickProviderKey(
+  mappings: ProviderApiKeyMappings,
+  provider: SupportedProvider,
+  providerApiKeyId: string,
+): ProviderApiKeyMappings {
+  if (takesSeveralKeys(provider)) {
+    return mappings.some((m) => m.providerApiKeyId === providerApiKeyId)
+      ? mappings.filter((m) => m.providerApiKeyId !== providerApiKeyId)
+      : [...mappings, { provider, providerApiKeyId }];
+  }
+  return [
+    ...mappings.filter((m) => m.provider !== provider),
+    { provider, providerApiKeyId },
+  ];
 }
 
 /** Subscription keys bill $0 in Costs and skip spend caps and team limits. */

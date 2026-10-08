@@ -5,6 +5,8 @@ import { useMemo } from "react";
 import {
   isSubscriptionKey,
   keysByProvider,
+  pickProviderKey,
+  takesSeveralKeys,
   useKeyOwnerLabel,
   useModelIdsByKey,
 } from "@/components/credential-billing/provider-key-data";
@@ -12,6 +14,7 @@ import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-ke
 import { ProviderIcon } from "@/components/provider-icon";
 import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
+import { Checkbox } from "@/components/ui/checkbox";
 import { Label } from "@/components/ui/label";
 import {
   RadioGroup,
@@ -53,28 +56,27 @@ export function ProviderKeyBoxes({
     .filter((provider) => !value.some((m) => m.provider === provider))
     .sort((a, b) => catalog.label(a).localeCompare(catalog.label(b)));
 
+  const providers = [...new Set(value.map((mapping) => mapping.provider))];
   const choose = (provider: SupportedProvider, providerApiKeyId: string) =>
-    onChange(
-      value.map((mapping) =>
-        mapping.provider === provider
-          ? { ...mapping, providerApiKeyId }
-          : mapping,
-      ),
-    );
+    onChange(pickProviderKey(value, provider, providerApiKeyId));
 
   return (
     <div className="space-y-3">
-      {value.map((mapping) => {
-        const keys = grouped.get(mapping.provider) ?? [];
-        const label = catalog.label(mapping.provider);
+      {providers.map((provider) => {
+        const keys = grouped.get(provider) ?? [];
+        const label = catalog.label(provider);
+        const chosenIds = value
+          .filter((mapping) => mapping.provider === provider)
+          .map((mapping) => mapping.providerApiKeyId);
+        const several = takesSeveralKeys(provider);
         return (
           <section
-            key={mapping.provider}
+            key={provider}
             aria-label={label}
             className="rounded-lg border"
           >
             <div className="flex items-center gap-2 border-b px-3 py-2">
-              <ProviderIcon provider={mapping.provider} size={18} />
+              <ProviderIcon provider={provider} size={18} />
               <span className="flex-1 font-medium text-sm">{label}</span>
               <Button
                 type="button"
@@ -82,15 +84,15 @@ export function ProviderKeyBoxes({
                 size="sm"
                 className="h-auto px-0 text-destructive"
                 onClick={() =>
-                  onChange(value.filter((m) => m.provider !== mapping.provider))
+                  onChange(value.filter((m) => m.provider !== provider))
                 }
               >
                 Remove
               </Button>
             </div>
             <RadioGroup
-              value={mapping.providerApiKeyId}
-              onValueChange={(id) => choose(mapping.provider, id)}
+              value={several ? "" : (chosenIds[0] ?? "")}
+              onValueChange={(id) => choose(provider, id)}
               aria-label={`${label} key`}
               className="gap-2 p-3"
             >
@@ -106,7 +108,15 @@ export function ProviderKeyBoxes({
                       radioCardClass(),
                     )}
                   >
-                    <RadioGroupItem id={id} value={key.id} />
+                    {several ? (
+                      <Checkbox
+                        id={id}
+                        checked={chosenIds.includes(key.id)}
+                        onCheckedChange={() => choose(provider, key.id)}
+                      />
+                    ) : (
+                      <RadioGroupItem id={id} value={key.id} />
+                    )}
                     <span className="min-w-0">
                       <span className="block truncate font-medium">
                         {key.name}

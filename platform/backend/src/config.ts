@@ -3080,6 +3080,12 @@ const config = {
       notifyDatabaseUrl:
         process.env.ARCHESTRA_CHAT_ACTIVE_RUN_NOTIFY_DATABASE_URL?.trim() || "",
     },
+    // Generous by default: hidden-reasoning models can think for minutes
+    // before their first visible chunk.
+    modelStreamIdleTimeoutMs: parsePositiveInt(
+      process.env.ARCHESTRA_CHAT_MODEL_STREAM_IDLE_TIMEOUT_MS,
+      5 * 60_000,
+    ),
     secretScanEnabled:
       process.env.ARCHESTRA_CHAT_SECRET_SCAN_ENABLED !== "false",
     maxOutputTokensCeiling: parseChatMaxOutputTokens(

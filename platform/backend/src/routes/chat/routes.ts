@@ -9,6 +9,7 @@ import {
   type ContextWindowBreakdown,
   collapseWhitespace,
   getModelReadableMimeTypes,
+  hasPersistableAssistantContent,
   isModelSelectionComplete,
   isThinkingEffortSelfHostedProvider,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
@@ -17,6 +18,7 @@ import {
   requiresPerplexityAgentApi,
   TimeInMs,
   type TokenUsage,
+  TURN_NOTICE_PART_TYPE,
   toPlaceholderTitle,
   truncateChars,
 } from "@archestra/shared";
@@ -160,7 +162,10 @@ import {
 import { estimateMessagesSize } from "@/utils/message-size";
 import { projectCappedToolOutputs } from "@/utils/tool-result-cap";
 import { broadcastConversationUpdated } from "@/websocket";
-import { createAbortiveTurnTracker } from "./abortive-turn";
+import {
+  createAbortiveTurnTracker,
+  hasUnfinishedToolInput,
+} from "./abortive-turn";
 import { buildAnthropicProviderOptions } from "./anthropic-provider-options";
 import {
   isSafeInlineMimeType,
@@ -182,9 +187,11 @@ import {
 } from "./encrypted-chat";
 import {
   buildAbortiveTurnError,
+  buildIncompleteResponseNotice,
   formatUnavailableToolErrorDetails,
   getActiveTraceContext,
   getUnavailableToolErrorDetails,
+  ModelStreamStalledError,
   mapProviderError,
   ProviderError,
   sanitizeChatErrorForFrontend,
@@ -220,6 +227,7 @@ import {
   detectSandboxCommand,
   runSandboxCommandTurn,
 } from "./sandbox-command-turn";
+import { withStreamIdleTimeout } from "./stream-idle-timeout";
 import { createToolCallRepair } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 import { sendGatedUiMessageStreamResponse } from "./ui-stream-response";
@@ -388,7 +396,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         `${CacheKey.ChatActiveStream}-${conversationId}` as const;
       let removeAbortListeners = () => {};
 
-      // Flag to prevent duplicate message persistence if both onError and onFinish fire
+      // Prevents duplicate persistence when a pre-merge error path and the
+      // model stream's onFinish both fire.
       let messagesPersisted = false;
       const claimMessagesPersisted = (): boolean => {
         if (messagesPersisted || !conversationId) {
@@ -397,6 +406,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         messagesPersisted = true;
         return true;
       };
+      // Once the model stream is merged, its onFinish is the sole persistence
+      // point: it fires on every close (including after errors and aborts)
+      // with the assistant message streamed so far.
+      let modelStreamMerged = false;
 
       // Handle broken pipe gracefully when the client navigates away
       // The stream continues running but writing to a closed response should not crash
@@ -1111,7 +1124,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // Persist messages on stream-level errors (e.g. errors thrown
                 // in execute before writer.merge() is reached). Without this,
                 // user messages are lost on refresh after an error.
-                const shouldPersist = claimMessagesPersisted();
+                const shouldPersist =
+                  !modelStreamMerged && claimMessagesPersisted();
                 (async () => {
                   if (shouldPersist) {
                     try {
@@ -1348,9 +1362,26 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // "retrying may help".
                 let lastFinishReason: string | null = null;
 
+                // Errors thrown by a tool's execute reach toUIMessageStream's
+                // onError like stream errors do; tracking them here lets that
+                // handler render them as tool-level errors instead of failing
+                // the run.
+                const toolExecutionErrors = new Set<unknown>();
+                // Computed in the model stream's onFinish, emitted by the
+                // abortive-turn tracker's flush (which runs after it).
+                let turnNoticeChunk: UIMessageChunk | null = null;
+
                 const streamTextConfig: ChatStreamTextConfig = {
-                  model,
+                  model: withStreamIdleTimeout(
+                    model,
+                    config.chat.modelStreamIdleTimeoutMs,
+                  ),
                   messages: modelMessages,
+                  experimental_onToolCallFinish: (event) => {
+                    if (!event.success) {
+                      toolExecutionErrors.add(event.error);
+                    }
+                  },
                   ...(usesStepPromptCache({
                     provider,
                     anthropicNativeEndpoint,
@@ -1830,6 +1861,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       return serializedToolError;
                     }
 
+                    // A tool's execute threw: the SDK already recorded it as a
+                    // tool-error result the model can react to, so render it on
+                    // the tool card and keep the run alive. A ProviderError (a
+                    // subagent's model failed) is rethrown on purpose to fail
+                    // the parent run, so it stays fatal.
+                    if (
+                      toolExecutionErrors.has(error) &&
+                      !(error instanceof ProviderError)
+                    ) {
+                      return incomingErrorMessage;
+                    }
+
                     // Use pre-built error from subagent if available (preserves correct provider),
                     // otherwise map the error with the current provider
                     const serializedChatError = buildStreamErrorPayload({
@@ -1846,58 +1889,73 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     });
                     returnedChatErrorPayloads.add(serializedChatError);
 
-                    activeRunError =
-                      error instanceof Error ? error.message : String(error);
-                    // Claim persistence before the async work below starts,
-                    // otherwise onFinish can race and also persist (duplicates).
-                    const shouldPersist = claimMessagesPersisted();
-
-                    (async () => {
-                      logger.error(
-                        {
-                          // EncryptedChat: errors routinely echo prompt/tool
-                          // content — keep the app log content-free.
-                          error: conversation.encryptedChat
-                            ? "[redacted: encrypted chat]"
-                            : error,
-                          conversationId,
-                          agentId,
-                          ...getCorrelationLogFields(getActiveTraceContext()),
-                        },
-                        "Chat stream error occurred",
-                      );
-
-                      // Persist messages despite error so they have a valid ID for editing
-                      if (shouldPersist) {
-                        try {
-                          await persistNewMessages(
-                            conversationId,
-                            messages,
-                            "onError",
-                            encryptedChatKey,
-                          );
-                        } catch (persistError) {
-                          // Log persistence error but don't prevent the error response
-                          logger.error(
-                            { persistError, conversationId },
-                            "Failed to persist messages during error handling",
-                          );
-                        }
-                      }
-                    })().catch((err) => {
-                      // Log any errors from the async IIFE but don't crash
-                      logger.error(
-                        { err },
-                        "Unexpected error in onError async handler",
-                      );
-                    });
+                    // Persistence is left to onFinish, which still fires after
+                    // this error with whatever the assistant streamed so far.
+                    activeRunError = incomingErrorMessage;
+                    // The SDK keeps running a tool call completed before the
+                    // stall and would start the next step afterwards; end the
+                    // run so the client's error is the turn's last word.
+                    if (error instanceof ModelStreamStalledError) {
+                      chatAbortController.abort();
+                    }
+                    logger.error(
+                      {
+                        // EncryptedChat: errors routinely echo prompt/tool
+                        // content — keep the app log content-free.
+                        error: conversation.encryptedChat
+                          ? "[redacted: encrypted chat]"
+                          : error,
+                        conversationId,
+                        agentId,
+                        ...getCorrelationLogFields(getActiveTraceContext()),
+                      },
+                      "Chat stream error occurred",
+                    );
 
                     return serializedChatError;
                   },
-                  onFinish: async ({ messages: finalMessages }) => {
+                  onFinish: async ({
+                    messages: finalMessages,
+                    finishReason,
+                    isAborted,
+                  }) => {
                     removeAbortListeners();
                     stopActiveRunPolling();
                     unsubscribeDualLlmProgress();
+
+                    const lastMessage = finalMessages.at(-1);
+                    const reply =
+                      lastMessage?.role === "assistant" &&
+                      hasPersistableAssistantContent(lastMessage)
+                        ? lastMessage
+                        : null;
+
+                    // A reply the model ended early (output limit, provider
+                    // "other"/"error") gets a non-fatal notice, persisted with
+                    // it so it survives reload. Unfinished tool input is the
+                    // abortive-turn tracker's error instead.
+                    const turnNotice =
+                      reply &&
+                      !activeRunError &&
+                      !isAborted &&
+                      !chatAbortController.signal.aborted &&
+                      !hasUnfinishedToolInput(reply)
+                        ? buildIncompleteResponseNotice(finishReason)
+                        : null;
+                    const turnNoticePart = turnNotice
+                      ? { type: TURN_NOTICE_PART_TYPE, data: turnNotice }
+                      : null;
+                    turnNoticeChunk = turnNoticePart;
+                    const turnMessages = turnNoticePart
+                      ? finalMessages.map((message) =>
+                          message === reply
+                            ? {
+                                ...message,
+                                parts: [...message.parts, turnNoticePart],
+                              }
+                            : message,
+                        )
+                      : finalMessages;
 
                     // Splice the turn's collected hook runs into the assistant
                     // message(s) as inline `data-hook-run` parts before persisting,
@@ -1906,7 +1964,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       applyMcpTasksToMessages(
                         applySubagentToolCallsToMessages(
                           applyHookRunsToMessages(
-                            finalMessages as unknown as ChatMessage[],
+                            turnMessages as unknown as ChatMessage[],
                             hookRunCollector,
                           ),
                           subagentToolStream.collected(),
@@ -1916,10 +1974,18 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                       dualLlmAnalysisStream.collected(),
                     );
 
-                    // Only persist if not already persisted by onError
                     if (!messagesPersisted && conversationId) {
                       try {
-                        if (trigger === "regenerate-message") {
+                        if (activeRunError && !reply) {
+                          // Failed before streaming anything: persist only the
+                          // request so its messages get DB ids for editing.
+                          await persistNewMessages(
+                            conversationId,
+                            messages,
+                            "onError",
+                            encryptedChatKey,
+                          );
+                        } else if (trigger === "regenerate-message") {
                           // Replace the regenerated turn atomically: delete the
                           // stale messages below the anchor and write the new
                           // turn in one transaction (no destructive pre-delete).
@@ -1985,6 +2051,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 // content. Emitting from the tracker's flush keeps it in stream
                 // order and avoids an execute-side await on a not-yet-drained
                 // stream.
+                modelStreamMerged = true;
                 writer.merge(
                   modelUiStream
                     .pipeThrough(
@@ -2046,6 +2113,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             }),
                           };
                         },
+                        onResolvedTurnEnd: () => turnNoticeChunk,
                       }),
                     ),
                 );

@@ -682,6 +682,11 @@ At startup, Archestra creates an organization-wide key from each `ARCHESTRA_CHAT
   - Values: `1` to `1000000`
   - On low Groq tiers, a larger request fails with HTTP 413 before generating anything. Raise it on higher tiers.
 
+- **`ARCHESTRA_CHAT_MODEL_STREAM_IDLE_TIMEOUT_MS`** - How long a chat model response may go without sending data before Archestra ends the turn, in milliseconds.
+  - Default: `300000` (5 minutes)
+  - Keep-alive messages from the provider or a proxy do not count as data. Time spent running tools does not count either.
+  - The user sees an error with a retry option. Raise it for models that think for a long time before they answer.
+
 - **`ARCHESTRA_CHAT_ATTACHMENT_STORAGE_BYTES_LIMIT`** - Largest file a user can attach to a chat message, in bytes.
   - Default: `52428800` (50 MiB)
   - Archestra stores a file the model cannot read in the conversation's Files panel and tells the agent it is there.

@@ -33,6 +33,7 @@ const {
   deleteAgent,
   exportAgent,
   getAgentCredentialReadiness,
+  getAgentDefaultSuggestedPrompts,
   getAgents,
   getAllAgents,
   getDefaultMcpGateway,
@@ -622,6 +623,28 @@ export function useDefaultAgentId() {
       throwOnApiError(error, { toastOnError: false });
       return data?.defaultAgentId ?? null;
     },
+  });
+}
+
+/**
+ * Suggested prompts the platform offers for an agent with none of its own
+ * (today: the docs servers' prompts on the caller's personal assistant). The
+ * backend decides which apply. They are never stored on the agent.
+ */
+export function useAgentDefaultSuggestedPrompts(
+  agentId: string | null | undefined,
+  params: { enabled: boolean },
+) {
+  return useQuery({
+    queryKey: ["agents", agentId, "default-suggested-prompts"],
+    queryFn: async () => {
+      const { data, error } = await getAgentDefaultSuggestedPrompts({
+        path: { id: agentId as string },
+      });
+      throwOnApiError(error, { toastOnError: false });
+      return data ?? [];
+    },
+    enabled: params.enabled && Boolean(agentId),
   });
 }
 

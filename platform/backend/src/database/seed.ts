@@ -73,6 +73,7 @@ import {
   ensureEncryptionKeyAvailable,
   isEncryptedSecret,
 } from "@/utils/crypto";
+import { seedDocsMcpServers } from "./seed-docs-mcp-servers";
 
 /**
  * Seeds admin user
@@ -1265,6 +1266,9 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Ensure all existing members have a personal MCP gateway
   await ensureExistingUsersHavePersonalMcpGateways();
   await seedDefaultAppsForPristineOrgs();
+  // Runs after the personal chat agents exist: it adds suggested prompts to
+  // the admin's assistant.
+  await seedDocsMcpServers();
   // Clean up orphaned MCP HTTP sessions (older than 24h)
   await McpHttpSessionModel.deleteExpired();
 }

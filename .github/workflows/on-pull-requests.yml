@@ -1017,7 +1017,12 @@ jobs:
             # port and racing another process to bind it after the probe closes.
             port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT * 97) % 7000) * shard_count + shard))
             echo "Starting frontend integration shard ${shard}/${shard_count} on port ${port}"
-            ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
+            # Playwright writes its config transform cache with plain,
+            # non-atomic writes. Shards that start together and share one cache
+            # can load a half-written file and die with "SyntaxError: Unexpected
+            # end of input" before running a test, so each shard gets its own.
+            PWTEST_CACHE_DIR="${RUNNER_TEMP}/playwright-transform-cache-${shard}" \
+              ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
               ARCHESTRA_FRONTEND_INT_TESTS_SHARD="$shard" \
               pnpm --filter @frontend exec playwright test --shard="${shard}/${shard_count}" &
             pids+=("$!")

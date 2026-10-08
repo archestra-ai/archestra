@@ -37,6 +37,10 @@ import {
   AddResourceAccessDialog,
   ResourceAccessPicker,
 } from "@/components/add-resource-access-dialog";
+import {
+  PermissionLevelLabel,
+  PermissionLevelSelect,
+} from "@/components/permission-level-select";
 import { PermissionsSettingsSection } from "@/components/permissions-settings-section";
 import { QueryLoadError } from "@/components/query-load-error";
 import { getPermissionSafetyPreview } from "@/components/resource-permission-safety-preview";
@@ -49,13 +53,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { Skeleton } from "@/components/ui/skeleton";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { WizardFooter } from "@/components/wizard-footer";
@@ -370,6 +367,16 @@ function PermissionsEditor({
     return () => setDialogCanManage?.(false);
   }, [canManage, setDialogCanManage]);
   const presets = resourcePermissionPresetsFor(policy.resource);
+  // A level is offered only when the viewer holds every action in it.
+  const canGrant = (actions: readonly ResourcePermissionAction[]) =>
+    actions.every((action) => policy.effectiveActions.includes(action));
+  const levelOptions = Object.entries(presets).map(([value, preset]) => ({
+    value,
+    label: preset.label,
+    description: presetDescription(value, policy.resource),
+    actions: preset.actions,
+    disabled: !canGrant(preset.actions),
+  }));
   const mutation = useUpdateResourcePermissions(policy.resource, policy.scope);
   const changedElsewhere = dirty && policy.revision !== form.watch("revision");
   const safety = getPermissionSafetyPreview({
@@ -504,7 +511,7 @@ function PermissionsEditor({
       {layout !== "settings" && (fields.length > 0 || indirect.length > 0) && (
         <div className="hidden items-center gap-3 pb-2 text-xs font-medium text-muted-foreground sm:flex">
           <span className="flex-1">Recipient</span>
-          <span className="w-48 border border-transparent px-3">
+          <span className="w-56 border border-transparent px-3">
             Permission
           </span>
           <span className="size-8" />
@@ -527,7 +534,7 @@ function PermissionsEditor({
               {subjectLabels[grant.subject.type]}
             </p>
           </div>
-          <Select
+          <PermissionLevelSelect
             disabled={!canManage || mutation.isPending}
             value={presetFor(grant.actions, policy.resource)}
             onValueChange={(preset) => {
@@ -537,39 +544,24 @@ function PermissionsEditor({
               if (choice)
                 update(index, { ...grant, actions: [...choice.actions] });
             }}
-          >
-            <SelectTrigger
-              size="sm"
-              className="h-11 min-h-11 w-full min-w-0 text-left shadow-none hover:bg-muted sm:h-8 sm:min-h-8 sm:w-48 sm:shrink-0 sm:border-transparent dark:bg-transparent dark:hover:bg-muted"
-              aria-label={`Permission for ${grant.name}`}
-              title={actionDetail(grant.actions, policy.resource)}
-            >
-              <SelectValue>
-                {actionSummary(grant.actions, policy.resource)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {Object.entries(presets).map(([key, preset]) => (
-                <SelectItem
-                  key={key}
-                  value={key}
-                  disabled={preset.actions.some(
-                    (action) => !policy.effectiveActions.includes(action),
-                  )}
-                >
-                  <span className="block font-medium">{preset.label}</span>
-                  <span className="block text-xs text-muted-foreground">
-                    {presetDescription(key, policy.resource)}
-                  </span>
-                </SelectItem>
-              ))}
-              {presetFor(grant.actions, policy.resource) === "custom" && (
-                <SelectItem value="custom" disabled>
-                  {actionSummary(grant.actions, policy.resource)}
-                </SelectItem>
-              )}
-            </SelectContent>
-          </Select>
+            options={levelOptions}
+            ariaLabel={`Permission for ${grant.name}`}
+            title={actionDetail(grant.actions, policy.resource)}
+            valueLabel={
+              presetFor(grant.actions, policy.resource) === "custom"
+                ? actionSummary(grant.actions, policy.resource)
+                : undefined
+            }
+            extraOption={
+              presetFor(grant.actions, policy.resource) === "custom"
+                ? {
+                    value: "custom",
+                    label: actionSummary(grant.actions, policy.resource),
+                  }
+                : undefined
+            }
+            className="h-11 min-h-11 w-full min-w-0 shadow-none hover:bg-muted sm:h-8 sm:min-h-8 sm:w-56 sm:border-transparent dark:bg-transparent dark:hover:bg-muted"
+          />
           <Button
             type="button"
             size="icon"
@@ -631,12 +623,12 @@ function PermissionsEditor({
               </PopoverContent>
             </Popover>
           </div>
-          <p
-            className="min-w-0 text-sm sm:w-48 sm:shrink-0 sm:truncate sm:border sm:border-transparent sm:px-3"
+          <PermissionLevelLabel
+            label={actionSummary(grant.actions, policy.resource)}
+            actions={grant.actions}
             title={actionDetail(grant.actions, policy.resource)}
-          >
-            {actionSummary(grant.actions, policy.resource)}
-          </p>
+            className="w-auto min-w-0 px-0 sm:w-56 sm:px-3"
+          />
           <span className="hidden size-8 shrink-0 sm:block" />
         </div>
       ))}
@@ -880,9 +872,7 @@ function PermissionsEditor({
             label: preset.label,
             description: presetDescription(value, policy.resource),
             actions: [...preset.actions],
-            disabled: preset.actions.some(
-              (action) => !policy.effectiveActions.includes(action),
-            ),
+            disabled: !canGrant(preset.actions),
           }))}
           onAdd={(grants) => {
             // In a permissions dialog, the picker's "Add access" commits, so

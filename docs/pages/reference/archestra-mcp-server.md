@@ -1762,10 +1762,11 @@ Required RBAC permission: [`credential:create`](/docs/reference/permissions#cred
 
 | Tool | Description | Required RBAC Permission |
 |------|-------------|--------------------------|
-| `create_agent` | Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. | [`agent:create`](/docs/reference/permissions#agent:create) |
+| `create_agent` | Create a new agent with the specified name, optional description, labels, prompts, icon emoji, model, explicit tool assignments, and sub-agent delegations. | [`agent:create`](/docs/reference/permissions#agent:create) |
 | `get_agent` | Get a specific agent by ID or name. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `list_agents` | List agents with optional filtering by name, provider key, or how the caller reaches them (access). | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `edit_agent` | Edit an existing agent. | `update` on the agent (granted per item) |
+| `list_llm_models` | List the provider API keys the caller can use and the models linked to each. | [`llmModel:read`](/docs/reference/permissions#llmModel:read) |
 | `list_hooks` | List an agent's lifecycle hooks. | [`agent:read`](/docs/reference/permissions#agent:read) |
 | `create_hook` | Create a lifecycle hook on an agent. | `update` on the agent (granted per item) |
 | `update_hook` | Update an existing lifecycle hook: its event, file name, script content, Python requirements, or enabled state. | `update` on the agent (granted per item) |
@@ -1805,6 +1806,25 @@ Required RBAC permission: [`agent:create`](/docs/reference/permissions#agent:cre
 | `toolAssignments[].resolveAtCallTime` | `boolean` | No | When true, resolve credentials and execution target at tool call time. Prefer this for builder flows. |
 | `toolAssignments[].credentialResolutionMode` | `"static" \| "dynamic" \| "enterprise_managed"` | No |  |
 | `toolAssignments[].mcpServerId` | `string \| null` | No | Optional MCP server installation to pin the tool to when using static credential resolution. |
+| `runtime` | `object` | No | Run this agent in its own container (Agent Runtime) instead of the built-in chat harness. Pass { template } for a maintained CLI, or { image } for a custom image. Other fields override the defaults: claudeCode.authentication is 'subscription' (each user signs in with their own Claude account, the default) or 'provider' (bill through llmApiKeyId/modelId); credentials declares environment variables a run needs (users supply values later, or use transfer_credential); ttlHours, idleTimeoutMinutes, and maxCostUsd bound each run; privileged requires an agent administrator. |
+| `runtime.backend` | `"kubernetes"` | No |  |
+| `runtime.steerMode` | `"pipe" \| "tmux_keys"` | No |  |
+| `runtime.privileged` | `boolean` | No |  |
+| `runtime.resources` | `object \| null` | No |  |
+| `runtime.ports` | `integer[]` | No |  |
+| `runtime.environment` | `object[] \| null` | No |  |
+| `runtime.credentials` | `object[] \| null` | No |  |
+| `runtime.allowAgentSuppliedCredentialValues` | `boolean` | No |  |
+| `runtime.claudeCode` | `object` | No |  |
+| `runtime.ttlHours` | `integer \| null` | No |  |
+| `runtime.maxCostUsd` | `integer \| null` | No |  |
+| `runtime.idleTimeoutMinutes` | `integer \| null` | No |  |
+| `runtime.template` | `"claude-code" \| "codex" \| "opencode" \| "hermes" \| "openclaw"` | No | Maintained CLI to run: 'claude-code' (Claude Code), 'codex' (Codex), 'opencode' (OpenCode), 'hermes' (Hermes), 'openclaw' (OpenClaw). The image, launch command, and model protocol come from the template. |
+| `runtime.image` | `string` | No |  |
+| `runtime.command` | `string[] \| null` | No |  |
+| `runtime.inferenceProtocol` | `"openai_responses" \| "openai_chat" \| "anthropic"` | No |  |
+| `llmApiKeyId` | `string` | No | Provider API key the agent uses. Set together with modelId. Use list_llm_models to find both. |
+| `modelId` | `string` | No | Model the agent uses: the model's id from list_llm_models, not its provider name. Set together with llmApiKeyId. |
 
 
 #### get_agent
@@ -1848,6 +1868,30 @@ Required RBAC permission: [`agent:read`](/docs/reference/permissions#agent:read)
 | `suggestedPrompts` | `object[]` | Yes | Configured suggested prompts. |
 | `suggestedPrompts[].summaryTitle` | `string` | Yes | The short title shown in the chat UI. |
 | `suggestedPrompts[].prompt` | `string` | Yes | The suggested prompt text. |
+| `runtime` | `object \| null` | No | The Agent Runtime container this agent runs in, or null for the built-in chat harness. |
+| `runtime.image` | `string` | Yes |  |
+| `runtime.command` | `string[] \| null` | Yes |  |
+| `runtime.inferenceProtocol` | `"openai_responses" \| "openai_chat" \| "anthropic"` | Yes |  |
+| `runtime.backend` | `"kubernetes"` | Yes |  |
+| `runtime.steerMode` | `"pipe" \| "tmux_keys"` | Yes |  |
+| `runtime.privileged` | `boolean` | Yes |  |
+| `runtime.resources` | `object \| null` | Yes |  |
+| `runtime.resources.cpuRequest` | `string` | No |  |
+| `runtime.resources.memoryRequest` | `string` | No |  |
+| `runtime.resources.cpuLimit` | `string` | No |  |
+| `runtime.resources.memoryLimit` | `string` | No |  |
+| `runtime.ports` | `integer[]` | No |  |
+| `runtime.environment` | `object[] \| null` | Yes |  |
+| `runtime.credentials` | `object[] \| null` | Yes |  |
+| `runtime.allowAgentSuppliedCredentialValues` | `boolean` | No |  |
+| `runtime.claudeCode` | `object` | No |  |
+| `runtime.claudeCode.authentication` | `"provider" \| "subscription"` | Yes |  |
+| `runtime.claudeCode.model` | `string` | No |  |
+| `runtime.ttlHours` | `integer \| null` | Yes |  |
+| `runtime.maxCostUsd` | `integer \| null` | No |  |
+| `runtime.idleTimeoutMinutes` | `integer \| null` | Yes |  |
+| `llmApiKeyId` | `string \| null` | No | The pinned provider API key ID, or null for the default. |
+| `modelId` | `string \| null` | No | The pinned model ID, or null for the default. |
 | `skillsEnabled` | `boolean` | No | Present for an internal agent when the current user has skill:read; whether load_skill is executable for it. |
 | `skillsNotice` | `string` | No | Trust boundary for the catalog-supplied skill names and descriptions in skills. |
 | `skills` | `object[]` | No | Present for an internal agent when the current user has skill:read; caller-relative skills it can activate. |
@@ -1934,7 +1978,34 @@ Required RBAC permission: `update` on the agent (granted per item)
 | `suggestedPrompts[].summaryTitle` | `string` | Yes | Short title shown to users for this suggested prompt. |
 | `suggestedPrompts[].prompt` | `string` | Yes | Suggested prompt text users can click to start a conversation. |
 | `systemPrompt` | `string \| null` | No | New system prompt for the agent. |
+| `runtime` | `object \| null` | No | Run this agent in its own container (Agent Runtime) instead of the built-in chat harness. Pass { template } for a maintained CLI, or { image } for a custom image. Other fields override the defaults: claudeCode.authentication is 'subscription' (each user signs in with their own Claude account, the default) or 'provider' (bill through llmApiKeyId/modelId); credentials declares environment variables a run needs (users supply values later, or use transfer_credential); ttlHours, idleTimeoutMinutes, and maxCostUsd bound each run; privileged requires an agent administrator. Replaces the whole runtime: pass every field to keep. Pass null to return the agent to the built-in chat harness. |
+| `llmApiKeyId` | `string \| null` | No | Provider API key the agent uses. Set together with modelId. Use list_llm_models to find both. Pass null for both to use the default model. |
+| `modelId` | `string \| null` | No | Model the agent uses: the model's id from list_llm_models, not its provider name. Set together with llmApiKeyId. Pass null for both to use the default model. |
 
+
+#### list_llm_models
+
+Required RBAC permission: [`llmModel:read`](/docs/reference/permissions#llmModel:read)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `provider` | `"openai" \| "gemini" \| "anthropic" \| "bedrock" \| "cohere" \| "cerebras" \| "mistral" \| "perplexity" \| "groq" \| "xai" \| "openrouter" \| "vllm" \| "ollama" \| "ollama-native" \| "zhipuai" \| "deepseek" \| "minimax" \| "kimi" \| "azure" \| "github-copilot" \| "microsoft-365-copilot" \| "archestra" \| "voyage" \| "jev"` | No | Only list keys for this provider. |
+| `query` | `string` | No | Only list models whose name contains this text. |
+
+##### Output
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `apiKeys` | `object[]` | Yes |  |
+| `apiKeys[].id` | `string` | Yes | Pass as llmApiKeyId. |
+| `apiKeys[].name` | `string` | Yes | The key's display name. |
+| `apiKeys[].provider` | `string` | Yes | The key's LLM provider. |
+| `apiKeys[].models` | `object[]` | Yes |  |
+| `apiKeys[].models[].id` | `string` | Yes | Pass as modelId. |
+| `apiKeys[].models[].name` | `string` | Yes | The provider's model name. |
+| `apiKeys[].omittedModelCount` | `number` | Yes | Linked models left out after the first 100. Narrow with query to see them. |
 
 #### list_hooks
 

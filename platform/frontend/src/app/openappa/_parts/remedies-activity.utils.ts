@@ -1,11 +1,11 @@
-import type { ConsultActivityDay } from "@/lib/openappa-remedies.query";
+import type { ActivityDay } from "@/lib/openappa-remedies.query";
 
-/** One bar of a panel's week: the day's answers, labelled by weekday. */
-export type ActivityBar = ConsultActivityDay & { label: string };
+/** One bar of the week: the day's denied calls by how they ended, labelled by weekday. */
+export type ActivityBar = ActivityDay & { label: string };
 
 /** Weekday names in the viewer's locale, oldest day first. */
 export function activityBars(
-  days: ConsultActivityDay[],
+  days: ActivityDay[],
   locale?: string,
 ): ActivityBar[] {
   const weekday = new Intl.DateTimeFormat(locale, {
@@ -20,31 +20,26 @@ export function activityBars(
   }));
 }
 
-export function activityTotals(days: ConsultActivityDay[]): {
+export type ActivityTotals = {
+  blocked: number;
   approved: number;
-  denied: number;
   cleaned: number;
-} {
+};
+
+export function activityTotals(days: ActivityDay[]): ActivityTotals {
   return days.reduce(
     (totals, day) => ({
+      blocked: totals.blocked + day.blocked,
       approved: totals.approved + day.approved,
-      denied: totals.denied + day.denied,
       cleaned: totals.cleaned + day.cleaned,
     }),
-    { approved: 0, denied: 0, cleaned: 0 },
+    { blocked: 0, approved: 0, cleaned: 0 },
   );
 }
 
-/** The headline beside the Authorities week: what people and services ruled. */
-export function reviewsHeadline(totals: {
-  approved: number;
-  denied: number;
-}): string {
-  if (totals.approved + totals.denied === 0) return "none yet";
-  return `${totals.approved.toLocaleString()} approved · ${totals.denied.toLocaleString()} denied`;
-}
-
-/** The headline beside the Sanitizers week. */
-export function cleaningsHeadline(totals: { cleaned: number }): string {
-  return totals.cleaned === 0 ? "none yet" : totals.cleaned.toLocaleString();
+/** The headline beside the week, in the words its legend uses. */
+export function activityHeadline(totals: ActivityTotals): string {
+  const denied = totals.blocked + totals.approved + totals.cleaned;
+  if (denied === 0) return "nothing blocked";
+  return `${denied.toLocaleString()} denied · ${totals.approved.toLocaleString()} approved · ${totals.cleaned.toLocaleString()} cleaned · ${totals.blocked.toLocaleString()} blocked`;
 }

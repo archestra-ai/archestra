@@ -1,15 +1,14 @@
 import { describe, expect, test } from "vitest";
 import {
   activityBars,
+  activityHeadline,
   activityTotals,
-  cleaningsHeadline,
-  reviewsHeadline,
 } from "./remedies-activity.utils";
 
 const days = [
-  { date: "2026-10-02", approved: 3, denied: 1, cleaned: 2 },
-  { date: "2026-10-03", approved: 0, denied: 0, cleaned: 0 },
-  { date: "2026-10-04", approved: 5, denied: 0, cleaned: 6 },
+  { date: "2026-10-02", blocked: 1, approved: 3, cleaned: 2 },
+  { date: "2026-10-03", blocked: 0, approved: 0, cleaned: 0 },
+  { date: "2026-10-04", blocked: 2, approved: 5, cleaned: 6 },
 ];
 
 describe("activityBars", () => {
@@ -21,24 +20,23 @@ describe("activityBars", () => {
     ]);
     expect(activityBars(days, "en-US")[0]).toMatchObject({
       date: "2026-10-02",
+      blocked: 1,
       approved: 3,
-      denied: 1,
       cleaned: 2,
     });
   });
 });
 
-describe("activityTotals and headlines", () => {
-  test("sums the week and words the headlines", () => {
+describe("activityTotals and activityHeadline", () => {
+  test("sums the week and words the headline", () => {
     const totals = activityTotals(days);
-    expect(totals).toEqual({ approved: 8, denied: 1, cleaned: 8 });
-    expect(reviewsHeadline(totals)).toBe("8 approved · 1 denied");
-    expect(cleaningsHeadline(totals)).toBe("8");
+    expect(totals).toEqual({ blocked: 3, approved: 8, cleaned: 8 });
+    expect(activityHeadline(totals)).toBe(
+      "19 denied · 8 approved · 8 cleaned · 3 blocked",
+    );
   });
 
-  test("an empty week says none yet", () => {
-    const totals = activityTotals([]);
-    expect(reviewsHeadline(totals)).toBe("none yet");
-    expect(cleaningsHeadline(totals)).toBe("none yet");
+  test("an empty week says nothing blocked", () => {
+    expect(activityHeadline(activityTotals([]))).toBe("nothing blocked");
   });
 });

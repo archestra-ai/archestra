@@ -14,7 +14,7 @@ import {
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
-  type ConsultActivityDay,
+  type ActivityDay,
   type RemediesView,
   type Remedy,
   useRemedies,
@@ -24,24 +24,26 @@ import { cn } from "@/lib/utils/tailwind";
 import { gapCount, gapLines } from "./remedies.utils";
 import {
   activityBars,
+  activityHeadline,
   activityTotals,
-  cleaningsHeadline,
-  reviewsHeadline,
 } from "./remedies-activity.utils";
 import { RemediesDialog, type RemedyFilter } from "./remedies-dialog";
 
-const REVIEWS: ChartConfig = {
-  approved: { label: "approved", color: "var(--color-blue-400)" },
-  denied: { label: "denied", color: "var(--color-red-400)" },
-};
-const CLEANINGS: ChartConfig = {
-  cleaned: { label: "cleaned", color: "var(--color-pink-400)" },
+/** The three ways a denied call ends, bottom of the stack first. */
+const OUTCOMES: ChartConfig = {
+  blocked: { label: "stayed blocked", color: "var(--muted-foreground)" },
+  approved: {
+    label: "approved by an authority",
+    color: "var(--color-blue-400)",
+  },
+  cleaned: { label: "cleaned by a sanitizer", color: "var(--color-pink-400)" },
 };
 
 /**
  * Beside the security label: one card with the authorities that can approve
- * a blocked call and the sanitizers that can clean data, each with what it
- * answered over the last week, then the kinds of block nothing lifts.
+ * a blocked call and the sanitizers that can clean data, and under them the
+ * week's denied calls by how each ended; then the kinds of block nothing
+ * lifts.
  */
 export function RemediesPanels() {
   const view = useRemedies();
@@ -62,9 +64,12 @@ export function RemediesPanels() {
     return (
       <>
         <Card className="py-4 xl:col-span-2">
-          <CardContent className="grid flex-1 gap-6 px-4 sm:grid-cols-2">
+          <CardContent className="grid gap-6 px-4 sm:grid-cols-2">
             <Column title="Authorities" loading />
             <Column title="Sanitizers" loading />
+          </CardContent>
+          <CardContent className="mt-auto px-4">
+            <Skeleton className="h-24 w-full" />
           </CardContent>
         </Card>
         <Panel title="Gaps" loading />
@@ -74,25 +79,24 @@ export function RemediesPanels() {
   return (
     <>
       <Card className="py-4 xl:col-span-2">
-        <CardContent className="grid flex-1 gap-6 px-4 sm:grid-cols-2">
+        <CardContent className="grid gap-6 px-4 sm:grid-cols-2">
           <CountColumn
             title="Authorities"
             remedies={view.data.authorities}
             detail="can approve a blocked call"
             empty="nobody can approve a blocked call"
             onOpen={() => setOpen("authority")}
-          >
-            <ActivityWeek kind="reviews" />
-          </CountColumn>
+          />
           <CountColumn
             title="Sanitizers"
             remedies={view.data.sanitizers}
             detail="can clean a tool result or arguments to approve a blocked call"
             empty="nothing cleans data"
             onOpen={() => setOpen("sanitizer")}
-          >
-            <ActivityWeek kind="cleanings" />
-          </CountColumn>
+          />
+        </CardContent>
+        <CardContent className="mt-auto px-4">
+          <ActivityWeek />
         </CardContent>
       </Card>
       <GapsPanel view={view.data} />
@@ -131,7 +135,6 @@ function Column({
         <>
           <Skeleton className="h-9 w-16" />
           <Skeleton className="h-4 w-40" />
-          <Skeleton className="mt-auto h-20 w-full" />
         </>
       ) : (
         children
@@ -174,14 +177,12 @@ function CountColumn({
   detail,
   empty,
   onOpen,
-  children,
 }: {
   title: string;
   remedies: Remedy[];
   detail: string;
   empty: string;
   onOpen: () => void;
-  children: ReactNode;
 }) {
   return (
     <Column
@@ -202,31 +203,23 @@ function CountColumn({
       <p className="text-muted-foreground text-xs">
         {remedies.length === 0 ? empty : detail}
       </p>
-      {children}
     </Column>
   );
 }
 
 /**
- * The last seven days of answers: reviews an authority approved or denied,
- * or results and arguments a sanitizer cleaned.
+ * The last seven days of denied calls, each by how it ended: approved by an
+ * authority, cleaned by a sanitizer, or blocked when neither lifted it.
  */
-function ActivityWeek({ kind }: { kind: "reviews" | "cleanings" }) {
+function ActivityWeek() {
   const activity = useRemediesActivity();
-  const config = kind === "reviews" ? REVIEWS : CLEANINGS;
-  const days: ConsultActivityDay[] = activity.data?.days ?? [];
-  const totals = activityTotals(days);
-  const headline =
-    kind === "reviews" ? reviewsHeadline(totals) : cleaningsHeadline(totals);
+  const days: ActivityDay[] = activity.data?.days ?? [];
+  const headline = activityHeadline(activityTotals(days));
 
   return (
-    <div className="mt-auto space-y-2 pt-2">
+    <div className="space-y-2">
       <div className="text-muted-foreground flex items-center justify-between gap-2 text-[11px]">
-        <span>
-          {kind === "reviews"
-            ? "Reviews · last 7 days"
-            : "Cleanings · last 7 days"}
-        </span>
+        <span>Denied calls · last 7 days</span>
         {activity.data ? (
           <span className="tabular-nums">{headline}</span>
         ) : activity.isLoadingError ? (
@@ -237,11 +230,11 @@ function ActivityWeek({ kind }: { kind: "reviews" | "cleanings" }) {
             Could not load · retry
           </UnstyledButton>
         ) : (
-          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-3 w-40" />
         )}
       </div>
       {activity.data ? (
-        <ChartContainer config={config} className="aspect-auto h-16 w-full">
+        <ChartContainer config={OUTCOMES} className="aspect-auto h-16 w-full">
           <BarChart
             accessibilityLayer
             data={activityBars(days)}
@@ -261,12 +254,13 @@ function ActivityWeek({ kind }: { kind: "reviews" | "cleanings" }) {
                 />
               }
             />
-            {Object.entries(config).map(([key, series], index, all) => (
+            {Object.entries(OUTCOMES).map(([key, series], index, all) => (
               <Bar
                 key={key}
                 dataKey={key}
                 stackId="week"
                 fill={series.color}
+                fillOpacity={key === "blocked" ? 0.35 : 1}
                 isAnimationActive={false}
                 radius={index === all.length - 1 ? [2, 2, 0, 0] : 0}
               />
@@ -277,12 +271,15 @@ function ActivityWeek({ kind }: { kind: "reviews" | "cleanings" }) {
         <Skeleton className="h-16 w-full" />
       )}
       <ul className="text-muted-foreground flex flex-wrap gap-x-2.5 gap-y-1 text-[11px]">
-        {Object.entries(config).map(([key, series]) => (
+        {Object.entries(OUTCOMES).map(([key, series]) => (
           <li key={key} className="flex items-center gap-1">
             <span
               aria-hidden
               className="size-1.5 rounded-sm"
-              style={{ backgroundColor: series.color }}
+              style={{
+                backgroundColor: series.color,
+                opacity: key === "blocked" ? 0.35 : 1,
+              }}
             />
             <span>{series.label}</span>
           </li>

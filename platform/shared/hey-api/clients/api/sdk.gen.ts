@@ -8433,7 +8433,7 @@ export const previewOpenAppaPolicyTest = <ThrowOnError extends boolean = false>(
 export const getOpenappaRemedies = <ThrowOnError extends boolean = false>(options?: Options<GetOpenappaRemediesData, ThrowOnError>) => (options?.client ?? client).get<GetOpenappaRemediesResponses, GetOpenappaRemediesErrors, ThrowOnError>({ url: '/api/openappa/remedies', ...options });
 
 /**
- * What authorities and sanitizers answered on each of the last seven days: reviews approved and denied, and results or arguments cleaned. Days are calendar days in `timeZone`.
+ * Tool calls the runtime denied on each of the last seven days, by how each ended: approved by an authority, cleaned by a sanitizer, or blocked when neither lifted it. Days are calendar days in `timeZone`.
  *
  * Authentication:
  *

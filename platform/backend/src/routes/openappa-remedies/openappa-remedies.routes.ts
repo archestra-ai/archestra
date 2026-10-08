@@ -40,7 +40,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaRemediesActivity,
         description:
-          "What authorities and sanitizers answered on each of the last seven days: reviews approved and denied, and results or arguments cleaned. Days are calendar days in `timeZone`.",
+          "Tool calls the runtime denied on each of the last seven days, by how each ended: approved by an authority, cleaned by a sanitizer, or blocked when neither lifted it. Days are calendar days in `timeZone`.",
         tags: ["OpenAPPA"],
         querystring: z.object({
           timeZone: z

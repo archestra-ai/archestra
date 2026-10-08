@@ -694,6 +694,13 @@ export async function executeA2AMessage(
       });
       const stream = runStream.result;
       getCapturedStreamError = runStream.getCapturedStreamError;
+      const emitLiveSubagentToolCall =
+        subagentToolStream && delegationToolCallId
+          ? createLiveSubagentToolCallEmitter({
+              bridge: subagentToolStream,
+              parentToolCallId: delegationToolCallId,
+            })
+          : undefined;
 
       const uiMessageStreamConsumption = consumeReadableStream({
         stream: stream
@@ -726,6 +733,7 @@ export async function executeA2AMessage(
           .pipeThrough(
             new TransformStream<UIMessageChunk, UIMessageChunk>({
               async transform(chunk, controller) {
+                emitLiveSubagentToolCall?.(chunk);
                 await params.onUiMessageChunk?.(chunk);
                 controller.enqueue(chunk);
               },
@@ -915,6 +923,49 @@ export async function executeA2AMessage(
 type StageAttachmentsFn = (
   attachments: A2AAttachment[],
 ) => Promise<StageResult[]>;
+
+/**
+ * Surface a child run's tool calls while it runs: each call when its input is
+ * ready, again when it settles. The final-message pass in
+ * {@link emitSubagentToolCalls} re-emits the terminal states afterwards.
+ * @public — exported for testability
+ */
+export function createLiveSubagentToolCallEmitter(params: {
+  bridge: SubagentToolStreamBridge;
+  parentToolCallId: string;
+}): (chunk: UIMessageChunk) => void {
+  const { bridge, parentToolCallId } = params;
+  const calls = new Map<string, { toolName: string; input: unknown }>();
+  return (chunk) => {
+    switch (chunk.type) {
+      case "tool-input-available": {
+        const call = { toolName: chunk.toolName, input: chunk.input };
+        calls.set(chunk.toolCallId, call);
+        bridge.emit({
+          parentToolCallId,
+          toolCallId: chunk.toolCallId,
+          ...call,
+          state: "input-available",
+        });
+        return;
+      }
+      case "tool-output-available":
+      case "tool-output-error": {
+        const call = calls.get(chunk.toolCallId);
+        if (!call) return;
+        bridge.emit({
+          parentToolCallId,
+          toolCallId: chunk.toolCallId,
+          ...call,
+          ...(chunk.type === "tool-output-available"
+            ? { state: "output-available", output: chunk.output }
+            : { state: "output-error", errorText: chunk.errorText }),
+        });
+        return;
+      }
+    }
+  };
+}
 
 /**
  * Emit one `data-subagent-tool-call` per tool part in a child run's final

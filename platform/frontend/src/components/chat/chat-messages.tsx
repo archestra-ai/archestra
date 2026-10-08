@@ -127,6 +127,7 @@ import {
   collectSubagentToolCalls,
   extractFileAttachments,
   filterOptimisticToolCalls,
+  getToolCardTitle,
   hasTextPart,
   identifyCompactToolGroups,
   identifyReasoningRuns,
@@ -2029,6 +2030,7 @@ const MessageTool = memo(
     });
     const displayToolName = approvalDisplay.toolName;
     const displayInput = withoutProxyTransportArguments({
+      toolName: displayToolName,
       shortName: getToolShortName(displayToolName),
       input: approvalDisplay.input,
     });
@@ -2186,6 +2188,7 @@ const MessageTool = memo(
       >
         <ToolHeader
           type={`tool-${displayToolName}`}
+          title={getToolCardTitle(displayToolName)}
           state={getHeaderState({
             state: part.state || "input-available",
             toolResultPart,
@@ -2194,13 +2197,15 @@ const MessageTool = memo(
           isCollapsible={isExpandable}
           actionButton={logsButton}
           identityBadge={
-            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              Called as
-              <ExecutedAsBadge
-                executedAs={executedAs}
-                meUserId={viewerUserId}
-              />
-            </span>
+            executedAs ? (
+              <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                Called as
+                <ExecutedAsBadge
+                  executedAs={executedAs}
+                  meUserId={viewerUserId}
+                />
+              </span>
+            ) : undefined
           }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>

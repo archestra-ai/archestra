@@ -9,6 +9,7 @@ import {
   isBrowserMcpTool,
   parseArchestraAppResourceUri,
   parseFullToolName,
+  SELF_FORK_TOOL_NAME,
   SUBAGENT_TOOL_CALL_PART_TYPE,
   type SubagentToolCallPartData,
   TOOL_COPY_FILE_SHORT_NAME,
@@ -511,6 +512,11 @@ export function resolveAppEntryRender(params: {
   return null;
 }
 
+/** A human title for tool cards whose raw name means nothing to the reader. */
+export function getToolCardTitle(toolName: string): string | undefined {
+  return toolName === SELF_FORK_TOOL_NAME ? "Subagent" : undefined;
+}
+
 /** Unwrap a run_tool dispatch to the target tool name (no-op for other tools). */
 export function resolveRunToolTargetName(
   part: DynamicToolUIPart | ToolUIPart,
@@ -608,14 +614,14 @@ export type SubagentChildEntry = {
  * `toolCallId` is itself a key has descendants (a nested delegation), so the
  * renderer recurses to build an arbitrary-depth tree. Collected across all
  * messages — not per-message — so where the backend stored a part never affects
- * how it nests. Deduped by `toolCallId` so a part present both live (streamed)
- * and persisted (after reload) renders once.
+ * how it nests. Deduped by `toolCallId`, last-wins in place, so a call streamed
+ * while running and again once settled renders once, in its latest state.
  */
 export function collectSubagentToolCalls(
   messages: UIMessage[],
 ): Map<string, SubagentChildEntry[]> {
   const byParent = new Map<string, SubagentChildEntry[]>();
-  const seen = new Set<string>();
+  const seen = new Map<string, SubagentChildEntry>();
   for (const message of messages) {
     for (const part of message.parts ?? []) {
       const candidate = part as { type?: string; data?: unknown };
@@ -626,12 +632,10 @@ export function collectSubagentToolCalls(
       if (
         !data ||
         typeof data.parentToolCallId !== "string" ||
-        typeof data.toolCallId !== "string" ||
-        seen.has(data.toolCallId)
+        typeof data.toolCallId !== "string"
       ) {
         continue;
       }
-      seen.add(data.toolCallId);
       const entry: SubagentChildEntry = {
         toolCallId: data.toolCallId,
         toolName: data.toolName,
@@ -640,6 +644,12 @@ export function collectSubagentToolCalls(
         state: data.state,
         errorText: data.errorText,
       };
+      const existing = seen.get(data.toolCallId);
+      if (existing) {
+        Object.assign(existing, entry);
+        continue;
+      }
+      seen.set(data.toolCallId, entry);
       const list = byParent.get(data.parentToolCallId);
       if (list) {
         list.push(entry);

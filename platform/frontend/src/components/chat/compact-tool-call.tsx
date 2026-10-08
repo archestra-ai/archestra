@@ -43,6 +43,7 @@ import {
 } from "./battery-credentials-tool";
 import {
   type AppEntryRender,
+  getToolCardTitle,
   resolveAppEntryRender,
   resolveRunToolTargetName,
 } from "./chat-messages.utils";
@@ -711,6 +712,7 @@ function ExpandedToolCard({
     !errorText &&
     isOpenAppaPolicyChange(policyOutput, validationChange);
   const input = withoutProxyTransportArguments({
+    toolName,
     shortName: toolShortName,
     input:
       toolShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME
@@ -742,18 +744,21 @@ function ExpandedToolCard({
     <Tool open>
       <ToolHeader
         type={`tool-${toolName}`}
+        title={getToolCardTitle(toolName)}
         state={headerState}
         statusLabel={humanRuling?.label}
         isCollapsible={false}
         actionButton={logsButton}
         identityBadge={
-          <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-            Called as
-            <ExecutedAsBadge
-              executedAs={executedAs}
-              meUserId={session?.user?.id}
-            />
-          </span>
+          executedAs ? (
+            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+              Called as
+              <ExecutedAsBadge
+                executedAs={executedAs}
+                meUserId={session?.user?.id}
+              />
+            </span>
+          ) : undefined
         }
       />
       <ToolContent>

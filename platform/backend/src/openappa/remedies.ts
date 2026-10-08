@@ -1,11 +1,12 @@
 import { userHasPermission } from "@/auth";
-import { OpenappaExternalConsultModel } from "@/models";
+import { OpenAppaOperationModel, OpenappaExternalConsultModel } from "@/models";
 import type { ExternalConsult } from "@/types/openappa-external-consults";
 import type {
   Authority,
   AuthorityPermits,
   BlockCoverage,
   BlockKind,
+  RemediesActivity,
   RemediesView,
   RemedyImplementation,
   Sanitizer,
@@ -88,6 +89,21 @@ class OpenAppaRemediesService {
       blocks: blockCoverage(files, authorities, sanitizers),
     };
   }
+
+  /** Denied calls per day over the last week, and how many a remedy let through. */
+  async activity(params: {
+    organizationId: string;
+    timeZone: string;
+  }): Promise<RemediesActivity> {
+    return {
+      timeZone: params.timeZone,
+      days: await OpenAppaOperationModel.blockedCallsByDay({
+        organizationId: params.organizationId,
+        timeZone: params.timeZone,
+        days: ACTIVITY_DAYS,
+      }),
+    };
+  }
 }
 
 export const openappaRemediesService = new OpenAppaRemediesService();
@@ -95,6 +111,9 @@ export const openappaRemediesService = new OpenAppaRemediesService();
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/** The activity window the overview shows. */
+const ACTIVITY_DAYS = 7;
 
 type PolicyFile = {
   entry: string | null;
@@ -121,6 +140,12 @@ const SANITIZER_BUILTINS: Record<string, RemedyImplementation["kind"]> = {
   "redact-email": "builtin",
   "redact-secrets": "builtin",
 };
+
+/**
+ * The reserved sanitizer the runtime implements itself: it checks a child's
+ * structured return against the parent's schema and needs no `[externals]`.
+ */
+const ATTEST_SCHEMA_SANITIZER = "attest-schema";
 
 /** The reserved mark that denies a call; no authority may permit it. */
 const BLOCKED_MARK = "blocked";
@@ -217,7 +242,11 @@ function declaredSanitizers(
       battery: file.battery,
       line: lines[index] ?? null,
     },
-    implementation: wired.get(entry.name) ?? null,
+    implementation:
+      wired.get(entry.name) ??
+      (entry.name === ATTEST_SCHEMA_SANITIZER
+        ? { kind: "builtin", detail: ATTEST_SCHEMA_SANITIZER }
+        : null),
     tags: strings(entry.tags) ?? [],
     on: (strings(entry.on) ?? []).filter(
       (each): each is Sanitizer["on"][number] =>

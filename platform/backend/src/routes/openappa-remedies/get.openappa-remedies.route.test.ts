@@ -337,6 +337,30 @@ builtin = "hitl"
     });
     expect((await view()).authorities[0].lastConsult).toBeNull();
   });
+
+  test("the reserved attest-schema sanitizer is built into the runtime, not unwired", async () => {
+    await saveRoot(`[policy]
+version = 2
+
+[[policy.sanitizer]]
+name = "attest-schema"
+on = ["tool_output"]
+
+[policy.sanitizer.permits]
+trust = { from = "suspicious", to = "trusted" }
+
+[[policy.sanitizer]]
+name = "strip-pii"
+on = ["tool_output"]
+`);
+    const body = await view();
+    expect(
+      body.sanitizers.map((each) => [each.name, each.implementation]),
+    ).toEqual([
+      ["attest-schema", { kind: "builtin", detail: "attest-schema" }],
+      ["strip-pii", null],
+    ]);
+  });
 });
 
 async function seedConsult(params: {

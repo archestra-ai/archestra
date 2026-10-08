@@ -1,5 +1,6 @@
 "use client";
 
+import { BlockedCallsChart } from "./blocked-calls-chart";
 import { CoverageCharts } from "./coverage-charts";
 import { EntitiesTable } from "./entities-table";
 import { OpenAppaChatStrip } from "./openappa-chat-strip";
@@ -22,6 +23,7 @@ export function OverviewTab() {
             <TrustAudienceCard className="xl:col-span-2" />
             <RemediesPanels />
           </div>
+          <BlockedCallsChart />
           <section
             aria-labelledby="overview-policy-coverage"
             className="space-y-3"

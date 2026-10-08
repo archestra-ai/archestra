@@ -470,9 +470,9 @@ const registry = defineArchestraTools([
   }),
   defineArchestraTool({
     shortName: "yell",
-    title: "Report a confusing OpenAPPA experience",
+    title: "Report OpenAPPA feedback",
     description:
-      "Save confusing OpenAPPA blocks or remedies and their diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: describe what OpenAPPA did in this session (a block, a remedy, a narrowing, an approval prompt or a ruling) and what was confusing or wrong about it, or the user's own complaint about OpenAPPA. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content. This does not change policy or grant permission.",
+      "Send feedback about OpenAPPA, such as a confusing block, remedy or ruling, or the user's complaint, with a diagnostic archive for review in the Guardrails Yells tab. When deployment analytics is enabled, also forwards the report to the shared OpenAPPA reporting service. with_trajectory includes this session's policy decisions, never raw prompts, tool arguments, or outputs. Your message is sent verbatim: say what about OpenAPPA was confusing or wrong. When a call was blocked, report the block; never put the blocked call's content (such as a task you could not file) in its place, and do not include secrets, personal data, or task content. This does not change policy or grant permission.",
     schema: YellArgumentsSchema,
     async handler({ args, context }) {
       const id = context.sessionId ?? context.conversationId;

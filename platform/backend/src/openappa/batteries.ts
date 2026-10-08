@@ -27,7 +27,6 @@ import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
 import {
   type AttachReadiness,
-  attachmentKey,
   attachmentOf,
   type BatteryAttachment,
   type BatteryCredentialBindings,
@@ -42,6 +41,7 @@ import {
   type BatterySummary,
   type CreateBatteryInstall,
   type EffectivePolicy,
+  installIdentityKey,
   type PolicyBatteryView,
   type PolicyDeclarationsView,
   sameAttachment,
@@ -1592,7 +1592,7 @@ function rowKey(row: {
   batteryName: string;
   attachment: BatteryAttachment;
 }): string {
-  return `${row.batteryName}\u0000${attachmentKey(row.attachment)}`;
+  return installIdentityKey(row.batteryName, row.attachment);
 }
 
 function sortedBindings(

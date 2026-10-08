@@ -2,11 +2,11 @@ import { isDeepStrictEqual } from "node:util";
 import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
 import db, { schema, type Transaction } from "@/database";
 import {
-  attachmentKey,
   attachmentOf,
   type BatteryAttachment,
   type BatteryInstall,
   type BatteryInstallRow,
+  installIdentityKey,
 } from "@/types/openappa-batteries";
 import { isUniqueConstraintError } from "@/utils/db";
 
@@ -270,5 +270,5 @@ function identityOf(
     "batteryName" | "kind" | "catalogId" | "detectedId"
   >,
 ): string {
-  return `${row.batteryName}\u0000${attachmentKey(attachmentOf(row))}`;
+  return installIdentityKey(row.batteryName, attachmentOf(row));
 }

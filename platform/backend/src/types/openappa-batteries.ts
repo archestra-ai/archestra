@@ -123,6 +123,14 @@ export function attachmentKey(attachment: BatteryAttachment): string {
   }
 }
 
+/** The identity a recompose and the store agree on: one row per (battery, attachment). */
+export function installIdentityKey(
+  batteryName: string,
+  attachment: BatteryAttachment,
+): string {
+  return `${batteryName}\u0000${attachmentKey(attachment)}`;
+}
+
 /** One derived install as a recompose computes it; ids are the model's to preserve. */
 export const BatteryInstallRowSchema = z.strictObject({
   batteryName: z.string().min(1).max(100),

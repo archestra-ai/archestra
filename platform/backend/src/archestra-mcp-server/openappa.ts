@@ -716,7 +716,7 @@ const registry = defineArchestraTools([
     title: "Validate OpenAPPA policy",
     annotations: { readOnlyHint: true },
     description:
-      "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
+      "Validate proposed organization.appa.toml without applying changes. The batteries its `include` list names are composed into the check, so an entry no battery answers is refused unless the current revision already spells it — an entry the current revision keeps is valid with a warning instead, and `warnings` names every battery that would govern nothing. The text is also composed as this deployment would compose it, with every battery held back by a missing server, credential or package composed as empty: a refusal the text introduces is an error, and one the current revision already meets is a warning naming the held-back battery to fix. Report the warnings; do not read `valid` alone as working. Explain the intended behavior to the user before updating their policy.",
     schema: ValidateGuardrailsPolicySchema,
     async handler({ args, context }) {
       if (!context.organizationId)

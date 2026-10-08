@@ -11,7 +11,7 @@ import {
 } from "@archestra/shared";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
@@ -135,6 +135,19 @@ class OrganizationModel {
   }
 
   /**
+   * Serializes writers that check-then-insert per-organization rows (e.g.
+   * built-in provisioning) across replicas until `tx` ends. NO KEY UPDATE
+   * still lets other transactions insert rows referencing the organization.
+   */
+  static async lockRowForUpdate(id: string, tx: Transaction): Promise<void> {
+    await tx
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .for("no key update");
+  }
+
+  /**
    * Get or create the default organization
    */
   static async getOrCreateDefaultOrganization(): Promise<Organization> {
@@ -163,7 +176,10 @@ class OrganizationModel {
           slug: "default",
           createdAt: new Date(),
         })
+        // A concurrently booting replica may have created it first.
+        .onConflictDoNothing()
         .returning();
+      if (!organization) return null;
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -174,6 +190,15 @@ class OrganizationModel {
       // SPDX-SnippetEnd
       return organization;
     });
+    if (!createdOrg) {
+      const winner = await OrganizationModel.getFirst();
+      if (!winner) {
+        throw new Error(
+          "Default organization creation conflicted, but none exists",
+        );
+      }
+      return winner;
+    }
 
     logger.debug(
       { organizationId: createdOrg.id },

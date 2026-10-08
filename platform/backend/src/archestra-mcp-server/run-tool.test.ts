@@ -276,7 +276,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -324,7 +326,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -370,7 +374,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -428,7 +434,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -466,8 +474,12 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const githubCatalog = await makeInternalMcpCatalog();
-      const gitlabCatalog = await makeInternalMcpCatalog();
+      const githubCatalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      const gitlabCatalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const githubTool = await makeTool({
         name: "github__search_repositories",
         catalogId: githubCatalog.id,
@@ -501,8 +513,12 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const githubCatalog = await makeInternalMcpCatalog();
-      const gitlabCatalog = await makeInternalMcpCatalog();
+      const githubCatalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
+      const gitlabCatalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const githubTool = await makeTool({
         name: "github__search_repositories",
         catalogId: githubCatalog.id,
@@ -549,7 +565,9 @@ describe("run_tool", () => {
       seedAndAssignArchestraTools,
     }) => {
       await seedAndAssignArchestraTools(testAgent.id);
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const colliding = await makeTool({
         name: "someserver__whoami",
         catalogId: catalog.id,
@@ -1199,7 +1217,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -1237,7 +1257,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const enabled = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1272,7 +1294,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1326,7 +1350,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const assigned = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1365,7 +1391,9 @@ describe("run_tool", () => {
         targetAgent.id,
       );
       await makeAgentTool(testAgent.id, delegationTool.id);
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const other = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1429,7 +1457,9 @@ describe("run_tool", () => {
     // policy gate's disabled-tool filter is active (non-empty enabled set) and
     // would otherwise emit "not enabled for this conversation" for a
     // hallucinated name. The pre-check must intercept first.
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const assigned = await makeTool({
       name: "github__search_repositories",
       catalogId: catalog.id,
@@ -1466,7 +1496,7 @@ describe("run_tool", () => {
       name: "Run Tool Policy Agent",
       organizationId: org.id,
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
       catalogId: catalog.id,
@@ -1520,7 +1550,7 @@ describe("run_tool", () => {
       name: "Run Tool Approval Agent",
       organizationId: org.id,
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       name: `workspace__approve_${crypto.randomUUID().slice(0, 8)}`,
       catalogId: catalog.id,
@@ -1571,7 +1601,7 @@ describe("run_tool", () => {
       name: "Run Tool Approved Agent",
       organizationId: org.id,
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const tool = await makeTool({
       name: `workspace__approved_${crypto.randomUUID().slice(0, 8)}`,
       catalogId: catalog.id,
@@ -1622,7 +1652,9 @@ describe("run_tool", () => {
     makeInternalMcpCatalog,
     makeTool,
   }) => {
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({
+      organizationId: mockContext.organizationId,
+    });
     const tool = await makeTool({
       name: "github__get_repository",
       catalogId: catalog.id,
@@ -1661,7 +1693,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "final_answer__submit_result",
         catalogId: catalog.id,
@@ -1697,7 +1731,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "search__query",
         catalogId: catalog.id,
@@ -1737,7 +1773,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "tickets__bulk_update",
         catalogId: catalog.id,
@@ -1778,7 +1816,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1816,7 +1856,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1850,7 +1892,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -1882,7 +1926,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2044,7 +2090,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2090,7 +2138,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2132,7 +2182,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "workspace__get_app",
         catalogId: catalog.id,
@@ -2209,7 +2261,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "final_answer__submit_result",
         catalogId: catalog.id,
@@ -2253,7 +2307,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "loose__ingest",
         catalogId: catalog.id,
@@ -2293,7 +2349,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2339,7 +2397,9 @@ describe("run_tool", () => {
       makeInternalMcpCatalog,
       makeTool,
     }) => {
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({
+        organizationId: mockContext.organizationId,
+      });
       const tool = await makeTool({
         name: "github__search_repositories",
         catalogId: catalog.id,
@@ -2391,7 +2451,7 @@ describe("run_tool", () => {
         name: "Repair Policy Agent",
         organizationId: org.id,
       });
-      const catalog = await makeInternalMcpCatalog();
+      const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
       const tool = await makeTool({
         name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
         catalogId: catalog.id,

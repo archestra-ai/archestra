@@ -525,6 +525,11 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               value:
                                 "Stop auto-replies in this thread (@mention me to resume)",
                             },
+                            {
+                              title: "reset",
+                              value:
+                                "Start a new conversation (direct messages and group chats)",
+                            },
                           ],
                         },
                         {

@@ -255,14 +255,13 @@ function svgDataUrl(svg: string): string {
 
 const ARCHESTRA_LOGO_SVG = `<svg width="32" height="32" viewBox="0 0 994 953" xmlns="http://www.w3.org/2000/svg"><rect width="993.958" height="952.543" rx="204.92" fill="black"/><path fill-rule="evenodd" clip-rule="evenodd" d="M390.871 664.818C427.68 664.818 460.629 641.985 473.553 607.519L565.238 363.026C586.887 305.296 544.211 243.715 482.556 243.715C445.747 243.715 412.798 266.548 399.874 301.014L308.189 545.507C286.54 603.237 329.216 664.818 390.871 664.818Z" fill="white"/><ellipse cx="638.487" cy="577.095" rx="87.7298" ry="81.1501" fill="white"/></svg>`;
 
-const OPENAPPA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" shape-rendering="crispEdges"><style>.body{fill:hsl(30,8%,12%)}.dim{fill:hsl(32,3%,54%)}.bg{fill:hsl(40,25%,99%)}@media (prefers-color-scheme:dark){.body{fill:hsl(40,12%,93%)}.dim{fill:hsl(33,4%,55%)}.bg{fill:hsl(30,6%,8%)}}</style><g transform="translate(0,1)"><rect class="body" x="5" y="0" width="2" height="2"/><rect class="body" x="17" y="0" width="2" height="2"/><rect class="body" x="4" y="2" width="16" height="1"/><rect class="body" x="3" y="3" width="18" height="3"/><rect class="body" x="3" y="6" width="3" height="3"/><rect class="body" x="9" y="6" width="6" height="3"/><rect class="body" x="18" y="6" width="3" height="3"/><rect class="bg" x="6" y="6" width="3" height="3"/><rect class="bg" x="15" y="6" width="3" height="3"/><rect class="body" x="3" y="9" width="18" height="1"/><rect class="body" x="3" y="10" width="7" height="2"/><rect class="body" x="14" y="10" width="7" height="2"/><rect class="dim" x="10" y="10" width="4" height="1"/><rect class="dim" x="10" y="11" width="1" height="1"/><rect class="bg" x="11" y="11" width="2" height="1"/><rect class="dim" x="13" y="11" width="1" height="1"/><rect class="body" x="3" y="12" width="18" height="1"/><rect class="body" x="4" y="13" width="16" height="1"/><rect class="body" x="1" y="14" width="22" height="1"/><rect class="body" x="0" y="15" width="24" height="5"/><rect class="body" x="0" y="20" width="5" height="1"/><rect class="body" x="7" y="20" width="4" height="1"/><rect class="body" x="13" y="20" width="4" height="1"/><rect class="body" x="19" y="20" width="5" height="1"/><rect class="dim" x="0" y="21" width="5" height="1"/><rect class="dim" x="7" y="21" width="4" height="1"/><rect class="dim" x="13" y="21" width="4" height="1"/><rect class="dim" x="19" y="21" width="5" height="1"/></g></svg>`;
+const OPENAPPA_LOGO_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" shape-rendering="crispEdges"><rect width="32" height="32" rx="6.6" fill="#211e1b" shape-rendering="geometricPrecision"/><g transform="translate(4,5)"><rect x="5" y="0" width="2" height="2" fill="#efece6"/><rect x="17" y="0" width="2" height="2" fill="#efece6"/><rect x="4" y="2" width="16" height="1" fill="#efece6"/><rect x="3" y="3" width="18" height="3" fill="#efece6"/><rect x="3" y="6" width="3" height="3" fill="#efece6"/><rect x="9" y="6" width="6" height="3" fill="#efece6"/><rect x="18" y="6" width="3" height="3" fill="#efece6"/><rect x="6" y="6" width="3" height="3" fill="#211e1b"/><rect x="15" y="6" width="3" height="3" fill="#211e1b"/><rect x="3" y="9" width="18" height="1" fill="#efece6"/><rect x="3" y="10" width="7" height="2" fill="#efece6"/><rect x="14" y="10" width="7" height="2" fill="#efece6"/><rect x="10" y="10" width="4" height="1" fill="#8f8b86"/><rect x="10" y="11" width="1" height="1" fill="#8f8b86"/><rect x="11" y="11" width="2" height="1" fill="#211e1b"/><rect x="13" y="11" width="1" height="1" fill="#8f8b86"/><rect x="3" y="12" width="18" height="1" fill="#efece6"/><rect x="4" y="13" width="16" height="1" fill="#efece6"/><rect x="1" y="14" width="22" height="1" fill="#efece6"/><rect x="0" y="15" width="24" height="5" fill="#efece6"/><rect x="0" y="20" width="5" height="1" fill="#efece6"/><rect x="7" y="20" width="4" height="1" fill="#efece6"/><rect x="13" y="20" width="4" height="1" fill="#efece6"/><rect x="19" y="20" width="5" height="1" fill="#efece6"/><rect x="0" y="21" width="5" height="1" fill="#8f8b86"/><rect x="7" y="21" width="4" height="1" fill="#8f8b86"/><rect x="13" y="21" width="4" height="1" fill="#8f8b86"/><rect x="19" y="21" width="5" height="1" fill="#8f8b86"/></g></svg>`;
 
 const DOCS_MCP_SERVERS: DocsMcpServer[] = [
   {
     catalogId: "00000000-0000-4000-8000-000000000003",
     name: "Archestra Docs",
-    description:
-      "The Archestra documentation: list, search, and read the docs pages. Installed by default; delete it if you do not need it.",
+    description: "The Archestra documentation.",
     serverUrl: "https://archestra.ai/mcp",
     docsUrl: "https://archestra.ai/docs",
     icon: svgDataUrl(ARCHESTRA_LOGO_SVG),
@@ -275,8 +274,7 @@ const DOCS_MCP_SERVERS: DocsMcpServer[] = [
   {
     catalogId: "00000000-0000-4000-8000-000000000004",
     name: "OpenAPPA Docs",
-    description:
-      "The OpenAPPA documentation: list, search, and read the docs pages, and look up policy terms. Installed by default; delete it if you do not need it.",
+    description: "The OpenAPPA documentation.",
     serverUrl: "https://www.openappa.com/mcp",
     docsUrl: "https://www.openappa.com",
     icon: svgDataUrl(OPENAPPA_LOGO_SVG),

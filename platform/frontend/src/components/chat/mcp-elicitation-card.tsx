@@ -1,5 +1,6 @@
 "use client";
 
+import { ASK_USER_OTHER_ANSWER_FIELD } from "@archestra/shared";
 import {
   CheckIcon,
   ChevronLeftIcon,
@@ -76,6 +77,12 @@ export function McpElicitationCard({
     Record<string, ChatMcpElicitationRequest>
   >(() => Object.fromEntries(requests.map((request) => [request.id, request])));
   const [activeId, setActiveId] = useState<string | null>(null);
+  // Questions whose "Other" answer is open; its text box shows only then.
+  const [otherOpenById, setOtherOpenById] = useState<Record<string, boolean>>(
+    {},
+  );
+  // Request whose just-opened "Other" box takes focus after it renders.
+  const focusOtherRef = useRef<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [isAwaitingResults, setIsAwaitingResults] = useState(false);
   const formRef = useRef<HTMLFormElement>(null);
@@ -278,6 +285,19 @@ export function McpElicitationCard({
       ?.focus();
   }, [activeRequestId]);
 
+  useEffect(() => {
+    const requestId = focusOtherRef.current;
+    if (!requestId || !otherOpenById[requestId]) {
+      return;
+    }
+    focusOtherRef.current = null;
+    formRef.current
+      ?.querySelector<HTMLElement>(
+        `#${CSS.escape(`mcp-elicitation-${requestId}-${ASK_USER_OTHER_ANSWER_FIELD}`)}`,
+      )
+      ?.focus();
+  }, [otherOpenById]);
+
   if (!activeQuestion && !allMembersSettled) {
     return null;
   }
@@ -361,10 +381,50 @@ export function McpElicitationCard({
         [fieldName]: value,
       },
     }));
+    if (other && isSingleChoiceForm(fields) && !typed) {
+      setOtherOpen({ question, open: false });
+    }
     // Typing never advances, and stops an advance a pick just scheduled;
     // Next or Submit sends the text.
     if (typed) cancelAutoAdvance();
     else advanceOnPick(question);
+  };
+
+  /**
+   * Opening "Other" on a single pick replaces the pick; closing it drops the
+   * typed text, so only what is on screen is sent.
+   */
+  const setOtherOpen = ({
+    question,
+    open,
+  }: {
+    question: CardQuestion;
+    open: boolean;
+  }) => {
+    const { request, fields } = question;
+    const other = fields.find(isOtherTextField);
+    if (!other) return;
+    cancelAutoAdvance();
+    const cleared = open
+      ? isSingleChoiceForm(fields)
+        ? Object.fromEntries(
+            fields
+              .filter((field) => field.name !== other.name)
+              .map((field) => [field.name, ""]),
+          )
+        : {}
+      : { [other.name]: "" };
+    setValuesById((current) => ({
+      ...current,
+      [request.id]: {
+        ...(current[request.id] ?? getDefaultValues(fields)),
+        ...cleared,
+      },
+    }));
+    if (open && lastInputRef.current === "pointer") {
+      focusOtherRef.current = request.id;
+    }
+    setOtherOpenById((current) => ({ ...current, [request.id]: open }));
   };
 
   const respondToAll = async (
@@ -447,26 +507,71 @@ export function McpElicitationCard({
   const renderFields = (question: CardQuestion) => {
     const questionId = questionMessageId(question.request.id);
     const singlePick = isSingleChoiceForm(question.fields);
-    const choiceCount = question.fields.filter(
+    const otherField = question.fields.find(isOtherTextField);
+    const otherOpen = otherOpenById[question.request.id] === true;
+    const choiceFields = question.fields.filter(
       (field) => !isOtherTextField(field),
-    ).length;
-    const inputs = question.fields.map((field) => (
+    );
+    const disabled = isSubmitting || !question.isPending;
+    const inputs = choiceFields.map((field) => (
       <ElicitationFieldInput
         key={field.name}
         idPrefix={question.request.id}
         field={field}
         choiceStyle
-        hideLabel={!isOtherTextField(field) && choiceCount === 1}
+        hideLabel={choiceFields.length === 1}
         labelledBy={singlePick ? questionId : undefined}
         value={question.values[field.name]}
-        disabled={isSubmitting || !question.isPending}
+        disabled={disabled}
         onChange={(value) =>
           setFieldValue({ question, fieldName: field.name, value })
         }
         onPick={() => advanceOnPick(question)}
-        onFocus={isOtherTextField(field) ? cancelAutoAdvance : undefined}
+        other={
+          otherField && singlePick
+            ? {
+                selected: otherOpen,
+                onSelect: () => setOtherOpen({ question, open: true }),
+              }
+            : undefined
+        }
       />
     ));
+    if (otherField && !singlePick) {
+      inputs.push(
+        <ElicitationFieldInput
+          key={`${otherField.name}-toggle`}
+          idPrefix={question.request.id}
+          field={{
+            name: `${otherField.name}-toggle`,
+            label: otherField.label,
+            required: false,
+            schema: { type: "boolean" },
+          }}
+          choiceStyle
+          value={otherOpen}
+          disabled={disabled}
+          onChange={(open) => setOtherOpen({ question, open: open === true })}
+        />,
+      );
+    }
+    if (otherField && otherOpen) {
+      inputs.push(
+        <ElicitationFieldInput
+          key={otherField.name}
+          idPrefix={question.request.id}
+          field={otherField}
+          choiceStyle
+          hideLabel
+          value={question.values[otherField.name]}
+          disabled={disabled}
+          onChange={(value) =>
+            setFieldValue({ question, fieldName: otherField.name, value })
+          }
+          onFocus={cancelAutoAdvance}
+        />,
+      );
+    }
     return singlePick ? (
       <div className="flex flex-col gap-4">{inputs}</div>
     ) : (

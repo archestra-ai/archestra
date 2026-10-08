@@ -109,6 +109,7 @@ const emptyDeclarations = (
 ): Declarations => ({
   batteries: [],
   aliasesWithoutIncludedBattery: [],
+  unusedAliases: [],
   rootRevision: 3,
   lastError: null,
   managedInGithub: false,

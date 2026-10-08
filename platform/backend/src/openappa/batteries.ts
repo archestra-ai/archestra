@@ -204,6 +204,7 @@ class OpenAppaBatteriesService {
     return {
       batteries,
       aliasesWithoutIncludedBattery,
+      unusedAliases: aliasesWithoutIncludedBattery,
       rootRevision: policy.rootRevision,
       lastError: policy.lastError,
       managedInGithub: sync?.interval != null,

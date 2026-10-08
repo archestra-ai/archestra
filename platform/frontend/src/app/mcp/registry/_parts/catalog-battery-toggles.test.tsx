@@ -108,6 +108,7 @@ beforeEach(() => {
   declarations = {
     batteries: [],
     aliasesWithoutIncludedBattery: [],
+    unusedAliases: [],
     rootRevision: 1,
     lastError: null,
     managedInGithub: false,

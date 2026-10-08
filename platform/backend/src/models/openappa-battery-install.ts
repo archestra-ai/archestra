@@ -57,14 +57,13 @@ class OpenAppaBatteryInstallModel {
               .set(values)
               .where(eq(table.id, current.id))
               .returning()
-          : await tx
-              .insert(table)
-              .values({
+          : [
+              await insertOrAdopt(tx, {
                 organizationId,
                 batteryName: row.batteryName,
                 ...values,
-              })
-              .returning();
+              }),
+            ];
         saved.push(written);
       }
       const kept = new Set(saved.map((row) => row.id));

@@ -3,6 +3,7 @@ import type {
   PolicyBattery,
   PolicyDeclarations,
 } from "@/lib/openappa-batteries.query";
+import { aliasesWithoutIncludedBattery } from "@/lib/openappa-policy-views";
 import { BATTERY_STATUS } from "./battery-status";
 
 type BatteryStatus = PolicyBattery["status"];
@@ -51,7 +52,7 @@ export function policyAnnotations(
       status: enforced ? status : "refused",
     }),
   );
-  const aliases = declarations.aliasesWithoutIncludedBattery.map(
+  const aliases = aliasesWithoutIncludedBattery(declarations).map(
     ({ line, namespace }): PolicyAnnotation => ({
       kind: "unusedAlias",
       line,

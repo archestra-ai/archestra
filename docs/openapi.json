@@ -333211,6 +333211,32 @@
                         "additionalProperties": false
                       }
                     },
+                    "unusedAliases": {
+                      "type": "array",
+                      "items": {
+                        "type": "object",
+                        "properties": {
+                          "namespace": {
+                            "type": "string"
+                          },
+                          "servers": {
+                            "type": "array",
+                            "items": {
+                              "type": "string"
+                            }
+                          },
+                          "line": {
+                            "type": "number"
+                          }
+                        },
+                        "required": [
+                          "namespace",
+                          "servers",
+                          "line"
+                        ],
+                        "additionalProperties": false
+                      }
+                    },
                     "rootRevision": {
                       "type": "number"
                     },
@@ -333253,6 +333279,7 @@
                   "required": [
                     "batteries",
                     "aliasesWithoutIncludedBattery",
+                    "unusedAliases",
                     "rootRevision",
                     "lastError",
                     "managedInGithub",

@@ -86342,6 +86342,11 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             servers: Array<string>;
             line: number;
         }>;
+        unusedAliases: Array<{
+            namespace: string;
+            servers: Array<string>;
+            line: number;
+        }>;
         rootRevision: number;
         lastError: string | null;
         managedInGithub: boolean;

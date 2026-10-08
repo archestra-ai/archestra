@@ -268,6 +268,8 @@ const HeldPullViewSchema = z.object({
 export const PolicyDeclarationsViewSchema = z.object({
   batteries: z.array(PolicyBatteryViewSchema),
   aliasesWithoutIncludedBattery: z.array(AliasWithoutIncludedBatteryViewSchema),
+  /** The same list under its former name, for a client from before the rename. */
+  unusedAliases: z.array(AliasWithoutIncludedBatteryViewSchema),
   rootRevision: z.number(),
   lastError: z.string().nullable(),
   managedInGithub: z.boolean(),

@@ -92,6 +92,7 @@ import {
 } from "@/lib/openappa-batteries.query";
 import { useCoverageSummary } from "@/lib/openappa-coverage.query";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
+import { aliasesWithoutIncludedBattery } from "@/lib/openappa-policy-views";
 import {
   type RuntimeCredentialDefinition,
   useRuntimeCredentials,
@@ -478,12 +479,12 @@ export function BatteriesPanel() {
           onClose={() => setDeletingPackage(null)}
         />
       )}
-      {declarations.data.aliasesWithoutIncludedBattery.length > 0 && (
+      {aliasesWithoutIncludedBattery(declarations.data).length > 0 && (
         <div className="space-y-2 border-t pt-3">
           <h3 className="text-sm font-medium">
             Aliases no included battery declares
           </h3>
-          {declarations.data.aliasesWithoutIncludedBattery.map((alias) => (
+          {aliasesWithoutIncludedBattery(declarations.data).map((alias) => (
             <div
               key={alias.namespace}
               className="flex flex-wrap items-center gap-2 text-sm"

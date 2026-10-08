@@ -259,7 +259,7 @@ const registry = defineArchestraTools([
     shortName: "resolve_openappa_yell",
     title: "Resolve an OpenAPPA yell",
     description:
-      "Mark an OpenAPPA yell resolved, or reopen it with resolved=false. Resolve only after the user confirms the fix, or when the user asks you to. Resolving does not change policy.",
+      "Mark an OpenAPPA yell resolved, or reopen it with resolved=false. Call it when the operator says the yell is resolved, or after the operator accepts your policy fix and it is published. Resolving does not change policy.",
     schema: z.strictObject({
       id: z.uuid(),
       resolved: z

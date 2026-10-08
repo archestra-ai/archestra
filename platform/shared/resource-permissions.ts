@@ -97,6 +97,31 @@ export type ResourcePermissionGrant = z.infer<
   typeof ResourcePermissionGrantSchema
 >;
 
+/**
+ * `internal_code` of a role or team assignment refused because it would share
+ * objects the caller cannot share. The error's `details` follow
+ * {@link RoleAssignmentBlockedDetailsSchema}.
+ */
+export const ROLE_ASSIGNMENT_BLOCKED_CODE = "role_assignment_blocked";
+
+export const RoleAssignmentBlockedDetailsSchema = z.object({
+  subjectType: z.enum(["role", "team"]),
+  /** The first objects that blocked it; `total` counts all of them. */
+  items: z.array(
+    z.object({
+      resource: ManagedResourceSchema,
+      scope: ResourcePermissionScopeSchema,
+      /** Null for an organization-wide (`*`) policy. */
+      name: z.string().nullable(),
+    }),
+  ),
+  total: z.number().int(),
+});
+
+export type RoleAssignmentBlockedDetails = z.infer<
+  typeof RoleAssignmentBlockedDetailsSchema
+>;
+
 export type ScopedPermission = {
   organizationId: string;
   resource: ScopedResource;

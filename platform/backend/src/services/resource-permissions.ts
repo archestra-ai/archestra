@@ -9,11 +9,13 @@ import {
   ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
   PredefinedRoleNameSchema,
+  ROLE_ASSIGNMENT_BLOCKED_CODE,
   type ResourcePermissionAction,
   ResourcePermissionActionSchema,
   type ResourcePermissionGrant,
   type ResourcePermissionScope,
   ResourcePermissionScopeSchema,
+  type RoleAssignmentBlockedDetails,
   roleDisplayNames,
   type ScopedPermission,
   type ScopedResource,
@@ -48,20 +50,28 @@ export class ResourcePermissions {
    * it. Without this, one member sharing a chat with the Member role would
    * stop every administrator from assigning Member to anyone. Grants kept on
    * a deleted object are skipped too: they reach nothing.
+   *
+   * A caller who can edit organization-wide policies skips the check: they
+   * can already grant themselves Full access on every object at `*`, so
+   * refusing them protects nothing. Without this, a custom role holding every
+   * permission still cannot assign a role, because only the built-in admin
+   * roles are seeded with `*` grants.
+   *
+   * A refusal names every object that blocked it (see
+   * {@link RoleAssignmentBlockedDetails}), so the caller learns what to fix.
    */
   static async validateSubjectAssignment(params: {
     organizationId: string;
     userId: string;
     subjects: PermissionSubject[];
   }): Promise<void> {
+    if (await ResourcePermissions.canManageGlobalPolicy(params)) return;
     const policies =
       await ResourcePermissionPolicyModel.findForSubjects(params);
     const keys = new Set(params.subjects.map(subjectKey));
-    const canManageGlobal =
-      await ResourcePermissions.canManageGlobalPolicy(params);
+    const blocked: RoleAssignmentBlockedDetails["items"] = [];
     for (const policy of policies) {
       if (!ManagedResourceSchema.safeParse(policy.resource).success) continue;
-      if (policy.scope === "*" && canManageGlobal) continue;
       if (isSessionObject({ resource: policy.resource, scope: policy.scope }))
         continue;
       const requested = policy.grants
@@ -91,11 +101,18 @@ export class ResourcePermissions {
       if (reservedToAuthor({ ...context, target })) continue;
       const grants = await ResourcePermissions.resolve(context);
       if (!canDelegateScopedPermissions({ grants, requested })) {
-        throw new ApiError(
-          403,
-          "You cannot assign a role or team whose scoped permissions you cannot grant",
-        );
+        blocked.push({
+          resource: ManagedResourceSchema.parse(policy.resource),
+          scope: policy.scope,
+          name: target?.name ?? null,
+        });
       }
+    }
+    if (blocked.length) {
+      throw roleAssignmentBlockedError({
+        subjectType: params.subjects[0]?.type === "team" ? "team" : "role",
+        items: blocked,
+      });
     }
   }
 
@@ -840,6 +857,28 @@ function reservedToAuthor(params: {
   )
     return true;
   return params.resource === "llmProviderApiKey" && !!target.authorId;
+}
+
+/** The refusal names at most this many objects; `total` counts the rest. */
+const MAX_BLOCKED_ITEMS = 20;
+
+function roleAssignmentBlockedError(params: {
+  subjectType: RoleAssignmentBlockedDetails["subjectType"];
+  items: RoleAssignmentBlockedDetails["items"];
+}): ApiError {
+  const total = params.items.length;
+  const error = new ApiError(
+    403,
+    `This ${params.subjectType} gives access to ${total} ${total === 1 ? "item" : "items"} that you cannot share. ` +
+      "To assign it, get Full access to those items, or ask someone who can edit organization-wide access policies.",
+    ROLE_ASSIGNMENT_BLOCKED_CODE,
+  );
+  error.details = {
+    subjectType: params.subjectType,
+    items: params.items.slice(0, MAX_BLOCKED_ITEMS),
+    total,
+  } satisfies RoleAssignmentBlockedDetails;
+  return error;
 }
 
 function subjectKey(subject: PermissionSubject): string {

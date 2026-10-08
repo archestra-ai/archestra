@@ -16,6 +16,7 @@ export type ErrorResponseSchema<T extends z.infer<typeof ApiErrorTypeSchema>> =
       message: string;
       type: T;
       internal_code?: string;
+      details?: Record<string, unknown>;
     };
   };
 
@@ -29,6 +30,7 @@ export const generateErrorResponseSchema = <
       message: z.string(),
       type: z.literal(errorType),
       internal_code: z.string().optional(),
+      details: z.record(z.string(), z.unknown()).optional(),
     }),
   });
 

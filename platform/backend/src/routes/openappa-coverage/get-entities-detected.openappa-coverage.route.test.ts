@@ -80,17 +80,10 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
         }) => [s.type, s.id, s.name, s.clientFamily, s.toolCount],
       ),
     ).toEqual([
-      ["detected_mcp_server", "opencode.github", "github", "opencode", 1, 1],
-      ["detected_mcp_server", "codex.linear", "linear", "codex", 1, 1],
-      [
-        "detected_mcp_server",
-        "claude-code.slack",
-        "slack",
-        "claude-code",
-        2,
-        2,
-      ],
-      ["detected_mcp_server", "codex.slack", "slack", "codex", 1, 1],
+      ["detected_mcp_server", "opencode.github", "github", "opencode", 1],
+      ["detected_mcp_server", "codex.linear", "linear", "codex", 1],
+      ["detected_mcp_server", "claude-code.slack", "slack", "claude-code", 2],
+      ["detected_mcp_server", "codex.slack", "slack", "codex", 1],
     ]);
   });
 

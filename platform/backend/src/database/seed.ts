@@ -99,18 +99,29 @@ export async function seedDefaultUserAndOrg(
   return user;
 }
 
-/** @public — exported for testability */
-export async function syncBuiltInAgents(): Promise<void> {
-  const organizations = await getOrganizationsForBuiltInAgentSync();
+/**
+ * Reconciles the built-in agents, and the built-in skills they reference, into
+ * the given organizations (every organization by default). The two are synced
+ * together so no path can provision an organization's built-in agents while
+ * leaving it without their skills.
+ *
+ * @public — exported for testability
+ */
+export async function syncBuiltInAgents(
+  organizationIds?: string[],
+): Promise<void> {
+  const ids =
+    organizationIds ??
+    (await getOrganizationsForBuiltInAgentSync()).map(({ id }) => id);
 
-  for (const organization of organizations) {
+  for (const organizationId of ids) {
+    const organization = await OrganizationModel.getById(organizationId);
+    if (!organization) continue;
     // Every shipped string below is branded for the organization being
     // seeded, and the branding singleton holds one organization at a time —
     // so it has to be synced before the definitions are built, not once for
     // the whole sweep.
-    archestraMcpBranding.syncFromOrganization(
-      await OrganizationModel.getById(organization.id),
-    );
+    archestraMcpBranding.syncFromOrganization(organization);
 
     const builtInAgents = [
       {
@@ -201,6 +212,7 @@ export async function syncBuiltInAgents(): Promise<void> {
         builtInAgent,
       });
     }
+    await syncBuiltInSkillsForOrganization(organization);
   }
 }
 
@@ -227,7 +239,7 @@ export async function syncBuiltInSkills(): Promise<void> {
 
 /**
  * Reconcile the built-in skills into a single organization, branded under its
- * white-label app name. Called per-org by {@link syncBuiltInSkills} on startup
+ * white-label app name. Called per-org by {@link syncBuiltInAgents} on startup
  * and directly when an admin changes the app name (so list_skills/load_skill
  * reflect the new brand immediately, mirroring the built-in MCP tool re-seed).
  *
@@ -412,16 +424,33 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
   ] as const;
 
   for (const organization of await getOrganizationsForBuiltInAgentSync()) {
+    const enabled = config.openappa.enabled;
+    const findBuiltIns = async () => ({
+      guide: enabled
+        ? await SkillModel.findBuiltIn({
+            organizationId: organization.id,
+            sourceRef: builtInSkillSourceRef("appa-guide"),
+          })
+        : null,
+      agent: await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        organization.id,
+      ),
+    });
+    let found = await findBuiltIns();
+    // An organization created after the built-in pass (the fallback in
+    // getOrganizationsForBuiltInAgentSync, or a reseed racing startup) has
+    // neither yet; provision it now instead of only on the next restart.
+    if (!found.agent || (enabled && !found.guide)) {
+      await syncBuiltInAgents([organization.id]);
+      found = await findBuiltIns();
+    }
+    const { guide, agent } = found;
+    if (!agent) continue;
+
     archestraMcpBranding.syncFromOrganization(
       await OrganizationModel.getById(organization.id),
     );
-    const enabled = config.openappa.enabled;
-    const guide = enabled
-      ? await SkillModel.findBuiltIn({
-          organizationId: organization.id,
-          sourceRef: builtInSkillSourceRef("appa-guide"),
-        })
-      : null;
     const liveGuide = guide && !guide.deletedAt ? guide : null;
     const toolIds = enabled
       ? await ToolModel.findBuiltInToolIdsByNames(
@@ -430,12 +459,6 @@ export async function syncOpenAppaConfigAgentCapabilities(): Promise<void> {
           ),
         )
       : [];
-
-    const agent = await AgentModel.getBuiltInAgent(
-      BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
-      organization.id,
-    );
-    if (!agent) continue;
 
     const agentId = await withDbTransaction(async (tx) => {
       await AgentModel.lockRowForUpdate(agent.id, tx);
@@ -1186,7 +1209,6 @@ export async function seedRequiredStartingData(): Promise<void> {
   // Every organization gets its LLM Proxy row before internal agents seed
   await AgentModel.ensureLlmProxiesForAllOrganizations();
   await syncBuiltInAgents();
-  await syncBuiltInSkills();
   await seedArchestraCatalogAndTools();
   await syncOpenAppaConfigAgentCapabilities();
   await enableSkillToolsForExistingOrgs();

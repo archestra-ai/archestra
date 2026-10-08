@@ -442,26 +442,19 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     }
   });
 
-  test.for([
-    "missing",
-    "soft-deleted",
-  ] as const)("keeps the OpenAPPA agent's managed tools when the guide is %s", async (guideState, {
+  test("keeps the OpenAPPA agent's managed tools when the guide is soft-deleted", async ({
     makeOrganization,
   }) => {
     config.openappa.enabled = true;
     config.skillsSandbox.enabled = true;
     const withGuide = await makeOrganization();
-    const withoutGuide =
-      guideState === "soft-deleted" ? await makeOrganization() : null;
+    const orgWithoutGuide = await makeOrganization();
     await syncBuiltInSkills();
-    const orgWithoutGuide = withoutGuide ?? (await makeOrganization());
-    if (guideState === "soft-deleted") {
-      const guide = await SkillModel.findBuiltIn({
-        organizationId: orgWithoutGuide.id,
-        sourceRef: builtInSkillSourceRef("appa-guide"),
-      });
-      await SkillModel.delete(guide?.id ?? "");
-    }
+    const guide = await SkillModel.findBuiltIn({
+      organizationId: orgWithoutGuide.id,
+      sourceRef: builtInSkillSourceRef("appa-guide"),
+    });
+    await SkillModel.delete(guide?.id ?? "");
     await syncBuiltInAgents();
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     await syncOpenAppaConfigAgentCapabilities();
@@ -565,6 +558,60 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
       manualToolIds,
     );
     expect(await AgentSuggestedPromptModel.getForAgent(agentId)).toEqual([]);
+  });
+
+  test("provisions an organization created after the built-in pass", async ({
+    makeOrganization,
+  }) => {
+    const original = config.openappa.enabled;
+    try {
+      config.openappa.enabled = true;
+      await makeOrganization();
+      await syncBuiltInAgents();
+      await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
+
+      const lateOrg = await makeOrganization();
+      await syncOpenAppaConfigAgentCapabilities();
+
+      const guide = await SkillModel.findBuiltIn({
+        organizationId: lateOrg.id,
+        sourceRef: builtInSkillSourceRef("appa-guide"),
+      });
+      expect(guide?.deletedAt).toBeNull();
+      const files = await SkillFileModel.findBySkillId(guide?.id ?? "");
+      const shippedGuide = getEnabledBuiltInSkills().find(
+        (skill) => skill.builtInSkillId === "appa-guide",
+      );
+      expect(files.map((file) => file.path).sort()).toEqual(
+        shippedGuide?.files.map((file) => file.path).sort(),
+      );
+
+      const agent = await AgentModel.getBuiltInAgent(
+        BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG,
+        lateOrg.id,
+      );
+      expect(
+        await AgentActivationSkillRuleModel.findPolicySnapshot(agent?.id ?? ""),
+      ).toMatchObject({
+        mode: "manual",
+        rules: [{ reference: { source: "native", skillId: guide?.id } }],
+      });
+
+      await syncBuiltInAgents();
+      await syncOpenAppaConfigAgentCapabilities();
+      const builtInSkills = await db
+        .select({ id: schema.skillsTable.id })
+        .from(schema.skillsTable)
+        .where(
+          and(
+            eq(schema.skillsTable.organizationId, lateOrg.id),
+            eq(schema.skillsTable.sourceType, "built_in"),
+          ),
+        );
+      expect(builtInSkills).toHaveLength(getEnabledBuiltInSkills().length);
+    } finally {
+      config.openappa.enabled = original;
+    }
   });
 
   test("creates built-in agents for every organization", async ({

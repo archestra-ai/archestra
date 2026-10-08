@@ -9,6 +9,7 @@ import type { ColumnDef } from "@tanstack/react-table";
 import {
   Bot,
   Copy,
+  type LucideIcon,
   Network,
   Pencil,
   Plus,
@@ -439,8 +440,16 @@ function OauthClientsTable() {
             showSearch={false}
             items={[
               { value: "all", label: "All types" },
-              { value: "llm", label: "LLM Proxy" },
-              { value: "mcp", label: "MCP" },
+              {
+                value: "llm",
+                label: "LLM Proxy",
+                content: <IconLabel icon={Bot} label="LLM Proxy" />,
+              },
+              {
+                value: "mcp",
+                label: "MCP",
+                content: <IconLabel icon={Network} label="MCP" />,
+              },
             ]}
           />
           <FilterSelect
@@ -455,8 +464,16 @@ function OauthClientsTable() {
             showSearch={false}
             items={[
               { value: "all", label: "All sign-in modes" },
-              { value: "client_credentials", label: "As itself" },
-              { value: "authorization_code", label: "For its users" },
+              {
+                value: "client_credentials",
+                label: "As itself",
+                content: <IconLabel icon={Server} label="As itself" />,
+              },
+              {
+                value: "authorization_code",
+                label: "For its users",
+                content: <IconLabel icon={Users} label="For its users" />,
+              },
             ]}
           />
           <EntityLabelFilter
@@ -606,6 +623,16 @@ function OauthClientsTable() {
 }
 
 type GrantType = "client_credentials" | "authorization_code";
+
+/** A filter option prefixed with the icon its table column uses. */
+function IconLabel({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    <span className="flex items-center gap-2">
+      <Icon className="size-4 shrink-0 text-muted-foreground" />
+      {label}
+    </span>
+  );
+}
 
 function isClientType(value: string | null) {
   return value === "llm" || value === "mcp";

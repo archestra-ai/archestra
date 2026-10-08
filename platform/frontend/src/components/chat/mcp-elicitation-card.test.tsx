@@ -310,7 +310,12 @@ describe("McpElicitationCard", () => {
     );
 
     expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
-    await user.type(screen.getByRole("textbox", { name: "Other" }), "acme");
+    expect(
+      screen.queryByRole("textbox", { name: "Other" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("radio", { name: "Other" }));
+    expect(screen.getByRole("textbox", { name: "Other" })).toHaveFocus();
+    await user.keyboard("acme");
     await new Promise((resolve) => setTimeout(resolve, 400));
     expect(screen.getByTestId("mcp-elicitation-tab-0")).toHaveAttribute(
       "aria-selected",
@@ -360,6 +365,7 @@ describe("McpElicitationCard", () => {
     );
 
     await user.click(screen.getByRole("radio", { name: "my-org" }));
+    await user.click(screen.getByRole("radio", { name: "Other" }));
     await user.type(screen.getByRole("textbox", { name: "Other" }), "a");
     await new Promise((resolve) => setTimeout(resolve, 400));
 
@@ -367,6 +373,46 @@ describe("McpElicitationCard", () => {
       "aria-selected",
       "true",
     );
+  });
+
+  it("sends checked options with typed Other text, and drops the text once Other is unchecked", async () => {
+    const user = userEvent.setup();
+    const onRespond = vi.fn().mockResolvedValue(true);
+    render(
+      <McpElicitationCard
+        requests={[
+          withOther(
+            multiChoice({
+              id: "q-steps",
+              message: "Which steps should run?",
+              options: ["Run tests", "Deploy"],
+            }),
+          ),
+        ]}
+        onRespond={onRespond}
+      />,
+    );
+
+    await user.click(screen.getByRole("checkbox", { name: "Run tests" }));
+    await user.click(screen.getByRole("checkbox", { name: "Other" }));
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "lint");
+    await user.click(screen.getByRole("checkbox", { name: "Other" }));
+    expect(
+      screen.queryByRole("textbox", { name: "Other" }),
+    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Other" }));
+    await user.type(screen.getByRole("textbox", { name: "Other" }), "build");
+    await user.click(screen.getByRole("button", { name: "Submit" }));
+
+    expect(onRespond).toHaveBeenCalledExactlyOnceWith({
+      id: "q-steps",
+      action: "accept",
+      content: {
+        option_0: true,
+        option_1: false,
+        [ASK_USER_OTHER_ANSWER_FIELD]: "build",
+      },
+    });
   });
 
   it("keeps an enum and an independent optional text field off the inline card", () => {
@@ -421,8 +467,13 @@ describe("McpElicitationCard", () => {
 
     const submit = screen.getByRole("button", { name: "Submit" });
     expect(submit).toBeDisabled();
+    await user.click(screen.getByRole("radio", { name: "Other" }));
+    expect(submit).toBeDisabled();
     await user.type(screen.getByRole("textbox", { name: "Other" }), "acme");
     await user.click(screen.getByRole("radio", { name: "my-org" }));
+    expect(
+      screen.queryByRole("textbox", { name: "Other" }),
+    ).not.toBeInTheDocument();
     await user.click(submit);
 
     expect(onRespond).toHaveBeenCalledExactlyOnceWith({

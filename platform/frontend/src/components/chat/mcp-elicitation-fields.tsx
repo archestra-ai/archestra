@@ -259,6 +259,7 @@ export function ElicitationFieldInput({
   onChange,
   onPick,
   onFocus,
+  other,
 }: {
   /** Keeps control ids unique when several requests render at once. */
   idPrefix: string;
@@ -281,6 +282,8 @@ export function ElicitationFieldInput({
   onPick?: (value: string) => void;
   /** Focus on a text field; choice controls ignore it. */
   onFocus?: () => void;
+  /** Adds an "Other" option to a single pick, for a typed answer instead. */
+  other?: { selected: boolean; onSelect: () => void };
 }) {
   const id = `mcp-elicitation-${idPrefix}-${field.name}`;
   const errorId = `${id}-error`;
@@ -348,9 +351,11 @@ export function ElicitationFieldInput({
           </p>
         )}
         <RadioGroup
-          value={String(value ?? "")}
+          value={other?.selected ? OTHER_OPTION_VALUE : String(value ?? "")}
           disabled={disabled}
-          onValueChange={onChange}
+          onValueChange={(picked) =>
+            picked === OTHER_OPTION_VALUE ? other?.onSelect() : onChange(picked)
+          }
           aria-labelledby={labelledBy ?? (hideLabel ? undefined : labelId)}
           aria-label={!labelledBy && hideLabel ? field.label : undefined}
           aria-invalid={Boolean(error)}
@@ -386,6 +391,20 @@ export function ElicitationFieldInput({
               </OptionRow>
             );
           })}
+          {other ? (
+            <OptionRow
+              htmlFor={`${id}-other`}
+              selected={other.selected}
+              error={Boolean(error)}
+            >
+              <RadioGroupItem
+                id={`${id}-other`}
+                value={OTHER_OPTION_VALUE}
+                className="mt-0.5"
+              />
+              <span className="text-sm leading-5">Other</span>
+            </OptionRow>
+          ) : null}
         </RadioGroup>
         {error ? (
           <p id={errorId} className="text-xs text-destructive">
@@ -401,7 +420,7 @@ export function ElicitationFieldInput({
 
   return (
     <div className="flex flex-col gap-2">
-      <Label htmlFor={id}>
+      <Label htmlFor={id} className={hideLabel ? "sr-only" : undefined}>
         {field.label}
         {field.required ? <span className="text-destructive">*</span> : null}
       </Label>
@@ -463,6 +482,8 @@ export function ElicitationFieldInput({
 }
 
 // === Internal helpers ===
+
+const OTHER_OPTION_VALUE = ASK_USER_OTHER_ANSWER_FIELD;
 
 function isChoiceField(field: ElicitationField) {
   const options = field.schema.enum;

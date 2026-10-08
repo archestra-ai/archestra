@@ -16,7 +16,6 @@ import {
   anthropicSupportsThinkingDisabled,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
-  DELEGATION_BILLING_ENVIRONMENT_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
@@ -210,11 +209,6 @@ export function createLLMModel(params: {
    */
   encryptedChatKey?: Buffer | null;
   /**
-   * Caller environment for advisor delegation billing. Loopback-gated on the
-   * proxy side; see DELEGATION_BILLING_ENVIRONMENT_HEADER.
-   */
-  delegationBillingEnvironmentId?: string | null;
-  /**
    * MCP App whose runtime is making this call, so the interaction is attributed
    * to it rather than only to the shared App Runtime agent. Loopback-gated on
    * the proxy side; see APP_ID_HEADER.
@@ -239,7 +233,6 @@ export function createLLMModel(params: {
     chatApiKeyId,
     dualLlmProgressChannel,
     encryptedChatKey,
-    delegationBillingEnvironmentId,
     appId,
     supportedEndpoints,
   } = params;
@@ -290,12 +283,6 @@ export function createLLMModel(params: {
   // text into the response stream.
   if (dualLlmProgressChannel) {
     clientHeaders[DUAL_LLM_PROGRESS_CHANNEL_HEADER] = dualLlmProgressChannel;
-  }
-  // Advisor consultations bill to the delegating caller's environment; the
-  // proxy re-validates this against the executing agent row and its org.
-  if (delegationBillingEnvironmentId) {
-    clientHeaders[DELEGATION_BILLING_ENVIRONMENT_HEADER] =
-      delegationBillingEnvironmentId;
   }
   // App runtime completions attribute their spend to the calling app; the proxy
   // re-validates this against the executing agent's organization.
@@ -353,12 +340,6 @@ export async function createLLMModelForAgent(params: {
    * interaction content is stored encrypted rather than redacted.
    */
   encryptedChatKey?: Buffer | null;
-  /**
-   * Caller environment for advisor delegation billing; forwarded as a
-   * loopback-gated proxy header. Set only by the A2A executor when the
-   * executed agent is the advisor built-in.
-   */
-  delegationBillingEnvironmentId?: string | null;
   /** Signed binding of an in-process subagent run to its child trajectory. */
   appaSubagentToken?: string;
 }): Promise<{
@@ -488,7 +469,6 @@ export async function createLLMModelForAgent(params: {
     chatApiKeyId,
     dualLlmProgressChannel,
     encryptedChatKey: params.encryptedChatKey,
-    delegationBillingEnvironmentId: params.delegationBillingEnvironmentId,
     appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,
   });

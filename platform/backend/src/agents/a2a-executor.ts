@@ -1,6 +1,5 @@
 import crypto from "node:crypto";
 import {
-  BUILT_IN_AGENT_IDS,
   type ChatUploadRejectionReason,
   chatUploadRejectionReason,
   getModelReadableMimeTypes,
@@ -160,12 +159,6 @@ export interface A2AExecuteParams {
   chatOpsThreadId?: string;
   /** Whether the parent execution context was still trusted at delegation time */
   parentContextIsTrusted?: boolean;
-  /**
-   * Environment of the delegating caller (null = Default). Only consumed when
-   * the executed agent is the advisor built-in: its own row is org-wide and
-   * env-less, so consultations bill to the caller's environment instead.
-   */
-  callerEnvironmentId?: string | null;
   /** Schedule trigger run ID — identifies the scheduled run this execution belongs to */
   scheduleTriggerRunId?: string;
 
@@ -319,14 +312,6 @@ export async function executeA2AMessage(
     await assertCallerMayStartTurn({ agentId, userId });
   }
 
-  // The advisor's row is env-less, so without this its spend would escape
-  // environment budgets entirely; every other agent bills to its own row's
-  // environment as usual.
-  const delegationBillingEnvironmentId =
-    agent.builtInAgentConfig?.name === BUILT_IN_AGENT_IDS.ADVISOR
-      ? (params.callerEnvironmentId ?? null)
-      : null;
-
   const { selectedModel, selectedProvider: provider } =
     await resolveConversationLlmSelectionForAgent({
       agent: {
@@ -415,7 +400,6 @@ export async function executeA2AMessage(
         externalAgentId: delegationChain,
         agentLlmApiKeyId: agent.llmApiKeyId,
         contextIsTrusted: parentContextIsTrusted,
-        delegationBillingEnvironmentId,
         appaSubagentToken: params.appaSubagent?.token,
       });
 
@@ -574,7 +558,6 @@ export async function executeA2AMessage(
               externalAgentId: delegationChain,
               agentLlmApiKeyId: agent.llmApiKeyId,
               contextIsTrusted: parentContextIsTrusted,
-              delegationBillingEnvironmentId,
               appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,

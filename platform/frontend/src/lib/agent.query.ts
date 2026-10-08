@@ -102,14 +102,8 @@ async function fetchChatAgents() {
 const delegationTargetAgentsQuery = {
   agentType: "agent",
   excludeBuiltIn: true,
-  includeAdvisor: true,
 } as const;
 
-/**
- * Agents that can be picked as a subagent. Separate from
- * {@link useInternalAgents} because the advisor belongs here and nowhere else:
- * it is a target to delegate to, not an agent to start a conversation with.
- */
 export function useDelegationTargetAgents(params?: { enabled?: boolean }) {
   return useQuery({
     queryKey: ["agents", "all", delegationTargetAgentsQuery],

@@ -1,6 +1,5 @@
 import {
   type AgentType,
-  BUILT_IN_AGENT_IDS,
   createPaginatedResponseSchema,
   getResourceForAgentType,
   isModelSelectionComplete,
@@ -382,12 +381,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Exclude built-in agents from the results, except the system chat assistant in chat view. Defaults to false.",
             ),
-          includeAdvisor: z
-            .preprocess((val) => val === "true" || val === true, z.boolean())
-            .optional()
-            .describe(
-              "Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to.",
-            ),
           scope: AgentScopeFilterSchema.optional().describe(
             "Filter by scope: personal, team, org, or built_in.",
           ),
@@ -428,7 +421,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType,
           agentTypes,
           excludeBuiltIn,
-          includeAdvisor,
           scope,
           excludeOtherPersonalAgents,
           status,
@@ -473,7 +465,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentType: agentTypes || permittedTypes ? undefined : agentType,
           agentTypes: permittedTypes ?? agentTypes,
           excludeBuiltIn,
-          includeAdvisor,
           scope:
             scope && scope !== "built_in" ? (scope as AgentScope) : undefined,
           excludeOtherPersonalAgents: isAdmin
@@ -715,7 +706,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
       }
 
       // `builtInAgentConfig` is server-owned: only the seeder sets it, and it
-      // is a trust attribute (the advisor discriminator drives the delegation
       // environment exception), so a client-supplied value is dropped here.
       if (initialGrants !== undefined) {
         // SPDX-SnippetBegin
@@ -743,19 +733,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // The retired visibility column is NOT NULL; nothing reads it.
         scope: "personal" as const,
       };
-      // Whether a new record starts out able to consult the Advisor is decided
-      // here, not by a follow-up write from the client: that second write
-      // forks another version and silently never happens for roles without
-      // `agent:read`.
-      const defaultExcludedSubagentIds =
-        await agentSubagentExclusionsService.getCreationDefaultExclusions({
-          organizationId,
-          agentType,
-          accessAllSubagents: createData.accessAllSubagents === true,
-        });
-
       const agent = await AgentModel.create(createData, user.id, {
-        defaultExcludedSubagentIds,
         deferInitialVersionFork: body.activationSkillPolicy !== undefined,
         initialPermissionGrants: initialGrants ?? [],
       });
@@ -1928,20 +1906,6 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           }
         }
 
-        // The advisor is one org-wide row every environment's agents reach
-        // through delegation. An environment would re-fence it, so reject a
-        // narrowing change rather than silently scoping a shared resource.
-        if (
-          existingAgent.builtInAgentConfig.name === BUILT_IN_AGENT_IDS.ADVISOR
-        ) {
-          if (body.environmentId !== undefined && body.environmentId !== null) {
-            throw new ApiError(
-              400,
-              "The Advisor is org-wide and cannot be assigned to an environment",
-            );
-          }
-        }
-
         // Only allow specific fields for built-in agents.
         updateData = {
           ...(body.builtInAgentConfig !== undefined && {
@@ -1957,7 +1921,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       } else {
         // `builtInAgentConfig` is server-owned and a trust attribute (drives
-        // the advisor delegation exception), so a client cannot promote an
+        // built-in behavior), so a client cannot promote an
         // ordinary agent into a built-in by supplying it on update.
         const { builtInAgentConfig: _ignoredBuiltIn, ...bodyWithoutBuiltIn } =
           body;

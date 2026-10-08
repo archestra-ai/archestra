@@ -10,9 +10,7 @@ import {
   APPA_SESSION_HEADER,
   ArchestraInternalErrorCode,
   type BillingMode,
-  BUILT_IN_AGENT_IDS,
   CHAT_API_KEY_ID_HEADER,
-  DELEGATION_BILLING_ENVIRONMENT_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   hasArchestraTokenPrefix,
   type InteractionSource,
@@ -56,7 +54,6 @@ import {
   AgentTeamModel,
   AppModel,
   ConversationModel,
-  EnvironmentModel,
   InteractionModel,
   LimitValidationService,
   LlmProviderApiKeyModel,
@@ -291,12 +288,6 @@ export interface LLMProxyContext<TRequest> {
    * fallback. Resolved once per request so every write site agrees.
    */
   encryptedChat: EncryptedChatAuditDisposition;
-  /**
-   * Caller environment an advisor consultation bills to, resolved from the
-   * loopback-gated delegation header and re-validated against the executing
-   * agent row. Undefined for every non-advisor request.
-   */
-  delegationBillingEnvironmentId?: string;
   /**
    * MCP App whose runtime made this call, resolved from the loopback-gated app
    * header and re-validated against the executing agent's organization.
@@ -1310,14 +1301,6 @@ export async function handleLLMProxy<
     );
   }
 
-  // Advisor consultations bill to the delegating caller's environment (the
-  // advisor's own row is env-less). Resolved once so the limit check and every
-  // interaction write agree on it.
-  const delegationBillingEnvironmentId =
-    await resolveDelegationBillingEnvironment(request, resolvedAgent);
-
-  // App-runtime completions carry the calling app, so per-app runtime spend is
-  // attributable instead of collapsing into the shared App Runtime agent.
   const attributedAppId = await resolveAttributedAppId(request, resolvedAgent);
 
   // Check usage limits
@@ -1332,7 +1315,6 @@ export async function handleLLMProxy<
         userId,
         virtualKeyId,
         passthroughVirtualKeyId,
-        environmentIdOverride: delegationBillingEnvironmentId,
         agent: resolvedAgent,
         teamSource: lookups,
       });
@@ -2525,7 +2507,6 @@ export async function handleLLMProxy<
       unsafeContextBoundary,
       suppressContent,
       encryptedChat,
-      delegationBillingEnvironmentId,
       appId: attributedAppId,
       externalAgentId,
       authMethod,
@@ -2626,11 +2607,7 @@ export async function handleLLMProxy<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(
-        record,
-        encryptedChat,
-        delegationBillingEnvironmentId,
-      );
+      await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: resolvedAgent.id },
@@ -2735,7 +2712,6 @@ async function handleStreaming<
     unsafeContextBoundary,
     suppressContent,
     encryptedChat,
-    delegationBillingEnvironmentId,
     appId,
     externalAgentId,
     authMethod,
@@ -2923,11 +2899,7 @@ async function handleStreaming<
         inputTokens: 0,
         outputTokens: 0,
       };
-      await persistProxyInteraction(
-        record,
-        encryptedChat,
-        delegationBillingEnvironmentId,
-      );
+      await persistProxyInteraction(record, encryptedChat);
     } catch (interactionError) {
       logger.error(
         { err: interactionError, profileId: agent.id },
@@ -3658,11 +3630,7 @@ async function handleStreaming<
           unsafeContextBoundary,
           toolCallBlock,
         });
-        await persistProxyInteraction(
-          record,
-          encryptedChat,
-          delegationBillingEnvironmentId,
-        );
+        await persistProxyInteraction(record, encryptedChat);
       } catch (interactionError) {
         logger.error(
           { err: interactionError, profileId: agent.id },
@@ -3713,7 +3681,6 @@ async function handleNonStreaming<
     unsafeContextBoundary,
     suppressContent,
     encryptedChat,
-    delegationBillingEnvironmentId,
     appId,
     externalAgentId,
     authMethod,
@@ -4114,11 +4081,7 @@ async function handleNonStreaming<
         unsafeContextBoundary,
         toolCallBlock: toToolCallBlock(toolInvocationRefusal),
       });
-      await persistProxyInteraction(
-        refusalRecord,
-        encryptedChat,
-        delegationBillingEnvironmentId,
-      );
+      await persistProxyInteraction(refusalRecord, encryptedChat);
 
       if (pluginRegistry && pluginContext) {
         // A refusal is a terminal answer: the turn ends here, as it does on
@@ -4274,11 +4237,7 @@ async function handleNonStreaming<
       dualLlmAnalyses,
       unsafeContextBoundary,
     });
-    await persistProxyInteraction(
-      record,
-      encryptedChat,
-      delegationBillingEnvironmentId,
-    );
+    await persistProxyInteraction(record, encryptedChat);
     responsePersisted = true;
   } catch (interactionError) {
     logger.error(
@@ -4828,87 +4787,13 @@ function extractDurationStatusCode(error: unknown): string {
 async function persistProxyInteraction(
   record: InsertInteraction,
   encryptedChat: EncryptedChatAuditDisposition,
-  environmentIdOverride?: string,
 ): Promise<void> {
   await InteractionModel.create(
     encryptedChat.kind === "redact"
       ? redactEncryptedChatInteraction(record)
       : record,
     encryptedChat.kind === "encrypt" ? encryptedChat.audit : null,
-    environmentIdOverride ? { environmentIdOverride } : undefined,
   );
-}
-
-/**
- * Resolve the environment an advisor consultation bills to, from
- * DELEGATION_BILLING_ENVIRONMENT_HEADER. Honored only when all three hold:
- * the request arrived over the loopback socket (the in-process A2A executor's
- * path — the raw socket peer, not request.ip, which trustProxy can rewrite
- * from forwarded headers), the executing agent row is the advisor built-in,
- * and the id names an environment of that agent's organization. Anything else
- * ignores the header with a warning: the worst a spoofed value can do is
- * misattribute advisor spend between one organization's environments.
- */
-async function resolveDelegationBillingEnvironment(
-  request: FastifyRequest,
-  agent: GatewayAgent,
-): Promise<string | undefined> {
-  const raw =
-    request.headers[DELEGATION_BILLING_ENVIRONMENT_HEADER.toLowerCase()];
-  const value = Array.isArray(raw) ? raw[0] : raw;
-  if (!value) {
-    return undefined;
-  }
-
-  if (!isLoopbackRequest(request)) {
-    logger.warn(
-      { agentId: agent.id },
-      "Ignoring delegation billing environment header from a non-loopback peer",
-    );
-    return undefined;
-  }
-  if (agent.builtInAgentConfig?.name !== BUILT_IN_AGENT_IDS.ADVISOR) {
-    logger.warn(
-      { agentId: agent.id },
-      "Ignoring delegation billing environment header on a non-advisor agent",
-    );
-    return undefined;
-  }
-  // The env-id column is a uuid; a non-uuid value would make the lookup's cast
-  // throw and 500 the LLM call (leaking the query), so reject it here — an
-  // unusable header must be ignored, not fatal.
-  if (!isUuid(value)) {
-    logger.warn(
-      { agentId: agent.id },
-      "Ignoring malformed delegation billing environment header",
-    );
-    return undefined;
-  }
-  // A lookup failure must not fail the LLM call — the header only refines
-  // billing attribution, so on any error fall back to the agent's own env.
-  let environment: Awaited<
-    ReturnType<typeof EnvironmentModel.findByIdForOrganization>
-  >;
-  try {
-    environment = await EnvironmentModel.findByIdForOrganization(
-      value,
-      agent.organizationId,
-    );
-  } catch (error) {
-    logger.warn(
-      { err: error, agentId: agent.id },
-      "Ignoring delegation billing environment header after a lookup error",
-    );
-    return undefined;
-  }
-  if (!environment) {
-    logger.warn(
-      { agentId: agent.id, environmentId: value },
-      "Ignoring delegation billing environment header naming an unknown environment",
-    );
-    return undefined;
-  }
-  return environment.id;
 }
 
 /**

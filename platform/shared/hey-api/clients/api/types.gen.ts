@@ -14435,8 +14435,6 @@ export type GetAgentCatalogResponses = {
                     name: 'chat-title-generation-subagent';
                 } | {
                     name: 'app-runtime-llm-agent';
-                } | {
-                    name: 'advisor-agent';
                 } | null;
                 builtIn: boolean | null;
                 latestVersion: number;
@@ -14782,8 +14780,6 @@ export type GetAgentsResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
-            } | {
-                name: 'advisor-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -14927,8 +14923,6 @@ export type CreateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
         labels?: Array<{
@@ -15204,8 +15198,6 @@ export type CreateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -15451,10 +15443,6 @@ export type GetAllAgentsData = {
          */
         excludeBuiltIn?: boolean;
         /**
-         * Keep the advisor in the results while built-in agents are excluded. For pickers that choose a subagent to delegate to.
-         */
-        includeAdvisor?: boolean;
-        /**
          * Filter by scope: personal, team, org, or built_in.
          */
         scope?: 'personal' | 'team' | 'org' | 'built_in';
@@ -15630,8 +15618,6 @@ export type GetAllAgentsResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -15937,8 +15923,6 @@ export type GetDefaultMcpGatewayResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -16236,8 +16220,6 @@ export type ImportAgentResponses = {
                 name: 'chat-title-generation-subagent';
             } | {
                 name: 'app-runtime-llm-agent';
-            } | {
-                name: 'advisor-agent';
             } | null;
             builtIn: boolean | null;
             latestVersion: number;
@@ -16548,8 +16530,6 @@ export type GetAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -16683,8 +16663,6 @@ export type UpdateAgentData = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         deletedAt?: unknown;
         labels?: Array<{
@@ -16862,8 +16840,6 @@ export type UpdateAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -17349,8 +17325,6 @@ export type RestoreAgentVersionResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -17593,8 +17567,6 @@ export type CloneAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;
@@ -19922,8 +19894,6 @@ export type RestoreAgentResponses = {
             name: 'chat-title-generation-subagent';
         } | {
             name: 'app-runtime-llm-agent';
-        } | {
-            name: 'advisor-agent';
         } | null;
         builtIn: boolean | null;
         latestVersion: number;

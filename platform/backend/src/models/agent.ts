@@ -704,16 +704,6 @@ class AgentModel {
        * onto the new agent.
        */
       skipCreationDefaultTools?: boolean;
-      /**
-       * Delegation targets the new agent starts with excluded from its
-       * Auto-subagent surface (today: the Advisor, which is opt-in). Applied
-       * inside create so version 1's snapshot already records them — a
-       * follow-up write from the caller would fork a second version, and one
-       * made by the client silently never happens for roles without
-       * `agent:read`. Which ids these are is the caller's rule; see
-       * `agentSubagentExclusionsService.getCreationDefaultExclusions`.
-       */
-      defaultExcludedSubagentIds?: string[];
       /** Caller will fork version 1 after completing a staged create policy. */
       deferInitialVersionFork?: boolean;
     },
@@ -882,30 +872,6 @@ class AgentModel {
       }
     }
 
-    // Seed the caller's default Auto-mode subagent exclusions. Before the
-    // version-1 fork below, so the first snapshot carries them like any other
-    // part of the created config. Best-effort, like the fork itself: the agent
-    // row and its junctions are already committed (create is not transactional,
-    // and this write is a delete+insert of its own), so throwing here would
-    // leave a half-made agent behind. One that starts with the Advisor
-    // reachable is degraded, not broken.
-    if (
-      options?.defaultExcludedSubagentIds &&
-      options.defaultExcludedSubagentIds.length > 0
-    ) {
-      try {
-        await AgentExcludedSubagentModel.replaceForAgent(
-          createdAgent.id,
-          options.defaultExcludedSubagentIds,
-        );
-      } catch (error) {
-        logger.warn(
-          { error, agentId: createdAgent.id },
-          "Default subagent exclusions were not seeded; agent created without them",
-        );
-      }
-    }
-
     // Fork version 1 once the full config of this create (row, junctions,
     // auto-assigned tools, exclusion pre-fill) is in place. A caller that
     // defers this fork must capture version 1 after it finishes its remaining
@@ -960,13 +926,6 @@ class AgentModel {
       authorization?: { organizationId: string; baseReadTypes: AgentType[] };
       agentTypes?: AgentType[];
       excludeBuiltIn?: boolean;
-      /**
-       * Keep the advisor in the results even while built-ins are excluded.
-       * It is the one built-in another agent is meant to reach, so the
-       * subagent picker needs it without also offering the platform
-       * machinery — dual-LLM, compaction, title generation.
-       */
-      includeAdvisor?: boolean;
       scope?: AgentScope;
       excludeOtherPersonalAgents?: boolean;
       status?: AgentRecordStatus;
@@ -1048,8 +1007,6 @@ class AgentModel {
       const visibleAgents = [eq(schema.agentsTable.builtIn, false)];
       if (isChatView && config.openappa.enabled) {
         visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG));
-      } else if (!isChatView && options?.includeAdvisor) {
-        visibleAgents.push(eq(builtInName, BUILT_IN_AGENT_IDS.ADVISOR));
       }
       whereConditions.push(or(...visibleAgents) as SQL);
     }
@@ -2544,32 +2501,6 @@ class AgentModel {
     return agents.map((agent) => agent.id);
   }
 
-  /**
-   * Agents a toolset backfill may assign to. Everything in the organization
-   * except the advisor, which answers questions and must not act: a tool it
-   * holds is one a consultation can call, and the advisor's whole contract is
-   * that it returns a recommendation and edits nothing.
-   */
-  static async findToolAssignableIdsByOrganizationId(
-    organizationId: string,
-  ): Promise<string[]> {
-    const agents = await db
-      .select({ id: schema.agentsTable.id })
-      .from(schema.agentsTable)
-      .where(
-        and(
-          eq(schema.agentsTable.organizationId, organizationId),
-          ne(
-            sql`coalesce(${schema.agentsTable.builtInAgentConfig}->>'name', '')`,
-            BUILT_IN_AGENT_IDS.ADVISOR,
-          ),
-          notDeleted(schema.agentsTable),
-        ),
-      );
-
-    return agents.map((agent) => agent.id);
-  }
-
   static async findAllIds(): Promise<string[]> {
     const agents = await db
       .select({ id: schema.agentsTable.id })
@@ -2655,10 +2586,7 @@ class AgentModel {
    * {@link ToolModel.getMcpToolsAccessibleToUser} — the dynamic surface for
    * `agents.access_all_subagents`. Admins see every internal agent.
    *
-   * Built-in agents are excluded with one exception: the advisor exists to be
-   * consulted, so it is the only built-in offered as a delegation target. The
-   * rest back platform machinery — dual-LLM, compaction, title generation —
-   * and delegating to them means driving an internal mechanism by hand.
+   * Built-in agents back platform machinery and are excluded.
    */
   static async findAccessibleDelegationTargets(params: {
     userId: string;
@@ -2668,8 +2596,6 @@ class AgentModel {
     /**
      * The calling agent's environment: delegation never crosses environment
      * boundaries (null is the Default environment), mirroring tool isolation.
-     * The advisor is the one exception — its org-wide (env-less) row is
-     * reachable from every environment.
      */
     environmentId: string | null;
     lookups?: PrincipalSource;
@@ -2679,34 +2605,14 @@ class AgentModel {
     const { userId, isAdmin, organizationId, excludeAgentId, environmentId } =
       params;
 
-    // The env-less advisor is reachable from every environment; scoping to the
-    // caller's organization keeps that exception from surfacing another org's
-    // advisor (the admin branch below has no other org fence).
-    const advisorException = and(
-      isNull(schema.agentsTable.environmentId),
-      eq(
-        sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-        BUILT_IN_AGENT_IDS.ADVISOR,
-      ),
-    );
-
     const baseConditions = [
       eq(schema.agentsTable.organizationId, organizationId),
       eq(schema.agentsTable.agentType, "agent"),
-      or(
-        eq(schema.agentsTable.builtIn, false),
-        eq(
-          sql`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-          BUILT_IN_AGENT_IDS.ADVISOR,
-        ),
-      ),
+      eq(schema.agentsTable.builtIn, false),
       ne(schema.agentsTable.id, excludeAgentId),
-      or(
-        environmentId === null
-          ? isNull(schema.agentsTable.environmentId)
-          : eq(schema.agentsTable.environmentId, environmentId),
-        advisorException,
-      ),
+      environmentId === null
+        ? isNull(schema.agentsTable.environmentId)
+        : eq(schema.agentsTable.environmentId, environmentId),
       notDeleted(schema.agentsTable),
     ];
 

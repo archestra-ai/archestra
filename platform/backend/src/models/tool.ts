@@ -1842,8 +1842,7 @@ class ToolModel {
     );
     if (toolIds.length === 0) return 0;
 
-    const agentIds =
-      await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
+    const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
 
     for (const agentId of agentIds) {
       await AgentToolModel.createManyIfNotExists(agentId, toolIds);
@@ -1918,8 +1917,7 @@ class ToolModel {
         newAppShortNames,
       );
       if (toolIds.length === 0) continue;
-      const agentIds =
-        await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
+      const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }

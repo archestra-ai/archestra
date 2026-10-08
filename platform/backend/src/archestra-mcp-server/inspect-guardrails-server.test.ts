@@ -363,7 +363,7 @@ describe("inspect_guardrails_server", () => {
     for (const overrides of [
       { name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG },
       { name: BUILT_IN_AGENT_NAMES.OPENAPPA_CONFIG, accessAllTools: true },
-      { builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR } },
+      { builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION } },
     ]) {
       const agent = await makeAgent({
         agentType: "agent",
@@ -396,7 +396,7 @@ describe("inspect_guardrails_server", () => {
       { agentType: "mcp_gateway" as const },
       {
         agentType: "agent" as const,
-        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+        builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
       },
     ]) {
       const agent = await makeAgent({

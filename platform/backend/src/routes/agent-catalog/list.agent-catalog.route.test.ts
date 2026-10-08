@@ -117,8 +117,8 @@ describe("GET /api/agent-catalog", () => {
     await makeAgent({
       organizationId: ctx.organizationId,
       agentType: "agent",
-      name: `Advisor ${suffix}`,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+      name: `Compaction ${suffix}`,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
     });
 
     const list = async (query: string) => {
@@ -142,16 +142,16 @@ describe("GET /api/agent-catalog", () => {
     // Built-in agents have no author, so the access filter does not apply to
     // them; the flag adds them on top of the selection.
     expect(await list("access=mine&includeBuiltIn=true")).toEqual({
-      names: ["Advisor", "Mine"],
+      names: ["Compaction", "Mine"],
       total: 2,
     });
     expect(await list("access=others&includeBuiltIn=true")).toEqual({
-      names: ["Advisor", "Theirs"],
+      names: ["Compaction", "Theirs"],
       total: 2,
     });
     // The older origin filter still lists the built-in agents alone.
     expect(await list("scope=built_in")).toEqual({
-      names: ["Advisor"],
+      names: ["Compaction"],
       total: 1,
     });
   });

@@ -4,11 +4,11 @@ import type { archestraApiTypes } from "@archestra/shared";
 import {
   AlertTriangle,
   CheckCircle2,
-  CircleDashed,
   ExternalLink,
   GitBranch,
   Github,
   GitPullRequestArrow,
+  LoaderCircle,
   RefreshCw,
 } from "lucide-react";
 import Link from "next/link";
@@ -248,8 +248,8 @@ export function AppaGithubSyncPanel() {
                       </span>
                       <InlineNoticeText>
                         Your current policy stays active until this pull request
-                        merges. Sync checks for the merge every minute, or use
-                        Sync now.
+                        merges. Sync keeps checking for the merge, or use Sync
+                        now.
                       </InlineNoticeText>
                       <Button variant="outline" size="xs" asChild>
                         <a
@@ -655,12 +655,10 @@ function OpenAppaSetupPullRequestDialog({
           <Badge variant={source?.lastSyncError ? "destructive" : "outline"}>
             {merged ? (
               <CheckCircle2 className="text-emerald-600 dark:text-emerald-400" />
-            ) : checking ? (
-              <RefreshCw className="animate-spin" />
             ) : source?.lastSyncError ? (
               <AlertTriangle />
             ) : (
-              <CircleDashed className="text-muted-foreground" />
+              <LoaderCircle className="animate-spin text-muted-foreground" />
             )}
             <span>
               {merged
@@ -710,8 +708,8 @@ function OpenAppaSetupPullRequestDialog({
             <span>{checking ? "Checking…" : "Check if merged"}</span>
           </Button>
           <p className="basis-full text-xs text-muted-foreground">
-            Sync also checks every minute. You can close this and come back from
-            the GitHub sync card.
+            We keep checking for the merge. You can close this and come back
+            from the GitHub sync card.
           </p>
         </div>
       )}

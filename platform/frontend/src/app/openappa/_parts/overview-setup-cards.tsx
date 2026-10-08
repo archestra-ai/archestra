@@ -8,6 +8,7 @@ import {
   CircleX,
   ClipboardCheck,
   Github,
+  LoaderCircle,
   MessageCircle,
   RefreshCw,
   ShieldCheck,
@@ -241,7 +242,10 @@ function GithubSyncCard({ next }: { next: boolean }) {
           !sync.data ? null : failed ? (
             <Status failed>Sync failed</Status>
           ) : connected && source?.setupPullRequestNumber ? (
-            <Status>Awaiting initial merge</Status>
+            <Badge variant="outline">
+              <LoaderCircle className="animate-spin text-muted-foreground" />
+              <span>Awaiting initial merge</span>
+            </Badge>
           ) : next ? (
             <Badge>Step 2 of 2</Badge>
           ) : connected ? (
@@ -260,7 +264,7 @@ function GithubSyncCard({ next }: { next: boolean }) {
               <span aria-live="polite">
                 {source.lastSyncedAt
                   ? `Last checked ${formatRelativeTimeFromNow(source.lastSyncedAt).toLowerCase()}.`
-                  : "Sync checks for the merge every minute."}
+                  : "Checking for the merge…"}
               </span>
             </span>
           ) : connected && source?.repo ? (

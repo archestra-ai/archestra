@@ -9,6 +9,7 @@ import {
   Edit,
   Info,
   Key,
+  KeyRound,
   Network,
   Plus,
   Trash2,
@@ -42,7 +43,6 @@ import {
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
 import { LlmModelSearchableSelect } from "@/components/llm-model-select";
-
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -90,6 +90,7 @@ import {
   useUpdateLimit,
 } from "@/lib/limits.query";
 import { useModelsWithApiKeys } from "@/lib/llm-models.query";
+import { useLlmOauthClients } from "@/lib/llm-oauth-clients.query";
 import { useLlmProxy } from "@/lib/llm-proxy.query";
 import {
   useOrganization,
@@ -182,6 +183,13 @@ const ENTITY_TYPE_ITEMS: Array<{
     icon: <Key className="h-4 w-4 shrink-0 text-muted-foreground" />,
   },
   {
+    value: "llm_oauth_client",
+    label: "LLM OAuth Client",
+    description:
+      "Caps spend for requests made by an application through an LLM OAuth client.",
+    icon: <KeyRound className="h-4 w-4 shrink-0 text-muted-foreground" />,
+  },
+  {
     value: "environment",
     label: "Environment",
     description:
@@ -221,6 +229,10 @@ export default function LimitsPage() {
     limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
   });
   const virtualKeys = virtualKeysData?.data ?? [];
+  const { data: oauthClientsData } = useLlmOauthClients({
+    limit: LIMITS_ENTITY_SELECTOR_PAGE_SIZE,
+  });
+  const oauthClients = oauthClientsData?.data ?? [];
   const { data: agents = [] } = useProfiles({
     filters: { agentTypes: ["agent"] },
   });
@@ -367,6 +379,12 @@ export default function LimitsPage() {
         );
         return key?.name ?? "Unknown key";
       }
+      if (limit.entityType === "llm_oauth_client") {
+        const client = oauthClients.find(
+          (candidate) => candidate.id === limit.entityId,
+        );
+        return client?.name ?? "Unknown OAuth client";
+      }
       if (limit.entityType === "agent") {
         if (limit.entityId === llmProxyId) {
           return "LLM Proxy";
@@ -384,7 +402,15 @@ export default function LimitsPage() {
       }
       return "Unknown";
     },
-    [teams, members, virtualKeys, agents, llmProxyId, environments],
+    [
+      teams,
+      members,
+      virtualKeys,
+      oauthClients,
+      agents,
+      llmProxyId,
+      environments,
+    ],
   );
 
   const getEntityIcon = useCallback(
@@ -401,6 +427,9 @@ export default function LimitsPage() {
       }
       if (limit.entityType === "virtual_key") {
         return <Key className={iconClassName} />;
+      }
+      if (limit.entityType === "llm_oauth_client") {
+        return <KeyRound className={iconClassName} />;
       }
       if (limit.entityType === "environment") {
         return <Boxes className={iconClassName} />;
@@ -840,6 +869,7 @@ export default function LimitsPage() {
                 { value: "llm_proxy", label: "LLM Proxy" },
                 { value: "user", label: "User" },
                 { value: "virtual_key", label: "Virtual Key" },
+                { value: "llm_oauth_client", label: "LLM OAuth Client" },
                 { value: "environment", label: "Environment" },
               ]}
             />
@@ -1060,6 +1090,25 @@ export default function LimitsPage() {
                       value: agent.id,
                       label: agent.name,
                       description: agent.description ?? undefined,
+                    }))}
+                    className="w-full sm:flex-1"
+                  />
+                )}
+
+                {formState.entityType === "llm_oauth_client" && (
+                  <SearchableSelect
+                    value={formState.entityId}
+                    onValueChange={(value) =>
+                      setFormState((current) => ({
+                        ...current,
+                        entityId: value,
+                      }))
+                    }
+                    placeholder="Select OAuth client"
+                    items={oauthClients.map((client) => ({
+                      value: client.id,
+                      label: client.name,
+                      description: client.clientId,
                     }))}
                     className="w-full sm:flex-1"
                   />

@@ -168,9 +168,9 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.getByLabelText("Name")).toHaveValue(
       "Self Admin's virtual key (2)",
     );
-    expect(
-      screen.getByLabelText("Selected provider keys"),
-    ).toHaveTextContent("OpenAI · Main OpenAI");
+    expect(screen.getByLabelText("Selected provider keys")).toHaveTextContent(
+      "OpenAI · Main OpenAI",
+    );
     // Sharing is set from the saved key's Permissions tab, not on create.
     expect(
       screen.queryByRole("button", { name: "Permissions" }),

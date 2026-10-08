@@ -46,27 +46,29 @@ export const LlmOauthClientMetadataSchema = z.object({
   billingTeamId: z.string().nullable().default(null),
 });
 
-export const LlmOauthClientSchema = z.object({
-  id: z.string(),
-  clientId: z.string(),
-  name: z.string(),
-  organizationId: z.string(),
-  grantType: LlmOauthClientGrantTypeSchema,
-  providerApiKeys: z.array(
-    LlmOauthClientProviderKeySchema.extend({
-      providerApiKeyName: z.string(),
-    }),
-  ),
-  redirectUris: z.array(z.string()),
-  disabled: z.boolean(),
-  authorId: z.string().nullable(),
-  authorName: z.string().nullable(),
-  /** The author, in the shape shared by every major object. */
-  createdBy: CreatedByNullableSchema,
-  labels: z.array(LabelWithDetailsSchema),
-  createdAt: z.date(),
-  updatedAt: z.date(),
-}).merge(CredentialBillingSchema);
+export const LlmOauthClientSchema = z
+  .object({
+    id: z.string(),
+    clientId: z.string(),
+    name: z.string(),
+    organizationId: z.string(),
+    grantType: LlmOauthClientGrantTypeSchema,
+    providerApiKeys: z.array(
+      LlmOauthClientProviderKeySchema.extend({
+        providerApiKeyName: z.string(),
+      }),
+    ),
+    redirectUris: z.array(z.string()),
+    disabled: z.boolean(),
+    authorId: z.string().nullable(),
+    authorName: z.string().nullable(),
+    /** The author, in the shape shared by every major object. */
+    createdBy: CreatedByNullableSchema,
+    labels: z.array(LabelWithDetailsSchema),
+    createdAt: z.date(),
+    updatedAt: z.date(),
+  })
+  .merge(CredentialBillingSchema);
 
 export const LlmOauthClientWithSecretSchema = LlmOauthClientSchema.extend({
   clientSecret: z.string(),

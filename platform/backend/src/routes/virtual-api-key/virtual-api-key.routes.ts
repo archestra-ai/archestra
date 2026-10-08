@@ -27,8 +27,8 @@ import { CredentialResourcePermissions } from "@/services/credential-resource-pe
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
   ApiError,
-  constructResponseSchema,
   CredentialSpendCapInputSchema,
+  constructResponseSchema,
   type LabelWithDetails,
   LabelWithDetailsSchema,
   ResourceVisibilityScopeSchema,

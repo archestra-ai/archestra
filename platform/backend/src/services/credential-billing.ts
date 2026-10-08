@@ -4,7 +4,6 @@ import TeamModel from "@/models/team";
 import { getTeamForOrg } from "@/services/team-authorization";
 import {
   ApiError,
-  type CredentialBillingTeam,
   type CredentialSpendCap,
   type CredentialSpendCapInput,
 } from "@/types";
@@ -126,50 +125,6 @@ class CredentialBillingService {
       entityIds: [params.entityId],
     });
     return caps.get(params.entityId) ?? null;
-  }
-
-  /** Billing teams and spend caps for a page of credentials, in two queries. */
-  async loadMany(params: {
-    entityType: BilledEntityType;
-    credentials: Array<{ id: string; billingTeamId: string | null }>;
-  }): Promise<
-    Map<
-      string,
-      {
-        billingTeam: CredentialBillingTeam | null;
-        spendCap: CredentialSpendCap | null;
-      }
-    >
-  > {
-    const teamIds = [
-      ...new Set(
-        params.credentials.flatMap((c) =>
-          c.billingTeamId ? [c.billingTeamId] : [],
-        ),
-      ),
-    ];
-    const [teams, caps] = await Promise.all([
-      teamIds.length > 0 ? TeamModel.findByIds(teamIds) : [],
-      LimitModel.findSpendCaps({
-        entityType: params.entityType,
-        entityIds: params.credentials.map((c) => c.id),
-      }),
-    ]);
-    const teamsById = new Map(teams.map((team) => [team.id, team]));
-    return new Map(
-      params.credentials.map((credential) => {
-        const team = credential.billingTeamId
-          ? teamsById.get(credential.billingTeamId)
-          : undefined;
-        return [
-          credential.id,
-          {
-            billingTeam: team ? { id: team.id, name: team.name } : null,
-            spendCap: caps.get(credential.id) ?? null,
-          },
-        ];
-      }),
-    );
   }
 
   private isCostManager(params: {

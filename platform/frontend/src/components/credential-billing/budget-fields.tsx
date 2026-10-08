@@ -1,6 +1,6 @@
 "use client";
 
-import { getDocsUrl, DocsPage } from "@archestra/shared";
+import { DocsPage, getDocsUrl } from "@archestra/shared";
 import { Info } from "lucide-react";
 import { useMemo } from "react";
 import {
@@ -8,13 +8,13 @@ import {
   type LimitCleanupInterval,
 } from "@/components/limit-cleanup-interval-select";
 import { Badge } from "@/components/ui/badge";
+import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import {
   InputGroup,
   InputGroupAddon,
   InputGroupInput,
   InputGroupText,
 } from "@/components/ui/input-group";
-import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { Label } from "@/components/ui/label";
 import {
   Select,
@@ -43,16 +43,17 @@ export function describeWindow(interval: LimitCleanupInterval): string {
 export function summarizeBudget({
   billingTeamName,
   spendCap,
+  payer = "No team",
 }: {
   billingTeamName: string | null;
   spendCap: SpendCapValue;
+  /** Who pays when no team does. */
+  payer?: string;
 }): string {
   const cap = spendCap
     ? `${formatWholeDollars(spendCap.limitValue)}${PERIOD_SUFFIXES[spendCap.cleanupInterval]}`
-    : null;
-  if (billingTeamName && cap) return `${billingTeamName} · ${cap}`;
-  if (billingTeamName) return billingTeamName;
-  return cap ? `No team · ${cap}` : "No team, no cap";
+    : "no cap";
+  return `${billingTeamName ?? payer} · ${cap}`;
 }
 
 /**
@@ -153,7 +154,10 @@ export function BudgetFields({
           <span className="font-medium text-sm">
             Spend cap for this {subject === "key" ? "key" : "client"}
           </span>
-          <Badge variant="outline" className="font-normal text-muted-foreground">
+          <Badge
+            variant="outline"
+            className="font-normal text-muted-foreground"
+          >
             Optional
           </Badge>
         </div>
@@ -218,7 +222,9 @@ export function BudgetFields({
             </span>
           </p>
         )}
-        {team && <TeamUsageBar team={team} spendCap={spendCap} subject={subject} />}
+        {team && (
+          <TeamUsageBar team={team} spendCap={spendCap} subject={subject} />
+        )}
       </fieldset>
     </div>
   );
@@ -231,8 +237,8 @@ export function UsersPayNotice() {
       <Info />
       <span className="font-medium">Each signed-in user pays</span>
       <InlineNoticeText>
-        Usage counts toward each user's own limits and the LLM proxy's teams.
-        A cap here limits all users of this client together.
+        Usage counts toward each user's own limits and the LLM proxy's teams. A
+        cap here limits all users of this client together.
       </InlineNoticeText>
     </InlineNotice>
   );
@@ -282,7 +288,10 @@ function TeamUsageBar({
     0,
   );
   const total = teamLimit.limitValue;
-  const reserved = Math.min(spendCap?.limitValue ?? 0, Math.max(total - used, 0));
+  const reserved = Math.min(
+    spendCap?.limitValue ?? 0,
+    Math.max(total - used, 0),
+  );
   const left = Math.max(total - used - reserved, 0);
   const pct = (value: number) => `${total > 0 ? (value / total) * 100 : 0}%`;
   const window = describeWindow(
@@ -304,11 +313,11 @@ function TeamUsageBar({
         role="img"
         aria-label={`${team.name} has used ${formatWholeDollars(used)} of ${formatWholeDollars(total)} ${window}`}
       >
-        <div className="bg-foreground" style={{ width: pct(Math.min(used, total)) }} />
         <div
-          className="bg-foreground/35"
-          style={{ width: pct(reserved) }}
+          className="bg-foreground"
+          style={{ width: pct(Math.min(used, total)) }}
         />
+        <div className="bg-foreground/35" style={{ width: pct(reserved) }} />
       </div>
       <dl className="grid grid-cols-3 gap-2 text-xs">
         <LegendItem swatch="bg-foreground" label="Used" value={used} />

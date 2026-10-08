@@ -185,9 +185,7 @@ describe("EditVirtualKeyDialog", () => {
     expect(screen.getByLabelText("Spend cap in dollars")).toHaveValue("500");
     expect(screen.getByLabelText("Spend cap in dollars")).toBeDisabled();
     expect(screen.getByText("$212 spent this month.")).toBeVisible();
-    expect(
-      screen.getByText(/Ask someone who manages limits/),
-    ).toBeVisible();
+    expect(screen.getByText(/Ask someone who manages limits/)).toBeVisible();
   });
 });
 

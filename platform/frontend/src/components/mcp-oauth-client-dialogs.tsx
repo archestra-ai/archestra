@@ -5,16 +5,12 @@ import { KeyRound } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import type { AgentSelectorAgent } from "@/components/agent-selector";
+import { CreatedByHeader } from "@/components/credential-billing/created-by-header";
+import { ChoiceCards } from "@/components/oauth-client/choice-cards";
+import { GatewayChecklist } from "@/components/oauth-client/gateway-checklist";
+import { OAuthClientIdentityFields } from "@/components/oauth-client/identity-fields";
 import {
-  AgentSelector,
-  type AgentSelectorAgent,
-} from "@/components/agent-selector";
-import { createdByFact } from "@/components/created-by-cell";
-import { DetailFacts } from "@/components/detail-facts";
-import {
-  GatewayGrantField,
-  OAUTH_CLIENT_SECTIONS,
-  type OAuthClientSection,
   parseRedirectUris,
   RedirectUrisField,
 } from "@/components/oauth-client-form-fields";
@@ -23,6 +19,8 @@ import { TabbedDialogShell } from "@/components/tabbed-dialog-shell";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { DialogCancelButton } from "@/components/unsaved-changes-guard";
+import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 
 export type McpOauthClient =
   archestraApiTypes.GetMcpOauthClientsResponses["200"][number];
@@ -32,6 +30,7 @@ export function EditOAuthClientDialog({
   onOpenChange,
   gateways,
   onSubmit,
+  onRotateSecret,
   isSubmitting,
 }: {
   oauthClient: McpOauthClient | null;
@@ -41,15 +40,18 @@ export function EditOAuthClientDialog({
     id: string,
     values: archestraApiTypes.UpdateMcpOauthClientData["body"],
   ) => Promise<void>;
+  /** Hands the client to the page's rotate-secret confirmation. */
+  onRotateSecret?: (oauthClient: McpOauthClient) => void;
   isSubmitting: boolean;
 }) {
   const [name, setName] = useState("");
   const [selectedGatewayIds, setSelectedGatewayIds] = useState<string[]>([]);
+  const [grantsGateways, setGrantsGateways] = useState(false);
   const [redirectUrisText, setRedirectUrisText] = useState("");
   const [labels, setLabels] = useState<ProfileLabel[]>([]);
   const labelsRef = useRef<ProfileLabelsRef>(null);
-  const [activeSection, setActiveSection] =
-    useState<OAuthClientSection>("general");
+  const [activeSection, setActiveSection] = useState<Section>("general");
+  const initialSnapshotRef = useRef<Record<string, unknown> | null>(null);
   // The permissions section keeps its edits in its own form. This dialog's
   // Save Changes is the only Save on screen, so it commits them too.
   const permissionsSave = useRef<(() => Promise<void>) | null>(null);
@@ -59,51 +61,98 @@ export function EditOAuthClientDialog({
     },
     [],
   );
+  const [permissionsDirty, setPermissionsDirty] = useState(false);
 
   useEffect(() => {
     if (!oauthClient) return;
     setActiveSection("general");
     setName(oauthClient.name);
     setSelectedGatewayIds(oauthClient.allowedGatewayIds);
+    setGrantsGateways(oauthClient.allowedGatewayIds.length > 0);
     setRedirectUrisText(oauthClient.redirectUris.join("\n"));
     setLabels(oauthClient.labels);
+    initialSnapshotRef.current = {
+      name: oauthClient.name,
+      selectedGatewayIds: oauthClient.allowedGatewayIds,
+      redirectUrisText: oauthClient.redirectUris.join("\n"),
+      labels: oauthClient.labels,
+    };
   }, [oauthClient]);
 
+  if (!oauthClient) return null;
+
   // The grant type is fixed at creation, so only its own configuration is editable.
-  const isAuthorizationCode = oauthClient?.grantType === "authorization_code";
+  const isAuthorizationCode = oauthClient.grantType === "authorization_code";
   const redirectUris = parseRedirectUris(redirectUrisText);
+  // Users who sign in keep their own access unless the client grants more.
+  const grantedGatewayIds =
+    isAuthorizationCode && !grantsGateways ? [] : selectedGatewayIds;
   const canSubmit =
-    !!oauthClient &&
     name.trim().length > 0 &&
     (isAuthorizationCode
-      ? redirectUris.length > 0
+      ? redirectUris.length > 0 &&
+        (!grantsGateways || selectedGatewayIds.length > 0)
       : selectedGatewayIds.length > 0);
+  const isDirty =
+    permissionsDirty ||
+    (initialSnapshotRef.current !== null &&
+      hasUnsavedChanges(initialSnapshotRef.current, {
+        name,
+        selectedGatewayIds: grantedGatewayIds,
+        redirectUrisText,
+        labels,
+      }));
 
   return (
     <TabbedDialogShell
-      open={!!oauthClient}
+      open
       onOpenChange={onOpenChange}
-      title="Edit OAuth Client"
+      title={oauthClient.name}
       description={
         isAuthorizationCode
-          ? "Update the redirect URIs and gateway grant for this OAuth client."
-          : "Update the gateways this OAuth client can access."
+          ? "Signs users in. Tools act with each user's own identity."
+          : "Calls the gateways and agents you pick, as itself."
       }
       sidebarLabel={name.trim() || "OAuth client"}
-      sidebarDescription="Agents & MCP gateways"
+      sidebarDescription="MCP OAuth client"
       sidebarIcon={<KeyRound className="h-4 w-4 text-muted-foreground" />}
+      isDirty={isDirty}
       activeSection={activeSection}
-      navItems={OAUTH_CLIENT_SECTIONS}
+      navItems={[
+        { id: "general", label: "General", status: oauthClient.clientId },
+        ...(isAuthorizationCode
+          ? [
+              {
+                id: "signin" as const,
+                label: "Sign-in",
+                status: `${redirectUris.length} redirect ${redirectUris.length === 1 ? "URI" : "URIs"}`,
+              },
+            ]
+          : []),
+        {
+          id: "access",
+          label: "Access",
+          status:
+            grantedGatewayIds.length > 0
+              ? `${grantedGatewayIds.length} ${grantedGatewayIds.length === 1 ? "gateway" : "gateways"}`
+              : "Each user's own access",
+        },
+        {
+          id: "permissions",
+          label: "Permissions",
+          status: "Who can manage it",
+        },
+      ]}
       onActiveSectionChange={setActiveSection}
+      headerExtra={
+        <CreatedByHeader
+          createdBy={oauthClient.createdBy}
+          createdAt={oauthClient.createdAt}
+        />
+      }
       footer={
         <>
-          <Button
-            type="button"
-            variant="outline"
-            onClick={() => onOpenChange(false)}
-          >
-            Cancel
-          </Button>
+          <DialogCancelButton>Cancel</DialogCancelButton>
           <Button type="submit" disabled={!canSubmit || isSubmitting}>
             Save Changes
           </Button>
@@ -111,13 +160,12 @@ export function EditOAuthClientDialog({
       }
       onSubmit={async (event) => {
         event.preventDefault();
-        if (!oauthClient) return;
         const finalLabels = labelsRef.current?.saveUnsavedLabel() ?? labels;
         await permissionsSave.current?.();
         await onSubmit(oauthClient.id, {
           name: name.trim(),
           grantType: oauthClient.grantType,
-          allowedGatewayIds: selectedGatewayIds,
+          allowedGatewayIds: grantedGatewayIds,
           ...(isAuthorizationCode && { redirectUris }),
           labels: finalLabels,
         });
@@ -133,35 +181,17 @@ export function EditOAuthClientDialog({
             placeholder="support-assistant-prod"
           />
         </div>
-        {/* Provenance before the editable fields: who to ask before you
-              change somebody else's credential. */}
-        <DetailFacts facts={[createdByFact(oauthClient?.createdBy)]} />
-        {isAuthorizationCode ? (
-          <>
-            <RedirectUrisField
-              value={redirectUrisText}
-              onChange={setRedirectUrisText}
-            />
-            <GatewayGrantField
-              gateways={gateways}
-              value={selectedGatewayIds}
-              onValueChange={setSelectedGatewayIds}
-            />
-          </>
-        ) : (
-          <div className="space-y-2">
-            <Label>Allowed gateways &amp; agents</Label>
-            <AgentSelector
-              mode="multiple"
-              agents={gateways}
-              value={selectedGatewayIds}
-              onValueChange={setSelectedGatewayIds}
-              placeholder="Select gateways or agents"
-              searchPlaceholder="Search gateways and agents"
-              emptyMessage="No gateways or agents found"
-            />
-          </div>
-        )}
+        <OAuthClientIdentityFields
+          kindLabel={
+            isAuthorizationCode
+              ? "Agents & MCP gateways · for its users"
+              : "Agents & MCP gateways · as itself"
+          }
+          clientId={oauthClient.clientId}
+          onRotateSecret={
+            onRotateSecret ? () => onRotateSecret(oauthClient) : undefined
+          }
+        />
         <AdvancedLabelsSection
           ref={labelsRef}
           labels={labels}
@@ -169,21 +199,70 @@ export function EditOAuthClientDialog({
         />
       </div>
 
+      {isAuthorizationCode && (
+        <div hidden={activeSection !== "signin"}>
+          <RedirectUrisField
+            value={redirectUrisText}
+            onChange={setRedirectUrisText}
+          />
+        </div>
+      )}
+
+      <div hidden={activeSection !== "access"} className="space-y-4">
+        {isAuthorizationCode && (
+          <ChoiceCards
+            label="What can signed-in users reach?"
+            idPrefix="edit-oauth-client-access"
+            columns={1}
+            value={grantsGateways ? "grant" : "own"}
+            onValueChange={(next) => setGrantsGateways(next === "grant")}
+            options={[
+              {
+                value: "own",
+                title: "Only what each user can already reach",
+                description:
+                  "Access stays governed by each user's own role and teams.",
+              },
+              {
+                value: "grant",
+                title: "Also these gateways, for everyone who signs in",
+                description:
+                  "Adds the gateways below on top of each user's own access.",
+              },
+            ]}
+          />
+        )}
+        {(!isAuthorizationCode || grantsGateways) && (
+          <GatewayChecklist
+            label={
+              isAuthorizationCode
+                ? "Gateways to grant"
+                : "Gateways and agents it can call"
+            }
+            idPrefix="edit-oauth-client-gateway"
+            gateways={gateways}
+            value={selectedGatewayIds}
+            onValueChange={setSelectedGatewayIds}
+          />
+        )}
+      </div>
+
       {/* Kept mounted on every tab, so Save Changes commits its edits. */}
       <div hidden={activeSection !== "permissions"}>
         {/* SPDX-SnippetBegin
               SPDX-SnippetCopyrightText: 2026 Archestra Inc.
               SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-        {oauthClient && (
-          <ResourceAccessSection
-            resource="mcpOauthClient"
-            id={oauthClient.id}
-            registerSave={registerPermissionsSave}
-            standalone
-          />
-        )}
+        <ResourceAccessSection
+          resource="mcpOauthClient"
+          id={oauthClient.id}
+          registerSave={registerPermissionsSave}
+          onDirtyChange={setPermissionsDirty}
+          standalone
+        />
         {/* SPDX-SnippetEnd */}
       </div>
     </TabbedDialogShell>
   );
 }
+
+type Section = "general" | "signin" | "access" | "permissions";

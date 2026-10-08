@@ -35,11 +35,11 @@ import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { hasUnsavedChanges } from "@/components/unsaved-changes-guard-utils";
 import { useConnectionBaseUrl } from "@/components/virtual-key-connection-base-url";
 import { VirtualKeyConnectionGuide } from "@/components/virtual-key-connection-guide";
-import { useModelProviderCatalog } from "@/lib/integration-overrides";
-import { useTeams } from "@/lib/teams/team.query";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useFeature } from "@/lib/config/config.query";
+import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useTeams } from "@/lib/teams/team.query";
 import { formatRelativeTime } from "@/lib/utils/date-time";
 import {
   useAllVirtualApiKeys,
@@ -409,9 +409,7 @@ export function CreateVirtualKeyDialog({
                   </div>
                   {!isPassthrough && (
                     <div className="space-y-2">
-                      <span className="font-medium text-sm">
-                        Provider keys
-                      </span>
+                      <span className="font-medium text-sm">Provider keys</span>
                       <ProviderKeyPicker
                         value={providerApiKeyIds}
                         onChange={setProviderApiKeyIds}

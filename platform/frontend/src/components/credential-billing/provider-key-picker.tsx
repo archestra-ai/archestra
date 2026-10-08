@@ -10,8 +10,8 @@ import {
   useModelIdsByKey,
 } from "@/components/credential-billing/provider-key-data";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { ProviderIcon } from "@/components/provider-icon";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
@@ -79,7 +79,9 @@ export function ProviderKeyPicker({
     onChange(value.filter((mapping) => mapping.provider !== provider));
 
   const totalModels = new Set(
-    value.flatMap((mapping) => modelIdsByKey.get(mapping.providerApiKeyId) ?? []),
+    value.flatMap(
+      (mapping) => modelIdsByKey.get(mapping.providerApiKeyId) ?? [],
+    ),
   ).size;
 
   return (
@@ -231,7 +233,9 @@ export function ProviderKeyPicker({
               )}
               {!chosenKey && (
                 <p className="p-3 text-xs text-muted-foreground">
-                  <span>Pick a key to use {catalog.label(focusedProvider)}.</span>
+                  <span>
+                    Pick a key to use {catalog.label(focusedProvider)}.
+                  </span>
                 </p>
               )}
             </>
@@ -246,7 +250,7 @@ export function ProviderKeyPicker({
       </div>
 
       {value.length > 0 && (
-        <div
+        <section
           className="flex flex-wrap items-center gap-2 rounded-lg border bg-muted/40 px-3 py-2"
           aria-label="Selected provider keys"
         >
@@ -271,7 +275,7 @@ export function ProviderKeyPicker({
               </UnstyledButton>
             </span>
           ))}
-        </div>
+        </section>
       )}
     </div>
   );

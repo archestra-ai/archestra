@@ -17,7 +17,11 @@ export function CreatedByHeader({
   return (
     <span className="flex items-center gap-1.5 text-xs text-muted-foreground">
       <span>Created by</span>
-      {createdBy ? <CreatedByCell createdBy={createdBy} /> : <span>unknown</span>}
+      {createdBy ? (
+        <CreatedByCell createdBy={createdBy} />
+      ) : (
+        <span>unknown</span>
+      )}
       {createdAt && (
         <span>
           ·{" "}

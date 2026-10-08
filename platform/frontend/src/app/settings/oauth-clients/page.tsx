@@ -489,6 +489,10 @@ function OauthClientsTable() {
         onSubmit={async (id, body) => {
           if (await llmUpdate.mutateAsync({ id, body })) setEditingLlm(null);
         }}
+        onRotateSecret={(client) => {
+          setEditingLlm(null);
+          setRotating({ kind: "llm", client });
+        }}
         isSubmitting={llmUpdate.isPending}
       />
 
@@ -500,6 +504,10 @@ function OauthClientsTable() {
         gateways={resources}
         onSubmit={async (id, body) => {
           if (await mcpUpdate.mutateAsync({ id, body })) setEditingMcp(null);
+        }}
+        onRotateSecret={(client) => {
+          setEditingMcp(null);
+          setRotating({ kind: "mcp", client });
         }}
         isSubmitting={mcpUpdate.isPending}
       />

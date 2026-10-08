@@ -3,7 +3,6 @@ import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import logger from "@/logging";
-import { LLM_OAUTH_CLIENT_METADATA_TYPE } from "@/types/llm-oauth-client";
 import type {
   CreateLimit,
   CredentialSpendCap,
@@ -16,6 +15,7 @@ import type {
   Model,
   UpdateLimit,
 } from "@/types";
+import { LLM_OAUTH_CLIENT_METADATA_TYPE } from "@/types/llm-oauth-client";
 import { retryOnceOnDeadlock } from "@/utils/deadlock";
 import AgentModel from "./agent";
 import AgentTeamModel, { type AgentTeamSource } from "./agent-team";

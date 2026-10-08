@@ -9,8 +9,8 @@ import {
   useModelIdsByKey,
 } from "@/components/credential-billing/provider-key-data";
 import type { LlmProviderApiKeyResponse } from "@/components/llm-provider-api-key-form";
-import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { ProviderIcon } from "@/components/provider-icon";
+import type { ProviderApiKeyMappings } from "@/components/provider-key-mappings-field";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
@@ -82,9 +82,7 @@ export function ProviderKeyBoxes({
                 size="sm"
                 className="h-auto px-0 text-destructive"
                 onClick={() =>
-                  onChange(
-                    value.filter((m) => m.provider !== mapping.provider),
-                  )
+                  onChange(value.filter((m) => m.provider !== mapping.provider))
                 }
               >
                 Remove

@@ -581,43 +581,37 @@ async function hydrateOauthClients(
     labelsByClient,
     billingTeams,
     spendCaps,
-  ] = await Promise.all(
-    [
-      providerApiKeyIds.length > 0
-        ? db
-            .select({
-              id: schema.llmProviderApiKeysTable.id,
-              name: schema.llmProviderApiKeysTable.name,
-              provider: schema.llmProviderApiKeysTable.provider,
-              isPrimary: schema.llmProviderApiKeysTable.isPrimary,
-              createdAt: schema.llmProviderApiKeysTable.createdAt,
-            })
-            .from(schema.llmProviderApiKeysTable)
-            .where(
-              inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds),
-            )
-        : [],
-      UserModel.getNamesByIds(authorIds),
-      CreatedByModel.resolve(authorIds),
-      OauthClientLabelModel.getLabelsForMany(clients.map((c) => c.id)),
-      billingTeamIds.length > 0
-        ? db
-            .select({
-              id: schema.teamsTable.id,
-              name: schema.teamsTable.name,
-            })
-            .from(schema.teamsTable)
-            .where(inArray(schema.teamsTable.id, billingTeamIds))
-        : [],
-      LimitModel.findSpendCaps({
-        entityType: "llm_oauth_client",
-        entityIds: clients.map((c) => c.id),
-      }),
-    ],
-  );
-  const billingTeamsById = new Map(
-    billingTeams.map((team) => [team.id, team]),
-  );
+  ] = await Promise.all([
+    providerApiKeyIds.length > 0
+      ? db
+          .select({
+            id: schema.llmProviderApiKeysTable.id,
+            name: schema.llmProviderApiKeysTable.name,
+            provider: schema.llmProviderApiKeysTable.provider,
+            isPrimary: schema.llmProviderApiKeysTable.isPrimary,
+            createdAt: schema.llmProviderApiKeysTable.createdAt,
+          })
+          .from(schema.llmProviderApiKeysTable)
+          .where(inArray(schema.llmProviderApiKeysTable.id, providerApiKeyIds))
+      : [],
+    UserModel.getNamesByIds(authorIds),
+    CreatedByModel.resolve(authorIds),
+    OauthClientLabelModel.getLabelsForMany(clients.map((c) => c.id)),
+    billingTeamIds.length > 0
+      ? db
+          .select({
+            id: schema.teamsTable.id,
+            name: schema.teamsTable.name,
+          })
+          .from(schema.teamsTable)
+          .where(inArray(schema.teamsTable.id, billingTeamIds))
+      : [],
+    LimitModel.findSpendCaps({
+      entityType: "llm_oauth_client",
+      entityIds: clients.map((c) => c.id),
+    }),
+  ]);
+  const billingTeamsById = new Map(billingTeams.map((team) => [team.id, team]));
   const apiKeysById = new Map(apiKeyRows.map((row) => [row.id, row]));
 
   return parsed.flatMap(({ client, metadata }) => {

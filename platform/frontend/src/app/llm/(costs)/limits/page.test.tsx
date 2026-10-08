@@ -56,6 +56,12 @@ vi.mock("@/lib/teams/team.query");
 
 vi.mock("@/lib/organization.query");
 
+vi.mock("@/lib/llm-oauth-clients.query", () => ({
+  useLlmOauthClients: () => ({
+    data: { data: [{ id: "client-1", name: "CI runner", clientId: "oc_1" }] },
+  }),
+}));
+
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useAllVirtualApiKeys: (...args: unknown[]) =>
     mockUseAllVirtualApiKeys(...args),
@@ -665,6 +671,32 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
     const row = screen.getByTestId("data-table-row-limit-agent");
     expect(row).toHaveTextContent("Test Agent");
+  });
+
+  it("names the OAuth client a client spend cap applies to", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        {
+          id: "limit-client",
+          entityType: "llm_oauth_client",
+          entityId: "client-1",
+          limitType: "token_cost",
+          limitValue: 200,
+          model: null,
+          mcpServerName: null,
+          toolName: null,
+          lastCleanup: null,
+          createdAt: "2026-01-01",
+          updatedAt: "2026-01-01",
+          modelUsage: [],
+        },
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+    const row = screen.getByTestId("data-table-row-limit-client");
+    expect(row).toHaveTextContent("CI runner");
   });
 
   it("labels the LLM Proxy row for a limit targeting the proxy", () => {

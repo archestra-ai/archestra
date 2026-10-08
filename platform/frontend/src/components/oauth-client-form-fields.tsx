@@ -1,16 +1,10 @@
 "use client";
 
-import {
-  AgentSelector,
-  type AgentSelectorAgent,
-} from "@/components/agent-selector";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 
-// Form fields shared between the unified create dialog and the per-type edit
-// dialogs (the grant type and access target are fixed at creation, so the edit
-// dialogs only reuse the field components, not the pickers for those).
+// Form fields shared between the create wizard and the per-type edit dialogs.
 
 export function parseRedirectUris(text: string): string[] {
   return text
@@ -44,47 +38,3 @@ export function RedirectUrisField({
     </div>
   );
 }
-
-export function GatewayGrantField({
-  gateways,
-  value,
-  onValueChange,
-}: {
-  gateways: AgentSelectorAgent[];
-  value: string[];
-  onValueChange: (value: string[]) => void;
-}) {
-  return (
-    <div className="space-y-2">
-      <Label>Gateway access grant (optional)</Label>
-      <AgentSelector
-        mode="multiple"
-        flat
-        agents={gateways}
-        value={value}
-        onValueChange={onValueChange}
-        placeholder="Select gateways to grant"
-        searchPlaceholder="Search gateways"
-        emptyMessage="No gateways found"
-      />
-      <FieldDescription>
-        Grants any user who authenticates through this client access to the
-        selected gateways — <strong>in addition to</strong> their own role-based
-        access, even gateways they otherwise couldn't reach. Leave empty for
-        pure identity passthrough (access stays governed by each user's
-        permissions).
-      </FieldDescription>
-    </div>
-  );
-}
-
-/** The tabs of the OAuth client create and edit dialogs. */
-export type OAuthClientSection = "general" | "permissions";
-
-export const OAUTH_CLIENT_SECTIONS: Array<{
-  id: OAuthClientSection;
-  label: string;
-}> = [
-  { id: "general", label: "General" },
-  { id: "permissions", label: "Permissions" },
-];

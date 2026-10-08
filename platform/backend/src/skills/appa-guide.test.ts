@@ -191,6 +191,24 @@ describe("APPA Guide feature availability", () => {
     }
   });
 
+  test("binds battery credentials with the bind tool, never a [credentials] line", () => {
+    const reference = APPA_GUIDE_SKILL.files.find(
+      (file) => file.path === "references/archestra.md",
+    )?.content;
+    if (!reference) throw new Error("Archestra reference not found");
+    for (const text of [APPA_GUIDE_SKILL.content, reference]) {
+      expect(text).toContain("archestra__bind_guardrails_credential");
+      // A text line wins over the stored binding and locks it in the UI.
+      for (const [, toml] of text.matchAll(/```toml\n([\s\S]*?)```/g))
+        expect(toml).not.toContain("[credentials]");
+      expect(text).not.toContain("`[server_aliases]`, and `[credentials]`");
+      expect(text).not.toContain("`[server_aliases]` and `[credentials]`");
+    }
+    expect(APPA_GUIDE_SKILL.content).toContain(
+      "overrides the stored binding and locks it in the Batteries dialog; do not add one",
+    );
+  });
+
   test("inlines OpenAPPA's shared policy-writing rules into the always-loaded skill body", () => {
     const core = readFileSync(
       new URL("./appa-guide.core.generated.md", import.meta.url),

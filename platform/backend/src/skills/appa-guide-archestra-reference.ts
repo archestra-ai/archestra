@@ -46,17 +46,16 @@ Without the catch-all, declare \`archestra__search_tools\`, \`archestra__load_sk
 
 ## Batteries
 
-A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[server_aliases]\` points each battery namespace at an installed server's tool prefixes, and \`[credentials]\` binds each credential variable to a runtime credential key. The value never appears in the policy, only the key:
+A battery is declared in the root policy. \`include\` names it, either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package. \`[server_aliases]\` points each battery namespace at an installed server's tool prefixes:
 
 \`\`\`toml
 include = ["batteries/github/appa.toml"]
 
 [server_aliases]
 github = ["github_prod"]
-
-[credentials]
-APPA_PROVIDER_GITHUB_TOKEN = "github-token"
 \`\`\`
+
+Each credential variable a battery reads is bound to a runtime credential key with \`archestra__bind_guardrails_credential\`, for example \`{ "variable": "APPA_PROVIDER_GITHUB_TOKEN", "key": "github-token" }\`. The binding lives outside the policy text and never holds the value, only the key. A \`[credentials]\` line in the text overrides the binding and locks it in the Batteries dialog; do not add one.
 
 A battery governs calls only when \`effective.batteries\` marks it \`active\`. Removing its \`include\` entry turns it off.
 

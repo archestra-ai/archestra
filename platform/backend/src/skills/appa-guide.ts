@@ -156,9 +156,10 @@ Use this when the operator picks batteries to add: from a review, after the firs
 1. Read the policy, the fits of the chosen batteries (\`archestra__list_guardrails_battery_fits\`), and the runtime credentials (\`archestra__list_runtime_credentials\`).
 2. A battery needs a token for each of its \`credentials\` variables that is not bound to a connected organization credential. Keep variables that are already bound. Batteries without credentials need none.
 3. Call \`archestra__request_battery_credentials\` once with every battery that needs a token, and end the turn. The card shows what each battery does and how to get its token; do not repeat them. Never ask for a token in chat.
-   - On the operator's "Battery credentials: …" message, list the credentials again to confirm each named key is connected, and bind each key to its variable in \`[credentials]\`.
+   - On the operator's "Battery credentials: …" message, list the credentials again to confirm each named key is connected, then call \`archestra__bind_guardrails_credential\` once per pair with \`{ "variable": "<VARIABLE>", "key": "<key>" }\`. A skipped battery gets no call.
+   - The binding is stored beside the policy, not in its text. A \`[credentials]\` line in the policy text overrides the stored binding and locks it in the Batteries dialog; do not add one.
    - Leave a skipped battery out of this change; its tools keep working as they do now.
-4. Then preview one change that adds every battery with its credentials (its \`include\`, \`[server_aliases]\` and \`[credentials]\` entries) and ask for approval as in **Ask for approval**.
+4. Then preview one change that adds every battery (its \`include\` and \`[server_aliases]\` entries) and ask for approval as in **Ask for approval**.
 5. If publishing opens a GitHub PR, report it as **Publish and finish** says. After a local save, read back and, below the result banner, finish in at most five lines: which tools are now protected and how, which batteries were skipped, and that the operator can ask later to add them.
 
 ## Requests
@@ -219,7 +220,7 @@ A yell is a report about how the policy behaved.
 - If a tool fails twice with the same error, stop and tell the operator in one sentence what failed and what they can do; do not retry with variations. Read this skill's files with \`archestra__load_skill\`, never through \`run_command\`.
 - The policy text lives only in the policy tools. It is not a file in the sandbox, and \`run_command\` cannot read a tool result or call a policy tool. Do not build a policy draft in the sandbox.
 - If an edit is rejected, the error names the edit and the reason. Copy the exact text from the latest \`archestra__get_guardrails_policy\` result and preview again. If a policy tool keeps failing, give the operator its exact error, not a general reason.
-- A battery is declared in this same policy document. \`include\` names it - either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package - \`[server_aliases]\` points the namespace at server tool prefixes, and \`[credentials]\` binds runtime credential keys.
+- A battery is declared in this same policy document. \`include\` names it - either \`batteries/<name>/appa.toml\` for a bundled battery or \`batteries/<name>@sha256-<hash>/appa.toml\` for an uploaded package - \`[server_aliases]\` points the namespace at server tool prefixes. Its credential variables are bound to runtime credential keys with \`archestra__bind_guardrails_credential\`, outside the policy text.
 - A battery is available when it exists in the bundled or organization battery layer. It is declared by \`include\` and governs calls only when \`effective.batteries\` marks it \`active\`.
 - Preview before you propose, and explain any warnings. An unsaved local revision-0 starter still needs preview, approval, and publication even when its text is unchanged.
 - Ask for approval only before an action you can perform. State the action in one concise sentence. Use the host's native review dialog when required; run background calls silently. If the operator must act elsewhere, give the steps or link instead of an approval form.
@@ -247,10 +248,10 @@ If publishing opens a GitHub PR, give its link and state that the proposed polic
 
 ### Inspect
 
-1. Call \`archestra__get_guardrails_policy\` with no arguments. Read \`content\` (root policy text), \`revision\` (version token), \`delivery\` (local revision or GitHub PR), and \`effective\` (enforced policy). Note \`[policy.deployment]\`, declared \`include\`, \`[server_aliases]\`, and \`[credentials]\` entries. \`effective.content\` holds the composed policy, and \`effective.batteries\` lists battery statuses:
+1. Call \`archestra__get_guardrails_policy\` with no arguments. Read \`content\` (root policy text), \`revision\` (version token), \`delivery\` (local revision or GitHub PR), and \`effective\` (enforced policy). Note \`[policy.deployment]\`, declared \`include\`, and \`[server_aliases]\` entries. \`effective.content\` holds the composed policy, with each bound credential under \`[credentials]\`, and \`effective.batteries\` lists battery statuses:
    - \`active\`: battery's rules or routed annotator can govern calls.
    - \`unavailable\`: no battery package answers the entry.
-   - \`missing_credentials\`: \`[credentials]\` does not bind required helper variables.
+   - \`missing_credentials\`: a required helper variable has no binding; bind it with \`archestra__bind_guardrails_credential\`.
    - \`server_missing\`: alias target resolves to no server.
    - \`naming_conflict\`: alias target is ambiguous.
    - \`unrouted\`: no tool rule uses this organization-wide battery's annotator.
@@ -270,7 +271,7 @@ If publishing opens a GitHub PR, give its link and state that the proposed polic
 Batteries supply pre-packaged security rules for popular MCP servers. In Archestra, batteries are declared in the root policy text:
 
 - Check which batteries are declared in \`include\` and active in \`effective.batteries\`.
-- Call \`archestra__list_guardrails_battery_fits\` with \`{ "mcpServerId": null }\` to learn which undeclared batteries fit the installed servers. Propose only those, and describe what they do from the rules it returns. Declare one with its \`include\` entry, point each of its namespaces at the server's \`toolPrefixes\` in \`[server_aliases]\`, and bind each of its \`credentials\` variables to a runtime credential key in \`[credentials]\`. Never guess a battery name or what its rules do.
+- Call \`archestra__list_guardrails_battery_fits\` with \`{ "mcpServerId": null }\` to learn which undeclared batteries fit the installed servers. Propose only those, and describe what they do from the rules it returns. Declare one with its \`include\` entry, point each of its namespaces at the server's \`toolPrefixes\` in \`[server_aliases]\`, and bind each of its \`credentials\` variables to a runtime credential key with \`archestra__bind_guardrails_credential\`. Never guess a battery name or what its rules do.
 - An organization-wide annotator-only battery governs no server. It is \`unrouted\` until a tool rule names its annotator. Check that rule before calling it active. If it needs a credential, calls routed to it are refused until the credential is bound.
 - Describe each battery you propose as **Propose a battery** in the policy-writing rules says.
 - If the current root config changes a battery's default behavior, explain the result in plain English.
@@ -334,12 +335,12 @@ If the requested outcome is ambiguous, ask one focused question and wait.
 
 ## Boundaries
 
-- Reading and previewing require \`openappaPolicy:read\`. Publishing requires \`openappaPolicy:update\`. Creating the policy repository requires \`organizationSettings:update\`. Reading yells and helper errors requires \`openappaDiagnostics:read\`. GitHub PR publishing and status checks also require \`credential:read\`. Adding a battery that binds runtime credentials requires \`credential:update\`. On a permission error, explain what is missing. GitHub PR publishing supports the configured organization GitHub App or PAT. A PAT needs Contents and Pull requests Read & write. If GitHub sync lacks a ready credential or has changed upstream, do not claim a policy update. Fix or sync the source before retrying.
+- Reading and previewing require \`openappaPolicy:read\`. Publishing requires \`openappaPolicy:update\`. Creating the policy repository requires \`organizationSettings:update\`. Reading yells and helper errors requires \`openappaDiagnostics:read\`. GitHub PR publishing and status checks also require \`credential:read\`. Binding a battery credential, or adding a battery that reads a bound one, requires \`credential:update\`. On a permission error, explain what is missing. GitHub PR publishing supports the configured organization GitHub App or PAT. A PAT needs Contents and Pull requests Read & write. If GitHub sync lacks a ready credential or has changed upstream, do not claim a policy update. Fix or sync the source before retrying.
 - The default catch-all annotator returns empty delta and requirements, so unlisted tools have no extra APPA restrictions. The default policy also routes \`run_command\` to the \`archestra.run-command\` annotator, which labels each sandbox command with the organization's default model.
 - Keep the \`run_command\` annotator rule as it is in every policy you write or edit. Change or remove it only when the user specifically asks.
 - Explicit rules apply. Keep the catch-all unless the user wants unknown tools blocked. Do not quietly weaken a rule to let a blocked call succeed.
-- The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\`, \`[server_aliases]\`, and \`[credentials]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
-- Keep secrets out of policy text. A remote binding's \`token_env\` reads the organization runtime credential bound to it in \`[credentials]\`, never a backend environment variable. Never put raw credentials in policy text.
+- The supported editor format is \`[policy]\`, \`[policy.deployment]\`, \`[externals]\`, and battery declarations: \`include\` and \`[server_aliases]\`. An \`include\` entry must be \`batteries/<name>/appa.toml\` or \`batteries/<name>@sha256-<hash>/appa.toml\`. Removing an entry turns that battery off.
+- Keep secrets out of policy text. Bind a battery's credential variables with \`archestra__bind_guardrails_credential\`, never with a \`[credentials]\` line. A \`token_env\` in your own \`[externals]\` reads the organization runtime credential its \`[credentials]\` line names, never a backend environment variable. Never put raw credentials in policy text.
 - APPA is available only when \`ARCHESTRA_BETA=true\`. If its tools are unavailable, report that fact. Do not change process environment settings through this skill; policy \`[policy.deployment]\` may be edited through preview and approval.
 - A refused policy blocks enabling Guardrails v2. If it is already on, every proxied request fails closed without retry until the policy is fixed; the previous policy does not keep serving. Report the error. Do not claim Guardrails v2 switched off or that the draft is active.
 

@@ -15,9 +15,12 @@ const POLICY_LAUNCH_PROMPTS = {
   /** Batteries card: included batteries not enforced, or ones that fit. */
   configureBatteries:
     "Review my OpenAPPA batteries: what is not enforced, and which ones fit my MCP servers.",
-  /** Security label card: the trust levels, the audiences, and their batteries. */
-  explainSecurityLabel:
-    "Explain the security label my OpenAPPA policy gives an agent session.",
+  /** Overview chat strip: what the policy does today. */
+  currentPolicy: "Tell me about my current OpenAPPA policy.",
+  /** Overview chat strip: the concepts, for someone new to guardrails. */
+  explainGuardrails: "Explain OpenAPPA guardrails to me.",
+  /** Overview chat strip: a guided change. */
+  changePolicy: "Help me change my OpenAPPA policy.",
 } as const;
 
 const TARGET_LAUNCH_PROMPTS = {

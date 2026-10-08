@@ -374,12 +374,14 @@ function VirtualKeysTable() {
                 {
                   value: "standard",
                   label: "Standard",
-                  content: <KeyTypeLabel keyType="standard" />,
+                  content: <KeyTypeLabel keyType="standard" withHint />,
+                  selectedContent: <KeyTypeLabel keyType="standard" />,
                 },
                 {
                   value: "passthrough",
                   label: "Passthrough",
-                  content: <KeyTypeLabel keyType="passthrough" />,
+                  content: <KeyTypeLabel keyType="passthrough" withHint />,
+                  selectedContent: <KeyTypeLabel keyType="passthrough" />,
                 },
               ]}
             />
@@ -631,12 +633,24 @@ function VirtualKeyKindIcon({
 }
 
 /** A kind filter option, prefixed with the icon the list uses. */
-function KeyTypeLabel({ keyType }: { keyType: VirtualKeyRow["keyType"] }) {
-  const { icon: Icon, label, tone } = KEY_TYPE_STYLES[keyType];
+function KeyTypeLabel({
+  keyType,
+  withHint = false,
+}: {
+  keyType: VirtualKeyRow["keyType"];
+  /** Adds a one-line hint under the label, for the open list. */
+  withHint?: boolean;
+}) {
+  const { icon: Icon, label, hint, tone } = KEY_TYPE_STYLES[keyType];
   return (
     <span className="flex items-center gap-2">
       <Icon className={cn("size-4 shrink-0", tone.text)} />
-      {label}
+      <span className="min-w-0">
+        <span className="block">{label}</span>
+        {withHint && (
+          <span className="block text-xs text-muted-foreground">{hint}</span>
+        )}
+      </span>
     </span>
   );
 }
@@ -646,12 +660,14 @@ const KEY_TYPE_STYLES = {
     icon: KeyRound,
     label: "Standard",
     description: "Uses your organization's provider keys.",
+    hint: "Uses org provider keys",
     tone: { tile: "bg-primary/15", text: "text-primary" },
   },
   passthrough: {
     icon: ArrowLeftRight,
     label: "Passthrough",
     description: "Relays the caller's own provider key.",
+    hint: "Caller brings their own key",
     tone: {
       tile: "bg-sky-500/15",
       text: "text-sky-700 dark:text-sky-300",
@@ -663,6 +679,7 @@ const KEY_TYPE_STYLES = {
     icon: LucideIcon;
     label: string;
     description: string;
+    hint: string;
     tone: { tile: string; text: string };
   }
 >;

@@ -21,6 +21,8 @@ type PolicyChange = {
   delivery: "revision" | "pull_request";
   before: string;
   after: string;
+  /** The backend's unified diff, trimmed to the changed hunks. */
+  diff?: string;
   path?: string;
   revision?: number;
   number?: number;
@@ -83,7 +85,7 @@ export function OpenAppaPolicyChange({
         </CodeBlock>
       ) : (
         <CodeBlock
-          code={policyDiff(change.before, change.after, path)}
+          code={change.diff || policyDiff(change.before, change.after, path)}
           language="diff"
           aria-label="Policy diff"
         >

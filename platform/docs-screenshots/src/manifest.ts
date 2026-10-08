@@ -119,8 +119,9 @@ export const SHOTS: Shot[] = [
       "automated_screenshots/platform-agent-skills-sharing_connection-setup",
     route: () => "/connection?clientId=claude-code",
     prepare: async (page) => {
+      // The card's skills column, e.g. "+3 skills".
       await page
-        .getByText(/shared skills?/)
+        .getByText(/^\+\d+ skills?$/)
         .first()
         .waitFor();
     },
@@ -128,7 +129,8 @@ export const SHOTS: Shot[] = [
   {
     asset:
       "automated_screenshots/platform-agent-skills-sharing_marketplace-link",
-    route: () => "/connection?clientId=generic",
+    // Any Client opens on its prompt; the marketplace step is in Manual setup.
+    route: () => "/connection?clientId=generic&mode=manual",
     prepare: async (page) => {
       await page.getByTestId("skills-marketplace-credential-toggle").click();
     },
@@ -149,7 +151,10 @@ export const SHOTS: Shot[] = [
     route: () => "/llm/proxy",
     viewport: { width: 1440, height: 920 },
     prepare: async (page) => {
-      await page.getByText("Create standard virtual key").waitFor();
+      await page
+        .getByRole("button", { name: "Create new virtual key" })
+        .first()
+        .waitFor();
     },
   },
   {
@@ -158,17 +163,14 @@ export const SHOTS: Shot[] = [
     route: () => "/llm/proxy",
     viewport: { width: 1440, height: 1000 },
     prepare: async (page) => {
-      await page.getByText("Create standard virtual key").click();
-      const dialog = page.getByRole("dialog");
-      await dialog.getByLabel("Name").fill("Support bot");
-      // Map the first key of the first two providers: the seeded ones in CI,
-      // local keys elsewhere. Picking a provider shows its keys.
-      await dialog.getByRole("radio").first().click();
-      await dialog
-        .getByTestId("provider-key-picker-available-provider")
+      await page
+        .getByRole("button", { name: "Create new virtual key" })
         .first()
         .click();
-      await dialog.getByRole("radio").first().click();
+      const dialog = page.getByRole("dialog");
+      await dialog.getByLabel("Name").fill("Support bot");
+      // The Model Router endpoint starts the key on the first key of every
+      // provider it serves: the seeded ones in CI, local keys elsewhere.
       await dialog.getByRole("button", { name: "Continue" }).click();
       await dialog.getByRole("button", { name: "Continue" }).click();
       await dialog.getByRole("button", { name: "Create key" }).click();

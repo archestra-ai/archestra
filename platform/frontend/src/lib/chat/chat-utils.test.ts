@@ -310,8 +310,8 @@ describe("getManualCompactionSkippedMessage", () => {
     );
   });
 
-  it("falls back for unknown skip reasons", () => {
-    expect(getManualCompactionSkippedMessage("other_reason")).toBe(
+  it("falls back for reasons without a dedicated message", () => {
+    expect(getManualCompactionSkippedMessage("below_threshold")).toBe(
       "There is no completed earlier context to compact yet.",
     );
   });

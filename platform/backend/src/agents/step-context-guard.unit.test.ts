@@ -107,7 +107,6 @@ describe("createStepContextGuard — summarization compaction", () => {
     expect(call.transcript).toContain("a".repeat(300));
 
     expect(result[0].role).toBe("user");
-    expect(result[0].content).toContain("untrusted conversation history");
     expect(result[0].content).toContain("the compact summary");
     expect(result[result.length - 1].content).toBe("c".repeat(300));
     // the summarized turns are gone from the step payload

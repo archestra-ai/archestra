@@ -94,6 +94,7 @@ import {
   AgentTeamModel,
   ConversationAttachmentModel,
   ConversationChatErrorModel,
+  ConversationCompactionModel,
   ConversationEnabledToolModel,
   ConversationModel,
   LlmProviderApiKeyModel,
@@ -136,6 +137,8 @@ import type { ConversationContentKey } from "@/types";
 import {
   ApiError,
   type ChatMessage,
+  ContextCompactionReasonSchema,
+  ContextCompactionStatusSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
@@ -155,6 +158,7 @@ import {
   resolveConversationModel,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { projectCappedToolOutputs } from "@/utils/tool-result-cap";
 import { broadcastConversationUpdated } from "@/websocket";
 import { createAbortiveTurnTracker } from "./abortive-turn";
 import { buildAnthropicProviderOptions } from "./anthropic-provider-options";
@@ -163,10 +167,7 @@ import {
   sanitizeAttachmentContentType,
 } from "./attachment-content-type";
 import { buildChatContext } from "./build-chat-context";
-import {
-  compactMessagesForChat,
-  invalidateConversationCompactions,
-} from "./context-compaction";
+import { compactMessagesForChat } from "./compaction/compact-messages";
 import {
   buildContextWindowBreakdown,
   estimateEachToolTokens,
@@ -3367,8 +3368,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(
           z.object({
-            status: z.enum(["created", "existing", "skipped", "failed"]),
-            reason: z.string().optional(),
+            status: ContextCompactionStatusSchema,
+            reason: ContextCompactionReasonSchema.optional(),
             compaction: SelectConversationCompactionSchema.nullable(),
             conversation: SelectConversationSchema,
           }),
@@ -3420,7 +3421,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         selectedModel,
         modelId: conversation.modelId,
         agentLlmApiKeyId: conversation.agent.llmApiKeyId,
-        messages: normalizedMessages,
+        messages: projectCappedToolOutputs(normalizedMessages),
         systemPrompt: conversation.agent.systemPrompt ?? undefined,
         trigger: "manual",
       });
@@ -3746,7 +3747,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tx,
           editKey,
         );
-        await invalidateConversationCompactions(message.conversationId, tx);
+        await ConversationCompactionModel.deleteByConversation(
+          message.conversationId,
+          tx,
+        );
       });
 
       // Return updated conversation with all messages

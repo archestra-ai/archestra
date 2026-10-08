@@ -11,7 +11,7 @@ import {
   RouteCategory,
 } from "@/observability/tracing/attributes";
 import { startActiveChatSpan } from "@/observability/tracing/chat";
-import { compactMessagesForChat } from "./context-compaction";
+import { compactMessagesForChat } from "./compact-messages";
 
 describe("context compaction tracing", () => {
   const exporter = new InMemorySpanExporter();

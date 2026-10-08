@@ -56,8 +56,9 @@ overrides:
   # CVE-2026-54466 (GHSA-xv26-6w52-cph6, message corruption via protocol
   # length-header abuse) fixed in 0.7.5, the package's latest release.
   websocket-driver: '>=0.7.5'
-  # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6.
-  next: 16.3.6
+  # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6; CVE-2026-94483 (HIGH, SSRF)
+  # fixed in 16.3.8.
+  next: 16.3.8
   # form-data 3.0.5 / 4.0.6 fix CVE-2026-12143 (HIGH). Floors rather than exact
   # pins, and bounded per major so a <4 consumer is not jumped onto 4.x.
   form-data@>=4: '>=4.0.6'

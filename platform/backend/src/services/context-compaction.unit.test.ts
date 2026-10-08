@@ -31,6 +31,12 @@ describe("uiMessageTranscriptEntries", () => {
           input: { path: "/b" },
           errorText: "permission denied",
         },
+        {
+          type: "tool-lookup",
+          state: "output-available",
+          input: { id: 7 },
+          output: null,
+        },
         null,
       ],
     });
@@ -47,6 +53,8 @@ describe("uiMessageTranscriptEntries", () => {
         toolName: "write_file",
         output: { error: "permission denied" },
       },
+      { kind: "tool_call", toolName: "lookup", input: { id: 7 } },
+      { kind: "tool_result", toolName: "lookup", output: null },
     ]);
   });
 });
@@ -108,20 +116,30 @@ describe("renderCompactionTranscript", () => {
 describe("chooseRecentSuffixStart", () => {
   test("keeps the newest items that fit the budget", () => {
     expect(
-      chooseRecentSuffixStart({ sizes: [10, 10, 10, 10], keepBudget: 25 }),
+      chooseRecentSuffixStart({
+        count: 4,
+        sizeOf: () => 10,
+        keepBudget: 25,
+      }),
     ).toBe(2);
   });
 
   test("always keeps the newest item even when it alone exceeds the budget", () => {
-    expect(chooseRecentSuffixStart({ sizes: [1, 100], keepBudget: 10 })).toBe(
-      1,
-    );
+    const sizes = [1, 100];
+    expect(
+      chooseRecentSuffixStart({
+        count: sizes.length,
+        sizeOf: (index) => sizes[index],
+        keepBudget: 10,
+      }),
+    ).toBe(1);
   });
 
   test("never moves below minIndex", () => {
     expect(
       chooseRecentSuffixStart({
-        sizes: [1, 1, 1, 1],
+        count: 4,
+        sizeOf: () => 1,
         keepBudget: 100,
         minIndex: 2,
       }),

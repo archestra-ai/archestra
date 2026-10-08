@@ -274,7 +274,8 @@ function splitForCompaction(
   budgetTokens: number,
 ): { compactable: A2AMessage[]; recent: A2AMessage[] } {
   const boundary = chooseRecentSuffixStart({
-    sizes: messages.map((message) => estimateMessagesTokens([message])),
+    count: messages.length,
+    sizeOf: (index) => estimateMessagesTokens([messages[index]]),
     keepBudget: budgetTokens * CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
   });
   return {

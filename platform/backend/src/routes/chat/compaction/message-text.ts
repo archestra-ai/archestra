@@ -216,11 +216,13 @@ function getNonFilePartText(part: ChatMessagePart): string {
   if (part.type === "text" && typeof part.text === "string") {
     return part.text;
   }
-  if (part.type?.startsWith("tool-")) {
-    const output = part.output ?? part.result;
-    return `[${part.type} ${part.toolName ?? ""} ${part.state ?? ""}] ${
-      output === undefined ? "" : safeJson(output)
-    }`;
+  if (part.type?.startsWith("tool-") || part.type === "dynamic-tool") {
+    const output = part.output !== undefined ? part.output : part.result;
+    return [
+      `[${part.type} ${part.toolName ?? ""} ${part.state ?? ""}]`,
+      part.input === undefined ? "" : safeJson(part.input),
+      output === undefined ? (part.errorText ?? "") : safeJson(output),
+    ].join(" ");
   }
   return `[${part.type}]`;
 }

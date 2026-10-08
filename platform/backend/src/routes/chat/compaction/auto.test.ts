@@ -199,6 +199,31 @@ describe("compactMessagesForChat auto trigger", () => {
     expect(mockGenerateText.mock.calls[1][0].messages).toBeDefined();
   });
 
+  test("summarizes an oversized tool call instead of keeping it in the tail", async () => {
+    mockGenerateText.mockResolvedValue(generated("<summary>S-TOOL</summary>"));
+    const toolCall: ChatMessage = {
+      id: "a-tool",
+      role: "assistant",
+      parts: [
+        {
+          type: "tool-write_file",
+          toolCallId: "call-1",
+          state: "output-available",
+          input: { path: "/plan.md", content: LONG_TURN.repeat(20) },
+          output: "ok",
+        },
+      ],
+    };
+
+    const result = await compactMessagesForChat({
+      ...params,
+      messages: [MESSAGES[0], toolCall, MESSAGES[2]],
+    });
+
+    expect(result.status).toBe("created");
+    expect(result.messages.slice(1)).toEqual([MESSAGES[2]]);
+  });
+
   test("keeps the recent exchange verbatim when it fits the tail budget", async () => {
     mockGenerateText.mockResolvedValue(generated("<summary>S-TAIL</summary>"));
     const recentExchange: ChatMessage[] = [

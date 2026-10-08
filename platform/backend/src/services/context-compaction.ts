@@ -210,11 +210,13 @@ export function uiMessageTranscriptEntries(message: {
     };
     // `result` is the legacy persisted name; a failed call carries errorText.
     const output =
-      record.output ??
-      record.result ??
-      (typeof record.errorText === "string"
-        ? { error: record.errorText }
-        : undefined);
+      record.output !== undefined
+        ? record.output
+        : record.result !== undefined
+          ? record.result
+          : typeof record.errorText === "string"
+            ? { error: record.errorText }
+            : undefined;
     return output === undefined
       ? [call]
       : [call, { kind: "tool_result", toolName, output }];
@@ -222,21 +224,24 @@ export function uiMessageTranscriptEntries(message: {
 }
 
 /**
- * Index where the verbatim recent suffix starts: walk back from the newest
- * item while the suffix fits `keepBudget`, never below `minIndex`. The newest
- * item is always kept, so the result is at most `sizes.length - 1`.
+ * Index where the verbatim recent suffix starts: walk back from the newest of
+ * `count` items while the suffix fits `keepBudget`, never below `minIndex`.
+ * The newest item is always kept, so the result is at most `count - 1`.
+ * Sizes are measured lazily, only for the items the walk reaches.
  */
 export function chooseRecentSuffixStart(params: {
-  sizes: number[];
+  count: number;
+  sizeOf: (index: number) => number;
   keepBudget: number;
   minIndex?: number;
 }): number {
-  const { sizes, keepBudget } = params;
+  const { count, sizeOf, keepBudget } = params;
   const minIndex = params.minIndex ?? 0;
-  let start = sizes.length - 1;
-  let kept = sizes[start] ?? 0;
+  let start = count - 1;
+  if (start < 0) return start;
+  let kept = sizeOf(start);
   while (start > minIndex) {
-    const next = sizes[start - 1] ?? 0;
+    const next = sizeOf(start - 1);
     if (kept + next > keepBudget) break;
     kept += next;
     start--;

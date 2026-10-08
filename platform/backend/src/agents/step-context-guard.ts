@@ -191,7 +191,8 @@ function chooseCompactionBoundary(params: {
 }): number {
   const { messages, minIndex, budgetChars } = params;
   let boundary = chooseRecentSuffixStart({
-    sizes: messages.map((message) => charSize([message])),
+    count: messages.length,
+    sizeOf: (index) => charSize([messages[index]]),
     keepBudget: budgetChars * CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
     minIndex,
   });

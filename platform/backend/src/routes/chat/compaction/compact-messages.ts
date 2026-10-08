@@ -301,13 +301,13 @@ function splitRecentTail(params: {
   selectedModel: string;
 }): { compactable: ChatMessage[]; recent: ChatMessage[] } {
   const start = chooseRecentSuffixStart({
-    sizes: params.messages.map((message) =>
+    count: params.messages.length,
+    sizeOf: (index) =>
       estimateChatMessagesTokens({
         provider: params.provider,
         model: params.selectedModel,
-        messages: [message],
+        messages: [params.messages[index]],
       }),
-    ),
     keepBudget: params.keepBudget,
   });
   return {

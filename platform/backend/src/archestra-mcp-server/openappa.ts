@@ -562,7 +562,7 @@ const registry = defineArchestraTools([
         .array(z.string())
         .optional()
         .describe(
-          "Only these tools, by name or full name (`<prefix>__<name>`).",
+          "Only these tools, by name or full name (`<prefix>__<name>`). Empty or omitted means every tool.",
         ),
       offset: z
         .number()
@@ -654,7 +654,8 @@ const registry = defineArchestraTools([
           ...(coverageByTool.get(row.toolId) ?? []),
           row,
         ]);
-      const named = args.tools && new Set(args.tools);
+      // Strict-mode clients send `[]` for an omitted optional array.
+      const named = args.tools?.length ? new Set(args.tools) : null;
       const entries = tools
         .filter(
           (tool) =>

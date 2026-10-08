@@ -609,7 +609,7 @@ function VirtualKeyKindIcon({
 }: {
   keyType: VirtualKeyRow["keyType"];
 }) {
-  const { icon: Icon, label, description, tone } = KEY_TYPE_STYLES[keyType];
+  const { icon: Icon, label, hint, tone } = KEY_TYPE_STYLES[keyType];
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -626,7 +626,7 @@ function VirtualKeyKindIcon({
         </span>
       </TooltipTrigger>
       <TooltipContent>
-        <span className="font-medium">{label} key.</span> {description}
+        <span className="font-medium">{label}:</span> {hint}
       </TooltipContent>
     </Tooltip>
   );
@@ -659,14 +659,12 @@ const KEY_TYPE_STYLES = {
   standard: {
     icon: KeyRound,
     label: "Standard",
-    description: "Uses your organization's provider keys.",
     hint: "Uses org provider keys",
     tone: { tile: "bg-primary/15", text: "text-primary" },
   },
   passthrough: {
     icon: ArrowLeftRight,
     label: "Passthrough",
-    description: "Relays the caller's own provider key.",
     hint: "Caller brings their own key",
     tone: {
       tile: "bg-sky-500/15",
@@ -678,7 +676,6 @@ const KEY_TYPE_STYLES = {
   {
     icon: LucideIcon;
     label: string;
-    description: string;
     hint: string;
     tone: { tile: string; text: string };
   }

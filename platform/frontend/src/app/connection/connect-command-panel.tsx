@@ -80,6 +80,7 @@ import {
   FINISH_OAUTH_FLOW_TITLE,
   type InstallerClientId,
 } from "./clients";
+import { ConnectionConsentOptions } from "./connection-consent-options";
 import { GatewayServersSummary } from "./gateway-servers-summary";
 import { OsLogos } from "./os-logos";
 import {
@@ -1168,7 +1169,57 @@ export function ConnectCommandPanel({
         }
         last={!showOAuthStep && !showDesktopGatewayStep}
       >
-        {!showSetupSummary && (
+        {!showSetupSummary && connectRequest && (
+          <ConnectionConsentOptions
+            open={customizing}
+            onOpenChange={setCustomizing}
+            hasExcludedParts={excluded.size > 0}
+            gateway={
+              mcpGatewayId && mcpGateways !== null ? (
+                <>
+                  <IncludeCheckbox
+                    id="connect-include-gateway"
+                    disabled={excluded.has("tools")}
+                    checked={includeGateway}
+                    onCheckedChange={setIncludeGateway}
+                  >
+                    Connect the MCP gateway
+                  </IncludeCheckbox>
+                  {gatewayEditor}
+                </>
+              ) : null
+            }
+            proxy={
+              llmProxyId ? (
+                <>
+                  <IncludeCheckbox
+                    id="connect-include-proxy"
+                    disabled={excluded.has("proxy")}
+                    checked={includeProxy}
+                    onCheckedChange={setIncludeProxy}
+                  >
+                    Route model requests through the LLM Proxy
+                  </IncludeCheckbox>
+                  {proxyEditor}
+                  {proxyActive && modelEditor}
+                </>
+              ) : null
+            }
+            skills={skillsEligible ? skillsEditor : null}
+            plugins={pluginsEnabled ? pluginsEditor : null}
+            platform={
+              <div className="max-[360px]:[&_[data-slot=tabs-list]]:h-auto max-[360px]:[&_[data-slot=tabs-list]]:max-w-full max-[360px]:[&_[data-slot=tabs-list]]:flex-wrap">
+                <ConnectionPlatformToggle
+                  value={platform}
+                  onValueChange={setPlatform}
+                  ariaLabel="Select a platform"
+                  dataTestId="connect-platform-select"
+                />
+              </div>
+            }
+          />
+        )}
+        {!showSetupSummary && !connectRequest && (
           <Collapsible
             open={customizing}
             onOpenChange={setCustomizing}
@@ -1191,27 +1242,7 @@ export function ConnectCommandPanel({
                   connection.
                 </p>
               )}
-              {connectRequest && mcpGatewayId && mcpGateways !== null && (
-                <IncludeCheckbox
-                  id="connect-include-gateway"
-                  disabled={excluded.has("tools")}
-                  checked={includeGateway}
-                  onCheckedChange={setIncludeGateway}
-                >
-                  Connect the MCP gateway
-                </IncludeCheckbox>
-              )}
               {gatewayEditor}
-              {connectRequest && llmProxyId && (
-                <IncludeCheckbox
-                  id="connect-include-proxy"
-                  disabled={excluded.has("proxy")}
-                  checked={includeProxy}
-                  onCheckedChange={setIncludeProxy}
-                >
-                  Route model requests through the LLM Proxy
-                </IncludeCheckbox>
-              )}
               {proxyEditor}
               {proxyActive && modelEditor}
               {skillsEligible && skillsEditor}

@@ -1,23 +1,23 @@
 //! Offline replay of host-supplied scenarios through OpenAPPA's parser and runner.
 //! The policy bytes are never rewritten. Annotators, context providers and audience
 //! sources are rebound to an in-process loopback stand-in: the host's own no-op
-//! annotator endpoint gets the answer the host says it serves, and every other consult
-//! gets no answer, which makes the step that raised it `cannot_run` and ends its file. A
-//! deployment needing a model process, a model profile or a live remedy party is refused
-//! as a whole.
+//! annotator endpoint, bound without a token, gets the answer the host says it serves.
+//! Every other consult gets no answer, and the file ends `cannot_run` at the first step
+//! that answer could have decided. A deployment needing a model process, a model profile
+//! or a live remedy party is refused as a whole.
 use appa_eventlog::{Backend, LogStore};
 use appa_runtime::{
-    api::{ConsultRecord, ConsultRecorder, ExternalOutcome, Runtime},
+    api::{ConsultRecord, ConsultRecorder, ExternalOutcome, ExternalRole, OfferKind, Runtime},
     config::{
         AnnotatorImplementation, ArchestraEndpoint, AudienceImplementation, Config, Endpoint,
         HostDefaults, Implementation,
     },
-    replay::{self, Got, StepOutcome, Trace, TraceReport, Verdict},
+    replay::{self, Expect, Got, StepOutcome, Trace, TraceReport, Verdict},
 };
 use serde::{Deserialize, Serialize};
 use std::{
     collections::HashSet,
-    path::{Path, PathBuf},
+    path::Path,
     sync::{Arc, Mutex, MutexGuard, PoisonError},
     time::Duration,
 };
@@ -199,6 +199,9 @@ struct StepResult {
     status: Status,
     #[serde(skip_serializing_if = "Option::is_none")]
     error: Option<String>,
+    /// The call ran as proposed, or once the model accepted the narrowing it makes.
+    #[serde(skip)]
+    released: bool,
 }
 
 fn cannot_run(path: String, assertion_count: usize, error: String) -> FileResult {
@@ -355,7 +358,7 @@ async fn offline_runtime(content: &str, noop: Option<&NoopAnnotator>) -> Result<
     let stand_in = |url: &str| AnnotatorImplementation::Resolver(Endpoint::new(url.into(), None));
     for binding in externals.annotators.values_mut() {
         let noop_bound = matches!(binding, AnnotatorImplementation::Resolver(endpoint)
-            if noop.is_some_and(|noop| noop.url == endpoint.url));
+            if endpoint.token.is_none() && noop.is_some_and(|noop| noop.url == endpoint.url));
         *binding = stand_in(match noop_bound {
             true => &consults.noop_url,
             false => &consults.refuse_url,
@@ -388,19 +391,19 @@ struct Offline {
     _consults: OfflineConsults,
 }
 
-/// Every consult that got no answer, in order. Not every one refuses its call: an
-/// unanswered audience source denies it, which a `deny` expectation would take as a pass.
+/// The audience sources that gave no answer, in order. An unanswered annotator refuses
+/// its call, which the runner already reports as `cannot_run`; an unanswered context
+/// provider leaves the annotator asked, and only the no-op answers offline. An unanswered
+/// audience source instead denies the call, which a `deny` expectation would take as a pass.
 #[derive(Default)]
 struct Unanswered(Mutex<Vec<String>>);
 
 impl ConsultRecorder for Unanswered {
     fn record(&self, record: ConsultRecord) {
-        if let ExternalOutcome::NoAnswer(_) = record.outcome {
-            self.entries().push(format!(
-                "{} {:?}",
-                crate::consults::role_name(record.role),
-                record.external_name
-            ));
+        if let (ExternalRole::AudienceSource, ExternalOutcome::NoAnswer(_)) =
+            (record.role, record.outcome)
+        {
+            self.entries().push(record.external_name);
         }
     }
 }
@@ -409,15 +412,11 @@ impl Unanswered {
     fn entries(&self) -> MutexGuard<'_, Vec<String>> {
         self.0.lock().unwrap_or_else(PoisonError::into_inner)
     }
-
-    fn after(&self, mark: usize) -> Option<String> {
-        self.entries().get(mark).cloned()
-    }
 }
 
-/// Replay one trace. Where a consult went unanswered, the first step whose prefix leaves
-/// one cannot run and ends the file, whatever the runtime decided for it. Replay is
-/// deterministic, so a binary search over prefixes, each on a fresh root, finds that step.
+/// Replay one trace. A call needing an answer that did not come is not released, so after
+/// an unanswered audience source the first step whose call was not released as proposed
+/// cannot run and ends the file. Steps before it were released without one.
 async fn replay_trace(offline: &Offline, trace: &Trace) -> Vec<FileResult> {
     let mark = offline.unanswered.entries().len();
     let mut results: Vec<FileResult> = replay::run(&offline.runtime, std::slice::from_ref(trace))
@@ -425,39 +424,24 @@ async fn replay_trace(offline: &Offline, trace: &Trace) -> Vec<FileResult> {
         .into_iter()
         .map(|report| result(trace, report))
         .collect();
-    let Some(consult) = offline.unanswered.after(mark) else {
+    let Some(source) = offline.unanswered.entries().get(mark).cloned() else {
         return results;
     };
-    let Some(file) = results.first_mut().filter(|file| !file.steps.is_empty()) else {
-        return results;
-    };
-    let (mut clean, mut unanswered) = (0, file.steps.len());
-    while unanswered - clean > 1 {
-        let middle = (clean + unanswered) / 2;
-        let probe = Trace {
-            path: PathBuf::from(format!("{}#{middle}", trace.path.display())),
-            steps: trace.steps[..middle].to_vec(),
+    for file in &mut results {
+        let Some(at) = file.steps.iter().position(|step| !step.released) else {
+            continue;
         };
-        let mark = offline.unanswered.entries().len();
-        replay::run(&offline.runtime, std::slice::from_ref(&probe)).await;
-        match offline.unanswered.after(mark) {
-            Some(_) => unanswered = middle,
-            None => clean = middle,
+        file.steps.truncate(at + 1);
+        let step = &mut file.steps[at];
+        if step.status != Status::CannotRun {
+            step.status = Status::CannotRun;
+            step.actual = None;
+            step.error = Some(format!(
+                "audience source {source:?} gave no answer offline at or before this call, so replay cannot decide it"
+            ));
         }
+        file.status = Status::CannotRun;
     }
-    file.steps.truncate(unanswered);
-    let step = file
-        .steps
-        .last_mut()
-        .expect("the search keeps at least one step");
-    if step.status != Status::CannotRun {
-        step.status = Status::CannotRun;
-        step.actual = None;
-        step.error = Some(format!(
-            "{consult} gave no answer offline, so replay cannot decide this call"
-        ));
-    }
-    file.status = Status::CannotRun;
     results
 }
 
@@ -472,6 +456,21 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
         .into_iter()
         .map(|step| {
             let expected = step.expect.to_string();
+            let released = matches!(
+                (&step.outcome, &step.expect),
+                (
+                    StepOutcome::Passed {
+                        taken: None | Some(OfferKind::Accept)
+                    },
+                    Expect::Allow
+                ) | (
+                    StepOutcome::Mismatch {
+                        got: Got::Allowed,
+                        ..
+                    },
+                    _
+                )
+            );
             let (status, actual, error) = match step.outcome {
                 StepOutcome::Passed { taken } => {
                     let actual = match taken {
@@ -494,6 +493,7 @@ fn result(trace: &Trace, report: TraceReport) -> FileResult {
                 actual,
                 status,
                 error,
+                released,
             }
         })
         .collect();
@@ -711,35 +711,45 @@ mod tests {
 
     #[tokio::test]
     async fn a_check_needing_audience_members_cannot_run_offline() {
+        let statuses = |response: &Response| {
+            response.files[0]
+                .steps
+                .iter()
+                .map(|step| (step.line, step.status))
+                .collect::<Vec<_>>()
+        };
         for expect in ["allow", "deny"] {
             let response = run(annotated_request(
                 &annotated_policy(NOOP_URL),
                 &[(
                     "audience.appa",
-                    &format!("mcp/notes/share {{}}\nexpect allow\nmcp/files/read {{}}\nexpect allow\nmcp/mail/send {{}}\nexpect deny\nmcp/files/internal {{}}\nexpect allow\nmcp/notes/share {{}}\nexpect {expect}"),
+                    &format!("mcp/notes/share {{}}\nexpect allow\nmcp/files/internal {{}}\nexpect allow\nmcp/notes/share {{}}\nexpect {expect}\nmcp/notes/list {{}}\nexpect allow"),
                 )],
             ))
             .await;
-            let file = &response.files[0];
+            assert_eq!(response.files[0].status, Status::CannotRun);
             assert_eq!(
-                file.steps
-                    .iter()
-                    .map(|step| step.status)
-                    .collect::<Vec<_>>(),
+                statuses(&response),
                 [
-                    Status::Passed,
-                    Status::Passed,
-                    Status::Passed,
-                    Status::Passed,
-                    Status::CannotRun
-                ],
-                "{:?}",
-                file.steps
-                    .iter()
-                    .map(|step| (&step.actual, &step.error))
-                    .collect::<Vec<_>>()
+                    (1, Status::Passed),
+                    (3, Status::Passed),
+                    (5, Status::CannotRun)
+                ]
             );
         }
+        // A denial earlier in the file may be the unanswered one: replay stops there.
+        let response = run(annotated_request(
+            &annotated_policy(NOOP_URL),
+            &[(
+                "earlier-deny.appa",
+                "mcp/files/read {}\nexpect allow\nmcp/mail/send {}\nexpect deny\nmcp/files/internal {}\nexpect allow\nmcp/notes/share {}\nexpect deny",
+            )],
+        ))
+        .await;
+        assert_eq!(
+            statuses(&response),
+            [(1, Status::Passed), (3, Status::CannotRun)]
+        );
     }
 
     #[tokio::test]
@@ -752,6 +762,13 @@ mod tests {
             request(
                 &annotated_policy(NOOP_URL),
                 &[("unsupplied.appa", "mcp/notes/list {}\nexpect allow")],
+            ),
+            annotated_request(
+                &annotated_policy(NOOP_URL).replace(
+                    &format!("url = '{NOOP_URL}'"),
+                    &format!("url = '{NOOP_URL}'\ntoken_env = 'APPA_NOOP_TOKEN'"),
+                ),
+                &[("credential.appa", "mcp/notes/list {}\nexpect allow")],
             ),
         ] {
             let response = run(request).await;

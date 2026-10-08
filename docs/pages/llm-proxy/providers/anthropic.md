@@ -23,7 +23,7 @@ Go to **Model Providers → Add API Key**, select **Anthropic**, and configure t
 
 New Claude Code features work through the proxy with no setup. One example is auto mode with its no-charge, server-side safety checks. The proxy sends request fields and `anthropic-beta` values to the provider unchanged. It also returns response keys and stream events that it does not recognize. This applies on Anthropic, Microsoft Foundry, Vertex AI, and [Amazon Bedrock](/docs/llm-proxy/providers/bedrock).
 
-If Claude Code says "this session isn't eligible" for auto mode's no-charge checks, update Archestra. Older versions removed the fields that these checks use.
+If Claude Code says "this session isn't eligible" for auto mode's no-charge checks, update Archestra. Older versions removed the fields that these checks use. See Anthropic's [auto mode classifier request charges](https://code.claude.com/docs/en/auto-mode-classifier-billing) page for what the notice means.
 
 ### Anthropic on Microsoft Foundry
 

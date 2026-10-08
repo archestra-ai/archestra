@@ -18,8 +18,8 @@ type UnavailableContent =
  * What the logs pages show in place of content they do not have. Three
  * states, each worded for what actually happened: an encrypted chat's content
  * still exists (encrypted, with an escrow copy of the key); an encrypted chat's
- * redacted content never made it to disk; and the organization's Log Content
- * setting kept the content from being written at all.
+ * redacted content never made it to disk; and the deployment's Log Content
+ * mode kept the content from being written at all.
  *
  * Locked content really is recoverable: the wrapped key sits on the
  * conversation row, so its presence is verifiable rather than assumed.
@@ -80,7 +80,7 @@ function describeUnavailable(value: UnavailableContent): {
   if (isLogContentNotStored(value)) {
     return {
       title: "Content not stored",
-      body: "This was logged while the organization's Log Content setting was Metadata only, so the content was never stored.",
+      body: "This was logged while Log Content was set to Metadata only, so the content was never stored.",
     };
   }
   return {

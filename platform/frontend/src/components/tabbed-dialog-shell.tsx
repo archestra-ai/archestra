@@ -21,6 +21,8 @@ import { cn } from "@/lib/utils/tailwind";
 export interface TabbedDialogNavItem<TSection extends string> {
   id: TSection;
   label: string;
+  /** A short state line under the label, e.g. "2 providers". */
+  status?: string;
 }
 
 interface TabbedDialogShellProps<TSection extends string> {
@@ -111,14 +113,25 @@ export function TabbedDialogShell<TSection extends string>({
                 type="button"
                 variant="ghost"
                 data-testid={getNavItemTestId?.(navItem.id)}
+                aria-label={navItem.status ? navItem.label : undefined}
+                aria-description={navItem.status}
                 className={cn(
-                  "justify-start h-9 px-3 font-normal w-full",
+                  "justify-start font-normal w-full",
+                  navItem.status && "h-auto flex-col items-start gap-0 py-1.5",
                   activeSection === navItem.id &&
                     "bg-accent text-accent-foreground font-medium",
                 )}
                 onClick={() => onActiveSectionChange(navItem.id)}
               >
-                {navItem.label}
+                <span>{navItem.label}</span>
+                {navItem.status && (
+                  <span
+                    aria-hidden
+                    className="max-w-full truncate text-xs font-normal text-muted-foreground"
+                  >
+                    {navItem.status}
+                  </span>
+                )}
               </Button>
             ))}
           </div>
@@ -146,8 +159,8 @@ export function TabbedDialogShell<TSection extends string>({
             <Button
               type="button"
               variant="ghost"
-              size="icon"
-              className="h-8 w-8 shrink-0 rounded-xs opacity-70 hover:opacity-100"
+              size="icon-sm"
+              className="shrink-0 rounded-xs opacity-70 hover:opacity-100"
               onClick={guard.requestClose}
             >
               <XIcon className="h-4 w-4" />

@@ -334,7 +334,7 @@ export function buildModelsToUpsert(params: {
   models: Array<{
     id: string;
     capabilities?: FetchedModelCapabilities;
-    /** Underlying vendor model name, when the fetcher can determine it (Azure). */
+    /** Underlying vendor model name, when the fetcher can determine it (Azure, Bedrock, Claude on Microsoft Foundry). */
     underlyingModelName?: string | null;
   }>;
   modelsDevData: ModelsDevApiResponse;
@@ -412,7 +412,17 @@ export function buildModelsToUpsert(params: {
     const capabilities = resolveModelCapabilities({
       provider,
       modelId: model.id,
-      capabilities: lookupModelsDevCapabilities(capabilitiesMap, model.id),
+      // A deployment named freely by its operator (Claude on Microsoft
+      // Foundry) has no registry entry of its own; its backing model does.
+      // Resellers already resolve that through the cross-provider tier.
+      capabilities:
+        lookupModelsDevCapabilities(capabilitiesMap, model.id) ??
+        (!isReseller && model.underlyingModelName
+          ? lookupModelsDevCapabilities(
+              capabilitiesMap,
+              model.underlyingModelName,
+            )
+          : undefined),
       fetched: model.capabilities,
       selfHostedReasoning,
       crossProviderPrices,
@@ -1209,6 +1219,17 @@ function normalizeKnownModelCapabilities(params: {
 }): ProviderModelCapabilities {
   const { provider, modelId, underlyingModelName, capabilities } = params;
   const normalizedModelId = modelId.toLowerCase();
+
+  // Jev answers decisions, not prompts: no text output, which is what keeps its
+  // models out of every chat picker (`ModelModel.supportsTextChat`).
+  if (provider === "jev") {
+    return {
+      ...capabilities,
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+    };
+  }
 
   if (provider === "gemini" && normalizedModelId === "gemini-embedding-2") {
     return {

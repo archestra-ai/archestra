@@ -4,28 +4,29 @@ import {
 } from "@archestra/shared";
 
 const POLICY_LAUNCH_PROMPTS = {
+  writeValidations:
+    "Help me with validations for my current OpenAPPA policy. Ground me briefly in what the policy protects and why a small validation helps. If no checks exist, suggest one useful starting check; otherwise, summarize their coverage and help me choose whether to review, edit or add one. Draft and replay the chosen change for review. Save only when I ask, and leave the policy unchanged unless I request a fix.",
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
-    "Create a useful starting OpenAPPA policy with what is already available. Keep ordinary work working; leave additional batteries and detailed tuning for later. Explain which rules you recommend, with examples of what they allow or block and what remains unrestricted. Offer to show me the exact TOML, then ask for my approval to save the policy and turn it on. After saving, guide me through GitHub sync: list my available credentials, choose a connected organization GitHub App if one exists, or open the native credential setup dialog if none exists. Ask for the GitHub owner and repository name before creating the private repository from the template. Explain that later policy edits will open pull requests.",
+    "Set up a starting OpenAPPA policy with what is already available.",
   /** Tool coverage card: how to bring more tools under a rule. */
   improveCoverage:
-    "Help me improve my OpenAPPA tool coverage. Open with a one-line summary of how many of my MCP server tools a rule covers, how many have a rule that is not enforced, and how many are not covered (a noop catch-all or no matching rule). Also review tools covered by a non-noop catch-all and suggest specific rules where tighter control is useful. Then name the biggest gaps: the servers with the most uncovered tools, and the riskiest of those tools: ones that send data out, change or delete data, or read private data. End with up to three numbered changes ranked by how many tools they would cover, such as fixing a broken battery, including a battery that fits, or adding rules, so I can reply with a number. Don't change anything until I pick one, then tell me what it would do and ask me whether to apply it.",
+    "Review my OpenAPPA tool coverage and suggest how to cover more tools.",
   /** Batteries card: included batteries not enforced, or ones that fit. */
   configureBatteries:
-    "Help me configure my OpenAPPA batteries. First, for each included battery that is not enforced, tell me what is wrong and how to fix it. Then list the batteries that fit my MCP servers and are not included yet: the servers each fits, how many of their uncovered tools it would cover, and which of those tools its rules would let run, block, or send for approval. Ask me which ones to fix or include, then tell me what the change would do and ask me whether to apply it.",
-  /** Policy tab header, next to the policy text. */
-  explainPolicy:
-    "Walk me through my current OpenAPPA policy in plain language: what it allows, denies, and sends for approval. Then ask me what I'd like to change.",
+    "Review my OpenAPPA batteries: what is not enforced, and which ones fit my MCP servers.",
+  /** Overview chat strip: what the policy does today. */
+  currentPolicy: "Tell me about my current OpenAPPA policy.",
+  /** Overview chat strip: the concepts, for someone new to guardrails. */
+  explainGuardrails: "Explain OpenAPPA guardrails to me.",
+  /** Overview chat strip: a guided change. */
+  changePolicy: "Help me change my OpenAPPA policy.",
 } as const;
 
 const TARGET_LAUNCH_PROMPTS = {
-  /**
-   * Servers and gateways row: one review for any target, whatever its
-   * coverage and whether a battery fits it: what judges its tools, the
-   * riskiest ones, and a few numbered changes to pick from.
-   */
+  /** Servers and gateways row: a coverage review scoped to one target. */
   reviewCoverage: (subject: string) =>
-    `Review how my OpenAPPA policy governs ${subject}. Open with a one-line summary of how many of its tools a rule covers. Group its tools by what judges them (custom rule, battery rule, catch-all rule, or not covered) and whether their calls run freely, get blocked, or need approval, naming only the riskiest few in each: tools that send data out, change or delete data, or read private data. Flag any rule that is not enforced. End with up to three numbered changes ranked by impact, such as including a battery that fits or adding rules, so I can reply with a number. Don't change anything until I pick one, then tell me what it would do and ask me whether to apply it.`,
+    `Review how my OpenAPPA policy governs ${subject}.`,
 } as const;
 
 export type OpenAppaLaunchPromptKey =
@@ -36,6 +37,10 @@ function isOpenAppaTargetPromptKey(
   key: string,
 ): key is keyof typeof TARGET_LAUNCH_PROMPTS {
   return Object.hasOwn(TARGET_LAUNCH_PROMPTS, key);
+}
+
+export function openAppaYellInvestigationPrompt(yellId: string): string {
+  return `Investigate OpenAPPA yell ${yellId}.`;
 }
 
 /**

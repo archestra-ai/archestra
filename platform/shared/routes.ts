@@ -1,5 +1,11 @@
 export const RouteId = {
   AnnotateGuardrailsTool: "annotateGuardrailsTool",
+  GetOpenAppaPolicyTests: "getOpenAppaPolicyTests",
+  InspectOpenAppaPolicyTests: "inspectOpenAppaPolicyTests",
+  UpdateOpenAppaPolicyTests: "updateOpenAppaPolicyTests",
+  RunOpenAppaPolicyTests: "runOpenAppaPolicyTests",
+  PreviewOpenAppaPolicyTest: "previewOpenAppaPolicyTest",
+  GetOpenAppaPolicyTestRuns: "getOpenAppaPolicyTestRuns",
   GetGuardrailsPolicy: "getGuardrailsPolicy",
   ValidateGuardrailsPolicy: "validateGuardrailsPolicy",
   UpdateGuardrailsPolicy: "updateGuardrailsPolicy",
@@ -20,6 +26,7 @@ export const RouteId = {
   CreateAgent: "createAgent",
   CloneAgent: "cloneAgent",
   GetAgent: "getAgent",
+  GetAgentDefaultSuggestedPrompts: "getAgentDefaultSuggestedPrompts",
   PinAgent: "pinAgent",
   UnpinAgent: "unpinAgent",
   GetDefaultMcpGateway: "getDefaultMcpGateway",
@@ -307,6 +314,10 @@ export const RouteId = {
   OpenrouterChatCompletionsWithDefaultAgent:
     "openrouterChatCompletionsWithDefaultAgent",
   OpenrouterChatCompletionsWithAgent: "openrouterChatCompletionsWithAgent",
+
+  // Proxy Routes - Jev
+  JevDecisionsWithDefaultAgent: "jevDecisionsWithDefaultAgent",
+  JevDecisionsWithAgent: "jevDecisionsWithAgent",
 
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
@@ -614,7 +625,6 @@ export const RouteId = {
 
   // Skills Settings Routes (organization-level)
   UpdateSkillsSettings: "updateSkillsSettings",
-  UpdateLogsSettings: "updateLogsSettings",
 
   // Agent Settings Routes (organization-level)
   UpdateAgentSettings: "updateAgentSettings",
@@ -732,6 +742,7 @@ export const RouteId = {
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
+  UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
   GenerateTelegramLinkCode: "generateTelegramLinkCode",
   ConnectNgrok: "connectNgrok",
   DisconnectNgrok: "disconnectNgrok",
@@ -847,6 +858,7 @@ export const RouteId = {
   DeleteOpenappaBatteryInclude: "deleteOpenappaBatteryInclude",
   UploadOpenappaBatteryPackage: "uploadOpenappaBatteryPackage",
   DeleteOpenappaBatteryPackage: "deleteOpenappaBatteryPackage",
+  SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
@@ -861,6 +873,9 @@ export const RouteId = {
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",
+  GetOpenappaTrustAudience: "getOpenappaTrustAudience",
+  GetOpenappaRemedies: "getOpenappaRemedies",
+  GetOpenappaRemediesActivity: "getOpenappaRemediesActivity",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",
@@ -953,6 +968,11 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionHealth: "getConnectionHealth",
+  GetConnectedClients: "getConnectedClients",
+  DisconnectConnectedClient: "disconnectConnectedClient",
+  GetConnectedClientLog: "getConnectedClientLog",
+  GetAgentAdoption: "getAgentAdoption",
+  GetAgentAdoptionUsage: "getAgentAdoptionUsage",
 
   // MCP App Routes
   GetApps: "getApps",

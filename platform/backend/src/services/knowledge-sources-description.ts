@@ -1,4 +1,5 @@
 import { dynamicAccessContext } from "@/archestra-mcp-server/dynamic-tools";
+import type { RequestLookups } from "@/auth/request-lookups";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import {
   AgentConnectorAssignmentModel,
@@ -14,8 +15,11 @@ import type { KnowledgeBase, KnowledgeBaseConnector } from "@/types";
 export async function buildKnowledgeSourcesDescription(
   agentId: string,
   viewer?: { userId?: string; organizationId: string },
+  lookups?: RequestLookups,
 ): Promise<string | null> {
-  const agent = await AgentModel.findGatewayAgentById(agentId);
+  const agent = lookups
+    ? await lookups.gatewayAgent(agentId)
+    : await AgentModel.findGatewayAgentById(agentId);
   if (!agent || (viewer && viewer.organizationId !== agent.organizationId)) {
     return null;
   }
@@ -24,12 +28,14 @@ export async function buildKnowledgeSourcesDescription(
     ? await knowledgeSourceAccessControlService.buildAccessControlContext({
         userId: viewer.userId,
         organizationId,
+        lookups,
       })
     : null;
   const dynamic = await dynamicAccessContext({
     agentId,
     userId: viewer?.userId,
     organizationId,
+    lookups,
   });
   let connectors: KnowledgeBaseConnector[];
   let knowledgeBases: KnowledgeBase[] = [];
@@ -43,6 +49,7 @@ export async function buildKnowledgeSourcesDescription(
         canReadAll: access.canReadAll,
         viewerTeamIds: access.teamIds,
         viewerUserId: access.userId,
+        viewerPrincipal: access.principal,
         visibilityScope: "query",
         environmentId: agent.environmentId,
         // Enough rows to detect overflow even if every excluded source is first.
@@ -81,6 +88,7 @@ export async function buildKnowledgeSourcesDescription(
           canReadAll: access?.canReadAll,
           viewerTeamIds: access?.teamIds,
           viewerUserId: access?.userId,
+          viewerPrincipal: access?.principal,
           visibilityScope: "query",
         },
       ),

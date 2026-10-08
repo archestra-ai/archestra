@@ -267,3 +267,50 @@ describe("ChatCompletionRequestSchema", () => {
     expect("plugins" in parsed).toBe(false);
   });
 });
+
+describe("OpenrouterRequestAdapter cache_control", () => {
+  test("keeps a tool result's breakpoint when the result is rewritten", () => {
+    const adapter = openrouterAdapterFactory.createRequestAdapter({
+      model: "anthropic/claude-haiku-4.5",
+      messages: [
+        { role: "user", content: "Look it up." },
+        {
+          role: "assistant",
+          content: null,
+          tool_calls: [
+            {
+              id: "call_1",
+              type: "function",
+              function: { name: "lookup", arguments: "{}" },
+            },
+          ],
+        },
+        {
+          role: "tool",
+          tool_call_id: "call_1",
+          content: [
+            {
+              type: "text",
+              text: "raw result",
+              cache_control: { type: "ephemeral" },
+            },
+          ],
+        },
+      ],
+    });
+
+    adapter.applyToolResultUpdates({ call_1: "sanitized result" });
+
+    expect(adapter.toProviderRequest().messages[2]).toEqual({
+      role: "tool",
+      tool_call_id: "call_1",
+      content: [
+        {
+          type: "text",
+          text: "sanitized result",
+          cache_control: { type: "ephemeral" },
+        },
+      ],
+    });
+  });
+});

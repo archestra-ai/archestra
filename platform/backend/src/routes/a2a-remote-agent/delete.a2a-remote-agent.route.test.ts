@@ -1,14 +1,22 @@
+import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { A2aOutboundRunModel, A2aRemoteAgentModel } from "@/models";
 import AgentToolModel from "@/models/agent-tool";
-import { describe, expect, test } from "@/test";
+import { beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import { makeAgentCard } from "./a2a-remote-agent.test-helpers";
 
 describe("DELETE /api/a2a/remote-agents/:id", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
+  beforeEach(async ({ makeMember }) => {
+    // Grants resolve through membership; an administrator reaches every
+    // external agent through the organization-wide grant.
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+  });
 
   test("deletes an unassigned remote agent", async () => {
     const created = await ctx.app.inject({

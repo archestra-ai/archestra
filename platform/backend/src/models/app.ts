@@ -284,16 +284,6 @@ class AppModel {
     return await withLabelsOne(result);
   }
 
-  static async findOrganizationId(id: string): Promise<string | null> {
-    const [result] = await db
-      .select({ organizationId: schema.appsTable.organizationId })
-      .from(schema.appsTable)
-      .where(and(eq(schema.appsTable.id, id), notDeleted(schema.appsTable)))
-      .limit(1);
-
-    return result?.organizationId ?? null;
-  }
-
   /**
    * Map backing-catalog ids → app ids for active apps, batched. Lets the
    * registry link a `serverType:"app"` catalog card to the app it backs. Only

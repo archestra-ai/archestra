@@ -24,7 +24,10 @@ import {
   OPENAI_CODEX_INSTRUCTIONS,
   type OpenAiCodexCredential,
 } from "@/services/openai-codex-credentials";
-import { createOpenAiCodexFetch } from "@/services/openai-codex-token";
+import {
+  createOpenAiCodexFetch,
+  normalizeCodexErrorResponse,
+} from "@/services/openai-codex-token";
 import {
   ApiError,
   type CreateClientOptions,
@@ -283,6 +286,6 @@ function createOpenAiCodexPassthroughFetch(params: {
 
     const response = await baseFetch(input, { ...init, headers });
     if (response.ok) onResponseHeaders?.(response.headers);
-    return response;
+    return normalizeCodexErrorResponse(response);
   };
 }

@@ -1,10 +1,11 @@
 import type { IncomingMessage, ServerResponse } from "node:http";
-import { RouteId, RUN_ID_HEADER } from "@archestra/shared";
+import { RouteId, RUN_ID_HEADER, SOURCE_HEADER } from "@archestra/shared";
 import type { JSONRPCMessage } from "@modelcontextprotocol/sdk/types.js";
 import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 
+import { RequestLookups } from "@/auth/request-lookups";
 import type { TokenAuthContext } from "@/clients/mcp-client";
 import config from "@/config";
 import logger from "@/logging";
@@ -26,6 +27,7 @@ import {
   type AgentRunRecord,
   ApiError,
   constructResponseSchema,
+  type McpGatewayCallSource,
   UuidOrSlugSchema,
 } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
@@ -188,6 +190,8 @@ async function logHandshake(params: {
       userId: tokenAuthContext?.userId ?? null,
       runId: runId ?? null,
       authMethod: deriveAuthMethod(tokenAuthContext) ?? null,
+      oauthClientId: tokenAuthContext?.oauthClientId ?? null,
+      source: tokenAuthContext?.source ?? null,
     });
     fastify.log.trace({ profileId, method }, "Saved handshake request");
   } catch (dbError) {
@@ -211,6 +215,7 @@ async function handleMcpPostRequest(
   resolution: ProtocolResolution,
   /** Rounds already spent on this call, from a verified requestState. */
   mrtrRound: number,
+  lookups?: RequestLookups,
 ): Promise<unknown> {
   const { revision } = resolution;
   const body = request.body as Record<string, unknown>;
@@ -444,6 +449,7 @@ async function handleMcpPostRequest(
       agentId: profileId,
       tokenAuth: tokenAuthContext,
       runId,
+      lookups,
       mrtr: {
         // Only a 2026-07-28 client can act on an InputRequiredResult. A legacy
         // client keeps the in-band elicitation it has always used.
@@ -939,9 +945,14 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         };
       }
 
+      // Each stateless POST builds its server from scratch; these lookups let
+      // authentication and every tools/list helper share one caller and agent
+      // resolution for this request only.
+      const lookups = new RequestLookups();
       const { result: tokenAuth, reason } = await authenticateMCPGatewayRequest(
         profileId,
         token,
+        lookups,
       );
       if (!tokenAuth) {
         setWWWAuthenticateHeader(request, reply);
@@ -1168,6 +1179,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
           agentId: profileId,
           subscriptionId,
           requested: parseSubscriptionFilter(request.body),
+          caller: {
+            userId: tokenAuth.userId,
+            organizationId: tokenAuth.organizationId,
+          },
         });
         return;
       }
@@ -1191,6 +1206,10 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               isOrganizationToken: tokenAuth.isOrganizationToken,
               organizationId: tokenAuth.organizationId,
               ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+              ...(tokenAuth.oauthClientId && {
+                oauthClientId: tokenAuth.oauthClientId,
+              }),
+              source: gatewayCallSource(request),
             },
             runId: readHeader(request, RUN_ID_HEADER),
           }),
@@ -1216,11 +1235,15 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
+        ...(tokenAuth.oauthClientId && {
+          oauthClientId: tokenAuth.oauthClientId,
+        }),
+        source: gatewayCallSource(request),
         ...(runId && { runId }),
       };
 
       // Extract passthrough headers from the incoming request per the agent's allowlist
-      const agent = await AgentModel.findGatewayAgentById(profileId);
+      const agent = await lookups.gatewayAgent(profileId);
       if (agent) {
         const passthroughHeaders = extractPassthroughHeaders(
           agent.passthroughHeaders,
@@ -1243,10 +1266,19 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         tokenAuthContext,
         resolution,
         mrtrRound,
+        lookups,
       );
     },
   );
 };
+
+/**
+ * Who sent a gateway request: the built-in chat's loopback client marks
+ * itself; everything else is an outside agent.
+ */
+function gatewayCallSource(request: FastifyRequest): McpGatewayCallSource {
+  return readHeader(request, SOURCE_HEADER) === "chat" ? "chat" : "api";
+}
 
 function readHeader(request: FastifyRequest, name: string): string | undefined {
   const value = request.headers[name.toLowerCase()];

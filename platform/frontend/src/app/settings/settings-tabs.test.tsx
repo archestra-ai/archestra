@@ -386,7 +386,6 @@ describe("useSettingsTabs", () => {
         "Apps",
         "Skills",
         "Security",
-        "Logs",
         "Knowledge",
         "Users",
         "Teams",

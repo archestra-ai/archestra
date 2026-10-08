@@ -74,9 +74,6 @@ import { useChatApps } from "@/components/chat/use-chat-apps";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
 import { LoadingState } from "@/components/loading";
-import MessageThread, {
-  type PartialUIMessage,
-} from "@/components/message-thread";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
@@ -98,7 +95,11 @@ import {
   EmptyTitle,
 } from "@/components/ui/empty";
 import { Version } from "@/components/version";
-import { useChatAgents, useDefaultAgentId } from "@/lib/agent.query";
+import {
+  useAgentDefaultSuggestedPrompts,
+  useChatAgents,
+  useDefaultAgentId,
+} from "@/lib/agent.query";
 import {
   useAgentRuntimePreflight,
   useStartAgentRun,
@@ -156,6 +157,7 @@ import {
   getMessageFeedback,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { isConversationShared } from "@/lib/chat/conversation-sharing";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
 import {
   generateEncryptedChatKey,
@@ -194,6 +196,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
+import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -859,17 +862,10 @@ export function ChatPageContent({
     canManageShare === true,
   );
   const isShared = sharingPolicy.data
-    ? [
-        ...sharingPolicy.data.grants,
-        ...sharingPolicy.data.inheritedGrants,
-      ].some(
-        (grant) =>
-          grant.actions.includes("read") &&
-          !(
-            grant.subject.type === "user" &&
-            grant.subject.id === conversation?.userId
-          ),
-      )
+    ? isConversationShared({
+        grants: sharingPolicy.data.grants,
+        ownerId: conversation?.userId,
+      })
     : !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&
@@ -894,10 +890,6 @@ export function ChatPageContent({
     enabled: shouldEnableChatSession,
   });
   const connectivity = useConnectivity();
-  const sharedConversationMessages = useMemo(
-    () => (conversation?.messages ?? []) as PartialUIMessage[],
-    [conversation?.messages],
-  );
   const sharedConversationAgentId =
     conversation?.agentId ?? conversation?.agent?.id ?? null;
   const {
@@ -985,11 +977,20 @@ export function ChatPageContent({
   const initialAgent = internalAgents.find(
     (agent) => agent.id === initialAgentId,
   );
+  const initialAgentHasOwnPrompts =
+    (initialAgent?.suggestedPrompts?.length ?? 0) > 0;
+  const { data: defaultSuggestedPrompts } = useAgentDefaultSuggestedPrompts(
+    initialAgentId,
+    { enabled: Boolean(initialAgent) && !initialAgentHasOwnPrompts },
+  );
+  const initialSuggestedPrompts = initialAgentHasOwnPrompts
+    ? initialAgent?.suggestedPrompts
+    : defaultSuggestedPrompts;
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
   const suggestionPreview = resolveSuggestionPreview(
-    initialAgent?.suggestedPrompts,
+    initialSuggestedPrompts,
     hoveredSuggestionPrompt,
   );
   const {
@@ -1795,8 +1796,7 @@ export function ChatPageContent({
   // resend is genuinely issued (so the card disappears without wiping the
   // error when the resend never starts) — same as the regenerate action on a
   // message. If the resend itself fails, the card stays so the user still sees
-  // the error. Owner-editable chats only (read-only viewers render
-  // MessageThread instead of this).
+  // the error. Owner-editable chats only (read-only viewers get no retry).
   const handleChatErrorRetry = useCallback(async () => {
     try {
       await resendLastUserMessage();
@@ -1860,8 +1860,12 @@ export function ChatPageContent({
     [setMessages],
   );
 
+  // Sync once the turn has settled — including a failed one. regenerate (and
+  // the error card's "Try again") resolves the live message to its saved id
+  // through this stamp; skipping it after an error left the just-sent message
+  // unresolvable, so regenerating it silently did nothing.
   useEffect(() => {
-    if (status !== "ready") {
+    if (status === "submitted" || status === "streaming") {
       return;
     }
 
@@ -1913,7 +1917,8 @@ export function ChatPageContent({
   const isContextCompacting =
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
-  const handleCompactConversation = useCallback(async () => {
+  // Stable identity: passed to the memoized composer (see handleSubmit).
+  const handleCompactConversation = useStableCallback(async () => {
     // The composer stays usable for the whole compaction, so `/compact` is
     // reachable again while one is already running — this guard is what stops
     // a second run re-entering.
@@ -2011,16 +2016,7 @@ export function ChatPageContent({
     } finally {
       endManualContextCompaction?.();
     }
-  }, [
-    beginManualContextCompaction,
-    compactConversationMutation,
-    conversationId,
-    endManualContextCompaction,
-    isContextCompacting,
-    isReadOnlyConversation,
-    recordContextCompaction,
-    syncPersistedMessageMetadata,
-  ]);
+  });
 
   useEffect(() => {
     if (
@@ -2195,7 +2191,10 @@ export function ChatPageContent({
     });
   }, []);
 
-  const handleStopStreaming = () => {
+  // The composer is memoized so streamed chunks (which re-render this page)
+  // skip it; its handlers therefore keep one identity across renders while
+  // still reading the latest messages/status when invoked.
+  const handleStopStreaming = useStableCallback(() => {
     if (conversationId) {
       stop?.({
         preserveQueuedMessages: true,
@@ -2204,13 +2203,12 @@ export function ChatPageContent({
     } else {
       stop?.();
     }
-  };
+  });
 
-  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = async (
-    message,
-    e,
-    options,
-  ) => {
+  const handleSubmit = useStableCallback<
+    Parameters<ArchestraPromptInputProps["onSubmit"]>,
+    ReturnType<ArchestraPromptInputProps["onSubmit"]>
+  >(async (message, e, options) => {
     e.preventDefault();
 
     // Enqueue this submission instead of sending it now (throws on inputs that
@@ -2393,7 +2391,7 @@ export function ChatPageContent({
         conversationId,
       });
     }
-  };
+  });
 
   const isBrowserPanelVisible = isBrowserPanelOpen;
   const isReviewPanelVisible = isReviewTabOpen && !!reviewContext;
@@ -3147,6 +3145,7 @@ export function ChatPageContent({
         <EmptyContent>
           {!canCreateAgent ? (
             <ButtonWithTooltip
+              size="sm"
               disabled
               disabledText={"You don't have permission to create agents"}
             >
@@ -3154,7 +3153,7 @@ export function ChatPageContent({
               Create Agent
             </ButtonWithTooltip>
           ) : (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/agents/new">
                 <Plus className="h-4 w-4" />
                 Create Agent
@@ -3183,7 +3182,7 @@ export function ChatPageContent({
               The conversation may have been deleted, or you may not have
               permission to view it.
             </p>
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/chat">Start a new chat</Link>
             </Button>
           </CardContent>
@@ -3213,7 +3212,7 @@ export function ChatPageContent({
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center pb-8">
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/chat">Start a new chat</Link>
             </Button>
           </CardContent>
@@ -3351,20 +3350,10 @@ export function ChatPageContent({
                     >
                       {isReadOnlyConversation && isScheduledRunInProgress ? (
                         <ScheduledRunInProgress />
-                      ) : isReadOnlyConversation ? (
-                        <MessageThread
-                          messages={sharedConversationMessages}
-                          chatErrors={conversation?.chatErrors ?? []}
-                          conversationId={conversationId}
-                          containerClassName="h-full"
-                          hideDivider
-                          profileId={conversation?.agent?.id}
-                          agentName={conversation?.agent?.name}
-                          selectedModel={conversation?.modelId ?? undefined}
-                        />
                       ) : (
                         <ChatMessages
                           conversationId={conversationId}
+                          readOnly={isReadOnlyConversation}
                           agentId={
                             currentProfileId || initialAgentId || undefined
                           }
@@ -3390,7 +3379,7 @@ export function ChatPageContent({
                               : internalAgents.find(
                                   (a) => a.id === initialAgentId,
                                 )
-                            )?.name
+                            )?.name ?? conversation?.agent?.name
                           }
                           selectedModel={conversationModelId ?? initialModel}
                           modelSource={
@@ -3399,8 +3388,18 @@ export function ChatPageContent({
                           chatErrors={conversation?.chatErrors ?? []}
                           compactions={conversation?.compactions ?? []}
                           onRegenerateUserMessage={regenerateUserMessage}
-                          onProviderConnected={handleProviderConnected}
-                          onChatErrorRetry={handleChatErrorRetry}
+                          // Both re-send the owner's last prompt, which a
+                          // read-only viewer cannot do.
+                          onProviderConnected={
+                            isReadOnlyConversation
+                              ? undefined
+                              : handleProviderConnected
+                          }
+                          onChatErrorRetry={
+                            isReadOnlyConversation
+                              ? undefined
+                              : handleChatErrorRetry
+                          }
                           error={error}
                           onToolApprovalResponse={
                             addToolApprovalResponse
@@ -3483,7 +3482,10 @@ export function ChatPageContent({
                               been deleted.
                             </span>
                           </div>
-                          <Button onClick={() => router.push("/chat")}>
+                          <Button
+                            size="sm"
+                            onClick={() => router.push("/chat")}
+                          >
                             <Plus className="h-4 w-4" />
                             New Conversation
                           </Button>
@@ -3672,7 +3674,7 @@ export function ChatPageContent({
                       </div>
                       {(() => {
                         if (isInitialRuntimeMode) return null;
-                        const prompts = initialAgent?.suggestedPrompts;
+                        const prompts = initialSuggestedPrompts;
                         if (!prompts || prompts.length === 0) return null;
                         return (
                           <SuggestedPromptPills
@@ -4090,7 +4092,11 @@ function ReviewChatNoKeyNotice({ onKeyAdded }: { onKeyAdded: () => void }) {
             submission. The replay on the right plays without a key.
           </span>
         </div>
-        <Button className="shrink-0" onClick={() => setIsDialogOpen(true)}>
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={() => setIsDialogOpen(true)}
+        >
           <Plus className="h-4 w-4" />
           Add API key
         </Button>

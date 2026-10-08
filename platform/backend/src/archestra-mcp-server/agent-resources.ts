@@ -1,8 +1,18 @@
 import {
+  AGENT_CATALOG_IDS,
+  AGENT_CATALOG_NAMES,
+  type AgentCatalogId,
+  buildAgentCatalogRuntime,
+  buildAgentCatalogSystemPrompt,
+  buildCustomAgentRuntime,
+  isIntegrationHidden,
   type ResourcePermissionGrant,
   ResourcePermissionGrantSchema,
+  resolveAgentCatalogId,
   TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_LOAD_SKILL_SHORT_NAME,
+  TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
 import {
@@ -18,16 +28,22 @@ import {
   AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  OrganizationModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { getAgentActivationSkills } from "@/services/agent-activation-skills";
-import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
+import {
+  assertAgentModelSelectionAvailable,
+  assertAgentRuntimeModelCompatibility,
+  requireAgentRuntimePermission,
+} from "@/services/agent-runtime/agent-config-validation";
 import { resolveDefaultEnvironmentForNewResource } from "@/services/environments/environment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import { SKILL_CATALOG_UNTRUSTED_NOTE } from "@/skills/skill-catalog-prompt";
-import type { Agent, ToolExposureMode } from "@/types";
+import type { Agent, AgentRuntime, ToolExposureMode } from "@/types";
 import {
   AgentActivationSkillSchema,
+  AgentRuntimeSchema,
   AgentScopeSchema,
   AgentToolAssignmentInputSchema,
   ApiError,
@@ -126,6 +142,53 @@ export const CreateBaseToolArgsSchema = z
   })
   .strict();
 
+/**
+ * An Agent Runtime, as the agent create and edit pages offer it: one of the
+ * maintained CLI templates (the catalog cards), or a custom image. Fields left
+ * out take the value the page would start from.
+ */
+export const AgentRuntimeToolInputSchema = z
+  .union([
+    AgentRuntimeSchema.omit({
+      image: true,
+      command: true,
+      inferenceProtocol: true,
+    })
+      .partial()
+      .extend({
+        template: z
+          .enum(AGENT_CATALOG_IDS as [AgentCatalogId, ...AgentCatalogId[]])
+          .describe(
+            `Maintained CLI to run: ${AGENT_CATALOG_IDS.map((id) => `'${id}' (${AGENT_CATALOG_NAMES[id]})`).join(", ")}. The image, launch command, and model protocol come from the template.`,
+          ),
+      })
+      .strict(),
+    AgentRuntimeSchema.partial()
+      .required({ image: true })
+      .strict()
+      .describe(
+        "A custom container image. Set inferenceProtocol to the wire protocol the image speaks to the model router.",
+      ),
+  ])
+  .describe(
+    "Run this agent in its own container (Agent Runtime) instead of the built-in chat harness. " +
+      "Pass { template } for a maintained CLI, or { image } for a custom image. Other fields override the defaults: " +
+      "claudeCode.authentication is 'subscription' (each user signs in with their own Claude account, the default) or 'provider' (bill through llmApiKeyId/modelId); " +
+      "credentials declares environment variables a run needs (users supply values later, or use " +
+      `${TOOL_TRANSFER_CREDENTIAL_SHORT_NAME}); ttlHours, idleTimeoutMinutes, and maxCostUsd bound each run; privileged requires an agent administrator.`,
+  );
+
+type AgentRuntimeToolInput = z.infer<typeof AgentRuntimeToolInputSchema>;
+
+export const AgentModelToolInputSchemas = {
+  llmApiKeyId: UuidIdSchema.describe(
+    `Provider API key the agent uses. Set together with modelId. Use ${TOOL_LIST_LLM_MODELS_SHORT_NAME} to find both.`,
+  ),
+  modelId: UuidIdSchema.describe(
+    `Model the agent uses: the model's id from ${TOOL_LIST_LLM_MODELS_SHORT_NAME}, not its provider name. Set together with llmApiKeyId.`,
+  ),
+};
+
 export const GetResourceToolArgsSchema = z
   .object({
     id: UuidIdSchema.optional(),
@@ -201,6 +264,21 @@ const ResourceDetailOutputSchema = z.object({
 export const McpGatewayDetailOutputSchema = ResourceDetailOutputSchema;
 
 export const AgentDetailOutputSchema = ResourceDetailOutputSchema.extend({
+  runtime: AgentRuntimeSchema.nullable()
+    .optional()
+    .describe(
+      "The Agent Runtime container this agent runs in, or null for the built-in chat harness.",
+    ),
+  llmApiKeyId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("The pinned provider API key ID, or null for the default."),
+  modelId: z
+    .string()
+    .nullable()
+    .optional()
+    .describe("The pinned model ID, or null for the default."),
   skillsEnabled: z
     .boolean()
     .optional()
@@ -268,6 +346,9 @@ export async function handleCreateResource<
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
+    runtime?: AgentRuntimeToolInput;
+    llmApiKeyId?: string;
+    modelId?: string;
   },
 >(params: {
   args: TArgs;
@@ -293,13 +374,25 @@ export async function handleCreateResource<
       return errorResult(`${toolLabel} name is required and cannot be empty.`);
     }
 
+    let isAgentAdmin = false;
     if (context.userId && context.organizationId) {
       const checker = await getAgentTypePermissionChecker({
         userId: context.userId,
         organizationId: context.organizationId,
       });
       checker.require(targetAgentType, "create");
+      isAgentAdmin = checker.isAdmin(targetAgentType);
     }
+
+    const runtimeAndModel = await resolveRuntimeAndModelForWrite({
+      context,
+      agentType: targetAgentType,
+      isAgentAdmin,
+      runtimeInput: args.runtime,
+      llmApiKeyId: args.llmApiKeyId,
+      modelId: args.modelId,
+      existing: null,
+    });
 
     const createParams: Parameters<typeof AgentModel.create>[0] = {
       name: args.name,
@@ -322,10 +415,24 @@ export async function handleCreateResource<
     if (args.accessAllSubagents !== undefined) {
       createParams.accessAllSubagents = args.accessAllSubagents;
     }
+    Object.assign(createParams, runtimeAndModel);
+
+    // A template-backed agent starts with what the catalog card would give
+    // it: a coding-agent prompt and dynamic tool access.
+    const template =
+      args.runtime && "template" in args.runtime ? args.runtime.template : null;
+    if (template && args.accessAllTools === undefined) {
+      createParams.accessAllTools = true;
+    }
 
     if (targetAgentType === "agent" || targetAgentType === "mcp_gateway") {
       if (targetAgentType === "agent" && args.systemPrompt) {
         createParams.systemPrompt = args.systemPrompt;
+      } else if (targetAgentType === "agent" && template) {
+        createParams.systemPrompt = buildAgentCatalogSystemPrompt({
+          name: AGENT_CATALOG_NAMES[template],
+          platformName: archestraMcpBranding.appName,
+        });
       }
       if (args.description) createParams.description = args.description;
       if (args.icon) createParams.icon = args.icon;
@@ -354,17 +461,6 @@ export async function handleCreateResource<
       if (args.icon) createParams.icon = args.icon;
     }
 
-    // Same Advisor default as the REST create path — the rule belongs to the
-    // record, not to the surface that created it. Without an organization in
-    // context there is no Advisor row to resolve, so nothing is seeded.
-    const defaultExcludedSubagentIds = context.organizationId
-      ? await agentSubagentExclusionsService.getCreationDefaultExclusions({
-          organizationId: context.organizationId,
-          agentType: targetAgentType,
-          accessAllSubagents: createParams.accessAllSubagents === true,
-        })
-      : [];
-
     if (args.initialGrants !== undefined) {
       if (!context.userId || !context.organizationId)
         return errorResult(
@@ -387,7 +483,6 @@ export async function handleCreateResource<
       // SPDX-SnippetEnd
     }
     const created = await AgentModel.create(createParams, context.userId, {
-      defaultExcludedSubagentIds,
       initialPermissionGrants: args.initialGrants ?? [],
     });
 
@@ -407,6 +502,7 @@ export async function handleCreateResource<
       `Name: ${created.name}`,
       `ID: ${created.id}`,
       `Type: ${targetAgentType}`,
+      `Runtime: ${describeRuntime(created.runtime)}`,
       `Edit: ${editLink}`,
       `Teams: ${created.teams.length > 0 ? created.teams.map((team) => team.name).join(", ") : "None"}`,
       `Labels: ${created.labels.length > 0 ? created.labels.map((label) => `${label.key}: ${label.value}`).join(", ") : "None"}`,
@@ -415,6 +511,7 @@ export async function handleCreateResource<
 
     return successResult(lines.join("\n"));
   } catch (error) {
+    if (error instanceof ApiError) return errorResult(error.message);
     return catchError(error, `creating ${toolLabel}`);
   }
 }
@@ -617,6 +714,9 @@ export async function handleEditResource<
     toolExposureMode?: ToolExposureMode;
     accessAllTools?: boolean;
     accessAllSubagents?: boolean;
+    runtime?: AgentRuntimeToolInput | null;
+    llmApiKeyId?: string | null;
+    modelId?: string | null;
   },
 >(params: {
   args: TArgs;
@@ -668,7 +768,17 @@ export async function handleEditResource<
       agentType: existingAgent.agentType,
     });
 
-    const updateData: Record<string, unknown> = {};
+    const runtimeAndModel = await resolveRuntimeAndModelForWrite({
+      context,
+      agentType: existingAgent.agentType,
+      isAgentAdmin: checker.isAdmin(existingAgent.agentType),
+      runtimeInput: args.runtime,
+      llmApiKeyId: args.llmApiKeyId,
+      modelId: args.modelId,
+      existing: existingAgent,
+    });
+
+    const updateData: Record<string, unknown> = { ...runtimeAndModel };
     if (args.name !== undefined) updateData.name = args.name;
     if (args.description !== undefined)
       updateData.description = args.description;
@@ -736,6 +846,7 @@ export async function handleEditResource<
       "",
       `Name: ${updated.name}`,
       `ID: ${updated.id}`,
+      `Runtime: ${describeRuntime(updated.runtime)}`,
       `Edit: ${editLink}`,
       `Scope: ${updated.scope}`,
       `Teams: ${updated.teams.length > 0 ? updated.teams.map((team) => team.name).join(", ") : "None"}`,
@@ -769,6 +880,124 @@ async function resolveNewAgentEnvironmentId(params: {
     organizationId,
     resource,
     userId,
+  });
+}
+
+/**
+ * Validate a runtime and model change the way the agents REST routes do, and
+ * return only the fields to write. `existing` is the stored agent on an edit,
+ * so a change to one field is checked against the other's current value.
+ */
+async function resolveRuntimeAndModelForWrite(params: {
+  context: ArchestraContext;
+  agentType: Agent["agentType"];
+  isAgentAdmin: boolean;
+  runtimeInput: AgentRuntimeToolInput | null | undefined;
+  llmApiKeyId: string | null | undefined;
+  modelId: string | null | undefined;
+  existing: Pick<Agent, "runtime" | "llmApiKeyId" | "modelId"> | null;
+}): Promise<Partial<Pick<Agent, "runtime" | "llmApiKeyId" | "modelId">>> {
+  const { context, runtimeInput, llmApiKeyId, modelId, existing } = params;
+  const touchesModel = llmApiKeyId !== undefined || modelId !== undefined;
+  if (runtimeInput === undefined && !touchesModel) return {};
+  if (params.agentType !== "agent") {
+    throw new ApiError(
+      400,
+      "runtime, llmApiKeyId, and modelId apply only to agents.",
+    );
+  }
+  if (!context.userId || !context.organizationId) {
+    throw new ApiError(400, "user/organization context not available.");
+  }
+
+  const runtime =
+    runtimeInput == null
+      ? runtimeInput
+      : await resolveAgentRuntimeToolInput({
+          input: runtimeInput,
+          organizationId: context.organizationId,
+        });
+  requireAgentRuntimePermission({
+    agentType: params.agentType,
+    runtime,
+    isAdmin: params.isAgentAdmin,
+  });
+
+  const merged = {
+    runtime: runtime !== undefined ? runtime : (existing?.runtime ?? null),
+    llmApiKeyId:
+      llmApiKeyId !== undefined ? llmApiKeyId : (existing?.llmApiKeyId ?? null),
+    modelId: modelId !== undefined ? modelId : (existing?.modelId ?? null),
+  };
+  const scope = {
+    organizationId: context.organizationId,
+    userId: context.userId,
+  };
+  // Stricter than the REST routes on purpose: a model is checked against the
+  // caller's keys even for a chat agent, so the tool never stores a pairing
+  // the caller could not have picked in the UI.
+  if (touchesModel) {
+    await assertAgentModelSelectionAvailable({ ...scope, agent: merged });
+  }
+  await assertAgentRuntimeModelCompatibility({
+    ...scope,
+    runtime: merged.runtime,
+    agent: merged,
+  });
+
+  return {
+    ...(runtime !== undefined && { runtime }),
+    ...(llmApiKeyId !== undefined && { llmApiKeyId }),
+    ...(modelId !== undefined && { modelId }),
+  };
+}
+
+function describeRuntime(runtime: AgentRuntime | null): string {
+  if (!runtime) return "built-in chat harness";
+  const template = resolveAgentCatalogId(runtime);
+  return template
+    ? `${AGENT_CATALOG_NAMES[template]} (${runtime.image})`
+    : `custom image ${runtime.image}`;
+}
+
+/**
+ * Expand a runtime tool argument into the stored runtime the create and edit
+ * pages would save: a template's image and launch settings, or a custom
+ * image's starting values, under any fields the caller set.
+ */
+async function resolveAgentRuntimeToolInput(params: {
+  input: AgentRuntimeToolInput;
+  organizationId: string;
+}): Promise<AgentRuntime> {
+  const { input } = params;
+  if (!("template" in input)) {
+    return AgentRuntimeSchema.parse({
+      ...buildCustomAgentRuntime({ image: input.image }),
+      ...input,
+    });
+  }
+  const { template, ...overrides } = input;
+  const organization = await OrganizationModel.getById(params.organizationId);
+  if (
+    isIntegrationHidden(organization?.popularAgentOverrides ?? null, template)
+  ) {
+    throw new ApiError(
+      400,
+      `The ${AGENT_CATALOG_NAMES[template]} template is turned off for this organization.`,
+    );
+  }
+  if (overrides.claudeCode && template !== "claude-code") {
+    throw new ApiError(
+      400,
+      "claudeCode settings apply only to the claude-code template.",
+    );
+  }
+  return AgentRuntimeSchema.parse({
+    ...buildAgentCatalogRuntime({
+      id: template,
+      image: config.agentRuntime.catalogImages[template],
+    }),
+    ...overrides,
   });
 }
 

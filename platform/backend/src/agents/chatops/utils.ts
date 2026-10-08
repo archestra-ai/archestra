@@ -313,6 +313,24 @@ export function errorMessage(error: unknown): string {
   }
 }
 
+/**
+ * Whether a message asks to start a new conversation in a chat without reply
+ * threads. The WHOLE message must be a reset command, so "reset the staging
+ * cluster" is a real request for the agent, not a reset. A leading "/" and a
+ * Telegram "@bot" suffix are accepted, so "/reset@acme_bot" also matches.
+ */
+export function isSessionResetCommand(text: string): boolean {
+  const normalized = text
+    .trim()
+    .toLowerCase()
+    .replace(/^\//, "")
+    .replace(/@\S+$/, "")
+    .replace(/[.!?]+$/, "")
+    .replace(/\s+/g, " ")
+    .trim();
+  return SESSION_RESET_COMMANDS.has(normalized);
+}
+
 // ===========================================================================
 // Internal helpers
 // ===========================================================================
@@ -333,6 +351,17 @@ const AGENT_FOOTER_GLYPH_SHORTCODE = ":robot_face:";
 
 /** Separates the agent identity from any extra detail inside a footer. */
 const FOOTER_DETAIL_SEPARATOR = " · ";
+
+/**
+ * Whole-message commands that start a new conversation. Bare "new" is left
+ * out on purpose: it is too common as a real one-word answer.
+ */
+const SESSION_RESET_COMMANDS: ReadonlySet<string> = new Set([
+  "reset",
+  "new chat",
+  "new conversation",
+  "start over",
+]);
 
 /** A footer glyph, in either spelling, run onto the end of a line of prose. */
 const INLINE_FOOTER_GLYPH_PATTERN = new RegExp(

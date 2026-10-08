@@ -25,8 +25,6 @@ import {
   ProfileLabels,
   type ProfileLabelsRef,
 } from "@/components/agent-labels";
-import { createdByFact } from "@/components/created-by-cell";
-import { DetailFacts } from "@/components/detail-facts";
 import type { InitialPermissionGrant } from "@/components/initial-resource-permissions";
 import { ResourceAccessSection } from "@/components/resource-access-section";
 import { SubscriptionSignIn } from "@/components/subscription-sign-in";
@@ -242,6 +240,17 @@ const PROVIDER_CONFIG: Record<
     consoleName: "Voyage AI Dashboard",
     description:
       "Embeddings only. Voyage serves no chat models, so this key is used to embed knowledge-base documents rather than to answer prompts.",
+  },
+  jev: {
+    name: "Jev",
+    icon: "/model-logos/jev.svg",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://console.typesafe.ai/",
+    consoleName: "TypeSafe Console",
+    description:
+      "Decisions only. Jev classifies content and serves no chat models. To reach Jev through another service, set the base URL to its full decisions endpoint, such as https://openrouter.ai/api/alpha/decisions.",
+    supportsEmbeddings: false,
   },
   cohere: {
     name: "Cohere",
@@ -1028,7 +1037,7 @@ export function LlmProviderApiKeyForm({
   const advancedFields = (
     <div className="space-y-4">
       {hasAdvancedSettings && !isSubscriptionFlow && !hideScopeAndPrimary && (
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between gap-4">
           <div className="space-y-0.5">
             <Label htmlFor="llm-provider-api-key-is-primary">Primary key</Label>
             <FieldDescription>
@@ -1184,7 +1193,6 @@ export function LlmProviderApiKeyForm({
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
         <div className="space-y-4">
-          <DetailFacts facts={[createdByFact(existingKey?.createdBy)]} />
           {!isSubscriptionFlow && (
             <div
               className={

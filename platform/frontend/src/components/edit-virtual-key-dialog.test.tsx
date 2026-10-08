@@ -22,9 +22,6 @@ vi.mock("@/components/virtual-key-connection-base-url", () => ({
 vi.mock("@/lib/llm-provider-api-keys.query", () => ({
   useLlmProviderApiKeys: () => ({ data: [] }),
 }));
-vi.mock("@/components/proxy-auth-provider-key-fields", () => ({
-  ProviderKeyAccessFields: () => <section>Provider Keys</section>,
-}));
 vi.mock("@/components/resource-access-section", () => ({
   ResourceAccessSection: ({
     resource,
@@ -48,6 +45,9 @@ const virtualKey = {
   providerApiKeys: [{ provider: "openai", providerApiKeyId: "pak-1" }],
   labels: [],
   expiresAt: null,
+  billingTeamId: null,
+  billingTeam: null,
+  spendCap: null,
 } as unknown as EditableVirtualKey;
 
 beforeEach(() => {
@@ -124,7 +124,11 @@ describe("EditVirtualKeyDialog", () => {
     ).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Connect" }));
     expect(screen.getByText("Use your saved key")).toBeVisible();
-    expect(screen.getByText(/X-Archestra-Virtual-Key/)).toBeVisible();
+    // Named in the explanation, and sent in the example request too: before
+    // any model syncs, the request falls back to the provider's default model.
+    for (const header of screen.getAllByText(/X-Archestra-Virtual-Key/)) {
+      expect(header).toBeVisible();
+    }
   });
 
   it("edits access through the key's own permission policy", () => {
@@ -155,6 +159,33 @@ describe("EditVirtualKeyDialog", () => {
     expect(payload.data.name).toBe("Renamed key");
     expect(payload.data).not.toHaveProperty("scope");
     expect(payload.data).not.toHaveProperty("teams");
+    // Unchanged billing stays out, so renaming never needs limit permissions.
+    expect(payload.data).not.toHaveProperty("billingTeamId");
+    expect(payload.data).not.toHaveProperty("spendCap");
+  });
+
+  it("shows a saved cap read-only to someone who cannot manage limits", async () => {
+    const user = userEvent.setup();
+    renderDialog({
+      ...virtualKey,
+      spendCap: {
+        limitId: "limit-1",
+        limitValue: 500,
+        cleanupInterval: "calendar_month",
+        currentUsage: 212,
+      },
+    } as EditableVirtualKey);
+
+    expect(screen.getByRole("button", { name: "Budget" })).toHaveAttribute(
+      "aria-description",
+      "No team · $500/month",
+    );
+    await user.click(screen.getByRole("button", { name: "Budget" }));
+
+    expect(screen.getByLabelText("Spend cap in dollars")).toHaveValue("500");
+    expect(screen.getByLabelText("Spend cap in dollars")).toBeDisabled();
+    expect(screen.getByText("$212 spent this month.")).toBeVisible();
+    expect(screen.getByText(/Ask someone who manages limits/)).toBeVisible();
   });
 });
 

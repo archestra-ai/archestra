@@ -140,13 +140,21 @@ builtin = "hitl"
   });
   const restarted = (session, event) => onReplica({ ...session, ...event });
   const offerInput = (session, event) => {
-    const { original_arguments, ...rest } = event;
+    const {
+      original_arguments,
+      tool: _tool,
+      spelling: _spelling,
+      dispatch: _dispatch,
+      ...rest
+    } = event;
     return {
       organization_id: session.organization_id,
-      caller_id: session.caller_id,
-      session_id: session.session_id,
-      parent_id: session.parent_id,
-      owner_caller_id: session.owner_caller_id ?? session.caller_id,
+      ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+      trajectory: {
+        v: 1,
+        session_id: session.session_id,
+        ...(session.parent_id ? { parent_id: session.parent_id } : {}),
+      },
       execution_mode: event.tool_call_id ? 'tracked' : 'untracked',
       original_arguments: JSON.stringify(original_arguments || event.arguments),
       presentation: { control_tool: 'archestra__execute_remedy_plan', supports_delegation: false },
@@ -290,31 +298,62 @@ builtin = "hitl"
     assert.equal(sanitizations, before + 1, 'accepting staged material does not rerun the sanitizer');
   });
 
-  await t.test('wrong organization and personal owner are indistinguishable unknowns', async () => {
+  await t.test('a wrong run is unknown and does not spend the offer', async () => {
     const session = scope();
     const denied = await call(session, 'held', 'read_untrusted');
     const offer_id = denied.offers[0].offer_id;
-    const event = { tool_call_id: 'provider-remedy-scope', arguments: { offer_id } };
-    const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, event);
-    const wrongUser = await byOffer({ ...session, caller_id: 'user:wrong', owner_caller_id: 'user:owner' }, event);
-    for (const response of [wrongOrganization, wrongUser]) {
+    const event = { arguments: { offer_id } };
+    const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, {
+      ...event, tool_call_id: 'wrong-org',
+    });
+    const wrongSession = await byOffer({ ...session, session_id: randomUUID() }, {
+      ...event, tool_call_id: 'wrong-session',
+    });
+    const wrongParent = await byOffer({ ...session, parent_id: 'not-the-parent' }, {
+      ...event, tool_call_id: 'wrong-parent',
+    });
+    for (const response of [wrongOrganization, wrongSession, wrongParent]) {
       assert.equal(response.offer.status, 'unknown');
       assert.equal(response.reason, 'unknown_control_call');
       assert.equal(response.output_source, 'runtime');
-      assert.equal(response.approved_output, response.result.content[0].text);
     }
-    assert.equal(wrongOrganization.approved_output, wrongUser.approved_output);
+    const other = scope();
+    await call(other, 'other-open', 'read_plain');
+    const wrongActor = await byOffer(other, { ...event, tool_call_id: 'wrong-actor' });
+    assert.equal(wrongActor.offer.status, 'known');
+    assert.equal(wrongActor.result.isError, true);
+    assert.ok(!/Authorized/.test(wrongActor.approved_output), wrongActor.approved_output);
+
+    const spent = await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy',
+    });
+    assert.equal(spent.offer.status, 'known');
+    assert.match(spent.approved_output, /Authorized/);
+    assert.deepEqual((await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy',
+    })).result, spent.result);
+    const again = await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy-again',
+    });
+    assert.equal(again.offer.status, 'known');
+    assert.equal(again.result.isError, true);
+    assert.ok(!/Authorized/.test(again.approved_output));
   });
 
-  await t.test('credential-owned offers permit an authenticated same-organization spender', async () => {
-    const session = scope('virtual-key:credential');
-    const denied = await call(session, 'held', 'read_untrusted');
-    const response = await byOffer({ ...session, caller_id: 'user:spender', owner_caller_id: 'virtual-key:credential' }, {
-      tool_call_id: 'credential-remedy',
+  await t.test('an anonymous organization token can spend the stamped session', async () => {
+    const session = scope();
+    const denied = await call(session, 'anon-held', 'read_untrusted');
+    const { caller_id: _caller, ...anonymous } = session;
+    const response = await byOffer(anonymous, {
+      tool_call_id: 'anon-remedy',
       arguments: { offer_id: denied.offers[0].offer_id },
     });
     assert.equal(response.offer.status, 'known');
-    assert.notEqual(response.result.isError, true);
+    assert.match(response.approved_output, /Authorized/);
+    assert.deepEqual((await byOffer(anonymous, {
+      tool_call_id: 'anon-remedy',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    })).result, response.result);
   });
 
   await t.test('a direct remedy cannot spend an offer from another trajectory', async () => {
@@ -1079,27 +1118,64 @@ builtin = "hitl"
   });
 
   await t.test('an offer accepted for a dispatched call retries it through the dispatch tool', async () => {
-    const hint = async (dispatch) => {
-      const session = scope();
-      const denied = await call(session, 'dispatched-read', 'read_untrusted', { path: 'report.txt' });
-      assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
-      return (await byOffer(session, {
-        tool_call_id: `accept-${dispatch ?? 'direct'}`,
-        arguments: { offer_id: denied.offers[0].offer_id },
-        tool: 'read_untrusted',
-        spelling: 'read_untrusted',
-        ...(dispatch ? { dispatch } : {}),
-      })).approved_output;
-    };
+    const open = (session, extra) => hook(session, {
+      event: 'tool_call',
+      operation_id: 'call:dispatched-read',
+      tool: 'read_untrusted',
+      arguments: { path: 'report.txt' },
+      ...extra,
+    });
+    const accept = (session, denied) => byOffer(session, {
+      tool_call_id: 'accept-recorded',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    });
 
-    const [prefix, retry] = (await hint('my_gateway_archestra__run_tool')).split('exactly these arguments: ');
+    const dispatched = scope();
+    const denied = await open(dispatched, {
+      spelling: 'client.read_untrusted',
+      dispatch: 'my_gateway_archestra__run_tool',
+    });
+    assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
+    const [prefix, retry] = (await accept(dispatched, denied)).approved_output.split('exactly these arguments: ');
     assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
     assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
-    // A direct call keeps naming the tool itself.
+
+    const direct = scope();
+    const named = await open(direct, { spelling: 'client.read_untrusted' });
     assert.match(
-      await hint(undefined),
-      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the read_untrusted tool again/,
+      (await accept(direct, named)).approved_output,
+      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the client\.read_untrusted tool again/,
     );
+  });
+
+  await t.test('a restarted replica recovers dispatch retry text, and an old row falls back', async () => {
+    const session = scope();
+    const denied = await hook(session, {
+      event: 'tool_call',
+      operation_id: 'call:restart-read',
+      tool: 'read_untrusted',
+      arguments: { path: 'report.txt' },
+      spelling: 'client.read_untrusted',
+      dispatch: 'my_gateway_archestra__run_tool',
+    });
+    const restarted = await remoteOffer(session, {
+      tool_call_id: 'accept-restart',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    });
+    assert.match(restarted.approved_output, /Call the my_gateway_archestra__run_tool tool again/);
+    assert.deepEqual(
+      JSON.parse(restarted.approved_output.split('exactly these arguments: ')[1]),
+      { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } },
+    );
+
+    const legacy = scope();
+    const old = await call(legacy, 'legacy-read', 'read_untrusted', { path: 'report.txt' });
+    const text = (await byOffer(legacy, {
+      tool_call_id: 'accept-legacy',
+      arguments: { offer_id: old.offers[0].offer_id },
+    })).approved_output;
+    assert.match(text, /Call the read_untrusted tool again/);
+    assert.doesNotMatch(text, /run_tool/);
   });
 
   await t.test('a human denial is final, reads as one, and replays', async () => {
@@ -1142,7 +1218,7 @@ builtin = "hitl"
     const approved = await byOffer(session, {
       tool_call_id: 'post-other-approve', tool: 'publish_post', arguments: { offer_id: remaining }, ruling: 'approve',
     });
-    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the publish_post tool again/);
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the publish_post tool again/);
   });
 
   await t.test('a precheck refusal answers the remedy without touching the offer', async () => {
@@ -1170,7 +1246,7 @@ builtin = "hitl"
     const approved = await byOffer(session, {
       tool_call_id: 'email-after-precheck', tool: 'send_email', arguments: { offer_id }, ruling: 'approve',
     });
-    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the send_email tool again/);
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the send_email tool again/);
 
     await assert.rejects(
       () => byOffer(session, {

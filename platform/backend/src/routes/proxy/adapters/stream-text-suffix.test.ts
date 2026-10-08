@@ -94,7 +94,7 @@ describe("stream text suffix seam", () => {
     );
   });
 
-  test("Anthropic binds a multipart receipt to its final text block", () => {
+  test("Anthropic keeps a multipart receipt on only its first text block", () => {
     const adapter = anthropicAdapterFactory.createStreamAdapter();
     adapter.setTextSuffix?.(signedPrefix);
     let sse = "";
@@ -126,6 +126,7 @@ describe("stream text suffix seam", () => {
     });
     process({ type: "content_block_stop", index: 1 });
     process({ type: "message_stop" });
+    sse += adapter.formatEndSSE();
 
     const textByBlock = new Map<number, string>();
     for (const frame of frames(sse)) {
@@ -145,8 +146,102 @@ describe("stream text suffix seam", () => {
       sessionIds: [],
     });
     expect(adapter.state.text).toBe("firstsecond");
+    expect(
+      frames(sse)
+        .filter((frame) => frame.type === "content_block_stop")
+        .map((frame) => frame.index),
+    ).toEqual([0, 1]);
+    expect(
+      frames(sse).filter((frame) => frame.type === "message_stop"),
+    ).toHaveLength(1);
     expect(adapter.toProviderResponse().content).toContainEqual(
       expect.objectContaining({ type: "text", text: "firstsecond" }),
+    );
+  });
+
+  test.each([
+    "end_turn",
+    "max_tokens",
+    "tool_use",
+  ] as const)("Anthropic emits one first-delta prefix and each block stop exactly once across %s", (stopReason) => {
+    const adapter = anthropicAdapterFactory.createStreamAdapter();
+    const prefixInputs: string[] = [];
+    adapter.setTextSuffix?.((firstText) => {
+      prefixInputs.push(firstText);
+      return signedPrefix(firstText);
+    });
+    let sse = "";
+    const process = (chunk: unknown) => {
+      const result = adapter.processChunk(chunk as never);
+      sse += String(result.sseData ?? "");
+      return result;
+    };
+    process({
+      type: "message_start",
+      message: { id: "msg_1", model: "claude-test", usage: {} },
+    });
+    process({
+      type: "content_block_start",
+      index: 0,
+      content_block: { type: "text", text: "" },
+    });
+    process({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: "answer" },
+    });
+    process({
+      type: "content_block_delta",
+      index: 0,
+      delta: { type: "text_delta", text: " tail" },
+    });
+    const stopped = process({ type: "content_block_stop", index: 0 });
+    expect(frames(String(stopped.sseData))).toEqual([
+      { type: "content_block_stop", index: 0 },
+    ]);
+    if (stopReason === "tool_use") {
+      const tool = process({
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "tool_use", id: "call_1", name: "read" },
+      });
+      expect(tool.sseData).toBeNull();
+      process({ type: "content_block_stop", index: 1 });
+      sse += (adapter.formatToolCallsSSE?.(adapter.state.toolCalls) ?? []).join(
+        "",
+      );
+    }
+    process({ type: "message_delta", delta: { stop_reason: stopReason } });
+    expect(process({ type: "message_stop" })).toMatchObject({
+      sseData: null,
+      isFinal: true,
+    });
+    sse += adapter.formatEndSSE();
+    const output = frames(sse);
+    expect(prefixInputs).toEqual(["answer"]);
+    expect(
+      output
+        .filter(
+          (frame) =>
+            frame.type === "content_block_delta" &&
+            (frame.delta as { type: string }).type === "text_delta",
+        )
+        .map((frame) => (frame.delta as { text: string }).text),
+    ).toEqual([signedPrefix("answer"), "\n\nanswer", " tail"]);
+    expect(
+      output
+        .filter((frame) => frame.type === "content_block_stop")
+        .map((frame) => frame.index),
+    ).toEqual(stopReason === "tool_use" ? [0, 1] : [0]);
+    expect(
+      output.filter((frame) => frame.type === "message_stop"),
+    ).toHaveLength(1);
+    expect(
+      output.find((frame) => frame.type === "message_delta"),
+    ).toMatchObject({ delta: { stop_reason: stopReason } });
+    expect(adapter.state.text).toBe("answer tail");
+    expect(adapter.toProviderResponse().content).toContainEqual(
+      expect.objectContaining({ type: "text", text: "answer tail" }),
     );
   });
 
@@ -453,7 +548,11 @@ describe("stream text suffix seam", () => {
   test("emits subagent trajectory start prefix when Anthropic stream begins with tool calls", () => {
     const adapter = anthropicAdapterFactory.createStreamAdapter();
     const banner = "▄█▄▄▄█▄\n██▄█▄██  started subagent ABC-1234";
-    adapter.setTextSuffix?.(() => banner);
+    const prefixInputs: string[] = [];
+    adapter.setTextSuffix?.((firstText) => {
+      prefixInputs.push(firstText);
+      return banner;
+    });
     adapter.processChunk({
       type: "message_start",
       message: { id: "msg_1", model: "claude-test", usage: {} },
@@ -464,6 +563,52 @@ describe("stream text suffix seam", () => {
       content_block: { type: "tool_use", id: "call_1", name: "read" },
     } as never);
     expect(result.sseData).toContain("started subagent ABC-1234");
+    let sse = String(result.sseData ?? "");
+    for (const chunk of [
+      { type: "content_block_stop", index: 0 },
+      {
+        type: "content_block_start",
+        index: 1,
+        content_block: { type: "text", text: "" },
+      },
+      {
+        type: "content_block_delta",
+        index: 1,
+        delta: { type: "text_delta", text: "after tool" },
+      },
+      { type: "content_block_stop", index: 1 },
+      { type: "message_delta", delta: { stop_reason: "tool_use" } },
+      { type: "message_stop" },
+    ]) {
+      sse += String(adapter.processChunk(chunk as never).sseData ?? "");
+    }
+    sse += adapter.getRawToolCallEvents().join("");
+    sse += adapter.formatEndSSE();
+    const output = frames(sse);
+    expect(prefixInputs).toEqual([""]);
+    expect(
+      output
+        .filter(
+          (frame) =>
+            frame.type === "content_block_delta" &&
+            (frame.delta as { type: string }).type === "text_delta",
+        )
+        .map((frame) => (frame.delta as { text: string }).text),
+    ).toEqual([banner, "after tool"]);
+    const starts = output
+      .filter((frame) => frame.type === "content_block_start")
+      .map((frame) => frame.index);
+    const stops = output
+      .filter((frame) => frame.type === "content_block_stop")
+      .map((frame) => frame.index);
+    expect(starts.sort()).toEqual([0, 1, 2]);
+    expect(stops.sort()).toEqual([0, 1, 2]);
+    expect(
+      output.filter((frame) => frame.type === "message_stop"),
+    ).toHaveLength(1);
+    expect(adapter.toProviderResponse().content).toContainEqual(
+      expect.objectContaining({ type: "text", text: `${banner}after tool` }),
+    );
   });
 
   test("carries the trajectory prefix when a Responses stream begins with tool calls", () => {

@@ -9,7 +9,7 @@ import {
 import { logContentNotStored } from "./log-content";
 
 describe("redacted content", () => {
-  it("recognizes content the Log Content setting kept out of storage", () => {
+  it("recognizes content the Log Content mode kept out of storage", () => {
     // Outside any locked chat, but it means the same to a reader: never
     // stored. Missing it would render the marker as a provider payload.
     const marker = logContentNotStored({ isError: true });

@@ -8,6 +8,7 @@ import {
   allAvailableActions,
   roleActionResourceFor,
 } from "@archestra/shared/access-control";
+import type { RequestLookups } from "@/auth/request-lookups";
 import { getPermissionsForUserContext, userHasPermission } from "@/auth/utils";
 import logger from "@/logging";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
@@ -39,20 +40,41 @@ export const TOOL_PERMISSIONS: Record<
   list_peer_messages: null,
   read_peer_message: null,
   get_openappa_yell: { resource: "openappaDiagnostics", action: "read" },
+  resolve_openappa_yell: {
+    resource: "openappaDiagnostics",
+    action: "update",
+  },
+  list_openappa_yells: { resource: "openappaDiagnostics", action: "read" },
+  list_openappa_consults: { resource: "openappaDiagnostics", action: "read" },
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
+  get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },
+  preview_openappa_validation_change: {
+    resource: "openappaPolicy",
+    action: "read",
+  },
+  publish_openappa_validation_change: {
+    resource: "openappaPolicy",
+    action: "update",
+  },
   list_guardrails_battery_fits: { resource: "openappaPolicy", action: "read" },
   inspect_guardrails_server: { resource: "openappaPolicy", action: "read" },
-  validate_guardrails_policy: { resource: "openappaPolicy", action: "update" },
+  validate_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   preview_guardrails_policy_change: {
     resource: "openappaPolicy",
     action: "read",
   },
   update_guardrails_policy: { resource: "openappaPolicy", action: "update" },
+  // The handler also requires credential:update, as the REST route does.
+  bind_guardrails_credential: { resource: "openappaPolicy", action: "update" },
   get_guardrails_policy_change_status: {
     resource: "openappaPolicy",
     action: "read",
   },
   create_guardrails_repository: {
+    resource: "organizationSettings",
+    action: "update",
+  },
+  connect_guardrails_repository: {
     resource: "organizationSettings",
     action: "update",
   },
@@ -65,11 +87,13 @@ export const TOOL_PERMISSIONS: Record<
     resource: "credential",
     action: "create",
   },
+  request_battery_credentials: { resource: "credential", action: "create" },
 
   // Agents
   create_agent: { resource: "agent", action: "create" },
   get_agent: { resource: "agent", action: "read" },
   list_agents: { resource: "agent", action: "read" },
+  list_llm_models: { resource: "llmModel", action: "read" },
   edit_agent: { resource: "agent", action: "update" },
 
   // Agent lifecycle hooks — mirror the REST hook routes' permissions
@@ -451,6 +475,7 @@ export async function filterToolNamesByPermission(
   toolNames: string[],
   userId: string | undefined,
   organizationId: string | undefined,
+  lookups?: RequestLookups,
 ): Promise<Set<string>> {
   if (!userId || !organizationId) {
     // No user context — include tools with no permission requirement, plus
@@ -468,10 +493,9 @@ export async function filterToolNamesByPermission(
     );
   }
 
-  const permissions = await getPermissionsForUserContext({
-    userId,
-    organizationId,
-  });
+  const permissions = lookups
+    ? await lookups.permissions({ userId, organizationId })
+    : await getPermissionsForUserContext({ userId, organizationId });
   const scopedActions = new Set<ResourcePermissionAction>();
   const neededScopedActions = new Set(
     toolNames
@@ -492,6 +516,7 @@ export async function filterToolNamesByPermission(
           userId,
           organizationId,
           action,
+          lookups,
         })
       )
         scopedActions.add(action);
@@ -530,7 +555,7 @@ export async function filterToolNamesByPermission(
         archestraMcpBranding.getToolShortName(name) as ArchestraToolShortName
       ],
   )
-    ? await ResourcePermissions.resolveAll({ userId, organizationId })
+    ? await ResourcePermissions.resolveAll({ userId, organizationId, lookups })
     : [];
   // SPDX-SnippetEnd
 

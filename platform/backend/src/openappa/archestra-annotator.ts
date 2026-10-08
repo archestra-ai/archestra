@@ -3,6 +3,7 @@ import { APICallError } from "ai";
 import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
 import AgentModel from "@/models/agent";
+import LlmProviderApiKeyModel from "@/models/llm-provider-api-key";
 import OrganizationModel from "@/models/organization";
 import { generateTaggedText } from "@/utils/generate-tagged-text";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
@@ -61,6 +62,7 @@ class OpenAppaArchestraAnnotator {
       agentId: agent.id,
       modelName: selection.modelName,
       source: "guardrail:annotator",
+      internalCall: true,
       baseUrl: selection.baseUrl,
       chatApiKeyId: selection.chatApiKeyId,
     });
@@ -79,26 +81,63 @@ class OpenAppaArchestraAnnotator {
         };
       return { kind: "answered", answer };
     } catch (error) {
-      const status = APICallError.isInstance(error)
-        ? error.statusCode
-        : undefined;
+      const apiError = APICallError.isInstance(error) ? error : null;
+      const status = apiError?.statusCode;
       // 429 is the provider's rate limit; 402 is Archestra's token-cost limit.
       if (status === 429 || status === 402) return { kind: "throttled" };
+      const key = selection.chatApiKeyId
+        ? await LlmProviderApiKeyModel.findById(selection.chatApiKeyId)
+        : null;
+      const call = `${selection.provider}/${selection.modelName}${
+        key ? ` with key "${key.name}" (${key.id})` : ""
+      }`;
+      const reason =
+        apiError && status !== undefined
+          ? `The model call failed: ${call} was rejected upstream with ${status}: ${upstreamMessage(apiError)}`
+          : `The model call failed: ${call}.`;
       logger.warn(
         {
           err: error,
           provider: selection.provider,
           model: selection.modelName,
+          chatApiKeyId: selection.chatApiKeyId,
+          chatApiKeyName: key?.name,
           statusCode: status,
         },
         "OpenAPPA archestra annotator call failed",
       );
-      return { kind: "failed", reason: "The model call failed." };
+      return { kind: "failed", reason };
     }
   }
 }
 
 export const openappaArchestraAnnotator = new OpenAppaArchestraAnnotator();
+
+/**
+ * What the upstream said, from the `error.message` every provider body and
+ * Archestra's own error envelope carry, else the status text.
+ */
+function upstreamMessage(error: APICallError): string {
+  const body = error.responseBody;
+  if (body) {
+    try {
+      const parsed: unknown = JSON.parse(body);
+      if (
+        typeof parsed === "object" &&
+        parsed !== null &&
+        "error" in parsed &&
+        typeof parsed.error === "object" &&
+        parsed.error !== null &&
+        "message" in parsed.error &&
+        typeof parsed.error.message === "string"
+      )
+        return parsed.error.message;
+    } catch {
+      // Not JSON: fall through to the SDK's own message.
+    }
+  }
+  return error.message;
+}
 
 function parseObject(text: string): Record<string, unknown> | null {
   try {

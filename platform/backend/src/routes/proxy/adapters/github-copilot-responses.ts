@@ -9,9 +9,8 @@
  * Every adapter behaviour is the OpenAI Responses behaviour, so this composes
  * from that factory rather than restating it, exactly as
  * `perplexity-responses` does. `openAiResponsesAdapterFactory` is a plain
- * object literal holding no state, and the adapters it builds carry no
- * provider-dependent behaviour, so spreading it is genuine reuse rather than a
- * shallow-copy hazard.
+ * object literal holding no state. Delegated factory methods retain this
+ * provider's receiver so provider-specific transport checks stay scoped.
  *
  * What differs is auth, and it is the same difference as the chat surface: the
  * incoming "API key" is a long-lived GitHub OAuth token (`gho_…`) that Copilot
@@ -94,7 +93,11 @@ export const githubCopilotResponsesAdapterFactory: LLMProvider<
 
   async executeStream(client: unknown, request: GithubCopilotResponsesRequest) {
     return withStableReasoningIds(
-      await openAiResponsesAdapterFactory.executeStream(client, request),
+      await openAiResponsesAdapterFactory.executeStream.call(
+        this,
+        client,
+        request,
+      ),
     );
   },
 };

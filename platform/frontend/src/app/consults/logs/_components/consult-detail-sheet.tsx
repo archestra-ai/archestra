@@ -51,7 +51,7 @@ function ConsultDetail({ view }: { view: ConsultView }) {
   // The server nulls the request of an audience-source consult for callers
   // without member:read.
   const withheld = consult.request === null;
-  // Under the Metadata only Log Content setting the request is a marker that
+  // Under the Metadata only Log Content mode the request is a marker that
   // keeps only the tool's name, and the answer and diagnostics are null.
   const notStored = isLogContentNotStored(consult.request);
 
@@ -94,8 +94,8 @@ function ConsultDetail({ view }: { view: ConsultView }) {
               <EyeOff className="size-4" />
               <span className="font-medium">Content not stored</span>
               <InlineNoticeText>
-                This was logged while the organization's Log Content setting was
-                Metadata only, so the content was never stored.
+                This was logged while Log Content was set to Metadata only, so
+                the content was never stored.
               </InlineNoticeText>
             </InlineNotice>
           </Section>

@@ -70,7 +70,6 @@ import {
   UpdateDefaultEnvironmentSchema,
   UpdateIntegrationSettingsSchema,
   UpdateKnowledgeSettingsSchema,
-  UpdateLogsSettingsSchema,
   UpdateMcpSettingsSchema,
   UpdateSecuritySettingsSchema,
   UpdateSkillsSettingsSchema,
@@ -279,29 +278,6 @@ const organizationRoutes: FastifyPluginAsyncZod = async (fastify) => {
         description: "Update Skills settings (online catalog availability)",
         tags: ["Organization"],
         body: UpdateSkillsSettingsSchema,
-        response: constructResponseSchema(SelectOrganizationSchema),
-      },
-    },
-    async ({ organizationId, body }, reply) => {
-      const organization = await OrganizationModel.patch(organizationId, body);
-
-      if (!organization) {
-        throw new ApiError(404, "Organization not found");
-      }
-
-      return reply.send(organization);
-    },
-  );
-
-  fastify.patch(
-    "/api/organization/logs-settings",
-    {
-      schema: {
-        operationId: RouteId.UpdateLogsSettings,
-        description:
-          "Update Logs settings (whether logs store content or metadata only)",
-        tags: ["Organization"],
-        body: UpdateLogsSettingsSchema,
         response: constructResponseSchema(SelectOrganizationSchema),
       },
     },

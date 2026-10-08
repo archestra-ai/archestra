@@ -6,7 +6,6 @@ import {
   ContextualRetrievalModeSchema,
   EmbeddingDimensionsSchema,
   KnowledgeConnectorOverridesSchema,
-  LogContentModeSchema,
   MessagingChannelOverridesSchema,
   ModelProviderOverridesSchema,
   OAUTH_ACCESS_TOKEN_MAX_LIFETIME_SECONDS,
@@ -327,7 +326,6 @@ const extendedFields = {
   embeddingModel: z.string().nullable(),
   embeddingDimensions: EmbeddingDimensionsSchema.nullable(),
   kbContextualRetrievalMode: ContextualRetrievalModeSchema.nullable(),
-  logContentMode: LogContentModeSchema,
   defaultLlmModel: z.string().nullable(),
   defaultLlmProvider: SupportedProvidersSchema.nullable(),
   defaultUserLimitValue: z.number().int().positive().nullable(),
@@ -465,10 +463,6 @@ export const UpdateMcpSettingsSchema = z.object({
   // SPDX-SnippetEnd
 });
 
-export const UpdateLogsSettingsSchema = z.object({
-  logContentMode: LogContentModeSchema.optional(),
-});
-
 export const UpdateSkillsSettingsSchema = z.object({
   onlineSkillCatalogEnabled: z.boolean().optional(),
   skillMarketplaceAnonymousAccess: z.boolean().optional(),
@@ -563,6 +557,11 @@ export const UpdateConnectionSettingsSchema = z.object({
   connectionDefaultProviderKeys:
     ConnectionDefaultProviderKeysSchema.nullable().optional(),
   connectionDefaultClientId: z.string().max(64).nullable().optional(),
+  connectionClientOrder: z
+    .array(z.string().max(64))
+    .refine((ids) => new Set(ids).size === ids.length, "Duplicate client ID")
+    .nullable()
+    .optional(),
   connectionShownClientIds: z
     .array(z.string().max(64))
     .max(50)

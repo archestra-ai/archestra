@@ -32,7 +32,6 @@ import {
   readNotice,
   readRemedyExecution,
 } from "./notice";
-import type { OfferJws } from "./offer-claims";
 import { appendSessionReceipt, stripSessionReceipts } from "./session-token";
 import {
   parseTrajectoryStamp,
@@ -91,32 +90,6 @@ export function providerWire(
     appaWireFamily(interactionType) ??
     OTHER_STAMP_WIRES[interactionType as SupportedProviderDiscriminator]
   );
-}
-
-/**
- * Collects signed offer claims from notice calls in request history.
- * When `currentTurnOnly` is set, considers only notices issued since the last user message.
- */
-export function collectSignedOfferClaims(params: {
-  family: AppaWireFamily;
-  body: unknown;
-  isNoticeTool: (name: string, namespace?: string) => boolean;
-  mayBeNoticeTool: (name: string) => boolean;
-  currentTurnOnly?: boolean;
-}): OfferJws[] {
-  const claims: OfferJws[] = [];
-  const calls = toolCallSites({
-    family: params.family,
-    body: params.currentTurnOnly ? currentTurnBody(params) : params.body,
-    match: (name, namespace) =>
-      params.isNoticeTool(name, namespace) || params.mayBeNoticeTool(name),
-  });
-  for (const call of calls) {
-    const notice = readNotice({ callId: call.id, arguments: call.arguments });
-    if (!notice?.offers) continue;
-    claims.push(...notice.offers);
-  }
-  return claims;
 }
 
 /**
@@ -478,13 +451,22 @@ export function stripChildTrajectoryReceiptsFromRequest(params: {
   body: unknown;
 }): AppaChildTrajectoryReceipt[] {
   const receipts: AppaChildTrajectoryReceipt[] = [];
+  // A receipt returned by a tool belongs to its callee, never to the caller.
+  for (const site of toolResultTextSites(params.family, params.body)) {
+    site.set(stripChildTrajectoryReceipts(site.get()).text);
+  }
   for (const site of historyTextSites(params.family, params.body)) {
-    const text = site.get();
+    // SDK reminders and summaries can wrap notifications in prose. Strip the
+    // nested return's receipts first so only the caller's own context remains.
+    const text = site
+      .get()
+      .replace(
+        /<(task-notification|subagent_notification|teammate-message)\b[^>]*>[\s\S]*?<\/\1>/giu,
+        (envelope) => stripChildTrajectoryReceipts(envelope).text,
+      );
     const stripped = stripChildTrajectoryReceipts(text);
     site.set(stripped.text);
-    if (!isChildReturnEnvelopeSite(text)) {
-      receipts.push(...stripped.receipts);
-    }
+    receipts.push(...stripped.receipts);
   }
   return receipts;
 }
@@ -1024,25 +1006,6 @@ function endsWithUserTurn(params: {
   return isUserAuthored(params.family, history.at(-1));
 }
 
-/**
- * The body cut down to the current turn: the history after the last message
- * the user wrote. A shallow copy, for reading; the request is left untouched.
- */
-function currentTurnBody(params: {
-  family: AppaWireFamily;
-  body: unknown;
-}): unknown {
-  const history = historyEntries(params);
-  if (!history) return params.body;
-  const lastUserMessage = history.findLastIndex((entry) =>
-    isUserAuthored(params.family, entry),
-  );
-  return {
-    ...asRecord(params.body),
-    [historyKey(params.family)]: history.slice(lastUserMessage + 1),
-  };
-}
-
 function historyKey(family: AppaWireFamily): "input" | "messages" {
   return family === "openai:responses" ? "input" : "messages";
 }
@@ -1580,20 +1543,6 @@ function toolResultTextSites(
     }
   }
   return sites;
-}
-
-/**
- * Identifies child-return notifications across message roles.
- * Proofs inside return envelopes are transport metadata, not conversation lineage.
- */
-function isChildReturnEnvelopeSite(text: string): boolean {
-  const trimmed = text.trim();
-  return (
-    (trimmed.startsWith("<task-notification>") &&
-      trimmed.endsWith("</task-notification>")) ||
-    (trimmed.startsWith("<subagent_notification>") &&
-      trimmed.endsWith("</subagent_notification>"))
-  );
 }
 
 /** Text parts the proxy may return as model-visible assistant content. */

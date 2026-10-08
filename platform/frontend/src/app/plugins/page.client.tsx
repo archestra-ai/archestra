@@ -30,6 +30,7 @@ import { LabelTags } from "@/components/label-tags";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { RepositoryOwnerIcon } from "@/components/repository-owner-icon";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -67,6 +68,7 @@ import {
 import { useBulkCardSelection } from "@/lib/hooks/use-bulk-card-selection";
 import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import {
+  countPlugins,
   type PluginListItem,
   useBulkDeletePlugins,
   useDeletePlugin,
@@ -81,12 +83,7 @@ import {
 import { PluginClientIcon } from "./_parts/plugin-client-icon";
 import { PluginInstallDialog } from "./_parts/plugin-install-dialog";
 import {
-  ARCHESTRA_PLUGIN_AUTHOR_LABEL,
   CLIENT_LABELS,
-  comparePinnedPluginTableOrder,
-  comparePluginCatalogOrder,
-  comparePluginRepositoryOrder,
-  isArchestraPlugin,
   pluginDetailHref,
   resolvePluginInstallSelection,
 } from "./_parts/plugin-page-config";
@@ -156,7 +153,10 @@ function PluginsList() {
     isFetching,
     isLoadingError,
     refetch,
-  } = usePlugins(true, { labels: labelsFilter });
+  } = usePlugins(true, {
+    labels: labelsFilter,
+    access: scopeFilter.access,
+  });
 
   const setFilter = useCallback(
     (name: string, value: string) => {
@@ -202,7 +202,9 @@ function PluginsList() {
           }
           return true;
         })
-        .sort(comparePluginCatalogOrder),
+        .sort((left, right) =>
+          left.displayName.localeCompare(right.displayName),
+        ),
     [plugins, search, client, platform, source, sourceRepo],
   );
 
@@ -244,6 +246,7 @@ function PluginsList() {
       "teamIds",
       "authorIds",
       "excludeAuthorIds",
+      "access",
       "labels",
     ]) {
       params.delete(key);
@@ -293,10 +296,6 @@ function PluginsList() {
       {
         icon: <PackagePlus className="h-4 w-4" />,
         label: installAction.label,
-        tooltip: isArchestraPlugin(plugin) ? "Install OpenAPPA" : undefined,
-        className: isArchestraPlugin(plugin)
-          ? "plugin-featured-action"
-          : undefined,
         permissions: installAction.permissions,
         permissionScope: installAction.permissionScope,
         onClick: () => setInstallingPlugin(plugin),
@@ -338,16 +337,8 @@ function PluginsList() {
     {
       id: "displayName",
       accessorKey: "displayName",
-      sortingFn: (left, right, columnId) =>
-        comparePinnedPluginTableOrder({
-          left: left.original,
-          right: right.original,
-          descending:
-            sorting.find((item) => item.id === columnId)?.desc ?? false,
-          fallbackResult: left.original.displayName.localeCompare(
-            right.original.displayName,
-          ),
-        }),
+      sortingFn: (left, right) =>
+        left.original.displayName.localeCompare(right.original.displayName),
       header: ({ column }) => (
         <Button
           variant="ghost"
@@ -370,11 +361,6 @@ function PluginsList() {
                   {plugin.displayName}
                 </span>
                 <LabelTags labels={plugin.labels ?? []} />
-                {isArchestraPlugin(plugin) && (
-                  <Badge variant="secondary" className="shrink-0">
-                    {ARCHESTRA_PLUGIN_AUTHOR_LABEL}
-                  </Badge>
-                )}
                 {!plugin.enabled && (
                   <Badge variant="outline" className="shrink-0">
                     Disabled
@@ -394,16 +380,9 @@ function PluginsList() {
     {
       id: "details",
       accessorFn: (plugin) => plugin.updatedAt,
-      sortingFn: (left, right, columnId) =>
-        comparePinnedPluginTableOrder({
-          left: left.original,
-          right: right.original,
-          descending:
-            sorting.find((item) => item.id === columnId)?.desc ?? false,
-          fallbackResult:
-            new Date(left.original.updatedAt).getTime() -
-            new Date(right.original.updatedAt).getTime(),
-        }),
+      sortingFn: (left, right) =>
+        new Date(left.original.updatedAt).getTime() -
+        new Date(right.original.updatedAt).getTime(),
       size: 380,
       header: "Details",
       cell: ({ row }) => {
@@ -500,6 +479,7 @@ function PluginsList() {
               <PermissionButton
                 permissions={{ plugin: ["create", "update"] }}
                 permissionScope="*"
+                size="sm"
                 asChild
               >
                 <Link href="/plugins/new">
@@ -591,7 +571,9 @@ function PluginsList() {
                                 options={[
                                   ["all", "All repositories"],
                                   ...[...sourceRepos]
-                                    .sort(comparePluginRepositoryOrder)
+                                    .sort((left, right) =>
+                                      left.localeCompare(right),
+                                    )
                                     .map(
                                       (repo) =>
                                         [
@@ -618,6 +600,11 @@ function PluginsList() {
                     />
                   }
                 >
+                  <ResourceAccessFilter
+                    resource="plugin"
+                    noun="plugins"
+                    countItems={countPlugins}
+                  />
                   <FacetSelect
                     label="Filter by client"
                     value={client}
@@ -870,6 +857,7 @@ function PluginsEmptyState() {
         <PermissionButton
           permissions={{ plugin: ["create", "update"] }}
           permissionScope="*"
+          size="sm"
           asChild
         >
           <Link href="/plugins/new">

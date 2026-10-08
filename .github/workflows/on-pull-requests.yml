@@ -157,36 +157,6 @@ jobs:
           base-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           lockfiles: ai-labs/Cargo.lock
 
-  docs-image-policy:
-    name: Docs Image Policy
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Enforce docs asset format and size policy
-        run: python3 .github/scripts/check-docs-image-policy.py
-
-  docs-links:
-    name: Docs Link Check
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Check internal doc links and asset embeds resolve
-        run: python3 .github/scripts/check-docs-links.py
-
   migration-kit-checks:
     name: Migration Kit Checks
     if: github.event_name == 'merge_group'
@@ -1047,7 +1017,12 @@ jobs:
             # port and racing another process to bind it after the probe closes.
             port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT * 97) % 7000) * shard_count + shard))
             echo "Starting frontend integration shard ${shard}/${shard_count} on port ${port}"
-            ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
+            # Playwright writes its config transform cache with plain,
+            # non-atomic writes. Shards that start together and share one cache
+            # can load a half-written file and die with "SyntaxError: Unexpected
+            # end of input" before running a test, so each shard gets its own.
+            PWTEST_CACHE_DIR="${RUNNER_TEMP}/playwright-transform-cache-${shard}" \
+              ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
               ARCHESTRA_FRONTEND_INT_TESTS_SHARD="$shard" \
               pnpm --filter @frontend exec playwright test --shard="${shard}/${shard_count}" &
             pids+=("$!")

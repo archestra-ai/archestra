@@ -12,6 +12,7 @@ import {
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type PrincipalSource,
 } from "@/models/resource-permission-subject";
 import * as metrics from "@/observability/metrics";
 import { ResourcePermissions } from "@/services/resource-permissions";
@@ -211,9 +212,12 @@ class KnowledgeSourceAccessControlService {
   async buildAccessControlContext(params: {
     userId: string;
     organizationId: string;
+    lookups?: PrincipalSource;
   }): Promise<KnowledgeSourceAccessControlContext> {
-    const principal =
-      await ResourcePermissionSubjectModel.resolvePrincipal(params);
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      params.lookups,
+      { userId: params.userId, organizationId: params.organizationId },
+    );
     const grants = await ResourcePermissions.resolveAll(principal);
     const canReadAll = hasScopedPermission({
       grants,

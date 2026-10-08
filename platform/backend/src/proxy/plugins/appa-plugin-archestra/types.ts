@@ -31,6 +31,8 @@ export type AppaTrustedContext = {
   request: AppaPreparedRequest;
   /** Server-recognized client maintenance, not a child completion. */
   compaction?: boolean;
+  /** Stable teammate identity from this caller's allowed native spawn. */
+  claudeTeammateNativeId?: string;
   /**
    * Raw X-Appa-* headers from the client before proxy derivation.
    * Child lineage checks compare against these claims.
@@ -72,6 +74,8 @@ export type AppaChildTrajectory = {
     nativeParentId: string;
     /** Actual client-native child ID, when the client reports one. */
     childNativeId?: string;
+    /** Original conversation for a server-correlated split-pane teammate. */
+    nativeConversationId?: string;
     /** Signed spawn correlation. Marker-only children use this without generating a fake native ID. */
     spawnCallId?: string;
     /** Digest of the opening prompt the verified delegation marker closes. */
@@ -209,6 +213,16 @@ export type AppaClientAdapter = {
     name: string,
     args: Record<string, unknown>,
   ): AppaSpawnPromptField | undefined;
+  /**
+   * Argument names the current native spawn declaration rejects.
+   * Absent when this client has no closed schema for the call.
+   */
+  unsupportedSpawnFields?(params: {
+    requestBody: unknown;
+    name: string;
+    namespace?: string;
+    arguments: unknown;
+  }): string[] | undefined;
   /** Native conversation ID that child subagents report as their parent. */
   nativeConversationId(context: AppaMatchContext): string | undefined;
   /**

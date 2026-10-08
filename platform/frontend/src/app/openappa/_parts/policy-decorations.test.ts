@@ -13,6 +13,7 @@ function declarations(
     lastError: null,
     managedInGithub: false,
     heldPull: null,
+    credentialBindings: [],
     ...overrides,
   };
 }

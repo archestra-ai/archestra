@@ -57,9 +57,13 @@ class McpGatewayTaskReaper {
       const purged = await McpGatewayTaskModel.purgeExpired({
         graceMs: PURGE_GRACE_MS,
       });
-      // Keyv only expires entries on reads; disconnected streams leave no reader.
+      // Keyv expires on reads; disconnected streams and old review history
+      // can be abandoned without another reader.
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseMessages);
       await cacheManager.deleteExpiredByPrefix(CacheKey.LegacySseSession);
+      await cacheManager.deleteExpiredByPrefix(
+        CacheKey.OpenAppaHitlReviewHistory,
+      );
       if (failed > 0 || purged > 0) {
         logger.info(
           { failed, purged },

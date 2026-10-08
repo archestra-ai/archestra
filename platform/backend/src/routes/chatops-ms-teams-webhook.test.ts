@@ -1,4 +1,7 @@
-import { describe, expect, test } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
+import { chatOpsManager } from "@/agents/chatops/chatops-manager";
+import MSTeamsProvider from "@/agents/chatops/ms-teams-provider";
+import { cacheManager } from "@/cache-manager";
 import { createFastifyInstance } from "@/fastify-instance";
 import chatopsRoutes, { msTeamsWebhookRoutes } from "./chatops";
 
@@ -56,5 +59,67 @@ describe("MS Teams webhook route registration", () => {
     expect(webhookResponse.json().error.message).toBe(
       "MS Teams chatops provider not configured",
     );
+  });
+});
+
+describe("MS Teams webhook Bot Framework rejections", () => {
+  beforeEach(() => {
+    // The webhook's rate limiter reads and writes through the cache manager,
+    // which is backed by an external Postgres store. Keep it in memory so the
+    // test does not depend on a reachable database.
+    const store = new Map<string, unknown>();
+    vi.spyOn(cacheManager, "get").mockImplementation(async (key) =>
+      store.get(key),
+    );
+    vi.spyOn(cacheManager, "set").mockImplementation(async (key, value) => {
+      store.set(key, value);
+      return value;
+    });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  /**
+   * The Bot Framework SDK answers with `res.status(code)` and `res.send(body)`
+   * as two separate calls. The route must keep that status, so a rejected
+   * activity is not reported as a 200 and the SDK's reason reaches the caller.
+   */
+  test("relays the SDK's status and message when it rejects the activity", async () => {
+    const provider = new MSTeamsProvider({
+      enabled: true,
+      appId: "app-id-123",
+      appSecret: "test-secret",
+      tenantId: "tenant-1",
+      graphTenantId: "",
+      graphClientId: "",
+      graphClientSecret: "",
+    });
+    await provider.initialize();
+    vi.spyOn(chatOpsManager, "getMSTeamsProvider").mockReturnValue(provider);
+
+    const app = createFastifyInstance();
+    await app.register(msTeamsWebhookRoutes);
+
+    // No Authorization header: the SDK rejects the activity before any
+    // network call to the Bot Framework token endpoints.
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/webhooks/chatops/ms-teams",
+      payload: {
+        type: "message",
+        text: "ping",
+        from: { id: "test" },
+        conversation: { id: "test" },
+        recipient: { id: "app-id-123" },
+        channelId: "msteams",
+        serviceUrl: "https://smba.trafficmanager.net/amer/",
+      },
+    });
+
+    expect(response.statusCode).toBe(401);
+    expect(response.json().error.type).toBe("api_authentication_error");
+    expect(response.json().error.message).toMatch(/unauthorized/i);
   });
 });

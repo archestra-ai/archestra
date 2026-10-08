@@ -5,14 +5,23 @@ import Link from "next/link";
 import { InlineNotice, InlineNoticeText } from "@/components/ui/inline-notice";
 import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 
-export function GithubManagedPolicyNotice() {
+type AppaGithubSource = NonNullable<
+  NonNullable<ReturnType<typeof useAppaGithubSync>["data"]>["source"]
+>;
+
+export function GithubManagedPolicyNotice({
+  validationDirectory,
+}: {
+  validationDirectory?: string;
+} = {}) {
   const { data } = useAppaGithubSync();
   const source = data?.source;
   const failed = Boolean(source?.lastSyncError);
+  const validations = validationDirectory !== undefined;
   const href =
-    source?.repo && source.path
-      ? `https://github.com/${source.repo}/blob/${encodeURIComponent(source.ref ?? "HEAD")}/${source.path.split("/").map(encodeURIComponent).join("/")}`
-      : null;
+    validations && source?.repo
+      ? `https://github.com/${source.repo}/tree/${encodeURIComponent(source.ref ?? "HEAD")}/${validationDirectory.split("/").map(encodeURIComponent).join("/")}`
+      : githubPolicyFileUrl(source, "blob");
 
   return (
     <InlineNotice variant={failed ? "error" : "neutral"}>
@@ -37,11 +46,17 @@ export function GithubManagedPolicyNotice() {
           <span>repository</span>
         )}{" "}
         <span>
-          {failed
-            ? "owns this policy, but its updates could not be synced."
-            : "owns this policy. Change its rules and batteries there."}
+          {validations
+            ? failed
+              ? "owns these validations, but its updates could not be synced."
+              : validationDirectory
+                ? "owns these validations. Change their files there."
+                : "owns these validations. Validations are disabled until you set a directory in sync settings."
+            : failed
+              ? "owns this policy, but its updates could not be synced."
+              : "owns this policy. Change its rules and batteries there."}
         </span>
-        {failed && (
+        {(failed || validationDirectory === "") && (
           <>
             {" "}
             <Link
@@ -56,4 +71,14 @@ export function GithubManagedPolicyNotice() {
       </InlineNoticeText>
     </InlineNotice>
   );
+}
+
+/** The synced policy file on GitHub, to read (`blob`) or to change (`edit`). */
+export function githubPolicyFileUrl(
+  source: AppaGithubSource | null | undefined,
+  view: "blob" | "edit",
+): string | null {
+  if (!source?.repo || !source.path) return null;
+  const path = source.path.split("/").map(encodeURIComponent).join("/");
+  return `https://github.com/${source.repo}/${view}/${encodeURIComponent(source.ref ?? "HEAD")}/${path}`;
 }

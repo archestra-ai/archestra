@@ -840,7 +840,7 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Run Tool Agent",
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const targetTool = await makeTool({
       name: "workspace__find_projects",
       catalogId: catalog.id,
@@ -951,7 +951,7 @@ describe("chat-mcp-client tool caching", () => {
       organizationId: org.id,
       name: "Chat Wrapped Approval Agent",
     });
-    const catalog = await makeInternalMcpCatalog();
+    const catalog = await makeInternalMcpCatalog({ organizationId: org.id });
     const targetTool = await makeTool({
       name: `workspace__export_${crypto.randomUUID().slice(0, 8)}`,
       catalogId: catalog.id,
@@ -2013,6 +2013,39 @@ describe("buildArchestraToolOutput", () => {
     expect(extractMcpExecutedAs(result)).toEqual({
       kind: "platform",
       callerUserId: null,
+    });
+  });
+
+  test("keeps the battery credential card's batteries for the card, not the model", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const batteries = [
+      {
+        name: "slack",
+        title: "Slack",
+        benefit: null,
+        setup: [],
+        credentials: ["APPA_PROVIDER_SLACK_TOKEN"],
+      },
+    ];
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "Opened the card." }],
+        structuredContent: { batteries },
+      },
+      toolName: "archestra__request_battery_credentials",
+      toolArguments: { batteries: ["slack"] },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "Opened the card.",
+      structuredContent: { batteries },
+    });
+    expect(mcpToolToModelOutput({ output: result })).toEqual({
+      type: "text",
+      value: "Opened the card.",
     });
   });
 

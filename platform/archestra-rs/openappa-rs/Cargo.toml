@@ -9,11 +9,11 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Actor-scoped peer messaging from OpenAPPA #593 and the `archestra` annotator builtin from #595.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "26cf1b91286073c77e104f8c0fdd5644cac7a553", features = ["archestra"] }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "26cf1b91286073c77e104f8c0fdd5644cac7a553" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "26cf1b91286073c77e104f8c0fdd5644cac7a553", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "26cf1b91286073c77e104f8c0fdd5644cac7a553" }
+# The Slack battery from OpenAPPA #609: a bot token is no end of a user-id DM, and a DM id the token cannot see refuses with its cause. Also carries #610, the atomic try_update rename.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "596f8a656bfd65f9d13a41f02f5de9b1b0902afe", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "596f8a656bfd65f9d13a41f02f5de9b1b0902afe" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "596f8a656bfd65f9d13a41f02f5de9b1b0902afe", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "596f8a656bfd65f9d13a41f02f5de9b1b0902afe" }
 chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
@@ -25,7 +25,7 @@ toml = "1.1"
 # The runtime's own editor speaks this document type; reading a root's declarations
 # with their spans needs the same version the runtime holds.
 toml_edit = "0.25"
-tokio = { version = "1", features = ["sync", "time"] }
+tokio = { version = "1", features = ["sync", "time", "rt", "net", "io-util"] }
 futures-util = "0.3"
 # Stream bounded receipt lookups through the store's existing PostgreSQL client.
 postgres = "0.19"

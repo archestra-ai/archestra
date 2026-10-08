@@ -81,12 +81,8 @@ class McpToolCallModel {
     auditContext?: EncryptedChatAuditContext | null,
   ) {
     // Enforced here, the one place every MCP log row is written, so no caller
-    // can store content the organization's Log Content setting withholds.
-    const withheld =
-      (await resolveLogContentMode({
-        agentId: data.agentId,
-        appId: data.appId,
-      })) === "metadata_only";
+    // can store content the deployment's Log Content mode withholds.
+    const withheld = resolveLogContentMode() === "metadata_only";
     // A withheld row holds no content to encrypt under a conversation key, so
     // it is written like the encrypted-chat fallback: unkeyed, marker in place.
     const audit = withheld ? null : (auditContext ?? null);

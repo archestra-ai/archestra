@@ -1,6 +1,6 @@
 import { archestraApiClient } from "@archestra/shared";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
@@ -16,7 +16,11 @@ import {
   it,
   vi,
 } from "vitest";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganizationMembers } from "@/lib/organization.query";
 import { useTeams } from "@/lib/teams/team.query";
@@ -46,11 +50,8 @@ const remoteAgent = {
   lastDiscoveredAt: "2026-09-08T12:00:00.000Z",
   createdAt: "2026-09-08T12:00:00.000Z",
   updatedAt: "2026-09-08T12:00:00.000Z",
-  scope: "personal",
   authorId: "user-1",
   authorName: "Test User",
-  teams: [],
-  users: [],
   connection: {
     id: "connection-1",
     remoteAgentId: "remote-agent-1",
@@ -93,6 +94,62 @@ vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/organization.query");
 vi.mock("@/lib/teams/team.query");
 vi.mock("sonner");
+// The shared permission editors have their own tests. Here they only need to
+// show up, and the create form's one to hand back a starting grant.
+const savePermissions = vi.fn(async () => {});
+vi.mock("@/components/resource-permissions", async () => {
+  const { useEffect } = await import("react");
+  return {
+    ResourcePermissions: ({
+      resource,
+      onDirtyChange,
+      registerSave,
+    }: {
+      resource: string;
+      onDirtyChange?: (dirty: boolean) => void;
+      registerSave?: (save: (() => Promise<void>) | null) => void;
+    }) => {
+      useEffect(() => {
+        registerSave?.(savePermissions);
+        return () => registerSave?.(null);
+      }, [registerSave]);
+      return (
+        <section aria-label={`Permissions for ${resource}`}>
+          <button type="button" onClick={() => onDirtyChange?.(true)}>
+            Change a grant
+          </button>
+          {!registerSave && <button type="button">Save permissions</button>}
+        </section>
+      );
+    },
+  };
+});
+vi.mock("@/components/initial-resource-permissions", () => ({
+  InitialResourcePermissions: ({
+    resource,
+    onChange,
+  }: {
+    resource: string;
+    onChange: (grants: unknown[]) => void;
+  }) => (
+    <section aria-label={`Initial permissions for ${resource}`}>
+      <button
+        type="button"
+        onClick={() =>
+          onChange([
+            {
+              subject: { type: "team", id: "team-1" },
+              actions: ["read", "use"],
+              name: "Operations",
+            },
+          ])
+        }
+      >
+        Share with Operations
+      </button>
+    </section>
+  ),
+}));
 
 beforeAll(() => {
   Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
@@ -121,6 +178,7 @@ beforeEach(() => {
   vi.mocked(useSession).mockReturnValue({
     data: { user: { id: "user-1" } },
   } as ReturnType<typeof useSession>);
+  grantCapabilities(["update", "delete"]);
   vi.mocked(useTeams).mockReturnValue({ data: [] } as unknown as ReturnType<
     typeof useTeams
   >);
@@ -205,9 +263,7 @@ describe("external A2A agent routed pages", () => {
         auth: { type: "none" },
         name: remoteAgent.name,
         description: remoteAgent.description,
-        scope: "personal",
-        teams: [],
-        users: [],
+        initialGrants: [],
       });
     });
     expect(push).toHaveBeenCalledWith("/agents/a2a/remote-agent-1");
@@ -324,9 +380,8 @@ describe("external A2A agent routed pages", () => {
       expect(createdBody).toEqual({
         source: { type: "well_known", url: remoteAgent.discoveryUrl },
         auth: expectedAuth,
-        scope: "personal",
-        teams: [],
-        users: [],
+        name: "Fixture Agent",
+        initialGrants: [],
       });
     });
   });
@@ -382,22 +437,187 @@ describe("external A2A agent routed pages", () => {
     });
   });
 
-  it("requires a selected user or team for explicit access choices", async () => {
+  it("previews the checked Agent Card and fills empty details from it", async () => {
     const user = userEvent.setup();
-    let inspectCalls = 0;
-    vi.mocked(useOrganizationMembers).mockReturnValue({
-      data: [
-        { id: "user-1", name: "Test User", email: "owner@example.com" },
-        { id: "user-2", name: "Morgan Lee", email: "morgan@example.com" },
-      ],
-    } as unknown as ReturnType<typeof useOrganizationMembers>);
-    vi.mocked(useTeams).mockReturnValue({
-      data: [{ id: "team-1", name: "Operations", parentId: null }],
-    } as unknown as ReturnType<typeof useTeams>);
+    let createdBody: unknown;
     server.use(
-      http.post(`${REGISTRY_URL}/inspect`, () => {
-        inspectCalls += 1;
-        return HttpResponse.json({
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json(
+          inspectionFor({
+            name: "Fixture Agent",
+            description: "A deterministic external agent",
+            agentCard: {
+              name: "Fixture Agent",
+              version: "2.1.0",
+              provider: { organization: "Example Org", url: "https://x.test" },
+              skills: [
+                {
+                  id: "refunds",
+                  name: "Refunds",
+                  description: "Issues refunds for orders",
+                },
+                { id: "invoices", name: "Invoices" },
+              ],
+            },
+          }),
+        ),
+      ),
+      http.post(REGISTRY_URL, async ({ request }) => {
+        createdBody = await request.json();
+        return HttpResponse.json(remoteAgent);
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.click(screen.getByLabelText("Agent base URL"));
+    await user.paste(remoteAgent.discoveryUrl);
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+
+    const preview = await screen.findByRole("status", {
+      name: "Agent Card found",
+    });
+    expect(preview).toHaveTextContent(
+      "by Example Org · v2.1.0 · A2A 1.0 over JSONRPC",
+    );
+    // The description is shown once, in the prefilled field below.
+    expect(preview).not.toHaveTextContent("A deterministic external agent");
+    const skills = within(preview).getByRole("list", {
+      name: "What this agent can do",
+    });
+    expect(
+      within(skills)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["RefundsIssues refunds for orders", "Invoices"]);
+    expect(screen.getByLabelText("Display name (optional)")).toHaveValue(
+      "Fixture Agent",
+    );
+    expect(screen.getByLabelText("Description (optional)")).toHaveValue(
+      "A deterministic external agent",
+    );
+
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+    await waitFor(() =>
+      expect(createdBody).toMatchObject({
+        name: "Fixture Agent",
+        description: "A deterministic external agent",
+      }),
+    );
+  });
+
+  it("leaves out Agent Card skills and versions that add no information", async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json(
+          inspectionFor({
+            name: "QA Tools",
+            description: "Runs QA checks",
+            agentCard: {
+              name: "QA Tools",
+              version: "1791292336",
+              skills: [
+                { id: "qa", name: "qa tools", description: "Runs QA checks" },
+                { id: "lint", name: "Lint", description: "Runs QA checks" },
+              ],
+            },
+          }),
+        ),
+      ),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    await user.click(screen.getByLabelText("Agent base URL"));
+    await user.paste(remoteAgent.discoveryUrl);
+    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
+
+    const preview = await screen.findByRole("status", {
+      name: "Agent Card found",
+    });
+    expect(preview).not.toHaveTextContent("1791292336");
+    expect(preview).not.toHaveTextContent("Runs QA checks");
+    const skills = within(preview).getByRole("list", {
+      name: "What this agent can do",
+    });
+    expect(
+      within(skills)
+        .getAllByRole("listitem")
+        .map((item) => item.textContent),
+    ).toEqual(["Lint"]);
+  });
+
+  it("refreshes Agent Card details on recheck without overwriting user edits", async () => {
+    const user = userEvent.setup();
+    const cards: Record<string, { name: string; description: string | null }> =
+      {
+        "https://first.example.com": {
+          name: "First Agent",
+          description: "First description",
+        },
+        "https://second.example.com": {
+          name: "Second Agent",
+          description: "Second description",
+        },
+        "https://third.example.com": {
+          name: "Third Agent",
+          description: null,
+        },
+      };
+    server.use(
+      http.post(`${REGISTRY_URL}/inspect`, async ({ request }) => {
+        const body = (await request.json()) as { source: { url: string } };
+        const card = cards[body.source.url];
+        return HttpResponse.json(
+          inspectionFor({ ...card, agentCard: { name: card.name } }),
+        );
+      }),
+    );
+
+    renderPage(<CreateA2aRemoteAgentPage />);
+    const baseUrlInput = screen.getByLabelText("Agent base URL");
+    const nameInput = screen.getByLabelText("Display name (optional)");
+    const descriptionInput = screen.getByLabelText("Description (optional)");
+    const checkCard = async (url: string, expectedName: string) => {
+      await user.clear(baseUrlInput);
+      await user.click(baseUrlInput);
+      await user.paste(url);
+      await user.click(
+        screen.getByRole("button", { name: "Check Agent Card" }),
+      );
+      expect(
+        await screen.findByRole("status", { name: "Agent Card found" }),
+      ).toHaveTextContent(expectedName);
+    };
+
+    // A name typed before checking is never replaced.
+    await user.type(nameInput, "My Agent");
+    await checkCard("https://first.example.com", "First Agent");
+    expect(nameInput).toHaveValue("My Agent");
+    expect(descriptionInput).toHaveValue("First description");
+
+    // An untouched pre-filled description follows the newly checked card.
+    await checkCard("https://second.example.com", "Second Agent");
+    expect(nameInput).toHaveValue("My Agent");
+    expect(descriptionInput).toHaveValue("Second description");
+
+    // Clearing the name lets the card fill it; an edited description stays.
+    await user.clear(nameInput);
+    await user.type(descriptionInput, " (edited)");
+    await checkCard("https://third.example.com", "Third Agent");
+    expect(nameInput).toHaveValue("Third Agent");
+    expect(descriptionInput).toHaveValue("Second description (edited)");
+  });
+
+  it("sends the starting grants chosen on the create page", async () => {
+    const user = userEvent.setup();
+    let createdBody: unknown;
+    server.use(
+      http.post(REGISTRY_URL, async ({ request }) => {
+        createdBody = await request.json();
+        return HttpResponse.json(remoteAgent);
+      }),
+      http.post(`${REGISTRY_URL}/inspect`, () =>
+        HttpResponse.json({
           name: "Fixture Agent",
           description: null,
           agentCard: remoteAgent.agentCard,
@@ -405,8 +625,8 @@ describe("external A2A agent routed pages", () => {
           selectedInterface: remoteAgent.connection.selectedInterface,
           supportedAuthTypes: ["none"],
           selectedSecurityRequirement: null,
-        });
-      }),
+        }),
+      ),
     );
 
     renderPage(<CreateA2aRemoteAgentPage />);
@@ -414,47 +634,79 @@ describe("external A2A agent routed pages", () => {
       screen.getByLabelText("Agent base URL"),
       remoteAgent.discoveryUrl,
     );
-    await user.click(screen.getByRole("button", { name: "Check Agent Card" }));
-    await screen.findByRole("status", { name: "Connection compatible" });
     await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
+      within(
+        screen.getByRole("region", {
+          name: "Initial permissions for externalAgent",
+        }),
+      ).getByRole("button", { name: "Share with Operations" }),
+    );
+    await user.click(screen.getByRole("button", { name: "Connect agent" }));
+
+    await waitFor(() =>
+      expect(createdBody).toMatchObject({
+        initialGrants: [
+          { subject: { type: "team", id: "team-1" }, actions: ["read", "use"] },
+        ],
       }),
     );
-    await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("option", { name: "Selected people" }));
-    const connectButton = screen.getByRole("button", {
-      name: "Connect agent",
-    });
-    expect(connectButton).toBeEnabled();
-    await user.click(connectButton);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Select at least one user.",
-    );
-    expect(inspectCalls).toBe(1);
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    );
-    await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("option", { name: "Selected teams" }));
-    expect(connectButton).toBeEnabled();
-    await user.click(connectButton);
-    expect(await screen.findByRole("alert")).toHaveTextContent(
-      "Select at least one team.",
-    );
-    expect(inspectCalls).toBe(1);
   });
 
-  it("prefills edit and omits unchanged source and stored credential on a visibility-only update", async () => {
+  it("commits permission edits with the page's one Save", async () => {
+    const user = userEvent.setup();
+    let updated = false;
+    server.use(
+      http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
+      http.put(`${REGISTRY_URL}/:id`, () => {
+        updated = true;
+        return HttpResponse.json(remoteAgent);
+      }),
+    );
+
+    renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
+    const permissions = await screen.findByRole("region", {
+      name: "Permissions for externalAgent",
+    });
+    expect(
+      within(permissions).queryByRole("button", { name: "Save permissions" }),
+    ).toBeNull();
+    const save = screen.getByRole("button", { name: "Save changes" });
+    expect(save).toBeDisabled();
+
+    await user.click(
+      within(permissions).getByRole("button", { name: "Change a grant" }),
+    );
+    await user.click(save);
+
+    await waitFor(() => expect(savePermissions).toHaveBeenCalledTimes(1));
+    expect(updated).toBe(false);
+  });
+
+  it("lets a reader without edit grants view the agent but not change it", async () => {
+    grantCapabilities([]);
+    server.use(
+      http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
+    );
+
+    renderPage(<A2aRemoteAgentDetailPage id={remoteAgent.id} />);
+
+    expect(
+      await screen.findByText(/you do not have permission to change/i),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByRole("region", { name: "Permissions for externalAgent" }),
+    ).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /More actions/ })).toBeNull();
+  });
+
+  it("prefills edit and omits unchanged source and stored credential on a details-only update", async () => {
     const user = userEvent.setup();
     let updatedBody: unknown;
     server.use(
       http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
       http.put(`${REGISTRY_URL}/:id`, async ({ request }) => {
         updatedBody = await request.json();
-        return HttpResponse.json({ ...remoteAgent, scope: "org" });
+        return HttpResponse.json({ ...remoteAgent, name: "Renamed Agent" });
       }),
     );
 
@@ -470,13 +722,9 @@ describe("external A2A agent routed pages", () => {
       "",
     );
     expect(screen.getByRole("button", { name: "Save changes" })).toBeDisabled();
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    );
-    await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("option", { name: /Everyone/ }));
+    const nameInput = screen.getByLabelText("Display name (optional)");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed Agent");
     await user.click(
       screen.getByRole("button", {
         name: `More actions ${remoteAgent.name}`,
@@ -488,9 +736,7 @@ describe("external A2A agent routed pages", () => {
     await user.keyboard("{Escape}");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
-    await waitFor(() =>
-      expect(updatedBody).toEqual({ scope: "org", teams: [], users: [] }),
-    );
+    await waitFor(() => expect(updatedBody).toEqual({ name: "Renamed Agent" }));
   });
 
   it("rechecks the saved Agent Card when the edit page opens", async () => {
@@ -576,7 +822,7 @@ describe("external A2A agent routed pages", () => {
       http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(legacyAgent)),
       http.put(`${REGISTRY_URL}/:id`, async ({ request }) => {
         updatedBody = await request.json();
-        return HttpResponse.json({ ...legacyAgent, scope: "org" });
+        return HttpResponse.json({ ...legacyAgent, name: "Renamed Agent" });
       }),
     );
 
@@ -586,18 +832,12 @@ describe("external A2A agent routed pages", () => {
     expect(
       screen.getByText(/uses a legacy Agent Card source/i),
     ).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    );
-    await user.keyboard("{ArrowDown}");
-    await user.click(screen.getByRole("option", { name: /Everyone/ }));
+    const nameInput = screen.getByLabelText("Display name (optional)");
+    await user.clear(nameInput);
+    await user.type(nameInput, "Renamed Agent");
     await user.click(screen.getByRole("button", { name: "Save changes" }));
 
-    await waitFor(() =>
-      expect(updatedBody).toEqual({ scope: "org", teams: [], users: [] }),
-    );
+    await waitFor(() => expect(updatedBody).toEqual({ name: "Renamed Agent" }));
   });
 
   it("requires a credential when checking an edited base URL", async () => {
@@ -765,10 +1005,7 @@ describe("external A2A agent routed pages", () => {
   });
 
   it("shows a read-only detail without exposing or replacing credentials", async () => {
-    vi.mocked(useHasPermissions).mockReturnValue({
-      data: false,
-      isPending: false,
-    } as ReturnType<typeof useHasPermissions>);
+    grantCapabilities([]);
     server.use(
       http.get(`${REGISTRY_URL}/:id`, () => HttpResponse.json(remoteAgent)),
     );
@@ -786,29 +1023,6 @@ describe("external A2A agent routed pages", () => {
     expect(screen.queryByRole("button", { name: "Show value" })).toBeNull();
     expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
     expect(screen.queryByRole("button", { name: /More actions/ })).toBeNull();
-  });
-
-  it("lets external-agent managers choose organization visibility", async () => {
-    const user = userEvent.setup();
-    vi.mocked(useHasPermissions).mockImplementation(
-      (permissions) =>
-        ({
-          data:
-            !!permissions.organizationSettings?.includes("update") ||
-            !!permissions.team?.includes("read"),
-          isPending: false,
-        }) as ReturnType<typeof useHasPermissions>,
-    );
-
-    renderPage(<CreateA2aRemoteAgentPage />);
-
-    await user.click(
-      screen.getByRole("combobox", {
-        name: "Who can discover this remote agent",
-      }),
-    );
-    await user.keyboard("{ArrowDown}");
-    expect(screen.getByRole("option", { name: /Everyone/ })).toBeEnabled();
   });
 
   it("warns assigned agents before deletion from the detail page", async () => {
@@ -883,6 +1097,20 @@ describe("external A2A agent routed pages", () => {
   });
 });
 
+function inspectionFor(card: {
+  name: string;
+  description: string | null;
+  agentCard: Record<string, unknown>;
+}) {
+  return {
+    ...card,
+    cardHash: remoteAgent.cardHash,
+    selectedInterface: remoteAgent.connection.selectedInterface,
+    supportedAuthTypes: ["none"],
+    selectedSecurityRequirement: null,
+  };
+}
+
 function renderPage(children: React.ReactNode) {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -890,4 +1118,16 @@ function renderPage(children: React.ReactNode) {
   render(
     <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>,
   );
+}
+
+function grantCapabilities(actions: Array<"update" | "delete">) {
+  vi.mocked(useScopedCapabilities).mockReturnValue({
+    data: actions.map((action) => ({
+      organizationId: "org-1",
+      resource: "externalAgent",
+      scope: remoteAgent.id,
+      action,
+    })),
+    isPending: false,
+  } as unknown as ReturnType<typeof useScopedCapabilities>);
 }

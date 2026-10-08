@@ -25,9 +25,18 @@ class OpenAppaGithubSyncModel {
       .where(eq(table.organizationId, organizationId));
     return row ?? null;
   }
-  static async save(organizationId: string, source: AppaGithubSource) {
+  static async save(
+    organizationId: string,
+    source: AppaGithubSource & { setupPullRequestNumber?: number },
+  ) {
+    const {
+      validationDirectory,
+      setupPullRequestNumber = null,
+      ...policySource
+    } = source;
     const values = {
-      ...source,
+      setupPullRequestNumber,
+      ...policySource,
       revision: randomUUID(),
       sourceCommit: null,
       lastSyncedAt: null,
@@ -37,6 +46,27 @@ class OpenAppaGithubSyncModel {
     };
     await db.transaction(async (tx) => {
       await lockGuardrailsPolicy(tx, organizationId);
+      const [suite] = await tx
+        .select()
+        .from(schema.openappaPolicyTestSuitesTable)
+        .where(
+          eq(
+            schema.openappaPolicyTestSuitesTable.organizationId,
+            organizationId,
+          ),
+        );
+      const directory = validationDirectory ?? suite?.directory ?? "traces";
+      await tx
+        .delete(schema.openappaPolicyTestSuitesTable)
+        .where(
+          eq(
+            schema.openappaPolicyTestSuitesTable.organizationId,
+            organizationId,
+          ),
+        );
+      await tx
+        .insert(schema.openappaPolicyTestSuitesTable)
+        .values({ organizationId, directory });
       await tx
         .insert(table)
         .values({ organizationId, ...values })
@@ -74,7 +104,7 @@ class OpenAppaGithubSyncModel {
     organizationId: string;
     revision: string;
     outcome:
-      | { error: string }
+      | { error: string | null }
       | { content: string; contentHash: string; sourceCommit: string };
   }): Promise<boolean> {
     const { organizationId, revision, outcome } = params;
@@ -86,6 +116,7 @@ class OpenAppaGithubSyncModel {
           ...("error" in outcome
             ? { lastSyncError: outcome.error }
             : {
+                setupPullRequestNumber: null,
                 content: outcome.content,
                 sourceCommit: outcome.sourceCommit,
                 lastSyncError: null,
@@ -212,6 +243,7 @@ class OpenAppaGithubSyncModel {
       await tx
         .update(table)
         .set({
+          setupPullRequestNumber: null,
           content: row.heldContent,
           sourceCommit: row.heldSourceCommit,
           lastSyncError: null,
@@ -227,6 +259,9 @@ class OpenAppaGithubSyncModel {
     });
   }
 
+  // The interval paces policy downloads. A pending setup pull request is
+  // checked every minute instead: an operator is waiting on that merge, and
+  // the check reads one pull request rather than the policy.
   static async findDue() {
     return db
       .select()
@@ -234,7 +269,7 @@ class OpenAppaGithubSyncModel {
       .where(
         and(
           isNotNull(table.interval),
-          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE ${table.interval} WHEN '15m' THEN INTERVAL '15 minutes' WHEN '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
+          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
         ),
       );
   }

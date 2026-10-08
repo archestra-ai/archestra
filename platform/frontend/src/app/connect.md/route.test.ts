@@ -278,6 +278,30 @@ describe("Connect agent instructions", () => {
     expect(instructions).toContain("or quoting the test response");
   });
 
+  it("passes the parts the prompt left out to the installer", async () => {
+    const response = GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=claude-code&exclude=proxy,skills,bogus",
+      ),
+    );
+    const instructions = await response.text();
+
+    expect(instructions).toContain(
+      "--client claude-code --exclude skills,proxy\n",
+    );
+    expect(instructions).toContain(
+      "--client claude-code --exclude skills,proxy }",
+    );
+    expect(instructions).toContain(
+      "The user chose to leave out shared skills, routing model requests through the LLM Proxy.",
+    );
+
+    const unfiltered = await GET(
+      new Request("http://localhost:3000/connect.md?client=claude-code"),
+    ).text();
+    expect(unfiltered).not.toContain("--exclude");
+  });
+
   it("focuses Claude Desktop on its host installer", async () => {
     const response = GET(
       new Request("http://localhost:3000/connect.md?client=claude-desktop"),
@@ -288,6 +312,50 @@ describe("Connect agent instructions", () => {
     expect(instructions).toContain("/connection?clientId=claude-desktop");
     expect(instructions).not.toContain("--client CLIENT_ID");
     expect(instructions).not.toContain("opencode mcp auth");
+  });
+
+  it("sets up only what the generic prompt did not leave out", async () => {
+    const response = GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&exclude=skills&base=https://edge.example/v1/",
+      ),
+    );
+    const instructions = await response.text();
+
+    expect(instructions).toContain(
+      "Gateway URL: https://edge.example/v1/mcp/team",
+    );
+    expect(instructions).toContain("### Model requests: LLM proxy");
+    expect(instructions).not.toContain("### Skills");
+    expect(instructions).toContain(
+      "http://localhost:3000/disconnect.md?client=generic&base=https://edge.example/v1 and follow it.",
+    );
+  });
+
+  it("never mentions the LLM proxy when it is left out", async () => {
+    const instructions = await GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&exclude=proxy",
+      ),
+    ).text();
+
+    expect(instructions).not.toMatch(/proxy/i);
+  });
+
+  it("ignores a base that is not an http(s) URL", async () => {
+    const response = GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&base=javascript:alert(1)",
+      ),
+    );
+    const instructions = await response.text();
+
+    expect(instructions).toContain(
+      "Gateway URL: http://localhost:3000/v1/mcp/team",
+    );
+    expect(instructions).toContain(
+      "disconnect.md?client=generic and follow it.",
+    );
   });
 
   it("keeps the full instructions for an unknown client", async () => {

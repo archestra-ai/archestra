@@ -1,5 +1,5 @@
 import type { UIMessageChunk } from "ai";
-import { eq } from "drizzle-orm";
+import { eq, inArray } from "drizzle-orm";
 import db, { schema } from "@/database";
 import ActiveChatRunModel from "@/models/chat-active-run";
 import { expect, test } from "@/test";
@@ -244,6 +244,99 @@ test("updates stopRequestedAt on the running active chat run", async ({
   });
 
   expect(stopped?.stopRequestedAt).toBeInstanceOf(Date);
+});
+
+test("a stop request leaves the liveness clock alone, so a stopped run whose owner died is still reaped", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const conversation = await makeConversation(agent.id, {
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const run = await ActiveChatRunModel.create({
+    conversationId: conversation.id,
+    userId: user.id,
+    organizationId: organization.id,
+  });
+  const lastTouch = new Date(Date.now() - 10_000);
+  await db
+    .update(schema.chatActiveRunsTable)
+    .set({ updatedAt: lastTouch })
+    .where(eq(schema.chatActiveRunsTable.id, run?.id ?? ""));
+
+  // Repeated Stop clicks on an ownerless run.
+  for (let i = 0; i < 3; i++) {
+    const stopped = await ActiveChatRunModel.requestStop({
+      conversationId: conversation.id,
+      organizationId: organization.id,
+    });
+    expect(stopped?.updatedAt.getTime()).toBe(lastTouch.getTime());
+  }
+
+  expect(await ActiveChatRunModel.markStaleRunningAsFailed(5_000)).toBe(1);
+  expect((await ActiveChatRunModel.findById(run?.id ?? ""))?.status).toBe(
+    "failed",
+  );
+});
+
+test("markRunAsFailedIfStale fails only that run, and only once it is stale", async ({
+  makeAgent,
+  makeConversation,
+  makeOrganization,
+  makeUser,
+}) => {
+  const user = await makeUser();
+  const organization = await makeOrganization();
+  const agent = await makeAgent({ organizationId: organization.id });
+  const makeRun = async () => {
+    const conversation = await makeConversation(agent.id, {
+      userId: user.id,
+      organizationId: organization.id,
+    });
+    const run = await ActiveChatRunModel.create({
+      conversationId: conversation.id,
+      userId: user.id,
+      organizationId: organization.id,
+    });
+    return run?.id ?? "";
+  };
+  const staleRunId = await makeRun();
+  const otherStaleRunId = await makeRun();
+  const freshRunId = await makeRun();
+  await db
+    .update(schema.chatActiveRunsTable)
+    .set({ updatedAt: new Date(Date.now() - 10_000) })
+    .where(
+      inArray(schema.chatActiveRunsTable.id, [staleRunId, otherStaleRunId]),
+    );
+
+  expect(
+    await ActiveChatRunModel.markRunAsFailedIfStale({
+      runId: freshRunId,
+      staleMs: 5_000,
+    }),
+  ).toBeNull();
+  expect(
+    (
+      await ActiveChatRunModel.markRunAsFailedIfStale({
+        runId: staleRunId,
+        staleMs: 5_000,
+      })
+    )?.status,
+  ).toBe("failed");
+
+  expect((await ActiveChatRunModel.findById(freshRunId))?.status).toBe(
+    "running",
+  );
+  expect((await ActiveChatRunModel.findById(otherStaleRunId))?.status).toBe(
+    "running",
+  );
 });
 
 test("does not stop a running active chat run in a different organization", async ({

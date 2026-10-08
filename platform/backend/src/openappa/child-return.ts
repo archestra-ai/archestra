@@ -1,5 +1,4 @@
-import { createHash, createHmac } from "node:crypto";
-import config from "@/config";
+import { createHash } from "node:crypto";
 import { stripChildTrajectoryReceipts } from "@/openappa/child-trajectory-receipt";
 import { parseTrajectoryStamp } from "@/openappa/trajectory-stamp";
 import { ApiError } from "@/types";
@@ -32,9 +31,7 @@ export function mintChildReturnMarker(params: {
   spawnCallId?: string;
   value: string;
   format?: "full" | "inline";
-}): string | undefined {
-  const key = markerKey();
-  if (!key) return undefined;
+}): string {
   const valueHash = hashValue(params.value);
   const claims: ChildReturnClaims = [
     PROOF_VERSION,
@@ -47,8 +44,7 @@ export function mintChildReturnMarker(params: {
     valueHash,
   ];
   const payload = encodeClaims(claims);
-  const mac = proofMac({ key, payload });
-  const displayCode = encodeCrockford35(first35Bits(Buffer.from(mac, "hex")));
+  const displayCode = encodeCrockford35(first35Bits(displayDigest(payload)));
   return formatMarker({ displayCode, format: params.format });
 }
 
@@ -231,11 +227,6 @@ export function collectAndStripChildReturns(
   return {
     completions: collected.completions,
   };
-}
-
-/** Shows whether this deployment can mark crossed child returns. */
-export function childReturnMarkersConfigured(): boolean {
-  return markerKey() !== undefined;
 }
 
 /**
@@ -667,8 +658,7 @@ function normalizeCallId(value: string | null | undefined): string | undefined {
 // === Display code derivation ===
 
 const CROCKFORD = "0123456789ABCDEFGHJKMNPQRSTVWXYZ";
-const KEY_LABEL = "archestra.appa.child-return-proof.key.v1";
-const PROOF_MAC_DOMAIN = "archestra.appa.child-return-proof.mac.v1";
+const DISPLAY_DOMAIN = "archestra.appa.child-return-display.v1";
 const HEX_SHA256 = /^[0-9a-f]{64}$/;
 
 type ChildReturnClaims = [
@@ -693,12 +683,12 @@ function encodeClaims(claims: ChildReturnClaims): string {
   return encoded.toString("base64url");
 }
 
-function proofMac(params: { key: Buffer; payload: string }): string {
-  return createHmac("sha256", params.key)
-    .update(PROOF_MAC_DOMAIN)
+function displayDigest(payload: string): Buffer {
+  return createHash("sha256")
+    .update(DISPLAY_DOMAIN)
     .update("\0")
-    .update(params.payload)
-    .digest("hex");
+    .update(payload)
+    .digest();
 }
 
 function isChildReturnClaims(value: unknown): value is ChildReturnClaims {
@@ -731,13 +721,6 @@ function formatMarker(params: {
   return params.format === "inline"
     ? `finished subagent ${params.displayCode}`
     : `${MARK_TOP}\n${MARK_BOTTOM}  finished subagent ${params.displayCode}`;
-}
-
-function markerKey(): Buffer | undefined {
-  const secret = config.openappa.offerSigningSecret;
-  return secret.length > 0
-    ? createHmac("sha256", secret).update(KEY_LABEL).digest()
-    : undefined;
 }
 
 function hashValue(value: string): string {

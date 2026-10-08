@@ -1,8 +1,7 @@
 import { BUILT_IN_AGENT_IDS, BUILT_IN_AGENT_NAMES } from "@archestra/shared";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
-import { AgentModel, EnvironmentModel } from "@/models";
-import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import { AgentModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
@@ -129,68 +128,6 @@ describe("built-in agents routes", () => {
     });
 
     expect(deleteResponse.statusCode).toBe(403);
-  });
-
-  test("the advisor rejects environment changes and retired sharing fields, and accepts prompt edits", async ({
-    makeTeam,
-  }) => {
-    const advisor = await AgentModel.create({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      organizationId,
-      agentType: "agent",
-      scope: "org",
-      systemPrompt: "You are the advisor.",
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-      teams: [],
-      labels: [],
-      knowledgeBaseIds: [],
-      connectorIds: [],
-    });
-    const team = await makeTeam(organizationId, user.id);
-
-    // Who reaches an agent is its grants, not the update body: the retired
-    // scope and team fields are refused, and the advisor's audience stays as
-    // it was.
-    const policyKey = {
-      organizationId,
-      resource: "agent" as const,
-      scope: advisor.id,
-    };
-    const grantsBefore = (await ResourcePermissionPolicyModel.find(policyKey))
-      ?.grants;
-    const scopeResponse = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${advisor.id}`,
-      payload: { scope: "team", teams: [team.id] },
-    });
-    expect(scopeResponse.statusCode).toBe(400);
-    expect(
-      (await ResourcePermissionPolicyModel.find(policyKey))?.grants,
-    ).toEqual(grantsBefore);
-
-    // One org-wide advisor serves every environment's agents through
-    // delegation, so narrowing it to an environment is rejected outright
-    // rather than silently dropped.
-
-    const environment = await EnvironmentModel.create({
-      organizationId,
-      name: "Staging",
-    });
-    const envResponse = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${advisor.id}`,
-      payload: { environmentId: environment.id },
-    });
-    expect(envResponse.statusCode).toBe(400);
-
-    const promptResponse = await app.inject({
-      method: "PUT",
-      url: `/api/agents/${advisor.id}`,
-      payload: { systemPrompt: "Updated advisor prompt" },
-    });
-    expect(promptResponse.statusCode).toBe(200);
-    expect(promptResponse.json().systemPrompt).toBe("Updated advisor prompt");
-    expect(promptResponse.json().environmentId).toBeNull();
   });
 
   test("can update builtInAgentConfig", async () => {

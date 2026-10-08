@@ -1,5 +1,6 @@
 import { Check, CircleDashed } from "lucide-react";
 import type { ReactNode } from "react";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 
 /**
  * One setup-review line: status, summary, and an optional inline editor using
@@ -39,14 +40,14 @@ export function SetupSummaryRow({
           {editable && !compact && (
             <>
               {" "}
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={onToggle}
                 data-testid={changeTestId}
                 className="text-xs text-muted-foreground/70 hover:text-foreground hover:underline"
               >
                 {isEditing ? "Done" : "Change"}
-              </button>
+              </UnstyledButton>
             </>
           )}
         </span>

@@ -696,35 +696,6 @@ describe("organization routes", () => {
     });
   });
 
-  describe("PATCH /api/organization/logs-settings - log content", () => {
-    test("switches to metadata only and records the change in the audit log", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/logs-settings",
-        payload: { logContentMode: "metadata_only" },
-      });
-
-      expect(response.statusCode, response.body).toBe(200);
-      expect(response.json().logContentMode).toBe("metadata_only");
-      const [audit] = await db
-        .select()
-        .from(schema.auditLogsTable)
-        .where(eq(schema.auditLogsTable.action, "organization.updated"));
-      expect(audit?.before).toMatchObject({ logContentMode: "full" });
-      expect(audit?.after).toMatchObject({ logContentMode: "metadata_only" });
-    });
-
-    test("rejects an unknown mode", async () => {
-      const response = await app.inject({
-        method: "PATCH",
-        url: "/api/organization/logs-settings",
-        payload: { logContentMode: "off" },
-      });
-
-      expect(response.statusCode).toBe(400);
-    });
-  });
-
   describe("PATCH /api/organization/connection-settings - default provider keys", () => {
     test("saves handoff instructions and records their audit diff", async () => {
       await OrganizationModel.patch(organizationId, {

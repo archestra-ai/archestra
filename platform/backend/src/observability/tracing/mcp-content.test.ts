@@ -13,7 +13,7 @@ import {
   InMemorySpanExporter,
   SimpleSpanProcessor,
 } from "@opentelemetry/sdk-trace-base";
-import OrganizationModel from "@/models/organization";
+import config from "@/config";
 import { afterAll, afterEach, beforeAll, expect, test } from "@/test";
 import {
   EVENT_GENAI_CONTENT_INPUT,
@@ -37,6 +37,7 @@ beforeAll(() => {
 
 afterEach(() => {
   exporter.reset();
+  config.logs.contentMode = "full";
 });
 
 afterAll(async () => {
@@ -47,11 +48,9 @@ afterAll(async () => {
 
 test("Metadata only keeps tool arguments and results out of spans", async ({
   makeAgent,
-  makeOrganization,
 }) => {
-  const org = await makeOrganization();
-  await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-  const agent = await makeAgent({ organizationId: org.id });
+  config.logs.contentMode = "metadata_only";
+  const agent = await makeAgent();
 
   await callTool(agent);
 

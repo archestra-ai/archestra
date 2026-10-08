@@ -1,16 +1,21 @@
+import {
+  CONNECT_SETUP_PARTS,
+  INSTALLER_CLIENT_IDS,
+} from "@archestra/shared/connection-setup";
+
 /** Public bootstrap: secrets stay in process memory; only the approved script reaches disk. */
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
 const { spawn, spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
 const { mkdtemp, open, writeFile, readFile, rm, access } = require('node:fs/promises');
-const { tmpdir } = require('node:os');
+const { hostname, tmpdir } = require('node:os');
 const { join } = require('node:path');
 
 async function main() {
   const args = process.argv.slice(2);
   const value = (flag) => { const i = args.indexOf(flag); return i < 0 ? undefined : args[i + 1]; };
   if (args.includes('--help')) {
-    console.log('Usage: node connect.cjs --url https://deployment.example --client claude-code|claude-desktop|cursor|codex|copilot-cli|opencode [--no-open]');
+    console.log('Usage: node connect.cjs --url https://deployment.example --client ${INSTALLER_CLIENT_IDS.join("|")} [--exclude ${CONNECT_SETUP_PARTS.join(",")}] [--no-open]');
     return;
   }
   const origin = new URL(value('--url'));
@@ -21,7 +26,9 @@ async function main() {
   const clientId = value('--client');
   const setupToken = value('--setup-token');
   if (setupToken && (clientId !== 'claude-desktop' || !/^archestra_con_[A-Za-z0-9_-]{32,43}$/.test(setupToken))) throw new Error('Invalid Desktop setup ticket.');
-  if (!['claude-code', 'claude-desktop', 'cursor', 'codex', 'copilot-cli', 'opencode'].includes(clientId)) throw new Error('Choose --client claude-code, claude-desktop, cursor, codex, copilot-cli, or opencode.');
+  if (!${JSON.stringify(INSTALLER_CLIENT_IDS)}.includes(clientId)) throw new Error('Choose --client ${INSTALLER_CLIENT_IDS.slice(0, -1).join(", ")}, or ${INSTALLER_CLIENT_IDS.at(-1)}.');
+  const exclude = (value('--exclude') ?? '').split(',').filter(Boolean);
+  if (exclude.some(part => !${JSON.stringify(CONNECT_SETUP_PARTS)}.includes(part))) throw new Error('--exclude takes a comma-separated list of ${CONNECT_SETUP_PARTS.join(", ")}.');
   const platform = { darwin: 'macos', linux: 'linux', win32: 'windows' }[process.platform];
   if (!platform) throw new Error('Supported operating systems: macOS, Linux, Windows.');
   if (typeof fetch !== 'function') throw new Error('Node.js 18 or newer is required.');
@@ -38,18 +45,20 @@ async function main() {
   }
   const releaseLock = await acquireConnectionLock({ origin: origin.origin, clientId, platform });
   try {
-    await runConnection({ args, clientId, networkOrigin, origin, platform });
+    await runConnection({ args, clientId, exclude, networkOrigin, origin, platform });
   } finally {
     await releaseLock();
   }
 }
-async function runConnection({ args, clientId, networkOrigin, origin, platform }) {
+async function runConnection({ args, clientId, exclude, networkOrigin, origin, platform }) {
   const request = async (path, body) => {
     const response = await fetch(new URL(path, networkOrigin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(15000) });
     if (!response.ok) { const error = new Error('Connection request failed (HTTP ' + response.status + '). Restart the installer or check the deployment URL.'); error.retryable = response.status === 429 || response.status >= 500; throw error; }
     return response.json();
   };
-  const started = await request('/api/client-connections', { clientId, platform });
+  const deviceName = hostname().trim().slice(0, 64);
+  const started = await request('/api/client-connections', { clientId, platform, ...(exclude.length ? { exclude } : {}), ...(deviceName ? { deviceName } : {}) });
+  if (exclude.length) console.log('Leaving out: ' + exclude.join(', ') + '.');
   if (!Number.isSafeInteger(started.interval) || started.interval < 1 || started.interval > 600) throw new Error('Invalid polling interval.');
   const pollIntervalMs = started.interval * 1000;
   const verificationUrl = new URL(started.verificationPath, origin);

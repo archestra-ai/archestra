@@ -5,13 +5,19 @@ import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
 } from "@archestra/shared";
+import {
+  INSTALLER_CLIENT_IDS,
+  OAUTH_AGENTS,
+} from "@archestra/shared/connection-setup";
 import { describe, expect, it } from "vitest";
 import {
   type ClientStep,
   CONNECT_CLIENTS,
   type McpBuildParams,
+  orderedClients,
   type ProxyBuildParams,
   type ProxyStep,
+  visibleClients,
 } from "./clients";
 import { SKILL_MARKETPLACE_CLIENTS } from "./skills-marketplace-clients";
 
@@ -340,5 +346,57 @@ describe("OpenCode connection client", () => {
       expect(prose).toContain("Acme AI");
       expect(prose).not.toContain("Archestra");
     }
+  });
+});
+
+describe("Connect page apps and the shared agent list", () => {
+  // Agents are added once, in the shared list; this catches an app the page
+  // would have no logo or steps for.
+  it("has an app for every agent the installer sets up or the gateway recognises", () => {
+    const apps = new Set(CONNECT_CLIENTS.map((c) => c.id));
+    for (const id of [...INSTALLER_CLIENT_IDS, ...Object.keys(OAUTH_AGENTS)]) {
+      expect(apps.has(id), `${id} has no Connect page app`).toBe(true);
+    }
+  });
+
+  it("names each recognised agent as its Connect page app does", () => {
+    for (const [id, agent] of Object.entries(OAUTH_AGENTS)) {
+      expect(CONNECT_CLIENTS.find((c) => c.id === id)?.label).toBe(agent.label);
+    }
+  });
+});
+
+describe("Connect agent ordering", () => {
+  it("keeps the catalogue order when no order is stored", () => {
+    expect(visibleClients(null).map((c) => c.id)).toEqual(
+      CONNECT_CLIENTS.map((c) => c.id),
+    );
+  });
+
+  it("ignores unavailable and repeated IDs, appends new agents, and keeps generic last", () => {
+    const clients = orderedClients([
+      "cursor",
+      "removed-client",
+      "generic",
+      "codex",
+      "cursor",
+    ]);
+    expect(clients.map((c) => c.id)).toEqual([
+      "cursor",
+      "codex",
+      ...CONNECT_CLIENTS.filter(
+        (c) => c.id !== "cursor" && c.id !== "codex",
+      ).map((c) => c.id),
+    ]);
+  });
+
+  it("filters visibility without changing the saved order or restoring hidden agents", () => {
+    expect(
+      visibleClients(
+        ["codex", "claude-code"],
+        ["cursor", "codex", "claude-code"],
+      ).map((c) => c.id),
+    ).toEqual(["codex", "claude-code", "generic"]);
+    expect(visibleClients([], ["codex"]).map((c) => c.id)).toEqual(["generic"]);
   });
 });

@@ -25,6 +25,7 @@ import {
   Gemini,
   GithubCopilot,
   Groq,
+  Jev,
   Kimi,
   Microsoft365Copilot,
   Minimax,
@@ -182,6 +183,7 @@ export const InteractionRequestSchema = z.union([
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
   Azure.API.ResponsesRequestSchema,
+  Jev.API.DecisionsRequestSchema,
 ]);
 
 /**
@@ -211,7 +213,7 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
   EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
-  Anthropic.API.MessagesResponseSchema,
+  Anthropic.API.MessagesResponseWireSchema,
   Bedrock.API.ConverseResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
   Mistral.API.ChatCompletionResponseSchema,
@@ -234,13 +236,14 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ResponsesCompactedResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
+  Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
 ]);
 
 /**
  * The shapes content takes when it is not available to the reader: an encrypted
  * chat's, encrypted under the browser key (locked) or never stored (redacted),
- * and content the Log Content setting kept out of storage. Neither resembles a provider payload, so every read arm
+ * and content the Log Content mode kept out of storage. Neither resembles a provider payload, so every read arm
  * has to accept them explicitly — otherwise one encrypted-chat row 500s the whole
  * interactions list rather than rendering as unavailable.
  */
@@ -478,7 +481,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(Anthropic.API.MessagesResponseSchema),
+    response: withErrorResponse(Anthropic.API.MessagesResponseWireSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
@@ -501,7 +504,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(Bedrock.API.InvokeRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(Bedrock.API.InvokeResponseSchema),
+    response: withErrorResponse(Bedrock.API.InvokeResponseWireSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
@@ -732,6 +735,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
       .optional(),
     response: withErrorResponse(GithubCopilot.API.ResponsesResponseSchema),
     requestType: RequestTypeSchema.optional(),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["jev:decisions"]),
+    request: withReadFallback(Jev.API.DecisionsRequestSchema),
+    processedRequest: withReadFallback(Jev.API.DecisionsRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Jev.API.DecisionsResponseSchema),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),

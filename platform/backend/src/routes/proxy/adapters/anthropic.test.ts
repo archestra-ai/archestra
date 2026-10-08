@@ -1,6 +1,7 @@
 import AnthropicProvider from "@anthropic-ai/sdk";
 import { ArchestraInternalErrorCode } from "@archestra/shared";
 import { describe, expect, test, vi } from "vitest";
+import { anthropicStreamPromise } from "@/test/llm-provider-stubs";
 import type { Anthropic } from "@/types";
 import { anthropicAdapterFactory } from "./anthropic";
 
@@ -225,6 +226,69 @@ describe("declared tools vs called tools", () => {
 });
 
 describe("AnthropicRequestAdapter", () => {
+  test.each([
+    { content: [] },
+    { content: "" },
+    { content: " \n" },
+    { content: [{ type: "text" as const, text: " \n" }] },
+  ])("drops an empty system placeholder after compaction (%j)", ({
+    content,
+  }) => {
+    const messages: Anthropic.Types.MessagesRequest["messages"] = [
+      { role: "user", content: "Before compaction" },
+      { role: "system", content },
+      { role: "user", content: "Continue after compaction" },
+    ];
+    const request = createMockRequest(messages);
+    const forwarded = anthropicAdapterFactory
+      .createRequestAdapter(request)
+      .toProviderRequest();
+    expect(forwarded.messages).toEqual([messages[0], messages[2]]);
+    expect(request.messages).toEqual(messages);
+  });
+
+  test("preserves real system instructions and conversational tool boundaries", () => {
+    const messages: Anthropic.Types.MessagesRequest["messages"] = [
+      {
+        role: "system",
+        content: [
+          { type: "text", text: "\n" },
+          {
+            type: "text",
+            text: "Keep this instruction",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      },
+      {
+        role: "assistant",
+        content: [{ type: "tool_use", id: "call-1", name: "read", input: {} }],
+      },
+      {
+        role: "user",
+        content: [{ type: "tool_result", tool_use_id: "call-1", content: "" }],
+      },
+    ];
+    expect(
+      anthropicAdapterFactory
+        .createRequestAdapter(createMockRequest(messages))
+        .toProviderRequest().messages,
+    ).toEqual([
+      {
+        role: "system",
+        content: [
+          {
+            type: "text",
+            text: "Keep this instruction",
+            cache_control: { type: "ephemeral" },
+          },
+        ],
+      },
+      messages[1],
+      messages[2],
+    ]);
+  });
+
   describe("declared tools", () => {
     const messages = [
       { role: "user", content: "Hello" },
@@ -276,6 +340,50 @@ describe("AnthropicRequestAdapter", () => {
 
       expect(adapter.getTools()).toEqual([]);
       expect(adapter.hasTools()).toBe(false);
+    });
+  });
+
+  describe("getMessages - tool result error status", () => {
+    // toCommonFormat feeds getMessages(), which is what tool-invocation and
+    // trusted-data policies evaluate. Dropping is_error there records every
+    // tool result as a success even when the tool reported an error.
+    test.each([
+      ["true", { is_error: true }, true],
+      ["false", { is_error: false }, false],
+      ["absent", {}, false],
+    ] as const)("propagates is_error %s onto the common tool call", (_label, extension, isError) => {
+      const messages = [
+        {
+          role: "assistant",
+          content: [
+            { type: "tool_use", id: "tool_1", name: "read", input: {} },
+          ],
+        },
+        {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "tool_1",
+              content: "result body",
+              ...extension,
+            },
+          ],
+        },
+      ] as unknown as Anthropic.Types.MessagesRequest["messages"];
+
+      const adapter = anthropicAdapterFactory.createRequestAdapter(
+        createMockRequest(messages),
+      );
+
+      const toolMessage = adapter
+        .getMessages()
+        .find((message) => message.toolCalls);
+      expect(toolMessage?.toolCalls?.[0]).toMatchObject({
+        id: "tool_1",
+        name: "read",
+        isError,
+      });
     });
   });
 
@@ -1729,8 +1837,10 @@ describe("anthropicAdapterFactory - unsupported sampling params", () => {
     async function* emptyStream(): AsyncGenerator<never> {}
     const create = vi
       .fn()
-      .mockRejectedValueOnce(deprecatedTemperatureError())
-      .mockResolvedValueOnce(emptyStream());
+      .mockImplementationOnce(() =>
+        anthropicStreamPromise(Promise.reject(deprecatedTemperatureError())),
+      )
+      .mockImplementationOnce(() => anthropicStreamPromise(emptyStream()));
     const client = { messages: { create } };
 
     await anthropicAdapterFactory.executeStream(

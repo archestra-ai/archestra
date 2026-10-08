@@ -64,9 +64,9 @@ export async function startActiveMcpSpan<T>(params: {
   /**
    * Suppress tool argument/result content capture for this span even when
    * ARCHESTRA_OTEL_CAPTURE_CONTENT is on (encrypted chat sessions). Metadata
-   * attributes (tool name, agent, session) are unaffected. The agent's
-   * organization Log Content setting suppresses it too, checked here so no
-   * caller can forget it.
+   * attributes (tool name, agent, session) are unaffected. The deployment's
+   * Log Content mode suppresses it too, checked here so no caller can forget
+   * it.
    */
   suppressContent?: boolean;
   user?: SpanUserInfo | null;
@@ -77,7 +77,7 @@ export async function startActiveMcpSpan<T>(params: {
   const recordContent =
     captureContent &&
     !params.suppressContent &&
-    (await resolveLogContentMode({ agentId: params.agent.id })) === "full";
+    resolveLogContentMode() === "full";
 
   // Inject session ID into context so it's available to the pino mixin for log correlation
   let ctx = context.active();

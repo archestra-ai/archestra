@@ -93,7 +93,10 @@ export function EmbeddingModelImageSupportNotice({
         Handles text only. Choose a multimodal embedding model to sync supported
         image files.{" "}
         <a
-          href={getDocsUrl(DocsPage.PlatformKnowledge, "image-embedding")}
+          href={getDocsUrl(
+            DocsPage.PlatformKnowledgeSettings,
+            "image-embedding",
+          )}
           target="_blank"
           rel="noreferrer"
           className="underline decoration-dotted underline-offset-4 hover:decoration-solid"

@@ -5,10 +5,10 @@ import Link from "next/link";
 import { useMemo, useState } from "react";
 import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
-import { useProfile } from "@/lib/agent.query";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useCanManageGateway } from "@/lib/auth/use-can-manage-gateway";
-import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { cn } from "@/lib/utils/tailwind";
+import { useGatewayServers } from "./use-gateway-servers";
 
 interface GatewayServersSummaryProps {
   gatewayId: string;
@@ -36,8 +36,11 @@ interface ServerRow {
 export function GatewayServersSummary({
   gatewayId,
 }: GatewayServersSummaryProps) {
-  const { data: gateway } = useProfile(gatewayId);
-  const { data: catalog } = useInternalMcpCatalog();
+  const {
+    gateway,
+    accessAll,
+    servers: gatewayServers,
+  } = useGatewayServers(gatewayId);
   const { canManage } = useCanManageGateway(gateway);
   // Collapsed by default — the header summary ("N servers · M tools") is the
   // at-a-glance answer; the full list only unfolds when the user asks for it,
@@ -45,44 +48,19 @@ export function GatewayServersSummary({
   const [expanded, setExpanded] = useState(false);
 
   // "Access all tools" gateways grant every tool in the org dynamically, so the
-  // profile's own tool list is empty. There is no endpoint for the resolved
-  // set, so we enumerate the org's MCP catalog — the faithful list of "every
-  // MCP server in your organization" — and label it as dynamic.
-  const accessAll = gateway?.accessAllTools ?? false;
-
-  const servers = useMemo<ServerRow[]>(() => {
-    const catalogById = new Map((catalog ?? []).map((c) => [c.id, c]));
-
-    if (accessAll) {
-      return (catalog ?? [])
-        .map((item) => ({
-          catalogId: item.id,
-          name: item.name,
-          icon: item.icon,
-          description: item.description,
-          toolCount: item.toolCount,
-        }))
-        .sort((a, b) => b.toolCount - a.toolCount);
-    }
-
-    const tools = gateway?.tools ?? [];
-    const counts = new Map<string | null, number>();
-    for (const tool of tools) {
-      counts.set(tool.catalogId, (counts.get(tool.catalogId) ?? 0) + 1);
-    }
-    return [...counts.entries()]
-      .map(([catalogId, toolCount]) => {
-        const item = catalogId ? catalogById.get(catalogId) : undefined;
-        return {
-          catalogId,
-          name: item?.name ?? deriveFallbackName(tools, catalogId),
-          icon: item?.icon ?? null,
-          description: item?.description ?? null,
-          toolCount,
-        };
-      })
-      .sort((a, b) => b.toolCount - a.toolCount);
-  }, [accessAll, gateway?.tools, catalog]);
+  // profile's own tool list is empty; useGatewayServers then lists the org's
+  // MCP catalog — "every MCP server in your organization" — labelled dynamic.
+  const servers = useMemo<ServerRow[]>(
+    () =>
+      gatewayServers.map((server) => ({
+        catalogId: server.catalogId,
+        name: server.catalogName ?? "Unknown",
+        icon: server.icon,
+        description: server.description,
+        toolCount: server.toolCount,
+      })),
+    [gatewayServers],
+  );
 
   // Loading (or gateway unreadable): the review line already names the gateway,
   // so render nothing rather than a skeleton for a detail row.
@@ -128,7 +106,7 @@ export function GatewayServersSummary({
   return (
     <div className="text-xs" data-testid="connect-gateway-servers">
       <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
-        <button
+        <UnstyledButton
           type="button"
           onClick={() => setExpanded((e) => !e)}
           aria-expanded={expanded}
@@ -141,7 +119,7 @@ export function GatewayServersSummary({
             )}
           />
           <span>{summaryLabel}</span>
-        </button>
+        </UnstyledButton>
         {accessAll && (
           <span className="text-muted-foreground/70">
             in your organization — new servers included automatically
@@ -215,15 +193,4 @@ function ServerRowItem({ server }: { server: ServerRow }) {
       </Link>
     </li>
   );
-}
-
-/** Tools without a catalog entry: derive a name from the tool-name prefix. */
-function deriveFallbackName(
-  tools: { name: string; catalogId: string | null }[],
-  catalogId: string | null,
-): string {
-  const tool = tools.find((t) => t.catalogId === catalogId);
-  const prefix = tool?.name.split("__")[0];
-  if (!prefix) return "Unknown";
-  return prefix.charAt(0).toUpperCase() + prefix.slice(1);
 }

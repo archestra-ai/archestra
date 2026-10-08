@@ -20,11 +20,11 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { DataTable } from "@/components/ui/data-table";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   type OpenAppaYell,
@@ -37,9 +37,9 @@ import { useOpenAppaChatLaunch } from "./openappa-chat-button";
 
 export function YellsTable() {
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"unresolved" | "resolved" | "all">(
-    "all",
-  );
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const status =
+    searchParams.get("status") === "resolved" ? "resolved" : "unresolved";
   const pagination = useCursorPagination();
   const isMobile = useIsMobile();
   const { data: canRead, isPending: permissionsLoading } = useHasPermissions({
@@ -60,7 +60,7 @@ export function YellsTable() {
   const resolve = useResolveOpenAppaYell();
   const clearFilters = () => {
     setSearch("");
-    setStatus("all");
+    updateQueryParams({ status: null });
     pagination.goNewest();
   };
   const columns: ColumnDef<OpenAppaYell>[] = [
@@ -77,7 +77,6 @@ export function YellsTable() {
             <span className="block space-y-1 text-xs font-normal text-muted-foreground">
               <YellCaller yell={row.original} />
               <span className="block">
-                {row.original.resolvedAt ? "Resolved" : "Unresolved"} ·{" "}
                 {formatRelativeTimeFromNow(row.original.createdAt)}
               </span>
             </span>
@@ -90,16 +89,6 @@ export function YellsTable() {
       header: "Reported by",
       size: 280,
       cell: ({ row }) => <YellCaller yell={row.original} />,
-    },
-    {
-      id: "status",
-      header: "Status",
-      size: 110,
-      cell: ({ row }) => (
-        <Badge variant="outline">
-          {row.original.resolvedAt ? "Resolved" : "Unresolved"}
-        </Badge>
-      ),
     },
     {
       accessorKey: "createdAt",
@@ -156,28 +145,25 @@ export function YellsTable() {
               }}
             />
           }
-          onClearFilters={search || status !== "all" ? clearFilters : undefined}
+          onClearFilters={
+            search || status === "resolved" ? clearFilters : undefined
+          }
         >
           <FilterSelect
             value={status}
-            inactiveValue="all"
+            inactiveValue="unresolved"
             ariaLabel="Yell status"
             placeholder="Status"
             showSearch={false}
             items={[
-              { value: "all", label: "All statuses" },
               { value: "unresolved", label: "Unresolved" },
               { value: "resolved", label: "Resolved" },
             ]}
             onValueChange={(value) => {
-              if (
-                value === "unresolved" ||
-                value === "resolved" ||
-                value === "all"
-              ) {
-                setStatus(value);
-                pagination.goNewest();
-              }
+              updateQueryParams({
+                status: value === "resolved" ? value : null,
+              });
+              pagination.goNewest();
             }}
           />
         </FilterBar>
@@ -193,7 +179,6 @@ export function YellsTable() {
             isMobile
               ? columns.filter(
                   (column) =>
-                    column.id !== "status" &&
                     !(
                       "accessorKey" in column &&
                       (column.accessorKey === "createdAt" ||
@@ -202,7 +187,7 @@ export function YellsTable() {
                 )
               : columns
           }
-          fixedWidthColumnIds={["caller", "status", "createdAt"]}
+          fixedWidthColumnIds={["caller", "createdAt"]}
           flexibleColumnIds={["message"]}
           data={yells.data?.data ?? []}
           getRowId={(row) => row.id}
@@ -219,15 +204,9 @@ export function YellsTable() {
               pagination.goOlder(yells.data?.pagination.nextCursor ?? null),
           }}
           emptyIcon={Megaphone}
-          emptyMessage={
-            status === "unresolved"
-              ? "No unresolved yells"
-              : status === "resolved"
-                ? "No resolved yells"
-                : "No yells yet"
-          }
+          emptyMessage="No unresolved yells"
           emptyDescription="Reports appear here when an agent uses the yell tool."
-          hasActiveFilters={!!search || status !== "all"}
+          hasActiveFilters={!!search || status === "resolved"}
           filteredEmptyMessage="No reports match these filters."
           onClearFilters={clearFilters}
         />
@@ -239,15 +218,20 @@ export function YellsTable() {
 function useYellInvestigation(yell: OpenAppaYell) {
   const router = useRouter();
   const { href, agents, permissions } = useOpenAppaChatLaunch({
-    promptKey: "explainPolicy",
-    yellId: yell.id,
-    hasArchive: yell.hasArchive,
+    subject: { kind: "yell", yellId: yell.id },
   });
   const archive = useOpenAppaYellArchive();
+  const { conversation } = yell;
   return {
     permissions,
-    disabled: archive.isPending || (!href && !agents.isError),
+    label: conversation ? "Open investigation" : "Investigate in chat",
+    disabled:
+      !conversation && (archive.isPending || (!href && !agents.isError)),
     launch: () => {
+      if (conversation) {
+        router.push(`/chat/${conversation.id}`);
+        return;
+      }
       if (!href) {
         void agents.refetch();
         return;
@@ -288,7 +272,7 @@ function YellRowActions({
       actions={[
         {
           icon: <MessageCircle className="size-4" />,
-          label: "Investigate in chat",
+          label: investigation.label,
           permissions: investigation.permissions,
           disabled: investigation.disabled,
           onClick: investigation.launch,

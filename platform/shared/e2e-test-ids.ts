@@ -3,7 +3,6 @@ export const E2eTestId = {
   AgentsTable: "agents-table",
   CreateAgentButton: "create-agent-button",
   CreateAgentCloseHowToConnectButton: "create-agent-how-to-connect-button",
-  ConsultAdvisorSwitch: "consult-advisor-switch",
   CloneAgentButton: "clone-agent-button",
   AgentVersionHistoryButton: "agent-version-history-button",
   DeleteAgentButton: "delete-agent-button",
@@ -138,7 +137,7 @@ export const E2eTestId = {
   VirtualKeyCreateDialog: "virtual-key-create-dialog",
   VirtualKeyDeleteDialog: "virtual-key-delete-dialog",
   VirtualKeyProviderSelect: "virtual-key-provider-select",
-  VirtualKeyParentKeySelect: "virtual-key-parent-key-select",
+  ProviderKeyPickerAvailableProvider: "provider-key-picker-available-provider",
   VirtualKeyValue: "virtual-key-value",
   // Chat Prompt Input
   ChatFileUploadButton: "chat-file-upload-button",

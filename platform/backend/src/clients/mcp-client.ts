@@ -85,6 +85,11 @@ import {
   isToolRowExcluded,
 } from "@/services/agent-tool-exclusions";
 import { escapeAppNameForModelText } from "@/services/apps/app-run-link";
+import {
+  filterToolsByCallerCatalogAccess,
+  getCallerAccessibleCatalogIds,
+  isToolCatalogAccessible,
+} from "@/services/caller-catalog-access";
 import { evaluateRemoteServerUrlAgainstNetworkPolicy } from "@/services/environments/remote-server-network-policy";
 import {
   type ResolvedEnterpriseTransportCredential,
@@ -110,6 +115,7 @@ import type {
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
+  McpGatewayCallSource,
   McpServer,
   McpToolAssignment,
   ResourceVisibilityScope,
@@ -297,6 +303,10 @@ export type TokenAuthContext = {
   rawToken?: string;
   /** True if authenticated via browser session (MCP proxy route) */
   isSessionAuth?: boolean;
+  /** OAuth client the caller signed in with, for OAuth tokens */
+  oauthClientId?: string;
+  /** Who sent the request over the HTTP gateway; unset for in-process calls */
+  source?: McpGatewayCallSource;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
   passthroughHeaders?: Record<string, string>;
   /** Durable execution that issued this gateway request, when provided. */
@@ -323,6 +333,8 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
 type ToolCallAuthInfo = {
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
+  oauthClientId?: string;
+  source?: McpGatewayCallSource;
   executedAs?: McpExecutedAs;
   runId?: string;
 };
@@ -360,6 +372,8 @@ class ConnectionLimiter {
     return new Promise<T>((resolve, reject) => {
       const execute = () => {
         state.activeCount += 1;
+        // Adopt the complete operation, including its recursive retries, before
+        // releasing this lease. A retry must not acquire a second limiter slot.
         Promise.resolve()
           .then(fn)
           .then(resolve, reject)
@@ -498,6 +512,7 @@ class McpClient {
   // with "Connection closed", which cannot be retried safely.
   private clientRequestsInFlight = new Map<Client, number>();
   private clientsClosingWhenIdle = new Set<Client>();
+  private connectionInitializationLocks = new Map<string, Promise<Client>>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -620,6 +635,8 @@ class McpClient {
         ? {
             userId: tokenAuth.userId,
             authMethod: deriveAuthMethod(tokenAuth),
+            oauthClientId: tokenAuth.oauthClientId,
+            source: tokenAuth.source,
             executedAs: platformExecutedAs(tokenAuth.userId),
             runId: tokenAuth.runId,
           }
@@ -638,6 +655,38 @@ class McpClient {
     const { tool, catalogItem, resolvedToolCall } = validationResult;
     // Use the resolved name (may have been prefixed by suffix fallback lookup)
     toolCall = resolvedToolCall;
+
+    // Sharing an agent does not share its tools' MCP servers: a user reaches an
+    // assigned tool only when they can see its catalog item. This is the deep
+    // gate behind every agent dispatch path (gateway tools/call, run_tool, and
+    // chat's cached tool wrappers); the listing surfaces drop the same tools.
+    // Refused like an unknown tool so the server's existence is not disclosed.
+    if (
+      owner.type === "agent" &&
+      !isToolCatalogAccessible(
+        tool,
+        await getCallerAccessibleCatalogIds({
+          userId: tokenAuth?.userId,
+          organizationId: tokenAuth?.organizationId,
+        }),
+      )
+    ) {
+      const message = unavailableThirdPartyToolMessage(toolCall.name);
+      return this.createErrorResult({
+        toolCall,
+        owner,
+        error: message,
+        mcpServerName: tool.catalogName || catalogItem.name,
+        authInfo,
+        structuredError: {
+          type: "tool_state",
+          code: "unknown_tool",
+          message,
+          toolName: toolCall.name,
+        },
+        encryptedChatContent,
+      });
+    }
 
     if (
       isPlaywrightCatalogItem(catalogItem.id) &&
@@ -929,6 +978,7 @@ class McpClient {
         // The client this attempt ran on. Recovery closes only this one: the
         // cached client may already be a fresh one a sibling call is using.
         let attemptClient: Client | undefined;
+        let attemptSessionId: string | undefined;
         try {
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
@@ -982,6 +1032,12 @@ class McpClient {
             options?.elicitationHandler,
           );
           attemptClient = client;
+          // The candidate transport may not be used when a cached client wins.
+          // Capture the actual session before a failed RPC or close mutates it.
+          attemptSessionId =
+            client.transport instanceof StreamableHTTPClientTransport
+              ? client.transport.sessionId
+              : undefined;
           this.clientRequestsInFlight.set(
             client,
             (this.clientRequestsInFlight.get(client) ?? 0) + 1,
@@ -1194,7 +1250,7 @@ class McpClient {
                 "Waiting for concurrent session recovery",
               );
               await existingRecovery;
-              return executeToolCall(getTransport, currentSecrets, true);
+              return await executeToolCall(getTransport, currentSecrets, true);
             }
 
             logger.info(
@@ -1210,13 +1266,24 @@ class McpClient {
             this.sessionRecoveryLocks.set(connectionKey, recoveryPromise);
 
             try {
-              try {
-                await McpHttpSessionModel.deleteStaleSession(connectionKey);
-              } catch (err) {
-                logger.warn(
-                  { connectionKey, err },
-                  "Failed to delete stale MCP HTTP session",
-                );
+              const cachedClient = this.activeConnections.get(connectionKey);
+              if (
+                attemptSessionId &&
+                (!cachedClient || cachedClient === attemptClient)
+              ) {
+                try {
+                  // Ownership can change across this await or on another pod;
+                  // the DB predicate must still match the failed session.
+                  await McpHttpSessionModel.deleteStaleSession(
+                    connectionKey,
+                    attemptSessionId,
+                  );
+                } catch (err) {
+                  logger.warn(
+                    { connectionKey, err },
+                    "Failed to delete stale MCP HTTP session",
+                  );
+                }
               }
               // Retire the client this attempt ran on. When a sibling already
               // replaced it, the cached client is fresh and in use: leave it
@@ -1505,11 +1572,59 @@ class McpClient {
     currentServerState: CachedServerState,
     elicitationHandler?: McpElicitationHandler,
   ): Promise<Client> {
-    const effectiveServerState = this.withLatestCredentialFingerprint(
+    // Snapshot this caller's headers before waiting: another transport for the
+    // same key can update the shared latest fingerprint during initialization.
+    // This caller-bound state is what a fresh initialization advertises.
+    const callerServerState = this.withLatestCredentialFingerprint(
       connectionKey,
       currentServerState,
     );
+    // A cold handshake must have one owner. Otherwise concurrent connects
+    // overwrite the cache and leave the displaced SDK's SSE retries alive.
+    while (this.connectionInitializationLocks.has(connectionKey)) {
+      await this.connectionInitializationLocks
+        .get(connectionKey)
+        ?.catch(() => {});
+    }
+    // Re-resolve after the wait: the lock holder may have rotated credentials
+    // (e.g. an OAuth refresh) while this caller was parked, leaving the
+    // pre-wait snapshot stale. The latest state only vetoes reuse of a cached
+    // client whose credentials are no longer current; it never substitutes
+    // for the caller-bound state a fresh initialization advertises.
+    const latestServerState = this.withLatestCredentialFingerprint(
+      connectionKey,
+      currentServerState,
+    );
+    // Publish ownership before invoking SDK code, including on a fresh retry.
+    // This lock ends at initialization, not at the subsequent tool RPC.
+    const initialization = Promise.resolve().then(() =>
+      this.initializeClient(
+        connectionKey,
+        transport,
+        targetMcpServerId,
+        { callerServerState, latestServerState },
+        elicitationHandler,
+      ),
+    );
+    this.connectionInitializationLocks.set(connectionKey, initialization);
+    try {
+      return await initialization;
+    } finally {
+      this.connectionInitializationLocks.delete(connectionKey);
+    }
+  }
 
+  private async initializeClient(
+    connectionKey: string,
+    transport: Transport,
+    targetMcpServerId: string,
+    serverStates: {
+      callerServerState: CachedServerState;
+      latestServerState: CachedServerState;
+    },
+    elicitationHandler?: McpElicitationHandler,
+  ): Promise<Client> {
+    const { callerServerState, latestServerState } = serverStates;
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
@@ -1517,14 +1632,18 @@ class McpClient {
         this.activeConnectionServerState.get(connectionKey);
       if (
         !cachedServerState ||
-        !this.hasMatchingServerState(cachedServerState, effectiveServerState)
+        !this.hasMatchingServerState(cachedServerState, callerServerState) ||
+        // A cached client matching this caller's pre-wait snapshot is still
+        // stale when the credential fingerprint advanced during the lock
+        // wait; reusing it would skip the rebuild the rotation requires.
+        !this.hasMatchingServerState(cachedServerState, latestServerState)
       ) {
         logger.info(
           {
             connectionKey,
             targetMcpServerId,
             cachedSecretId: cachedServerState?.secretId ?? null,
-            currentSecretId: effectiveServerState.secretId,
+            currentSecretId: callerServerState.secretId,
           },
           "Discarding cached MCP client after MCP server credentials changed",
         );
@@ -1534,6 +1653,10 @@ class McpClient {
 
     const reusableClient = this.activeConnections.get(connectionKey);
     if (reusableClient) {
+      const reusableSessionId =
+        reusableClient.transport instanceof StreamableHTTPClientTransport
+          ? reusableClient.transport.sessionId
+          : undefined;
       // Health check idle clients to verify the connection is still alive.
       // Recently-used clients skip the ping and recover on actual call failure.
       try {
@@ -1542,14 +1665,16 @@ class McpClient {
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
         logger.debug({ connectionKey }, "Reusing cached MCP client");
+        // The cached client won, so this caller's candidate transport is
+        // unused. Close it (fire-and-forget) so its sockets and abort
+        // controllers do not linger; the SDK's transport close never sends
+        // the session-terminating DELETE, so a stored session id is safe.
+        this.closeDiscardedTransport(connectionKey, transport);
         if (elicitationHandler) {
           configureMcpElicitation(reusableClient, elicitationHandler);
         }
         this.activeConnections.set(connectionKey, reusableClient);
-        this.activeConnectionServerState.set(
-          connectionKey,
-          effectiveServerState,
-        );
+        this.activeConnectionServerState.set(connectionKey, callerServerState);
         return reusableClient;
       } catch (error) {
         // Connection is dead, invalidate cache and create fresh client
@@ -1561,15 +1686,13 @@ class McpClient {
           "Client ping failed, creating fresh client",
         );
         this.clearConnectionState(connectionKey);
-        // If the transport carries a stored session ID the session is likely
-        // stale (e.g. Playwright pod restarted).  Delete it from the DB so
-        // the retry path creates a truly fresh connection instead of reading
-        // the same stale ID again.
-        if (
-          transport instanceof StreamableHTTPClientTransport &&
-          transport.sessionId
-        ) {
-          McpHttpSessionModel.deleteStaleSession(connectionKey).catch(() => {});
+        // Delete only the cached client's failed session, not the candidate
+        // transport's potentially newer session read from another pod's row.
+        if (reusableSessionId) {
+          McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            reusableSessionId,
+          ).catch(() => {});
         }
         // Fall through to create new client
       }
@@ -1596,19 +1719,24 @@ class McpClient {
     }
 
     // Track whether we're using a stored session ID (for stale session cleanup)
-    const usedStoredSession =
-      transport instanceof StreamableHTTPClientTransport &&
-      !!transport.sessionId;
+    const storedSessionId =
+      transport instanceof StreamableHTTPClientTransport
+        ? transport.sessionId
+        : undefined;
 
     try {
       await client.connect(transport);
     } catch (error) {
+      this.closeWhenIdle(connectionKey, client);
       // If we used a stored session ID and connection failed, the session is
       // likely stale (e.g. Playwright pod restarted).  Delete it and throw a
       // StaleSessionError so executeToolCall can retry with a fresh session.
-      if (usedStoredSession) {
+      if (storedSessionId) {
         try {
-          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+          await McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            storedSessionId,
+          );
         } catch (err) {
           logger.warn(
             { connectionKey, err },
@@ -1626,12 +1754,16 @@ class McpClient {
     // re-persisting the (potentially stale) session ID.  Without this check
     // concurrent calls would re-persist the stale ID into the DB, undoing
     // another call's cleanup and creating a thundering-herd loop.
-    if (usedStoredSession) {
+    if (storedSessionId) {
       try {
         await client.ping();
       } catch {
+        this.closeWhenIdle(connectionKey, client);
         try {
-          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+          await McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            storedSessionId,
+          );
         } catch (err) {
           logger.warn(
             { connectionKey, err },
@@ -1642,11 +1774,10 @@ class McpClient {
       }
     }
 
-    // Store the connection for reuse BEFORE persisting session ID.
-    // This prevents a race where a second request creates a duplicate connection
-    // while the upsert is in flight.
+    // Store the connection before releasing the initialization lock so waiting
+    // callers reuse it rather than starting another handshake.
     this.activeConnections.set(connectionKey, client);
-    this.activeConnectionServerState.set(connectionKey, effectiveServerState);
+    this.activeConnectionServerState.set(connectionKey, callerServerState);
     this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
 
     // Persist the MCP session ID so other backend pods can reuse it.
@@ -1655,7 +1786,7 @@ class McpClient {
     // Only persist *new* session IDs (obtained via fresh init), not stored ones
     // we just verified — those are already in the DB with the correct value.
     if (
-      !usedStoredSession &&
+      !storedSessionId &&
       transport instanceof StreamableHTTPClientTransport &&
       transport.sessionId
     ) {
@@ -1707,6 +1838,26 @@ class McpClient {
     Promise.resolve(client.close()).catch((error) => {
       logger.warn({ connectionKey, error }, "Error closing retired MCP client");
     });
+  }
+
+  /**
+   * Close a candidate transport that lost the race to a cached client.
+   * Fire-and-forget like closeWhenIdle: the SDK's transport close only aborts
+   * pending streams and never sends the session-terminating DELETE, so a
+   * transport carrying a stored session id is safe to close here.
+   */
+  private closeDiscardedTransport(
+    connectionKey: string,
+    transport: Transport,
+  ): void {
+    Promise.resolve()
+      .then(() => transport.close())
+      .catch((error) => {
+        logger.warn(
+          { connectionKey, error },
+          "Error closing discarded MCP transport",
+        );
+      });
   }
 
   private releaseClient(client: Client): void {
@@ -3771,6 +3922,8 @@ class McpClient {
           userId: authInfo?.userId ?? null,
           runId: authInfo?.runId ?? null,
           authMethod: authInfo?.authMethod ?? null,
+          oauthClientId: authInfo?.oauthClientId ?? null,
+          source: authInfo?.source ?? null,
         },
         audit,
       );
@@ -3787,11 +3940,11 @@ class McpClient {
 
       // The app log stays content-free for every encrypted-chat call, encrypted
       // rows included: the row is protected at rest, the log line is not. The
-      // same goes for a call the Log Content setting kept out of the row.
+      // same goes for a call the Log Content mode kept out of the row.
       if (isEncryptedChat) {
         logData.resultContent = "[redacted: encrypted chat]";
       } else if (isLogContentNotStored(savedToolCall.toolResult)) {
-        logData.resultContent = "[not stored: log content setting]";
+        logData.resultContent = "[not stored: log content mode]";
       } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
         // the same way as the success-path content preview.
@@ -4329,7 +4482,7 @@ class McpClient {
         }
 
         this.clearConnectionState(connectionKey);
-        await McpHttpSessionModel.deleteStaleSession(connectionKey).catch(
+        await McpHttpSessionModel.deleteByConnectionKey(connectionKey).catch(
           (error) => {
             logger.warn(
               { connectionKey, targetMcpServerId, error },
@@ -4669,9 +4822,19 @@ class McpClient {
     const effectiveExclusions =
       exclusionSets ??
       (await agentToolExclusionsService.getActiveExclusionSets(agentId));
+    // An assigned tool whose catalog the calling user cannot see does not
+    // resolve the resource either (its server is not theirs to read from).
+    const accessibleCatalogIds = await getCallerAccessibleCatalogIds({
+      userId: tokenAuth?.userId,
+      organizationId: tokenAuth?.organizationId,
+    });
     const matchingTools = (
       await ToolModel.findToolsByUiResourceUri(agentId, uri)
-    ).filter((match) => !isToolRowExcluded(match.tool, effectiveExclusions));
+    ).filter(
+      (match) =>
+        !isToolRowExcluded(match.tool, effectiveExclusions) &&
+        isToolCatalogAccessible(match, accessibleCatalogIds),
+    );
     let catalogId = matchingTools[0]?.catalogId ?? null;
 
     // Assignment miss: a tool the agent reaches only through dynamic access
@@ -4904,11 +5067,16 @@ class McpClient {
     // excluded tools' resource URIs). Callers pass the sets they already
     // loaded; loaded here otherwise. Empty (no-op) unless the agent's
     // accessAllTools setting is on.
-    const { tools, exclusionSets: effectiveExclusions } =
+    const { tools: agentTools, exclusionSets: effectiveExclusions } =
       await agentToolExclusionsService.getFilteredMcpToolsByAgent(
         agentId,
         exclusionSets,
       );
+    // A catalog the calling user cannot see is not listed through the agent.
+    const tools = await filterToolsByCallerCatalogAccess(agentTools, {
+      userId: tokenAuth?.userId,
+      organizationId: tokenAuth?.organizationId,
+    });
     const assignedTools = await ToolModel.getMcpToolsAssignedToAgent(
       tools.map((tool) => tool.name),
       agentId,

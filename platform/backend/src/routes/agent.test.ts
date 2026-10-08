@@ -1,7 +1,6 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   BUILT_IN_AGENT_IDS,
-  BUILT_IN_AGENT_NAMES,
   DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
@@ -13,7 +12,6 @@ import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
-  AgentExcludedSubagentModel,
   AgentModel,
   AgentToolModel,
   LlmProviderApiKeyModelLinkModel,
@@ -22,14 +20,7 @@ import {
   ToolModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import {
-  accessGrants,
-  afterEach,
-  beforeEach,
-  describe,
-  expect,
-  test,
-} from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 
 vi.mock("@/observability");
@@ -756,157 +747,6 @@ describe("agent routes", () => {
     });
   });
 
-  describe("advisor delegation default", () => {
-    /** The org-wide Advisor row, as the seeder writes it. */
-    async function seedAdvisor() {
-      return AgentModel.create(
-        {
-          name: BUILT_IN_AGENT_NAMES.ADVISOR,
-          organizationId,
-          agentType: "agent",
-          description: "Answers questions from other agents",
-          systemPrompt: "You are the advisor.",
-          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-          teams: [],
-          labels: [],
-          knowledgeBaseIds: [],
-          connectorIds: [],
-        },
-        undefined,
-        accessGrants("org"),
-      );
-    }
-
-    async function createAgent(payload: Record<string, unknown>) {
-      const response = await app.inject({
-        method: "POST",
-        url: "/api/agents",
-        payload: {
-          name: `Advisor Default ${crypto.randomUUID().slice(0, 8)}`,
-          agentType: "agent",
-          ...payload,
-        },
-      });
-      expect(response.statusCode).toBe(200);
-      return response.json();
-    }
-
-    async function getExclusions(agentId: string): Promise<string[]> {
-      const response = await app.inject({
-        method: "GET",
-        url: `/api/agents/${agentId}/subagent-exclusions`,
-      });
-      expect(response.statusCode).toBe(200);
-      return response.json().excludedSubagentIds;
-    }
-
-    test("excludes the advisor from a new agent in Auto subagent mode, in version 1", async () => {
-      const advisor = await seedAdvisor();
-
-      const agent = await createAgent({ accessAllSubagents: true });
-
-      expect(await getExclusions(agent.id)).toEqual([advisor.id]);
-
-      // Version 1 must already carry it: a follow-up write would fork a
-      // second version whose only change is the default.
-      const versionResponse = await app.inject({
-        method: "GET",
-        url: `/api/agents/${agent.id}/versions/1`,
-      });
-      expect(versionResponse.statusCode).toBe(200);
-      expect(versionResponse.json().snapshot.excludedSubagents).toEqual([
-        { agentId: advisor.id, name: BUILT_IN_AGENT_NAMES.ADVISOR },
-      ]);
-      expect(agent.latestVersion).toBe(1);
-    });
-
-    test("excludes nothing in Custom subagent mode", async () => {
-      await seedAdvisor();
-
-      const agent = await createAgent({ accessAllSubagents: false });
-
-      expect(await getExclusions(agent.id)).toEqual([]);
-    });
-
-    test("creates normally when the organization has no advisor", async () => {
-      const agent = await createAgent({ accessAllSubagents: true });
-
-      expect(await getExclusions(agent.id)).toEqual([]);
-    });
-
-    test("a clone copies the source's exclusions and gains none", async ({
-      makeInternalAgent,
-    }) => {
-      await seedAdvisor();
-      const source = await makeInternalAgent({
-        organizationId,
-        authorId: user.id,
-        accessAllSubagents: true,
-      });
-      expect(await getExclusions(source.id)).toEqual([]);
-
-      const cloneResponse = await app.inject({
-        method: "POST",
-        url: `/api/agents/${source.id}/clone`,
-      });
-      expect(cloneResponse.statusCode).toBe(200);
-
-      expect(await getExclusions(cloneResponse.json().id)).toEqual([]);
-    });
-
-    test("a profile record gets the same default", async () => {
-      const advisor = await seedAdvisor();
-
-      const profile = await createAgent({
-        agentType: "profile",
-        accessAllSubagents: true,
-      });
-
-      expect(await getExclusions(profile.id)).toEqual([advisor.id]);
-    });
-
-    test("the create still succeeds when seeding the exclusion fails", async () => {
-      await seedAdvisor();
-      const write = vi
-        .spyOn(AgentExcludedSubagentModel, "replaceForAgent")
-        .mockRejectedValue(new Error("exclusion write rejected"));
-
-      // Nothing rolls back a create, so a failed default must not fail it:
-      // the caller would be left with a half-made agent it never heard about.
-      const agent = await createAgent({ accessAllSubagents: true });
-
-      expect(write).toHaveBeenCalled();
-      expect(agent.id).toBeTruthy();
-      // Degraded, not broken — the agent simply starts with the Advisor
-      // reachable.
-      expect(await getExclusions(agent.id)).toEqual([]);
-    });
-
-    test("the seeded personal assistant never asks for the default", async () => {
-      await seedAdvisor();
-      const create = vi.spyOn(AgentModel, "create");
-
-      const assistantId = await AgentModel.ensurePersonalChatAgent({
-        userId: user.id,
-        organizationId,
-      });
-      expect(assistantId).toBeTruthy();
-
-      // Seeding never opts into the rule at all. Asserting only "no
-      // exclusions" would pass for the wrong reason: the assistant is created
-      // in Custom subagent mode, where the rule yields nothing anyway.
-      expect(create).toHaveBeenCalled();
-      for (const call of create.mock.calls) {
-        expect(call[2]?.defaultExcludedSubagentIds).toBeUndefined();
-      }
-      expect(
-        await AgentExcludedSubagentModel.findTargetAgentIdsByAgent(
-          assistantId as string,
-        ),
-      ).toEqual([]);
-    });
-  });
-
   describe("GET /api/agents/:id", () => {
     test("should get agent by ID", async ({ makeAgent }) => {
       const name = `Agent for Get By ID ${crypto.randomUUID().slice(0, 8)}`;
@@ -985,7 +825,7 @@ describe("agent routes", () => {
       expect(agent.name).toBe(updatedName);
     });
 
-    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot be promoted to the advisor", async ({
+    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot be promoted to a built-in", async ({
       makeAgent,
     }) => {
       const created = await makeAgent({
@@ -998,7 +838,9 @@ describe("agent routes", () => {
       const response = await app.inject({
         method: "PUT",
         url: `/api/agents/${created.id}`,
-        payload: { builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR } },
+        payload: {
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+        },
       });
 
       expect(response.statusCode).toBe(200);
@@ -1402,16 +1244,14 @@ describe("agent routes", () => {
       expect(created.isPersonalGateway).toBe(false);
     });
 
-    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot self-declare as the advisor", async () => {
-      // builtInAgentConfig is a trust attribute — the advisor discriminator
-      // drives the cross-environment delegation exception — so only the seeder
-      // may set it.
+    test("drops a client-supplied builtInAgentConfig so an ordinary agent cannot self-declare as a built-in", async () => {
+      // Built-in identity is server-owned, so only the seeder may set it.
       const response = await app.inject({
         method: "POST",
         url: "/api/agents",
         payload: {
           name: `Impostor ${crypto.randomUUID().slice(0, 8)}`,
-          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+          builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
         },
       });
       expect(response.statusCode).toBe(200);
@@ -1712,6 +1552,91 @@ describe("agent routes", () => {
       expect(names).toContain(`Own Personal ${suffix}`);
       expect(names).toContain(`Org Agent ${suffix}`);
       expect(names).toContain(`Other Personal ${suffix}`);
+    });
+
+    test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId, { role: "member" });
+      const myTeam = await makeTeam(organizationId, user.id);
+      await makeTeamMember(myTeam.id, user.id);
+      const otherTeam = await makeTeam(organizationId, otherUser.id);
+
+      await makeAgent({
+        name: `Mine ${suffix}`,
+        organizationId,
+        access: "personal",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Other Personal ${suffix}`,
+        organizationId,
+        access: "personal",
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Org ${suffix}`,
+        organizationId,
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `My Team ${suffix}`,
+        organizationId,
+        access: { teams: [myTeam.id] },
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Other Team ${suffix}`,
+        organizationId,
+        access: { teams: [otherTeam.id] },
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Shared With Me ${suffix}`,
+        organizationId,
+        access: { users: [user.id] },
+        authorId: otherUser.id,
+      });
+
+      const list = async (access?: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}${access ? `&access=${access}` : ""}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response
+          .json()
+          .data.map((agent: { name: string }) =>
+            agent.name.replace(` ${suffix}`, ""),
+          );
+      };
+
+      // The admin reads every agent through a `*` grant, which the filter
+      // must not count as "shared".
+      expect(await list()).toEqual([
+        "Mine",
+        "My Team",
+        "Org",
+        "Other Personal",
+        "Other Team",
+        "Shared With Me",
+      ]);
+      expect(await list("mine,shared,org")).toEqual([
+        "Mine",
+        "My Team",
+        "Org",
+        "Shared With Me",
+      ]);
+      expect(await list("others")).toEqual(["Other Personal", "Other Team"]);
+      expect(await list("mine")).toEqual(["Mine"]);
+      expect(await list("shared")).toEqual(["My Team", "Shared With Me"]);
+      expect(await list("org")).toEqual(["Org"]);
     });
 
     test("hides the default knowledge query tool when an agent has no knowledge sources", async ({

@@ -7,7 +7,6 @@ import { AgentIcon } from "@/components/agent-icon";
 import {
   CollectionFilters,
   FilterBar,
-  FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -17,7 +16,6 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DEFAULT_FILTER_ALL } from "@/consts";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import {
@@ -32,7 +30,6 @@ const PARAM_NAMES = {
   page: "entitiesPage",
   pageSize: "entitiesPageSize",
   search: "entitiesSearch",
-  type: "entitiesType",
   sortBy: "entitiesSortBy",
   sortDirection: "entitiesSortDirection",
 } as const;
@@ -40,22 +37,13 @@ const PARAM_NAMES = {
 /** The columns the table sorts by, named as the API sorts. */
 const SORTABLE = ["name", "type", "tools"] as const;
 type SortColumn = (typeof SORTABLE)[number];
-/** MCP servers first, then gateways, each by name. */
+/** MCP servers by name. */
 const DEFAULT_SORT: { id: SortColumn; desc: boolean } = {
-  id: "type",
+  id: "name",
   desc: false,
 };
 
-const TYPE_OPTIONS = [
-  { value: DEFAULT_FILTER_ALL, label: "All types" },
-  { value: "mcp_gateway", label: "MCP gateway" },
-  { value: "mcp_server", label: "MCP server" },
-] as const;
-
-/**
- * Every MCP server and MCP gateway, sortable by name, type and tool count, each
- * with a chat that reviews its rules.
- */
+/** Every visible MCP server, with a chat that reviews its rules. */
 export function EntitiesTable() {
   const [selected, setSelected] = useState<CoverageEntity | null>(null);
   const queryParamsAdapter = useQueryParamsAdapter({ paramNames: PARAM_NAMES });
@@ -68,9 +56,6 @@ export function EntitiesTable() {
   } = useDataTableQueryParams({ queryParamsAdapter });
   const limit = Math.min(pageSize, 100);
   const search = searchParams.get("search") || undefined;
-  const rawType = searchParams.get("type");
-  const type =
-    rawType === "mcp_gateway" || rawType === "mcp_server" ? rawType : undefined;
   const rawSortBy = searchParams.get("sortBy");
   const sort = SORTABLE.some((column) => column === rawSortBy)
     ? {
@@ -96,15 +81,15 @@ export function EntitiesTable() {
   );
   const entities = useCoverageEntities({
     search,
-    type,
+    type: "mcp_server",
     sortBy: sort.id,
     sortDirection: sort.desc ? "desc" : "asc",
     limit,
     offset: pageIndex * limit,
   });
-  const hasActiveFilters = !!search || !!type;
+  const hasActiveFilters = !!search;
   const clearFilters = useCallback(
-    () => updateQueryParams({ search: null, type: null, page: "1" }),
+    () => updateQueryParams({ search: null, page: "1" }),
     [updateQueryParams],
   );
 
@@ -205,7 +190,7 @@ export function EntitiesTable() {
           search={
             <SearchInput
               queryParamsAdapter={queryParamsAdapter}
-              placeholder="Search servers and gateways"
+              placeholder="Search MCP servers"
               isLoading={entities.isFetching}
               className={filterSearchClass}
             />
@@ -214,29 +199,15 @@ export function EntitiesTable() {
           actions={
             entities.data ? (
               <span className="text-sm text-muted-foreground tabular-nums">
-                {`${entities.data.pagination.total} servers and gateways`}
+                {`${entities.data.pagination.total} MCP servers`}
               </span>
             ) : null
           }
-        >
-          <FilterSelect
-            value={type ?? DEFAULT_FILTER_ALL}
-            onValueChange={(value) =>
-              updateQueryParams({
-                type: value === DEFAULT_FILTER_ALL ? null : value,
-                page: "1",
-              })
-            }
-            placeholder="Type"
-            ariaLabel="Type"
-            showSearch={false}
-            items={[...TYPE_OPTIONS]}
-          />
-        </FilterBar>
+        />
       </CollectionFilters>
       {entities.isLoadingError ? (
         <QueryLoadError
-          title="Could not load servers and gateways"
+          title="Could not load MCP servers"
           onRetry={() => entities.refetch()}
           className="rounded-md border py-10"
         />
@@ -262,10 +233,10 @@ export function EntitiesTable() {
           onSortingChange={setSorting}
           isLoading={entities.isFetching}
           emptyIcon={Bot}
-          emptyMessage="No servers or gateways"
-          emptyDescription="MCP gateways and MCP servers appear here when available."
+          emptyMessage="No MCP servers"
+          emptyDescription="MCP servers appear here when available."
           hasActiveFilters={hasActiveFilters}
-          filteredEmptyMessage="No server or gateway matches these filters."
+          filteredEmptyMessage="No MCP server matches these filters."
           onClearFilters={clearFilters}
         />
       )}

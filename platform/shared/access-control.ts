@@ -326,6 +326,7 @@ const SCOPED_RESOURCE_ROLE_ACTIONS: Partial<Record<ScopedResource, Resource>> =
     knowledgeConnector: "knowledgeSource",
     knowledgeFile: "knowledgeSource",
     mcpGateway: "mcpGateway",
+    externalAgent: "agent",
   };
 
 export const predefinedPermissionsMap: Record<PredefinedRoleName, Permissions> =
@@ -493,8 +494,14 @@ export const requiredEndpointPermissionsMap: Partial<
 > = {
   // Public, stateless APPA endpoint. Returns only an empty annotation.
   [RouteId.AnnotateGuardrailsTool]: {},
+  [RouteId.GetOpenAppaPolicyTests]: { openappaPolicy: ["read"] },
+  [RouteId.InspectOpenAppaPolicyTests]: { openappaPolicy: ["read"] },
+  [RouteId.UpdateOpenAppaPolicyTests]: { openappaPolicy: ["update"] },
+  [RouteId.RunOpenAppaPolicyTests]: { openappaPolicy: ["update"] },
+  [RouteId.PreviewOpenAppaPolicyTest]: { openappaPolicy: ["update"] },
+  [RouteId.GetOpenAppaPolicyTestRuns]: { openappaPolicy: ["read"] },
   [RouteId.GetGuardrailsPolicy]: { openappaPolicy: ["read"] },
-  [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["update"] },
+  [RouteId.ValidateGuardrailsPolicy]: { openappaPolicy: ["read"] },
   [RouteId.UpdateGuardrailsPolicy]: { openappaPolicy: ["update"] },
   // Inspecting or mutating arbitrary outbound destinations can configure
   // credential-bearing egress, so those operations remain settings-manager
@@ -502,13 +509,14 @@ export const requiredEndpointPermissionsMap: Partial<
   // visibility-filtered unless the caller can update Agent settings. Run
   // history includes caller and conversation identifiers, so it requires
   // Agent-settings read and intentionally permits organization-wide access.
-  [RouteId.InspectA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.InspectA2aRemoteAgent]: { agent: ["create"] },
   [RouteId.ListA2aRemoteAgents]: { agent: ["read"] },
   [RouteId.GetA2aRemoteAgent]: { agent: ["read"] },
-  [RouteId.ListA2aRemoteAgentRuns]: { organizationSettings: ["read"] },
-  [RouteId.CreateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.UpdateA2aRemoteAgent]: { organizationSettings: ["update"] },
-  [RouteId.DeleteA2aRemoteAgent]: { organizationSettings: ["update"] },
+  [RouteId.ListA2aRemoteAgentRuns]: { agent: ["read"] },
+  [RouteId.CreateA2aRemoteAgent]: { agent: ["create"] },
+  // Each external agent's own permission policy decides who may change it.
+  [RouteId.UpdateA2aRemoteAgent]: { agent: ["read"] },
+  [RouteId.DeleteA2aRemoteAgent]: { agent: ["read"] },
 
   /**
    * Getting basic info about the organization requires the user to be
@@ -590,6 +598,15 @@ export const requiredEndpointPermissionsMap: Partial<
   // (X-Archestra-Virtual-Key attribution). llmVirtualKey:create + llmProxy read
   // access are enforced in the handler.
   [RouteId.CreateConnectionPassthroughKey]: {},
+  // A signed-in member lists and disconnects only their own connected clients.
+  [RouteId.GetConnectedClients]: {},
+  [RouteId.DisconnectConnectedClient]: {},
+  // Who connected which agent is per-employee activity, so the org-wide log
+  // of it takes org-wide log visibility (admin tier) plus reading members.
+  [RouteId.GetConnectedClientLog]: { log: ["admin"], member: ["read"] },
+  // The same per-employee activity, summarized per member.
+  [RouteId.GetAgentAdoption]: { log: ["admin"], member: ["read"] },
+  [RouteId.GetAgentAdoptionUsage]: { log: ["admin"], member: ["read"] },
   /**
    * Existence check for a connected remote, used by the Claude Code startup
    * guard on machines with no session. Returns only ok/missing.
@@ -604,6 +621,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetAllAgents]: {},
   [RouteId.GetAgentCredentialReadiness]: {},
   [RouteId.GetAgent]: {},
+  // Agent read access is checked in the handler (requireReadableAgent).
+  [RouteId.GetAgentDefaultSuggestedPrompts]: {},
   // Agent type and instance visibility are dynamic and checked by PinAgent's
   // handler. Unpin is deliberately ungated beyond authentication so a stale
   // pin can be cleared after access is lost.
@@ -618,7 +637,8 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.TransferProjectOwnership]: { project: ["update"] },
   [RouteId.TransferAppOwnership]: {},
   [RouteId.TransferMcpCatalogOwnership]: {},
-  [RouteId.TransferRemoteAgentOwnership]: { organizationSettings: ["update"] },
+  // The external agent's own permission policy decides who may transfer it.
+  [RouteId.TransferRemoteAgentOwnership]: { agent: ["read"] },
   [RouteId.TransferAgentOwnership]: {},
   [RouteId.UpdateAgent]: {},
   [RouteId.BulkDeleteAgents]: {},
@@ -1247,9 +1267,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateSkillsSettings]: {
     organizationSettings: ["update"],
   },
-  [RouteId.UpdateLogsSettings]: {
-    organizationSettings: ["update"],
-  },
   [RouteId.UpdateAgentSettings]: {
     organizationSettings: ["update"],
   },
@@ -1533,8 +1550,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.UpdateTelegramChatOpsConfig]: {
     organizationSettings: ["update"],
   },
-  // Any authenticated user can link their own Telegram account
+  // Any authenticated user can link or unlink their own Telegram account
   [RouteId.LinkTelegramChatOpsAccount]: {},
+  [RouteId.UnlinkTelegramChatOpsAccount]: {},
   [RouteId.GenerateTelegramLinkCode]: {},
   [RouteId.ConnectNgrok]: {
     organizationSettings: ["update"],
@@ -1678,7 +1696,10 @@ export const requiredEndpointPermissionsMap: Partial<
   // you past the trash.
   [RouteId.PermanentlyDeleteSkill]: { skill: ["delete"] },
   [RouteId.ResetSkill]: {},
-  [RouteId.GetGuardrailsDeployment]: { organizationSettings: ["read"] },
+  // Any member: the Connect page shows whether guardrails apply to their
+  // agent. It reveals only the on/off switch and the unrecognized-client
+  // action, not the policy.
+  [RouteId.GetGuardrailsDeployment]: {},
   [RouteId.UpdateGuardrailsDeployment]: { organizationSettings: ["update"] },
   [RouteId.GetAppaGithubSync]: { organizationSettings: ["read"] },
   [RouteId.ConfigureAppaGithubSync]: { organizationSettings: ["update"] },
@@ -1694,6 +1715,11 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.DeleteOpenappaBatteryInclude]: { openappaPolicy: ["update"] },
   [RouteId.UploadOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
   [RouteId.DeleteOpenappaBatteryPackage]: { openappaPolicy: ["update"] },
+  // Binding hands an organization credential's value to helper code.
+  [RouteId.SetOpenappaCredentialBinding]: {
+    openappaPolicy: ["update"],
+    credential: ["update"],
+  },
   [RouteId.GetOpenappaPolicyDeclarations]: { openappaPolicy: ["read"] },
   // Publishing a held pull is a policy write; each reason it names carries its
   // own permission on top, checked where the pull's changes are known.
@@ -1715,6 +1741,9 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetOpenappaCoverageEntities]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageTools]: { openappaPolicy: ["read"] },
   [RouteId.GetOpenappaCoverageSummary]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaTrustAudience]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaRemedies]: { openappaPolicy: ["read"] },
+  [RouteId.GetOpenappaRemediesActivity]: { openappaPolicy: ["read"] },
   [RouteId.UpdateSkillGithubSync]: {},
   [RouteId.GetPlugins]: { plugin: ["read"] },
   [RouteId.GetPluginLabelKeys]: { plugin: ["read"] },
@@ -2028,6 +2057,7 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/mcp/logs": { log: ["read"] },
   "/audit/logs": { auditLog: ["read"] },
   "/consults/logs": { openappaDiagnostics: ["read"] },
+  "/connections/logs": { log: ["admin"], member: ["read"] },
 
   // Knowledge
   "/knowledge/knowledge-bases": { knowledgeSource: ["read"] },
@@ -2055,7 +2085,6 @@ export const requiredPagePermissionsMap: Record<string, Permissions> = {
   "/settings/messaging-channels/email": { organizationSettings: ["read"] },
   "/settings/apps": { organizationSettings: ["read"] },
   "/settings/security": { organizationSettings: ["read"] },
-  "/settings/logs": { organizationSettings: ["read"] },
   "/settings/environments": { environment: ["update"] },
   "/settings/knowledge": { organizationSettings: ["read"] },
   "/settings/users": { member: ["read"] },

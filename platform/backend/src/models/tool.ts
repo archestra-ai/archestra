@@ -957,7 +957,11 @@ class ToolModel {
    * Note: Archestra tools are no longer automatically assigned - they must be
    * explicitly assigned like any other MCP server tools.
    */
-  static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
+  static async getMcpToolsByAgent(
+    agentId: string,
+    /** The agent's environment, when the caller already read the agent. */
+    known?: { environmentId: string | null },
+  ): Promise<Tool[]> {
     const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
@@ -965,7 +969,9 @@ class ToolModel {
     // The agent's environment scopes which assigned tools it may use (environment
     // isolation). Knowledge-source surfacing is intentionally env-agnostic; the
     // knowledge query path enforces isolation.
-    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
+    const agentEnvironmentId = known
+      ? known.environmentId
+      : await AgentModel.findEnvironmentId(agentId);
 
     // Get tool IDs assigned via junction table (MCP tools) and agent's knowledge sources
     const [assignedToolIds, hasKnowledgeSources] = await Promise.all([
@@ -1836,8 +1842,7 @@ class ToolModel {
     );
     if (toolIds.length === 0) return 0;
 
-    const agentIds =
-      await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
+    const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
 
     for (const agentId of agentIds) {
       await AgentToolModel.createManyIfNotExists(agentId, toolIds);
@@ -1912,8 +1917,7 @@ class ToolModel {
         newAppShortNames,
       );
       if (toolIds.length === 0) continue;
-      const agentIds =
-        await AgentModel.findToolAssignableIdsByOrganizationId(organizationId);
+      const agentIds = await AgentModel.findIdsByOrganizationId(organizationId);
       for (const agentId of agentIds) {
         await AgentToolModel.createManyIfNotExists(agentId, toolIds);
       }
@@ -2883,14 +2887,18 @@ class ToolModel {
   /**
    * Catalog entries, tools, and visible entities used by the OpenAPPA overview.
    * The built-in catalog is included because its tools can be assigned.
+   * App catalogs are left out unless `includeAppCatalogs` is set.
    */
   static async findCoverageInventory(
     organizationId: string,
-    visibility?: {
-      userId: string;
-      agentTypes: Array<"agent" | "mcp_gateway">;
-      excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
-    },
+    options: {
+      visibility?: {
+        userId: string;
+        agentTypes: Array<"agent" | "mcp_gateway">;
+        excludeOtherPersonalTypes?: Array<"agent" | "mcp_gateway">;
+      };
+      includeAppCatalogs?: boolean;
+    } = {},
   ): Promise<{
     catalogs: Array<Pick<InternalMcpCatalog, "id" | "name" | "scope" | "icon">>;
     tools: Array<{
@@ -2915,6 +2923,7 @@ class ToolModel {
       accessAllTools: boolean;
     }>;
   }> {
+    const { visibility, includeAppCatalogs = false } = options;
     const principals = visibility
       ? await ResourcePermissionSubjectModel.resolvePrincipals({
           userId: visibility.userId,
@@ -2993,7 +3002,9 @@ class ToolModel {
             eq(schema.internalMcpCatalogTable.organizationId, organizationId),
             isNull(schema.internalMcpCatalogTable.organizationId),
           ),
-          ne(schema.internalMcpCatalogTable.serverType, "app"),
+          includeAppCatalogs
+            ? undefined
+            : ne(schema.internalMcpCatalogTable.serverType, "app"),
           isNull(schema.internalMcpCatalogTable.parentCatalogItemId),
           notDeleted(schema.internalMcpCatalogTable),
         ),

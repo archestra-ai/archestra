@@ -259,6 +259,13 @@ export type ChatMessage = {
 export const HOOK_RUN_PART_TYPE = "data-hook-run";
 
 /**
+ * Type of the non-fatal turn notice part: a `data-*` part carrying a
+ * `ChatErrorResponse` (e.g. `IncompleteResponse`) that is persisted with the
+ * assistant reply and rendered after it, but dropped from the model conversion.
+ */
+export const TURN_NOTICE_PART_TYPE = "data-turn-notice" as const;
+
+/**
  * Type of the inline subagent-tool-call part. A `data-*` part: persisted and
  * rendered in the chat thread (nested under the delegation call that spawned
  * it), but dropped from the model conversion (`convertToModelMessages`), so the
@@ -286,7 +293,7 @@ export interface SubagentToolCallPartData {
   toolName: string;
   /** Request arguments, capped. */
   input?: unknown;
-  /** Terminal tool state, e.g. `output-available` / `output-error`. */
+  /** Tool state: `input-available` while running, then `output-available` / `output-error`. */
   state?: string;
   /** Result, capped. Absent on error. */
   output?: unknown;

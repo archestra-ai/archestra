@@ -2,8 +2,15 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   ARCHESTRA_MCP_SERVER_NAME,
+  type ArchestraToolShortName,
+  buildAgentCatalogRuntime,
+  buildCustomAgentRuntime,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  TOOL_CREATE_AGENT_SHORT_NAME,
+  TOOL_EDIT_AGENT_SHORT_NAME,
+  TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_LIST_LLM_MODELS_SHORT_NAME,
 } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import config from "@/config";
@@ -11,10 +18,12 @@ import db, { schema } from "@/database";
 import {
   AgentKnowledgeBaseModel,
   AgentModel,
+  LlmProviderApiKeyModelLinkModel,
+  ModelModel,
   OrganizationModel,
   ToolModel,
 } from "@/models";
-import { beforeEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool } from ".";
 import { archestraMcpBranding } from "./branding";
@@ -868,6 +877,72 @@ describe("agent RBAC visibility", () => {
     expect(agentNames).not.toContain("Hidden Agent");
   });
 
+  test("list_agents narrows an admin's results by access", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+  }) => {
+    const org = await makeOrganization();
+    const admin = await makeUser();
+    await makeMember(admin.id, org.id, { role: "admin" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, org.id, { role: "member" });
+
+    const mine = await makeAgent({
+      name: "Access Mine",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "personal",
+      authorId: admin.id,
+    });
+    await makeAgent({
+      name: "Access Other Personal",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "personal",
+      authorId: otherUser.id,
+    });
+    await makeAgent({
+      name: "Access Org",
+      agentType: "agent",
+      organizationId: org.id,
+      access: "org",
+      authorId: otherUser.id,
+    });
+
+    const context: ArchestraContext = {
+      agent: { id: mine.id, name: mine.name },
+      userId: admin.id,
+      organizationId: org.id,
+    };
+    const listNames = async (access?: string[]) => {
+      const result = await executeArchestraTool(
+        archestraMcpBranding.getToolName(TOOL_LIST_AGENTS_SHORT_NAME),
+        { name: "Access", ...(access ? { access } : {}) },
+        context,
+      );
+      expect(result.isError, JSON.stringify(result.content)).toBe(false);
+      return JSON.parse((result.content[0] as any).text)
+        .agents.map((agent: { name: string }) => agent.name)
+        .sort();
+    };
+
+    // Omitted keeps today's behaviour: the admin's wildcard grant reaches
+    // every agent.
+    expect(await listNames()).toEqual([
+      "Access Mine",
+      "Access Org",
+      "Access Other Personal",
+    ]);
+    expect(await listNames(["mine"])).toEqual(["Access Mine"]);
+    expect(await listNames(["others"])).toEqual(["Access Other Personal"]);
+    expect(await listNames(["mine", "org"])).toEqual([
+      "Access Mine",
+      "Access Org",
+    ]);
+  });
+
   test("get_agent by name does not return inaccessible team-scoped agent", async ({
     makeUser,
     makeOrganization,
@@ -964,6 +1039,423 @@ describe("edit_agent migrated sharing", () => {
     const after = await AgentModel.findById(agent.id);
     expect(after?.scope).toBe("team");
     expect(after?.teams.map((entry) => entry.id)).toEqual([team.id]);
+  });
+});
+
+describe("agent runtime and model tools", () => {
+  let mockContext: ArchestraContext;
+  let organizationId: string;
+  let previousRuntimeEnabled: boolean;
+  let previousAllowPrivileged: boolean;
+  let secretId: () => Promise<string>;
+
+  beforeEach(
+    async ({
+      makeAgent,
+      makeUser,
+      makeOrganization,
+      makeMember,
+      makeSecret,
+    }) => {
+      secretId = async () =>
+        (await makeSecret({ secret: { apiKey: "test-key" } })).id;
+      const org = await makeOrganization();
+      organizationId = org.id;
+      const user = await makeUser();
+      await makeMember(user.id, org.id, { role: "admin" });
+      const caller = await makeAgent({ organizationId: org.id });
+      mockContext = {
+        agent: { id: caller.id, name: caller.name },
+        userId: user.id,
+        organizationId: org.id,
+      };
+      previousRuntimeEnabled = config.agentRuntime.enabled;
+      previousAllowPrivileged = config.agentRuntime.allowPrivileged;
+      config.agentRuntime.enabled = true;
+    },
+  );
+
+  afterEach(() => {
+    config.agentRuntime.enabled = previousRuntimeEnabled;
+    config.agentRuntime.allowPrivileged = previousAllowPrivileged;
+  });
+
+  const call = (
+    shortName: ArchestraToolShortName,
+    args: Record<string, unknown>,
+  ) =>
+    executeArchestraTool(
+      archestraMcpBranding.getToolName(shortName),
+      args,
+      mockContext,
+    );
+  const findCreated = async (
+    result: Awaited<ReturnType<typeof executeArchestraTool>>,
+  ) => AgentModel.findById(extractCreatedId(result), mockContext.userId, true);
+
+  async function linkModel(params: {
+    keyId: string;
+    provider: "anthropic" | "gemini";
+    modelId: string;
+  }) {
+    const model = await ModelModel.create({
+      externalId: `${params.provider}/${params.modelId}`,
+      provider: params.provider,
+      modelId: params.modelId,
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: true,
+      lastSyncedAt: new Date(),
+    });
+    await LlmProviderApiKeyModelLinkModel.linkModelsToApiKey(params.keyId, [
+      model.id,
+    ]);
+    return model;
+  }
+
+  test("create_agent builds a Claude Code agent the way the catalog card does", async () => {
+    const result = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Claude Code",
+      runtime: { template: "claude-code" },
+    });
+
+    expect(result.isError).toBe(false);
+    expect((result.content[0] as any).text).toContain("Runtime: Claude Code");
+    const created = await findCreated(result);
+    expect(created?.runtime).toEqual(
+      buildAgentCatalogRuntime({
+        id: "claude-code",
+        image: config.agentRuntime.catalogImages["claude-code"],
+      }),
+    );
+    expect(created?.accessAllTools).toBe(true);
+    expect(created?.systemPrompt).toContain("You are Claude Code");
+  });
+
+  test("create_agent applies runtime overrides on top of a template", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, await secretId(), {
+      provider: "anthropic",
+      access: "org",
+    });
+    const model = await linkModel({
+      keyId: key.id,
+      provider: "anthropic",
+      modelId: "claude-provider-billing-test",
+    });
+    const result = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Provider-billed Claude Code",
+      systemPrompt: "Own prompt",
+      accessAllTools: false,
+      llmApiKeyId: key.id,
+      modelId: model.id,
+      runtime: {
+        template: "claude-code",
+        claudeCode: { authentication: "provider" },
+        ttlHours: 4,
+        credentials: [
+          {
+            key: "GITHUB_TOKEN",
+            scope: "per_user",
+            label: "GitHub token",
+            required: true,
+          },
+        ],
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    const created = await findCreated(result);
+    expect(created?.runtime).toMatchObject({
+      command: ["archestra-claude-code"],
+      inferenceProtocol: "anthropic",
+      claudeCode: { authentication: "provider" },
+      ttlHours: 4,
+      credentials: [expect.objectContaining({ key: "GITHUB_TOKEN" })],
+    });
+    expect(created?.systemPrompt).toBe("Own prompt");
+    expect(created?.accessAllTools).toBe(false);
+  });
+
+  test("create_agent fills a custom image's runtime with the page defaults", async () => {
+    const result = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Custom runtime",
+      runtime: {
+        image: "example.test/agent:1",
+        inferenceProtocol: "openai_chat",
+      },
+    });
+
+    expect(result.isError).toBe(false);
+    expect((await findCreated(result))?.runtime).toEqual({
+      ...buildCustomAgentRuntime({ image: "example.test/agent:1" }),
+      inferenceProtocol: "openai_chat",
+    });
+  });
+
+  test("create_agent refuses a runtime the REST route would refuse", async ({
+    makeLlmProviderApiKey,
+  }) => {
+    const before = await AgentModel.findAllPaginated(
+      { limit: 100, offset: 0 },
+      undefined,
+      { organizationId, agentType: "agent" },
+      mockContext.userId,
+      true,
+    );
+    const key = await makeLlmProviderApiKey(organizationId, await secretId(), {
+      provider: "gemini",
+      access: "org",
+    });
+    const model = await linkModel({
+      keyId: key.id,
+      provider: "gemini",
+      modelId: "runtime-tool-test",
+    });
+
+    const incompatible = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Codex on Gemini",
+      runtime: { template: "codex" },
+      llmApiKeyId: key.id,
+      modelId: model.id,
+    });
+    expect(incompatible.isError).toBe(true);
+    expect((incompatible.content[0] as any).text).toContain(
+      "Codex runtime requires an OpenAI",
+    );
+
+    config.agentRuntime.allowPrivileged = false;
+    const privileged = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Privileged",
+      runtime: { template: "codex", privileged: true },
+    });
+    expect((privileged.content[0] as any).text).toContain(
+      "disabled by the deployment operator",
+    );
+
+    const wrongTemplateSettings = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Codex with Claude settings",
+      runtime: {
+        template: "codex",
+        claudeCode: { authentication: "provider" },
+      },
+    });
+    expect((wrongTemplateSettings.content[0] as any).text).toContain(
+      "only to the claude-code template",
+    );
+
+    config.agentRuntime.enabled = false;
+    const disabled = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Runtime off",
+      runtime: { template: "claude-code" },
+    });
+    expect((disabled.content[0] as any).text).toContain(
+      "Agent Runtime is not enabled",
+    );
+
+    const after = await AgentModel.findAllPaginated(
+      { limit: 100, offset: 0 },
+      undefined,
+      { organizationId, agentType: "agent" },
+      mockContext.userId,
+      true,
+    );
+    expect(after.data.length).toBe(before.data.length);
+  });
+
+  test("create_agent refuses a template the organization turned off", async () => {
+    await OrganizationModel.patch(organizationId, {
+      popularAgentOverrides: { codex: { hidden: true } },
+    });
+
+    const result = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Hidden Codex",
+      runtime: { template: "codex" },
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Codex template is turned off",
+    );
+  });
+
+  test("create_agent pins a model the caller can use and refuses one they cannot", async ({
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, await secretId(), {
+      provider: "anthropic",
+      access: "org",
+    });
+    const model = await linkModel({
+      keyId: key.id,
+      provider: "anthropic",
+      modelId: "claude-tool-test",
+    });
+
+    const created = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Pinned model",
+      llmApiKeyId: key.id,
+      modelId: model.id,
+    });
+    expect(created.isError).toBe(false);
+    expect(await findCreated(created)).toMatchObject({
+      llmApiKeyId: key.id,
+      modelId: model.id,
+    });
+
+    const halfPair = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Half pair",
+      modelId: model.id,
+    });
+    expect((halfPair.content[0] as any).text).toContain("must be set together");
+
+    const stranger = await makeUser();
+    const privateKey = await makeLlmProviderApiKey(
+      organizationId,
+      await secretId(),
+      {
+        userId: stranger.id,
+        provider: "anthropic",
+      },
+    );
+    const unavailable = await call(TOOL_CREATE_AGENT_SHORT_NAME, {
+      name: "Someone else's key",
+      llmApiKeyId: privateKey.id,
+      modelId: model.id,
+    });
+    expect((unavailable.content[0] as any).text).toContain(
+      "must be linked and available to you",
+    );
+  });
+
+  test("edit_agent turns a chat agent into a runtime agent and back", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: mockContext.userId,
+    });
+
+    const toRuntime = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: { template: "opencode" },
+    });
+    expect(toRuntime.isError).toBe(false);
+    expect((toRuntime.content[0] as any).text).toContain("Runtime: OpenCode");
+    expect((await AgentModel.findById(agent.id))?.runtime).toMatchObject({
+      command: ["archestra-opencode"],
+    });
+
+    const toChat = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: null,
+    });
+    expect(toChat.isError).toBe(false);
+    expect((await AgentModel.findById(agent.id))?.runtime).toBeNull();
+  });
+
+  test("edit_agent checks a runtime change against the agent's stored model", async ({
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, await secretId(), {
+      provider: "gemini",
+      access: "org",
+    });
+    const model = await linkModel({
+      keyId: key.id,
+      provider: "gemini",
+      modelId: "runtime-edit-test",
+    });
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: mockContext.userId,
+      llmApiKeyId: key.id,
+      modelId: model.id,
+    });
+
+    const result = await call(TOOL_EDIT_AGENT_SHORT_NAME, {
+      id: agent.id,
+      runtime: { template: "codex" },
+    });
+
+    expect(result.isError).toBe(true);
+    expect((result.content[0] as any).text).toContain(
+      "Codex runtime requires an OpenAI",
+    );
+    expect((await AgentModel.findById(agent.id))?.runtime).toBeNull();
+  });
+
+  test("get_agent returns the runtime and pinned model", async ({
+    makeAgent,
+  }) => {
+    const runtime = buildCustomAgentRuntime({ image: "example.test/agent:2" });
+    const agent = await makeAgent({
+      organizationId,
+      agentType: "agent",
+      authorId: mockContext.userId,
+      runtime,
+    });
+
+    const result = await call(TOOL_GET_AGENT_SHORT_NAME, { id: agent.id });
+
+    expect(result.isError).toBe(false);
+    expect(result.structuredContent).toMatchObject({
+      runtime,
+      llmApiKeyId: null,
+      modelId: null,
+    });
+  });
+
+  test("list_llm_models lists the caller's keys with their linked models", async ({
+    makeLlmProviderApiKey,
+    makeUser,
+  }) => {
+    const key = await makeLlmProviderApiKey(organizationId, await secretId(), {
+      provider: "anthropic",
+      access: "org",
+    });
+    const model = await linkModel({
+      keyId: key.id,
+      provider: "anthropic",
+      modelId: "claude-list-test",
+    });
+    const stranger = await makeUser();
+    const privateKey = await makeLlmProviderApiKey(
+      organizationId,
+      await secretId(),
+      {
+        userId: stranger.id,
+        provider: "anthropic",
+      },
+    );
+
+    const result = await call(TOOL_LIST_LLM_MODELS_SHORT_NAME, {});
+    expect(result.isError).toBe(false);
+    const apiKeys = (result.structuredContent as any).apiKeys;
+    expect(apiKeys).toContainEqual({
+      id: key.id,
+      name: key.name,
+      provider: "anthropic",
+      models: [{ id: model.id, name: "claude-list-test" }],
+      omittedModelCount: 0,
+    });
+    expect(apiKeys.map((k: { id: string }) => k.id)).not.toContain(
+      privateKey.id,
+    );
+
+    const filtered = await call(TOOL_LIST_LLM_MODELS_SHORT_NAME, {
+      query: "no-such-model",
+    });
+    expect(
+      (filtered.structuredContent as any).apiKeys.find(
+        (k: { id: string }) => k.id === key.id,
+      ).models,
+    ).toEqual([]);
   });
 });
 

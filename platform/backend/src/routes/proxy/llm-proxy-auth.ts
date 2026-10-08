@@ -109,12 +109,16 @@ export interface VirtualKeyValidationResult {
   virtualKeyIsPersonal?: boolean;
   /** Owner of the resolved key (for cross-credential user-consistency checks). */
   virtualKeyAuthorId?: string | null;
+  /** Team the key's spend is charged to, when it has one. */
+  billingTeamId?: string;
 }
 
 export interface PassthroughVirtualKeyResult {
   /** Owner of the passthrough key — the acting Archestra user. */
   userId: string;
   passthroughVirtualKeyId: string;
+  /** Team the key's spend is charged to, when it has one. */
+  billingTeamId?: string;
 }
 
 type ResolvedVirtualApiKey = NonNullable<
@@ -268,6 +272,7 @@ export async function validateVirtualApiKey(params: {
       resolved.virtualKey,
     ),
     virtualKeyAuthorId: resolved.virtualKey.authorId,
+    billingTeamId: resolved.virtualKey.billingTeamId ?? undefined,
   };
 }
 
@@ -351,6 +356,7 @@ export async function validatePassthroughVirtualKey(params: {
   return {
     userId: virtualKey.authorId,
     passthroughVirtualKeyId: virtualKey.id,
+    billingTeamId: virtualKey.billingTeamId ?? undefined,
   };
 }
 
@@ -386,6 +392,8 @@ export type LlmOAuthAccessTokenValidationResult = {
     clientId: string;
   };
   userId?: string;
+  /** Team a client-credentials client's spend is charged to, when it has one. */
+  billingTeamId?: string;
 };
 
 export async function validateLlmOAuthAccessToken(params: {
@@ -781,57 +789,58 @@ interface RateLimitEntry {
  * shared across all application pods. Entries expire automatically via TTL.
  */
 export class VirtualKeyRateLimiter {
-  private cacheManager: {
-    get: <T>(key: AllowedCacheKey) => Promise<T | undefined>;
-    set: <T>(
-      key: AllowedCacheKey,
-      value: T,
-      ttl?: number,
-    ) => Promise<T | undefined>;
-  };
+  private cache: RateLimitCache;
 
-  constructor(cacheManager: {
-    get: <T>(key: AllowedCacheKey) => Promise<T | undefined>;
-    set: <T>(
-      key: AllowedCacheKey,
-      value: T,
-      ttl?: number,
-    ) => Promise<T | undefined>;
-  }) {
-    this.cacheManager = cacheManager;
+  constructor(cache: RateLimitCache) {
+    this.cache = cache;
   }
 
+  /**
+   * Reads both buckets and the credential's validation mark in one statement.
+   */
   async check(params: { ip: string; credential?: string }): Promise<void> {
     const { ip, credential } = params;
     const now = Date.now();
-    const [credentialEntry, ipEntry] = await Promise.all([
-      this.cacheManager.get<RateLimitEntry>(this.credentialKey(ip, credential)),
-      this.cacheManager.get<RateLimitEntry>(this.ipKey(ip)),
-    ]);
+    const credentialKey = this.credentialKey(ip, credential);
+    const ipKey = this.ipKey(ip);
+    const validatedKey = credential ? this.validatedKey(credential) : null;
+    const entries = await this.cache.getMany<RateLimitEntry | boolean>(
+      validatedKey
+        ? [credentialKey, ipKey, validatedKey]
+        : [credentialKey, ipKey],
+    );
 
-    const credentialWindow = activeWindow(credentialEntry, now);
+    const credentialWindow = activeWindow(
+      asRateLimitEntry(entries.get(credentialKey)),
+      now,
+    );
     if (credentialWindow.count >= RATE_LIMIT_MAX_FAILURES) {
       throw this.rejection({ ip, bucket: "credential", ...credentialWindow });
     }
 
-    const ipWindow = activeWindow(ipEntry, now);
+    const ipWindow = activeWindow(asRateLimitEntry(entries.get(ipKey)), now);
     if (
       ipWindow.count >= RATE_LIMIT_MAX_FAILURES_PER_IP &&
-      !(await this.recentlyValidated(credential))
+      !(validatedKey !== null && entries.get(validatedKey) === true)
     ) {
       throw this.rejection({ ip, bucket: "ip", ...ipWindow });
     }
   }
 
+  /**
+   * Counts a failure in both buckets with one atomic upsert, so concurrent
+   * failures are never lost. An open window keeps its end, so a burst cannot
+   * push the reset out; the entry expires when its window ends.
+   */
   async recordFailure(params: {
     ip: string;
     credential?: string;
   }): Promise<void> {
     const { ip, credential } = params;
-    await Promise.all([
-      this.increment(this.credentialKey(ip, credential)),
-      this.increment(this.ipKey(ip)),
-    ]);
+    await this.cache.incrementFixedWindows({
+      keys: [this.credentialKey(ip, credential), this.ipKey(ip)],
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
   }
 
   /**
@@ -846,7 +855,7 @@ export class VirtualKeyRateLimiter {
     const { credential } = params;
     if (!credential) return;
     try {
-      await this.cacheManager.set(
+      await this.cache.set(
         this.validatedKey(credential),
         true,
         RECENTLY_VALIDATED_TTL_MS,
@@ -860,29 +869,6 @@ export class VirtualKeyRateLimiter {
         "[LLMProxy] could not record a validated credential for the rate limiter",
       );
     }
-  }
-
-  private async increment(key: AllowedCacheKey): Promise<void> {
-    const now = Date.now();
-    const entry = await this.cacheManager.get<RateLimitEntry>(key);
-    const window = activeWindow(entry, now);
-    // Keep the existing window's end when one is open, so a burst of failures
-    // cannot push the reset out indefinitely. The TTL tracks the window so the
-    // entry disappears exactly when the count stops counting.
-    const windowEndsAt = window.windowEndsAt ?? now + RATE_LIMIT_WINDOW_MS;
-    await this.cacheManager.set<RateLimitEntry>(
-      key,
-      { count: window.count + 1, windowEndsAt },
-      Math.max(windowEndsAt - now, 1),
-    );
-  }
-
-  private async recentlyValidated(credential?: string): Promise<boolean> {
-    if (!credential) return false;
-    return (
-      (await this.cacheManager.get<boolean>(this.validatedKey(credential))) ===
-      true
-    );
   }
 
   private rejection(params: {
@@ -925,6 +911,17 @@ export class VirtualKeyRateLimiter {
 }
 
 export const virtualKeyRateLimiter = new VirtualKeyRateLimiter(cacheManager);
+
+type RateLimitCache = Pick<
+  typeof cacheManager,
+  "getMany" | "incrementFixedWindows" | "set"
+>;
+
+function asRateLimitEntry(
+  value: RateLimitEntry | boolean | undefined,
+): RateLimitEntry | undefined {
+  return typeof value === "object" ? value : undefined;
+}
 
 /**
  * The still-open window an entry describes, or an empty one when the entry is
@@ -1003,7 +1000,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
     );
   }
 
-  return resolveOAuthProviderApiKey({
+  const resolvedKey = await resolveOAuthProviderApiKey({
     chatApiKeyId: providerApiKey.id,
     secretId: providerApiKey.secretId,
     baseUrl: providerApiKey.inferenceBaseUrl ?? providerApiKey.baseUrl,
@@ -1016,6 +1013,10 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
       clientId: oauthClient.clientId,
     },
   });
+  return {
+    ...resolvedKey,
+    billingTeamId: oauthClient.billingTeamId ?? undefined,
+  };
 }
 
 async function validateUserLlmOAuthAccessToken(params: {

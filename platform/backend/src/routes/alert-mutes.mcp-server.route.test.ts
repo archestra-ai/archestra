@@ -1,7 +1,6 @@
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
-import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
@@ -47,7 +46,6 @@ describe("MCP server alert mute routes", () => {
       // A plain member: no installation-admin capability anywhere, so every
       // visibility decision below is the ordinary scope rule, not an admin
       // bypass.
-      config.mcpServer.alertingEnabled = true;
       vi.spyOn(betterAuth.api, "getSession").mockImplementation(
         async () => ({ user: { id: user.id } }) as never,
       );

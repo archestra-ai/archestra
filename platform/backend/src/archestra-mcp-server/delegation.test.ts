@@ -1,9 +1,8 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 import {
-  ADVISOR_AGENT_DESCRIPTION,
   AGENT_TOOL_PREFIX,
   BUILT_IN_AGENT_IDS,
-  BUILT_IN_AGENT_NAMES,
+  SELF_FORK_TOOL_NAME,
   slugify,
 } from "@archestra/shared";
 import { vi } from "vitest";
@@ -20,6 +19,11 @@ import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { Agent } from "@/types";
 import { type ArchestraContext, executeArchestraTool, getAgentTools } from ".";
+
+/** The delegation targets a surface offers, without the caller's own fork. */
+function delegationTargets(tools: Array<{ name: string }>) {
+  return tools.filter((tool) => tool.name !== SELF_FORK_TOOL_NAME);
+}
 
 const mockExecuteA2AMessage = vi.fn();
 const mockStartDelegatedTask = vi.fn();
@@ -589,6 +593,34 @@ describe("Auto-mode subagent delegation", () => {
     expect(names).not.toContain(`${AGENT_TOOL_PREFIX}${slugify(parent.name)}`);
   });
 
+  test("Auto mode excludes platform built-ins while offering ordinary subagents", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent, target } = await setupAutoMode({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    const builtIn = await makeAgent({
+      name: "Platform Compaction",
+      agentType: "agent",
+      organizationId: organization.id,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
+    });
+    const tools = await getAgentTools({
+      agentId: parent.id,
+      organizationId: organization.id,
+      userId: user.id,
+    });
+    const names = tools.map((tool) => tool.name);
+    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`);
+    expect(names).not.toContain(`${AGENT_TOOL_PREFIX}${slugify(builtIn.name)}`);
+  });
+
   test("omits excluded delegation targets from the surface", async ({
     makeOrganization,
     makeUser,
@@ -614,84 +646,6 @@ describe("Auto-mode subagent delegation", () => {
     );
   });
 
-  test("offers the advisor built-in, and no other built-in", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-  }) => {
-    const { organization, user, parent } = await setupAutoMode({
-      makeOrganization,
-      makeUser,
-      makeMember,
-      makeAgent,
-    });
-    const advisor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      agentType: "agent",
-      organizationId: organization.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-    });
-    // Backs platform machinery rather than answering questions; delegating to
-    // it would mean driving an internal mechanism by hand.
-    const compaction = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.CONTEXT_COMPACTION,
-      agentType: "agent",
-      organizationId: organization.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION },
-    });
-
-    const names = (
-      await getAgentTools({
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      })
-    ).map((t) => t.name);
-
-    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
-    expect(names).not.toContain(
-      `${AGENT_TOOL_PREFIX}${slugify(compaction.name)}`,
-    );
-  });
-
-  test("describes the advisor to the caller with its own guidance", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-  }) => {
-    const { organization, user, parent } = await setupAutoMode({
-      makeOrganization,
-      makeUser,
-      makeMember,
-      makeAgent,
-    });
-    const advisor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      agentType: "agent",
-      organizationId: organization.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-      description: ADVISOR_AGENT_DESCRIPTION,
-    });
-
-    const tool = (
-      await getAgentTools({
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      })
-    ).find((t) => t.name === `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
-
-    // What the calling model reads is the shipped guidance, not the one-line
-    // summary an administrator sees on the agent — and the closing line, which
-    // is what stops a model consulting on every step, has to reach it whole.
-    expect(tool?.description).toContain(
-      "not for syntax, lookups, or things you already know",
-    );
-    expect(tool?.description).not.toContain(ADVISOR_AGENT_DESCRIPTION);
-  });
-
   test("does not expand for system/token flows (no real user)", async ({
     makeOrganization,
     makeUser,
@@ -714,7 +668,7 @@ describe("Auto-mode subagent delegation", () => {
       skipAccessCheck: true,
     });
 
-    expect(tools).toHaveLength(0);
+    expect(delegationTargets(tools)).toHaveLength(0);
   });
 
   test("Custom mode ignores accessible agents (explicit only)", async ({
@@ -737,7 +691,7 @@ describe("Auto-mode subagent delegation", () => {
       userId: user.id,
     });
 
-    expect(tools).toHaveLength(0);
+    expect(delegationTargets(tools)).toHaveLength(0);
   });
 
   test("dispatches to an accessible target without explicit assignment", async ({
@@ -908,7 +862,7 @@ describe("Auto-mode subagent delegation", () => {
       organizationId: organization.id,
       userId: user.id,
     });
-    expect(tools).toHaveLength(0);
+    expect(delegationTargets(tools)).toHaveLength(0);
 
     const result = await executeArchestraTool(
       `${AGENT_TOOL_PREFIX}${slugify(crossEnvTarget.name)}`,
@@ -926,314 +880,133 @@ describe("Auto-mode subagent delegation", () => {
     );
     expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
   });
+});
 
-  test("Auto mode reaches the org-wide advisor from another environment (surface and dispatch)", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-  }) => {
-    const organization = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, organization.id, { role: "member" });
-    const env = await EnvironmentModel.create({
-      organizationId: organization.id,
-      name: "Staging",
-    });
-    const parent = await makeAgent({
-      name: "Staging Parent",
+describe("self-fork and attested returns", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  async function setup(fixtures: {
+    makeOrganization: any;
+    makeUser: any;
+    makeMember: any;
+    makeAgent: any;
+  }) {
+    const organization = await fixtures.makeOrganization();
+    const user = await fixtures.makeUser();
+    await fixtures.makeMember(user.id, organization.id, { role: "member" });
+    const parent = await fixtures.makeAgent({
+      name: "Parent Agent",
       agentType: "agent",
       organizationId: organization.id,
-      environmentId: env.id,
     });
     await AgentModel.update(parent.id, { accessAllSubagents: true });
-    const advisor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
+    const target = await fixtures.makeAgent({
+      name: "Research Bot",
       agentType: "agent",
       organizationId: organization.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
     });
+    return { organization, user, parent, target };
+  }
 
-    // The advisor's env-less row is the one target reachable across the fence.
-    const names = (
-      await getAgentTools({
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      })
-    ).map((t) => t.name);
-    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
-
-    mockExecuteA2AMessage.mockResolvedValue({ text: "advice" });
-    const result = await executeArchestraTool(
-      `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`,
-      { message: "Which approach should I take?" },
-      {
-        agent: { id: parent.id, name: parent.name },
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      },
-    );
-    expect(result.isError).toBe(false);
-    // The caller's environment rides along so the consultation bills to it.
-    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
-      expect.objectContaining({
-        agentId: advisor.id,
-        callerEnvironmentId: env.id,
-      }),
-    );
-  });
-
-  test("an environment-scoped stray advisor stays fenced to its own environment", async ({
+  test("offers every agent a fork of itself", async ({
     makeOrganization,
     makeUser,
     makeMember,
     makeAgent,
   }) => {
-    const organization = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, organization.id, { role: "member" });
-    const envA = await EnvironmentModel.create({
-      organizationId: organization.id,
-      name: "Env A",
-    });
-    const envB = await EnvironmentModel.create({
-      organizationId: organization.id,
-      name: "Env B",
-    });
-    const parent = await makeAgent({
-      name: "Env A Parent",
-      agentType: "agent",
-      organizationId: organization.id,
-      environmentId: envA.id,
-    });
-    await AgentModel.update(parent.id, { accessAllSubagents: true });
-    // Residue a pre-collapse replica could leave: an advisor row carrying the
-    // discriminator but pinned to an environment. The exception is env-less
-    // only, so it must NOT cross from Env A into Env B.
-    const strayAdvisor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      agentType: "agent",
-      organizationId: organization.id,
-      environmentId: envB.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-    });
-
-    const names = (
-      await getAgentTools({
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      })
-    ).map((t) => t.name);
-    expect(names).not.toContain(
-      `${AGENT_TOOL_PREFIX}${slugify(strayAdvisor.name)}`,
-    );
-  });
-
-  test("the advisor exception does not surface another organization's advisor", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-  }) => {
-    const orgA = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, orgA.id, { role: "member" });
-    const env = await EnvironmentModel.create({
-      organizationId: orgA.id,
-      name: "Staging",
-    });
-    const parent = await makeAgent({
-      name: "Org A Parent",
-      agentType: "agent",
-      organizationId: orgA.id,
-      environmentId: env.id,
-    });
-    await AgentModel.update(parent.id, { accessAllSubagents: true });
-
-    const orgB = await makeOrganization();
-    const foreignAdvisor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      agentType: "agent",
-      organizationId: orgB.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-    });
-
-    const names = (
-      await getAgentTools({
-        agentId: parent.id,
-        organizationId: orgA.id,
-        userId: user.id,
-      })
-    ).map((t) => t.name);
-    expect(names).not.toContain(
-      `${AGENT_TOOL_PREFIX}${slugify(foreignAdvisor.name)}`,
-    );
-  });
-
-  test("an exclusion still hides the advisor from a cross-environment caller", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-  }) => {
-    const organization = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, organization.id, { role: "member" });
-    const env = await EnvironmentModel.create({
-      organizationId: organization.id,
-      name: "Staging",
-    });
-    const parent = await makeAgent({
-      name: "Staging Parent",
-      agentType: "agent",
-      organizationId: organization.id,
-      environmentId: env.id,
-    });
-    await AgentModel.update(parent.id, { accessAllSubagents: true });
-    const advisor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      agentType: "agent",
-      organizationId: organization.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-    });
-    await AgentExcludedSubagentModel.replaceForAgent(parent.id, [advisor.id]);
-
-    const names = (
-      await getAgentTools({
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      })
-    ).map((t) => t.name);
-    expect(names).not.toContain(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
-
-    const result = await executeArchestraTool(
-      `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`,
-      { message: "Which approach should I take?" },
-      {
-        agent: { id: parent.id, name: parent.name },
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      },
-    );
-    expect(result.isError).toBe(true);
-    expect(mockExecuteA2AMessage).not.toHaveBeenCalled();
-  });
-
-  test("Custom mode reaches an explicitly granted advisor from another environment", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-    makeAgentTool,
-  }) => {
-    const organization = await makeOrganization();
-    const user = await makeUser();
-    await makeMember(user.id, organization.id, { role: "member" });
-    const env = await EnvironmentModel.create({
-      organizationId: organization.id,
-      name: "Staging",
-    });
-    const parent = await makeAgent({
-      name: "Staging Parent",
-      agentType: "agent",
-      organizationId: organization.id,
-      environmentId: env.id,
-    });
-    const advisor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      agentType: "agent",
-      organizationId: organization.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
-    });
-    const advisorTool = await ToolModel.findOrCreateDelegationTool(advisor.id);
-    await makeAgentTool(parent.id, advisorTool.id);
-
-    const names = (
-      await getAgentTools({
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      })
-    ).map((t) => t.name);
-    expect(names).toContain(`${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`);
-
-    mockExecuteA2AMessage.mockResolvedValue({ text: "advice" });
-    const result = await executeArchestraTool(
-      `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`,
-      { message: "Which approach should I take?" },
-      {
-        agent: { id: parent.id, name: parent.name },
-        agentId: parent.id,
-        organizationId: organization.id,
-        userId: user.id,
-      },
-    );
-    expect(result.isError).toBe(false);
-    expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: advisor.id }),
-    );
-  });
-
-  test("the built-in advisor wins the agent__advisor slug over a user agent of the same name", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-    makeAgent,
-  }) => {
-    const { organization, user, parent } = await setupAutoMode({
+    const { organization, user, parent } = await setup({
       makeOrganization,
       makeUser,
       makeMember,
       makeAgent,
     });
-    // A user agent squatting on the advisor's name, in the caller's own
-    // environment — same slug, so only one of the two can be advertised.
-    const impostor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      agentType: "agent",
+
+    const tools = await getAgentTools({
+      agentId: parent.id,
       organizationId: organization.id,
-    });
-    const advisor = await makeAgent({
-      name: BUILT_IN_AGENT_NAMES.ADVISOR,
-      agentType: "agent",
-      organizationId: organization.id,
-      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.ADVISOR },
+      userId: user.id,
     });
 
-    const advisorToolName = `${AGENT_TOOL_PREFIX}${slugify(advisor.name)}`;
-    const names = (
-      await getAgentTools({
+    expect(tools.find((tool) => tool.name === SELF_FORK_TOOL_NAME)).toEqual(
+      expect.objectContaining({
+        _meta: expect.objectContaining({ targetAgentId: parent.id }),
+      }),
+    );
+  });
+
+  for (const active of [true, false]) {
+    test(`offers return_schema to own agents only while Guardrails v2 is ${active ? "active" : "off"}`, async ({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    }) => {
+      config.openappa.enabled = true;
+      await GuardrailsDeploymentModel.setEnabled(active);
+      const { organization, user, parent, target } = await setup({
+        makeOrganization,
+        makeUser,
+        makeMember,
+        makeAgent,
+      });
+
+      const tools = await getAgentTools({
         agentId: parent.id,
         organizationId: organization.id,
         userId: user.id,
-      })
-    ).map((t) => t.name);
-    expect(names.filter((n) => n === advisorToolName)).toHaveLength(1);
+      });
+      const attests = (name: string) =>
+        Object.hasOwn(
+          tools.find((tool) => tool.name === name)?.inputSchema.properties ??
+            {},
+          "return_schema",
+        );
 
-    mockExecuteA2AMessage.mockResolvedValue({ text: "advice" });
+      expect(attests(SELF_FORK_TOOL_NAME)).toBe(active);
+      expect(attests(`${AGENT_TOOL_PREFIX}${slugify(target.name)}`)).toBe(
+        active,
+      );
+    });
+  }
+
+  test("a fork runs the calling agent itself", async ({
+    makeOrganization,
+    makeUser,
+    makeMember,
+    makeAgent,
+  }) => {
+    const { organization, user, parent } = await setup({
+      makeOrganization,
+      makeUser,
+      makeMember,
+      makeAgent,
+    });
+    mockExecuteA2AMessage.mockResolvedValue({
+      messageId: "fork-message",
+      text: "Summarized",
+      finishReason: "stop",
+    });
+
     const result = await executeArchestraTool(
-      advisorToolName,
-      { message: "Which approach should I take?" },
+      SELF_FORK_TOOL_NAME,
+      { message: "Summarize the logs." },
       {
+        userId: user.id,
         agent: { id: parent.id, name: parent.name },
         agentId: parent.id,
         organizationId: organization.id,
-        userId: user.id,
       },
     );
-    expect(result.isError).toBe(false);
-    // Dispatch resolves the built-in, not the impostor — surface and dispatch
-    // share the same tie-break.
+
+    expect(result.isError).toBeFalsy();
     expect(mockExecuteA2AMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: advisor.id }),
-    );
-    expect(mockExecuteA2AMessage).not.toHaveBeenCalledWith(
-      expect.objectContaining({ agentId: impostor.id }),
+      expect.objectContaining({
+        agentId: parent.id,
+        selfFork: true,
+        parentDelegationChain: parent.id,
+      }),
     );
   });
 });

@@ -78,10 +78,15 @@ function contrast(a: Rgb, b: Rgb): number {
 }
 
 /** The mix percentage globals.css uses, so the test follows the real values. */
-function mixPercent(token: string): number {
-  const match = globals.match(
-    new RegExp(`${token}:\\s*color-mix\\(in oklab,[^%]*?([\\d.]+)%`),
-  );
+function mixPercent(token: string, { dark = false } = {}): number {
+  // `:root` comes first in globals.css and `html.dark` after it, so a token
+  // that dark mode redefines has its dark value in the last match.
+  const matches = [
+    ...globals.matchAll(
+      new RegExp(`${token}:\\s*color-mix\\(in oklab,[^%]*?([\\d.]+)%`, "g"),
+    ),
+  ];
+  const match = dark ? matches.at(-1) : matches[0];
   if (!match) throw new Error(`No color-mix percentage for ${token}`);
   return Number.parseFloat(match[1]) / 100;
 }
@@ -105,11 +110,13 @@ function themeTokens(): [string, Record<string, string>][] {
 /** Resolve the terminal palette the browser computes for one theme and mode. */
 function terminalPalette(theme: Record<string, string>, dark: boolean) {
   const anchor = parse(dark ? "white" : "black");
-  const surface = mix(
-    parse(theme["--card"]),
-    parse(theme["--foreground"]),
-    mixPercent("--terminal"),
-  );
+  const surface = dark
+    ? mix(
+        parse(theme["--card"]),
+        parse(theme["--foreground"]),
+        mixPercent("--terminal", { dark }),
+      )
+    : mix(parse(theme["--card"]), parse("white"), mixPercent("--terminal"));
   const foreground = mix(
     parse(theme["--foreground"]),
     anchor,
@@ -120,6 +127,7 @@ function terminalPalette(theme: Record<string, string>, dark: boolean) {
     foreground,
     emphasis: anchor,
     elevated: mix(surface, foreground, mixPercent("--terminal-elevated")),
+    selected: mix(surface, foreground, mixPercent("--terminal-selected")),
     muted: mix(foreground, surface, mixPercent("--terminal-muted")),
     comment: mix(foreground, surface, mixPercent("--terminal-comment")),
     success: mix(
@@ -163,9 +171,117 @@ describe("terminal surface contrast", () => {
     expect(contrast(palette.emphasis, palette.elevated)).toBeGreaterThanOrEqual(
       4.5,
     );
+    // Actions and the selected tab are raised keys: in dark mode a fill that
+    // stands apart from the strip, in light mode the white page colour with an
+    // edge and shadow. Either way their label stays legible on it.
+    if (name.endsWith("dark")) {
+      expect(
+        contrast(palette.selected, palette.surface),
+      ).toBeGreaterThanOrEqual(1.3);
+      expect(
+        contrast(palette.foreground, palette.selected),
+      ).toBeGreaterThanOrEqual(4.5);
+    } else {
+      const lightness = (c: Rgb) => toOklab(c)[0];
+      // The block is a raised card: never darker than the page it sits on
+      // (a hair of slack for a pure-white page with a tinted card).
+      expect(lightness(palette.surface)).toBeGreaterThanOrEqual(
+        lightness(parse(tokens["--background"])) - 0.005,
+      );
+      expect(
+        contrast(parse(tokens["--foreground"]), palette.surface),
+      ).toBeGreaterThanOrEqual(4.5);
+    }
     // The copied tick is a state graphic, so the 3:1 non-text bar applies.
     expect(contrast(palette.success, palette.elevated)).toBeGreaterThanOrEqual(
       3,
     );
+  });
+});
+
+describe("sidebar emphasis contrast", () => {
+  const themes = themeTokens();
+  const sidebarEmphasis = (name: string, tokens: Record<string, string>) =>
+    mix(
+      parse(tokens["--sidebar-foreground"]),
+      parse(name.endsWith("dark") ? "white" : "black"),
+      mixPercent("--sidebar-emphasis"),
+    );
+
+  it.each(
+    themes.filter(([name]) => name.endsWith("light")),
+  )("keeps %s chips and selected segment legible without heavy outlines", (name, tokens) => {
+    const emphasis = sidebarEmphasis(name, tokens);
+    const chip = mix(
+      emphasis,
+      parse(tokens["--sidebar"]),
+      mixPercent("--sidebar-chip"),
+    );
+
+    // "New"/"Beta" chips: emphasis text on the soft tinted fill.
+    expect(contrast(emphasis, chip)).toBeGreaterThanOrEqual(4.5);
+    // Selected AI/Studio segment: foreground text on a background card.
+    expect(
+      contrast(parse(tokens["--foreground"]), parse(tokens["--background"])),
+    ).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it.each(
+    themes.filter(([name]) => name.endsWith("dark")),
+  )("keeps %s chips and selected segment legible", (name, tokens) => {
+    const emphasis = sidebarEmphasis(name, tokens);
+
+    // Outlined "New"/"Beta" chips: emphasis text and edge on the sidebar.
+    // The selected AI/Studio segment: sidebar text on an emphasis fill, set
+    // against the muted track the unselected segment shares.
+    expect(
+      contrast(emphasis, parse(tokens["--sidebar"])),
+    ).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(emphasis, parse(tokens["--muted"]))).toBeGreaterThanOrEqual(
+      4.5,
+    );
+  });
+});
+
+describe("sidebar attention contrast", () => {
+  const themes = themeTokens();
+
+  it.each(
+    themes,
+  )("keeps the %s attention count and dot legible", (name, tokens) => {
+    const sidebar = parse(tokens["--sidebar"]);
+    const ink = mix(
+      parse(tokens["--destructive"]),
+      parse(name.endsWith("dark") ? "white" : "black"),
+      mixPercent("--sidebar-attention-foreground"),
+    );
+    const fill = mix(
+      parse(tokens["--destructive"]),
+      sidebar,
+      mixPercent("--sidebar-attention"),
+    );
+
+    // The count is text on its tinted fill; the dot is a 3:1 state graphic.
+    expect(contrast(ink, fill)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(ink, sidebar)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+describe("sidebar segmented toggle", () => {
+  it.each(
+    themeTokens(),
+  )("keeps the %s AI/Studio track visible against the sidebar", (_name, tokens) => {
+    const sidebar = parse(tokens["--sidebar"]);
+    const track = mix(
+      parse(tokens["--sidebar-foreground"]),
+      sidebar,
+      mixPercent("--sidebar-track"),
+    );
+    // The track reads as one control through its fill or its outline (a
+    // near-black sidebar flattens the fill's luminance step, but such
+    // themes ship a strong --sidebar-border).
+    const fillStep = contrast(track, sidebar);
+    const outline = contrast(parse(tokens["--sidebar-border"]), sidebar);
+    expect(fillStep >= 1.1 || outline >= 1.3).toBe(true);
   });
 });

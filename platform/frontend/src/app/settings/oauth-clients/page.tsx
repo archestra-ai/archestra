@@ -6,12 +6,24 @@ import {
   MCP_GATEWAY_OAUTH_SCOPE,
 } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
-import { Copy, Pencil, Plus, RefreshCw, Shield, Trash2 } from "lucide-react";
+import {
+  Bot,
+  Copy,
+  type LucideIcon,
+  Network,
+  Pencil,
+  Plus,
+  RefreshCw,
+  Server,
+  Trash2,
+  Users,
+} from "lucide-react";
 import { useCallback, useEffect, useState } from "react";
 import { toast } from "sonner";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { useSetSettingsAction } from "@/app/settings/layout";
 import { CreateOAuthClientDialog } from "@/components/create-oauth-client-dialog";
+import { formatSpendCap } from "@/components/credential-billing/budget-fields";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import {
@@ -30,10 +42,8 @@ import {
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { ResourcePermissionDialog } from "@/components/resource-permission-dialog";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
 import { PermissionButton } from "@/components/ui/permission-button";
@@ -62,6 +72,7 @@ import {
   useRotateMcpOauthClientSecret,
   useUpdateMcpOauthClient,
 } from "@/lib/mcp-oauth-clients.query";
+import { cn } from "@/lib/utils/tailwind";
 
 type LlmClient =
   archestraApiTypes.GetLlmOauthClientsResponses["200"]["data"][number];
@@ -153,11 +164,6 @@ function OauthClientsTable() {
   const [editingMcp, setEditingMcp] = useState<McpClient | null>(null);
   const [rotating, setRotating] = useState<Row | null>(null);
   const [deleting, setDeleting] = useState<Row | null>(null);
-  const [permissionTarget, setPermissionTarget] = useState<{
-    resource: "llmOauthClient" | "mcpOauthClient";
-    id: string;
-    name: string;
-  } | null>(null);
   const [revealed, setRevealed] = useState<{
     title: string;
     credentials: CreatedCredentials;
@@ -199,6 +205,7 @@ function OauthClientsTable() {
       <div className="flex items-center gap-2">
         <PermissionButton
           permissions={{ llmOauthClient: ["create"] }}
+          size="sm"
           onClick={() => setCreateOpen(true)}
         >
           <Plus className="h-4 w-4" />
@@ -226,96 +233,139 @@ function OauthClientsTable() {
           ),
         ),
       ];
-      return providers.length > 0 ? providers.join(", ") : "—";
+      if (providers.length > 0) return providers.join(", ");
+      return row.client.grantType === "authorization_code"
+        ? "Each user's own keys"
+        : "—";
     }
-    return row.client.allowedGatewayIds.length > 0
-      ? row.client.allowedGatewayIds
-          .map((id) => resourceNameById.get(id) ?? id)
-          .join(", ")
+    if (row.client.allowedGatewayIds.length > 0) {
+      return row.client.allowedGatewayIds
+        .map((id) => resourceNameById.get(id) ?? id)
+        .join(", ");
+    }
+    return row.client.grantType === "authorization_code"
+      ? "What each user can reach"
       : "—";
   };
 
+  const openEdit = (row: Row) =>
+    row.kind === "llm" ? setEditingLlm(row.client) : setEditingMcp(row.client);
+
   const columns: ColumnDef<Row>[] = [
     {
+      // The ID sits under the name: it is copied, not read, so it does not
+      // need a column of its own.
       id: "name",
       header: "Name",
-      size: 140,
+      size: 180,
       cell: ({ row }) => (
-        <span className="flex max-w-[140px] items-center gap-2 font-medium">
-          <span className="truncate">{row.original.client.name}</span>
-          {row.original.client.disabled && (
-            <span className="text-muted-foreground">(disabled)</span>
-          )}
-          <LabelTags labels={row.original.client.labels} />
-        </span>
+        <div className="min-w-0 space-y-0.5">
+          <span className="flex max-w-[180px] items-center gap-2 font-medium">
+            <span className="truncate">{row.original.client.name}</span>
+            {row.original.client.disabled && (
+              <span className="text-muted-foreground">(disabled)</span>
+            )}
+            <LabelTags labels={row.original.client.labels} />
+          </span>
+          <div className="flex items-center gap-1 font-mono text-xs text-muted-foreground">
+            <code className="max-w-[140px] truncate">
+              {row.original.client.clientId}
+            </code>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              className="size-6"
+              aria-label={`Copy client ID for ${row.original.client.name}`}
+              onClick={async (e) => {
+                e.stopPropagation();
+                await copyToClipboard(row.original.client.clientId);
+                toast.success("Client ID copied");
+              }}
+            >
+              <Copy className="h-3.5 w-3.5" />
+            </Button>
+          </div>
+        </div>
       ),
     },
     {
       // The kind and the resources it reaches are one fact, and the settings
       // column is too narrow to spend two columns saying it.
       id: "type",
-      header: "Authenticates to",
-      size: 170,
-      cell: ({ row }) => (
-        <div className="min-w-0 space-y-1">
-          <Badge variant="secondary">
-            {row.original.kind === "llm" ? (
-              <span>LLM Proxy</span>
-            ) : (
-              <span>MCP</span>
-            )}
-          </Badge>
-          <p className="max-w-[170px] truncate text-xs text-muted-foreground">
-            {describeAccess(row.original)}
-          </p>
-        </div>
-      ),
+      header: "Reaches",
+      size: 190,
+      cell: ({ row }) => {
+        const Icon = row.original.kind === "llm" ? Bot : Network;
+        return (
+          <div className="flex min-w-0 items-center gap-2">
+            <span className="flex size-7 shrink-0 items-center justify-center rounded-md bg-muted text-muted-foreground">
+              <Icon className="size-4" />
+            </span>
+            <div className="min-w-0">
+              <div className="text-sm">
+                {row.original.kind === "llm" ? "LLM Proxy" : "MCP"}
+              </div>
+              <p className="max-w-[150px] truncate text-xs text-muted-foreground">
+                {describeAccess(row.original)}
+              </p>
+            </div>
+          </div>
+        );
+      },
     },
     {
-      id: "clientId",
-      header: "Client ID",
-      size: 140,
-      cell: ({ row }) => (
-        <div className="flex items-center gap-1 font-mono text-xs">
-          <code className="max-w-[120px] truncate">
-            {row.original.client.clientId}
-          </code>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            aria-label={`Copy client ID for ${row.original.client.name}`}
-            onClick={async () => {
-              await copyToClipboard(row.original.client.clientId);
-              toast.success("Client ID copied");
-            }}
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        </div>
-      ),
-    },
-    {
+      // The wizard's own words for the grant type, so the list and the
+      // dialog that created the client say the same thing.
       id: "grantType",
-      header: "Grant type",
-      size: 110,
-      cell: ({ row }) => (
-        <Badge variant="outline">
-          {row.original.client.grantType === "authorization_code" ? (
-            <span>On behalf of users</span>
-          ) : (
-            <span>Application</span>
-          )}
-        </Badge>
-      ),
+      header: "Signs in",
+      size: 120,
+      cell: ({ row }) => {
+        const forUsers = row.original.client.grantType === "authorization_code";
+        const Icon = forUsers ? Users : Server;
+        return (
+          <span className="flex items-center gap-1.5 text-sm text-muted-foreground">
+            <Icon className="size-3.5 shrink-0" />
+            {forUsers ? "For its users" : "As itself"}
+          </span>
+        );
+      },
     },
-
+    {
+      id: "budget",
+      header: "Budget",
+      size: 130,
+      cell: ({ row }) => {
+        // MCP clients have no spend of their own.
+        if (row.original.kind === "mcp") {
+          return <span className="text-muted-foreground">—</span>;
+        }
+        const { client } = row.original;
+        const forUsers = client.grantType === "authorization_code";
+        return (
+          <div className="min-w-0 text-sm">
+            <div
+              className={cn(
+                "max-w-[130px] truncate",
+                !forUsers && !client.billingTeam && "text-muted-foreground",
+              )}
+            >
+              {forUsers ? "Each user" : (client.billingTeam?.name ?? "No team")}
+            </div>
+            <div className="text-xs text-muted-foreground">
+              {client.spendCap
+                ? `${formatSpendCap(client.spendCap)} cap`
+                : "No cap"}
+            </div>
+          </div>
+        );
+      },
+    },
     {
       id: "actions",
       header: "Actions",
-      // Four icon-sm buttons with the table's px-4 inset on both sides, so
-      // the last icon sits 16px from the frame like every other cell edge.
-      size: 160,
+      // Two icon-sm buttons with the table's px-4 inset on both sides.
+      size: 100,
       cell: ({ row }) => {
         const isLlm = row.original.kind === "llm";
         const resource = isLlm ? "llmOauthClient" : "mcpOauthClient";
@@ -328,26 +378,15 @@ function OauthClientsTable() {
                 icon: <Pencil className="h-4 w-4" />,
                 label: "Edit",
                 permissions: { [resource]: ["update"] },
-                onClick: () =>
-                  row.original.kind === "llm"
-                    ? setEditingLlm(row.original.client)
-                    : setEditingMcp(row.original.client),
+                onClick: () => openEdit(row.original),
               },
+            ]}
+            dropdownActions={[
               {
                 icon: <RefreshCw className="h-4 w-4" />,
                 label: "Rotate secret",
                 permissions: { [resource]: ["update"] },
                 onClick: () => setRotating(row.original),
-              },
-              {
-                icon: <Shield className="h-4 w-4" />,
-                label: "Permissions",
-                onClick: () =>
-                  setPermissionTarget({
-                    resource,
-                    id: row.original.client.id,
-                    name: row.original.client.name,
-                  }),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
@@ -401,8 +440,16 @@ function OauthClientsTable() {
             showSearch={false}
             items={[
               { value: "all", label: "All types" },
-              { value: "llm", label: "LLM Proxy" },
-              { value: "mcp", label: "MCP" },
+              {
+                value: "llm",
+                label: "LLM Proxy",
+                content: <IconLabel icon={Bot} label="LLM Proxy" />,
+              },
+              {
+                value: "mcp",
+                label: "MCP",
+                content: <IconLabel icon={Network} label="MCP" />,
+              },
             ]}
           />
           <FilterSelect
@@ -413,12 +460,20 @@ function OauthClientsTable() {
                 page: "1",
               })
             }
-            placeholder="Filter by grant type"
+            placeholder="Filter by how it signs in"
             showSearch={false}
             items={[
-              { value: "all", label: "All grant types" },
-              { value: "client_credentials", label: "Application" },
-              { value: "authorization_code", label: "On behalf of users" },
+              { value: "all", label: "All sign-in modes" },
+              {
+                value: "client_credentials",
+                label: "As itself",
+                content: <IconLabel icon={Server} label="As itself" />,
+              },
+              {
+                value: "authorization_code",
+                label: "For its users",
+                content: <IconLabel icon={Users} label="For its users" />,
+              },
             ]}
           />
           <EntityLabelFilter
@@ -435,6 +490,7 @@ function OauthClientsTable() {
         columns={columns}
         data={rows}
         getRowId={(row) => `${row.kind}:${row.client.id}`}
+        onRowClick={openEdit}
         isLoading={llmQuery.isPending || mcpQuery.isPending}
         hasActiveFilters={hasActiveFilters}
         onClearFilters={clearFilters}
@@ -488,6 +544,10 @@ function OauthClientsTable() {
         onSubmit={async (id, body) => {
           if (await llmUpdate.mutateAsync({ id, body })) setEditingLlm(null);
         }}
+        onRotateSecret={(client) => {
+          setEditingLlm(null);
+          setRotating({ kind: "llm", client });
+        }}
         isSubmitting={llmUpdate.isPending}
       />
 
@@ -500,20 +560,13 @@ function OauthClientsTable() {
         onSubmit={async (id, body) => {
           if (await mcpUpdate.mutateAsync({ id, body })) setEditingMcp(null);
         }}
+        onRotateSecret={(client) => {
+          setEditingMcp(null);
+          setRotating({ kind: "mcp", client });
+        }}
         isSubmitting={mcpUpdate.isPending}
       />
 
-      {permissionTarget && (
-        <ResourcePermissionDialog
-          resource={permissionTarget.resource}
-          scope={permissionTarget.id}
-          title={`${permissionTarget.name} permissions`}
-          open
-          onOpenChange={(open) => {
-            if (!open) setPermissionTarget(null);
-          }}
-        />
-      )}
       <DeleteConfirmDialog
         open={!!rotating}
         onOpenChange={(open) => {
@@ -570,6 +623,16 @@ function OauthClientsTable() {
 }
 
 type GrantType = "client_credentials" | "authorization_code";
+
+/** A filter option prefixed with the icon its table column uses. */
+function IconLabel({ icon: Icon, label }: { icon: LucideIcon; label: string }) {
+  return (
+    <span className="flex items-center gap-2">
+      <Icon className="size-4 shrink-0 text-muted-foreground" />
+      {label}
+    </span>
+  );
+}
 
 function isClientType(value: string | null) {
   return value === "llm" || value === "mcp";

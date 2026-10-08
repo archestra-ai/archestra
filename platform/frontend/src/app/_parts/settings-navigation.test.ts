@@ -27,7 +27,6 @@ vi.mock("@/lib/auth/auth.query", () => ({
         "/settings/skills",
         "/settings/security",
         "/settings/openappa",
-        "/settings/logs",
         "/settings/knowledge",
         "/settings/environments",
         "/settings/users",

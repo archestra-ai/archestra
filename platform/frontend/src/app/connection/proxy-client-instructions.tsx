@@ -37,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
@@ -298,6 +299,34 @@ export function ProxyClientInstructions({
           reason={`${client.label} doesn't support this provider.`}
         />
       )}
+
+      {client.proxy.kind === "generic" &&
+        client.id !== "generic" &&
+        (routerSelected || selectedProvider) && (
+          <AgentIdHeaderHint agentId={client.id} />
+        )}
+    </div>
+  );
+}
+
+/**
+ * The header that names a generic-instructions agent on the proxy, so its
+ * calls show as that agent rather than as a generic client.
+ */
+function AgentIdHeaderHint({ agentId }: { agentId: string }) {
+  return (
+    <div className="space-y-1.5 rounded-lg border bg-card p-4">
+      <div className="text-xs font-medium text-muted-foreground">
+        Agent header
+      </div>
+      <p className="text-xs text-muted-foreground">
+        If your agent can send custom headers, add this one so its calls show
+        under its name.
+      </p>
+      <CopyableCode
+        value={`${EXTERNAL_AGENT_ID_HEADER}: ${agentId}`}
+        toastMessage="Header copied"
+      />
     </div>
   );
 }
@@ -414,13 +443,13 @@ function GenericProxyInstructions({
                     <>
                       {" "}
                       (
-                      <button
+                      <UnstyledButton
                         type="button"
                         className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
                         onClick={() => setShowAddProviderKey(true)}
                       >
                         add one
-                      </button>
+                      </UnstyledButton>
                       ).
                     </>
                   ) : (
@@ -877,13 +906,13 @@ function PassthroughKeyField({
     return (
       <p className="text-[12.5px] leading-snug text-muted-foreground">
         Couldn&apos;t create a passthrough key.{" "}
-        <button
+        <UnstyledButton
           type="button"
           onClick={runProvision}
           className="font-medium text-foreground underline underline-offset-2 hover:text-primary"
         >
           Retry
-        </button>{" "}
+        </UnstyledButton>{" "}
         or open the Connect dialog on the{" "}
         <Link
           href="/llm/proxy"
@@ -1035,7 +1064,7 @@ function FieldCopyButton({ value }: { value: string }) {
     setTimeout(() => setCopied(false), 1600);
   }, [value]);
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={onCopy}
       aria-label="Copy to clipboard"
@@ -1046,7 +1075,7 @@ function FieldCopyButton({ value }: { value: string }) {
       ) : (
         <Copy className="size-3.5" strokeWidth={2} />
       )}
-    </button>
+    </UnstyledButton>
   );
 }
 

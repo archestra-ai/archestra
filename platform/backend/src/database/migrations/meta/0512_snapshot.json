@@ -1,5 +1,5 @@
 {
-  "id": "b259295f-9d0c-4d31-8bf3-053be6589b5e",
+  "id": "0f3bbff9-15c3-4e63-9b3b-2ea6224b34fb",
   "prevId": "f854f895-805e-4373-8c64-239fcf2f5da5",
   "version": "7",
   "dialect": "postgresql",
@@ -14063,14 +14063,14 @@
         },
         "current_usage_tokens_in": {
           "name": "current_usage_tokens_in",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": true,
           "default": 0
         },
         "current_usage_tokens_out": {
           "name": "current_usage_tokens_out",
-          "type": "integer",
+          "type": "bigint",
           "primaryKey": false,
           "notNull": true,
           "default": 0
@@ -18045,13 +18045,6 @@
           "primaryKey": false,
           "notNull": true,
           "default": true
-        },
-        "log_content_mode": {
-          "name": "log_content_mode",
-          "type": "varchar",
-          "primaryKey": false,
-          "notNull": true,
-          "default": "'full'"
         },
         "allow_tool_auto_assignment": {
           "name": "allow_tool_auto_assignment",

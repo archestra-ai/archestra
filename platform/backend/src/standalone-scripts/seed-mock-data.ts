@@ -7,7 +7,11 @@ import {
 import { getTableName, sql } from "drizzle-orm";
 import type { PgTable } from "drizzle-orm/pg-core";
 import db, { initializeDatabase, schema } from "@/database";
-import { seedDefaultUserAndOrg } from "@/database/seed";
+import {
+  seedArchestraCatalogAndTools,
+  seedDefaultUserAndOrg,
+  syncBuiltInAgents,
+} from "@/database/seed";
 import logger from "@/logging";
 import {
   AgentLabelModel,
@@ -151,6 +155,10 @@ async function seedMockData() {
 
   // Always ensure the LLM Proxy exists
   await AgentModel.ensureLlmProxiesForAllOrganizations();
+  await syncBuiltInAgents();
+  // The TRUNCATE above dropped the built-in catalog; without it every
+  // starter policy is refused until the backend restarts.
+  await seedArchestraCatalogAndTools();
 
   const sharedUsers = [
     { id: editorUser.id, name: "editor" },

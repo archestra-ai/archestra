@@ -9,18 +9,20 @@ import {
   type ModelMessage,
   type ToolCallPart,
   type ToolResultPart,
+  type ToolSet,
   type UIMessage,
 } from "ai";
 import config from "@/config";
 import logger from "@/logging";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import type { ChatMessage, ConversationContentKey } from "@/types";
+import { projectCappedToolOutputs } from "@/utils/tool-result-cap";
 import {
   buildContextCompactionStreamData,
   type ContextCompactionResult,
   type ContextCompactionStreamData,
   compactMessagesForChat,
-} from "./context-compaction";
+} from "./compaction/compact-messages";
 import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
 import {
   assertRequestWithinProviderPayloadLimit,
@@ -87,14 +89,14 @@ export async function buildModelMessages(params: {
   /**
    * The conversation's `models` FK, forwarded to compaction so the summary is
    * written by the model the conversation runs on. See
-   * `ContextCompactionParams` in `./context-compaction`.
+   * `ContextCompactionParams` in `./compaction/compact-messages`.
    */
   modelId?: string | null;
   inputModalities?: ModelInputModality[] | null;
   agentLlmApiKeyId?: string | null;
   systemPrompt?: string;
   /** AI SDK tool definitions included in the main model request. */
-  tools?: Record<string, unknown>;
+  tools?: ToolSet;
   abortSignal?: AbortSignal;
   emit: (event: CompactionStreamEvent) => void;
   /**
@@ -133,8 +135,12 @@ export async function buildModelMessages(params: {
     disableCompaction = false,
     anthropicNativeEndpoint = true,
     conversationKey = null,
-    ...compaction
+    ...rest
   } = params;
+  const compaction = {
+    ...rest,
+    messages: projectCappedToolOutputs(rest.messages),
+  };
 
   let compactionStarted = false;
   // Encrypted chats skip auto-compaction outright: a summary is

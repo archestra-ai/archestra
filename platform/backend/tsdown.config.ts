@@ -1,6 +1,6 @@
 // biome-ignore-all lint/suspicious/noConsole: we use console.log for logging in this file
 import { type ChildProcess, spawn } from "node:child_process";
-import { rmSync } from "node:fs";
+import { readdirSync, rmSync } from "node:fs";
 import path from "node:path";
 import { buildSync } from "esbuild";
 import { defineConfig, type UserConfig } from "tsdown";
@@ -304,7 +304,16 @@ export default defineConfig((options: UserConfig) => {
     ],
 
     // Copy SQL migrations and other assets that need to exist at runtime
-    copy: ["src/database/migrations", "src/static"],
+    copy: [
+      "src/database/migrations",
+      "src/static",
+      "src/skills/appa-guide.core.generated.md",
+      ...readdirSync("src/skills")
+        .filter((name) =>
+          /^appa-guide\.contracts\.[\w-]+\.generated\.md$/.test(name),
+        )
+        .map((name) => `src/skills/${name}`),
+    ],
 
     // Only clean if NOT in watch mode, to avoid race conditions during rebuilds where
     // the output directory is deleted while the server process is trying to restart.

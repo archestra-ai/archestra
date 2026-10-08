@@ -8,20 +8,14 @@ import { AgentSelector } from "@/components/agent-selector";
 import { WizardStep } from "@/components/wizard-step";
 import { useProfiles } from "@/lib/agent.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import config from "@/lib/config/config";
-import { ClientPicker } from "./client-grid";
-import { CONNECT_CLIENTS } from "./clients";
-import { ConnectCommandPanel, isScriptClient } from "./connect-command-panel";
-import { ConnectWithAi } from "./connect-with-ai";
+import { isInstallerClientId, visibleClients } from "./clients";
+import { ConnectCommandPanel } from "./connect-command-panel";
 import {
   type ConnectionBaseUrl,
-  resolveAdminDefaultBaseUrl,
-  resolveCandidateBaseUrls,
   resolveEffectiveId,
   resolveInitialClientId,
+  useConnectionBaseUrl,
 } from "./connection-flow.utils";
-import { ConnectionPreview } from "./connection-preview";
-import { ConnectionUrlStep } from "./connection-url-step";
 import { McpClientInstructions } from "./mcp-client-instructions";
 import { ProxyClientInstructions } from "./proxy-client-instructions";
 import {
@@ -83,12 +77,10 @@ export function ConnectionFlow({
   });
   const { data: canReadLlmProxy } = useHasPermissions({ llmProxy: ["read"] });
 
-  const visibleClients = useMemo(() => {
-    if (!shownClientIds) return CONNECT_CLIENTS;
-    const shown = new Set(shownClientIds);
-    // "generic" ("Any client") is always visible regardless of admin config.
-    return CONNECT_CLIENTS.filter((c) => c.id === "generic" || shown.has(c.id));
-  }, [shownClientIds]);
+  const shownClients = useMemo(
+    () => visibleClients(shownClientIds),
+    [shownClientIds],
+  );
 
   // Pre-select a client so the flow never loads blank. URL param wins (for
   // bookmarkable state), then the admin default, then the first visible
@@ -96,49 +88,15 @@ export function ConnectionFlow({
   const initialClientId = resolveInitialClientId({
     urlClientId,
     adminDefaultClientId,
-    visibleClientIds: visibleClients.map((c) => c.id),
+    visibleClientIds: shownClients.map((c) => c.id),
   });
-  const [clientId, setClientId] = useState<string | null>(initialClientId);
-  const client = visibleClients.find((c) => c.id === clientId) ?? null;
-
-  const selectClient = (id: string) => {
-    setClientId(id);
-    // Providers vary per client, so clear any bookmarked provider on switch.
-    updateUrlParams({
-      clientId: id,
-      providerId: null,
-    });
-  };
+  const client = shownClients.find((c) => c.id === initialClientId) ?? null;
 
   const [selectedMcpId, setSelectedMcpId] = useState<string | null>(null);
 
   // Connection base URL — chosen once for the whole page, threaded into each
-  // instruction panel below. Admins can hide individual env URLs from end
-  // users; we filter those out here. Falls back to the admin default, then the
-  // first remaining env URL, then the in-cluster internal URL.
-  const candidateBaseUrls = useMemo(
-    () =>
-      resolveCandidateBaseUrls({
-        externalProxyUrls: config.api.externalProxyUrls,
-        internalProxyUrl: config.api.internalProxyUrl,
-        metadata: connectionBaseUrls,
-      }),
-    [connectionBaseUrls],
-  );
-  const adminDefaultBaseUrl = useMemo(
-    () => resolveAdminDefaultBaseUrl(connectionBaseUrls),
-    [connectionBaseUrls],
-  );
-  // Derived, not stateful: this lets the admin default take effect after the
-  // org data resolves on initial load. Once the user manually picks a URL,
-  // `userBaseUrl` overrides every fallback below.
-  const [userBaseUrl, setUserBaseUrl] = useState<string | null>(null);
-  const baseUrl =
-    (userBaseUrl && candidateBaseUrls.includes(userBaseUrl) && userBaseUrl) ||
-    (adminDefaultBaseUrl &&
-      candidateBaseUrls.includes(adminDefaultBaseUrl) &&
-      adminDefaultBaseUrl) ||
-    candidateBaseUrls[0];
+  // instruction panel below.
+  const baseUrl = useConnectionBaseUrl(connectionBaseUrls);
 
   const handleMcpSelect = (id: string) => {
     setSelectedMcpId(id);
@@ -160,20 +118,13 @@ export function ConnectionFlow({
   const urlProvider: SupportedProvider | null =
     urlProviderId && isSupportedProvider(urlProviderId) ? urlProviderId : null;
 
-  const promptClient =
-    !searchParams.get("connectRequest") &&
-    (client?.id === "claude-code" ||
-      client?.id === "cursor" ||
-      client?.id === "codex" ||
-      client?.id === "copilot-cli" ||
-      client?.id === "opencode");
-
   const marketplaceVisible = useSkillsMarketplaceVisible(client);
   const skillsVisible = skillsEnabled && marketplaceVisible;
 
   // Manual flow (n8n / Any client): one wizard-rail entry per instruction
   // block, numbered after the client step.
-  const manualClient = client && !isScriptClient(client.id) ? client : null;
+  const manualClient =
+    client && !isInstallerClientId(client.id) ? client : null;
   const manualSteps: {
     key: string;
     title: string;
@@ -181,21 +132,6 @@ export function ConnectionFlow({
     content: ReactNode;
   }[] = [];
   if (manualClient) {
-    if (candidateBaseUrls.length > 1) {
-      manualSteps.push({
-        key: "endpoint",
-        title: "Select an endpoint",
-        content: (
-          <ConnectionUrlStep
-            bare
-            candidateUrls={candidateBaseUrls}
-            metadata={connectionBaseUrls}
-            value={baseUrl}
-            onChange={setUserBaseUrl}
-          />
-        ),
-      });
-    }
     if (canReadMcpGateway) {
       manualSteps.push({
         key: "mcp",
@@ -254,38 +190,9 @@ export function ConnectionFlow({
 
   return (
     <div className="flex flex-col">
-      {/* Step 1 — Client */}
-      {!searchParams.get("connectRequest") && (
-        <WizardStep n={1} title="Choose your app" last={!client}>
-          <ClientPicker
-            clients={visibleClients}
-            selected={clientId}
-            onSelect={selectClient}
-          />
-        </WizardStep>
-      )}
-
       <div inert={isRevalidating} className="contents">
-        {client && promptClient && (
-          <>
-            <WizardStep n={2} title="Review the setup">
-              <ConnectionPreview
-                client={client}
-                gateway={canReadMcpGateway ? (selectedMcp ?? null) : null}
-                proxyAvailable={
-                  llmProxyEnabled && canReadLlmProxy === true && !!llmProxyId
-                }
-                skillsEnabled={skillsEnabled}
-              />
-            </WizardStep>
-            <WizardStep n={3} title={`Connect ${client.label}`} last>
-              <ConnectWithAi client={client} />
-            </WizardStep>
-          </>
-        )}
-
         {/* Steps 2-3 (script clients) — review, then run the command */}
-        {client && !promptClient && isScriptClient(client.id) && (
+        {client && isInstallerClientId(client.id) && (
           <ConnectCommandPanel
             client={client}
             mcpGateways={canReadMcpGateway ? (mcpGateways ?? []) : null}
@@ -298,9 +205,6 @@ export function ConnectionFlow({
             urlProvider={urlProvider}
             onProviderSelect={(p) => updateUrlParams({ providerId: p })}
             baseUrl={baseUrl}
-            candidateBaseUrls={candidateBaseUrls}
-            baseUrlMetadata={connectionBaseUrls}
-            onBaseUrlChange={setUserBaseUrl}
             skillsEnabled={skillsEnabled}
             pluginsEnabled={pluginsEnabled}
           />

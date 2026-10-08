@@ -1,10 +1,10 @@
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import db, { schema } from "@/database";
 import A2aRemoteAgentModel from "@/models/a2a-remote-agent";
 import AgentToolModel from "@/models/agent-tool";
 import { secretManager } from "@/secrets-manager";
-import { createA2aRemoteAgent } from "@/services/a2a-outbound-registry";
-import { afterEach, describe, expect, test } from "@/test";
+import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useRouteTestApp } from "@/test/route-test-app";
 import a2aRemoteAgentRoutes from "./a2a-remote-agent.routes";
 import {
@@ -14,6 +14,13 @@ import {
 
 describe("PUT /api/a2a/remote-agents/:id", () => {
   const ctx = useRouteTestApp(a2aRemoteAgentRoutes);
+  beforeEach(async ({ makeMember }) => {
+    // Grants resolve through membership; an administrator reaches every
+    // external agent through the organization-wide grant.
+    await makeMember(ctx.user.id, ctx.organizationId, {
+      role: ADMIN_ROLE_NAME,
+    });
+  });
   let closeFixture: (() => Promise<void>) | undefined;
 
   afterEach(async () => {
@@ -77,12 +84,7 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
     await expect(secretManager().getSecret(secretId)).resolves.toBeNull();
   });
 
-  test("persists editable fields and visibility without rotating an omitted credential", async ({
-    makeTeam,
-  }) => {
-    const team = await makeTeam(ctx.organizationId, ctx.user.id, {
-      name: "Edited Audience",
-    });
+  test("persists editable fields without rotating an omitted credential", async () => {
     const created = await ctx.app.inject({
       method: "POST",
       url: "/api/a2a/remote-agents",
@@ -104,9 +106,6 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
         name: "After edit",
         description: "Edited description",
         enabled: false,
-        scope: "team",
-        teams: [team.id],
-        users: [ctx.user.id],
       },
     });
 
@@ -114,9 +113,6 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
     expect(response.json()).toMatchObject({
       name: "After edit",
       description: "Edited description",
-      scope: "team",
-      teams: [{ id: team.id, name: "Edited Audience" }],
-      users: [],
       connection: {
         enabled: false,
         authType: "bearer",
@@ -128,6 +124,62 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
       organizationId: ctx.organizationId,
     });
     expect(after?.connection.secretId).toBe(before?.connection.secretId);
+  });
+
+  test("each agent's own grants decide who may edit or delete it", async ({
+    makeMember,
+    makeUser,
+  }) => {
+    const owner = ctx.user;
+    const editor = await makeUser();
+    const viewer = await makeUser();
+    const stranger = await makeUser();
+    for (const user of [editor, viewer, stranger])
+      await makeMember(user.id, ctx.organizationId, { role: MEMBER_ROLE_NAME });
+    const created = await ctx.app.inject({
+      method: "POST",
+      url: "/api/a2a/remote-agents",
+      payload: {
+        name: "Shared target",
+        source: { type: "inline_card", agentCard: makeAgentCard("none") },
+        auth: { type: "none" },
+        initialGrants: [
+          {
+            subject: { type: "user", id: editor.id },
+            actions: ["read", "use", "update"],
+          },
+          { subject: { type: "user", id: viewer.id }, actions: ["read"] },
+        ],
+      },
+    });
+    expect(created.statusCode, created.body).toBe(200);
+    const url = `/api/a2a/remote-agents/${created.json().id}`;
+
+    ctx.user = stranger;
+    expect(
+      (await ctx.app.inject({ method: "PUT", url, payload: { name: "X" } }))
+        .statusCode,
+    ).toBe(404);
+    ctx.user = viewer;
+    expect(
+      (await ctx.app.inject({ method: "PUT", url, payload: { name: "X" } }))
+        .statusCode,
+    ).toBe(403);
+    ctx.user = editor;
+    const edited = await ctx.app.inject({
+      method: "PUT",
+      url,
+      payload: { name: "Edited by grant" },
+    });
+    expect(edited.statusCode, edited.body).toBe(200);
+    expect(edited.json().name).toBe("Edited by grant");
+    expect((await ctx.app.inject({ method: "DELETE", url })).statusCode).toBe(
+      403,
+    );
+    ctx.user = owner;
+    expect((await ctx.app.inject({ method: "DELETE", url })).statusCode).toBe(
+      200,
+    );
   });
 
   test("reuses the stored credential when refreshing a protected Agent Card", async () => {
@@ -235,32 +287,6 @@ describe("PUT /api/a2a/remote-agents/:id", () => {
       connection: { authType: "none", hasCredential: false },
     });
     expect(await fixture.requests()).toHaveLength(1);
-  });
-
-  test("adopts an author when a migrated organization row becomes personal", async () => {
-    const legacy = await createA2aRemoteAgent({
-      organizationId: ctx.organizationId,
-      input: {
-        source: { type: "inline_card", agentCard: makeAgentCard("none") },
-        auth: { type: "none" },
-      },
-    });
-    expect(legacy.authorId).toBeNull();
-    expect(legacy.scope).toBe("org");
-
-    const response = await ctx.app.inject({
-      method: "PUT",
-      url: `/api/a2a/remote-agents/${legacy.id}`,
-      payload: { scope: "personal" },
-    });
-
-    expect(response.statusCode).toBe(200);
-    expect(response.json()).toMatchObject({
-      id: legacy.id,
-      scope: "personal",
-      authorId: ctx.user.id,
-      authorName: ctx.user.name,
-    });
   });
 
   test("returns 404 for an agent outside the current organization", async ({

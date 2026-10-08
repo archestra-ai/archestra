@@ -312,7 +312,9 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/logs") ||
           pathname.startsWith("/mcp/logs") ||
-          pathname.startsWith("/audit/logs"),
+          pathname.startsWith("/audit/logs") ||
+          pathname.startsWith("/connections/logs") ||
+          pathname.startsWith("/consults/logs"),
       },
       {
         title: "Settings",
@@ -327,7 +329,6 @@ export const contentNavGroups: NavGroup[] = [
           "/settings/service-accounts",
           "/settings/agents",
           "/settings/security",
-          "/settings/logs",
           "/settings/llm",
           "/settings/mcp",
           "/settings/skills",

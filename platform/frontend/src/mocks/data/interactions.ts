@@ -90,6 +90,7 @@ export function makeInteraction(
     billingMode: "metered",
     authenticatedAppId: null,
     authenticatedAppName: null,
+    billingTeamId: null,
     request: {
       model: "gpt-4o",
       messages: [{ role: "user", content: "What is the capital of France?" }],

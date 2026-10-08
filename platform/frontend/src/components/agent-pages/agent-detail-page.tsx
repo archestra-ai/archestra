@@ -475,15 +475,15 @@ function AgentDetails({
           ? "clip"
           : "auto"
       }
+      icon={
+        <AgentIcon
+          icon={agent.icon}
+          fallbackType={config.defaultIconType}
+          size={24}
+        />
+      }
       title={
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <AgentIcon
-              icon={agent.icon}
-              fallbackType={config.defaultIconType}
-              size={24}
-            />
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate">{agent.name}</span>
           {isBuiltIn && <BuiltInAgentBadge className="font-normal" />}
           {/* Hidden below sm: the header is one clipped line, and the Start
@@ -549,7 +549,7 @@ function AgentDetails({
             </p>
           )}
           {chatAction.visible && chatAction.href && (
-            <Button variant="outline" asChild>
+            <Button variant="outline" size="sm" asChild>
               <Link href={chatAction.href}>
                 {chatAction.startsRun ? (
                   <TerminalSquare className="h-4 w-4" />
@@ -562,7 +562,7 @@ function AgentDetails({
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon-sm">
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">More actions</span>
               </Button>
@@ -704,6 +704,7 @@ function AgentDetails({
                     <WizardFooter className="sm:justify-end">
                       <Button
                         type="submit"
+                        size="sm"
                         form={formId}
                         disabled={
                           !canSubmit || isGone || isSaving || !formDirty

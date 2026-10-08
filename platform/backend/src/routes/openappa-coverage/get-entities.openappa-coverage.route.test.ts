@@ -72,8 +72,10 @@ describe("GET /api/openappa/coverage/entities", () => {
 
     await expect(
       ToolModel.findCoverageInventory(ctx.organizationId, {
-        userId: ctx.user.id,
-        agentTypes: ["agent", "mcp_gateway"],
+        visibility: {
+          userId: ctx.user.id,
+          agentTypes: ["agent", "mcp_gateway"],
+        },
       }),
     ).resolves.toMatchObject({ entities: expect.any(Array) });
   });
@@ -331,7 +333,7 @@ describe("GET /api/openappa/coverage/entities", () => {
     ]);
   });
 
-  test("the default policy covers the built-in run_command and leaves other built-in tools to the fallback", async ({
+  test("the default policy covers run_command at the root and search_tools, search_files, and load_skill through the archestra battery, and leaves other built-in tools to the fallback", async ({
     makeAgent,
     makeAgentTool,
     makeInternalMcpCatalog,
@@ -347,7 +349,13 @@ describe("GET /api/openappa/coverage/entities", () => {
       organizationId: null,
       name: "Archestra",
     });
-    for (const rawName of ["run_command", "search_tools"]) {
+    for (const rawName of [
+      "run_command",
+      "search_tools",
+      "search_files",
+      "load_skill",
+      "list_skills",
+    ]) {
       const tool = await makeTool({
         catalogId: builtInCatalog.id,
         name: `archestra__${rawName}`,
@@ -371,7 +379,10 @@ describe("GET /api/openappa/coverage/entities", () => {
     );
     expect(sources).toEqual({
       archestra__run_command: "root",
-      archestra__search_tools: "not_covered",
+      archestra__search_tools: "battery",
+      archestra__search_files: "battery",
+      archestra__load_skill: "battery",
+      archestra__list_skills: "not_covered",
     });
   });
 
@@ -412,6 +423,33 @@ describe("GET /api/openappa/coverage/entities", () => {
       rawName: "search_tools",
     });
     await makeAgentTool(agent.id, builtInTool.id);
+
+    const serverList = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/coverage/entities?type=mcp_server&limit=100",
+    });
+    expect(serverList.statusCode).toBe(200);
+    expect(serverList.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: ARCHESTRA_MCP_CATALOG_ID,
+          name: "Archestra",
+          type: "mcp_server",
+          toolCount: 1,
+        }),
+        expect.objectContaining({ id: catalogIds.docs }),
+      ]),
+    );
+    expect(
+      serverList
+        .json()
+        .data.every((entity: { type: string }) => entity.type === "mcp_server"),
+    ).toBe(true);
+    const listedIds = serverList
+      .json()
+      .data.map((entity: { id: string }) => entity.id);
+    expect(listedIds).not.toContain(agent.id);
+    expect(listedIds).not.toContain(gateway.id);
 
     const appCatalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,

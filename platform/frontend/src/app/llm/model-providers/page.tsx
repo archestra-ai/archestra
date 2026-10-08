@@ -24,6 +24,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
+import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { ExternalDocsLink } from "@/components/external-docs-link";
@@ -124,7 +125,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
-  const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
+  const docsUrl = getFrontendDocsUrl("llm-proxy/providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
@@ -361,6 +362,7 @@ export default function ApiKeysPage() {
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
       <Button
+        size="sm"
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >
@@ -852,6 +854,17 @@ export default function ApiKeysPage() {
           ]}
           onActiveSectionChange={setEditSection}
           onSubmit={handleEdit}
+          headerExtra={
+            editingApiKey?.createdBy && (
+              <span className="flex min-w-0 items-center gap-1.5 text-xs text-muted-foreground">
+                <span className="shrink-0">Created by</span>
+                <CreatedByCell
+                  createdBy={editingApiKey.createdBy}
+                  className="max-w-48"
+                />
+              </span>
+            )
+          }
           footer={
             <>
               <DialogCancelButton>Cancel</DialogCancelButton>

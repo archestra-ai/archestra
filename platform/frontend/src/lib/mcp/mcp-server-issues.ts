@@ -199,6 +199,31 @@ export function attentionCatalogIds(
   return ids;
 }
 
+/**
+ * How many items in one facet carry each kind of issue, in declared kind
+ * order, omitting kinds with no items. Counts items, like
+ * `attentionCatalogIds`, so an item with two kinds appears under both and the
+ * per-kind counts may sum to more than the facet total.
+ */
+export function attentionKindCounts(
+  issuesByCatalog: Map<string, McpServerIssue[]>,
+  { audience }: { audience: McpServerAttentionFacet },
+): { kind: McpServerIssueKind; count: number }[] {
+  const counts = new Map<McpServerIssueKind, number>();
+  for (const catalogId of attentionCatalogIds(issuesByCatalog, { audience })) {
+    const kinds = new Set(
+      facetIssues(issuesByCatalog.get(catalogId) ?? [], audience).map(
+        (issue) => issue.kind,
+      ),
+    );
+    for (const kind of kinds) counts.set(kind, (counts.get(kind) ?? 0) + 1);
+  }
+  return MCP_SERVER_ISSUE_KINDS.flatMap(({ kind }) => {
+    const count = counts.get(kind) ?? 0;
+    return count > 0 ? [{ kind, count }] : [];
+  });
+}
+
 export function attentionSortRank(
   issues: McpServerIssue[] | undefined,
 ): number {

@@ -1019,6 +1019,38 @@ class LlmProviderApiKeyModel {
    */
 
   /**
+   * The key for `provider` when no user is acting: the configured key
+   * (`agentLlmApiKeyId`, an agent's own key or the organization default)
+   * when it belongs to this organization and provider, else the
+   * organization-wide key. Mirrors the agent-key rung of `getCurrentApiKey`:
+   * permission flows through whoever configured the key, so no further
+   * access check applies.
+   */
+  static async getOrganizationApiKey(params: {
+    organizationId: string;
+    provider: SupportedProvider;
+    agentLlmApiKeyId?: string | null;
+  }): Promise<LlmProviderApiKey | null> {
+    const { organizationId, provider, agentLlmApiKeyId } = params;
+    if (agentLlmApiKeyId) {
+      const configuredKey =
+        await LlmProviderApiKeyModel.findById(agentLlmApiKeyId);
+      if (
+        configuredKey &&
+        configuredKey.organizationId === organizationId &&
+        configuredKey.provider === provider &&
+        canUseProviderApiKey(configuredKey)
+      ) {
+        return configuredKey;
+      }
+    }
+    return LlmProviderApiKeyModel.findOrganizationWideKey(
+      organizationId,
+      provider,
+    );
+  }
+
+  /**
    * The key for `provider` that the organization at large may use, for
    * resolution with no acting user: a use grant to everyone, or the role
    * grants the conversion wrote for an organization-wide key. Primary first,

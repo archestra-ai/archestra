@@ -13,7 +13,7 @@
  * against PGlite, exactly like mcp-client.test.ts.
  */
 import { sql } from "drizzle-orm";
-import { vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import config from "@/config";
 import {
   _resetContentKeys,
@@ -29,7 +29,6 @@ import {
   ToolModel,
 } from "@/models";
 import { secretManager } from "@/secrets-manager";
-import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { agentOwner } from "@/types";
 import mcpClient from "./mcp-client";
 
@@ -83,7 +82,7 @@ const TOOL_NAME = "github-mcp-server__list_repos";
 describe("McpClient encrypted-chat tool-call redaction", () => {
   let agentId: string;
 
-  beforeEach(async ({ makeOrganization }) => {
+  beforeEach(async () => {
     // Force server-side content encryption at rest OFF so the raw
     // mcp_tool_calls rows show the encrypted-chat redaction marker directly —
     // local .env files may set ARCHESTRA_CONTENT_ENCRYPTION_SECRET, which
@@ -96,7 +95,6 @@ describe("McpClient encrypted-chat tool-call redaction", () => {
 
     const agent = await AgentModel.create({
       name: "EncryptedChat Test Agent",
-      organizationId: (await makeOrganization()).id,
       scope: "org",
       teams: [],
     });

@@ -92,6 +92,12 @@ it("loads the chosen recipient type, excludes existing grants, searches, and add
   await user.click(
     screen.getByRole("combobox", { name: "Permission for Alex Reader" }),
   );
+  // The detail under the list explains the chosen level, then follows the
+  // highlighted one, as it does in every other permission picker.
+  const detail = screen.getByTestId("permission-level-detail");
+  expect(detail).toHaveTextContent("Read this resource");
+  await user.hover(screen.getByRole("option", { name: "Can use" }));
+  expect(detail).toHaveTextContent("Read and use this resource");
   await user.click(screen.getByRole("option", { name: "Can use" }));
   await user.click(screen.getByRole("button", { name: "Add access" }));
   expect(onAdd).toHaveBeenCalledExactlyOnceWith([
@@ -170,9 +176,13 @@ it("choosing the organization goes straight to permission selection and adds onl
     screen.getByRole("button", { name: "Back to recipient types" }),
   );
   await user.click(
-    screen.getByRole("button", { name: "Everyone in the organization" }),
+    screen.getByRole("button", { name: /^Everyone in the organization/ }),
   );
-  expect(screen.getAllByText("Everyone in the organization")).toHaveLength(1);
+  expect(
+    screen.getByRole("combobox", {
+      name: "Permission for Everyone in the organization",
+    }),
+  ).toHaveTextContent("Can view");
   expect(screen.queryByRole("checkbox")).not.toBeInTheDocument();
   expect(screen.queryByText(/selected$/)).not.toBeInTheDocument();
   expect(screen.queryByText("Alex Reader")).not.toBeInTheDocument();
@@ -187,9 +197,14 @@ it("choosing the organization goes straight to permission selection and adds onl
     screen.getByRole("button", { name: "Back to recipient types" }),
   );
   await user.click(
-    screen.getByRole("button", { name: "Everyone in the organization" }),
+    screen.getByRole("button", { name: /^Everyone in the organization/ }),
   );
-  await user.click(screen.getByRole("radio", { name: /^Can use/ }));
+  await user.click(
+    screen.getByRole("combobox", {
+      name: "Permission for Everyone in the organization",
+    }),
+  );
+  await user.click(screen.getByRole("option", { name: "Can use" }));
   await user.click(screen.getByRole("button", { name: "Add access" }));
   expect(onAdd).toHaveBeenCalledExactlyOnceWith([
     {
@@ -200,12 +215,23 @@ it("choosing the organization goes straight to permission selection and adds onl
   ]);
 });
 
+it("disables the organization choice when everyone already has access", async () => {
+  server.use(http.get(endpoint, () => HttpResponse.json(choices)));
+  renderDialog({
+    existingSubjects: [{ type: "organization", id: "*" }],
+  });
+  expect(
+    screen.getByRole("button", { name: /^Everyone in the organization/ }),
+  ).toBeDisabled();
+  expect(screen.getByText("Already has access")).toBeInTheDocument();
+});
+
 it("does not allow organization access when the audience lookup fails or is unavailable", async () => {
   server.use(http.get(endpoint, () => new HttpResponse(null, { status: 503 })));
   renderDialog();
   const user = userEvent.setup();
   await user.click(
-    screen.getByRole("button", { name: "Everyone in the organization" }),
+    screen.getByRole("button", { name: /^Everyone in the organization/ }),
   );
   expect(
     await screen.findByText("Could not load recipients"),

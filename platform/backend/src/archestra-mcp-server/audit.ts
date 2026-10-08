@@ -17,6 +17,9 @@ import KnowledgeBaseModel from "@/models/knowledge-base";
 import KnowledgeBaseConnectorModel from "@/models/knowledge-base-connector";
 import LimitModel from "@/models/limit";
 import McpServerModel from "@/models/mcp-server";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
+import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaYellModel from "@/models/openappa-yell";
 import PluginModel from "@/models/plugin";
 import ScheduleTriggerModel from "@/models/schedule-trigger";
 import SkillModel from "@/models/skill";
@@ -348,11 +351,38 @@ const TOOL_AUDIT_SPECS: Record<string, ArchestraToolAuditSpec> = {
     }),
   },
 
+  resolve_openappa_yell: {
+    resourceType: "openappaYell",
+    action: "openappaYell.updated",
+    idFromArgs: (args) => str(args.id),
+    fetchById: (id, orgId) => OpenAppaYellModel.findByIdForAudit(id, orgId),
+  },
   update_guardrails_policy: {
     resourceType: "guardrailsPolicy",
     action: "guardrailsPolicy.updated",
     useOrganizationAsResource: true,
     fetchById: (id, orgId) => GuardrailsPolicyModel.findByIdForAudit(id, orgId),
+  },
+  bind_guardrails_credential: {
+    resourceType: "openappaCredentialBinding",
+    action: "openappaCredentialBinding.updated",
+    idFromArgs: (args) => str(args.variable),
+    fetchById: (variable, orgId) =>
+      OpenAppaCredentialBindingModel.findByIdForAudit(variable, orgId),
+  },
+  create_guardrails_repository: {
+    resourceType: "organization",
+    action: "organization.updated",
+    useOrganizationAsResource: true,
+    fetchById: (id, orgId) =>
+      OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
+  },
+  connect_guardrails_repository: {
+    resourceType: "organization",
+    action: "organization.updated",
+    useOrganizationAsResource: true,
+    fetchById: (id, orgId) =>
+      OpenAppaGithubSyncModel.findByIdForAudit(id, orgId),
   },
   write_workspace_file: {
     resourceType: "agentRun",

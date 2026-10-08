@@ -3,7 +3,6 @@ import {
   calculatePaginationMeta,
   parseFullToolName,
 } from "@archestra/shared";
-import { parse as parseToml } from "smol-toml";
 import { getUnassignedDiscoverableTools } from "@/archestra-mcp-server/dynamic-tools";
 import { filterToolNamesByPermission } from "@/archestra-mcp-server/rbac";
 import { getAgentTypePermissionChecker } from "@/auth";
@@ -26,6 +25,12 @@ import type {
   CoverageToolsQuery,
 } from "@/types/openappa-coverage";
 import { openappaBatteriesService } from "./batteries";
+import {
+  asRecord,
+  type ToolEntry,
+  toolEntries,
+  toolHeaderLines,
+} from "./policy-text";
 
 /**
  * Which rule of the policy governs each tool reachable through a visible
@@ -51,6 +56,7 @@ class OpenAppaCoverageService {
       ...params,
       visibleCatalogIds: [params.catalogId],
       includeAutoModeTools: false,
+      includeAppCatalogs: true,
     });
     return tools
       .map((row) => row.tool)
@@ -247,6 +253,8 @@ class OpenAppaCoverageService {
         include: battery.include,
         namespaces: battery.namespaces,
         credentials: battery.credentials,
+        benefit: battery.benefit,
+        setup: battery.setup,
         newlyCovered: wouldGovern(battery.policy, serverTools),
         rules: batteryRules(battery.policy, serverTools),
       });
@@ -428,6 +436,8 @@ type CoverageVisibility = {
   autoModePage?: CoverageEntitiesQuery;
   /** Only resolve Auto-mode access for the target whose tools are requested. */
   autoModeEntityId?: string;
+  /** Per-catalog inspection reads app catalogs too; the overview leaves them out. */
+  includeAppCatalogs?: boolean;
 };
 
 /** A rule as it applies to one full tool name, battery rules once per alias target. */
@@ -444,9 +454,8 @@ async function buildReport(
 ): Promise<Report> {
   const [snapshot, inventory] = await Promise.all([
     openappaBatteriesService.coverageSnapshot(organizationId),
-    ToolModel.findCoverageInventory(
-      organizationId,
-      visibility?.userId
+    ToolModel.findCoverageInventory(organizationId, {
+      visibility: visibility?.userId
         ? {
             userId: visibility.userId,
             agentTypes: visibility.agentTypes ?? ["agent", "mcp_gateway"],
@@ -454,7 +463,8 @@ async function buildReport(
               visibility.excludeOtherPersonalTypes ?? [],
           }
         : undefined,
-    ),
+      includeAppCatalogs: visibility?.includeAppCatalogs,
+    }),
   ]);
   const { resolution, rootContent } = snapshot;
   const refused = snapshot.lastError !== null;
@@ -731,11 +741,7 @@ async function buildReport(
   }
   const visibleCatalogIds = new Set(visibility?.visibleCatalogIds ?? []);
   for (const catalog of inventory.catalogs) {
-    if (
-      catalog.id === ARCHESTRA_MCP_CATALOG_ID ||
-      !visibleCatalogIds.has(catalog.id)
-    )
-      continue;
+    if (!visibleCatalogIds.has(catalog.id)) continue;
     const serverTools = toolsByCatalog.get(catalog.id) ?? [];
     entitiesById.set(catalog.id, {
       id: catalog.id,
@@ -783,11 +789,7 @@ function autoModePageEntityIds(
       type: entity.agentType,
     })),
     ...inventory.catalogs
-      .filter(
-        (catalog) =>
-          catalog.id !== ARCHESTRA_MCP_CATALOG_ID &&
-          visibleCatalogIds.has(catalog.id),
-      )
+      .filter((catalog) => visibleCatalogIds.has(catalog.id))
       .map((catalog) => ({
         id: catalog.id,
         name: catalog.name,
@@ -838,50 +840,6 @@ function compareTargets(
 // =============================================================================
 // Parsing
 // =============================================================================
-
-/** One `[[policy.tool]]` entry, as far as coverage reads it. */
-type ToolEntry = {
-  name: string;
-  delta: unknown;
-  requires: unknown;
-  annotator: unknown;
-};
-
-/** Every `[[policy.tool]]` entry with a string name, in text order. */
-function toolEntries(text: string): ToolEntry[] {
-  let document: Record<string, unknown>;
-  try {
-    document = parseToml(text) as Record<string, unknown>;
-  } catch {
-    return [];
-  }
-  const policy = asRecord(document.policy);
-  const tools = Array.isArray(policy?.tool) ? policy.tool : [];
-  return tools.flatMap((tool) => {
-    const entry = asRecord(tool);
-    return entry && typeof entry.name === "string"
-      ? [
-          {
-            name: entry.name,
-            delta: entry.delta,
-            requires: entry.requires,
-            annotator: entry.annotator,
-          },
-        ]
-      : [];
-  });
-}
-
-/**
- * The 1-based line of every `[[policy.tool]]` header. The parser keeps no
- * positions, so the n-th header is the n-th entry's line whenever every entry
- * is written as a header.
- */
-function toolHeaderLines(text: string): number[] {
-  return text
-    .split("\n")
-    .flatMap((line, index) => (TOOL_HEADER.test(line) ? [index + 1] : []));
-}
 
 function splitSelector(name: string): {
   base: string;
@@ -955,12 +913,6 @@ function optionalList<K extends string>(
   return value === null ? {} : ({ [key]: value } as Record<K, string[]>);
 }
 
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return typeof value === "object" && value !== null && !Array.isArray(value)
-    ? (value as Record<string, unknown>)
-    : null;
-}
-
 // =============================================================================
 // Ordering and paging
 // =============================================================================
@@ -987,5 +939,3 @@ function page<T>(
 
 /** A battery rule's name: `mcp/<namespace>/<tool>`. */
 const CANONICAL_RULE_NAME = /^mcp\/([^/]+)\/(.+)$/;
-
-const TOOL_HEADER = /^\s*\[\[\s*policy\s*\.\s*tool\s*\]\]/;

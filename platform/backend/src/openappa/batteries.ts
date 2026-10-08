@@ -4,13 +4,14 @@ import type {
   BatteryPackage as NativeBatteryPackage,
   PolicyEditInput,
 } from "@archestra/openappa-rs";
-import { parseFullToolName } from "@archestra/shared";
+import { matchBatteries, parseFullToolName } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import InternalMcpCatalogModel from "@/models/internal-mcp-catalog";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaEffectivePolicyModel, {
   type EffectivePolicyValues,
 } from "@/models/openappa-effective-policy";
@@ -44,7 +45,6 @@ import type {
   UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
-import { matchBatteries } from "./battery-match";
 import {
   addedGrants,
   bundledEntry,
@@ -100,6 +100,23 @@ class OpenAppaBatteriesService {
       .sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  /** What each battery this organization can include asks of the person setting it up. */
+  async batterySetups(
+    organizationId: string,
+  ): Promise<Map<string, BatterySetup>> {
+    const available = await this.availableBatteries(organizationId);
+    return new Map(
+      [...available].map(([name, { package: battery }]) => [
+        name,
+        {
+          benefit: battery.benefit ?? null,
+          setup: batterySetupSteps(battery),
+          credentials: battery.credentials,
+        },
+      ]),
+    );
+  }
+
   /**
    * The battery each catalog has, or could have: its install when one exists
    * (an active one first), otherwise the strongest available match, as
@@ -150,6 +167,8 @@ class OpenAppaBatteriesService {
           description: found.package.description,
           namespaces: found.package.namespaces,
           credentials: found.package.credentials,
+          benefit: found.package.benefit ?? null,
+          setup: batterySetupSteps(found.package),
           policy: found.package.policy,
         });
     }
@@ -191,7 +210,10 @@ class OpenAppaBatteriesService {
   ): Promise<PolicyDeclarationsView> {
     const { policy, batteries, unusedAliases } =
       await this.current(organizationId);
-    const sync = await OpenAppaGithubSyncModel.find(organizationId);
+    const [sync, bindings] = await Promise.all([
+      OpenAppaGithubSyncModel.find(organizationId),
+      OpenAppaCredentialBindingModel.list(organizationId),
+    ]);
     return {
       batteries,
       unusedAliases,
@@ -206,6 +228,10 @@ class OpenAppaBatteriesService {
               reasons: sync.heldReasons,
             }
           : null,
+      credentialBindings: bindings.map(({ variable, credentialKey }) => ({
+        variable,
+        key: credentialKey,
+      })),
     };
   }
 
@@ -264,6 +290,38 @@ class OpenAppaBatteriesService {
    */
   async recompile(organizationId: string): Promise<EffectivePolicy> {
     return (await this.recompose(organizationId)).policy;
+  }
+
+  /**
+   * Compose `content` as a recompose would were it the root now, writing
+   * nothing: the batteries this deployment holds back compose as the empty
+   * battery. `refusal` is what the runtime refuses, empty when it composes;
+   * `heldBack` names each held-back battery and what brings it back.
+   */
+  async composeInDeployment(params: {
+    organizationId: string;
+    content: string;
+  }): Promise<{ refusal: string[]; heldBack: string[] }> {
+    const { organizationId, content } = params;
+    const [root, installs] = await Promise.all([
+      guardrailsPolicyService.get(organizationId),
+      OpenAppaBatteryInstallModel.list(organizationId),
+    ]);
+    const planned = await this.plan({
+      organizationId,
+      root: { ...root, content },
+      governed: installs.flatMap((install) => install.catalogId ?? []),
+    });
+    const held = heldBack(planned.batteries);
+    const composed = await openappaDeclarations.composeForCheck({
+      root: planned.root.content,
+      resolution: planned.resolution,
+      held: new Set(held.map((battery) => battery.name)),
+    });
+    return {
+      refusal: (composed.content ?? null) === null ? composed.errors : [],
+      heldBack: held.map(heldBackNote),
+    };
   }
 
   async recompileAll(): Promise<void> {
@@ -438,8 +496,8 @@ class OpenAppaBatteriesService {
   }
 
   /**
-   * Bind or unbind one catalog's prefixes for an included battery, or rebind the
-   * credential variables it reads. The include entry stays either way.
+   * Bind or unbind one catalog's prefixes for an included battery. The include
+   * entry stays either way.
    */
   async updateInstall(params: {
     userId: string;
@@ -478,37 +536,15 @@ class OpenAppaBatteriesService {
           organizationId,
           content: latest.content,
         });
-        const edits: PolicyEditInput[] = [];
-        if (catalog !== null)
-          edits.push(
-            ...(await this.catalogBindingEdits({
-              organizationId,
-              resolution,
-              catalog,
-              batteryName: existing.batteryName,
-              namespaces: battery?.namespaces ?? [],
-              enabled: changes.enabled,
-            })),
-          );
-        for (const [variable, key] of Object.entries(
-          changes.credentialBindings ?? {},
-        ))
-          edits.push({ kind: "setCredential", variable, key });
-        // The table is one per organization: a variable another included
-        // battery reads stays bound when this one lets go of it.
-        const readElsewhere = new Set(
-          resolution.entries
-            .filter((entry) => entry.name !== existing.batteryName)
-            .flatMap((entry) => entry.battery?.credentials ?? []),
-        );
-        for (const variable of Object.keys(existing.credentialBindings))
-          if (
-            changes.credentialBindings &&
-            !(variable in changes.credentialBindings) &&
-            !readElsewhere.has(variable)
-          )
-            edits.push({ kind: "setCredential", variable });
-        return edits;
+        if (catalog === null) return [];
+        return this.catalogBindingEdits({
+          organizationId,
+          resolution,
+          catalog,
+          batteryName: existing.batteryName,
+          namespaces: battery?.namespaces ?? [],
+          enabled: changes.enabled,
+        });
       },
     });
     return this.batteryView({
@@ -516,6 +552,48 @@ class OpenAppaBatteriesService {
       name: existing.batteryName,
       catalogId: existing.catalogId,
     });
+  }
+
+  /**
+   * Bind a helper variable to an organization credential, or unbind it, for
+   * every battery that reads it. The binding is stored beside the policy text,
+   * so it needs no text write and is open while the repository owns the text;
+   * a variable the text binds itself is the text's, since its line wins.
+   */
+  async setCredentialBinding(params: {
+    userId: string;
+    organizationId: string;
+    variable: string;
+    key: string | null;
+  }): Promise<PolicyDeclarationsView> {
+    const { userId, organizationId, variable, key } = params;
+    const root = await guardrailsPolicyService.get(organizationId);
+    const { credentials } = await openappaDeclarations.resolve({
+      organizationId,
+      content: root.content,
+    });
+    if (variable in credentials)
+      throw new ApiError(
+        409,
+        `${variable} is set by a [credentials] line in the policy text. Remove its line there to manage it here.`,
+      );
+    if (key === null)
+      await OpenAppaCredentialBindingModel.delete({ organizationId, variable });
+    else {
+      if (!(await this.bindableKeys(organizationId)).has(key))
+        throw new ApiError(
+          400,
+          `${key} is not a credential with an organization value`,
+        );
+      await OpenAppaCredentialBindingModel.upsert({
+        organizationId,
+        variable,
+        credentialKey: key,
+        updatedBy: userId,
+      });
+    }
+    await this.recompose(organizationId);
+    return this.policyDeclarations(organizationId);
   }
 
   /**
@@ -809,13 +887,11 @@ class OpenAppaBatteriesService {
       root,
       governed: installs.flatMap((install) => install.catalogId ?? []),
     });
-    const fingerprint =
-      hash(
-        JSON.stringify({
-          batteries: this.composeInputs({ planned, installs }),
-          credentials: planned.resolution.credentials,
-        }),
-      ) + (root.revision === 0 ? `:${root.contentHash}` : "");
+    const fingerprint = compositionFingerprint({
+      planned,
+      batteries: this.composeInputs({ planned, installs }),
+      root,
+    });
     // Catalogs, credentials or stored packages moved under the policy; only a
     // recomposition can say what the root composes to now.
     if (fingerprint !== stored.installFingerprint)
@@ -844,13 +920,11 @@ class OpenAppaBatteriesService {
             rows: planned.rows,
           });
       const composed = this.composeInputs({ planned, installs });
-      const installFingerprint =
-        hash(
-          JSON.stringify({
-            batteries: composed,
-            credentials: planned.resolution.credentials,
-          }),
-        ) + (root.revision === 0 ? `:${root.contentHash}` : "");
+      const installFingerprint = compositionFingerprint({
+        planned,
+        batteries: composed,
+        root,
+      });
       // Same inputs give the same bytes, so the stored row already is the answer.
       if (
         expected &&
@@ -872,7 +946,8 @@ class OpenAppaBatteriesService {
         };
       }
       const values = await this.compose({
-        root,
+        root: planned.root,
+        planned: planned.batteries,
         composed,
         installFingerprint,
         previousContent: expected?.content ?? null,
@@ -955,11 +1030,13 @@ class OpenAppaBatteriesService {
 
   private async compose(params: {
     root: GuardrailsPolicy;
+    planned: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
     previousContent: string | null;
   }): Promise<EffectivePolicyValues> {
-    const { root, composed, installFingerprint, previousContent } = params;
+    const { root, planned, composed, installFingerprint, previousContent } =
+      params;
     const native = await loadNative();
     const result = await native.composeOpenappaPolicy({
       root: root.content,
@@ -978,13 +1055,19 @@ class OpenAppaBatteriesService {
       contentHash: hash(content),
       rootRevision: root.revision,
       installFingerprint,
-      error: accepted === null ? result.errors.join("\n") : null,
+      error:
+        accepted === null
+          ? [...result.errors, ...heldBack(planned).map(heldBackNote)].join(
+              "\n",
+            )
+          : null,
     };
   }
 
   /**
-   * Resolve what the root declares into the batteries it composes and the install
-   * rows that composition implies, without writing anything.
+   * Resolve what the root declares, with the stored credential bindings applied,
+   * into the batteries it composes and the install rows that composition
+   * implies, without writing anything. The planned root carries the bound text.
    */
   private async plan(params: {
     organizationId: string;
@@ -992,11 +1075,13 @@ class OpenAppaBatteriesService {
     /** Catalogs the organization already governs; read even if no target names them. */
     governed: readonly string[];
   }): Promise<PlannedComposition> {
-    const { organizationId, root, governed } = params;
-    const resolution = await openappaDeclarations.resolve({
+    const { organizationId, governed } = params;
+    const bound = await openappaDeclarations.resolveWithBindings({
       organizationId,
-      content: root.content,
+      content: params.root.content,
     });
+    const { resolution, credentialSource } = bound;
+    const root = { ...params.root, content: bound.content };
     const [prefixes, bindable] = await Promise.all([
       catalogToolPrefixes(organizationId, {
         targets: resolution.aliases.flatMap((alias) => alias.servers),
@@ -1039,6 +1124,7 @@ class OpenAppaBatteriesService {
         (variable) => ({
           variable,
           key: resolution.credentials[variable] ?? null,
+          source: credentialSource[variable] ?? null,
           readers: readers.get(variable) ?? [],
         }),
       );
@@ -1586,6 +1672,12 @@ type AvailableBatteries = Map<
   }
 >;
 
+type BatterySetup = {
+  benefit: string | null;
+  setup: string[];
+  credentials: string[];
+};
+
 /** A catalog's battery: its install, or the match it could install. */
 type CatalogBattery =
   | { battery: string; status: BatteryInstallStatus }
@@ -1597,8 +1689,10 @@ type CatalogBattery =
       include: string;
       description: string;
       namespaces: string[];
-      /** Credential variables `[credentials]` must bind to a runtime credential key. */
+      /** Credential variables that need a runtime credential key bound. */
       credentials: string[];
+      benefit: string | null;
+      setup: string[];
       policy: string;
     };
 
@@ -1697,6 +1791,74 @@ function composes(battery: {
     case "refused":
       return false;
   }
+}
+
+type HeldBackStatus = Exclude<
+  BatteryInstallStatus,
+  "active" | "unrouted" | "refused"
+>;
+type HeldBackBattery = PlannedBattery & { status: HeldBackStatus };
+
+/** The batteries a plan composes as the empty battery. */
+function heldBack(batteries: readonly PlannedBattery[]): HeldBackBattery[] {
+  return batteries.filter(
+    (battery): battery is HeldBackBattery => !battery.composed,
+  );
+}
+
+/**
+ * What a held-back battery declares is absent from the composition, so a
+ * refusal naming one of its declarations is fixed where the status says, not in
+ * the root, which may not redeclare what an included battery declares.
+ */
+function heldBackNote(battery: HeldBackBattery): string {
+  return `battery ${JSON.stringify(battery.name)} is held back (${battery.status}), so nothing it declares is composed; bring it back rather than redeclaring what it declares in the root: ${heldBackRemedy(battery)}`;
+}
+
+function heldBackRemedy(battery: HeldBackBattery): string {
+  switch (battery.status) {
+    case "unavailable":
+      return "no battery package answers its include entry, or another entry answers the same battery";
+    case "missing_credentials":
+      return "bind each credential it reads to a runtime credential key with an organization value";
+    case "naming_conflict":
+      return "point its [server_aliases] targets at tool prefixes exactly one MCP server carries";
+    case "server_missing": {
+      const unserved = battery.servers
+        .filter((server) => server.catalogId === null)
+        .map((server) => JSON.stringify(server.target));
+      return unserved.length === 0
+        ? "point a [server_aliases] target at its namespaces"
+        : `no MCP server in this deployment carries the tool prefix ${unserved.join(", ")}; install or restore that server, or point the alias at one that exists`;
+    }
+  }
+}
+
+/**
+ * What a stored composition answers: the batteries it composed, the credential
+ * table and, when any is held back, the statuses its refusal explains.
+ */
+function compositionFingerprint(params: {
+  planned: PlannedComposition;
+  batteries: ComposeBatteryInput[];
+  root: GuardrailsPolicy;
+}): string {
+  const { planned, batteries, root } = params;
+  const held = heldBack(planned.batteries).map(heldBackNote);
+  return (
+    hash(
+      JSON.stringify({
+        batteries,
+        credentials: planned.resolution.credentials,
+        ...(held.length > 0 ? { held } : {}),
+      }),
+    ) + (root.revision === 0 ? `:${root.contentHash}` : "")
+  );
+}
+
+/** The native package joins its one-line setup steps with newlines. */
+function batterySetupSteps(battery: NativeBatteryPackage): string[] {
+  return battery.setup?.split("\n") ?? [];
 }
 
 /** A battery with no tool namespace and at least one annotator governs the organization. */

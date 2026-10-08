@@ -63,6 +63,7 @@ import config, {
   parseK8sResourceQuantity,
   parseKeepAliveTimeoutMs,
   parseLlmProxyPlugins,
+  parseLogContentMode,
   parseLogFormat,
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -3246,6 +3247,30 @@ describe("betaFeatureEnabled", () => {
     expect(betaFeatureEnabled("TRUE")).toBe(false);
     expect(betaFeatureEnabled("yes")).toBe(false);
     expect(betaFeatureEnabled("1")).toBe(false);
+  });
+});
+
+describe("parseLogContentMode", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  test("defaults to full content when unset", () => {
+    expect(parseLogContentMode(undefined)).toBe("full");
+    expect(parseLogContentMode("  ")).toBe("full");
+    expect(logger.warn).not.toHaveBeenCalled();
+  });
+
+  test("accepts both modes, ignoring case and whitespace", () => {
+    expect(parseLogContentMode("full")).toBe("full");
+    expect(parseLogContentMode(" METADATA_ONLY ")).toBe("metadata_only");
+  });
+
+  test("an unrecognized value stores metadata only and warns", () => {
+    expect(parseLogContentMode("metadata-only")).toBe("metadata_only");
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining("ARCHESTRA_LOGS_CONTENT_MODE"),
+    );
   });
 });
 

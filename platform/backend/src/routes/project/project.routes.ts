@@ -5,6 +5,7 @@ import {
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
   PROJECT_NAME_MAX_LENGTH,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
   ResourcePermissionGrantSchema,
   RouteId,
 } from "@archestra/shared";
@@ -272,6 +273,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
             "Lifecycle slice: `active` (default) or `deleted` (project admins " +
               "only; org-wide soft-deleted projects for the restore view).",
           ),
+          access: ResourceAccessQuerySchema,
         }),
         response: constructResponseSchema(z.array(ProjectListItemSchema)),
       },
@@ -300,6 +302,7 @@ const projectRoutes: FastifyPluginAsyncZod = async (fastify) => {
         search: query.search,
         status: query.status,
         labelFilteredIds,
+        access: query.access,
       });
     },
   );

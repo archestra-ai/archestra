@@ -1,6 +1,6 @@
 {
   "name": "archestra-platform",
-  "version": "1.4.0-rc.31",
+  "version": "1.4.0-rc.34",
   "description": "Enterprise MCP platform",
   "author": "Archestra",
   "engines": {
@@ -23,6 +23,7 @@
     "test:e2e": "turbo test:e2e",
     "test:e2e:ui": "turbo test:e2e:ui",
     "test:e2e:lite:up": "scripts/e2e-lite.sh up",
+    "docs:screenshots": "pnpm --filter @archestra/docs-screenshots capture",
     "test:e2e:lite": "scripts/e2e-lite.sh test",
     "test:e2e:lite:down": "scripts/e2e-lite.sh down",
     "test:integration": "turbo test:integration",

@@ -1,6 +1,7 @@
 "use client";
 
 import {
+  buildCustomAgentRuntime,
   getAgentRuntimeAllowedProtocols,
   TOOL_TRANSFER_CREDENTIAL_SHORT_NAME,
 } from "@archestra/shared";
@@ -36,6 +37,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useFeature } from "@/lib/config/config.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useRuntimeCredentials } from "@/lib/runtime-credentials.query";
@@ -76,20 +78,7 @@ export type AgentRuntimeConfig = {
 };
 
 export function defaultAgentRuntime(): AgentRuntimeConfig {
-  return {
-    image: "",
-    command: null,
-    inferenceProtocol: "openai_responses",
-    backend: "kubernetes",
-    steerMode: "pipe",
-    privileged: false,
-    resources: null,
-    environment: null,
-    credentials: null,
-    ttlHours: null,
-    maxCostUsd: null,
-    idleTimeoutMinutes: null,
-  };
+  return buildCustomAgentRuntime({ image: "" });
 }
 
 export function AgentRuntimeFields({
@@ -541,7 +530,7 @@ function AgentRuntimeContainerOptions({
       className="rounded-md border"
     >
       <CollapsibleTrigger asChild>
-        <button
+        <UnstyledButton
           type="button"
           className="flex w-full items-center gap-3 rounded-md px-4 py-3 text-left outline-none transition-colors hover:bg-muted/50 focus-visible:ring-[3px] focus-visible:ring-ring/50"
         >
@@ -560,7 +549,7 @@ function AgentRuntimeContainerOptions({
               open && "rotate-180",
             )}
           />
-        </button>
+        </UnstyledButton>
       </CollapsibleTrigger>
       <CollapsibleContent className="space-y-5 border-t px-4 py-4">
         <div className="grid gap-4 sm:grid-cols-2">

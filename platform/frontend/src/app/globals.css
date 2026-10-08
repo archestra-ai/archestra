@@ -31,6 +31,12 @@
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
   --color-sidebar: var(--sidebar);
+  --color-sidebar-emphasis: var(--sidebar-emphasis);
+  --color-sidebar-chip: var(--sidebar-chip);
+  --color-sidebar-track: var(--sidebar-track);
+  --color-raised: var(--raised);
+  --color-sidebar-attention: var(--sidebar-attention);
+  --color-sidebar-attention-foreground: var(--sidebar-attention-foreground);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
   --color-chart-3: var(--chart-3);
@@ -85,6 +91,7 @@
   --color-destructive-foreground: var(--destructive-foreground);
   --color-terminal: var(--terminal);
   --color-terminal-elevated: var(--terminal-elevated);
+  --color-terminal-selected: var(--terminal-selected);
   --color-terminal-foreground: var(--terminal-foreground);
   --color-terminal-muted: var(--terminal-muted);
   --color-terminal-comment: var(--terminal-comment);
@@ -126,14 +133,28 @@
      so each of the 24 selectable themes gets a block in its own palette, and
      derived *from the surface* rather than from the theme's text tokens so the
      contrast holds without per-theme tuning. --terminal-anchor is the far end
-     of the theme's range; it is the only value dark mode overrides.
-     terminal-surface.test.ts checks the resulting ratios for every theme. */
+     of the theme's range; dark mode overrides it and the surface tokens.
+     terminal-surface.test.ts checks the resulting ratios for every theme.
+     Light mode follows the usual elevation model: the block is a raised
+     card, near-white like --raised and never darker than the tinted page,
+     with the soft --border edge; a grey "well" there read as sunken and put
+     white controls inside something darker. Dark mode keeps the darker well
+     mixed from --card. */
   --terminal-anchor: black;
-  --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
+  /* Light-mode fill for raised elements that sit on a tinted surface: code
+     surface actions, selected tabs, selected segments. Many light themes
+     tint --background and --card, so "raised" in either matched the page;
+     this pulls the card 80% of the way to white so it reads as the
+     lightest thing on screen. Dark mode maps it to --card. */
+  --raised: color-mix(in oklab, var(--card) 20%, white);
+  --terminal: color-mix(in oklab, var(--card) 20%, white);
   --terminal-foreground: color-mix(in oklab, var(--foreground) 74%, var(--terminal-anchor));
   /* Raised fill so controls on the surface read as buttons. */
   --terminal-elevated: color-mix(in oklab, var(--terminal) 93%, var(--terminal-foreground));
-  --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
+  /* Selected tab on the surface: far enough from it to read as selected in
+     every theme and mode, close enough that the text still clears 4.5:1. */
+  --terminal-selected: color-mix(in oklab, var(--terminal) 80%, var(--terminal-foreground));
+  --terminal-edge: var(--border);
   --terminal-muted: color-mix(in oklab, var(--terminal-foreground) 85%, var(--terminal));
   --terminal-comment: color-mix(in oklab, var(--terminal-foreground) 78%, var(--terminal));
   --terminal-emphasis: var(--terminal-anchor);
@@ -141,10 +162,32 @@
      theme's surface while still reading as green/red. */
   --terminal-success: color-mix(in oklab, #22c55e 42%, var(--terminal-foreground));
   --terminal-destructive: color-mix(in oklab, #ef4444 40%, var(--terminal-foreground));
+
+  /* High-contrast ink for small sidebar chips and selected segments, pushed
+     past --sidebar-foreground so it clears 4.5:1 against --sidebar on themes
+     whose own sidebar text does not. terminal-surface.test.ts checks it. */
+  --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, black);
+  /* Soft tinted fill for light-mode sidebar chips ("New"/"Beta"): a chip reads
+     as a label through its fill, so it needs no dark outline. */
+  --sidebar-chip: color-mix(in oklab, var(--sidebar-emphasis) 8%, var(--sidebar));
+  /* Track of the sidebar's segmented AI/Studio toggle: pulled toward the
+     sidebar text so it never matches the sidebar, whatever --muted is. */
+  --sidebar-track: color-mix(in oklab, var(--sidebar-foreground) 10%, var(--sidebar));
+  /* Sidebar "needs action" signals (attention count, onboarding dot), drawn
+     from the theme's --destructive hue instead of a fixed red. The ink is
+     pushed toward the far end of the range so it clears 4.5:1 on the tinted
+     fill in every theme; terminal-surface.test.ts checks it. */
+  --sidebar-attention-foreground: color-mix(in oklab, var(--destructive) 55%, black);
+  --sidebar-attention: color-mix(in oklab, var(--destructive) 12%, var(--sidebar));
 }
 
 html.dark {
+  --raised: var(--card);
   --terminal-anchor: white;
+  --terminal: color-mix(in oklab, var(--card) 95%, var(--foreground));
+  --terminal-edge: color-mix(in oklab, var(--terminal) 72%, var(--terminal-foreground));
+  --sidebar-emphasis: color-mix(in oklab, var(--sidebar-foreground) 80%, white);
+  --sidebar-attention-foreground: color-mix(in oklab, var(--destructive) 55%, white);
 }
 
 @layer base {
@@ -542,143 +585,6 @@ div:has(> [data-testid="emoji-picker-list-header"]) {
     opacity: 0;
   }
 }
-
-/* OpenAPPA stays an ordinary pinned row; only its install action is featured. */
-button.plugin-featured-action {
-  --plugin-featured-spark: color-mix(
-    in oklab,
-    white 40%,
-    var(--primary) 60%
-  );
-  position: relative;
-  overflow: hidden;
-  border-color: color-mix(in oklab, var(--primary) 45%, transparent);
-  background-color: color-mix(in oklab, var(--primary) 5%, transparent);
-  /* Position the strips from the real border rather than the inset padding
-     box, so their orbit follows the control's outline. */
-  background-origin: border-box;
-  background-image:
-    linear-gradient(
-      90deg,
-      transparent,
-      var(--plugin-featured-spark) 50%,
-      transparent
-    ),
-    linear-gradient(
-      180deg,
-      transparent,
-      var(--plugin-featured-spark) 50%,
-      transparent
-    ),
-    linear-gradient(
-      90deg,
-      transparent,
-      var(--plugin-featured-spark) 50%,
-      transparent
-    ),
-    linear-gradient(
-      180deg,
-      transparent,
-      var(--plugin-featured-spark) 50%,
-      transparent
-    );
-  background-size:
-    8px 2px,
-    2px 8px,
-    8px 2px,
-    2px 8px;
-  background-repeat: no-repeat;
-  background-position:
-    -8px 0,
-    100% -8px,
-    calc(100% + 8px) 100%,
-    0 calc(100% + 8px);
-  animation: plugin-featured-action-border-spark 6s linear infinite;
-}
-
-button.plugin-featured-action:hover {
-  background-color: color-mix(in oklab, var(--primary) 9%, transparent);
-}
-
-/* One perimeter tour, then rest. The shorter cycle keeps the small action
-   noticeable without turning it into constant motion. */
-@keyframes plugin-featured-action-border-spark {
-  0%,
-  20% {
-    background-position:
-      -8px 0,
-      100% -8px,
-      calc(100% + 8px) 100%,
-      0 calc(100% + 8px);
-  }
-  35% {
-    background-position:
-      calc(100% + 8px) 0,
-      100% -8px,
-      calc(100% + 8px) 100%,
-      0 calc(100% + 8px);
-  }
-  50% {
-    background-position:
-      calc(100% + 8px) 0,
-      100% calc(100% + 8px),
-      calc(100% + 8px) 100%,
-      0 calc(100% + 8px);
-  }
-  65% {
-    background-position:
-      calc(100% + 8px) 0,
-      100% calc(100% + 8px),
-      -8px 100%,
-      0 calc(100% + 8px);
-  }
-  80%,
-  100% {
-    background-position:
-      calc(100% + 8px) 0,
-      100% calc(100% + 8px),
-      -8px 100%,
-      0 -8px;
-  }
-}
-
-button.plugin-featured-action::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 0;
-  width: 60%;
-  pointer-events: none;
-  background: linear-gradient(
-    100deg,
-    transparent 0%,
-    color-mix(in oklab, var(--primary) 20%, transparent) 35%,
-    color-mix(in oklab, white 12%, var(--primary) 30%) 50%,
-    color-mix(in oklab, var(--primary) 20%, transparent) 65%,
-    transparent 100%
-  );
-  transform: translate3d(-150%, 0, 0) skewX(-16deg);
-  animation: plugin-featured-action-glint 5s ease-in-out infinite;
-}
-
-@keyframes plugin-featured-action-glint {
-  0% {
-    transform: translate3d(-150%, 0, 0) skewX(-16deg);
-  }
-  18%,
-  100% {
-    transform: translate3d(260%, 0, 0) skewX(-16deg);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  button.plugin-featured-action,
-  button.plugin-featured-action::after {
-    animation: none;
-  }
-}
-
 
 /* ── Feedback pop-up ──
    Friendly greeting: the hand waves twice when the pop-up opens, then rests. */

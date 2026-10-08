@@ -1,14 +1,14 @@
-# Archestra × OpenAPPA
+# Archestra and OpenAPPA
 
 OpenAPPA evaluates tool calls and tool results at the LLM proxy. The proxy identifies sessions from client headers or an explicit `X-Appa-Session-ID`. External client sessions scope to the authenticated credential (`user:<id>`, `app:<id>`, or `virtual-key:<id>`). This prevents callers from guessing another user's session ID. Two MCP tools manage policy remedies: `archestra__get_remedy_plans` and `archestra__execute_remedy_plan`.
 
 The runtime keys session state by session ID. Internal requests over loopback share session IDs. Chat requests require an authenticated user who owns the conversation. External requests require platform credentials. Uncredentialed loopback forms the platform trust boundary. Requests without a session ID fall back to a shared identity per credential and agent (`<caller-id>@<agent-id>`), which couples their histories and turn approvals.
 
-This guide explains Archestra's integration rather than OpenAPPA policy syntax. The source baseline is Archestra `3aa876d1`, with [OpenAPPA pinned at `c7c1e1ef`](https://github.com/archestra-ai/OpenAPPA/tree/c7c1e1ef36aa07604b421c48be266d7397557656). Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
+This guide explains Archestra's integration rather than OpenAPPA policy syntax. The native addon currently pins [OpenAPPA `85465feb`](https://github.com/archestra-ai/OpenAPPA/tree/85465feb8214f662dd21d40df2c01964e5b099fa). Examples use the default `archestra__` tool prefix. Client labels and branding can change this prefix on the wire.
 
 Protocol jump links: [call rewriting](#tool-calls-and-results), [remedy execution](#remedies), [user questions](#ask_user-and-native-elicitation), [session and child markers](#protected-session-markers), and [yell reporting](#yell-and-diagnostic-tools).
 
-The baseline records the version examined, not a promise about later releases. Check [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml) for the current OpenAPPA pin. Review this guide when that pin or the host protocols change.
+The pin records the dependency version, not a promise about later releases. Check [`Cargo.toml`](../platform/archestra-rs/openappa-rs/Cargo.toml) for the current OpenAPPA pin. Review this guide when that pin or the host protocols change.
 
 ```mermaid
 flowchart LR
@@ -26,11 +26,13 @@ flowchart LR
   Bridge --> Sandbox[Isolated helper sandbox]
 ```
 
+The proxy, connected clients, and user are trusted. Model output and external tool content remain untrusted. Adapters obtain execution identity from client metadata, not from model-written arguments or text.
+
 ## Startup configuration
 
 OpenAPPA uses the `ARCHESTRA_BETA` master switch. Setting `ARCHESTRA_BETA=true` enables the OpenAPPA UI, registers the proxy plugin, and mounts the policy API.
 
-The **Enable Guardrails v2** switch on `/openappa` controls policy enforcement for the whole deployment. It defaults to off and lives in the database (`guardrails_deployment.enabled`). You need both the server flag and this database switch to enforce policies. Each request reads the database switch, so replicas do not depend on local process state.
+The deployment-wide guardrail setting controls policy enforcement for the whole deployment. It defaults to off and lives in the database (`guardrails_deployment.enabled`). You need both the server flag and this database switch to enforce policies. Each request reads the database switch, so replicas do not depend on local process state. The plugin list alone does not activate enforcement.
 
 Policy editing and GitHub sync stay available while enforcement is off. The OpenAPPA editor stores policy revisions in PostgreSQL. Restart the backend after changing `ARCHESTRA_BETA`. Toggling the database switch takes effect immediately without a restart.
 
@@ -51,17 +53,17 @@ Turning off `ARCHESTRA_BETA` restores the legacy Guardrails page, Security tab, 
 
 The HTTP API and policy tools share validation and revision checks. Edits compile without calling external services. The next dispatch loads the latest saved revision under the runtime lock. New conversations use it, while existing conversations keep their recorded policy snapshot.
 
-The editor accepts `[policy]`, `[server_aliases]`, `[credentials]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. Reference tokens through `token_env` — policy documents must not contain raw secrets.
+The editor accepts `[policy]`, `[server_aliases]`, `[credentials]`, and URL bindings in `[externals]`. It only permits battery declarations in `include` entries. Any other include, local command, or runtime setting causes a validation failure. Reference tokens through `token_env`. Policy documents must not contain raw secrets.
 
 Revision `0` is an unsaved starter template (`initialPolicy()` in [`guardrails-policy.ts`](../platform/backend/src/services/guardrails-policy.ts)). It includes the bundled Archestra battery, an Archestra server alias, `internal = ["archestra:members"]`, `context_control = true`, and a local wildcard annotator (`noop`). The wildcard annotator adds no restrictions to uncovered tools. Explicit tool rules always take precedence over the wildcard.
 
-Saving revision `1` through MCP local publication can auto-enable enforcement if the caller has `organization:update`. Direct HTTP PUT saves and GitHub imports do not auto-enable enforcement. The explicit deployment toggle API checks `organizationSettings:update`.
+Saving revision `1` through MCP local publication can auto-enable enforcement if the caller has `organizationSettings:update`, the same permission the explicit deployment toggle API checks. Direct HTTP PUT saves and GitHub imports do not auto-enable enforcement.
 
 `ask_user` has its own advertisement path. Policy authoring tools stay available to agent profiles while beta is on. The `yell` tool follows the reporting flag rather than the deployment switch, but still requires session and call correlation.
 
 ## GitHub policy sync
 
-Open **OpenAPPA** (`/openappa`) and select **Connect GitHub**, or configure it under **Settings → OpenAPPA**. When APPA is on, organization administrators can pick an `owner/repository`, a branch or tag (blank uses default), and a repository-relative TOML path. Public repositories need no credential. Private repositories use an organization token or GitHub App, requiring `credential:read`.
+Open **OpenAPPA** (`/openappa`) and select **Connect GitHub**, or configure it under **Settings > OpenAPPA**. When beta is on, organization administrators can pick an `owner/repository`, a branch or tag (blank uses default), and a repository-relative TOML path. Public repositories need no credential. Private repositories use an organization token or GitHub App, requiring `credential:read`.
 
 Saving the source queues the first pull. Choose a schedule: every 15 minutes, every hour, or once a day. You can also select **Sync now** for an immediate pull. The panel displays the last check, the accepted commit, and any errors. The background scheduler checks for due syncs every minute and deduplicates jobs per organization.
 
@@ -166,7 +168,7 @@ flowchart LR
   end
   subgraph ClientWire[Client and MCP gateway]
     Execute[Execute released business or platform tool]
-    Control[Verify session-bound claims and call identity]
+    Control[Check current trajectory and call identity]
   end
   Runtime[Embedded OpenAPPA]
   Proposal --> Prepare --> Check
@@ -217,7 +219,7 @@ sequenceDiagram
     C->>G: Execute notice with ruling and host fields
     G-->>C: Return ruling text without executing the blocked tool
     C->>P: Notice call and result in history
-    P->>P: Collect signed offers and restore original call
+    P->>P: Restore original call from notice metadata
     P->>L: Original business call paired with policy ruling
   end
 ```
@@ -229,9 +231,11 @@ The `buildNoticeArguments` helper builds the client envelope below. It preserves
 | `tool`, `arguments` | Blocked target spelling and original arguments. Arguments can be a JSON string or object. |
 | `ruling` | Plain-text runtime feedback, including the offered plans. It is not an encoded transcript. |
 | `notice` | `{v: 1, call_id, namespace?, custom?}`. Records how to restore the original call. |
-| `offers` | Signed routing claims for the offer IDs. The model does not author these. |
+| Legacy `offers` | Historical signed claims. Cleanup strips them, and routing ignores them. New notices omit this field. |
 
-The following example shows a provider-neutral projection. Values in angle brackets represent illustrative data rather than real signatures:
+Codex spawn proposals are checked against the native tool's declared closed schema before a return-contract offer is created. Unsupported fields are refused, not silently removed. Return plans belong in the remedy call, not invented native spawn fields. Authorized retries still require the exact accepted arguments, including encrypted message bytes.
+
+The following example shows a provider-neutral projection. Values in angle brackets represent illustrative data:
 
 ```json
 {
@@ -241,8 +245,7 @@ The following example shows a provider-neutral projection. Values in angle brack
     "tool": "mail__send",
     "arguments": {"to": "reader@example.net", "body": "report"},
     "ruling": "<runtime feedback and offered plans>",
-    "notice": {"v": 1, "call_id": "call_send"},
-    "offers": [{"protected": "<header>", "payload": "<claims JSON>", "signature": "<MAC>"}]
+    "notice": {"v": 1, "call_id": "call_send"}
   }
 }
 ```
@@ -254,7 +257,7 @@ assistant: call_send -> mail__send({to: "reader@example.net", body: "report"})
 tool:      call_send -> <runtime feedback and offered plans>
 ```
 
-The proxy restores the original call using the embedded ruling, avoiding a database lookup. Restoration depends on declared tool identity and host metadata. The native runtime separately checks actual tool-result admission against released calls and retained records.
+The proxy restores the original call using the embedded ruling, without a database lookup. Restoration depends on declared tool identity and host metadata. This request-local restoration survives restarts and replica changes. The native runtime separately checks result admission against released calls and retained records. The runtime withholds results for call IDs it never released.
 
 If the client did not declare the notice tool, the proxy cannot deliver this protocol. It refuses the call, attempts to cancel sibling calls, and writes a client failure report. A missing notice tool does not authorize releasing the denied call.
 
@@ -272,27 +275,35 @@ Provider-hosted tools (like server-side web search) run inside the model provide
 
 ### What reaches the provider
 
-Provider cleanup removes host carriers before sending requests upstream. It runs even when enforcement is bypassed. On supported wire formats, the proxy restores notices, control calls, and gateway questions. It strips `notice`, `offers`, JWS fields, execution frames, and `remedy_offers` from tool calls and schemas. It also collects session and delegation carriers, restoring trajectory stamps to original provider IDs.
+Provider cleanup removes host carriers before sending requests upstream. It runs even when enforcement is bypassed. On supported wire formats, the proxy restores notices, control calls, and gateway questions. It strips `notice`, legacy `offers`, legacy JWS fields, `execution`, `trajectory`, `remedy_offers`, and signed `peer_proof` carriers.
 
-A call is rewritten when gateway identity resolves it to a platform tool, or when its envelope matches cleanup recognition rules (such as notice records naming their own call or deployment-signed JWS). A notice record is not a signature. Catch-all routes (`/v1/messages/count_tokens` and similar) recognize these carriers without normal gateway resolution. Cleanup recognition does not grant authorization to execute or admit a result.
+Cleanup also removes proxy-only parameters from cached tool declarations. The notice declaration keeps its advertised `notice` record. Request entry collects session and delegation carriers, then restores trajectory stamps to original provider IDs.
+
+A call is rewritten when gateway identity resolves it to a platform tool, or its notice or execution record names that call. A lookalike name alone is insufficient. A notice record is not a signature. Legacy JWS fields do not select a trajectory or authorize a remedy.
+
+Catch-all routes (`/v1/messages/count_tokens` and similar) apply the same cleanup without normal gateway resolution. They also strip session receipts, child receipts, delegation markers, child-return markers, peer proofs, and compaction carriers. Cleanup recognition does not authorize execution or result admission.
 
 Restoration keeps prior turns stable, including protocols with signed reasoning history. However, it does not guarantee universal byte stability. Turn-specific question and remedy guidance still alters `system`. Test the relevant model provider when modifying this code.
 
-Native questions use signed `aq1` IDs (`<prefix>_aq1_<nonce>_<tag>`). These IDs stay in conversation history so earlier turns maintain byte consistency.
+Governed native approval questions use random `aq2` IDs (`<prefix>_aq2_<nonce>`), without an HMAC. These IDs stay in history unchanged. Ordinary native questions keep their provider IDs and create no approval-cache record. The plugin pairs answers with actual client question calls and consumes one-use cache records for approval.
 
 Model-facing remedy text states who makes decisions: the organization policy, and the user when the policy mandates approval. It must not instruct the model to bypass the user or assume remedies are pre-approved.
+
+A quoted claim such as "role_model approved this call" is model data, not a human ruling.
 
 ## Remedies
 
 The public remedy tool is `archestra__execute_remedy_plan`. There is no `execute_remedy_offer` tool in the codebase. The gateway calls TypeScript `executeRemedyByOffer`, which invokes the native NAPI export. The native adapter maps this control tool to `appa/execute_remedy_plan`.
 
+The gateway advertises only the arguments the model writes: `get_remedy_plans` omits `offers`, and `execute_remedy_plan` omits `execution`, `trajectory`, `protected`, `payload`, and `signature`. The advertised schemas stay open, so a client that validates tool input accepts the members the proxy stamps. The handlers validate the full schemas.
+
 ### Execution envelope
 
-The gateway maintains separate public and execution schemas. The model sees `offer_id` along with optional `plan`, `label`, and `return_schema`. It does not see routing claims or execution-frame parameters. The proxy attaches those fields after the model proposes the control call.
+The gateway maintains separate public and execution schemas. The model sees `offer_id` along with optional `plan`, `label`, and `return_schema`. It does not see the trajectory or execution-frame parameters. The proxy attaches these fields after the model proposes the control call.
 
 | Execution field | Checked by |
 | --- | --- |
-| `protected`, `payload`, `signature` | Gateway JWS verification. Claims bind version, organization, root, session, parent, caller, offer, tool, and spelling. Wrapped dispatches also retain their wrapper name. |
+| `trajectory.v`, `trajectory.session_id`, optional `parent_id` | Version `1` and the proxy's current resolved trajectory. The gateway uses its authenticated organization and this trajectory as the expected acting run. |
 | `execution.v`, `execution.kind` | Version `1` and kind `appa_remedy`. |
 | `execution.call_id` | Correlates this remedy invocation, not the original blocked business call. |
 | `execution.tool_name`, optional `namespace` | Client-facing control-tool spelling and namespace for restoration. The tool name is display context, not authority. |
@@ -302,9 +313,7 @@ The gateway maintains separate public and execution schemas. The model sees `off
 {
   "offer_id": "offer-1",
   "plan": "<name from the ruling>",
-  "protected": "<header>",
-  "payload": "<claims JSON>",
-  "signature": "<MAC>",
+  "trajectory": {"v": 1, "session_id": "<current scoped session>"},
   "execution": {
     "v": 1,
     "kind": "appa_remedy",
@@ -315,15 +324,63 @@ The gateway maintains separate public and execution schemas. The model sees `off
 }
 ```
 
-The JWS authenticates routing claims rather than every field in the outer JSON object. The gateway validates the frame and compares its parsed arguments with the submitted values. It removes the echoed `plan` field from native arguments, but keeps the submitted arguments for receipt matching. Native execution uses `offer_id` and structured options. A model-authored plan name does not constitute independent authorization.
+This envelope has no offer signature. The gateway checks the frame and compares its parsed arguments with the submitted semantic values. It removes the echoed `plan` field from native arguments, but keeps submitted arguments for receipt matching. Native execution uses `offer_id` and structured options. A model-authored plan name does not authorize a remedy.
 
-The logical call ID originates from the execution frame or `_meta["com.archestra/logicalToolCallId"]`. The MCP JSON-RPC ID is not a durable execution identity. With a logical ID, native execution is tracked. Without it, the host uses the untracked receipt path. Reusing an ID with altered arguments fails.
+The logical call ID comes from the execution frame or `_meta["com.archestra/logicalToolCallId"]`. The MCP JSON-RPC ID is not a durable execution identity. With a logical ID, native execution is tracked. Without it, the host uses the untracked receipt path. Reusing an ID with altered arguments fails.
 
-Before forwarding history to the provider, the proxy strips the execution frame and restores `original_arguments`. The client must echo the tool call it received rather than reconstructing it from the public schema.
+Before forwarding history, the proxy strips the execution frame and restores semantic `original_arguments`. It also strips legacy routing fields echoed inside those arguments. The client must echo the tool call it received rather than reconstruct it from the public schema.
 
-Remedy tokens use flattened JWS with HS256 and unencoded payloads (RFC 7515/7797). They provide integrity, not confidentiality. Unknown algorithms fail closed. Tokens do not expire on a timer because the database ledger verifies whether an offer remains spendable. Tokens cannot be reused across conversations.
+### Review Outcomes
 
-Claims provide routing context, not a reusable permission grant. The runtime verifies the owner and active offer. Personal offers require their original user. Spent, unknown, or unauthorized offers return error feedback without executing the remedy.
+A `review_required` result has not applied a remedy. For the declared control tool, the proxy exposes canonical status from a same-scope staged review or its server-issued per-call history record. A result matching neither, or coming from a foreign tool, stays withheld. This visibility exception records no approval and authorizes no retry.
+
+The gateway retains a per-call record of server-issued review status separately from the expiring review and one-use ruling. Its scope includes organization, caller, session, parent, call ID, and offer ID. History uses that record after approval, cancellation, or expiry. It contains no ruling or review payload and cannot reopen a question or authorize a retry.
+
+These history facts expire after thirty days. The existing five-minute cache sweep removes unread expired records. Live reviews and rulings still expire after ten minutes.
+
+Chat distinguishes unanswered expiry, user cancellation, unavailable delivery, and invalid answers before native remedy execution. These outcomes grant no ruling. The proxy preserves only the exact same-scope, server-recorded status, never client-supplied instructions. An unanswered review is not reported as an unreachable authority. Chat root recovery requires an authenticated caller that matches the conversation owner and current `ChatRoot` identity.
+
+The stored status is `review_required`, `review_unanswered`, `review_cancelled`, `review_unavailable`, or `review_invalid`. Chat caller recovery requires the stamped root to equal the server-owned conversation ID, with no parent. Headers and foreign or child sessions cannot supply that caller.
+
+A native Deny or Cancel blocks the reviewed action and its offer, not unrelated requests. The proxy captures the server's reviewed identity before consuming the answer. Independent calls still undergo normal policy evaluation. The answer grants them no permission.
+
+The proxy writes `trajectory: { v: 1, session_id, parent_id? }` on remedy and approval calls. It uses the adapter's current resolved session, including child and fork identity. It replaces any model-written trajectory. The client forwards this field unchanged.
+
+The gateway uses its authenticated organization and this trajectory as the expected acting run. It does not select the run from an offer in history or a gateway session header. The event log is the authority for whether the offer still stands.
+
+The runtime checks that the offer belongs to the acting run and remains valid. Its stored state controls approval and repeat execution. There is no separate comparison between the original proxy account and the gateway account. There is no separate original-owner registry for remedy routing. Normal authentication, organization scope, and tool permissions still apply. Missing trajectory metadata fails closed before a pending approval is consumed.
+
+Interactive approval uses the client's native question tool or gateway `ask_user` elicitation. The proxy replaces model-written review text with the staged server review. Native answers are paired with actual client question calls. Their one-use cache records bind answers to the exact offers. Earlier answers remain readable after that cache is consumed. Approval in a parent session does not authorize a child offer.
+
+Native questions and gateway `ask_user` forms replace only the decorative review prefix with `[OpenAPPA] Approve this call?`. Multi-line pixel art does not survive every terminal renderer or Claude's quoted answer summary. Reviewed tool names, arguments, authority, options, and offer bindings are unchanged.
+
+Offer routing and native questions require no signatures. Session receipt codes are random stored identifiers. Child completion codes are display-only. The parent checks returned text against the stored approved result.
+
+Signatures remain on history-based trajectory stamps, delegation bindings, and child recovery tokens where trusted client metadata is insufficient. Teammate inbox calls use a separate signed peer proof. A remedy field cannot authorize an inbox read. Gateway tool attestations still distinguish platform tools from external declarations.
+
+Legacy fields in resolved platform calls and call-bound transport envelopes are stripped from provider history. They never supply routing. Foreign tool arguments remain intact, including lookalike names and fields. An old in-flight remedy call without a trajectory must retry through the proxy. Pending native questions can consume their existing cache records during the ten-minute expiry window. New question IDs and cache keys use no HMAC.
+
+### Child contracts and completion
+
+Provider forwarding omits semantically empty Anthropic system messages left by compaction. It preserves real instructions and tool-result boundaries rather than inserting a whitespace system block that the provider rejects.
+
+A child `SessionStart` can return contract instructions rather than a refusal. The proxy injects non-empty instructions before child inference, including tool-free child requests. Empty instructions, unsupported delivery wires, and root-only context decisions fail closed. A sanitizer can still require the child to return its rewritten output verbatim before `ChildEnd` admits it.
+
+OpenCode's generated handoff plugin adds onboarding guidance only to a verified native root session. Child sessions do not inherit that root-only system instruction. The proxy also removes root-only handoff guidance from child requests. Missing native identity omits the optional guidance rather than modifying returned model text.
+
+Incomplete and failed Responses generations retain their original terminal status, errors, details, usage, and safe output. Partial executable calls and unadmitted hosted-tool content are withheld. Streaming retains text captured before the hosted boundary. A failed final snapshot cannot establish when its message text was generated. The proxy drops ambiguous hosted-derived output, including `output_text`.
+
+Translated subscription failures skip successful lifecycle hooks, including `RootEnd` and `ChildEnd`. The failure lifecycle still releases request resources and records the interaction once.
+
+Claude's declared native `SubagentHandback` is the return boundary when available. Intermediate text stops do not close that child. Its dedicated progress-label request is also not a completion. An admitted task with that same prefix still requires checked completion. Without handback, the checked final-text path remains. Finished-subagent display markers alone never prove that a result crossed.
+
+Split-pane Claude teammates report their own conversation id and a separate `parent_session_id` in native metadata. The adapter uses that parent for child binding, while keeping the child's own conversation id for later spawns. In-process teammates share the lead's conversation. Native parent metadata does not bypass prepared-spawn or return-contract validation and is removed before provider forwarding.
+
+The proxy correlates a split-pane conversation with its declared teammate name using a verified delegation marker and the same caller's recorded allowed spawn. Launch acknowledgements are control/status and need not appear in processed-result storage. The child receipt also binds the original native conversation for compaction recovery. Foreign spawn records and another child's receipt cannot supply that identity.
+
+Child receipts inside tool results or nested return notifications belong to the callee. The proxy strips them without adopting their lineage. Session-only Claude metadata does not prove that a request is a root. Even a `genuine_root` classification can be ambiguous with session-only metadata. A conflicting, valid own-context child receipt causes 409, not silent parent fallback. Genuine delegation markers and native child metadata retain their binding and recovery checks.
+
+Hosted peer reads require an exact declaration of `mcp/archestra/read_peer_message` with an empty delta. A wildcard rule is insufficient. The read applies the message's stored restrictions, not a tool annotator's replacement label.
 
 ### Execute, review, and retry
 
@@ -334,16 +391,16 @@ sequenceDiagram
   participant G as MCP gateway
   participant H as Shared review cache
   participant R as Native runtime and ledger
-  M->>C: execute_remedy_plan with signed routing and execution frame
+  M->>C: execute_remedy_plan with current trajectory and execution frame
   C->>G: tools/call, authenticated independently
-  G->>G: Verify JWS, organization, frame, and semantic arguments
-  G->>R: Load retained review for the signed session and offer
+  G->>G: Check trajectory, organization, frame, and semantic arguments
+  G->>R: Load retained review for the acting session and offer
   alt Reviewed action cannot run
     G->>R: Execute with precheck_refusal, no user ruling
     R-->>G: Refusal, offer remains unspent
   else No review needed or a ruling is already available
     G->>H: Consume any cached ruling
-    G->>R: executeRemedyByOffer with verified routing
+    G->>R: executeRemedyByOffer with expected acting trajectory
     R-->>G: Recorded result
   else External client needs review
     G->>H: Stage exact review and remedy arguments, TTL 10 minutes
@@ -363,23 +420,23 @@ sequenceDiagram
 
 The gateway checks whether the reviewed tool can execute before asking the user. A precheck refusal records why approval was skipped and keeps the offer unspent. Human review cannot override RBAC or make an unavailable tool executable.
 
-For external client tool loops, the gateway returns `review_required` instead of executing the remedy. Chat can elicit input directly within the gateway call. These represent two transports for the same signed offer, not two separate approvals.
+For external client tool loops, the gateway returns `review_required` instead of executing the remedy. Chat can elicit input directly within the gateway call. These are two transports for the same trajectory-bound offer, not two separate approvals.
 
 A successful remedy result does not mean the original business tool ran. The model follows the authorized retry instruction, or uses the admitted output returned by the remedy. The proxy does not automatically replay denied business calls.
 
 If a client rejects a remedy before the gateway receives it, the proxy can display this failure along with a note that the plan was not applied. This exception excludes pending-review states and does not admit unrecorded business outputs.
 
-Sources: [`openappa.ts`](../platform/backend/src/archestra-mcp-server/openappa.ts), [`offer-claims.ts`](../platform/backend/src/openappa/offer-claims.ts), [`service.ts`](../platform/backend/src/openappa/service.ts), [`native bindings`](../platform/archestra-rs/openappa-rs/index.d.ts).
+Sources: [`openappa.ts`](../platform/backend/src/archestra-mcp-server/openappa.ts), [`current-trajectory.ts`](../platform/backend/src/openappa/current-trajectory.ts), [`service.ts`](../platform/backend/src/openappa/service.ts), [`native bindings`](../platform/archestra-rs/openappa-rs/index.d.ts).
 
 ## ask_user and native elicitation
 
-`ask_user` functions as an ordinary multiple-choice tool. Its public parameters are `question`, `header`, `options`, `allowMultiple`, and optional `remedy_offer_ids`. The proxy attaches signed `remedy_offers` when the question references active offers. Providing an offer ID alone does not constitute proof of approval.
+`ask_user` functions as an ordinary multiple-choice tool. Its public parameters are `question`, `header`, `options`, `allowMultiple`, and optional `remedy_offer_ids`. For approval calls, the proxy replaces model-written routing with the current `trajectory`. An offer ID alone does not prove approval. Legacy signed `remedy_offers` are cleanup data, not routing authority.
 
 For staged reviews, the host replaces model-generated copy with the stored review text. The header becomes `Approval`, choices are restricted to `Approve` and `Deny`, and multiple selection is disabled. The model cannot soften the question or modify the reviewed action.
 
 ### Client mapping
 
-The proxy replaces a gateway `ask_user` call with a native question only when the client declares the tool, the adapter permits it, and the tool supports the requested selection mode. Otherwise, the gateway call remains untouched. Model calls made directly to recognized native question tools also receive signed question IDs.
+The proxy replaces gateway `ask_user` with a native question when the declaration, adapter, and selection mode permit it. Otherwise, the gateway call remains unchanged. Only staged approval questions receive proxy-issued random IDs. Ordinary native questions keep provider IDs. Recognition checks the actual paired call's name and namespace. A foreign same-name tool does not become a native question.
 
 | Client | Native tool | Mapping and fallback |
 | --- | --- | --- |
@@ -403,28 +460,28 @@ sequenceDiagram
   M->>P: ask_user naming the pending offer
   P->>H: Load exact stored review
   P->>P: Convert arguments to the declared native question tool
-  P->>H: Store question claim and offer IDs, TTL 10 minutes
-  P-->>C: Native question with signed aq1 wire ID
+  P->>H: Store one-use question record and offer IDs, TTL 10 minutes
+  P-->>C: Native question with random aq2 wire ID
   C->>C: Show Approve / Deny to the user
-  C->>P: Question result carrying the same signed ID
-  P->>P: Verify session, tool name, signature, and unique result ID
+  C->>P: Question result carrying the same ID
+  P->>P: Check paired question identity, namespace, and unique result ID
   P->>H: Atomically claim question once and record parsed ruling
   P->>M: Admit question result and add continuation guidance
   M->>P: Proposed follow-up calls
   P->>H: Confirm exactly one approval and retained remedy arguments
   P->>P: Replace follow-up with the exact reviewed remedy call
-  P-->>C: Signed execute_remedy_plan
+  P-->>C: execute_remedy_plan with current trajectory
   C->>G: Execute control call
   G->>H: Atomically consume ruling before native execution
 ```
 
-Native questions use `<toolu|call|aq>_aq1_<nonce>_<tag>` as their wire call ID. The tag binds organization, caller, session, parent, native tool name, and nonce. Only calls released as user questions receive this ID. Business tools with similar names do not gain question-result exemptions.
+Governed approval questions use `<toolu|call|aq>_aq2_<nonce>` as their wire call ID. The nonce is random, not an HMAC. The cache binds organization, caller, session, parent, question identity, and offer IDs. Only staged reviews create these records. Business tools with similar names do not gain question-result exemptions.
 
-The signature authenticates the question. The adapter then parses the client response. Errors, ambiguous answers, or cancellations produce `none` rather than approval. The first request claims the cached question once. Subsequent history entries can keep the signed ID without recording duplicate approvals.
+The adapter pairs the result with the actual client question call, then parses the response. Errors, ambiguous answers, or cancellations produce `none`, not approval. The first request consumes the cached question once. Later history retains the same ID without recording duplicate approvals. Ordinary native answers remain readable without an approval-cache record.
 
-Reviews and question claims expire after ten minutes. Keys include organization, caller, session, parent, and offer. `consumeHitlRuling` uses PostgreSQL `DELETE ... RETURNING` for atomic consumption. If conflicting cached rulings exist, denials take precedence over no-decision, which takes precedence over approval. Approval in a parent session does not authorize a child offer.
+Reviews and question records expire after ten minutes. Keys include organization, caller, session, parent, and offer. New keys use plain SHA-256, not an HMAC. Pending legacy `aq1` questions can consume their existing records during that expiry window. `consumeHitlRuling` uses PostgreSQL `DELETE ... RETURNING` for atomic consumption. If cached rulings conflict, denial takes precedence over no-decision, which takes precedence over approval. Approval in a parent session does not authorize a child offer.
 
-On the gateway path, signed offers retrieve the stored review to replace model-authored text. `context.elicitation.elicit` presents the form in Chat or sends an MCP elicitation request. Timeouts, cancellations, or missing clients leave the remedy blocked. Ordinary questions can fall back to plain text in headless runs, but security reviews cannot use that fallback as approval.
+On the gateway path, the acting trajectory and offer IDs select the stored review, which replaces model-authored text. `context.elicitation.elicit` presents the form in Chat or sends an MCP elicitation request. Timeouts, cancellations, or missing clients leave the remedy blocked. Ordinary questions can use plain text in headless runs. Security reviews cannot treat that fallback as approval.
 
 Sources: [`chat.ts`](../platform/backend/src/archestra-mcp-server/chat.ts), [`hitl-review.ts`](../platform/backend/src/openappa/hitl-review.ts), [`native question handling in plugin.ts`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/plugin.ts), [`native-question-ruling.ts`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/native-question-ruling.ts).
 
@@ -459,7 +516,7 @@ Adapters match in precedence order: Claude Code, Codex, OpenCode, then Chat. `X-
 | Archestra Chat | Trusted internal chat source | Conversation ID | Checks user ownership. Active encrypted-chat handling has a previously-unenforced exception. |
 | Other | Explicit APPA headers or recognized wire metadata | Explicit header, then applicable wire fallback such as `metadata.session_id` or `conversation` | Without recognition or explicit headers, `unsupported_client_action` applies and defaults to bypass. |
 
-For example, Codex metadata `{"thread_id":"thread-a"}` fills internal `X-Appa-Session-ID: thread-a`. If the caller is `user:u1`, native dispatch receives `session_id: "user:u1|thread-a"`. Callers cannot pick arbitrary IDs through metadata. Platform loopback requests use unscoped sessions under their own trust boundary.
+For example, Codex metadata `{"thread_id":"thread-a"}` fills internal `X-Appa-Session-ID: thread-a`. If the illustrative caller is `user:example`, native dispatch receives `session_id: "user:example|thread-a"`. Metadata cannot remove authenticated caller scoping. Platform loopback requests use unscoped sessions under their own trust boundary.
 
 Explicit headers provide stable conversation IDs for custom clients, but do not provide native spawn, return, or compaction handling. Those features require an adapter and compatible transport.
 
@@ -479,27 +536,27 @@ Sources: [`session-identity.ts`](../platform/backend/src/proxy/plugins/appa-plug
 
 ### Protected session markers
 
-Archestra uses distinct markers for different boundaries. Display text, signed routing tokens, and database records carry different authority.
+Archestra uses distinct markers for different boundaries. Display text, signed lineage proofs, and database records carry different authority. Current remedy trajectories do not use signed routing tokens.
 
 | Carrier | Injection point | What the receiver checks |
 | --- | --- | --- |
 | `[[gwa1.<payload>.<mac>]]` | Gateway tool description | Organization-bound gateway/tool provenance. Removed before provider routing. Uses an auth-secret-derived organization key. |
-| `protected session ABC-DEFG` | Receipt block on eligible external model text | Short session receipt derived from organization, caller, and native session. Resolve against retained sessions owned by that caller. The code alone is not a capability. |
-| `appat1<payload>.<tag>` | External tool-call IDs and matching references | Original provider ID, organization, caller, and session. The proxy verifies it for lineage, then restores the original ID. |
+| `protected session ABC-DEFG` | Receipt block on eligible external model text | Random stored receipt code. Resolve against retained sessions owned by the authenticated caller. The code alone is not a capability. |
+| `appat1<payload><tag>` | External tool-call IDs and matching references | Original provider ID, organization, caller, and session. The proxy verifies it for lineage, then restores the original ID. |
 | `appa2.<payload>.<mac>` in `[appa] delegated trajectory ...` | Prompt of an admitted native spawn | Organization, caller, parent trajectory, native spawner, spawn call ID, and digest of the prompt. Remove the appended marker before verifying the prompt digest. |
-| `protected child session ABC-DEFG` plus `child trajectory appachild1.<payload>.<mac>` | Child response receipt block | Full receipt binds organization, caller, spawner, parent, child, and optional native child/spawn IDs. The short display code is not enough to rebind a child. |
+| `started subagent ABC-DEFG` plus `[appa] child trajectory appact2-<payload>.<mac>.` | Child response receipt block | Signed receipt binds organization, caller, spawner, parent, child, and optional native child/spawn IDs. Runtime receipts also bind the verified workspace anchor. The short display code cannot rebind a child. |
 | `finished subagent ABC-DEFG` | Admitted child return | Display marker only. Parent attribution uses retained `ChildEnd` records and admitted bytes, not this code. |
 | `appac1-<base64url>` | Responses compaction item's `encrypted_content` | Carrier contains `[1, original encrypted content, proof]`. It does not decrypt the provider blob and has no separate MAC. Verify the enclosed session/child proof. |
-| `<toolu\|call\|aq>_aq1_<nonce>_<tag>` | Native question call ID | Issued-question identity plus one-shot cached claim. Kept in history to avoid changing earlier turns. |
-| `peer_proof` | Peer list/read execution arguments | Session, action, call ID, and read target. Separate signing domain from remedy offers. Removed from provider history. |
+| `<toolu\|call\|aq>_aq2_<nonce>` | Governed native question call ID | Random ID plus a one-use cache record. Paired question identity admits answers. Kept in history without an HMAC. |
+| `peer_proof` | Peer list/read execution arguments | Signed session, action, call ID, and read target. Separate inbox proof, not remedy routing. Removed from provider history. |
 
 The standard receipt block includes a two-line logo. Non-streaming requests prepend it to the first non-empty text chunk. Streaming requests use the response transform. Significant lines are shown below with inert placeholders:
 
 ```text
 protected session ABC-DEFG
 
-protected child session ABC-DEFG
-child trajectory appachild1.<signed-claims>.<mac>
+started subagent ABC-DEFG
+[appa] child trajectory appact2-<signed-claims>.<mac>.
 
 finished subagent ABC-DEFG
 ```
@@ -554,9 +611,9 @@ sequenceDiagram
 
 Adapters configure spawn prompt fields, such as Claude Code `Agent`/`Task` prompts and Codex `spawn_agent` parameters. The proxy appends the delegation marker only after admitting the call. It does not convert arbitrary prompt strings into checked spawns.
 
-`bindMintedChildTrajectory` combines verified delegation, child receipts, and native parent/child metadata. Child IDs remain scoped under their parent. Parent reuse, conflicting explicit headers, and invalid receipts cause rejections. Native launch acknowledgments only signal that a subagent started — they do not represent an admitted result.
+`bindMintedChildTrajectory` combines verified delegation, child receipts, and native parent/child metadata. Child IDs remain scoped under their parent. Parent reuse, conflicting explicit headers, and invalid receipts cause rejections. Native launch acknowledgments only signal that a subagent started. They do not represent an admitted result.
 
-Before invoking `ChildEnd`, the proxy requires a correlated spawn ID and an active signing key. This check happens before native execution because an admitted return has already crossed the boundary. Blocked runs output only blocking text without success markers. Teammate agents using message transports omit display markers on completion.
+Before invoking `ChildEnd`, the proxy requires a correlated spawn ID. Display-marker creation requires no signing key. Native admission and retained bytes remain the return authority. Blocked runs output only blocking text without success markers. Teammate agents using message transports omit display markers on completion.
 
 When the parent continues, the adapter extracts completions from native result payloads. The plugin compares completion bytes against `loadChildReturns`, narrowing by spawn and child IDs. Identical text from multiple children is treated as ambiguous rather than selecting the first candidate. Direct results cannot substitute for another spawn's completion. The provider request is rebuilt using only verified completion bytes.
 
@@ -611,9 +668,9 @@ recipient <- held-message metadata <- list_peer_messages
              -> gateway verification -> native read admission -> recorded body or refusal
 ```
 
-`list_peer_messages` returns message IDs and expiration timestamps without exposing bodies or session bindings. `read_peer_message` takes a `message_id`. The proxy appends a hidden `peer_proof` binding session, action, and call identity. Read proofs also bind the message ID. Their signing domain differs from remedy offers, preventing cross-use.
+`list_peer_messages` returns message IDs and expiration timestamps without exposing bodies or session bindings. `read_peer_message` takes a `message_id`. The proxy appends a hidden signed `peer_proof` binding session, action, and call identity. Read proofs also bind the message ID. Remedy trajectory fields cannot replace this proof.
 
-Successful reads return stored native results. Denied reads return feedback and can include signed remedy offers. Reading peer messages never constitutes user approval. Senders must target actors within the same family, and unenforced peers cannot access governed messages.
+Successful reads return stored native results. Denied reads return feedback and can include unsigned offer-ID presentation. A later remedy call uses its current proxy-resolved trajectory, not those presentation fields. Reading peer messages never constitutes user approval. Senders must target actors within the same family, and unenforced peers cannot access governed messages.
 
 Peer reads bypass the pending-receipt guard for the family. Send, admit, and list operations still enforce this check. This exception does not bypass message admission rules.
 
@@ -655,7 +712,7 @@ For external clients, the gateway might lack the proxy session or call ID. `reme
 
 `executeYell` creates an `openappa_yells` row and triggers `yell:<call-id>`. `captureYellReport` opens a temporary loopback listener on `127.0.0.1` using a random token. The native reporter builds the archive. Archestra stores the exact gzip payload, forwarding it only when analytics is permitted. Forwarding preserves `x-appa-signature`, rejects redirects, and applies an 8-second timeout. Delivery failures are recorded locally.
 
-`get_openappa_yell({id})` reads stored reports under `openappaDiagnostics:read`. Report contents remain untrusted diagnostic data. Reading reports does not resolve them or grant policy edit rights. HTTP routes support listing, summaries, archive downloads, and status updates. Unlike consult logs, reading organization yells does not require the diagnostics `admin` action.
+`get_openappa_yell({id})` reads stored reports under `openappaDiagnostics:read`. Report contents remain untrusted diagnostic data. Reading reports does not resolve them or grant policy edit rights. The first UI chat that reads a report becomes its investigation chat in `openappa_yells.conversation_id`; later chats never replace it. Yell responses return that chat only to its owner, and only while it is not deleted. `resolve_openappa_yell({id, resolved})` sets the status under `openappaDiagnostics:read` and `update` and writes the same `openappaYell.updated` audit entry as the HTTP route. HTTP routes support listing, summaries, archive downloads, and status updates. Unlike consult logs, reading organization yells does not require the diagnostics `admin` action.
 
 The reporting flag controls `yell` advertisement, while analytics controls upstream transmission. Automatic failure reports (such as missing remedy tools) are recorded locally without invoking the model yell flow.
 
@@ -668,9 +725,10 @@ Sources: [`yell-session.ts`](../platform/backend/src/openappa/yell-session.ts), 
 | `get_remedy_plans`, `execute_remedy_plan` | Deliver notices and execute verified recovery requests. Advertised when Guardrails v2 is active. |
 | `list_peer_messages`, `read_peer_message` | Actor-scoped inbox operations with proxy execution proofs. Shared active-enforcement advertisement gate. |
 | `ask_user` | General user questions and exact security review prompts. Separate implicit tool path and native client adapters. |
-| `yell`, `get_openappa_yell` | Submit routed diagnostic reports and inspect stored reports. Reporting and reading permissions are separate. |
+| `yell`, `list_openappa_yells`, `get_openappa_yell`, `resolve_openappa_yell` | Submit routed diagnostic reports, inspect stored reports, and resolve or reopen them. Reporting, reading, and resolving permissions are separate. |
+| `list_openappa_consults` | List the external consults recorded for a session, with each helper's diagnostics and raw response. A caller reads their own sessions; another caller's session needs the diagnostics `admin` action. The request and answer are not returned. |
 | `get_guardrails_policy`, `validate_guardrails_policy`, `preview_guardrails_policy_change`, `update_guardrails_policy` | Read, validate, preview, or publish policies. Administration tools, not runtime remedies. |
-| `inspect_guardrails_server`, `list_guardrails_battery_fits`, `get_guardrails_policy_change_status`, `create_guardrails_repository` | Inspect bindings, check publication state, or configure the policy repository. Standard policy and credential permissions apply. |
+| `inspect_guardrails_server`, `list_guardrails_battery_fits`, `get_guardrails_policy_change_status`, `create_guardrails_repository`, `connect_guardrails_repository` | Inspect bindings, check publication state, or configure the policy repository. Standard policy and credential permissions apply. |
 
 Policy helper tools can be advertised to agent profiles while beta is enabled and enforcement is disabled. Advertisement does not bypass handler authorization checks. See [`gateway tool selection`](../platform/backend/src/routes/mcp-gateway/utils.ts) and [`MCP RBAC`](../platform/backend/src/archestra-mcp-server/rbac.ts).
 
@@ -681,7 +739,7 @@ Protocol changes require comprehensive testing beyond basic tool execution. Exis
 | Change | Test locations and cases to retain |
 | --- | --- |
 | Notice/control envelopes | [`wire.test.ts`](../platform/backend/src/openappa/wire.test.ts), [`proxy integration tests`](../platform/backend/src/routes/proxy/llm-proxy-openappa.test.ts): wrapper targets, same-slot replacement, forged lookalikes, and cleanup while bypassed. |
-| Claims and review | [`offer-claims.unit.test.ts`](../platform/backend/src/openappa/offer-claims.unit.test.ts), [`hitl-review.test.ts`](../platform/backend/src/openappa/hitl-review.test.ts), [`plugin tests`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/plugin.test.ts): wrong session, changed arguments, duplicate/replayed answers, expired review, and denied approval. |
+| Trajectory and review | [`hitl-review.test.ts`](../platform/backend/src/openappa/hitl-review.test.ts), [`service.test.ts`](../platform/backend/src/openappa/service.test.ts), [`plugin tests`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/plugin.test.ts): wrong session, changed arguments, duplicate/replayed answers, expired review, and denied approval. |
 | Session and child carriers | [`session-token.test.ts`](../platform/backend/src/openappa/session-token.test.ts), [`child-trajectory-receipt.test.ts`](../platform/backend/src/openappa/child-trajectory-receipt.test.ts), [`child-return.test.ts`](../platform/backend/src/openappa/child-return.test.ts): caller mismatch, compaction, ambiguous attribution, and substituted returns. |
 | Native client formats | [`adapter tests`](../platform/backend/src/proxy/plugins/appa-plugin-archestra/adapters/): metadata conflicts, native question availability, launch acknowledgments versus completions, and transcript-path detection. |
 | Peer and yell transport | [`peer-claims.unit.test.ts`](../platform/backend/src/openappa/peer-claims.unit.test.ts), [`yell-receiver.test.ts`](../platform/backend/src/openappa/yell-receiver.test.ts), [`MCP handlers tests`](../platform/backend/src/archestra-mcp-server/openappa.test.ts), [`native peer tests`](../platform/archestra-rs/openappa-rs/peer.test.cjs). |
@@ -690,9 +748,17 @@ Host unit tests frequently mock native decisions. Native and PostgreSQL tests re
 
 ## Agent Runtimes
 
-The launcher issues a turn-scoped `X-Archestra-Runtime-Binding` for the saved workspace, run, actor, and Agent. The proxy verifies it against the runtime's virtual key. The gateway verifies it against its authenticated token. Both restore the stored OpenAPPA parent relationship. User runs keep `user:<id>`; non-user runs use `agent-workspace:<workspace id>`, so key rotation does not reset their trajectory. Binding credentials stay in secret environment variables and are not forwarded to providers or MCP servers.
+The launcher issues a turn-scoped `X-Archestra-Runtime-Binding` for the saved workspace, run, actor, and Agent. The proxy verifies it against the runtime's virtual key. The gateway verifies it against its authenticated token. Both restore the stored OpenAPPA parent relationship. User runs keep `user:<id>`. Non-user runs use `agent-workspace:<workspace id>`, so key rotation does not reset their trajectory. Binding credentials stay in secret environment variables and are not forwarded to providers or MCP servers.
 
-The proxy treats runtime launches as spawns and signs a `runtime_proof` over the source session, call ID, target, arguments, and spawn status. Proofs expire after five minutes and allow at most thirty seconds of issuance-clock skew. Wrapped `run_tool` calls carry them in `tool_args`. The proxy plugin reports each proof attachment to the registry. The registry verifies the signed source and call identity and rejects changes to any approved argument besides the added proof. The gateway verifies the proof and released-call receipt before dispatch. The launcher binds the child before staging inputs or starting its process. Steering and writes address that registered child again to inherit the parent's current restrictions. Child-return contracts are injected before inference; contracts over 64 KiB are refused. Native child identity and signed workspace lineage support direct and nested CLI children without trusting the static workspace header as a child claim.
+Runtime control calls require an authenticated spender. Workspace principals can act only on their own trajectory. These checks run before review lookup or consumption. They use the verified runtime binding, not legacy offer-owner claims.
+
+### Runtime Child Anchors
+
+Native child identity and signed workspace lineage support direct and nested CLI children. The static workspace header is not a child claim. A child receipt can bind `runtimeSessionId` to the verified workspace trajectory. It can also retain `nativeConversationId` for compaction recovery. These fields preserve the workspace anchor and native conversation as separate identities.
+
+The proxy treats runtime launches as spawns and signs a `runtime_proof` over the source session, call ID, target, arguments, and spawn status. Proofs expire after five minutes and allow at most thirty seconds of issuance-clock skew. Wrapped `run_tool` calls carry them in `tool_args`. The proxy plugin reports each proof attachment to the registry. The registry verifies the signed source and call identity. It rejects changes to approved arguments besides the added proof.
+
+The gateway verifies the proof and released-call receipt before dispatch. The launcher binds the child before staging inputs or starting its process. Steering and writes address that registered child again to inherit the parent's current restrictions. Child-return contracts are injected before inference. Contracts over 64 KiB are refused.
 
 Before execution, the gateway atomically claims the released call in the durable operation ledger. Concurrent or later replays do not dispatch again, even within the proof lifetime. A transport failure does not reopen the claim; inspect the run status before requesting another action.
 
@@ -704,11 +770,21 @@ Runtime -> Proxy: model calls and results under the stored child identity
 Gateway -> Parent: get_run returns the recorded admitted ChildReturn
 ```
 
-Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_run` returns only the exact admitted value for that task; unrelated sessions and oversized values are withheld. File reads cross the same boundary. Downloads check the pinned content, size, and checksum before issuing a ticket, and require admission without transformation. Protected exports are limited to 4 MiB. HTTP ranges serve the admitted host-side copy from a byte-bounded 64 MiB cache, not the runtime's mutable file. Owner HTTP views remain separate human surfaces; cross-runtime external publishing is refused without an egress crossing.
+Long-lived runtimes use `ChildReturn`, not `ChildEnd`, for each final value. This preserves pending calls and later turns. `get_run` returns only the exact admitted value for that task. Unrelated sessions and oversized values are withheld. File reads cross the same boundary.
 
-Receipt readers stream PostgreSQL rows and refuse histories exceeding 10,000 records or 8 MiB; they do not return partial authority. Runtime output lookups filter by child and task and request only the latest admitted operation.
+Downloads check the pinned content, size, and checksum before issuing a ticket. They require admission without transformation. Protected exports are limited to 4 MiB. HTTP ranges serve the admitted host-side copy from a byte-bounded 64 MiB cache, not the runtime's mutable file. Owner HTTP views remain separate human surfaces. Cross-runtime external publishing is refused without an egress crossing.
 
-Runtime human reviews use the run page rather than native forms that may auto-decline. Shared-cache entries retain separate offers for ten minutes. Only the run's user owner can record a ruling for its exact signed session and offer. Native-form callers also atomically claim their pending stage; duplicate approvals cannot grant twice, while an unspent approval remains revocable by genuine denial. Exact review context remains readable for native continuation only while approval is unspent; it does not reopen the pending claim. `ask_user` waits without consuming approval; the remedy retry spends it. Denial, timeout, disconnection, or the absence of an eligible reviewer leaves the call blocked. Native delivered/returned values are bounded to 8 MiB, and model-facing crossing refusals omit internal diagnostics. Existing non-runtime elicitation is unchanged.
+Receipt readers stream PostgreSQL rows and refuse histories exceeding 10,000 records or 8 MiB. They do not return partial authority. Runtime output lookups filter by child and task and request only the latest admitted operation.
+
+### Runtime Human Reviews
+
+Runtime human reviews use the run page rather than native forms that may auto-decline. Shared-cache entries retain separate offers for ten minutes. Only the run's user owner can record a ruling for its exact stored trajectory and offer. Native-form callers also atomically claim their pending stage. Duplicate approvals cannot grant twice. Genuine denial can revoke an unspent approval.
+
+Exact review context remains readable for native continuation only while approval is unspent. It does not reopen the pending claim. `ask_user` waits without consuming approval. The remedy retry spends it. Denial, timeout, disconnection, or the absence of an eligible reviewer leaves the call blocked.
+
+Native delivered and returned values are bounded to 8 MiB. Model-facing crossing refusals omit internal diagnostics. Existing non-runtime elicitation is unchanged.
+
+Sources: [`runtime-crossing.ts`](../platform/backend/src/services/agent-runtime/runtime-crossing.ts), [`runtime-identity.ts`](../platform/backend/src/services/agent-runtime/runtime-identity.ts), [`runtime-hitl-review.ts`](../platform/backend/src/openappa/runtime-hitl-review.ts), [`runtime-tool-claims.ts`](../platform/backend/src/openappa/runtime-tool-claims.ts).
 
 ## Persistence and current limits
 
@@ -717,6 +793,10 @@ The Rust binding stores event batches, policy snapshots, sessions, operations, a
 Execution follows three steps under a family advisory lock: insert a pending receipt, run the native hook to append events, and mark the receipt complete. A crash after committing events leaves a pending receipt, failing subsequent operations closed across the session family (except peer reads).
 
 Completed receipts return saved decisions without re-running the engine. Reusing IDs with modified arguments causes an immediate rejection. The event log enforces strict sequence ordering via transaction advisory locks.
+
+Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. Other protocols evaluate calls and results, but notices remain in history as notice calls. The proxy still removes their record, legacy signed offers, and execution frames before forwarding. Azure Responses tool traffic is refused while OpenAPPA is enabled.
+
+Subscription Responses translated to Chat Completions retain each tool's argument snapshots and deltas until completion. Conflicting identities or argument bytes fail closed. Incomplete generations do not release held tool calls. The translator does not replace malformed arguments with empty objects.
 
 The host acquires an in-process root lock before leasing a database connection. PostgreSQL advisory locks (`pg_advisory_lock`) serialize operations across instances. Root sessions run concurrently, while sibling sessions within a root run sequentially.
 
@@ -742,19 +822,19 @@ Start new conversations after enabling OpenAPPA. Retained unenforced sessions an
 
 For schema history, inspect [`the migrations directory`](../platform/backend/src/database/migrations/). This includes `0477_appa_github_sync`, `0483_openappa_batteries`, and `0485_fine_silver_surfer`. Startup backfill behavior lives in [`declare-installs.ts`](../platform/backend/src/openappa/declare-installs.ts), not a separate runtime migration.
 
-There is no automated cleanup API for pending receipts. Do not delete pending rows or truncate database tables manually. Investigate the root cause and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data — never run it to fix stuck production sessions.
+There is no automated cleanup API for pending receipts. Do not delete pending rows or truncate database tables manually. Investigate the root cause and check external state first. `pnpm --dir backend db:reset-openappa` is a development command that wipes policy data. Never run it to fix stuck production sessions.
 
 ## Build and deployment
 
-The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` (`c7c1e1ef36aa07604b421c48be266d7397557656`) and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
+The addon compiles with Archestra's native addons and ships inside the standard platform image. Cargo downloads OpenAPPA at the commit pinned in `openappa-rs/Cargo.toml` (`85465feb8214f662dd21d40df2c01964e5b099fa`) and `archestra-rs/Cargo.lock`. Archestra's standard release process remains unchanged, with no separate addon release.
 
 | Setting | Default | Notes |
 | --- | --- | --- |
-| `ARCHESTRA_BETA` | `false` | Enables OpenAPPA when set to `"true"`. Requires restart. |
+| `ARCHESTRA_BETA` | `false` | Enables UI/API and proxy registration. Enforcement also requires the database switch. Requires restart. |
 | `ARCHESTRA_LLM_PROXY_PLUGINS` | Empty | Automatically appends `appa` when beta is enabled. |
 | `guardrails_deployment.enabled` | `false` | Database row switch. Effective immediately without restart. |
 | `guardrails_deployment.unsupported_client_action` | `bypass` | Action for unknown clients (`bypass` or `block`). |
-| `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Secret for signing offers and tokens. Min 32 chars if explicit. |
+| `ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET` | Auto-derived | Legacy name for retained lineage and execution-proof signing. Not used for remedy routing, new question IDs, or display codes. Min 32 chars if explicit. |
 | `ARCHESTRA_OPENAPPA_POSTGRES_MAX_CONNECTIONS` | `4` | Max native pool connections (cap 64). Requires restart. |
 | `ARCHESTRA_OPENAPPA_YELL_ENABLED` | `true` | Enables yell diagnostic reporting when beta is on. |
 | `ARCHESTRA_ANALYTICS` | Environment-dependent | Unset enables analytics in production/prod. `disabled` prevents upstream yell forwarding, not local storage. |

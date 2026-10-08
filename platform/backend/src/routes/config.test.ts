@@ -136,7 +136,6 @@ describe("config routes", () => {
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
       // Beta-derived flags may inherit an ambient ARCHESTRA_BETA in dev/CI.
       mcpIdleHibernationBetaEnabled: expect.any(Boolean),
-      mcpServerAlertingEnabled: expect.any(Boolean),
       // SPDX-SnippetEnd
     });
     expect([null, "1", "2"]).toContain(payload.features.byosVaultKvVersion);
@@ -166,6 +165,7 @@ describe("config routes", () => {
       "gemini",
       "github-copilot",
       "groq",
+      "jev",
       "kimi",
       "microsoft-365-copilot",
       "minimax",

@@ -5,6 +5,7 @@ import db, { schema } from "@/database";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import { initialPolicy } from "@/services/guardrails-policy";
 import { describe, expect, test } from "@/test";
@@ -13,10 +14,13 @@ import type {
   BatteryPackageFile,
 } from "@/types/openappa-batteries";
 import { packageContentHash, uploadedEntry } from "./declarations";
-import { declareExistingInstalls } from "./declare-installs";
+import {
+  declareExistingInstalls,
+  seedCredentialBindings,
+} from "./declare-installs";
 
 describe("declaring the legacy battery installs", () => {
-  test("declares a bundled battery with its catalog's prefix and its owner's credential", async ({
+  test("declares a bundled battery with its catalog's prefix and stores its owner's credential binding", async ({
     makeOrganization,
     makeInternalMcpCatalog,
     makeTool,
@@ -48,9 +52,11 @@ describe("declaring the legacy battery installs", () => {
         servers,
       })),
     ).toEqual([{ namespace: "github", servers: ["github_prod"] }]);
-    expect(
-      declared.credentials.map(({ variable, key }) => [variable, key]),
-    ).toEqual([["APPA_PROVIDER_GITHUB_TOKEN", "github_prod_token"]]);
+    // The binding lives beside the text, not in it.
+    expect(declared.credentials).toEqual([]);
+    expect(await bindingsOf(organizationId)).toEqual([
+      ["APPA_PROVIDER_GITHUB_TOKEN", "github_prod_token"],
+    ]);
   });
 
   test("declares the stored package's hashed spelling when one shadows the bundled battery", async ({
@@ -217,9 +223,9 @@ describe("declaring the legacy battery installs", () => {
       "batteries/github/appa.toml",
       "batteries/linear/appa.toml",
     ]);
-    expect(
-      declared.credentials.map(({ variable, key }) => [variable, key]),
-    ).toEqual([["APPA_PROVIDER_LINEAR_TOKEN", "linear_prod_token"]]);
+    expect(await bindingsOf(organizationId)).toEqual([
+      ["APPA_PROVIDER_LINEAR_TOKEN", "linear_prod_token"],
+    ]);
   });
 
   test("declares neither a disabled install nor one of an unknown battery, and touches no row", async ({
@@ -262,7 +268,7 @@ describe("declaring the legacy battery installs", () => {
     expect(declared.serverAliases.map((alias) => alias.namespace)).toEqual([
       "github",
     ]);
-    expect(declared.credentials).toEqual([]);
+    expect(await bindingsOf(organizationId)).toEqual([]);
     expect(await OpenAppaBatteryInstallModel.list(organizationId)).toEqual(
       before,
     );
@@ -400,6 +406,44 @@ describe("declaring the legacy battery installs", () => {
   });
 });
 
+describe("seeding the credential bindings from the policy text", () => {
+  test("stores every [credentials] line whose variable has no binding, and keeps the ones that do", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const content = `${initialPolicy()}
+[credentials]
+APPA_PROVIDER_GITHUB_TOKEN = "github_repo_token"
+APPA_PROVIDER_LINEAR_TOKEN = "linear_repo_token"
+`;
+    await GuardrailsPolicyModel.saveDeclarationMigration({
+      organizationId,
+      content,
+      contentHash: createHash("sha256").update(content).digest("hex"),
+      expectedRevision: 0,
+    });
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId,
+      variable: "APPA_PROVIDER_LINEAR_TOKEN",
+      credentialKey: "linear_panel_token",
+      updatedBy: null,
+    });
+
+    await seedCredentialBindings();
+    const seeded = await OpenAppaCredentialBindingModel.list(organizationId);
+    await seedCredentialBindings();
+
+    expect(await bindingsOf(organizationId)).toEqual([
+      ["APPA_PROVIDER_GITHUB_TOKEN", "github_repo_token"],
+      ["APPA_PROVIDER_LINEAR_TOKEN", "linear_panel_token"],
+    ]);
+    // A second run writes nothing, not even a timestamp.
+    expect(await OpenAppaCredentialBindingModel.list(organizationId)).toEqual(
+      seeded,
+    );
+  });
+});
+
 /**
  * A row as the panel wrote it before batteries became declarations. Rows are
  * written one second apart: the step reads them in `createdAt` order, which is
@@ -485,6 +529,13 @@ delta = {}
         ),
       );
   return contentHash;
+}
+
+/** The organization's stored credential bindings, as variable and key pairs. */
+async function bindingsOf(organizationId: string) {
+  return (await OpenAppaCredentialBindingModel.list(organizationId)).map(
+    ({ variable, credentialKey }) => [variable, credentialKey],
+  );
 }
 
 /**

@@ -3,6 +3,7 @@
 import { FileText, FolderUp, Upload, X } from "lucide-react";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 /**
@@ -61,7 +62,7 @@ export function FileDropInput({
 
   return (
     <>
-      <button
+      <UnstyledButton
         type="button"
         aria-label={directory ? "Choose folder" : undefined}
         className={cn(
@@ -93,7 +94,7 @@ export function FileDropInput({
           </>
         )}
         <span className="text-xs text-muted-foreground/70">{typesLabel}</span>
-      </button>
+      </UnstyledButton>
       <input
         id={inputId}
         ref={inputRef}
@@ -135,8 +136,8 @@ export function StagedFileList({
           </span>
           <Button
             variant="ghost"
-            size="icon"
-            className="h-6 w-6 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             aria-label={`Remove ${file.name}`}
             onClick={() => onRemove(file)}
           >

@@ -6,8 +6,8 @@ import {
 import { McpToolErrorTypeSchema } from "./mcp-tool-error";
 
 /**
- * How much an organization's logs record about each LLM request, MCP tool call
- * and guardrail consult.
+ * How much the logs record about each LLM request, MCP tool call and guardrail
+ * consult. Set deployment-wide by `ARCHESTRA_LOGS_CONTENT_MODE`.
  *
  * - `full`: prompts, responses, tool arguments and results are stored and shown
  *   on the Logs pages.
@@ -15,16 +15,12 @@ import { McpToolErrorTypeSchema } from "./mcp-tool-error";
  *   tool, token usage, cost and the outcome (success or error) still are, so
  *   usage accounting, cost limits and the audit trail keep working.
  */
-export const LOG_CONTENT_MODES = ["full", "metadata_only"] as const;
-
-export const LogContentModeSchema = z
-  .enum(LOG_CONTENT_MODES)
-  .meta({ id: "LogContentMode" });
+export const LogContentModeSchema = z.enum(["full", "metadata_only"]);
 
 export type LogContentMode = z.infer<typeof LogContentModeSchema>;
 
 /**
- * The `__redacted` value written in place of content the Log Content setting
+ * The `__redacted` value written in place of content the Log Content mode
  * kept out of storage. It shares the `__redacted` key with the encrypted-chat
  * fallback because both mean the same thing to a reader — this content was
  * never stored and cannot be recovered — so every read path that already

@@ -1,6 +1,6 @@
 /**
- * Contract under test — with the organization's Log Content setting on
- * "Metadata only", no prompt, response, tool argument or tool result reaches
+ * Contract under test — with `ARCHESTRA_LOGS_CONTENT_MODE` set to
+ * "metadata_only", no prompt, response, tool argument or tool result reaches
  * the log tables, while everything usage, cost and the audit trail read from
  * those rows still does.
  */
@@ -10,19 +10,16 @@ import {
   platformExecutedAs,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
-import { vi } from "vitest";
+import config from "@/config";
 import db from "@/database";
-import { resolveLogContentMode } from "@/log-content";
 import InteractionModel from "@/models/interaction";
 import McpToolCallModel from "@/models/mcp-tool-call";
-import OrganizationModel from "@/models/organization";
-import { describe, expect, test } from "@/test";
+import { afterEach, describe, expect, test } from "@/test";
 import type { InteractionRequest, InteractionResponse } from "@/types";
 
-// The setting is read through the org-settings cache, which is not started in
-// tests; the canonical Map-backed fake stands in so a write that skipped
-// invalidation would be served the previous mode.
-vi.mock("@/cache-manager");
+afterEach(() => {
+  config.logs.contentMode = "full";
+});
 
 const PRIVATE = "the-private-quarterly-numbers";
 
@@ -40,11 +37,9 @@ const response = {
 describe("LLM interactions", () => {
   test("Metadata only stores usage and attribution, never content", async ({
     makeAgent,
-    makeOrganization,
   }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-    const agent = await makeAgent({ organizationId: org.id });
+    config.logs.contentMode = "metadata_only";
+    const agent = await makeAgent();
 
     const created = await InteractionModel.create({
       profileId: agent.id,
@@ -79,11 +74,9 @@ describe("LLM interactions", () => {
 
   test("a failed request keeps that it failed, never the error text", async ({
     makeAgent,
-    makeOrganization,
   }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-    const agent = await makeAgent({ organizationId: org.id });
+    config.logs.contentMode = "metadata_only";
+    const agent = await makeAgent();
 
     // Provider errors routinely echo the prompt back.
     const created = await InteractionModel.create({
@@ -101,27 +94,20 @@ describe("LLM interactions", () => {
     });
   });
 
-  test("knowledge-base calls follow their connector's organization", async ({
-    makeOrganization,
-    makeKnowledgeBase,
-    makeKnowledgeBaseConnector,
-  }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-    const kb = await makeKnowledgeBase(org.id);
-    const connector = await makeKnowledgeBaseConnector(kb.id, org.id);
+  test("rows without an agent are withheld too", async () => {
+    config.logs.contentMode = "metadata_only";
 
     const created = await InteractionModel.create({
       profileId: null,
-      connectorId: connector.id,
       type: "anthropic:messages",
       request,
       response,
+      inputTokens: 5,
     });
 
-    expect(
-      JSON.stringify(await rawRow("interactions", created.id)),
-    ).not.toContain(PRIVATE);
+    const raw = await rawRow("interactions", created.id);
+    expect(JSON.stringify(raw)).not.toContain(PRIVATE);
+    expect(raw.input_tokens).toBe(5);
   });
 
   test("Full content, the default, stores the request and response", async ({
@@ -140,58 +126,14 @@ describe("LLM interactions", () => {
       PRIVATE,
     );
   });
-
-  test("a change applies to the very next write", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    const agent = await makeAgent({ organizationId: org.id });
-    const write = () =>
-      InteractionModel.create({
-        profileId: agent.id,
-        type: "anthropic:messages",
-        request,
-        response,
-      });
-
-    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-    const withheld = await write();
-    await OrganizationModel.patch(org.id, { logContentMode: "full" });
-    const stored = await write();
-
-    expect(
-      JSON.stringify(await rawRow("interactions", withheld.id)),
-    ).not.toContain(PRIVATE);
-    expect(JSON.stringify(await rawRow("interactions", stored.id))).toContain(
-      PRIVATE,
-    );
-  });
-
-  test("a row whose organization cannot be resolved stores metadata only", async () => {
-    // Fails closed: an owner-less row has no setting to consult.
-    const created = await InteractionModel.create({
-      profileId: null,
-      type: "anthropic:messages",
-      request,
-      response,
-      inputTokens: 5,
-    });
-
-    const raw = await rawRow("interactions", created.id);
-    expect(JSON.stringify(raw)).not.toContain(PRIVATE);
-    expect(raw.input_tokens).toBe(5);
-  });
 });
 
 describe("MCP tool calls", () => {
   test("Metadata only keeps the tool, status and identity, never arguments or results", async ({
     makeAgent,
-    makeOrganization,
   }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-    const agent = await makeAgent({ organizationId: org.id });
+    config.logs.contentMode = "metadata_only";
+    const agent = await makeAgent();
 
     const created = await McpToolCallModel.create({
       agentId: agent.id,
@@ -231,13 +173,14 @@ describe("MCP tool calls", () => {
     });
   });
 
-  test("app-owned calls follow the app's organization", async ({
+  test("app-owned calls are withheld too", async ({
     makeApp,
     makeOrganization,
   }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-    const app = await makeApp({ organizationId: org.id });
+    config.logs.contentMode = "metadata_only";
+    const app = await makeApp({
+      organizationId: (await makeOrganization()).id,
+    });
 
     const created = await McpToolCallModel.create({
       ownerType: "app",
@@ -257,13 +200,9 @@ describe("MCP tool calls", () => {
     ).not.toContain(PRIVATE);
   });
 
-  test("discovery results are dropped too", async ({
-    makeAgent,
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-    const agent = await makeAgent({ organizationId: org.id });
+  test("discovery results are dropped too", async ({ makeAgent }) => {
+    config.logs.contentMode = "metadata_only";
+    const agent = await makeAgent();
 
     const created = await McpToolCallModel.create({
       agentId: agent.id,
@@ -277,22 +216,6 @@ describe("MCP tool calls", () => {
 
     const raw = await rawRow("mcp_tool_calls", created.id);
     expect(raw.tool_result).toEqual({ __redacted: "log_content_policy" });
-  });
-});
-
-describe("resolveLogContentMode", () => {
-  test("a writer that knows its organization gets that organization's setting", async ({
-    makeOrganization,
-  }) => {
-    const org = await makeOrganization();
-
-    expect(await resolveLogContentMode({ organizationId: org.id })).toBe(
-      "full",
-    );
-    await OrganizationModel.patch(org.id, { logContentMode: "metadata_only" });
-    expect(await resolveLogContentMode({ organizationId: org.id })).toBe(
-      "metadata_only",
-    );
   });
 });
 

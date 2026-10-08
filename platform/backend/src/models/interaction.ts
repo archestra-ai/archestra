@@ -55,6 +55,7 @@ import type {
   InteractionAuthMethod,
   InteractionSummary,
   InteractionVirtualKey,
+  LimitEntityType,
   SessionSummary,
   SessionUnattributedReason,
   SortingQuery,
@@ -452,38 +453,18 @@ class InteractionModel {
   static async create(
     data: InsertInteraction,
     auditContext?: EncryptedChatAuditContext | null,
-    opts?: {
-      /**
-       * Environment to stamp instead of the executing agent's own. The proxy
-       * supplies it for advisor consultations (loopback-verified), which bill
-       * to the delegating caller's environment because the advisor's row is
-       * org-wide and env-less.
-       */
-      environmentIdOverride?: string;
-    },
   ) {
     // Snapshot the environment from the agent at creation time (single funnel
     // for all interaction writes) so per-environment cost-limit usage stays
     // stable under later agent reassignment. The agent is authoritative: when a
     // profile is present its current environment wins over any caller-supplied
-    // value. Only profile-less system interactions may set it explicitly, and
-    // only the proxy's verified advisor-delegation path may override it.
-    const agent = data.profileId
-      ? await AgentModel.findEnvironmentAndOrganizationId(data.profileId)
-      : null;
-    const environmentId =
-      opts?.environmentIdOverride ??
-      (data.profileId
-        ? (agent?.environmentId ?? null)
-        : (data.environmentId ?? null));
+    // value. Only profile-less system interactions may set it explicitly.
+    const environmentId = data.profileId
+      ? await AgentModel.findEnvironmentId(data.profileId)
+      : (data.environmentId ?? null);
     // Enforced here, in the single funnel, so no writer can store content
-    // the organization's Log Content setting withholds.
-    const logContentMode = await resolveLogContentMode({
-      organizationId: agent?.organizationId,
-      connectorId: data.connectorId,
-      appId: data.appId,
-    });
-    const withheld = logContentMode === "metadata_only";
+    // the deployment's Log Content mode withholds.
+    const withheld = resolveLogContentMode() === "metadata_only";
     const record = withheld ? withholdInteractionContent(data) : data;
     // A withheld row holds no content to encrypt under a conversation key, so
     // it is written like the encrypted-chat fallback: unkeyed, marker in place.
@@ -1132,32 +1113,32 @@ class InteractionModel {
       conditions.push(eq(schema.interactionsTable.userId, ownUserId));
     }
 
-    if (requestingUserId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        requestingUserId,
-        false,
-      );
-
+    const accessibleAgentIds =
+      requestingUserId && !isAgentAdmin
+        ? await AgentTeamModel.getUserAccessibleAgentIds(
+            requestingUserId,
+            false,
+          )
+        : null;
+    if (accessibleAgentIds) {
       if (accessibleAgentIds.length === 0) {
         return [];
       }
-
       conditions.push(
         inArray(schema.interactionsTable.profileId, accessibleAgentIds),
       );
     }
 
-    const result = await db
-      .selectDistinct({
-        externalAgentId: schema.interactionsTable.externalAgentId,
-      })
-      .from(schema.interactionsTable)
-      .where(and(...conditions))
-      .orderBy(asc(schema.interactionsTable.externalAgentId));
-
-    const externalAgentIds = result
-      .map((r) => r.externalAgentId)
-      .filter((id): id is string => id !== null);
+    // A caller narrowed to their own rows or accessible agents reaches them
+    // through the user_id / profile_id indexes, so a plain DISTINCT is cheap;
+    // a skip scan there would walk the whole external_agent_id index. The
+    // org-wide view walks that index one distinct value at a time instead of
+    // reading every row.
+    const where = and(...conditions) ?? sql`true`;
+    const externalAgentIds =
+      ownUserId || accessibleAgentIds
+        ? await InteractionModel.distinctExternalAgentIds(where)
+        : await InteractionModel.skipScanExternalAgentIds(where);
 
     // Get all unique agent IDs from the external agent IDs (including from chains)
     const allAgentIds =
@@ -1268,7 +1249,6 @@ class InteractionModel {
         return;
       }
 
-      // Get agent's teams to update team and organization limits
       // If profileId is null (agent was deleted), we can't update usage - skip silently
       if (!interaction.profileId) {
         logger.info(
@@ -1276,139 +1256,51 @@ class InteractionModel {
         );
         return;
       }
-      const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
-        interaction.profileId,
-      );
-
-      const updatePromises: Promise<void>[] = [];
-
-      if (agentTeamIds.length === 0) {
+      // A credential's billing team takes the place of the agent's teams.
+      const teamIds = interaction.billingTeamId
+        ? [interaction.billingTeamId]
+        : await AgentTeamModel.getTeamsForAgent(interaction.profileId);
+      if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
-        );
-
-        // Even if agent has no teams, update organization limits for its own org.
-        try {
-          const organizationId = await AgentModel.findOrganizationId(
-            interaction.profileId,
-          );
-
-          if (organizationId) {
-            updatePromises.push(
-              LimitModel.updateTokenLimitUsage(
-                "organization",
-                organizationId,
-                model,
-                inputTokens,
-                outputTokens,
-              ),
-            );
-          }
-        } catch (error) {
-          logger.error(
-            { error },
-            "Failed to find organization for agent with no teams",
-          );
-        }
-      } else {
-        // Get team details to access organizationId
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
-
-        // Update organization-level token cost limits (from first team's organization)
-        if (teams.length > 0 && teams[0].organizationId) {
-          updatePromises.push(
-            LimitModel.updateTokenLimitUsage(
-              "organization",
-              teams[0].organizationId,
-              model,
-              inputTokens,
-              outputTokens,
-            ),
-          );
-        }
-
-        // Update team-level token cost limits
-        for (const team of teams) {
-          updatePromises.push(
-            LimitModel.updateTokenLimitUsage(
-              "team",
-              team.id,
-              model,
-              inputTokens,
-              outputTokens,
-            ),
-          );
-        }
-      }
-
-      // Update profile-level token cost limits (if any exist)
-      updatePromises.push(
-        LimitModel.updateTokenLimitUsage(
-          "agent",
-          interaction.profileId,
-          model,
-          inputTokens,
-          outputTokens,
-        ),
-      );
-
-      if (interaction.userId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "user",
-            interaction.userId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
-
-      if (interaction.virtualKeyId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "virtual_key",
-            interaction.virtualKeyId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
         );
       }
 
       // A passthrough virtual key accrues usage independently from the standard
       // virtual key (distinct limit entities), so record against both when present.
-      if (interaction.passthroughVirtualKeyId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "virtual_key",
-            interaction.passthroughVirtualKeyId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
+      const entityRefs: Array<{
+        entityType: LimitEntityType;
+        entityId: string | null | undefined;
+      }> = [
+        // The billing team pays instead of the caller, so a team-billed
+        // interaction leaves the caller's personal limit untouched.
+        {
+          entityType: "user",
+          entityId: interaction.billingTeamId ? null : interaction.userId,
+        },
+        { entityType: "virtual_key", entityId: interaction.virtualKeyId },
+        {
+          entityType: "llm_oauth_client",
+          entityId: interaction.authenticatedAppId,
+        },
+        {
+          entityType: "virtual_key",
+          entityId: interaction.passthroughVirtualKeyId,
+        },
+        { entityType: "environment", entityId: interaction.environmentId },
+      ];
+      const entities = entityRefs.flatMap(({ entityType, entityId }) =>
+        entityId ? [{ entityType, entityId }] : [],
+      );
 
-      // Update environment-level token cost limits using the environment
-      // snapshotted on the interaction at creation time.
-      if (interaction.environmentId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "environment",
-            interaction.environmentId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
-
-      // Execute all updates in parallel
-      await Promise.all(updatePromises);
+      await LimitModel.recordInteractionTokenUsage({
+        agentId: interaction.profileId,
+        teamIds,
+        entities,
+        model,
+        inputTokens,
+        outputTokens,
+      });
     } catch (error) {
       logger.error({ error }, "Error updating usage limits after interaction");
       // Don't throw - usage tracking should not break interaction creation
@@ -2523,6 +2415,44 @@ class InteractionModel {
       );
 
     return Number(row?.activeUsers) || 0;
+  }
+
+  private static async distinctExternalAgentIds(where: SQL): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({
+        externalAgentId: schema.interactionsTable.externalAgentId,
+      })
+      .from(schema.interactionsTable)
+      .where(where)
+      .orderBy(asc(schema.interactionsTable.externalAgentId));
+    return rows
+      .map((row) => row.externalAgentId)
+      .filter((id): id is string => id !== null);
+  }
+
+  /**
+   * Distinct external agent ids in ascending order, found by a loose index
+   * scan: each step jumps the external_agent_id index to the next value with
+   * a row matching `where`, so the cost follows the number of distinct ids
+   * rather than the number of interactions.
+   */
+  private static async skipScanExternalAgentIds(where: SQL): Promise<string[]> {
+    const column = schema.interactionsTable.externalAgentId;
+    const result = await db.execute<{ value: string }>(sql`
+      WITH RECURSIVE external_agent_ids AS (
+        (SELECT ${column} AS value FROM ${schema.interactionsTable}
+         WHERE ${where} AND ${column} IS NOT NULL
+         ORDER BY ${column} LIMIT 1)
+        UNION ALL
+        SELECT (SELECT ${column} FROM ${schema.interactionsTable}
+                WHERE ${where} AND ${column} > previous.value
+                ORDER BY ${column} LIMIT 1)
+        FROM external_agent_ids previous
+        WHERE previous.value IS NOT NULL
+      )
+      SELECT value FROM external_agent_ids WHERE value IS NOT NULL
+    `);
+    return result.rows.map((row) => row.value);
   }
 }
 

@@ -11,6 +11,10 @@ import { Info, Plus, Trash2, UserRound } from "lucide-react";
 import { useState } from "react";
 import { AddResourceAccessDialog } from "@/components/add-resource-access-dialog";
 import {
+  PermissionLevelLabel,
+  PermissionLevelSelect,
+} from "@/components/permission-level-select";
+import {
   PermissionsSettingsSection,
   permissionsSettingsDescription,
 } from "@/components/permissions-settings-section";
@@ -31,13 +35,6 @@ import {
   PopoverContent,
   PopoverTrigger,
 } from "@/components/ui/popover";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -107,6 +104,13 @@ export function InitialResourcePermissions({
             grant.scope === "*",
         ),
     );
+  const levelOptions = Object.entries(presets).map(([value, preset]) => ({
+    value,
+    label: preset.label,
+    description: presetDescription(value, resource),
+    actions: preset.actions,
+    disabled: !canGrantPreset(preset.actions),
+  }));
   const description = permissionsSettingsDescription(
     scopedResourceNouns[resource],
   );
@@ -143,9 +147,11 @@ export function InitialResourcePermissions({
               {/* Same width and padding as the editable rows' permission
                   select, plus the trash column's spacer, so every row in the
                   list shares one permission column. */}
-              <span className="w-48 shrink-0 px-3 text-sm text-muted-foreground">
-                Full access
-              </span>
+              <PermissionLevelLabel
+                label={resourcePermissionPresets.manage.label}
+                actions={resourcePermissionPresets.manage.actions}
+                className="text-muted-foreground"
+              />
               <span className="size-8 shrink-0" />
             </div>
           )}
@@ -163,7 +169,7 @@ export function InitialResourcePermissions({
                   {subjectLabels[grant.subject.type]}
                 </span>
               </div>
-              <Select
+              <PermissionLevelSelect
                 value={presetFor(grant.actions, resource)}
                 onValueChange={(value) => {
                   const preset = presets[value];
@@ -176,31 +182,15 @@ export function InitialResourcePermissions({
                     ),
                   );
                 }}
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-48 shrink-0 border-transparent bg-transparent shadow-none dark:bg-transparent"
-                  aria-label={`Permission for ${grant.name}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {Object.entries(presets).map(([key, preset]) => (
-                    <SelectItem
-                      key={key}
-                      value={key}
-                      disabled={!canGrantPreset(preset.actions)}
-                    >
-                      {preset.label}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={levelOptions}
+                ariaLabel={`Permission for ${grant.name}`}
+                className="border-transparent bg-transparent shadow-none dark:bg-transparent"
+              />
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="size-8 shrink-0 text-muted-foreground"
+                size="icon-sm"
+                className="shrink-0 text-muted-foreground"
                 aria-label={`Remove access for ${grant.name}`}
                 onClick={() =>
                   onChange(
@@ -232,7 +222,8 @@ export function InitialResourcePermissions({
                     <Button
                       type="button"
                       variant="ghost"
-                      className="h-7 gap-1 px-1 text-xs font-normal text-muted-foreground"
+                      size="xs"
+                      className="font-normal text-muted-foreground"
                       aria-label={`Why ${grant.name} has access: every ${scopedResourceNouns[resource]}`}
                     >
                       <span>Every {scopedResourceNouns[resource]}</span>
@@ -267,9 +258,11 @@ export function InitialResourcePermissions({
                   </PopoverContent>
                 </Popover>
               </div>
-              <span className="w-48 shrink-0 px-3 text-sm text-muted-foreground">
-                {actionSummary(grant.actions, resource)}
-              </span>
+              <PermissionLevelLabel
+                label={actionSummary(grant.actions, resource)}
+                actions={grant.actions}
+                className="text-muted-foreground"
+              />
               <span className="size-8 shrink-0" />
             </div>
           ))}

@@ -128,6 +128,7 @@ import {
   Gemini,
   Groq,
   InteractionVirtualKeySchema,
+  Jev,
   Minimax,
   Mistral,
   Ollama,
@@ -215,7 +216,7 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
     id: "AnthropicMessagesRequest",
   });
-  z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
+  z.globalRegistry.add(Anthropic.API.MessagesResponseWireSchema, {
     id: "AnthropicMessagesResponse",
   });
   z.globalRegistry.add(Cerebras.API.ChatCompletionRequestSchema, {
@@ -253,6 +254,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Openrouter.API.ChatCompletionResponseSchema, {
     id: "OpenrouterChatCompletionResponse",
+  });
+  z.globalRegistry.add(Jev.API.DecisionsRequestSchema, {
+    id: "JevDecisionsRequest",
+  });
+  z.globalRegistry.add(Jev.API.DecisionsResponseSchema, {
+    id: "JevDecisionsResponse",
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",
@@ -384,6 +391,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.deepseekProxyRoutes);
   fastify.register(routes.githubCopilotProxyRoutes);
   fastify.register(routes.groqProxyRoutes);
+  fastify.register(routes.jevProxyRoutes);
   fastify.register(routes.kimiProxyRoutes);
   fastify.register(routes.microsoft365CopilotProxyRoutes);
   fastify.register(routes.minimaxProxyRoutes);

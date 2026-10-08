@@ -93,19 +93,26 @@ test.describe("Bulk actions bar", () => {
     page,
     mswControl,
   }) => {
-    // Skills now offer a single bulk action, which fits a phone. A selected
-    // remote A2A agent still offers both Share and Delete, which
-    // crowd the rail.
+    // Skills offer a single bulk action, which fits a phone. On Agents, a
+    // fully selected page adds the long "select all matching" prompt next to
+    // Delete, which crowds the rail.
     await mswControl.use({
       method: "get",
       url: "/api/agent-catalog",
-      body: makeAgentCatalog({ externalAgents: [makeExternalAgent()] }),
+      body: makeAgentCatalog({
+        externalAgents: [makeExternalAgent()],
+        total: 2,
+        agentTotal: 0,
+        externalAgentTotal: 2,
+      }),
     });
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/agents");
     await page.getByRole("checkbox", { name: "Select Partner Agent" }).click();
     await expect(
-      page.getByRole("button", { name: "Share", exact: true }),
+      page.getByRole("button", {
+        name: "Select all 2 agents that match the current filters.",
+      }),
     ).toBeVisible();
 
     const metrics = await page

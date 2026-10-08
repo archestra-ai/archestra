@@ -49,8 +49,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   useInternalMcpCatalog,
   useUpdateInternalMcpCatalogItem,
@@ -66,6 +66,7 @@ import {
   getDeploymentLabel,
   STATE_PRIORITY,
 } from "./deployment-status";
+import { getLocalInstallationCopy } from "./local-installation-copy";
 
 type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
 
@@ -354,6 +355,9 @@ export function ManageUsersContent({
     !split.hasOrgConnection &&
     !!hasMcpServerAdminPermission;
   const isLocalServer = catalogItem?.serverType === "local";
+  const installationCopy = getLocalInstallationCopy(
+    catalogItem?.multitenant === true,
+  );
   const isPersonalOnly =
     catalogItem != null && isPlaywrightCatalogItem(catalogItem.id);
   const canAddServiceAccount = !isPersonalOnly && (canAddTeam || canAddOrg);
@@ -405,7 +409,7 @@ export function ManageUsersContent({
             }
             description={
               isLocalServer
-                ? "A private hosted instance available only to its owner."
+                ? installationCopy.personal
                 : "Private to its owner — only that person can use it."
             }
             emptyText={
@@ -444,7 +448,7 @@ export function ManageUsersContent({
             title={isLocalServer ? "Shared installations" : "Service accounts"}
             description={
               isLocalServer
-                ? "Hosted instances shared with a team or organization."
+                ? installationCopy.shared
                 : "Static credentials intentionally shared with a team or organization."
             }
             emptyText={
@@ -580,7 +584,6 @@ function ConnectionsTable({
   rows: ConnectionRow[];
   testId: string;
 } & RowRenderProps) {
-  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const hasDeploymentStatuses = rows.some(
     (r) => deploymentStatuses[r.server.id],
   );
@@ -687,7 +690,7 @@ function ConnectionsTable({
                     );
                   }
                   return (
-                    <button
+                    <UnstyledButton
                       type="button"
                       onClick={() => onOpenPodLogs?.(server.id)}
                       className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
@@ -696,7 +699,7 @@ function ConnectionsTable({
                       <span className="truncate min-w-0 flex-1 text-left">
                         {podName}
                       </span>
-                    </button>
+                    </UnstyledButton>
                   );
                 })()}
               </TableCell>
@@ -712,7 +715,7 @@ function ConnectionsTable({
             </TableCell>
             <TableCell>
               <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                {alertingEnabled && server.oauthRefreshError && (
+                {server.oauthRefreshError && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -720,9 +723,8 @@ function ConnectionsTable({
                           <Button
                             onClick={() => handleReauthenticate(server)}
                             disabled={!canReauthenticate(server)}
-                            size="sm"
+                            size="xs"
                             variant="outline"
-                            className="h-7 text-xs"
                           >
                             <RefreshCw className="mr-1 h-3 w-3" />
                             Re-authenticate
@@ -744,9 +746,9 @@ function ConnectionsTable({
                         <Button
                           onClick={() => handleRevoke(server)}
                           disabled={isDeleting || !canRevoke(server)}
-                          size="sm"
+                          size="xs"
                           variant="ghost"
-                          className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                          className="text-muted-foreground hover:text-foreground"
                           data-testid={
                             isYou
                               ? `${E2eTestId.RevokeCredentialButton}-personal`

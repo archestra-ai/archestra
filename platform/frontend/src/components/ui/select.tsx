@@ -7,9 +7,27 @@ import type * as React from "react";
 import { cn } from "@/lib/utils/tailwind";
 
 function Select({
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+  return (
+    <SelectPrimitive.Root
+      data-slot="select"
+      // Inside a <form>, Radix mirrors the value into a hidden native <select>.
+      // When a controlled value changes before that element has its options
+      // (e.g. a saved value loaded after mount), the browser resets it to ""
+      // and Radix reports that as a change, clearing the field and marking the
+      // form dirty. Radix forbids "" as an item value, so it is never a real
+      // selection and is safe to drop.
+      onValueChange={
+        onValueChange &&
+        ((value) => {
+          if (value !== "") onValueChange(value);
+        })
+      }
+      {...props}
+    />
+  );
 }
 
 function SelectGroup({
@@ -132,7 +150,7 @@ function SelectItem({
     <SelectPrimitive.Item
       data-slot="select-item"
       className={cn(
-        "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4 *:[span]:last:flex *:[span]:last:items-center *:[span]:last:gap-2",
+        "focus:bg-accent focus:text-accent-foreground [&_svg:not([class*='text-'])]:text-muted-foreground relative flex w-full cursor-default items-center gap-2 rounded-sm py-1.5 pr-8 pl-2 text-sm outline-hidden select-none data-[disabled]:pointer-events-none data-[disabled]:opacity-50 [&_svg]:pointer-events-none [&_svg]:shrink-0 [&_svg:not([class*='size-'])]:size-4",
         className,
       )}
       {...props}
@@ -153,8 +171,12 @@ function SelectItem({
             re-parented text node from its portal container
             (facebook/react#11538) — with the span, React only ever removes the
             span itself, which translation never moves. */}
-        <SelectPrimitive.ItemText>
-          <span>{children}</span>
+        {/* `contents` keeps the span out of layout, so an icon + label child
+            pair stays one row in the trigger's flex value instead of the
+            block-level svg breaking onto its own line. ItemText's own flex
+            does the same inside the open list. */}
+        <SelectPrimitive.ItemText className="flex items-center gap-2">
+          <span className="contents">{children}</span>
         </SelectPrimitive.ItemText>
         {description && (
           <span className="text-xs text-muted-foreground font-normal">

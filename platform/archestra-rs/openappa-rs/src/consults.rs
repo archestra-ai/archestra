@@ -48,8 +48,7 @@ pub(crate) struct Attribution {
     pub organization_id: String,
     pub session_id: String,
     pub caller_id: Option<String>,
-    /// The organization's Log Content setting is Metadata only, as the host
-    /// resolved it for this dispatch.
+    /// The host's Log Content mode is Metadata only for this dispatch.
     pub withhold_content: bool,
 }
 
@@ -219,7 +218,7 @@ fn without_content(record: ConsultRecord) -> ConsultRecord {
 
 // The stored names are the runtime's own serde names. The backend's zod enums
 // list the same strings.
-fn role_name(role: ExternalRole) -> &'static str {
+pub(crate) fn role_name(role: ExternalRole) -> &'static str {
     match role {
         ExternalRole::Authority => "authority",
         ExternalRole::Sanitizer => "sanitizer",

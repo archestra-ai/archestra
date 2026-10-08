@@ -5,11 +5,52 @@ import { runScopedResourcePermissionCutover } from "@/services/resource-permissi
 import { describe, expect, test } from "@/test";
 import AgentModel from "./agent";
 import AgentTeamModel from "./agent-team";
+import EnvironmentModel from "./environment";
 import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
 describe("resource permission policy persistence", () => {
+  test("batch policy lookup accepts more scopes than the PostgreSQL parameter limit", async ({
+    makeOrganization,
+  }) => {
+    const organization = await makeOrganization();
+    const first = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "First batch target",
+    });
+    const last = await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Last batch target",
+    });
+    await EnvironmentModel.create({
+      organizationId: organization.id,
+      name: "Excluded target",
+    });
+    const scopes = Array.from(
+      { length: 65_536 },
+      (_, index) =>
+        `00000000-0000-4000-8000-${index.toString(16).padStart(12, "0")}`,
+    );
+    scopes[0] = first.id;
+    scopes[scopes.length - 1] = last.id;
+    const policies = await ResourcePermissionPolicyModel.findApplicableBatch({
+      organizationId: organization.id,
+      resource: "environment",
+      scopes,
+    });
+    expect(policies.map((policy) => policy.scope).sort()).toEqual(
+      ["*", first.id, last.id].sort(),
+    );
+    const wildcardOnly =
+      await ResourcePermissionPolicyModel.findApplicableBatch({
+        organizationId: organization.id,
+        resource: "environment",
+        scopes: [],
+      });
+    expect(wildcardOnly.map((policy) => policy.scope)).toEqual(["*"]);
+  });
+
   test("a private agent shared with a role stays unavailable to organization credentials", async ({
     makeOrganization,
     makeUser,

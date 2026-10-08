@@ -95,6 +95,7 @@ import {
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
+import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
@@ -500,14 +501,8 @@ function CatalogItemDetails({
     <PageLayout
       // The wizard's column, so Edit opens in the same one this page reads in.
       maxWidth="wizard"
-      title={
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
-          </div>
-          <span className="min-w-0 truncate">{item.name}</span>
-        </div>
-      }
+      icon={<McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />}
+      title={<span className="block min-w-0 truncate">{item.name}</span>}
       status={
         statusIssue ? undefined : (
           <ServerStatus
@@ -529,6 +524,7 @@ function CatalogItemDetails({
           {showChatButton && (
             <Button
               variant="outline"
+              size="sm"
               disabled={isChatCreating}
               onClick={() => startChat(item)}
             >
@@ -537,7 +533,7 @@ function CatalogItemDetails({
             </Button>
           )}
           {canModify && effectiveTab !== "yaml" && (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href={mcpServerActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
                 {editAction.label}
@@ -549,7 +545,7 @@ function CatalogItemDetails({
             (canModify && !isPlaywright)) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon-sm">
                   <MoreHorizontal className="h-4 w-4" />
                   <span className="sr-only">More actions</span>
                 </Button>
@@ -674,7 +670,8 @@ function CatalogItemDetails({
                   }
                   description={
                     variant === "local"
-                      ? "Running instances of this server, for one person or shared with a team."
+                      ? getLocalInstallationCopy(item.multitenant === true)
+                          .section
                       : "The credentials this server is used with."
                   }
                 >
@@ -947,14 +944,14 @@ function ServerStatus({
     // No summary means no deployment entry for any of this server's ids. The
     // feed's own state decides what that means, never the absence of an entry
     // — the same rule the list's `installedStatusLabel` follows. A remote
-    // server has no pod at all, so "Installed" is its whole runtime story.
+    // server has no pod at all, and the page of an installed server needs no
+    // label that says so, so it shows nothing.
+    if (variant === "remote" || deploymentFeedState === "disabled") {
+      return null;
+    }
     return (
       <span className={typeRole({ role: "body" })}>
-        {variant === "remote" || deploymentFeedState === "disabled"
-          ? "Installed"
-          : deploymentFeedState === "loading"
-            ? "Checking…"
-            : "Status unavailable"}
+        {deploymentFeedState === "loading" ? "Checking…" : "Status unavailable"}
       </span>
     );
   }

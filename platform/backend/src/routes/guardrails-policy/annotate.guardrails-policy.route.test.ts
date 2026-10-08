@@ -1,3 +1,4 @@
+import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
 import { vi } from "vitest";
 import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin/plugin";
@@ -6,6 +7,7 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import ToolModel from "@/models/tool";
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
@@ -28,15 +30,19 @@ describe("catch-all tool annotations", () => {
     vi.restoreAllMocks();
   });
 
-  test("an unconfigured organization gets a valid catch-all whose only specific tool rule is run_command", async ({
+  test("an unconfigured organization gets a valid catch-all with rules for run_command and the control tools", async ({
     makeOrganization,
   }) => {
     const organizationId = (await makeOrganization()).id;
+    // The starter's archestra battery governs the built-in catalog, which
+    // startup seeds; without it this deployment would hold the battery back.
+    await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
     const policy = await guardrailsPolicyService.get(organizationId);
     expect(policy.revision).toBe(0);
     expect(policy.content).toContain('name = "*"');
     expect(policy.content.match(/name = "archestra__[^"]*"/g)).toEqual([
       'name = "archestra__run_command"',
+      'name = "archestra__ask_user"',
     ]);
     expect(
       await guardrailsPolicyService.validate(policy.content, {

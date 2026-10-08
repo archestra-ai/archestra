@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
@@ -175,5 +175,19 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect((await set(true)).statusCode).toBe(403);
     expect((await setUnsupportedClientAction("block")).statusCode).toBe(403);
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
+  });
+
+  test("members can read the status but not change it", async () => {
+    await db
+      .update(schema.membersTable)
+      .set({ role: MEMBER_ROLE_NAME })
+      .where(eq(schema.membersTable.userId, userId));
+    const read = await app.inject({
+      method: "GET",
+      url: "/api/guardrails-deployment",
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json()).toMatchObject({ unsupportedClientAction: "bypass" });
+    expect((await set(true)).statusCode).toBe(403);
   });
 });

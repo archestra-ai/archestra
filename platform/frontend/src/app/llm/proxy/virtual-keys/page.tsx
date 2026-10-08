@@ -3,11 +3,11 @@
 import type { archestraApiTypes } from "@archestra/shared";
 import type { ColumnDef, RowSelectionState } from "@tanstack/react-table";
 import {
+  ArrowLeftRight,
   ChevronDown,
   Copy,
-  Eye,
-  EyeOff,
   KeyRound,
+  type LucideIcon,
   Pencil,
   Plus,
   Trash2,
@@ -20,6 +20,7 @@ import {
   CreateVirtualKeyDialogWithData,
   type VirtualKeyType,
 } from "@/components/create-virtual-key-dialog";
+import { formatSpendCap } from "@/components/credential-billing/budget-fields";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EditVirtualKeyDialog } from "@/components/edit-virtual-key-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
@@ -47,7 +48,6 @@ import {
   TableCardViewToggle,
 } from "@/components/table-card-view";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
 import { BulkActions } from "@/components/ui/bulk-actions-bar";
 import { createSelectColumn } from "@/components/ui/bulk-select-column";
 import { Button } from "@/components/ui/button";
@@ -59,6 +59,11 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { PermissionButton } from "@/components/ui/permission-button";
+import {
+  Tooltip,
+  TooltipContent,
+  TooltipTrigger,
+} from "@/components/ui/tooltip";
 import {
   useHasPermissions,
   useScopedCapabilities,
@@ -79,6 +84,7 @@ import {
   formatRelativeTime,
   formatRelativeTimeFromNow,
 } from "@/lib/utils/date-time";
+import { cn } from "@/lib/utils/tailwind";
 import {
   useAllVirtualApiKeys,
   useBulkDeleteVirtualApiKeys,
@@ -157,7 +163,7 @@ function VirtualKeysTable() {
         {canCreate ? (
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button>
+              <Button size="sm">
                 <Plus className="h-4 w-4" />
                 <span>Create Virtual Key</span>
                 <ChevronDown className="h-4 w-4" />
@@ -237,32 +243,26 @@ function VirtualKeysTable() {
       allLabel: "Select all keys on this page",
     }),
     {
+      // The token sits under the name, and the kind reads from the icon.
       id: "name",
       accessorKey: "name",
       header: "Name",
-      size: 220,
+      size: 240,
       cell: ({ row }) => (
-        <div className="flex min-w-0 items-center gap-2">
-          <span className="truncate font-medium">{row.original.name}</span>
-          <Badge variant="outline" className="shrink-0">
-            {row.original.keyType === "passthrough"
-              ? "Passthrough"
-              : "Standard"}
-          </Badge>
-          <LabelTags labels={row.original.labels} />
+        <div className="flex min-w-0 items-center gap-2.5">
+          <VirtualKeyKindIcon keyType={row.original.keyType} />
+          <div className="min-w-0 flex-1">
+            <div className="flex min-w-0 items-center gap-2">
+              <span className="truncate font-medium">{row.original.name}</span>
+              <LabelTags labels={row.original.labels} />
+            </div>
+            <VirtualKeyValueCell
+              id={row.original.id}
+              tokenStart={row.original.tokenStart}
+              canCopy={row.original.authorId === currentUserId}
+            />
+          </div>
         </div>
-      ),
-    },
-    {
-      id: "token",
-      header: "Token",
-      size: 200,
-      cell: ({ row }) => (
-        <VirtualKeyValueCell
-          id={row.original.id}
-          tokenStart={row.original.tokenStart}
-          canReveal={row.original.authorId === currentUserId}
-        />
       ),
     },
     {
@@ -271,20 +271,19 @@ function VirtualKeysTable() {
       size: 160,
       cell: ({ row }) => (
         <span className="block max-w-[160px] truncate text-muted-foreground">
-          {row.original.keyType === "passthrough" ? (
-            <span>None</span>
-          ) : (
-            <span>
-              {formatProviderKeySummary(
-                row.original.providerApiKeys,
-                providerCatalog.label,
-              )}
-            </span>
-          )}
+          <VirtualKeyProviders
+            virtualKey={row.original}
+            label={providerCatalog.label}
+          />
         </span>
       ),
     },
-
+    {
+      id: "budget",
+      header: "Budget",
+      size: 140,
+      cell: ({ row }) => <VirtualKeyBudget virtualKey={row.original} />,
+    },
     {
       id: "activity",
       header: "Activity",
@@ -369,10 +368,21 @@ function VirtualKeysTable() {
                 })
               }
               placeholder="Filter by type"
+              showSearch={false}
               items={[
                 { value: "all", label: "All types" },
-                { value: "standard", label: "Standard" },
-                { value: "passthrough", label: "Passthrough" },
+                {
+                  value: "standard",
+                  label: "Standard",
+                  content: <KeyTypeLabel keyType="standard" withHint />,
+                  selectedContent: <KeyTypeLabel keyType="standard" />,
+                },
+                {
+                  value: "passthrough",
+                  label: "Passthrough",
+                  content: <KeyTypeLabel keyType="passthrough" withHint />,
+                  selectedContent: <KeyTypeLabel keyType="passthrough" />,
+                },
               ]}
             />
             <ProviderKeyFilterSelect
@@ -434,8 +444,18 @@ function VirtualKeysTable() {
               {keys.map((key) => (
                 <TableCard
                   key={key.id}
-                  icon={<KeyRound className="h-5 w-5" />}
+                  icon={<VirtualKeyKindIcon keyType={key.keyType} />}
                   title={key.name}
+                  description={
+                    <div className="flex min-w-0 items-center gap-2">
+                      <VirtualKeyValueCell
+                        id={key.id}
+                        tokenStart={key.tokenStart}
+                        canCopy={key.authorId === currentUserId}
+                      />
+                      <LabelTags labels={key.labels} />
+                    </div>
+                  }
                   {...cardSelection(key)}
                   selectionLabel={`Select ${key.name}`}
                   actions={
@@ -473,34 +493,19 @@ function VirtualKeysTable() {
                     </div>
                   }
                 >
-                  <div className="space-y-2">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge variant="outline">
-                        {key.keyType === "passthrough" ? (
-                          <span>Passthrough</span>
-                        ) : (
-                          <span>Standard</span>
-                        )}
-                      </Badge>
-                      <LabelTags labels={key.labels} />
-                    </div>
-                    {/* Token left, mapped providers in the row's spare width. */}
-                    <div className="flex items-center justify-between gap-3">
-                      <VirtualKeyValueCell
-                        id={key.id}
-                        tokenStart={key.tokenStart}
-                        canReveal={key.authorId === currentUserId}
+                  <dl className="grid grid-cols-[4.5rem_1fr] gap-x-3 gap-y-1 text-xs">
+                    <dt className="text-muted-foreground">Providers</dt>
+                    <dd className="min-w-0 truncate">
+                      <VirtualKeyProviders
+                        virtualKey={key}
+                        label={providerCatalog.label}
                       />
-                      {key.keyType !== "passthrough" && (
-                        <p className="min-w-0 shrink truncate text-right text-xs text-muted-foreground">
-                          {formatProviderKeySummary(
-                            key.providerApiKeys,
-                            providerCatalog.label,
-                          )}
-                        </p>
-                      )}
-                    </div>
-                  </div>
+                    </dd>
+                    <dt className="text-muted-foreground">Budget</dt>
+                    <dd className="min-w-0">
+                      <VirtualKeyBudget virtualKey={key} inline />
+                    </dd>
+                  </dl>
                 </TableCard>
               ))}
             </TableCardList>
@@ -595,73 +600,175 @@ function VirtualKeysTable() {
 }
 
 /**
- * The token cell: masked prefix with author-only reveal/copy — the backend
+ * The kind as a tinted icon: a key for a standard key, which carries provider
+ * keys, and crossed arrows for a passthrough key, which only relays the
+ * caller's own provider key.
+ */
+function VirtualKeyKindIcon({
+  keyType,
+}: {
+  keyType: VirtualKeyRow["keyType"];
+}) {
+  const { icon: Icon, label, hint, tone } = KEY_TYPE_STYLES[keyType];
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span
+          role="img"
+          aria-label={`${label} key`}
+          className={cn(
+            "flex size-6 shrink-0 items-center justify-center rounded",
+            tone.tile,
+            tone.text,
+          )}
+        >
+          <Icon className="size-3.5" />
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        <span className="font-medium">{label}:</span> {hint}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
+/** A kind filter option, prefixed with the icon the list uses. */
+function KeyTypeLabel({
+  keyType,
+  withHint = false,
+}: {
+  keyType: VirtualKeyRow["keyType"];
+  /** Adds a one-line hint under the label, for the open list. */
+  withHint?: boolean;
+}) {
+  const { icon: Icon, label, hint, tone } = KEY_TYPE_STYLES[keyType];
+  return (
+    <span className="flex items-center gap-2">
+      <Icon className={cn("size-4 shrink-0", tone.text)} />
+      <span className="min-w-0">
+        <span className="block">{label}</span>
+        {withHint && (
+          <span className="block text-xs text-muted-foreground">{hint}</span>
+        )}
+      </span>
+    </span>
+  );
+}
+
+const KEY_TYPE_STYLES = {
+  standard: {
+    icon: KeyRound,
+    label: "Standard",
+    hint: "Uses org provider keys",
+    tone: { tile: "bg-primary/15", text: "text-primary" },
+  },
+  passthrough: {
+    icon: ArrowLeftRight,
+    label: "Passthrough",
+    hint: "Caller brings their own key",
+    tone: {
+      tile: "bg-sky-500/15",
+      text: "text-sky-700 dark:text-sky-300",
+    },
+  },
+} satisfies Record<
+  VirtualKeyRow["keyType"],
+  {
+    icon: LucideIcon;
+    label: string;
+    hint: string;
+    tone: { tile: string; text: string };
+  }
+>;
+
+function VirtualKeyProviders({
+  virtualKey,
+  label,
+}: {
+  virtualKey: VirtualKeyRow;
+  label: Parameters<typeof formatProviderKeySummary>[1];
+}) {
+  if (virtualKey.keyType === "passthrough") {
+    return <span className="text-muted-foreground">Caller's own key</span>;
+  }
+  return (
+    <span>{formatProviderKeySummary(virtualKey.providerApiKeys, label)}</span>
+  );
+}
+
+/** Who pays for the key and its cap, on two lines or one. */
+function VirtualKeyBudget({
+  virtualKey,
+  inline = false,
+}: {
+  virtualKey: VirtualKeyRow;
+  inline?: boolean;
+}) {
+  const team = virtualKey.billingTeam?.name;
+  const cap = virtualKey.spendCap
+    ? `${formatSpendCap(virtualKey.spendCap)} cap`
+    : "No cap";
+  if (inline) {
+    return (
+      <span className="block truncate">
+        <span className={cn(!team && "text-muted-foreground")}>
+          {team ?? "No team"}
+        </span>
+        <span className="text-muted-foreground"> · {cap}</span>
+      </span>
+    );
+  }
+  return (
+    <div className="min-w-0 text-sm">
+      <div
+        className={cn(
+          "max-w-[140px] truncate",
+          !team && "text-muted-foreground",
+        )}
+      >
+        {team ?? "No team"}
+      </div>
+      <div className="text-xs text-muted-foreground">{cap}</div>
+    </div>
+  );
+}
+
+/**
+ * The token cell: masked prefix with an author-only copy action — the backend
  * 403s value reads for keys created by someone else.
  */
 function VirtualKeyValueCell({
   id,
   tokenStart,
-  canReveal,
+  canCopy,
 }: {
   id: string;
   tokenStart: string;
-  canReveal: boolean;
+  canCopy: boolean;
 }) {
   const fetchValue = useFetchVirtualApiKeyValue();
-  const [value, setValue] = useState<string | null>(null);
-  const [visible, setVisible] = useState(false);
-  const resolveValue = async () => {
-    if (value) return value;
-    const fetched = await fetchValue.mutateAsync(id);
-    if (fetched) setValue(fetched);
-    return fetched;
-  };
   return (
     // min-w-0 + overflow-hidden: the DataTable's fixed layout does not clip
     // cell content, so an unconstrained flex row paints over the next column.
-    <div className="flex min-w-0 items-center gap-1 overflow-hidden font-mono text-xs">
-      <code
-        className={visible && value ? "min-w-0 break-all" : "min-w-0 truncate"}
-      >
-        {visible && value ? value : `${tokenStart}…`}
-      </code>
-      {canReveal && (
-        <>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0"
-            aria-label={visible ? "Hide key" : "Reveal key"}
-            disabled={fetchValue.isPending}
-            onClick={async () => {
-              if (!visible && !(await resolveValue())) return;
-              setVisible(!visible);
-            }}
-          >
-            {visible ? (
-              <EyeOff className="h-3.5 w-3.5" />
-            ) : (
-              <Eye className="h-3.5 w-3.5" />
-            )}
-          </Button>
-          <Button
-            type="button"
-            variant="ghost"
-            size="icon-sm"
-            className="shrink-0"
-            aria-label="Copy key"
-            disabled={fetchValue.isPending}
-            onClick={async () => {
-              const resolved = await resolveValue();
-              if (!resolved) return;
-              await copyToClipboard(resolved);
-              toast.success("Key copied");
-            }}
-          >
-            <Copy className="h-3.5 w-3.5" />
-          </Button>
-        </>
+    <div className="flex h-5 min-w-0 items-center gap-0.5 overflow-hidden font-mono text-xs text-muted-foreground">
+      <code className="min-w-0 truncate">{`${tokenStart}…`}</code>
+      {canCopy && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="size-5 shrink-0"
+          aria-label="Copy key"
+          disabled={fetchValue.isPending}
+          onClick={async () => {
+            const value = await fetchValue.mutateAsync(id);
+            if (!value) return;
+            await copyToClipboard(value);
+            toast.success("Key copied");
+          }}
+        >
+          <Copy className="size-3" />
+        </Button>
       )}
     </div>
   );

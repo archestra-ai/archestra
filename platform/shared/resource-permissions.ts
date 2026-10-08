@@ -18,6 +18,9 @@ export const ScopedResourceSchema = z.enum([
   "knowledgeFile",
   "llmVirtualKey",
   "llmProviderApiKey",
+  // An agent hosted elsewhere and reached over A2A. Using one means assigning
+  // it as a subagent or delegating to it.
+  "externalAgent",
   // An OAuth client registration. Its tokens never consult these grants: they
   // decide who can see and manage the registration, not what it reaches.
   "mcpOauthClient",
@@ -189,7 +192,7 @@ export function resourcePermissionPresetsFor(
     return {
       ...resourcePermissionPresets,
       deploy: {
-        label: "Full access + deployment",
+        label: "Full access + deploy",
         actions: [
           ...resourcePermissionPresets.manage.actions,
           "configure-deployment-spec",

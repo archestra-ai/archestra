@@ -58,6 +58,70 @@ function stubAnthropicFetch() {
   return fetchMock;
 }
 
+/**
+ * A Foundry resource as it really answers: `/anthropic/v1/models` is
+ * `api_not_supported`, and the deployment listing accepts the key only in
+ * `api-key` (an `x-api-key` header gets 401).
+ */
+function stubFoundryFetch() {
+  const fetchMock = vi.fn(
+    async (input: RequestInfo | URL, init?: RequestInit): Promise<Response> => {
+      const url = new URL(String(input));
+      const headers = (init?.headers ?? {}) as Record<string, string>;
+      if (url.pathname === "/anthropic/v1/models") {
+        return new Response(
+          JSON.stringify({
+            error: {
+              code: "api_not_supported",
+              message: "Requested API is currently not supported",
+            },
+          }),
+          { status: 404 },
+        );
+      }
+      if (
+        url.pathname === "/openai/deployments" &&
+        url.searchParams.get("api-version") === "2023-03-15-preview"
+      ) {
+        if (headers["api-key"] !== "foundry-key") {
+          return new Response("unauthorized", { status: 401 });
+        }
+        return new Response(
+          JSON.stringify({
+            data: [
+              { id: "gpt-4.1", model: "gpt-4.1", status: "succeeded" },
+              {
+                id: "team-sonnet",
+                model: "claude-sonnet-5-5",
+                status: "succeeded",
+              },
+              {
+                id: "claude-opus-5-5",
+                model: "claude-opus-5-5",
+                status: "succeeded",
+              },
+              {
+                id: "claude-haiku-broken",
+                model: "claude-haiku-5",
+                status: "failed",
+              },
+              {
+                id: "grok-4-1-fast-non-reasoning",
+                model: "grok-4-1-fast-non-reasoning",
+                status: "succeeded",
+              },
+            ],
+          }),
+          { status: 200 },
+        );
+      }
+      throw new Error(`unexpected request: ${url}`);
+    },
+  );
+  vi.stubGlobal("fetch", fetchMock);
+  return fetchMock;
+}
+
 /** The headers the fetcher sent on the `/v1/models` request. */
 function modelsRequestHeaders(
   fetchMock: ReturnType<typeof stubAnthropicFetch>,
@@ -178,6 +242,45 @@ describe("fetchAnthropicModels", () => {
 
     expect(error).toBeInstanceOf(ApiError);
     expect(error.statusCode).toBe(502);
+  });
+
+  test("discovers Claude deployments on Microsoft Foundry, which serves no model list", async () => {
+    const fetchMock = stubFoundryFetch();
+
+    await expect(
+      fetchAnthropicModels(
+        "foundry-key",
+        "https://my-resource.services.ai.azure.com/anthropic",
+      ),
+    ).resolves.toEqual([
+      {
+        id: "team-sonnet",
+        displayName: "team-sonnet",
+        provider: "anthropic",
+        underlyingModelName: "claude-sonnet-5-5",
+      },
+      {
+        id: "claude-opus-5-5",
+        displayName: "claude-opus-5-5",
+        provider: "anthropic",
+        underlyingModelName: "claude-opus-5-5",
+      },
+    ]);
+    expect(
+      fetchMock.mock.calls.some((c) => String(c[0]).includes("/v1/models")),
+    ).toBe(false);
+  });
+
+  test("relays a rejected Foundry key with its real status", async () => {
+    stubFoundryFetch();
+
+    const error = await fetchAnthropicModels(
+      "wrong-key",
+      "https://my-resource.services.ai.azure.com/anthropic",
+    ).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.statusCode).toBe(401);
   });
 
   test("discovers versioned and alias Claude models from Vertex AI", async () => {

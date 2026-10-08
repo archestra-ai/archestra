@@ -9,9 +9,11 @@ import {
   BatteryPolicySourceSchema,
   BatterySummarySchema,
   CreateBatteryInstallSchema,
+  CredentialBindingParamsSchema,
   EffectivePolicySchema,
   PolicyBatteryViewSchema,
   PolicyDeclarationsViewSchema,
+  SetCredentialBindingSchema,
   UpdateBatteryInstallSchema,
   UploadBatteryPackageSchema,
   UploadedBatteryPackageSchema,
@@ -190,6 +192,25 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       });
       return { success: true as const };
     },
+  );
+  app.put(
+    "/api/openappa/credential-bindings/:variable",
+    {
+      schema: {
+        operationId: RouteId.SetOpenappaCredentialBinding,
+        tags: ["OpenAPPA"],
+        params: CredentialBindingParamsSchema,
+        body: SetCredentialBindingSchema,
+        response: constructResponseSchema(PolicyDeclarationsViewSchema),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.setCredentialBinding({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        variable: request.params.variable,
+        key: request.body.key,
+      }),
   );
   app.put(
     "/api/openappa/battery-packages/:name",

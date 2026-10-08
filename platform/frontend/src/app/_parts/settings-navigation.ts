@@ -20,7 +20,6 @@ export const SETTINGS_TAB_HREFS = [
   "/settings/skills",
   "/settings/security",
   "/settings/openappa",
-  "/settings/logs",
   "/settings/knowledge",
   "/settings/environments",
   "/settings/users",

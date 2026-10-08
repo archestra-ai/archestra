@@ -43,7 +43,7 @@ const LEGACY_ENCRYPTED_CHAT_REDACTED_VALUES = [
  * Read schemas validate persisted content, so they have to admit the legacy
  * value as well — hence a shared list rather than a literal at each site.
  *
- * The Log Content setting's marker is here too: it also means "never
+ * The Log Content mode's marker is here too: it also means "never
  * stored", outside any locked chat, so the same readers have to recognize it.
  */
 export const ENCRYPTED_CHAT_REDACTED_VALUES = [

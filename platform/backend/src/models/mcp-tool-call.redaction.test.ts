@@ -1,9 +1,19 @@
 // biome-ignore-all lint/suspicious/noExplicitAny: test
 
-import { expect, test } from "@/test";
+import { expect, test } from "vitest";
+import { AgentModel } from "@/models";
 import McpToolCallModel from "./mcp-tool-call";
 
 const SECRET_VALUE = "sk-arg-PLAINTEXT-must-not-escape";
+
+async function makeAgentForToolCall() {
+  return AgentModel.create({
+    name: `agent-${crypto.randomUUID().slice(0, 8)}`,
+    scope: "org",
+    teams: [],
+    knowledgeBaseIds: [],
+  });
+}
 
 /** Arguments as `archestra__edit_mcp_config` receives them. */
 function editConfigArgs() {
@@ -20,10 +30,8 @@ function editConfigArgs() {
   };
 }
 
-test("a secret in tool-call arguments is not persisted in the log", async ({
-  makeAgent,
-}) => {
-  const agent = await makeAgent();
+test("a secret in tool-call arguments is not persisted in the log", async () => {
+  const agent = await makeAgentForToolCall();
 
   const created = await McpToolCallModel.create({
     agentId: agent.id,
@@ -51,10 +59,8 @@ test("a secret in tool-call arguments is not persisted in the log", async ({
  * Redaction has to respect the same contract — mutating the caller's nested
  * `toolCall` would corrupt the response actually returned to the client.
  */
-test("create does not mutate the caller's toolCall object", async ({
-  makeAgent,
-}) => {
-  const agent = await makeAgent();
+test("create does not mutate the caller's toolCall object", async () => {
+  const agent = await makeAgentForToolCall();
 
   const toolCall = {
     id: "call-2",

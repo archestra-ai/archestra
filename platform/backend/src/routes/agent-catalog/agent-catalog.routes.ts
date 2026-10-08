@@ -2,11 +2,12 @@ import {
   calculatePaginationMeta,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { getAgentTypePermissionChecker, userHasPermission } from "@/auth";
+import { getAgentTypePermissionChecker } from "@/auth";
 import { AgentModel } from "@/models";
 import { listA2aRemoteAgents } from "@/services/a2a-outbound-registry";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
@@ -31,6 +32,16 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           .object({
             name: z.string().optional(),
             scope: AgentScopeFilterSchema.optional(),
+            includeBuiltIn: z
+              .preprocess(
+                (value) =>
+                  typeof value === "string" ? value === "true" : value,
+                z.boolean(),
+              )
+              .optional()
+              .describe(
+                "Also list the built-in agents. Applies to agent admins only, and the access filter does not apply to these agents.",
+              ),
             teamIds: z
               .preprocess(
                 (value) =>
@@ -59,6 +70,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 z.boolean(),
               )
               .optional(),
+            access: ResourceAccessQuerySchema,
             selectableOnly: z
               .preprocess(
                 (value) =>
@@ -99,22 +111,18 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       });
       checker.require("agent", query.status === "deleted" ? "delete" : "read");
       const isAgentAdmin = checker.isAdmin("agent");
-      const canManageExternalAgents = await userHasPermission(
-        user.id,
-        organizationId,
-        "organizationSettings",
-        "update",
-      );
       const filters = {
         organizationId,
         name: query.name,
         scope: query.scope,
+        includeBuiltIn: query.includeBuiltIn,
         teamIds: query.teamIds,
         authorIds: isAgentAdmin ? query.authorIds : undefined,
         excludeAuthorIds: isAgentAdmin ? query.excludeAuthorIds : undefined,
         excludeOtherPersonalAgents: isAgentAdmin
           ? query.excludeOtherPersonalAgents
           : undefined,
+        access: query.access,
         labels: parseLabelsParam(query.labels),
         status: query.status,
         providerApiKeyId: query.providerApiKeyId,
@@ -130,8 +138,7 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         filters,
         userId: user.id,
         isAgentAdmin,
-        canManageExternalAgents,
-        includeExternalAgents: !query.selectableOnly || canManageExternalAgents,
+        externalAgentAction: query.selectableOnly ? "delete" : "read",
         excludeOtherPersonalExternalAgents: query.excludeOtherPersonalAgents,
       });
       const agentIds = candidates.rows.flatMap((row) =>
@@ -153,7 +160,6 @@ const agentCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         listA2aRemoteAgents({
           organizationId,
           userId: user.id,
-          canManage: canManageExternalAgents,
           ids: externalAgentIds,
         }),
       ]);

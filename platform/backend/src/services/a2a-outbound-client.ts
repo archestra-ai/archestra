@@ -25,7 +25,7 @@ import type {
   A2aRemoteAgent,
   Tool,
 } from "@/types";
-import { safeA2aFetch } from "./a2a-outbound-registry";
+import { createA2aFetch, trustedA2aOrigin } from "./a2a-outbound-registry";
 
 const OUTPUT_MODES = ["text/plain", "application/json"];
 const A2A_EXECUTION_TIMEOUT_MS = 5 * 60_000;
@@ -91,7 +91,7 @@ export async function executeOutboundA2aDelegation(params: {
     : executionTimeout;
 
   try {
-    const fetchImpl = await buildAuthenticatedFetch(target.connection);
+    const fetchImpl = await buildAuthenticatedFetch(target);
     const options = ClientFactoryOptions.createFrom(
       ClientFactoryOptions.default,
       {
@@ -261,9 +261,16 @@ async function updateRunFromOutcome(
 }
 
 async function buildAuthenticatedFetch(
-  connection: A2aConnection,
+  target: OutboundA2aTarget,
 ): Promise<typeof fetch> {
-  if (connection.authType === "none") return safeA2aFetch;
+  const { connection } = target;
+  const a2aFetch = createA2aFetch(
+    trustedA2aOrigin({
+      discoveryUrl: target.remoteAgent.discoveryUrl,
+      interfaceUrl: connection.selectedInterface.url,
+    }),
+  );
+  if (connection.authType === "none") return a2aFetch;
   if (!connection.secretId) {
     throw new Error("Outbound A2A credential is missing");
   }
@@ -285,7 +292,7 @@ async function buildAuthenticatedFetch(
   return async (input, init) => {
     const headers = new Headers(init?.headers);
     headers.set(headerName, headerValue);
-    return safeA2aFetch(input, { ...init, headers });
+    return a2aFetch(input, { ...init, headers });
   };
 }
 

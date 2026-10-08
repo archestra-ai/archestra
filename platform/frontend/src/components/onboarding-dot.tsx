@@ -43,9 +43,8 @@ export function OnboardingDot({
         data-testid="onboarding-dot"
         data-state={visible ? "visible" : "leaving"}
         className={cn(
-          "inline-block size-1.5 shrink-0 rounded-full bg-red-500/80",
-          // Soft halo so it reads as a gentle nudge rather than a hard alert.
-          "shadow-[0_0_5px_1px] shadow-red-500/30",
+          // Theme-driven attention ink (see --sidebar-attention-foreground).
+          "inline-block size-1.5 shrink-0 rounded-full bg-sidebar-attention-foreground",
           // Gentle enter/exit. fill-mode-forwards holds the faded-out end state
           // during the brief window before the unmount timer fires.
           "duration-300 ease-out",

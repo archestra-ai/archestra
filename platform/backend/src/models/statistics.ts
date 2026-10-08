@@ -409,9 +409,17 @@ class StatisticsModel {
           notDeleted(schema.agentsTable),
         ),
       )
+      // A credential billed to a team charges only that team; everything else
+      // is shared by the teams the LLM proxy or agent is granted to.
       .innerJoin(
         schema.teamsTable,
-        AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
+        or(
+          eq(schema.interactionsTable.billingTeamId, schema.teamsTable.id),
+          and(
+            isNull(schema.interactionsTable.billingTeamId),
+            AgentTeamModel.grantsReadToTeamColumn(schema.teamsTable.id),
+          ),
+        ),
       )
       .where(
         and(

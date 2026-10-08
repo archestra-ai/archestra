@@ -2,7 +2,6 @@ import {
   DEFAULT_APP_NAME,
   DEFAULT_THEME_ID,
   type KnowledgeConnectorOverrides,
-  type LogContentMode,
   MEMBER_ROLE_NAME,
   type MessagingChannelOverrides,
   type ModelProviderOverrides,
@@ -12,7 +11,7 @@ import {
 } from "@archestra/shared";
 import { and, asc, eq, isNull } from "drizzle-orm";
 import { CacheKey, cacheManager, LRUCacheManager } from "@/cache-manager";
-import db, { schema, withDbTransaction } from "@/database";
+import db, { schema, type Transaction, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import { registerProcessLocalCache } from "@/process-local-cache-registry";
 import type {
@@ -136,6 +135,19 @@ class OrganizationModel {
   }
 
   /**
+   * Serializes writers that check-then-insert per-organization rows (e.g.
+   * built-in provisioning) across replicas until `tx` ends. NO KEY UPDATE
+   * still lets other transactions insert rows referencing the organization.
+   */
+  static async lockRowForUpdate(id: string, tx: Transaction): Promise<void> {
+    await tx
+      .select({ id: schema.organizationsTable.id })
+      .from(schema.organizationsTable)
+      .where(eq(schema.organizationsTable.id, id))
+      .for("no key update");
+  }
+
+  /**
    * Get or create the default organization
    */
   static async getOrCreateDefaultOrganization(): Promise<Organization> {
@@ -164,7 +176,10 @@ class OrganizationModel {
           slug: "default",
           createdAt: new Date(),
         })
+        // A concurrently booting replica may have created it first.
+        .onConflictDoNothing()
         .returning();
+      if (!organization) return null;
       // SPDX-SnippetBegin
       // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
       // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -175,6 +190,15 @@ class OrganizationModel {
       // SPDX-SnippetEnd
       return organization;
     });
+    if (!createdOrg) {
+      const winner = await OrganizationModel.getFirst();
+      if (!winner) {
+        throw new Error(
+          "Default organization creation conflicted, but none exists",
+        );
+      }
+      return winner;
+    }
 
     logger.debug(
       { organizationId: createdOrg.id },
@@ -273,7 +297,6 @@ class OrganizationModel {
     await cacheManager.delete(getOrganizationSettingsCacheKey(id));
     await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
     await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
-    await cacheManager.delete(getOrganizationLogContentModeCacheKey(id));
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
@@ -312,7 +335,6 @@ class OrganizationModel {
       await cacheManager.delete(getOrganizationSettingsCacheKey(id));
       await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
       await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
-      await cacheManager.delete(getOrganizationLogContentModeCacheKey(id));
     }
     return rows.length > 0;
   }
@@ -336,7 +358,6 @@ class OrganizationModel {
       await cacheManager.delete(getOrganizationSettingsCacheKey(id));
       await cacheManager.delete(getOrganizationAuthEnforcementCacheKey(id));
       await cacheManager.delete(getOrganizationOnlineSkillCatalogCacheKey(id));
-      await cacheManager.delete(getOrganizationLogContentModeCacheKey(id));
     }
     return rows.length;
   }
@@ -571,46 +592,6 @@ class OrganizationModel {
       // have the distributed cache initialized yet.
     }
     return enabled;
-  }
-
-  /**
-   * The organization's Log Content setting. Read for every logged LLM call and
-   * MCP tool call, so it goes through the shared org-settings cache rather
-   * than a query per write. Null when the organization does not exist; the
-   * caller decides what that means (the log writers fail closed).
-   */
-  static async getLogContentMode(
-    organizationId: string,
-  ): Promise<LogContentMode | null> {
-    const cacheKey = getOrganizationLogContentModeCacheKey(organizationId);
-    const cached = await cacheManager.get<LogContentMode>(cacheKey);
-    if (cached !== undefined) {
-      return cached;
-    }
-
-    const [organization] = await db
-      .select({ logContentMode: schema.organizationsTable.logContentMode })
-      .from(schema.organizationsTable)
-      .where(eq(schema.organizationsTable.id, organizationId))
-      .limit(1);
-    if (!organization) {
-      return null;
-    }
-
-    try {
-      // Short TTL for the same unguarded set-after-PATCH race as
-      // getOnlineSkillCatalogEnabled: a stale "full" re-cached after an admin
-      // switches to Metadata only must not keep storing content for an hour.
-      await cacheManager.set(
-        cacheKey,
-        organization.logContentMode,
-        LOG_CONTENT_MODE_CACHE_TTL_MS,
-      );
-    } catch {
-      // Cache writes are best-effort here; tests and early startup may not
-      // have the distributed cache initialized yet.
-    }
-    return organization.logContentMode;
   }
 
   /**
@@ -871,7 +852,6 @@ class OrganizationModel {
       // SPDX-SnippetEnd
       onlineSkillCatalogEnabled: org.onlineSkillCatalogEnabled,
       allowChatFileUploads: org.allowChatFileUploads,
-      logContentMode: org.logContentMode,
       appsHackathonRecorderEnabled: org.appsHackathonRecorderEnabled,
       allowToolAutoAssignment: org.allowToolAutoAssignment,
       embeddingModel: org.embeddingModel ?? null,
@@ -950,11 +930,4 @@ const ONLINE_SKILL_CATALOG_CACHE_TTL_MS = 60_000;
 
 function getOrganizationOnlineSkillCatalogCacheKey(organizationId: string) {
   return `${CacheKey.OrganizationSettings}-online-skill-catalog-${organizationId}` as const;
-}
-
-/** One minute; see the set() call in `getLogContentMode`. */
-const LOG_CONTENT_MODE_CACHE_TTL_MS = 60_000;
-
-function getOrganizationLogContentModeCacheKey(organizationId: string) {
-  return `${CacheKey.OrganizationSettings}-log-content-mode-${organizationId}` as const;
 }

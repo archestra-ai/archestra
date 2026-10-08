@@ -16,7 +16,6 @@ import {
   anthropicSupportsThinkingDisabled,
   anthropicThinksByDefault,
   CHAT_API_KEY_ID_HEADER,
-  DELEGATION_BILLING_ENVIRONMENT_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
   EXTERNAL_AGENT_ID_HEADER,
   isProviderApiKeyOptional,
@@ -66,6 +65,7 @@ import {
   isVertexAiEnabled,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
+import { internalCallHeader } from "@/clients/internal-call";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
@@ -78,6 +78,7 @@ import {
   APPA_SESSION_HEADER,
   openappaEnabled,
 } from "@/openappa/service";
+import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -193,6 +194,8 @@ export function createLLMModel(params: {
   externalAgentId?: string;
   sessionId?: string;
   appaParentId?: string;
+  /** Signed binding of an in-process subagent run to its child trajectory. */
+  appaSubagentToken?: string;
   source?: InteractionSource;
   baseUrl: string | null;
   contextIsTrusted?: boolean;
@@ -206,11 +209,6 @@ export function createLLMModel(params: {
    */
   encryptedChatKey?: Buffer | null;
   /**
-   * Caller environment for advisor delegation billing. Loopback-gated on the
-   * proxy side; see DELEGATION_BILLING_ENVIRONMENT_HEADER.
-   */
-  delegationBillingEnvironmentId?: string | null;
-  /**
    * MCP App whose runtime is making this call, so the interaction is attributed
    * to it rather than only to the shared App Runtime agent. Loopback-gated on
    * the proxy side; see APP_ID_HEADER.
@@ -218,6 +216,8 @@ export function createLLMModel(params: {
   appId?: string | null;
   /** See ProviderModelConfig.createModel — resolved only on the agent path. */
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
+  /** A platform guardrail call, exempt from blocking unrecognized clients. */
+  internalCall?: boolean;
 }): LLMModel {
   const {
     provider,
@@ -233,13 +233,14 @@ export function createLLMModel(params: {
     chatApiKeyId,
     dualLlmProgressChannel,
     encryptedChatKey,
-    delegationBillingEnvironmentId,
     appId,
     supportedEndpoints,
   } = params;
 
   // Build headers for LLM Proxy
-  const clientHeaders: Record<string, string> = {};
+  const clientHeaders: Record<string, string> = params.internalCall
+    ? internalCallHeader()
+    : {};
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }
@@ -252,6 +253,8 @@ export function createLLMModel(params: {
   }
   if (openappaEnabled() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
+  if (openappaEnabled() && params.appaSubagentToken)
+    clientHeaders[APPA_SUBAGENT_BINDING_HEADER] = params.appaSubagentToken;
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
   }
@@ -280,12 +283,6 @@ export function createLLMModel(params: {
   // text into the response stream.
   if (dualLlmProgressChannel) {
     clientHeaders[DUAL_LLM_PROGRESS_CHANNEL_HEADER] = dualLlmProgressChannel;
-  }
-  // Advisor consultations bill to the delegating caller's environment; the
-  // proxy re-validates this against the executing agent row and its org.
-  if (delegationBillingEnvironmentId) {
-    clientHeaders[DELEGATION_BILLING_ENVIRONMENT_HEADER] =
-      delegationBillingEnvironmentId;
   }
   // App runtime completions attribute their spend to the calling app; the proxy
   // re-validates this against the executing agent's organization.
@@ -343,12 +340,8 @@ export async function createLLMModelForAgent(params: {
    * interaction content is stored encrypted rather than redacted.
    */
   encryptedChatKey?: Buffer | null;
-  /**
-   * Caller environment for advisor delegation billing; forwarded as a
-   * loopback-gated proxy header. Set only by the A2A executor when the
-   * executed agent is the advisor built-in.
-   */
-  delegationBillingEnvironmentId?: string | null;
+  /** Signed binding of an in-process subagent run to its child trajectory. */
+  appaSubagentToken?: string;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -476,7 +469,7 @@ export async function createLLMModelForAgent(params: {
     chatApiKeyId,
     dualLlmProgressChannel,
     encryptedChatKey: params.encryptedChatKey,
-    delegationBillingEnvironmentId: params.delegationBillingEnvironmentId,
+    appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,
   });
 
@@ -613,6 +606,16 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       );
     },
     defaultBaseUrl: config.llm.voyage.baseUrl,
+  },
+  // Decisions-only provider: it answers classification questions and has no
+  // chat API, so the same loud failure applies.
+  jev: {
+    createModel: () => {
+      throw new Error(
+        "Jev is a decisions-only provider and cannot serve chat requests",
+      );
+    },
+    defaultBaseUrl: config.llm.jev.baseUrl,
   },
 
   // --- Native SDK providers (use their own SDK, call client(modelName)) ---

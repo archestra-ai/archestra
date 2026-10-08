@@ -96,5 +96,4 @@ test.each([
   show();
   expect(await screen.findByText("Coverage charts")).toBeInTheDocument();
   expect(screen.getByText("Entities table")).toBeInTheDocument();
-  expect(await screen.findByText("Client coverage")).toBeInTheDocument();
 });

@@ -38,6 +38,7 @@ vi.mock("./_parts/plugin-install-dialog", () => ({
   PluginInstallDialog: () => null,
 }));
 vi.mock("@/lib/plugins/plugin.query", () => ({
+  countPlugins: async () => 0,
   usePlugins: () => ({
     data: [PLUGIN],
     isPending: false,
@@ -65,14 +66,14 @@ const PLUGIN = vi.hoisted(() => ({
   description: "Applies approved policy hooks.",
   contentHash: "hash-1",
   sourceKind: "github",
-  sourceRepo: "archestra-ai/OpenAPPA",
+  sourceRepo: "acme/policy-plugins",
   sourceRef: "main",
   sourceSha: "abc123",
   sourceSubdir: null,
   sourceExclude: [],
-  sourceMarketplaceRepo: "archestra-ai/OpenAPPA",
+  sourceMarketplaceRepo: "acme/policy-plugins",
   sourceMarketplacePath: ".claude-plugin/marketplace.json",
-  sourceMarketplacePluginName: "appa-runtime",
+  sourceMarketplacePluginName: "policy-runtime",
   githubSyncInterval: "1h",
   githubSyncRef: "main",
   lastSyncedAt: "2026-08-23T18:00:00.000Z",
@@ -152,16 +153,6 @@ describe("PluginsPage", () => {
 
     await user.click(source);
     expect(push).not.toHaveBeenCalled();
-  });
-
-  it("attributes the vendor's own plugin to its author, not the deployment", () => {
-    render(<PluginsPage />);
-
-    // The deployment is branded "Northstar" (mocked above), but OpenAPPA is
-    // published by Archestra either way — a rebrand must not rewrite who wrote
-    // somebody else's plugin.
-    expect(screen.getByText("Archestra")).toBeVisible();
-    expect(screen.queryByText("Northstar")).not.toBeInTheDocument();
   });
 
   it("keeps secondary filters behind More filters until applied", async () => {

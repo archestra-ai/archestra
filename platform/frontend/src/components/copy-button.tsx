@@ -10,7 +10,7 @@ export function CopyButton({
   className,
   size = 14,
   behavior = "checkmark",
-  buttonSize = "sm",
+  buttonSize = "icon-xs",
   iconClassName,
   copiedIconClassName,
 }: {
@@ -18,7 +18,7 @@ export function CopyButton({
   className?: string;
   size?: number;
   behavior?: "checkmark" | "text";
-  buttonSize?: "default" | "sm" | "lg" | "icon";
+  buttonSize?: "icon" | "icon-sm" | "icon-xs";
   iconClassName?: string;
   copiedIconClassName?: string;
 }) {
@@ -34,34 +34,17 @@ export function CopyButton({
     }
   };
 
-  if (behavior === "text") {
-    return (
-      <>
-        <Button
-          type="button"
-          variant="ghost"
-          size={buttonSize}
-          className={`h-6 w-6 p-0 hover:bg-background/50 ${className ?? ""}`}
-          onClick={handleCopy}
-        >
-          <Copy size={size} className={iconClassName} />
-          <span className="sr-only">Copy to clipboard</span>
-        </Button>
-        {copied && <span className="ml-1 text-xs">Copied!</span>}
-      </>
-    );
-  }
-
-  return (
+  const showCheckmark = behavior === "checkmark" && copied;
+  const button = (
     <Button
       type="button"
       variant="ghost"
       size={buttonSize}
-      className={`h-6 w-6 p-0 hover:bg-background/50 ${className ?? ""}`}
+      className={`hover:bg-background/50 ${className ?? ""}`}
       onClick={handleCopy}
-      disabled={copied}
+      disabled={behavior === "checkmark" ? copied : undefined}
     >
-      {copied ? (
+      {showCheckmark ? (
         <Check
           size={size}
           className={copiedIconClassName ?? "text-green-500"}
@@ -70,8 +53,19 @@ export function CopyButton({
         <Copy size={size} className={iconClassName} />
       )}
       <span className="sr-only">
-        {copied ? "Copied!" : "Copy to clipboard"}
+        {showCheckmark ? "Copied!" : "Copy to clipboard"}
       </span>
     </Button>
   );
+
+  if (behavior === "text") {
+    return (
+      <>
+        {button}
+        {copied && <span className="ml-1 text-xs">Copied!</span>}
+      </>
+    );
+  }
+
+  return button;
 }

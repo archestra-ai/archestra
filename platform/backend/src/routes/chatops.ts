@@ -194,6 +194,9 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
           400: z.object({
             error: z.object({ message: z.string(), type: z.string() }),
           }),
+          401: z.object({
+            error: z.object({ message: z.string(), type: z.string() }),
+          }),
           429: z.object({
             error: z.object({ message: z.string(), type: z.string() }),
           }),
@@ -235,24 +238,43 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
         headers[key] = value;
       }
 
+      // The Bot Framework SDK answers with two separate calls,
+      // `res.status(code)` then `res.send(body)`, so the status must be kept
+      // between them. SDK failures (auth rejections, credential errors such as
+      // "Invalid appId.") are raised as ApiErrors after processing, so the
+      // caller gets the real status and the SDK's message.
+      const sdk: {
+        status: number;
+        failure: { status: number; message: string } | null;
+      } = { status: 200, failure: null };
+      const sendSdkResponse = (data?: unknown) => {
+        if (sdk.status >= 400) {
+          sdk.failure = {
+            status: sdk.status,
+            message:
+              typeof data === "string" && data
+                ? data
+                : "Bot Framework rejected the activity",
+          };
+          return;
+        }
+        // Bot Framework sends various response formats - use type assertion for passthrough
+        reply
+          .status(sdk.status as 200)
+          .send(data ? (data as never) : { status: "ok" });
+      };
+
       try {
         // Process the activity through the Bot Framework adapter
         // This handles JWT validation automatically
         await provider.processActivity(
           { body: request.body, headers },
           {
-            status: (code: number) => ({
-              send: (data?: unknown) => {
-                // Bot Framework sends various response formats - use type assertion for passthrough
-                reply
-                  .status(code as 200 | 400 | 429 | 500)
-                  .send(data ? (data as never) : { status: "ok" });
-              },
-            }),
-            send: (data?: unknown) => {
-              // Bot Framework sends various response formats - use type assertion for passthrough
-              reply.send(data ? (data as never) : { status: "ok" });
+            status: (code: number) => {
+              sdk.status = code;
+              return { send: sendSdkResponse };
             },
+            send: sendSdkResponse,
           },
           async (context: TurnContext) => {
             // Check if this is a card submission (agent selection) FIRST
@@ -273,7 +295,12 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   activityValue.workspaceId ||
                   context.activity.channelData?.team?.id ||
                   null,
-                threadId: context.activity.conversation?.id,
+                // 1:1 and group chats have no reply threads; the whole chat
+                // is the conversation.
+                threadId:
+                  context.activity.conversation?.conversationType === "channel"
+                    ? context.activity.conversation?.id
+                    : undefined,
                 senderId:
                   context.activity.from?.aadObjectId ||
                   context.activity.from?.id ||
@@ -285,7 +312,10 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   ? new Date(context.activity.timestamp)
                   : new Date(),
                 isThreadReply: false,
-                metadata: {},
+                metadata: {
+                  conversationType:
+                    context.activity.conversation?.conversationType,
+                },
               };
               // Resolve sender email and verify they are a registered Archestra user
               if (
@@ -495,6 +525,11 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               value:
                                 "Stop auto-replies in this thread (@mention me to resume)",
                             },
+                            {
+                              title: "reset",
+                              value:
+                                "Start a new conversation (direct messages and group chats)",
+                            },
                           ],
                         },
                         {
@@ -700,7 +735,7 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
 
         // If processActivity didn't send a response, send default
-        if (!reply.sent) {
+        if (!reply.sent && !sdk.failure) {
           return reply.send({ success: true });
         }
       } catch (error) {
@@ -712,6 +747,17 @@ export const msTeamsWebhookRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "[ChatOps] Error processing MS Teams webhook",
         );
         throw new ApiError(500, "Internal server error");
+      }
+
+      if (sdk.failure) {
+        const { status, message } = sdk.failure;
+        // Teams sends duplicate webhooks per message and one always fails JWT
+        // validation with a 401, so 4xx rejections stay at debug level.
+        logger[status >= 500 ? "warn" : "debug"](
+          { status, error: message },
+          "[ChatOps] Bot Framework rejected MS Teams activity",
+        );
+        throw new ApiError(status, message);
       }
     },
   );
@@ -2061,6 +2107,69 @@ const chatopsRoutes: FastifyPluginAsyncZod = async (fastify) => {
   );
 
   /**
+   * Unlink the signed-in user's Telegram account.
+   * Deletes the user's own linked Telegram DM binding, so the bot stops
+   * resolving that Telegram user to this account and asks them to /start
+   * again. Users can only remove their own link (self-service).
+   */
+  fastify.delete(
+    "/api/chatops/telegram/link",
+    {
+      schema: {
+        operationId: RouteId.UnlinkTelegramChatOpsAccount,
+        description: "Unlink the current user's Telegram account",
+        tags: ["ChatOps"],
+        response: constructResponseSchema(z.object({ success: z.boolean() })),
+      },
+    },
+    async (request, reply) => {
+      const email = request.user.email;
+      const dmBinding =
+        await ChatOpsChannelBindingModel.findDmBindingByEmailInOrganization({
+          organizationId: request.organizationId,
+          provider: "telegram",
+          dmOwnerEmail: email,
+        });
+      // A pending binding has no Telegram chat behind it yet — nothing to unlink.
+      if (!dmBinding || dmBinding.channelId.startsWith("dm:pending:")) {
+        throw new ApiError(404, "No linked Telegram account found.");
+      }
+
+      request.auditResourceId = { value: dmBinding.id };
+      request.auditBefore = await ChatOpsChannelBindingModel.findByIdForAudit(
+        dmBinding.id,
+        request.organizationId,
+      );
+
+      const deleted =
+        await ChatOpsChannelBindingModel.deleteByIdAndOrganization(
+          dmBinding.id,
+          request.organizationId,
+        );
+      if (!deleted) {
+        throw new ApiError(404, "No linked Telegram account found.");
+      }
+
+      await invalidateChannelAnswerAll({
+        provider: deleted.provider,
+        channelId: deleted.channelId,
+        workspaceId: deleted.workspaceId,
+      });
+
+      // Tell the Telegram chat it was unlinked (non-blocking)
+      chatOpsManager
+        .getTelegramProvider()
+        ?.sendDirectMessage({
+          userId: deleted.channelId,
+          text: `This Telegram account was unlinked from ${email}. Send /start to link it again.`,
+        })
+        .catch(() => {});
+
+      return reply.send({ success: true });
+    },
+  );
+
+  /**
    * Refresh channel discovery for a provider.
    * Clears the TTL cache, then triggers immediate discovery if the provider
    * supports it (e.g., Slack). Otherwise channels are re-discovered on the
@@ -2415,6 +2524,7 @@ async function handleAgentSelection(
         timestamp: message.timestamp,
         isThreadReply: message.isThreadReply,
         metadata: {
+          conversationType: context.activity.conversation?.conversationType,
           conversationReference: TurnContext.getConversationReference(
             context.activity,
           ),

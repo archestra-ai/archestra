@@ -2,6 +2,7 @@
 import {
   type PermissionSubject,
   PredefinedRoleNameSchema,
+  type ResourceAccessRelation,
 } from "@archestra/shared";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
 import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
@@ -16,7 +17,35 @@ export type GrantPrincipal = {
   subjects: PermissionSubject[];
 };
 
+/**
+ * A list's "Show" filter with the caller's subjects resolved, in the shape
+ * `ResourcePermissionPolicyModel.accessRelationCondition` takes.
+ */
+export type ResourceAccessFilter = {
+  userId: string;
+  subjects: PermissionSubject[];
+  relations: ResourceAccessRelation[];
+};
+
+/** Resolves principals; a request passes one that resolves each caller once. */
+export type PrincipalSource = {
+  principal(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<GrantPrincipal>;
+};
+
 export default class ResourcePermissionSubjectModel {
+  /** {@link resolvePrincipal} through the request's source when it has one. */
+  static resolvePrincipalFrom(
+    source: PrincipalSource | undefined,
+    params: { userId: string; organizationId: string },
+  ): Promise<GrantPrincipal> {
+    return source
+      ? source.principal(params)
+      : ResourcePermissionSubjectModel.resolvePrincipal(params);
+  }
+
   /**
    * Every subject a grant can name to reach this caller: the organization,
    * the user or service account, its teams with their ancestors, and its roles
@@ -40,6 +69,7 @@ export default class ResourcePermissionSubjectModel {
   static async resolvePrincipals(params: {
     userId: string;
     organizationId?: string;
+    lookups?: PrincipalSource;
   }): Promise<GrantPrincipal[]> {
     const { userId } = params;
     const organizationIds = params.organizationId
@@ -60,13 +90,35 @@ export default class ResourcePermissionSubjectModel {
             .where(eq(schema.membersTable.userId, userId));
     const principals = await Promise.all(
       organizationIds.map(({ id }) =>
-        ResourcePermissionSubjectModel.resolvePrincipal({
+        ResourcePermissionSubjectModel.resolvePrincipalFrom(params.lookups, {
           userId,
           organizationId: id,
         }),
       ),
     );
     return principals.filter((principal) => principal.subjects.length > 0);
+  }
+
+  /**
+   * The caller's subjects for a list's `access` filter, resolved once so a
+   * page query and its count share them. Undefined when the list is not
+   * filtered.
+   */
+  static async resolveAccessFilter(params: {
+    userId: string;
+    organizationId: string;
+    relations: ResourceAccessRelation[] | undefined;
+  }): Promise<ResourceAccessFilter | undefined> {
+    if (!params.relations) return undefined;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    return {
+      userId: params.userId,
+      subjects: principal.subjects,
+      relations: params.relations,
+    };
   }
 
   static async search(params: { organizationId: string; query: string }) {

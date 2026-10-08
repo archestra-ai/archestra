@@ -634,11 +634,6 @@ function BatteryDialog({
   const badge = status ? batteryStatusBadge(status) : null;
   const installs = summary?.installs ?? [];
   const servers = included?.servers ?? [];
-  const governed = new Set(
-    servers
-      .map((server) => attachedCatalogId(server))
-      .filter((id): id is string => id !== null),
-  );
   // Every server the battery already governs, catalog or detected, by the id
   // the picker offers it under.
   const governedTargets = new Set(
@@ -653,7 +648,11 @@ function BatteryDialog({
           ];
     }),
   );
-  const detectedServers = useDetectedMcpServers().data ?? [];
+  // The picker alone reads these; a dialog that cannot show it asks for nothing.
+  const detectedServers =
+    useDetectedMcpServers({
+      enabled: writable && !organizationWide && summary !== null,
+    }).data ?? [];
   // An entry not in the policy yet reads the organization's credential table
   // like any other: a variable another battery binds already has its key.
   const credentials: BatteryCredential[] =

@@ -99,16 +99,20 @@ const routes: FastifyPluginAsyncZod = async (app) => {
         response: constructResponseSchema(BatteryMatchesSchema),
       },
     },
-    async (request) =>
-      request.query.catalogId !== undefined
-        ? openappaBatteriesService.matchesForCatalog({
-            organizationId: request.organizationId,
-            catalogId: request.query.catalogId,
-          })
-        : openappaBatteriesService.matchesForDetected({
-            organizationId: request.organizationId,
-            detectedId: request.query.detectedId as string,
-          }),
+    async (request) => {
+      const { catalogId, detectedId } = request.query;
+      if (detectedId !== undefined)
+        return openappaBatteriesService.matchesForDetected({
+          organizationId: request.organizationId,
+          detectedId,
+        });
+      if (catalogId !== undefined)
+        return openappaBatteriesService.matchesForCatalog({
+          organizationId: request.organizationId,
+          catalogId,
+        });
+      throw new ApiError(400, "Name exactly one of catalogId and detectedId");
+    },
   );
   app.post(
     "/api/openappa/battery-installs",

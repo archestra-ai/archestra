@@ -229,7 +229,29 @@ class OpenAppaBatteriesService {
       organizationId,
       attachment: { detectedId },
     });
-    const { installs } = await this.current(organizationId);
+    const matches = await this.matchesForDetectedServers({
+      organizationId,
+      servers: [server],
+    });
+    return matches.get(server.id) ?? { attach: "ready", matches: [] };
+  }
+
+  /**
+   * `matchesForDetected` for many servers at once, by id: the installs,
+   * packages and rule names are read once, then every server is matched in
+   * memory. A battery the policy includes is read as the bytes it resolves to;
+   * one it does not include yet is read as its newest package. A battery
+   * already attached to the server is listed whatever its rules name now, so
+   * it can be detached from where it was attached.
+   */
+  async matchesForDetectedServers(params: {
+    organizationId: string;
+    servers: readonly DetectedMcpServer[];
+  }): Promise<Map<string, BatteryMatches>> {
+    const { organizationId, servers } = params;
+    const result = new Map<string, BatteryMatches>();
+    if (servers.length === 0) return result;
+    const { installs, resolution } = await this.current(organizationId);
     const available = await this.availableBatteries(organizationId);
     const ruleToolNames = new Map(
       [...available].map(([name, found]) => [
@@ -237,22 +259,40 @@ class OpenAppaBatteriesService {
         batteryRuleToolNames(found.package.policy),
       ]),
     );
-    const attachment: BatteryAttachment = { kind: "detected", detectedId };
-    return {
-      attach: "ready",
-      matches: matchBatteriesByToolNames(
+    for (const entry of resolution.entries)
+      if (entry.battery)
+        ruleToolNames.set(
+          entry.name,
+          batteryRuleToolNames(entry.battery.policy),
+        );
+    for (const server of servers) {
+      const attachment: BatteryAttachment = {
+        kind: "detected",
+        detectedId: server.id,
+      };
+      const attached = installs.filter((install) =>
+        sameAttachment(attachmentOf(install), attachment),
+      );
+      const matches = matchBatteriesByToolNames(
         new Set(server.tools.map((tool) => tool.toolName)),
         ruleToolNames,
       ).map((match) => ({
         ...match,
         install:
-          installs.find(
-            (install) =>
-              install.batteryName === match.battery &&
-              sameAttachment(attachmentOf(install), attachment),
-          ) ?? null,
-      })),
-    };
+          attached.find((install) => install.batteryName === match.battery) ??
+          null,
+      }));
+      const listed = new Set(matches.map((match) => match.battery));
+      for (const install of attached)
+        if (!listed.has(install.batteryName))
+          matches.push({
+            battery: install.batteryName,
+            evidence: "tool",
+            install,
+          });
+      result.set(server.id, { attach: "ready", matches });
+    }
+    return result;
   }
 
   /** What the root declares, what came of each declaration, and what holds it back. */

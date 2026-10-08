@@ -36,6 +36,7 @@ import { DEFAULT_FILTER_ALL } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
+import { usePolicyDeclarations } from "@/lib/openappa-batteries.query";
 import {
   type CoverageEntity,
   type DetectedCoverageEntity,
@@ -401,7 +402,10 @@ function isDetected(entity: CoverageEntity): entity is DetectedCoverageEntity {
 /** Attach a battery to a client's own server, from the suggestions its tool names earn. */
 function DetectedAttachPopover({ entity }: { entity: DetectedCoverageEntity }) {
   const { data: canWrite } = useHasPermissions({ openappaPolicy: ["update"] });
-  if (canWrite !== true) return null;
+  // A policy a repository syncs is edited there; a local attachment would be
+  // overwritten by the next pull.
+  const managedInGithub = usePolicyDeclarations().data?.managedInGithub;
+  if (canWrite !== true || managedInGithub !== false) return null;
   return (
     <Popover>
       <PopoverTrigger asChild>

@@ -885,7 +885,6 @@ export const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES = [
   "get_guardrails_policy",
   "list_guardrails_battery_fits",
   "list_detected_mcp_servers",
-  "list_detected_mcp_servers",
   "inspect_guardrails_server",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",

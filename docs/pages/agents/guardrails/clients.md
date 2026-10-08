@@ -24,6 +24,7 @@ A battery covers an MCP server someone connected straight to their coding client
 
 - A server is known by its client and label, so everyone in the organization who connects a server under that label is covered by the same battery.
 - The configuration agent lists these servers and their fitting batteries, and proposes the attachment for approval.
+- OpenCode spells a server's tools without a separator, such as `slack_send`, so an OpenCode server is listed once the policy names it: add `opencode.<label>` to `[server_aliases]` first.
 
 ## Session Headers
 

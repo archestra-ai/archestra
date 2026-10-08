@@ -585,24 +585,23 @@ const registry = defineArchestraTools([
         throw new ApiError(401, "Organization context is required");
       const organizationId = context.organizationId;
       const servers = await listDetectedMcpServers(organizationId);
+      const matches = await openappaBatteriesService.matchesForDetectedServers({
+        organizationId,
+        servers,
+      });
       return result({
-        servers: await Promise.all(
-          servers.map(async (server) => ({
-            id: server.id,
-            label: server.label,
-            client: server.clientFamily,
-            toolNames: server.tools.map((tool) => tool.toolName),
-            batteryMatches: (
-              await openappaBatteriesService.matchesForDetected({
-                organizationId,
-                detectedId: server.id,
-              })
-            ).matches.map((match) => ({
+        servers: servers.map((server) => ({
+          id: server.id,
+          label: server.label,
+          client: server.clientFamily,
+          toolNames: server.tools.map((tool) => tool.toolName),
+          batteryMatches: (matches.get(server.id)?.matches ?? []).map(
+            (match) => ({
               battery: match.battery,
               declared: match.install !== null,
-            })),
-          })),
-        ),
+            }),
+          ),
+        })),
       });
     },
   }),
@@ -1292,6 +1291,7 @@ export function isOpenappaTool(shortName: string | null | undefined): boolean {
     shortName === "resolve_openappa_yell" ||
     shortName === "list_openappa_consults" ||
     shortName === "list_guardrails_battery_fits" ||
+    shortName === "list_detected_mcp_servers" ||
     shortName === "inspect_guardrails_server" ||
     shortName === "validate_guardrails_policy" ||
     shortName === "preview_guardrails_policy_change" ||

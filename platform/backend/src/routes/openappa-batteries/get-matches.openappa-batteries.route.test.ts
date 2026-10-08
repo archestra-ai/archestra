@@ -228,4 +228,29 @@ describe("guardrails battery matches", () => {
       ).statusCode,
     ).toBe(400);
   });
+
+  test("an id that is not a detected server's is refused before any lookup", async () => {
+    for (const malformed of [
+      "garbage",
+      "unknown-family.server",
+      "claude-code.bad__label",
+    ]) {
+      expect((await detectedMatches(malformed)).statusCode, malformed).toBe(
+        400,
+      );
+      expect(
+        (
+          await app.inject({
+            method: "POST",
+            url: "/api/openappa/battery-installs",
+            body: {
+              batteryName: "github",
+              attachment: { kind: "detected", detectedId: malformed },
+            },
+          })
+        ).statusCode,
+        malformed,
+      ).toBe(400);
+    }
+  });
 });

@@ -6,6 +6,7 @@ import {
   openappaEffectivePoliciesTable,
 } from "@/database/schemas/openappa-batteries";
 import { HeldPullReasonSchema } from "@/types/openappa-github-sync";
+import { isDetectedServerId } from "@/utils/detected-mcp-server-names";
 
 export const BatteryPackageFileSchema = z.strictObject({
   path: z.string().min(1).max(512),
@@ -57,10 +58,19 @@ export const BatteryAttachmentKindSchema = z.enum([
 ]);
 export type BatteryAttachmentKind = z.infer<typeof BatteryAttachmentKindSchema>;
 
+/** A detected server's id, `<client-family>.<label>`, as a policy names it. */
+export const DetectedServerIdSchema = z
+  .string()
+  .min(1)
+  .refine(
+    isDetectedServerId,
+    "Expected a detected server id, <client>.<label>",
+  );
+
 /** An attachment to one server: the kinds an alias target can resolve to. */
 export const BatteryServerAttachmentSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("catalog"), catalogId: z.string().uuid() }),
-  z.object({ kind: z.literal("detected"), detectedId: z.string().min(1) }),
+  z.object({ kind: z.literal("detected"), detectedId: DetectedServerIdSchema }),
 ]);
 export type BatteryServerAttachment = z.infer<
   typeof BatteryServerAttachmentSchema
@@ -211,7 +221,7 @@ export type AttachReadiness = z.infer<typeof AttachReadinessSchema>;
 export const BatteryMatchesQuerySchema = z
   .object({
     catalogId: z.uuid().optional(),
-    detectedId: z.string().min(1).optional(),
+    detectedId: DetectedServerIdSchema.optional(),
   })
   .refine(
     (query) =>

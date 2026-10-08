@@ -35,9 +35,9 @@ export function BatteryAttachToggles({
     attachment,
     openappaEnabled,
   );
+  // The install routes take this permission; the checkbox follows them.
   const { data: canManage } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, so it takes its own
   // permission: whoever adds the battery here may not be able to finish it.

@@ -27,9 +27,11 @@ import { OPENCODE_PASSTHROUGH_PROVIDER_ROUTES } from "@archestra/shared/opencode
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import {
-  buildSetupCommand,
   CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
   claudeCodeAppaPermissionRules,
+} from "./agents/claude-code";
+import {
+  buildSetupCommand,
   proxyBaseUrlToOrigin,
   renderSetupScript,
   type SetupScriptContext,

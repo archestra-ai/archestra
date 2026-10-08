@@ -87,7 +87,7 @@ HTTPS is required except on loopback addresses for local development.
 From `platform/`:
 
 ```sh
-pnpm --dir backend exec vitest run src/routes/client-connection/decision.client-connection.route.test.ts src/services/client-connection-installer.test.ts
+pnpm --dir backend exec vitest run src/routes/client-connection/decision.client-connection.route.test.ts src/services/agent-connection-setup/bootstrap/client-connection-installer.unit.test.ts
 pnpm --dir frontend exec vitest run src/app/connection/client-connection-approval.test.tsx src/app/connection/connect-command-panel.test.tsx
 ```
 

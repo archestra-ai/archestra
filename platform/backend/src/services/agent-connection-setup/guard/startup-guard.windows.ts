@@ -14,6 +14,7 @@ import { CODEX_CONNECTION_VERIFICATION_WINDOWS } from "../payloads/codex-connect
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
+import { psq } from "../steps/quoting";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
 /**
@@ -1279,11 +1280,6 @@ Remove-Item Function:${client.binary} -ErrorAction SilentlyContinue`;
 // ===================================================================
 // Internal helpers
 // ===================================================================
-
-/** Single-quote a value for PowerShell; safe for arbitrary content. */
-function psq(value: string): string {
-  return `'${value.replace(/'/g, "''")}'`;
-}
 
 /**
  * The pre-loader header: the Archestra mark with the title beside it, for the

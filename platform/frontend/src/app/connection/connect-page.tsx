@@ -917,8 +917,8 @@ function ScriptBlock({
 
 /**
  * The Script option's "When it finishes" list. Its meaning follows the setup
- * script's own Next steps (nextStepsFor in
- * backend/src/services/connection-setup-script.ts); the full list prints at
+ * script's own Next steps (each agent's nextSteps in
+ * backend/src/services/agent-connection-setup/agents/); the full list prints at
  * the end of the output.
  */
 function scriptNextSteps(client: ConnectClient): string[] {

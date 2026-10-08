@@ -1,4 +1,4 @@
-import type { SetupScriptContext } from "../index";
+import type { SetupScriptContext } from "../types";
 
 /** Runs locally; subscription credentials never enter setup storage. */
 export function renderClaudeDesktopSetupScript(

@@ -8,9 +8,9 @@ import {
   CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
   claudeCodeAppaPermissionRules,
   claudeCodeAppaPermissionsAreLiteral,
-  renderSetupScript,
-  type SetupScriptMcpSection,
-} from "./index";
+} from "./agents/claude-code";
+import { renderSetupScript } from "./index";
+import type { SetupScriptMcpSection } from "./types";
 
 const execFileAsync = promisify(execFile);
 const powershellBin = [

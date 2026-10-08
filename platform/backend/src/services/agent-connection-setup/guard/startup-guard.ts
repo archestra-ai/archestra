@@ -12,10 +12,11 @@ import {
   ARCHESTRA_MARK_TAGLINE,
   ARCHESTRA_MARK_TAGLINE_ROW,
 } from "@/services/archestra-mark";
-import type { SetupScriptContext, SetupScriptProxySection } from "../index";
 import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
 import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
 import { describeMarketplaceContents } from "../steps/marketplace-copy";
+import { sh } from "../steps/quoting";
+import type { SetupScriptContext, SetupScriptProxySection } from "../types";
 
 /**
  * Client-agnostic renderer for the CLI startup guard ("pre-loader"): a
@@ -24,7 +25,7 @@ import { describeMarketplaceContents } from "../steps/marketplace-copy";
  * shell profile. Everything here is the shared engine; per-client specifics
  * (the wrapped binary, install paths, and the reverse-of-connect disconnect
  * commands) arrive through a {@link StartupGuardClient} descriptor — see
- * `startup-guard.clients.ts` for the Claude Code / Codex / Copilot CLI
+ * `clients/` for the Claude Code / Codex / Copilot CLI
  * descriptors. Before every launch the guard checks the Archestra remotes
  * wired into that client — LLM proxy, MCP gateway, skills marketplace, in that
  * order — and:
@@ -64,7 +65,7 @@ import { describeMarketplaceContents } from "../steps/marketplace-copy";
  * - the guard always ends by letting `claude` start.
  *
  * Everything here is deterministic string building — no DB, no I/O — matching
- * connection-setup-script.ts, which embeds these renders into the Claude Code
+ * the setup script renderers, which embed these renders into the Claude Code
  * setup script. The emitted bash stays 3.2-compatible (macOS system bash):
  * integer `read -t` fallback, no associative arrays.
  */
@@ -122,7 +123,7 @@ export interface StartupGuardContext {
  * Everything the shared guard engine needs that differs per CLI client: the
  * wrapped binary, the conversational product name shown in prompts, the
  * install locations, and the reverse-of-connect disconnect commands. One
- * descriptor per scriptable client lives in `startup-guard.clients.ts`.
+ * descriptor per scriptable client lives in `clients/`.
  *
  * @public — descriptors are defined in a sibling module and consumed by the
  * setup-script renderers, both of which knip --production can see; the tests
@@ -1455,11 +1456,6 @@ unset -f ${client.binary} 2>/dev/null || true`;
 /** Heredoc delimiters; must never appear on a line of the embedded bodies. */
 const GUARD_FILE_EOF = "ARCHESTRA_CLAUDE_GUARD_EOF";
 const GUARD_PROFILE_EOF = "ARCHESTRA_CLAUDE_GUARD_PROFILE_EOF";
-
-/** Single-quote a value for bash; safe for arbitrary content. */
-function sh(value: string): string {
-  return `'${value.replace(/'/g, `'\\''`)}'`;
-}
 
 /** Split a connect-wired URL into origin + the id-or-slug after the marker. */
 function splitResourceUrl(

@@ -18,8 +18,9 @@ import {
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
 import { CODEX_GUARD_CLIENT } from "./guard/clients";
-import { renderSetupScript, type SetupScriptProxySection } from "./index";
+import { renderSetupScript } from "./index";
 import { CODEX_HANDOFF_HELPER } from "./payloads/codex-handoff";
+import type { SetupScriptProxySection } from "./types";
 
 const execFileAsync = promisify(execFile);
 const powershellAvailable =

@@ -3291,6 +3291,7 @@ Required RBAC permission: [`openappaDiagnostics:read`](/docs/reference/permissio
 | `outcome` | `"answered" \| "unregistered" \| "unreachable" \| "dismissed" \| "non_success" \| "timeout" \| "transport" \| "malformed" \| "oversized" \| "unsupported_version" \| "module_error" \| "module_panicked"` | No | Only consults with this outcome, such as non_success. |
 | `externalName` | `string` | No | Only consults of this external, such as github.repository-visibility. |
 | `role` | `"authority" \| "sanitizer" \| "annotator" \| "audience_source" \| "input" \| "context_provider"` | No | Only consults of externals in this role, such as annotator. |
+| `cursor` | `string` | No | The nextCursor of the previous call, with the same filters, for the next page. |
 
 
 #### create_guardrails_repository

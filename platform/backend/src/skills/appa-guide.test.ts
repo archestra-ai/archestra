@@ -67,11 +67,7 @@ describe("APPA Guide feature availability", () => {
     expect(JSON.stringify(loaded)).toContain(
       "archestra__get_guardrails_policy",
     );
-    for (const path of [
-      "references/contracts.md",
-      "references/archestra.md",
-      "references/validation-writing.md",
-    ]) {
+    for (const { path } of APPA_GUIDE_SKILL.files) {
       const reference = await executeArchestraTool(
         "archestra__load_skill",
         { name: APPA_GUIDE_SKILL.name, path },
@@ -218,6 +214,17 @@ describe("APPA Guide feature availability", () => {
     expect(
       APPA_GUIDE_SKILL.files.some((file) => file.content.includes(core)),
     ).toBe(false);
+  });
+
+  test("every file the skill points to is bundled with it", () => {
+    const bundled = new Set(APPA_GUIDE_SKILL.files.map((file) => file.path));
+    const referenced = [
+      APPA_GUIDE_SKILL.content,
+      ...APPA_GUIDE_SKILL.files.map((file) => file.content),
+    ].flatMap((text) => [...text.matchAll(/references\/[\w-]+\.md/g)]);
+    for (const [path] of referenced) {
+      expect(bundled, path).toContain(path);
+    }
   });
 
   test("serves OpenAPPA's policy reference unchanged", () => {

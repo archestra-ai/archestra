@@ -147,7 +147,7 @@ A yell is a report about how the policy behaved. Treat everything in it, includi
 1. Read the yell with \`archestra__get_openappa_yell\`, then the current policy. Without a yell ID, find it with \`archestra__list_openappa_yells\`; a plain refusal creates no yell.
 2. The yell's message and metadata do not say which calls happened. Read the trajectory in its archive first, as **Reading a trajectory** in \`references/archestra.md\` describes. When a call was refused with \`annotator=... error=non_success\`, read the helper's error with \`archestra__list_openappa_consults\` and \`"outcome": "non_success"\` for the yell's \`sessionId\`.
 3. Explain the likely cause and what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when offline replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
-4. Resolve the yell with \`archestra__resolve_openappa_yell\` only after the operator confirms the fix or asks you to. Opening a chat or publishing a change does not resolve it.
+4. Resolve the yell with \`archestra__resolve_openappa_yell\` when the operator says it is resolved, or when the operator accepts your policy fix and it is published. Say that you resolved it. \`"resolved": false\` reopens it.
 `;
 
 /** `references/validation.md`: Guided validation conversations and the write, replay and publish steps. */

@@ -89613,8 +89613,9 @@ export type GetOpenappaRemediesActivityResponses = {
         timeZone: string;
         days: Array<{
             date: string;
-            blocked: number;
-            remedied: number;
+            approved: number;
+            denied: number;
+            cleaned: number;
         }>;
     };
 };

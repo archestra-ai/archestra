@@ -10,6 +10,7 @@ import type {
   ExternalConsultOutcome,
   ExternalConsultRole,
 } from "@/types/openappa-external-consults";
+import type { ConsultActivityDay } from "@/types/openappa-remedies";
 
 const table = schema.openappaExternalConsultsTable;
 
@@ -84,6 +85,54 @@ class OpenappaExternalConsultModel {
     return new Map(
       rows.map(({ externalName, ...latest }) => [externalName, latest]),
     );
+  }
+
+  /**
+   * What authorities and sanitizers answered per calendar day over the last
+   * `days` days, ending today in `timeZone`: reviews approved and denied,
+   * and results or arguments cleaned. Consults that got no answer are left
+   * out.
+   */
+  static async activityByDay(params: {
+    organizationId: string;
+    timeZone: string;
+    days: number;
+  }): Promise<ConsultActivityDay[]> {
+    const days = Math.max(1, Math.trunc(params.days));
+    // One day before the window covers the zone offset.
+    const since = sql`now() - make_interval(days => ${sql.raw(String(days + 1))})`;
+    const result = await db.execute<ConsultActivityDay>(sql`
+      WITH days AS (
+        SELECT to_char(
+          date_trunc('day', now() AT TIME ZONE ${params.timeZone}) - make_interval(days => n),
+          'YYYY-MM-DD'
+        ) AS date
+        FROM generate_series(${sql.raw(String(days - 1))}, 0, -1) AS n
+      ),
+      answered AS (
+        SELECT c.role, c.answer->>'ruling' AS ruling,
+          to_char(date_trunc('day', c.created_at AT TIME ZONE ${params.timeZone}), 'YYYY-MM-DD') AS date
+        FROM ${table} AS c
+        WHERE c.organization_id = ${params.organizationId}
+          AND c.created_at >= ${since}
+          AND c.outcome = 'answered'
+          AND c.role IN ('authority', 'sanitizer')
+      )
+      SELECT d.date,
+        COUNT(a.role) FILTER (WHERE a.role = 'authority' AND a.ruling = 'approve')::int AS approved,
+        COUNT(a.role) FILTER (WHERE a.role = 'authority' AND a.ruling = 'deny')::int AS denied,
+        COUNT(a.role) FILTER (WHERE a.role = 'sanitizer')::int AS cleaned
+      FROM days AS d
+      LEFT JOIN answered AS a ON a.date = d.date
+      GROUP BY d.date
+      ORDER BY d.date
+    `);
+    return result.rows.map((row) => ({
+      date: row.date,
+      approved: Number(row.approved),
+      denied: Number(row.denied),
+      cleaned: Number(row.cleaned),
+    }));
   }
 
   // SPDX-SnippetBegin

@@ -110,19 +110,21 @@ export const RemediesViewSchema = z.object({
 export type RemediesView = z.infer<typeof RemediesViewSchema>;
 
 /** One calendar day of the activity window, in the caller's time zone. */
-export const BlockedCallsDaySchema = z.object({
+export const ConsultActivityDaySchema = z.object({
   /** `YYYY-MM-DD` in the requested time zone. */
   date: z.string(),
-  /** Tool calls the runtime denied that day. */
-  blocked: z.number().int().nonnegative(),
-  /** Of those, the calls a remedy then let through: an authority ruled approve, or a sanitizer answered. */
-  remedied: z.number().int().nonnegative(),
+  /** Reviews an authority answered with `approve` that day. */
+  approved: z.number().int().nonnegative(),
+  /** Reviews an authority answered with `deny` that day. */
+  denied: z.number().int().nonnegative(),
+  /** Results or arguments a sanitizer answered for that day. */
+  cleaned: z.number().int().nonnegative(),
 });
-export type BlockedCallsDay = z.infer<typeof BlockedCallsDaySchema>;
+export type ConsultActivityDay = z.infer<typeof ConsultActivityDaySchema>;
 
 export const RemediesActivitySchema = z.object({
   timeZone: z.string(),
   /** Oldest day first, ending today. */
-  days: z.array(BlockedCallsDaySchema),
+  days: z.array(ConsultActivityDaySchema),
 });
 export type RemediesActivity = z.infer<typeof RemediesActivitySchema>;

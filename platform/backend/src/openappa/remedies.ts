@@ -1,5 +1,5 @@
 import { userHasPermission } from "@/auth";
-import { OpenAppaOperationModel, OpenappaExternalConsultModel } from "@/models";
+import { OpenappaExternalConsultModel } from "@/models";
 import type { ExternalConsult } from "@/types/openappa-external-consults";
 import type {
   Authority,
@@ -90,14 +90,14 @@ class OpenAppaRemediesService {
     };
   }
 
-  /** Denied calls per day over the last week, and how many a remedy let through. */
+  /** What authorities and sanitizers answered per day over the last week. */
   async activity(params: {
     organizationId: string;
     timeZone: string;
   }): Promise<RemediesActivity> {
     return {
       timeZone: params.timeZone,
-      days: await OpenAppaOperationModel.blockedCallsByDay({
+      days: await OpenappaExternalConsultModel.activityByDay({
         organizationId: params.organizationId,
         timeZone: params.timeZone,
         days: ACTIVITY_DAYS,

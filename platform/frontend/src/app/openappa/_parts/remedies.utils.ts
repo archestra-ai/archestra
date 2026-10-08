@@ -70,22 +70,7 @@ export function runsAs(remedy: Remedy): RunsAs | null {
   }
 }
 
-/** How many wired declarations each kind of implementation runs, for a bar; empty groups left out. */
-export function runsAsBreakdown(
-  remedies: Remedy[],
-): (RunsAs & { count: number })[] {
-  const counts = new Map<RunsAs["key"], number>();
-  for (const remedy of remedies) {
-    const group = runsAs(remedy);
-    if (group) counts.set(group.key, (counts.get(group.key) ?? 0) + 1);
-  }
-  return Object.values(RUNS_AS).flatMap((group) => {
-    const count = counts.get(group.key) ?? 0;
-    return count > 0 ? [{ ...group, count }] : [];
-  });
-}
-
-/** One kind of block a remedy lifts, as `Lock · value`. */
+/** One kind of block an authority or sanitizer lifts, as `Lock · value`. */
 export type CoverChip = {
   lock: "Approvals" | "Audience" | "Trust" | "Effects";
   value: string;

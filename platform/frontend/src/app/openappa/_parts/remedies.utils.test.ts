@@ -12,7 +12,6 @@ import {
   gapLines,
   groupBySource,
   runsAs,
-  runsAsBreakdown,
 } from "./remedies.utils";
 
 function authority(overrides: Partial<Authority> = {}): Authority {
@@ -110,20 +109,6 @@ describe("runsAs", () => {
     ).toBe("a local program");
     expect(runsAs(sanitizer())?.phrase).toBe("built in");
     expect(runsAs(authority({ implementation: null }))).toBeNull();
-  });
-
-  test("the breakdown counts wired remedies only, in a fixed order", () => {
-    expect(
-      runsAsBreakdown([
-        sanitizer(),
-        authority({ implementation: null }),
-        authority(),
-        authority({ name: "other" }),
-      ]).map((group) => [group.label, group.count]),
-    ).toEqual([
-      ["people", 2],
-      ["built in", 1],
-    ]);
   });
 });
 

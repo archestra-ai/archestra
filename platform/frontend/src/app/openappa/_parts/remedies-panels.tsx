@@ -2,23 +2,46 @@
 
 import { ArrowRight, CircleCheck, TriangleAlert } from "lucide-react";
 import { type ReactNode, useState } from "react";
+import { Bar, BarChart } from "recharts";
 import { QueryLoadError } from "@/components/query-load-error";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  type ChartConfig,
+  ChartContainer,
+  ChartTooltip,
+  ChartTooltipContent,
+} from "@/components/ui/chart";
 import { Skeleton } from "@/components/ui/skeleton";
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
+  type ConsultActivityDay,
   type RemediesView,
   type Remedy,
   useRemedies,
+  useRemediesActivity,
 } from "@/lib/openappa-remedies.query";
 import { cn } from "@/lib/utils/tailwind";
-import { gapCount, gapLines, runsAsBreakdown } from "./remedies.utils";
+import { gapCount, gapLines } from "./remedies.utils";
+import {
+  activityBars,
+  activityTotals,
+  cleaningsHeadline,
+  reviewsHeadline,
+} from "./remedies-activity.utils";
 import { RemediesDialog, type RemedyFilter } from "./remedies-dialog";
 
+const REVIEWS: ChartConfig = {
+  approved: { label: "approved", color: "var(--color-blue-400)" },
+  denied: { label: "denied", color: "var(--color-red-400)" },
+};
+const CLEANINGS: ChartConfig = {
+  cleaned: { label: "cleaned", color: "var(--color-pink-400)" },
+};
+
 /**
- * Three panels beside the security label: the authorities that can approve
- * a blocked call, the sanitizers that can clean data, and the kinds of block
- * the rules can cause that nothing lifts.
+ * Beside the security label: one card with the authorities that can approve
+ * a blocked call and the sanitizers that can clean data, each with what it
+ * answered over the last week, then the kinds of block nothing lifts.
  */
 export function RemediesPanels() {
   const view = useRemedies();
@@ -38,28 +61,40 @@ export function RemediesPanels() {
   if (!view.data)
     return (
       <>
-        <Panel title="Authorities" loading />
-        <Panel title="Sanitizers" loading />
+        <Card className="py-4 xl:col-span-2">
+          <CardContent className="grid flex-1 gap-6 px-4 sm:grid-cols-2">
+            <Column title="Authorities" loading />
+            <Column title="Sanitizers" loading />
+          </CardContent>
+        </Card>
         <Panel title="Gaps" loading />
       </>
     );
 
   return (
     <>
-      <CountPanel
-        title="Authorities"
-        remedies={view.data.authorities}
-        detail="can approve a blocked call"
-        empty="nobody can approve a blocked call"
-        onOpen={() => setOpen("authority")}
-      />
-      <CountPanel
-        title="Sanitizers"
-        remedies={view.data.sanitizers}
-        detail="can clean a tool result or arguments to approve a blocked call"
-        empty="nothing cleans data"
-        onOpen={() => setOpen("sanitizer")}
-      />
+      <Card className="py-4 xl:col-span-2">
+        <CardContent className="grid flex-1 gap-6 px-4 sm:grid-cols-2">
+          <CountColumn
+            title="Authorities"
+            remedies={view.data.authorities}
+            detail="can approve a blocked call"
+            empty="nobody can approve a blocked call"
+            onOpen={() => setOpen("authority")}
+          >
+            <ActivityWeek kind="reviews" />
+          </CountColumn>
+          <CountColumn
+            title="Sanitizers"
+            remedies={view.data.sanitizers}
+            detail="can clean a tool result or arguments to approve a blocked call"
+            empty="nothing cleans data"
+            onOpen={() => setOpen("sanitizer")}
+          >
+            <ActivityWeek kind="cleanings" />
+          </CountColumn>
+        </CardContent>
+      </Card>
       <GapsPanel view={view.data} />
       <RemediesDialog
         view={view.data}
@@ -74,7 +109,8 @@ export function RemediesPanels() {
 // Internal components
 // =============================================================================
 
-function Panel({
+/** A column of the shared card: the title row, then its body. */
+function Column({
   title,
   action,
   loading,
@@ -86,10 +122,37 @@ function Panel({
   children?: ReactNode;
 }) {
   return (
+    <section className="flex min-w-0 flex-col gap-2.5">
+      <div className="flex items-center justify-between">
+        <h3 className="text-xs font-medium">{title}</h3>
+        {action}
+      </div>
+      {loading ? (
+        <>
+          <Skeleton className="h-9 w-16" />
+          <Skeleton className="h-4 w-40" />
+          <Skeleton className="mt-auto h-20 w-full" />
+        </>
+      ) : (
+        children
+      )}
+    </section>
+  );
+}
+
+function Panel({
+  title,
+  loading,
+  children,
+}: {
+  title: string;
+  loading?: boolean;
+  children?: ReactNode;
+}) {
+  return (
     <Card className="gap-3 py-4">
       <CardHeader className="flex items-center justify-between px-4">
         <CardTitle className="text-xs font-medium">{title}</CardTitle>
-        {action}
       </CardHeader>
       <CardContent className="flex flex-1 flex-col gap-2.5 px-4">
         {loading ? (
@@ -105,23 +168,23 @@ function Panel({
   );
 }
 
-function CountPanel({
+function CountColumn({
   title,
   remedies,
   detail,
   empty,
   onOpen,
+  children,
 }: {
   title: string;
   remedies: Remedy[];
   detail: string;
   empty: string;
   onOpen: () => void;
+  children: ReactNode;
 }) {
-  const breakdown = runsAsBreakdown(remedies);
-  const wired = breakdown.reduce((total, group) => total + group.count, 0);
   return (
-    <Panel
+    <Column
       title={title}
       action={
         remedies.length > 0 && (
@@ -139,41 +202,93 @@ function CountPanel({
       <p className="text-muted-foreground text-xs">
         {remedies.length === 0 ? empty : detail}
       </p>
-      {wired > 0 && (
-        <div className="mt-auto space-y-1.5 pt-2">
-          <div
-            role="img"
-            aria-label={breakdown
-              .map((group) => `${group.label}: ${group.count}`)
-              .join(", ")}
-            className="flex h-1.5 gap-0.5"
+      {children}
+    </Column>
+  );
+}
+
+/**
+ * The last seven days of answers: reviews an authority approved or denied,
+ * or results and arguments a sanitizer cleaned.
+ */
+function ActivityWeek({ kind }: { kind: "reviews" | "cleanings" }) {
+  const activity = useRemediesActivity();
+  const config = kind === "reviews" ? REVIEWS : CLEANINGS;
+  const days: ConsultActivityDay[] = activity.data?.days ?? [];
+  const totals = activityTotals(days);
+  const headline =
+    kind === "reviews" ? reviewsHeadline(totals) : cleaningsHeadline(totals);
+
+  return (
+    <div className="mt-auto space-y-2 pt-2">
+      <div className="text-muted-foreground flex items-center justify-between gap-2 text-[11px]">
+        <span>
+          {kind === "reviews"
+            ? "Reviews · last 7 days"
+            : "Cleanings · last 7 days"}
+        </span>
+        {activity.data ? (
+          <span className="tabular-nums">{headline}</span>
+        ) : activity.isLoadingError ? (
+          <UnstyledButton
+            onClick={() => activity.refetch()}
+            className="hover:text-foreground underline"
           >
-            {breakdown.map((group) => (
-              <span
-                key={group.key}
-                className="rounded-sm"
-                style={{
-                  flex: `${group.count} 1 0`,
-                  backgroundColor: group.color,
-                }}
+            Could not load · retry
+          </UnstyledButton>
+        ) : (
+          <Skeleton className="h-3 w-24" />
+        )}
+      </div>
+      {activity.data ? (
+        <ChartContainer config={config} className="aspect-auto h-16 w-full">
+          <BarChart
+            accessibilityLayer
+            data={activityBars(days)}
+            margin={{ top: 0, left: 0, right: 0, bottom: 0 }}
+            barCategoryGap={3}
+          >
+            <ChartTooltip
+              cursor={{ fill: "var(--muted)", fillOpacity: 0.6 }}
+              content={
+                <ChartTooltipContent
+                  labelFormatter={(_, payload) => {
+                    const bar = payload[0]?.payload as
+                      | { date?: string }
+                      | undefined;
+                    return bar?.date ?? "";
+                  }}
+                />
+              }
+            />
+            {Object.entries(config).map(([key, series], index, all) => (
+              <Bar
+                key={key}
+                dataKey={key}
+                stackId="week"
+                fill={series.color}
+                isAnimationActive={false}
+                radius={index === all.length - 1 ? [2, 2, 0, 0] : 0}
               />
             ))}
-          </div>
-          <ul className="text-muted-foreground flex flex-wrap gap-x-2.5 gap-y-1 text-[11px]">
-            {breakdown.map((group) => (
-              <li key={group.key} className="flex items-center gap-1">
-                <span
-                  aria-hidden
-                  className="size-1.5 rounded-sm"
-                  style={{ backgroundColor: group.color }}
-                />
-                <span className="tabular-nums">{`${group.count} ${group.label}`}</span>
-              </li>
-            ))}
-          </ul>
-        </div>
+          </BarChart>
+        </ChartContainer>
+      ) : (
+        <Skeleton className="h-16 w-full" />
       )}
-    </Panel>
+      <ul className="text-muted-foreground flex flex-wrap gap-x-2.5 gap-y-1 text-[11px]">
+        {Object.entries(config).map(([key, series]) => (
+          <li key={key} className="flex items-center gap-1">
+            <span
+              aria-hidden
+              className="size-1.5 rounded-sm"
+              style={{ backgroundColor: series.color }}
+            />
+            <span>{series.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 

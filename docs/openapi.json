@@ -345499,7 +345499,7 @@
         "tags": [
           "OpenAPPA"
         ],
-        "description": "Tool calls the runtime denied on each of the last seven days, and how many of them a remedy then let through: an authority answered an offer with approve, or a sanitizer answered one. Days are calendar days in `timeZone`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage",
+        "description": "What authorities and sanitizers answered on each of the last seven days: reviews approved and denied, and results or arguments cleaned. Days are calendar days in `timeZone`.\n\nAuthentication:\n\nRequired. Use an authenticated browser session or send your Archestra API key in the `Authorization` header.\n\nAuthorization:\n\n`openappaPolicy:read`: View OpenAPPA policy, batteries, and coverage",
         "parameters": [
           {
             "schema": {
@@ -345530,12 +345530,17 @@
                           "date": {
                             "type": "string"
                           },
-                          "blocked": {
+                          "approved": {
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 9007199254740991
                           },
-                          "remedied": {
+                          "denied": {
+                            "type": "integer",
+                            "minimum": 0,
+                            "maximum": 9007199254740991
+                          },
+                          "cleaned": {
                             "type": "integer",
                             "minimum": 0,
                             "maximum": 9007199254740991
@@ -345543,8 +345548,9 @@
                         },
                         "required": [
                           "date",
-                          "blocked",
-                          "remedied"
+                          "approved",
+                          "denied",
+                          "cleaned"
                         ],
                         "additionalProperties": false
                       }

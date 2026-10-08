@@ -56,6 +56,7 @@ class OpenAppaCoverageService {
       ...params,
       visibleCatalogIds: [params.catalogId],
       includeAutoModeTools: false,
+      includeAppCatalogs: true,
     });
     return tools
       .map((row) => row.tool)
@@ -435,6 +436,8 @@ type CoverageVisibility = {
   autoModePage?: CoverageEntitiesQuery;
   /** Only resolve Auto-mode access for the target whose tools are requested. */
   autoModeEntityId?: string;
+  /** Per-catalog inspection reads app catalogs too; the overview leaves them out. */
+  includeAppCatalogs?: boolean;
 };
 
 /** A rule as it applies to one full tool name, battery rules once per alias target. */
@@ -451,9 +454,8 @@ async function buildReport(
 ): Promise<Report> {
   const [snapshot, inventory] = await Promise.all([
     openappaBatteriesService.coverageSnapshot(organizationId),
-    ToolModel.findCoverageInventory(
-      organizationId,
-      visibility?.userId
+    ToolModel.findCoverageInventory(organizationId, {
+      visibility: visibility?.userId
         ? {
             userId: visibility.userId,
             agentTypes: visibility.agentTypes ?? ["agent", "mcp_gateway"],
@@ -461,7 +463,8 @@ async function buildReport(
               visibility.excludeOtherPersonalTypes ?? [],
           }
         : undefined,
-    ),
+      includeAppCatalogs: visibility?.includeAppCatalogs,
+    }),
   ]);
   const { resolution, rootContent } = snapshot;
   const refused = snapshot.lastError !== null;

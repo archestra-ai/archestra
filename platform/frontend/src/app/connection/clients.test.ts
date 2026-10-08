@@ -381,15 +381,13 @@ describe("Connect agent ordering", () => {
       "codex",
       "cursor",
     ]);
-    expect(clients.slice(0, 2).map((c) => c.id)).toEqual(["cursor", "codex"]);
-    expect(clients.at(-1)?.id).toBe("generic");
-    expect(clients).toHaveLength(CONNECT_CLIENTS.length);
-    expect(new Set(clients.map((c) => c.id)).size).toBe(CONNECT_CLIENTS.length);
-    expect(clients.slice(2).map((c) => c.id)).toEqual(
-      CONNECT_CLIENTS.filter((c) => c.id !== "cursor" && c.id !== "codex").map(
-        (c) => c.id,
-      ),
-    );
+    expect(clients.map((c) => c.id)).toEqual([
+      "cursor",
+      "codex",
+      ...CONNECT_CLIENTS.filter(
+        (c) => c.id !== "cursor" && c.id !== "codex",
+      ).map((c) => c.id),
+    ]);
   });
 
   it("filters visibility without changing the saved order or restoring hidden agents", () => {

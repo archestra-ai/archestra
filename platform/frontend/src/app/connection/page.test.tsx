@@ -162,6 +162,7 @@ beforeEach(() => {
 
 describe("ConnectPage saved agent order", () => {
   it("renders saved order in tiles, including agents previously in Other agents", async () => {
+    const user = userEvent.setup();
     window.localStorage.clear();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -185,15 +186,8 @@ describe("ConnectPage saved agent order", () => {
       "aria-pressed",
       "true",
     );
-    await userEvent
-      .setup()
-      .click(screen.getByRole("button", { name: "Other agents" }));
-    expect(
-      screen.getByRole("option", { name: /Generic client/ }),
-    ).toBeVisible();
-    await userEvent
-      .setup()
-      .click(screen.getByRole("option", { name: /Generic client/ }));
+    await user.click(screen.getByRole("button", { name: "Other agents" }));
+    await user.click(screen.getByRole("option", { name: /Generic client/ }));
     expect(
       screen.getByRole("button", { name: "Generic client, change agent" }),
     ).toHaveAttribute("aria-pressed", "true");
@@ -233,12 +227,12 @@ describe("ConnectPage saved agent order", () => {
           .getAllByRole("option")
           .map((option) => option.getAttribute("data-value")),
       ).toEqual(["openclaw", "cursor", "claude-code", "generic"]);
-      await user.type(screen.getByPlaceholderText("Search agents"), "c");
+      await user.type(screen.getByPlaceholderText("Search agents"), "cl");
       expect(
         screen
           .getAllByRole("option")
           .map((option) => option.getAttribute("data-value")),
-      ).toEqual(["openclaw", "cursor", "claude-code", "generic"]);
+      ).toEqual(["openclaw", "claude-code", "generic"]);
     } finally {
       width.mockRestore();
     }

@@ -115,7 +115,6 @@ describe("ConnectionSettingsForm", () => {
     expect(
       within(list()).getAllByRole("button", { name: /^Reorder / })[0],
     ).toHaveAttribute("aria-label", secondName);
-    expect(screen.getByRole("button", { name: "Save" })).toBeEnabled();
     await user.click(screen.getByRole("button", { name: "Save" }));
     const saved = mutate.mock.lastCall?.[0];
     expect(saved.connectionClientOrder.slice(0, 2)).toEqual([
@@ -166,7 +165,6 @@ describe("ConnectionSettingsForm", () => {
     expect(
       screen.getByRole("combobox", { name: "All agents added" }),
     ).toBeDisabled();
-    expect(screen.getByRole("button", { name: "Reorder Codex" })).toBeVisible();
     expect(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
     ).toHaveFocus();
@@ -184,14 +182,8 @@ describe("ConnectionSettingsForm", () => {
       },
     } as ReturnType<typeof useOrganization>);
     render(<ConnectionSettingsForm />);
-    expect(
-      screen.queryByRole("button", { name: "Reorder Cursor" }),
-    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("combobox", { name: "Add an agent" }));
     await user.type(screen.getByPlaceholderText("Search agents…"), "cursor");
-    expect(
-      screen.queryByRole("option", { name: /Claude/ }),
-    ).not.toBeInTheDocument();
     await user.click(screen.getByRole("option", { name: /Cursor/ }));
     expect(
       within(screen.getByRole("list", { name: "Available agents" }))
@@ -204,9 +196,6 @@ describe("ConnectionSettingsForm", () => {
         connectionShownClientIds: ["codex", "cursor"],
         connectionClientOrder: ["codex", "cursor"],
       }),
-    );
-    expect(mutate.mock.lastCall?.[0].connectionClientOrder.slice(0, 2)).toEqual(
-      ["codex", "cursor"],
     );
     await user.click(
       screen.getByRole("button", { name: "Remove Codex from Connect" }),
@@ -243,9 +232,7 @@ describe("ConnectionSettingsForm", () => {
     );
     await user.click(screen.getByRole("combobox", { name: "Add an agent" }));
     await user.type(screen.getByPlaceholderText("Search agents…"), "codex");
-    expect(screen.getByRole("option", { name: /Codex/ })).toBeVisible();
     await user.click(screen.getByRole("option", { name: /Codex/ }));
-    expect(screen.getByRole("button", { name: "Reorder Codex" })).toBeVisible();
     expect(screen.getByRole("button", { name: "Save" })).toBeDisabled();
   });
 

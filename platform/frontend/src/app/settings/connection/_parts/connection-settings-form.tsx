@@ -142,7 +142,10 @@ export function ConnectionSettingsForm() {
   )
     .filter((c) => c.id !== "generic")
     .map((c) => c.id);
-  const selectedClientOrder = orderedClients(clientOrder)
+  const clientsInOrder = orderedClients(clientOrder).filter(
+    (c) => c.id !== "generic",
+  );
+  const selectedClientOrder = clientsInOrder
     .filter((c) => shownClientIds.includes(c.id))
     .map((c) => c.id);
   const clientOrderDirty =
@@ -571,9 +574,7 @@ export function ConnectionSettingsForm() {
                 description="Add the agents you want to offer on Connect, then drag their pills or use left/right arrow keys to reorder. Generic client is always shown last."
               >
                 <AvailableAgentsList
-                  clients={orderedClients(clientOrder).filter(
-                    (c) => c.id !== "generic",
-                  )}
+                  clients={clientsInOrder}
                   shownClientIds={shownClientIds}
                   onShownClientIdsChange={setShownClientIds}
                   onOrderChange={setClientOrder}

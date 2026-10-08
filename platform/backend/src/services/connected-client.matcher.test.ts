@@ -126,6 +126,22 @@ describe("isOAuthClientForConnectClient", () => {
     ).toBe(true);
   });
 
+  test("matches Claude Desktop's installer sign-in by its DCR name and fixed loopback redirect", () => {
+    const desktop = {
+      clientId: "dcr-desktop",
+      name: "Claude Desktop (2.19675.1)",
+      redirectUris: ["http://127.0.0.1:53280/callback"],
+    };
+    expect(isOAuthClientForConnectClient("claude-desktop", desktop)).toBe(true);
+    expect(
+      isOAuthClientForConnectClient("claude-desktop", {
+        ...desktop,
+        redirectUris: ["http://127.0.0.1:60000/callback"],
+      }),
+    ).toBe(false);
+    expect(isOAuthClientForConnectClient("claude-code", desktop)).toBe(false);
+  });
+
   test("the SQL version picks the same agent", async () => {
     const agentOf = async (client: {
       clientId: string;
@@ -168,6 +184,13 @@ describe("isOAuthClientForConnectClient", () => {
         redirectUris: ["http://localhost:41592/oauth/callback"],
       }),
     ).toBe("amp");
+    expect(
+      await agentOf({
+        clientId: "dcr-4",
+        name: "Claude Desktop (2.19675.1)",
+        redirectUris: ["http://127.0.0.1:53280/callback"],
+      }),
+    ).toBe("claude-desktop");
     expect(await agentOf(other)).toBeNull();
   });
 });

@@ -171,10 +171,18 @@ export const OAUTH_AGENTS = {
       { clientNamePattern: "^Codex$" },
     ],
   },
-  // CIMD; also how claude.ai connectors sign in.
+  // The installer's managed profile signs in by DCR: Claude Desktop registers
+  // as "Claude Desktop (<version>)" with the one loopback redirect its docs
+  // fix for every device (captured from Claude Desktop 2.19675.1). The CIMD
+  // is its "hosted" mode: how claude.ai connectors sign in, from Desktop, the
+  // web or mobile alike.
   "claude-desktop": {
     label: "Claude Desktop",
     identities: [
+      {
+        clientNamePattern: "^Claude Desktop \\(.*\\)$",
+        redirectUri: "http://127.0.0.1:53280/callback",
+      },
       { clientId: "https://claude.ai/oauth/mcp-oauth-client-metadata" },
     ],
   },

@@ -8,14 +8,15 @@ import {
   CAPPED_TOOL_RESULT_META_KEY,
   type CappedToolResult,
   capToolResultText,
-  MAX_TOOL_RESULT_CONTEXT_CHARS,
+  MAX_TOOL_RESULT_CONTEXT_BYTES,
+  utf8Length,
 } from "@/utils/tool-result-cap";
 import { uuidv5 } from "@/utils/uuid";
 
 type ToolResult = string | { content: string; [key: string]: unknown };
 
 /**
- * Bounds a chat tool result to {@link MAX_TOOL_RESULT_CONTEXT_CHARS} of
+ * Bounds a chat tool result to {@link MAX_TOOL_RESULT_CONTEXT_BYTES} of
  * model-facing text, appending PostToolUse `hookFeedback` when present. An
  * oversized result is saved in full to the conversation's default sandbox so
  * the model can grep it with `run_command`; when that is not possible the
@@ -31,7 +32,7 @@ export async function capChatToolResult(params: {
   const { result, hookFeedback, context, toolCallId } = params;
   const text = typeof result === "string" ? result : result.content;
   const suffix = hookFeedback ? `\n\n[hook feedback] ${hookFeedback}` : "";
-  if (text.length + suffix.length <= MAX_TOOL_RESULT_CONTEXT_CHARS) {
+  if (utf8Length(text + suffix) <= MAX_TOOL_RESULT_CONTEXT_BYTES) {
     return withContent(result, text + suffix);
   }
 

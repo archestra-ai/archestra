@@ -1,7 +1,8 @@
+import { jsonSchema, tool } from "ai";
 import { ModelModel } from "@/models";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
-import { compactMessagesForChat } from "./context-compaction";
+import { compactMessagesForChat } from "./compact-messages";
 
 test("auto-compaction includes chat-override tool schemas in its context threshold", async ({
   makeAgent,
@@ -57,31 +58,26 @@ test("auto-compaction includes chat-override tool schemas in its context thresho
   const belowThreshold = await compactMessagesForChat(baseParams);
   expect(belowThreshold.reason).toBe("below_threshold");
 
-  const abortController = new AbortController();
-  abortController.abort();
   const overThreshold = await compactMessagesForChat({
     ...baseParams,
     tools: {
-      large_schema_tool: {
+      large_schema_tool: tool({
         description: "A tool with a large schema.",
-        inputSchema: {
-          jsonSchema: {
-            type: "object",
-            properties: {
-              payload: {
-                type: "string",
-                description: "schema context ".repeat(1_000),
-              },
+        inputSchema: jsonSchema({
+          type: "object",
+          properties: {
+            payload: {
+              type: "string",
+              description: "schema context ".repeat(1_000),
             },
           },
-        },
-      },
+        }),
+      }),
     },
-    abortSignal: abortController.signal,
   });
 
-  // The aborted result proves the threshold was crossed without invoking a
-  // summarization model. Before tool schemas were counted this stayed below
-  // the threshold and returned `below_threshold`.
-  expect(overThreshold.reason).toBe("aborted");
+  // Crossing the threshold without invoking a summarization model: the short
+  // history fits the verbatim tail, so nothing is compactable. Before tool
+  // schemas were counted this stayed below the threshold.
+  expect(overThreshold.reason).toBe("nothing_to_compact");
 });

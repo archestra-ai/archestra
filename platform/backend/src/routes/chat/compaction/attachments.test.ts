@@ -1,7 +1,10 @@
 import ConversationAttachmentModel from "@/models/conversation-attachment";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
-import { __test, __testEstimateChatMessagesTokens } from "./context-compaction";
+import {
+  buildCompactionPrompt,
+  estimateChatMessagesTokens,
+} from "./message-text";
 
 const refUrl = (id: string) => `/api/chat/attachments/${id}/content`;
 
@@ -20,7 +23,7 @@ test("token-estimate sync branch uses part.fileSize for ref'd PDFs", () => {
     ],
   };
 
-  const refEstimate = __testEstimateChatMessagesTokens({
+  const refEstimate = estimateChatMessagesTokens({
     provider: "anthropic",
     messages: [refMessage],
   });
@@ -44,7 +47,7 @@ test("token-estimate ref branch without fileSize degrades to header-only", () =>
     ],
   };
 
-  const estimate = __testEstimateChatMessagesTokens({
+  const estimate = estimateChatMessagesTokens({
     provider: "anthropic",
     messages: [refMessage],
   });
@@ -82,11 +85,11 @@ test("token-estimate ref branch and data: URL branch produce comparable estimate
     ],
   };
 
-  const dataEstimate = __testEstimateChatMessagesTokens({
+  const dataEstimate = estimateChatMessagesTokens({
     provider: "anthropic",
     messages: [dataMessage],
   });
-  const refEstimate = __testEstimateChatMessagesTokens({
+  const refEstimate = estimateChatMessagesTokens({
     provider: "anthropic",
     messages: [refMessage],
   });
@@ -140,7 +143,7 @@ test("summary path includes text_preview for a ref attachment in the same conver
     },
   ];
 
-  const prompt = await __test.buildCompactionPrompt({
+  const prompt = await buildCompactionPrompt({
     previousSummary: null,
     messages,
     conversationId: conversation.id,
@@ -193,7 +196,7 @@ test("summary path silently drops refs from a DIFFERENT conversation (ACL)", asy
     },
   ];
 
-  const prompt = await __test.buildCompactionPrompt({
+  const prompt = await buildCompactionPrompt({
     previousSummary: null,
     messages,
     conversationId: requestConvo.id,
@@ -241,7 +244,7 @@ test("summary path falls back when ref's preview status is 'failed'", async ({
     },
   ];
 
-  const prompt = await __test.buildCompactionPrompt({
+  const prompt = await buildCompactionPrompt({
     previousSummary: null,
     messages,
     conversationId: conversation.id,
@@ -276,7 +279,7 @@ test("backward-compat: data: URL summary path still decodes text PDFs", async ({
     },
   ];
 
-  const prompt = await __test.buildCompactionPrompt({
+  const prompt = await buildCompactionPrompt({
     previousSummary: null,
     messages,
     conversationId: conversation.id,

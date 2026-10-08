@@ -6,7 +6,7 @@ import { SKILL_SANDBOX_HOME } from "@/skills-sandbox/runtime-image";
 import { afterAll, beforeEach, describe, expect, test } from "@/test";
 import {
   CAPPED_TOOL_RESULT_META_KEY,
-  MAX_TOOL_RESULT_CONTEXT_CHARS,
+  MAX_TOOL_RESULT_CONTEXT_BYTES,
   readCappedToolResult,
 } from "@/utils/tool-result-cap";
 import { capChatToolResult } from "./tool-result-spill";
@@ -70,7 +70,7 @@ describe("capChatToolResult", () => {
     (config.daggerRuntime as { enabled: boolean }).enabled = originalDagger;
   });
 
-  const oversized = `${"row,".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS / 2)}END`;
+  const oversized = `${"row,".repeat(MAX_TOOL_RESULT_CONTEXT_BYTES / 2)}END`;
 
   test("appends hook feedback to a result under the cap, keeping its shape", async () => {
     const rich = {
@@ -137,7 +137,7 @@ describe("capChatToolResult", () => {
         new RegExp(`^${SKILL_SANDBOX_HOME}/tool-results/.+\\.txt$`),
       );
       expect(capped.content.length).toBeLessThanOrEqual(
-        MAX_TOOL_RESULT_CONTEXT_CHARS,
+        MAX_TOOL_RESULT_CONTEXT_BYTES,
       );
       expect(capped.content.startsWith(`[Tool result too large`)).toBe(true);
       expect(capped.content).toContain(marker?.path ?? "missing");
@@ -236,7 +236,7 @@ describe("capChatToolResult", () => {
 
     expect(typeof capped).toBe("string");
     expect((capped as string).length).toBeLessThanOrEqual(
-      MAX_TOOL_RESULT_CONTEXT_CHARS,
+      MAX_TOOL_RESULT_CONTEXT_BYTES,
     );
     expect(oversized.startsWith((capped as string).split("\n\n")[1])).toBe(
       true,
@@ -261,6 +261,6 @@ function expectTruncatedWithoutPath(
     [CAPPED_TOOL_RESULT_META_KEY]: { totalChars: expect.any(Number) },
   });
   expect(capped.content.length).toBeLessThanOrEqual(
-    MAX_TOOL_RESULT_CONTEXT_CHARS,
+    MAX_TOOL_RESULT_CONTEXT_BYTES,
   );
 }

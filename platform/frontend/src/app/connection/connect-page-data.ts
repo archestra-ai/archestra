@@ -142,6 +142,14 @@ export interface ConnectPageData {
 /** What connect.md?client=generic can set up; it has no plugins. */
 const GENERIC_PARTS = ["tools", "skills", "proxy"] as const;
 
+/**
+ * The prompt for after connecting: the agent reads welcome.md, explores what
+ * it was given and suggests what to ask next.
+ */
+export function welcomePrompt(origin: string, appName: string): string {
+  return `Read ${origin}/welcome.md and show me what I can do with ${appName}.`;
+}
+
 export function useConnectPageData(): ConnectPageData {
   // A fresh read: these settings decide what a setup may include.
   const orgQuery = useOrganization(true, { fresh: true });

@@ -235,6 +235,8 @@ function GithubSyncCard({ next }: { next: boolean }) {
         status={
           !sync.data ? null : failed ? (
             <Status failed>Sync failed</Status>
+          ) : connected && source?.setupPullRequestNumber ? (
+            <Status>Awaiting initial merge</Status>
           ) : next ? (
             <Badge>Step 2 of 2</Badge>
           ) : connected ? (
@@ -246,7 +248,9 @@ function GithubSyncCard({ next }: { next: boolean }) {
           )
         }
         description={
-          connected && source?.repo ? (
+          connected && source?.setupPullRequestNumber ? (
+            "Merge the initial policy pull request to finish setup. Your current policy stays active until it merges."
+          ) : connected && source?.repo ? (
             <span>
               {appName} pulls the policy from{" "}
               <span className="font-mono text-foreground">{source.repo}</span>.
@@ -263,7 +267,19 @@ function GithubSyncCard({ next }: { next: boolean }) {
           label: "CI checks",
         }}
         action={
-          !sync.data?.enabled ? null : !canManage ? (
+          !sync.data?.enabled ? null : connected &&
+            source?.setupPullRequestNumber ? (
+            <Button size="sm" variant="outline" asChild>
+              <a
+                href={`https://github.com/${source.repo}/pull/${source.setupPullRequestNumber}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                <span>Review and merge PR</span>
+                <ArrowRight />
+              </a>
+            </Button>
+          ) : !canManage ? (
             connected ? null : (
               <p className="text-sm text-muted-foreground">
                 Ask an administrator to connect a repository.

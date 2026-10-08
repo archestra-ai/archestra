@@ -88207,6 +88207,7 @@ export type GetAppaGithubSyncResponses = {
             githubAppConfigId: string | null;
             revision: string;
             sourceCommit: string | null;
+            setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             declarationsPendingPublish: boolean;
@@ -88316,6 +88317,7 @@ export type UpdateAppaGithubSyncResponses = {
             githubAppConfigId: string | null;
             revision: string;
             sourceCommit: string | null;
+            setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             declarationsPendingPublish: boolean;
@@ -88426,6 +88428,7 @@ export type ConfigureAppaGithubSyncResponses = {
             githubAppConfigId: string | null;
             revision: string;
             sourceCommit: string | null;
+            setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             declarationsPendingPublish: boolean;
@@ -88533,6 +88536,7 @@ export type CreateAppaGithubRepositoryResponses = {
             githubAppConfigId: string | null;
             revision: string;
             sourceCommit: string | null;
+            setupPullRequestNumber: number | null;
             lastSyncedAt: string | null;
             lastSyncError: string | null;
             declarationsPendingPublish: boolean;
@@ -88641,6 +88645,7 @@ export type AcceptHeldAppaGithubPullResponses = {
                 githubAppConfigId: string | null;
                 revision: string;
                 sourceCommit: string | null;
+                setupPullRequestNumber: number | null;
                 lastSyncedAt: string | null;
                 lastSyncError: string | null;
                 declarationsPendingPublish: boolean;

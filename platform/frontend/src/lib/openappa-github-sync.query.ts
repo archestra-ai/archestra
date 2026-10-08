@@ -59,8 +59,12 @@ export function useCreateAppaGithubRepository() {
       }
       return data;
     },
-    onSuccess: () =>
-      toast.success("Repository created with your current policy."),
+    onSuccess: (data) =>
+      toast.success(
+        data?.source?.setupPullRequestNumber
+          ? "Repository connected. Merge the initial policy pull request to finish setup."
+          : "Repository connected with your current policy.",
+      ),
     onSettled: () => invalidatePolicyViews(client),
   });
 }
@@ -81,7 +85,11 @@ export function useUpdateAppaGithubSync() {
     },
     onSettled: () => invalidatePolicyViews(client),
     onSuccess: (data, body) => {
-      if (body.action === "sync" && data?.source?.lastSyncError) return;
+      if (
+        body.action === "sync" &&
+        (data?.source?.lastSyncError || data?.source?.setupPullRequestNumber)
+      )
+        return;
       toast.success(
         body.action === "sync"
           ? "Sync complete"

@@ -340072,6 +340072,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "setupPullRequestNumber": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -340113,6 +340119,7 @@
                         "githubAppConfigId",
                         "revision",
                         "sourceCommit",
+                        "setupPullRequestNumber",
                         "lastSyncedAt",
                         "lastSyncError",
                         "declarationsPendingPublish",
@@ -340526,6 +340533,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "setupPullRequestNumber": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -340567,6 +340580,7 @@
                         "githubAppConfigId",
                         "revision",
                         "sourceCommit",
+                        "setupPullRequestNumber",
                         "lastSyncedAt",
                         "lastSyncError",
                         "declarationsPendingPublish",
@@ -340971,6 +340985,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "setupPullRequestNumber": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -341012,6 +341032,7 @@
                         "githubAppConfigId",
                         "revision",
                         "sourceCommit",
+                        "setupPullRequestNumber",
                         "lastSyncedAt",
                         "lastSyncError",
                         "declarationsPendingPublish",
@@ -341395,6 +341416,12 @@
                           "nullable": true,
                           "type": "string"
                         },
+                        "setupPullRequestNumber": {
+                          "nullable": true,
+                          "type": "integer",
+                          "minimum": -2147483648,
+                          "maximum": 2147483647
+                        },
                         "lastSyncedAt": {
                           "nullable": true,
                           "type": "string",
@@ -341436,6 +341463,7 @@
                         "githubAppConfigId",
                         "revision",
                         "sourceCommit",
+                        "setupPullRequestNumber",
                         "lastSyncedAt",
                         "lastSyncError",
                         "declarationsPendingPublish",
@@ -341808,6 +341836,12 @@
                               "nullable": true,
                               "type": "string"
                             },
+                            "setupPullRequestNumber": {
+                              "nullable": true,
+                              "type": "integer",
+                              "minimum": -2147483648,
+                              "maximum": 2147483647
+                            },
                             "lastSyncedAt": {
                               "nullable": true,
                               "type": "string",
@@ -341849,6 +341883,7 @@
                             "githubAppConfigId",
                             "revision",
                             "sourceCommit",
+                            "setupPullRequestNumber",
                             "lastSyncedAt",
                             "lastSyncError",
                             "declarationsPendingPublish",

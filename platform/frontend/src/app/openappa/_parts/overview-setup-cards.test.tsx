@@ -65,6 +65,7 @@ const source = {
   sourceCommit: "a".repeat(40),
   lastSyncedAt: "2026-09-15T12:00:00Z",
   lastSyncError: null,
+  setupPullRequestNumber: null,
   declarationsPendingPublish: false,
   heldContentHash: null,
   heldSourceCommit: null,
@@ -340,6 +341,25 @@ test("a failed sync shows its error", async () => {
     "href",
     "/settings/openappa",
   );
+});
+
+test("shows the initial merge link on Overview while sync waits for setup", async () => {
+  revision = 1;
+  enabled = true;
+  sync = {
+    validationDirectory: "",
+    enabled: true,
+    hasPolicy: false,
+    source: { ...source, setupPullRequestNumber: 7, sourceCommit: null },
+  };
+  show();
+  expect(await screen.findByText("Awaiting initial merge")).toBeVisible();
+  expect(
+    screen.getByRole("link", { name: "Review and merge PR" }),
+  ).toHaveAttribute("href", "https://github.com/example/policies/pull/7");
+  expect(
+    screen.getByText(/Your current policy stays active until it merges/),
+  ).toBeVisible();
 });
 
 test("once sync is connected the cards stay as status with no next step", async () => {

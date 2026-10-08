@@ -3648,6 +3648,13 @@
       "when": 1791469737528,
       "tag": "0520_easy_luke_cage",
       "breakpoints": true
+    },
+    {
+      "idx": 521,
+      "version": "7",
+      "when": 1791471692141,
+      "tag": "0521_lumpy_ironclad",
+      "breakpoints": true
     }
   ]
 }

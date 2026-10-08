@@ -1,4 +1,4 @@
-import { createHash } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
@@ -87,7 +87,7 @@ export async function connectAppaGithubRepository(params: {
   return getAppaGithubSync(params.organizationId);
 }
 
-/** Create a private policy repository and make the current policy its first revision. */
+/** Seed a private policy repository, falling back to a PR when rules block the commit. */
 export async function createAppaGithubRepository(params: {
   organizationId: string;
   userId: string;
@@ -156,50 +156,99 @@ export async function createAppaGithubRepository(params: {
     !/^[^\p{Cc}\s~^:?*[\\]+$/u.test(created.default_branch)
   )
     throw new ApiError(502, "GitHub returned an unexpected repository");
+  let setupPullRequestNumber: number | undefined;
   try {
-    const path = `https://api.github.com/repos/${repo}/contents/appa.toml`;
-    for (let attempt = 0; attempt < 4; attempt++) {
+    const base = `https://api.github.com/repos/${repo}`;
+    const existing = await githubSetupRead<{ sha?: string }>({
+      url: `${base}/contents/appa.toml?ref=${encodeURIComponent(created.default_branch)}`,
+      token,
+    });
+    if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
+      throw new ApiError(502, "The template has no appa.toml file");
+    // Identical template bytes need no PR: GitHub cannot open an empty diff.
+    const bytes = Buffer.from(policy.content);
+    const policyBlob = createHash("sha1")
+      .update(`blob ${bytes.length}\0`)
+      .update(bytes)
+      .digest("hex");
+    if (existing.sha !== policyBlob) {
+      let requiresPullRequest = false;
       try {
-        const existing = await githubJson<{ sha?: string }>({
-          url: path,
-          token,
-        });
-        if (!existing.sha || !/^[a-f0-9]{40}$/.test(existing.sha))
-          throw new ApiError(502, "The template has no appa.toml file");
         await githubJson({
-          url: path,
+          url: `${base}/contents/appa.toml`,
           token,
           method: "PUT",
           body: {
             message: "Seed current OpenAPPA policy",
-            content: Buffer.from(policy.content).toString("base64"),
+            content: bytes.toString("base64"),
             sha: existing.sha,
             branch: created.default_branch,
           },
-          onHttpError: (status, message) =>
-            new ApiError(
-              status === 409 ? 409 : 502,
-              status === 409
-                ? `GitHub could not commit the policy: ${message ?? "HTTP 409 conflict"}.`
-                : `GitHub returned HTTP ${status}. Check repository access and App permissions.`,
-            ),
+          onHttpError: (status, message) => {
+            if (
+              [403, 409, 422].includes(status) &&
+              /repository rule violations|protected branch update failed|changes must be made through a pull request|required (?:status check|workflow)/i.test(
+                message ?? "",
+              )
+            )
+              return new GithubRepositoryRulesError();
+            return new ApiError(
+              502,
+              `GitHub returned HTTP ${status} while committing the initial policy. Check repository access and App permissions.`,
+            );
+          },
         });
-        break;
       } catch (error) {
-        if (
-          !(error instanceof ApiError) ||
-          ![409, 502].includes(error.statusCode) ||
-          attempt === 3
-        )
-          throw error;
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        if (!(error instanceof GithubRepositoryRulesError)) throw error;
+        requiresPullRequest = true;
+      }
+      if (requiresPullRequest) {
+        const branch = await githubSetupRead<{ object?: { sha?: string } }>({
+          url: `${base}/git/ref/heads/${created.default_branch.split("/").map(encodeURIComponent).join("/")}`,
+          token,
+        });
+        const sha = branch.object?.sha;
+        if (!sha || !/^[a-f0-9]{40}$/.test(sha))
+          throw new ApiError(502, "GitHub returned an invalid default branch");
+        const head = `archestra/openappa-setup-${randomUUID()}`;
+        await githubJson({
+          url: `${base}/git/refs`,
+          token,
+          method: "POST",
+          body: { ref: `refs/heads/${head}`, sha },
+        });
+        await githubJson({
+          url: `${base}/contents/appa.toml`,
+          token,
+          method: "PUT",
+          body: {
+            message: "Seed current OpenAPPA policy",
+            content: bytes.toString("base64"),
+            sha: existing.sha,
+            branch: head,
+          },
+        });
+        const pull = await githubJson<{ number?: number }>({
+          url: `${base}/pulls`,
+          token,
+          method: "POST",
+          body: {
+            title: "Seed current OpenAPPA policy",
+            body: "Review and merge this pull request to finish GitHub policy sync setup. Your current policy stays active until this pull request is merged.",
+            head,
+            base: created.default_branch,
+          },
+        });
+        if (!Number.isSafeInteger(pull.number) || (pull.number ?? 0) <= 0)
+          throw new ApiError(502, "GitHub returned an invalid pull request");
+        setupPullRequestNumber = pull.number;
       }
     }
   } catch (error) {
     if (error instanceof ApiError)
       throw new ApiError(
         error.statusCode,
-        `Repository ${repo} exists, but its policy was not seeded: ${error.message}`,
+        `Repository ${repo} exists, but its initial policy setup failed: ${error.message}`,
       );
     throw error;
   }
@@ -219,6 +268,7 @@ export async function createAppaGithubRepository(params: {
     githubPatId: null,
     githubAppConfigId: params.githubAppConfigId,
     validationDirectory: "",
+    setupPullRequestNumber,
   });
   await syncAppaGithubPolicy(params.organizationId);
   return getAppaGithubSync(params.organizationId);
@@ -320,6 +370,30 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
     };
     const base = `https://api.github.com/repos/${repo}`;
+    if (row.setupPullRequestNumber) {
+      const pull = await githubJson<{ merged?: boolean; state?: string }>({
+        url: `${base}/pulls/${row.setupPullRequestNumber}`,
+        token: token ?? "",
+      });
+      if (pull.merged !== true) {
+        if (pull.state !== "open" && pull.state !== "closed")
+          throw new ApiError(
+            502,
+            "GitHub returned an invalid setup pull request",
+          );
+        await OpenAppaGithubSyncModel.finish({
+          organizationId,
+          revision: row.revision,
+          outcome: {
+            error:
+              pull.state === "closed"
+                ? "The initial policy pull request was closed without merging. Reopen and merge it to finish setup, or stop syncing to keep managing the policy locally."
+                : null,
+          },
+        });
+        return;
+      }
+    }
     const commitResponse = await githubFetch(
       `${base}/commits/${encodeURIComponent(row.ref ?? "HEAD")}`,
       headers,
@@ -643,6 +717,32 @@ async function githubJson<T = unknown>(params: {
     return JSON.parse(bytes.toString()) as T;
   } catch {
     throw new ApiError(502, "GitHub returned an invalid response");
+  }
+}
+
+class GithubRepositoryRulesError extends ApiError {
+  constructor() {
+    super(409, "GitHub repository rules block the initial policy commit");
+  }
+}
+
+// Template generation can return before its files and branch are readable.
+async function githubSetupRead<T>(params: {
+  url: string;
+  token: string;
+}): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await githubJson<T>(params);
+    } catch (error) {
+      if (
+        !(error instanceof ApiError) ||
+        ![409, 502].includes(error.statusCode) ||
+        attempt === 3
+      )
+        throw error;
+      await new Promise((resolve) => setTimeout(resolve, 1000));
+    }
   }
 }
 

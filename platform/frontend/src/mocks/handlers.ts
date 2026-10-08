@@ -136,6 +136,56 @@ export const handlers: HttpHandler[] = [
       { name: "self", kind: "builtin" },
     ],
   }),
+  ...getJson("/api/openappa/remedies", {
+    authorities: [
+      {
+        kind: "authority",
+        name: "human",
+        source: { entry: null, battery: null, line: 12 },
+        implementation: { kind: "hitl", detail: "hitl" },
+        tags: [],
+        permits: {
+          attention: ["*"],
+          audienceMissing: [],
+          trustBelow: null,
+          effectsContaining: [],
+        },
+        lastConsult: null,
+      },
+    ],
+    sanitizers: [
+      {
+        kind: "sanitizer",
+        name: "attest-schema",
+        source: { entry: null, battery: null, line: 20 },
+        implementation: { kind: "builtin", detail: "attest-schema" },
+        tags: [],
+        on: ["tool_output"],
+        permits: { kind: "trust", from: "suspicious", to: "trusted" },
+        lastConsult: null,
+      },
+    ],
+    blocks: ["trust", "audience", "effects", "approvals"].map((kind) => ({
+      kind,
+      rules: 0,
+      approvers: 0,
+      cleaners: 0,
+      unservedMarks: [],
+      covered: true,
+    })),
+  }),
+  ...getJson("/api/openappa/remedies/activity", {
+    timeZone: "UTC",
+    days: [
+      { date: "2026-10-02", blocked: 3, remedied: 1 },
+      { date: "2026-10-03", blocked: 0, remedied: 0 },
+      { date: "2026-10-04", blocked: 5, remedied: 4 },
+      { date: "2026-10-05", blocked: 2, remedied: 0 },
+      { date: "2026-10-06", blocked: 4, remedied: 2 },
+      { date: "2026-10-07", blocked: 1, remedied: 1 },
+      { date: "2026-10-08", blocked: 2, remedied: 1 },
+    ],
+  }),
   ...getJson("/api/openappa/policy-tests/runs", []),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
   ...getJson("/api/openappa/yells", {

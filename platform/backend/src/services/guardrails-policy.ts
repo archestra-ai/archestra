@@ -1,9 +1,15 @@
 import { createHash } from "node:crypto";
+import {
+  TOOL_ASK_USER_SHORT_NAME,
+  TOOL_RUN_COMMAND_SHORT_NAME,
+} from "@archestra/shared";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
+import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
 import {
   addedGrants,
@@ -14,10 +20,12 @@ import {
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
+import type { PolicyTestFile } from "@/types/openappa-policy-tests";
 
 /**
- * A document and the revision it would replace, resolved together: resolving
- * one says nothing about the other, and every write compares the two.
+ * A document and the revision it would replace, resolved together with the
+ * stored credential bindings applied: resolving one says nothing about the
+ * other, and every write compares the two as the host would compose them.
  */
 async function resolveBoth(params: {
   organizationId: string;
@@ -26,10 +34,16 @@ async function resolveBoth(params: {
 }): Promise<{ submitted: PolicyResolution; previous: PolicyResolution }> {
   const { organizationId } = params;
   const [submitted, previous] = await Promise.all([
-    openappaDeclarations.resolve({ organizationId, content: params.content }),
-    openappaDeclarations.resolve({ organizationId, content: params.previous }),
+    openappaDeclarations.resolveWithBindings({
+      organizationId,
+      content: params.content,
+    }),
+    openappaDeclarations.resolveWithBindings({
+      organizationId,
+      content: params.previous,
+    }),
   ]);
-  return { submitted, previous };
+  return { submitted: submitted.resolution, previous: previous.resolution };
 }
 
 /**
@@ -155,6 +169,7 @@ export const guardrailsPolicyService = {
     userId: string;
     content: string;
     expectedRevision: number;
+    validation?: { expectedVersion: string; files?: PolicyTestFile[] };
   }) {
     requireEnabled();
     const { organizationId, userId, content } = params;
@@ -196,6 +211,7 @@ export const guardrailsPolicyService = {
       content,
       contentHash: hash(content),
       expectedRevision: params.expectedRevision,
+      validation: params.validation,
     });
     if (!saved)
       throw new ApiError(
@@ -203,6 +219,19 @@ export const guardrailsPolicyService = {
         "This policy changed since you opened it. Reload the latest revision before saving.",
         GUARDRAILS_REVISION_CONFLICT,
       );
+    if (latest.revision === 0 || latest.contentHash !== saved.contentHash) {
+      try {
+        await OpenAppaPolicyTestsModel.enqueuePolicyValidation(
+          organizationId,
+          saved.contentHash,
+        );
+      } catch {
+        logger.warn(
+          { organizationId },
+          "Could not queue informational validation after a policy change",
+        );
+      }
+    }
     return saved;
   },
 };
@@ -218,7 +247,8 @@ function hash(content: string) {
 /**
  * The text an organization that never saved a revision is read as. It installs
  * the bundled `archestra` battery over the built-in tools, under the name they
- * carry in this deployment, and reads the organization's members as `internal`.
+ * carry in this deployment, reads the organization's members as `internal`, and
+ * has the organization's default model label each sandbox command.
  */
 export function initialPolicy(): string {
   return `include = ["${bundledEntry(ARCHESTRA_BATTERY)}"]
@@ -235,8 +265,37 @@ internal = ["${ARCHESTRA_BATTERY}:members"]
 [policy.deployment]
 context_control = true
 
+# A subagent's return that matches the bounded JSON schema its parent declared
+# at the spawn crosses at the parent's trust. Built into the runtime.
+[[policy.sanitizer]]
+name = "attest-schema"
+on = ["tool_output"]
+
+[policy.sanitizer.permits]
+trust = { from = "suspicious", to = "trusted" }
+
 [[policy.annotator]]
 name = "noop"
+
+# Labels each sandbox command (run_command) with the organization's
+# default model, through the LLM proxy.
+[[policy.annotator]]
+name = "archestra.run-command"
+builtin = "archestra"
+hint = "run_command runs a shell command in this conversation's sandbox, a scratch workspace. A command that only lists, reads or changes ordinary files in the sandbox, with no network access, keeps the neutral annotation unless a file it reads visibly holds credentials or secrets."
+ranks = ["suspicious", "trusted"]
+marks = []
+effects = []
+
+[[policy.tool]]
+name = "${archestraMcpBranding.getToolName(TOOL_RUN_COMMAND_SHORT_NAME)}"
+annotator = "archestra.run-command"
+
+# Questions carry no data: they keep an empty label even if the catch-all
+# below is made stricter. search_tools gets the same from the archestra battery.
+[[policy.tool]]
+name = "${archestraMcpBranding.getToolName(TOOL_ASK_USER_SHORT_NAME)}"
+delta = {}
 
 # Tools without a specific rule have no additional restrictions.
 [[policy.tool]]

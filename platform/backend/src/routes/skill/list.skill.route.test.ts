@@ -7,7 +7,7 @@ import {
 } from "@/models";
 import MemberModel from "@/models/member";
 import { agentActivationSkillPolicyService } from "@/services/agent-activation-skill-policy";
-import { describe, expect, test } from "@/test";
+import { describe, expect, type TestAccess, test } from "@/test";
 import { drainBackgroundWork } from "@/utils/background-work";
 import skillRoutes from "./skill.routes";
 import {
@@ -161,11 +161,14 @@ describe("GET /api/skills", () => {
 
   test("forAgentId lists the effective Auto-mode skills published by a gateway", async ({
     makeAgent,
-    makeMember,
   }) => {
-    await makeMember(ctx.user.id, ctx.organizationId, {
-      role: ADMIN_ROLE_NAME,
-    });
+    // The test app already made this user a member; editing the gateway's
+    // environment view takes the admin's organization-wide grants.
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
     const gateway = await makeAgent({
       name: "Skill Gateway",
       organizationId: ctx.organizationId,
@@ -446,6 +449,74 @@ describe("GET /api/skills", () => {
     expect(await listNames(`?scope=team&teamIds=${teamA.id}`)).toEqual([
       "team-a-skill",
     ]);
+  });
+
+  test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+    makeMember,
+    makeTeam,
+    makeTeamMember,
+    makeUser,
+  }) => {
+    await MemberModel.updateRole(
+      ctx.user.id,
+      ctx.organizationId,
+      ADMIN_ROLE_NAME,
+    );
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, ctx.organizationId, {
+      role: MEMBER_ROLE_NAME,
+    });
+    const myTeam = await makeTeam(ctx.organizationId, ctx.user.id);
+    await makeTeamMember(myTeam.id, ctx.user.id);
+    const otherTeam = await makeTeam(ctx.organizationId, otherUser.id);
+
+    const seed = (name: string, access?: TestAccess, authorId = otherUser.id) =>
+      seedImportedSkill({
+        organizationId: ctx.organizationId,
+        name,
+        sourceRef: `access/${name}@main:SKILL.md`,
+        authorId,
+        access,
+      });
+    await seed("mine", undefined, ctx.user.id);
+    await seed("other-personal");
+    await seed("org", "org");
+    await seed("my-team", { teams: [myTeam.id] });
+    await seed("other-team", { teams: [otherTeam.id] });
+    await seed("shared-with-me", { users: [ctx.user.id] });
+
+    const listNames = async (access?: string) => {
+      const response = await ctx.app.inject({
+        method: "GET",
+        url: `/api/skills${access ? `?access=${access}` : ""}`,
+      });
+      expect(response.statusCode, response.body).toBe(200);
+      const body = response.json();
+      const names = body.data.map((s: { name: string }) => s.name).sort();
+      expect(body.pagination.total).toBe(names.length);
+      return names;
+    };
+
+    // The admin reads every skill through a `*` grant, which the filter must
+    // not count as "shared".
+    expect(await listNames()).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "other-personal",
+      "other-team",
+      "shared-with-me",
+    ]);
+    expect(await listNames("mine,shared,org")).toEqual([
+      "mine",
+      "my-team",
+      "org",
+      "shared-with-me",
+    ]);
+    expect(await listNames("others")).toEqual(["other-personal", "other-team"]);
+    expect(await listNames("mine")).toEqual(["mine"]);
+    expect(await listNames("shared")).toEqual(["my-team", "shared-with-me"]);
+    expect(await listNames("org")).toEqual(["org"]);
   });
 
   test("author filters apply for admins and are ignored for non-admins", async ({

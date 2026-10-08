@@ -5,9 +5,11 @@ import {
   ARCHESTRA_MCP_SERVER_NAME,
   BUILT_IN_AGENT_IDS,
   MCP_SERVER_TOOL_NAME_SEPARATOR,
+  resourcePermissionPresets,
   TOOL_CREATE_MCP_SERVER_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_GET_MCP_SERVERS_SHORT_NAME,
+  TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
   TOOL_SEARCH_PRIVATE_MCP_REGISTRY_SHORT_NAME,
 } from "@archestra/shared";
 import {
@@ -16,6 +18,7 @@ import {
   InternalMcpCatalogModel,
   OrganizationModel,
 } from "@/models";
+import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { beforeEach, describe, expect, test } from "@/test";
 import { createRestrictedEnvironment } from "@/test/environments";
 import type { Agent } from "@/types";
@@ -147,6 +150,50 @@ describe("mcp server tool execution", () => {
     const text = (result.content[0] as any).text;
     expect(text).toContain("UniqueSearchableServer");
     expect(text).toContain(catalog.id);
+  });
+
+  test("search_private_mcp_registry narrows a query by access", async ({
+    makeInternalMcpCatalog,
+    makeMember,
+    makeUser,
+  }) => {
+    const callerId = mockContext.userId as string;
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, organizationId, { role: "member" });
+    const mine = await makeInternalMcpCatalog({
+      name: "AccessFilterServer Mine",
+      organizationId,
+      authorId: callerId,
+      access: "personal",
+    });
+    const othersPersonal = await makeInternalMcpCatalog({
+      name: "AccessFilterServer Other",
+      organizationId,
+      authorId: otherUser.id,
+      access: "personal",
+    });
+    await makeInternalMcpCatalog({
+      name: "Unrelated Mine",
+      organizationId,
+      authorId: callerId,
+      access: "personal",
+    });
+
+    const searchIds = async (access?: string[]) => {
+      const result = await executeArchestraTool(
+        `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}search_private_mcp_registry`,
+        { query: "accessfilterserver", ...(access ? { access } : {}) },
+        mockContext,
+      );
+      expect(result.isError).toBe(false);
+      return (result.structuredContent as { items: { id: string }[] }).items
+        .map((item) => item.id)
+        .sort();
+    };
+
+    expect(await searchIds()).toEqual([mine.id, othersPersonal.id].sort());
+    expect(await searchIds(["mine"])).toEqual([mine.id]);
+    expect(await searchIds(["others"])).toEqual([othersPersonal.id]);
   });
 
   test("get_mcp_server_tools returns tools for a catalog item", async ({
@@ -326,6 +373,212 @@ describe("mcp server tool execution", () => {
       "@modelcontextprotocol/server-github",
     ]);
     expect(updatedCatalog?.localConfig?.transportType).toBe("stdio");
+  });
+});
+
+describe("MCP server tools and custom deployment YAML", () => {
+  const EDIT_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}edit_mcp_config`;
+  const CREATE_TOOL = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_TOOL_NAME_SEPARATOR}${TOOL_CREATE_MCP_SERVER_SHORT_NAME}`;
+  const DEPLOYMENT_YAML = `apiVersion: apps/v1
+kind: Deployment
+spec:
+  template:
+    spec:
+      containers:
+        - name: mcp-server
+          image: example.invalid/mcp-server:1.0
+`;
+
+  async function makeContext(
+    role: string,
+    fixtures: {
+      makeAgent: any;
+      makeMember: any;
+      makeOrganization: any;
+      makeUser: any;
+    },
+  ) {
+    const org = await fixtures.makeOrganization();
+    const user = await fixtures.makeUser();
+    await fixtures.makeMember(user.id, org.id, { role });
+    if (role === "editor") {
+      const policy = {
+        organizationId: org.id,
+        resource: "mcpRegistry" as const,
+        scope: "*",
+      };
+      const previous = await ResourcePermissionPolicyModel.find(policy);
+      await ResourcePermissionPolicyModel.replace({
+        ...policy,
+        revision: previous?.revision ?? 0,
+        grants: [
+          ...(previous?.grants ?? []),
+          {
+            subject: { type: "role", id: "editor" },
+            actions: [...resourcePermissionPresets.edit.actions],
+          },
+        ],
+      });
+    }
+    const agent = await fixtures.makeAgent({ organizationId: org.id });
+    const context: ArchestraContext = {
+      agent: { id: agent.id, name: agent.name },
+      userId: user.id,
+      organizationId: org.id,
+    };
+    return { context, organizationId: org.id, userId: user.id };
+  }
+
+  test("an editor cannot set deployment YAML through edit_mcp_config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId, userId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+    });
+
+    const result = await executeArchestraTool(
+      EDIT_TOOL,
+      { id: catalog.id, deploymentSpecYaml: DEPLOYMENT_YAML },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(persisted?.deploymentSpecYaml).toBeNull();
+  });
+
+  test("an editor cannot create a server with deployment YAML through create_mcp_server", async ({
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+
+    const result = await executeArchestraTool(
+      CREATE_TOOL,
+      {
+        name: "Editor Yaml Server",
+        serverType: "local",
+        command: "node",
+        deploymentSpecYaml: DEPLOYMENT_YAML,
+      },
+      context,
+    );
+
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
+    expect(
+      await InternalMcpCatalogModel.findRootByNameInOrg({
+        name: "Editor Yaml Server",
+        organizationId,
+      }),
+    ).toBeFalsy();
+  });
+
+  test.for([
+    "create",
+    "edit",
+  ])("an editor cannot inject Secret references through the %s tool", async (operation, {
+    makeAgent,
+    makeMember,
+    makeOrganization,
+    makeUser,
+    makeInternalMcpCatalog,
+  }) => {
+    const { context, organizationId, userId } = await makeContext("editor", {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+
+      serverType: "local",
+    });
+    const result = await executeArchestraTool(
+      operation === "create" ? CREATE_TOOL : EDIT_TOOL,
+      {
+        ...(operation === "create"
+          ? {
+              name: "Secret Reference Attempt",
+              serverType: "local",
+              command: "node",
+            }
+          : { id: catalog.id }),
+        envFrom: [{ type: "secret", name: "platform-secret", prefix: "" }],
+      },
+      context,
+    );
+    expect(result.isError).toBe(true);
+    expect(JSON.stringify(result.content)).toContain(
+      "configure-deployment-spec",
+    );
+    expect(
+      (await InternalMcpCatalogModel.findById(catalog.id))?.localConfig
+        ?.envFrom ?? [],
+    ).toEqual([]);
+    expect(
+      await InternalMcpCatalogModel.findRootByNameInOrg({
+        name: "Secret Reference Attempt",
+        organizationId,
+      }),
+    ).toBeFalsy();
+  });
+
+  test("an admin can set deployment YAML through edit_mcp_config", async ({
+    makeAgent,
+    makeInternalMcpCatalog,
+    makeMember,
+    makeOrganization,
+    makeUser,
+  }) => {
+    const { context, organizationId } = await makeContext(ADMIN_ROLE_NAME, {
+      makeAgent,
+      makeMember,
+      makeOrganization,
+      makeUser,
+    });
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      serverType: "local",
+    });
+
+    const result = await executeArchestraTool(
+      EDIT_TOOL,
+      { id: catalog.id, deploymentSpecYaml: DEPLOYMENT_YAML },
+      context,
+    );
+
+    expect(result.isError).toBe(false);
+    const persisted = await InternalMcpCatalogModel.findById(catalog.id, {
+      expandSecrets: false,
+    });
+    expect(persisted?.deploymentSpecYaml).toBe(DEPLOYMENT_YAML);
   });
 });
 
@@ -1143,6 +1396,63 @@ describe("mcp server tools respect the agent's environment", () => {
 
     expect(result.isError).toBe(true);
     expect((result.content[0] as any).text).toContain("not found");
+  });
+
+  test("list_mcp_server_deployments: only the config agent lists readable deployments across environments", async ({
+    makeAgent,
+    makeUser,
+    makeMember,
+    makeInternalMcpCatalog,
+    makeMcpServer,
+  }) => {
+    const member = await makeUser();
+    await makeMember(member.id, orgId, { role: "member" });
+    const otherUser = await makeUser();
+    await makeMember(otherUser.id, orgId, { role: "member" });
+    const prodCatalog = await makeInternalMcpCatalog({
+      name: "Production Server",
+      organizationId: orgId,
+      environmentId: prodEnvId,
+    });
+    const readable = await makeMcpServer({
+      catalogId: prodCatalog.id,
+      scope: "org",
+    });
+    const unreadable = await makeMcpServer({
+      catalogId: prodCatalog.id,
+      scope: "personal",
+      ownerId: otherUser.id,
+    });
+    const configAgent = await makeAgent({
+      agentType: "agent",
+      organizationId: orgId,
+      builtInAgentConfig: { name: BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG },
+    });
+    const list = async (agent: { id: string; name: string }) => {
+      const result = await executeArchestraTool(
+        tool(TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME),
+        {},
+        { agent, userId: member.id, organizationId: orgId },
+      );
+      expect(result.isError).toBe(false);
+      const content = result.structuredContent as {
+        scope: string;
+        deployments: { id: string }[];
+      };
+      return {
+        scope: content.scope,
+        ids: content.deployments.map((deployment) => deployment.id),
+      };
+    };
+
+    const fromConfigAgent = await list(configAgent);
+    expect(fromConfigAgent.scope).toBe("organization");
+    expect(fromConfigAgent.ids).toContain(readable.id);
+    expect(fromConfigAgent.ids).not.toContain(unreadable.id);
+
+    const fromStagingAgent = await list(stagingContext.agent);
+    expect(fromStagingAgent.scope).toBe("agent");
+    expect(fromStagingAgent.ids).not.toContain(readable.id);
   });
 
   test("create_mcp_server defaults to the calling agent's environment", async () => {

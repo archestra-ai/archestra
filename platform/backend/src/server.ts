@@ -57,9 +57,9 @@ import config, {
   shouldRunWebServer,
   shouldRunWorker,
 } from "@/config";
+import { verifyEncryptedChatConfig } from "@/content-encryption/encrypted-chat-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { verifyContentEncryptionKey } from "@/content-encryption/guard.ee";
-import { verifyLockedChatConfig } from "@/content-encryption/locked-chat-escrow";
 // biome-ignore lint/style/noRestrictedImports: dual-licensed, self-guards on the license flag
 import { assertRetentionConfigLicensed } from "@/data-retention/license-gate.ee";
 import { initializeDatabase, isDatabaseHealthy } from "@/database";
@@ -128,6 +128,7 @@ import {
   Gemini,
   Groq,
   InteractionVirtualKeySchema,
+  Jev,
   Minimax,
   Mistral,
   Ollama,
@@ -215,7 +216,7 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
     id: "AnthropicMessagesRequest",
   });
-  z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
+  z.globalRegistry.add(Anthropic.API.MessagesResponseWireSchema, {
     id: "AnthropicMessagesResponse",
   });
   z.globalRegistry.add(Cerebras.API.ChatCompletionRequestSchema, {
@@ -253,6 +254,12 @@ export function registerOpenApiSchemas() {
   });
   z.globalRegistry.add(Openrouter.API.ChatCompletionResponseSchema, {
     id: "OpenrouterChatCompletionResponse",
+  });
+  z.globalRegistry.add(Jev.API.DecisionsRequestSchema, {
+    id: "JevDecisionsRequest",
+  });
+  z.globalRegistry.add(Jev.API.DecisionsResponseSchema, {
+    id: "JevDecisionsResponse",
   });
   z.globalRegistry.add(Vllm.API.ChatCompletionRequestSchema, {
     id: "VllmChatCompletionRequest",
@@ -384,6 +391,7 @@ export async function registerWorkerRoutes(fastify: FastifyInstanceWithZod) {
   fastify.register(routes.deepseekProxyRoutes);
   fastify.register(routes.githubCopilotProxyRoutes);
   fastify.register(routes.groqProxyRoutes);
+  fastify.register(routes.jevProxyRoutes);
   fastify.register(routes.kimiProxyRoutes);
   fastify.register(routes.microsoft365CopilotProxyRoutes);
   fastify.register(routes.minimaxProxyRoutes);
@@ -905,7 +913,7 @@ const startWebServer = async () => {
     // Fail-closed content-key verification, before any write could encrypt
     // (or silently plaintext) interaction/message content.
     await verifyContentEncryptionKey();
-    verifyLockedChatConfig();
+    verifyEncryptedChatConfig();
     // SPDX-SnippetEnd
 
     await seedRequiredStartingData();
@@ -1407,7 +1415,7 @@ const startWorker = async () => {
     // Workers write messages and interactions (scheduled runs, triggers), so
     // the content-key guard must hold here too.
     await verifyContentEncryptionKey();
-    verifyLockedChatConfig();
+    verifyEncryptedChatConfig();
     // SPDX-SnippetEnd
     cacheManager.start();
     await enterpriseTier.start();

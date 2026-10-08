@@ -2,6 +2,7 @@ import {
   MAX_PROJECT_UPLOAD_BYTES,
   MAX_PROJECT_UPLOAD_MB,
   PROJECT_INSTRUCTIONS_FILENAME,
+  type ResourceAccessRelation,
   type ResourcePermissionGrant,
 } from "@archestra/shared";
 import { sql } from "drizzle-orm";
@@ -157,8 +158,11 @@ class ProjectService {
     // would end up in a shared space listing a conversation nobody there can
     // open. The UI already hides the action; this is the authoritative check a
     // custom client also meets.
-    if (meta.lockedChat) {
-      throw new ApiError(400, "Locked chats cannot be turned into a project");
+    if (meta.encryptedChat) {
+      throw new ApiError(
+        400,
+        "Encrypted chats cannot be turned into a project",
+      );
     }
 
     const name =
@@ -219,6 +223,8 @@ class ProjectService {
     search?: string;
     status?: ProjectLifecycle;
     labelFilteredIds?: string[];
+    /** The list's "Show" filter; omit for the default "All" view. */
+    access?: ResourceAccessRelation[];
   }): Promise<ProjectListItem[]> {
     const { organizationId, userId, scope } = params;
 
@@ -271,7 +277,7 @@ class ProjectService {
       candidates = candidates.filter(
         (c) => c.project.visibility === "organization",
       );
-    } else {
+    } else if (params.access === undefined) {
       // "All": show only what the caller can actually access — own, org-shared,
       // and team-shared to a team they belong to. For an admin that drops every
       // oversight row (other members' private projects AND team-shared projects
@@ -279,6 +285,21 @@ class ProjectService {
       // users and Team → pick that team. Non-admins have no oversight candidates
       // to begin with, so this is a no-op for them.
       candidates = candidates.filter((c) => c.viewerRole !== "admin");
+    }
+
+    // The "Show" filter replaces the "All" view's oversight rule above: it
+    // reaches oversight-only rows through `others`.
+    if (params.access !== undefined) {
+      const inRelations = new Set(
+        await ProjectAccessModel.getIdsInAccessRelations({
+          organizationId,
+          userId,
+          relations: params.access,
+        }),
+      );
+      candidates = candidates.filter(({ project }) =>
+        inRelations.has(project.id),
+      );
     }
 
     // admin "My / Other users" owner sub-filter (honored upstream for admins only).

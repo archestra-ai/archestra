@@ -286,7 +286,7 @@ export interface SubagentToolCallPartData {
   toolName: string;
   /** Request arguments, capped. */
   input?: unknown;
-  /** Terminal tool state, e.g. `output-available` / `output-error`. */
+  /** Tool state: `input-available` while running, then `output-available` / `output-error`. */
   state?: string;
   /** Result, capped. Absent on error. */
   output?: unknown;

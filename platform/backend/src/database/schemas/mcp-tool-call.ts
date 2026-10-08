@@ -10,6 +10,7 @@ import {
 import type {
   CommonToolCall,
   MCPGatewayAuthMethod,
+  McpGatewayCallSource,
   ToolOwnerType,
 } from "@/types";
 import agentsTable from "./agent";
@@ -48,7 +49,7 @@ const mcpToolCallsTable = pgTable(
     // - initialize: { capabilities, serverInfo }
     toolResult: jsonb("tool_result").$type<unknown>(),
     /**
-     * Non-null marks `toolCall`/`toolResult` as encrypted under a locked-chat
+     * Non-null marks `toolCall`/`toolResult` as encrypted under an encrypted-chat
      * conversation's browser-held key rather than the server key, and names the
      * conversation whose escrow record recovers it. Readers MUST consult this
      * before decrypting: a server-key decrypt of these envelopes throws.
@@ -57,7 +58,7 @@ const mcpToolCallsTable = pgTable(
      * retention — and no index: reads test it per row, and the rare offline
      * break-glass scan is acceptable.
      */
-    lockedChatConversationId: uuid("locked_chat_conversation_id"),
+    encryptedChatConversationId: uuid("encrypted_chat_conversation_id"),
     userId: text("user_id").references(() => usersTable.id, {
       onDelete: "set null",
     }),
@@ -66,6 +67,18 @@ const mcpToolCallsTable = pgTable(
     authMethod: varchar("auth_method", {
       length: 50,
     }).$type<MCPGatewayAuthMethod>(),
+    /**
+     * OAuth client the caller signed in with (`oauth_client.client_id`), when
+     * `authMethod` is "oauth": which agent made the call. No FK, so the row
+     * keeps it after the client is deleted.
+     */
+    oauthClientId: text("oauth_client_id"),
+    /**
+     * Who sent the call over the HTTP gateway: "api" for any outside agent,
+     * "chat" for the built-in chat's loopback client. Null for calls the
+     * platform made in-process, and for rows from before this was recorded.
+     */
+    source: varchar("source", { length: 20 }).$type<McpGatewayCallSource>(),
     createdAt: timestamp("created_at", { mode: "date" }).notNull().defaultNow(),
   },
   (table) => ({

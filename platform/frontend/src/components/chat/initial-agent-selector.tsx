@@ -1,10 +1,6 @@
 "use client";
 
-import {
-  type AgentScope,
-  type archestraApiTypes,
-  isBuiltInCatalogId,
-} from "@archestra/shared";
+import { type archestraApiTypes, isBuiltInCatalogId } from "@archestra/shared";
 import { useQueries } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -14,7 +10,6 @@ import {
   ExternalLink,
   Info,
   Loader2,
-  LockKeyhole,
   Plus,
   Search,
   XIcon,
@@ -25,7 +20,6 @@ import { ConnectorTypeIcon } from "@/app/knowledge/knowledge-bases/_parts/connec
 import { LocalServerInstallDialog } from "@/app/mcp/registry/_parts/local-server-install-dialog";
 import { NoAuthInstallDialog } from "@/app/mcp/registry/_parts/no-auth-install-dialog";
 import { RemoteServerInstallDialog } from "@/app/mcp/registry/_parts/remote-server-install-dialog";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentIconPicker } from "@/components/agent-icon-picker";
 import { agentConfigureHref } from "@/components/agent-pages/agent-page-config";
@@ -64,6 +58,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   useAgentCredentialReadiness,
   useChatAgents,
@@ -122,13 +117,11 @@ type CatalogItem =
 interface InitialAgentSelectorProps {
   currentAgentId: string | null;
   onAgentChange: (agentId: string) => void;
-  readOnly?: boolean;
 }
 
 export const InitialAgentSelector = memo(function InitialAgentSelector({
   currentAgentId,
   onAgentChange,
-  readOnly = false,
 }: InitialAgentSelectorProps) {
   const { data: allAgents = [] } = useChatAgents();
   const [open, setOpen] = useState(false);
@@ -377,34 +370,22 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
           <PromptInputButton
             role="combobox"
             aria-expanded={open}
-            aria-label={readOnly ? `${displayAgentName} (locked)` : undefined}
-            disabled={readOnly}
-            title={
-              readOnly
-                ? "This chat uses the OpenAPPA configuration agent"
-                : undefined
-            }
+            aria-label={displayAgentName}
             data-agent-selector
             onKeyDown={navigation.onTriggerKeyDown}
-            className="max-w-[300px] min-w-0 disabled:cursor-default disabled:opacity-100"
+            className="max-w-[300px] min-w-0"
           >
             <AgentIcon icon={currentAgent?.icon} size={16} />
             <span className="truncate flex-1 text-left">
               {displayAgentName}
             </span>
-            {readOnly ? (
-              <LockKeyhole
-                className="size-3.5 text-muted-foreground"
-                aria-hidden
-              />
-            ) : null}
             {runtimeEnabled && currentAgent?.runtime && (
               <RuntimeCapableIndicator runtime={currentAgent.runtime} />
             )}
             {/* In Auto mode the agent reaches everything dynamically,
                 so the per-server avatar group + its tool selector are
                 meaningless — hide them. */}
-            {!readOnly && !currentAgent?.accessAllTools && (
+            {!currentAgent?.accessAllTools && (
               <ToolServerAvatarGroup
                 catalogs={assignedCatalogs}
                 subagents={triggerSubagents}
@@ -470,7 +451,7 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                     )}
                   >
                     <div className="flex w-full items-center gap-2.5">
-                      <button
+                      <UnstyledButton
                         {...navigation.getOptionProps(agent.id)}
                         role="option"
                         type="button"
@@ -502,10 +483,6 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                                 runtime={agent.runtime}
                               />
                             )}
-                            <AgentBadge
-                              type={agent.scope}
-                              className="text-[10px] px-1.5 py-0 shrink-0"
-                            />
                             {/* Greying alone reads as "styled differently"; the
                               word is what says the row cannot be picked. */}
                             {isBlocked && (
@@ -542,15 +519,15 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                         {isSelected && (
                           <Check className="h-3.5 w-3.5 shrink-0 text-primary" />
                         )}
-                      </button>
+                      </UnstyledButton>
                       {/* Editing or cloning an agent the user cannot even start
                         answers a question they did not ask, so the hover action
                         is withheld while a connection is outstanding. */}
                       {gate.kind === "ok" && (
                         <Button
                           variant="ghost"
-                          size="sm"
-                          className="h-6 px-1.5 text-[11px] hidden group-hover:flex shrink-0"
+                          size="xs"
+                          className="hidden group-hover:flex shrink-0"
                           onClick={(e) => {
                             e.stopPropagation();
                             if (canEdit) {
@@ -574,8 +551,8 @@ export const InitialAgentSelector = memo(function InitialAgentSelector({
                       <div className="mt-1.5 pl-[38px]">
                         <Button
                           variant="outline"
-                          size="sm"
-                          className="h-6 w-full justify-center px-2 text-[11px]"
+                          size="xs"
+                          className="w-full justify-center"
                           onClick={(e) => {
                             e.stopPropagation();
                             setOpen(false);
@@ -747,7 +724,7 @@ function DialogHeader({
           <Button
             variant="ghost"
             size="sm"
-            className="h-8 px-2 gap-1.5 shrink-0 self-center"
+            className="shrink-0 self-center"
             onClick={onBack}
           >
             <ArrowLeft className="size-4" />
@@ -762,13 +739,13 @@ function DialogHeader({
                     className="flex items-center gap-1.5 min-w-0"
                   >
                     {i === 0 ? (
-                      <button
+                      <UnstyledButton
                         type="button"
                         onClick={onBack}
                         className="text-muted-foreground hover:text-foreground transition-colors truncate"
                       >
                         {crumb}
-                      </button>
+                      </UnstyledButton>
                     ) : (
                       <span className="text-muted-foreground truncate">
                         {crumb}
@@ -947,14 +924,14 @@ function AgentSettingsView({
               className="h-10 w-10"
             />
           ) : (
-            <button
+            <UnstyledButton
               type="button"
               aria-label="Edit agent icon"
               className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-muted cursor-pointer"
               onDoubleClick={() => setIsEditingIcon(true)}
             >
               <AgentIcon icon={agent.icon as string | null} size={24} />
-            </button>
+            </UnstyledButton>
           )}
           <div className="flex-1 min-w-0">
             {isEditingName ? (
@@ -975,17 +952,13 @@ function AgentSettingsView({
               />
             ) : (
               <div className="flex items-center gap-2">
-                <button
+                <UnstyledButton
                   type="button"
                   className="font-semibold text-sm cursor-pointer"
                   onDoubleClick={() => setIsEditingName(true)}
                 >
                   {agent.name}
-                </button>
-                <AgentBadge
-                  type={(agent.scope as AgentScope) ?? "personal"}
-                  className="text-[10px] px-1.5 py-0"
-                />
+                </UnstyledButton>
               </div>
             )}
             {!isEditingName && truncatedDescription && (
@@ -1065,7 +1038,7 @@ function AgentSettingsView({
               <Label>Knowledge sources</Label>
             </div>
             {matchedKbs.length === 0 && matchedConnectors.length === 0 ? (
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={onEditKnowledgeSources}
                 className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
@@ -1074,7 +1047,7 @@ function AgentSettingsView({
                 <span className="text-xs font-medium">
                   Add knowledge sources
                 </span>
-              </button>
+              </UnstyledButton>
             ) : (
               <div className="space-y-2">
                 {matchedKbs.map((kb) => {
@@ -1107,14 +1080,14 @@ function AgentSettingsView({
                             size="sm"
                           />
                         )}
-                        <button
+                        <UnstyledButton
                           type="button"
                           className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
                           onClick={() => handleRemoveKnowledgeBase(kb.id)}
                           title={`Remove ${kb.name}`}
                         >
                           <XIcon className="size-3" />
-                        </button>
+                        </UnstyledButton>
                       </div>
                     </div>
                   );
@@ -1136,24 +1109,24 @@ function AgentSettingsView({
                         </span>
                       )}
                     </div>
-                    <button
+                    <UnstyledButton
                       type="button"
                       className="hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors"
                       onClick={() => handleRemoveConnector(connector.id)}
                       title={`Remove ${connector.name}`}
                     >
                       <XIcon className="size-3" />
-                    </button>
+                    </UnstyledButton>
                   </div>
                 ))}
-                <button
+                <UnstyledButton
                   type="button"
                   onClick={onEditKnowledgeSources}
                   className="flex w-full items-center justify-center gap-1.5 rounded-lg border border-dashed p-2 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
                 >
                   <Plus className="size-3.5" />
                   <span className="text-xs font-medium">Add</span>
-                </button>
+                </UnstyledButton>
               </div>
             )}
           </div>
@@ -1172,12 +1145,7 @@ function AgentSettingsView({
           <div />
         )}
         {instructionsChanged && (
-          <Button
-            size="sm"
-            className="h-7 px-3 text-xs"
-            onClick={saveInstructions}
-            disabled={isSaving}
-          >
+          <Button size="xs" onClick={saveInstructions} disabled={isSaving}>
             {isSaving && <Loader2 className="size-3 animate-spin mr-1.5" />}
             <span>Save</span>
           </Button>
@@ -1255,7 +1223,7 @@ function AssignedToolsGrid({
           key={`delegation-${agent.id}`}
           className="group relative flex flex-col items-center gap-1.5 rounded-lg border border-primary bg-primary/5 p-3 text-center"
         >
-          <button
+          <UnstyledButton
             type="button"
             className="absolute top-1.5 right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
             onClick={() =>
@@ -1267,7 +1235,7 @@ function AssignedToolsGrid({
             title={`Remove ${agent.name}`}
           >
             <XIcon className="size-3" />
-          </button>
+          </UnstyledButton>
           <div className="flex flex-col items-center gap-1.5 w-full">
             <AgentIcon icon={agent.icon} size={24} />
             <span className="text-xs font-medium truncate w-full">
@@ -1284,7 +1252,7 @@ function AssignedToolsGrid({
             key={catalog.id}
             className="group relative flex flex-col items-center gap-1.5 rounded-lg border border-primary bg-primary/5 p-3 text-center cursor-pointer transition-colors hover:bg-primary/10"
           >
-            <button
+            <UnstyledButton
               type="button"
               className="absolute top-1.5 right-1.5 hidden group-hover:flex h-5 w-5 items-center justify-center rounded-full bg-muted hover:bg-destructive hover:text-destructive-foreground transition-colors z-10"
               onClick={(e) => {
@@ -1294,8 +1262,8 @@ function AssignedToolsGrid({
               title={`Remove ${catalog.name}`}
             >
               <XIcon className="size-3" />
-            </button>
-            <button
+            </UnstyledButton>
+            <UnstyledButton
               type="button"
               className="flex flex-col items-center gap-1.5 w-full"
               onClick={() => onEditTool(catalog)}
@@ -1311,18 +1279,18 @@ function AssignedToolsGrid({
               <span className="text-[10px] text-muted-foreground">
                 {info?.count ?? 0} {(info?.count ?? 0) === 1 ? "tool" : "tools"}
               </span>
-            </button>
+            </UnstyledButton>
           </div>
         );
       })}
-      <button
+      <UnstyledButton
         type="button"
         onClick={onAddTool}
         className="flex flex-col items-center justify-center gap-1.5 rounded-lg border border-dashed p-3 text-center transition-colors hover:bg-accent cursor-pointer text-muted-foreground"
       >
         <Plus className="size-5" />
         <span className="text-xs font-medium">Add</span>
-      </button>
+      </UnstyledButton>
     </div>
   );
 }
@@ -1491,7 +1459,7 @@ function AddToolView({
         ) : (
           <div className="grid grid-cols-3 gap-3">
             {!search && (
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={onAddDelegation}
                 className="flex flex-col items-center gap-2 rounded-lg border p-4 text-center transition-colors cursor-pointer hover:bg-accent"
@@ -1503,7 +1471,7 @@ function AddToolView({
                 <p className="text-xs text-muted-foreground line-clamp-2 w-full">
                   Delegate tasks to another agent
                 </p>
-              </button>
+              </UnstyledButton>
             )}
             {filteredCatalogs.map((catalog) => {
               const servers = allCredentials?.[catalog.id] ?? [];
@@ -1522,7 +1490,7 @@ function AddToolView({
                 isReady && !isAssigned && !isAdding && !hasNoTools;
               return (
                 <div key={catalog.id} className="group relative flex flex-col">
-                  <button
+                  <UnstyledButton
                     type="button"
                     disabled={
                       isAssigned || isServerInstalling || isAdding || hasNoTools
@@ -1584,11 +1552,11 @@ function AddToolView({
                         Install
                       </Badge>
                     )}
-                  </button>
+                  </UnstyledButton>
                   {showSelectLink && (
                     <div className="hidden group-hover:flex flex-col absolute left-0 right-0 bottom-0 rounded-b-lg z-10">
                       <div className="h-4 bg-gradient-to-t from-background to-transparent" />
-                      <button
+                      <UnstyledButton
                         type="button"
                         className="flex w-full items-center justify-center px-2 py-1 text-[11px] text-muted-foreground hover:text-foreground cursor-pointer bg-background rounded-b-lg"
                         onClick={(e) => {
@@ -1597,7 +1565,7 @@ function AddToolView({
                         }}
                       >
                         Select specific tools
-                      </button>
+                      </UnstyledButton>
                     </div>
                   )}
                 </div>
@@ -1922,7 +1890,7 @@ function AddDelegationView({
         ) : (
           <div className="grid grid-cols-3 gap-3">
             {filteredAgents.map((agent) => (
-              <button
+              <UnstyledButton
                 key={agent.id}
                 type="button"
                 onClick={() => handleToggle(agent.id)}
@@ -1948,14 +1916,10 @@ function AddDelegationView({
                   </p>
                 )}
                 <div className="flex items-center gap-2 w-full mt-auto">
-                  <AgentBadge
-                    type={agent.scope}
-                    className="text-[10px] px-1.5 py-0"
-                  />
                   <div className="flex-1" />
                   <AgentToolAvatars agentId={agent.id} enabled />
                 </div>
-              </button>
+              </UnstyledButton>
             ))}
             <a
               href="/agents/new"
@@ -2128,7 +2092,7 @@ function EditKnowledgeSourcesView({
                     ...new Set(connectors.map((c) => c.connectorType)),
                   ];
                   return (
-                    <button
+                    <UnstyledButton
                       key={kb.id}
                       type="button"
                       onClick={() => handleToggleKb(kb.id)}
@@ -2171,7 +2135,7 @@ function EditKnowledgeSourcesView({
                           <Check className="size-4 text-primary" />
                         )}
                       </div>
-                    </button>
+                    </UnstyledButton>
                   );
                 })}
               </div>
@@ -2186,7 +2150,7 @@ function EditKnowledgeSourcesView({
                 {sortedConnectors.map((connector) => {
                   const isSelected = selectedConnectorIds.has(connector.id);
                   return (
-                    <button
+                    <UnstyledButton
                       key={connector.id}
                       type="button"
                       onClick={() => handleToggleConnector(connector.id)}
@@ -2212,7 +2176,7 @@ function EditKnowledgeSourcesView({
                       {isSelected && (
                         <Check className="size-4 text-primary shrink-0" />
                       )}
-                    </button>
+                    </UnstyledButton>
                   );
                 })}
               </div>

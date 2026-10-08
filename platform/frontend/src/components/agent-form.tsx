@@ -392,7 +392,7 @@ function SubagentPill({
             variant="outline"
             size="sm"
             className={cn(
-              "h-8 px-3 gap-1.5 text-xs max-w-[200px] rounded-r-none border-r-0",
+              "max-w-[200px] rounded-r-none border-r-0 text-xs",
               !isSelected && "border-dashed opacity-50",
             )}
           >
@@ -414,10 +414,14 @@ function SubagentPill({
         {!readOnly && (
           <Button
             variant="outline"
-            size="sm"
-            className="h-8 w-7 p-0 rounded-l-none text-muted-foreground hover:text-destructive"
+            size="icon-sm"
+            className="rounded-l-none text-muted-foreground hover:text-destructive"
             onClick={() => onToggle(agent.id)}
-            aria-label={`Remove agent ${agent.name}`}
+            aria-label={
+              tone === "exclude"
+                ? `Include agent ${agent.name} again`
+                : `Remove agent ${agent.name}`
+            }
           >
             <X className="h-3 w-3" />
           </Button>
@@ -443,8 +447,8 @@ function SubagentPill({
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 p-0 shrink-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => setOpen(false)}
             aria-label="Close"
           >
@@ -520,9 +524,8 @@ function SubagentsEditor({
             </Badge>
           </div>
           <p className="mt-1 text-xs text-muted-foreground">
-            {excludedLocalAgents.length === 0
-              ? "Every local agent you can access may be delegated to."
-              : `${excludedLocalAgents.length} local ${excludedLocalAgents.length === 1 ? "agent is" : "agents are"} excluded below.`}
+            Includes every local agent you can access, and agents created later.
+            To leave one out, exclude it.
           </p>
         </div>
       ) : !hasSelectedTargets ? (
@@ -535,7 +538,7 @@ function SubagentsEditor({
       {localMode === "all" && excludedLocalAgents.length > 0 && (
         <div className="space-y-1.5">
           <p className="text-xs font-medium text-muted-foreground">
-            Local exceptions
+            Excluded from all local agents
           </p>
           <div className="flex flex-wrap gap-2">
             {excludedLocalAgents.map((agent) => (
@@ -580,7 +583,11 @@ function SubagentsEditor({
           agents={filteredAgents}
           value={selectedIds}
           onValueChange={handleSelectionChange}
-          triggerLabel="Add subagent"
+          // In All mode every local agent is already a subagent, so the only
+          // change the picker can make is to leave one out. Its label says so.
+          triggerLabel={
+            localMode === "all" ? "Exclude a local agent" : "Add subagent"
+          }
           searchPlaceholder={
             localMode === "all"
               ? "Search agents to exclude..."
@@ -616,7 +623,7 @@ function OutboundAgentPill({
           <Button
             variant="outline"
             size="sm"
-            className="h-8 max-w-[200px] gap-1.5 rounded-r-none border-r-0 px-3 text-xs"
+            className="max-w-[200px] rounded-r-none border-r-0 text-xs"
           >
             <span className="h-2 w-2 shrink-0 rounded-full bg-green-500" />
             <Globe className="h-3 w-3 shrink-0" />
@@ -630,8 +637,8 @@ function OutboundAgentPill({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="h-8 w-7 rounded-l-none p-0 text-muted-foreground hover:text-destructive"
+            size="icon-sm"
+            className="rounded-l-none text-muted-foreground hover:text-destructive"
             aria-label={`Remove ${target.name}`}
             onClick={onRemove}
           >
@@ -659,8 +666,8 @@ function OutboundAgentPill({
           </div>
           <Button
             variant="ghost"
-            size="sm"
-            className="h-6 w-6 shrink-0 p-0"
+            size="icon-xs"
+            className="shrink-0"
             onClick={() => setOpen(false)}
             aria-label="Close"
           >
@@ -791,7 +798,7 @@ function OutboundAgentsEditor({
         )}
         {!agentId && (
           <p className="pt-1 text-xs text-muted-foreground">
-            Save this agent before assigning an outbound A2A agent.
+            You can add external agents after you create this agent.
           </p>
         )}
         {agentId && (assignmentsError || agentsError) && (
@@ -919,6 +926,11 @@ export interface AgentFormFooterState {
    * shows nothing at all.
    */
   readOnly: boolean;
+  /**
+   * The agent runs in its own container: opening it in Chat starts a run
+   * rather than a foreground conversation.
+   */
+  hasRuntime: boolean;
 }
 
 /** Editable values a create flow may seed from a catalog template. */
@@ -1053,7 +1065,7 @@ export function AgentForm({
   const shouldLoadLlmConfiguration = agentType === "agent";
   const { data: canReadAgents } = useHasPermissions({ agent: ["read"] });
   const { data: canReadAgentTriggers } = useHasPermissions({
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   });
   const { data: allInternalAgents = [] } = useDelegationTargetAgents({
     enabled: supportsSubagents && !!canReadAgents,
@@ -1077,7 +1089,6 @@ export function AgentForm({
   } = useAgentA2aDelegations(supportsSubagents ? agent?.id : undefined);
   const a2aRemoteAgents = useA2aRemoteAgents({
     enabled: supportsSubagents && Boolean(agent?.id) && !agent?.builtIn,
-    accessibleOnly: true,
   });
   const syncA2aDelegations = useSyncAgentA2aDelegations();
   const syncSubagentExclusions = useUpdateAgentSubagentExclusions();
@@ -1177,7 +1188,7 @@ export function AgentForm({
     knowledgeSource: ["read"],
   });
   const { data: canAccessKnowledgeSettings } = useHasPermissions({
-    knowledgeSettings: ["read"],
+    organizationSettings: ["read"],
   });
   const isKnowledgeConfigured = useIsKnowledgeBaseConfigured();
   const { data: canReadLlmProviderApiKeys } = useHasPermissions({
@@ -1332,8 +1343,9 @@ export function AgentForm({
     },
     [],
   );
-  const [toolExposureMode, setToolExposureMode] =
-    useState<ToolExposureMode>("full");
+  const [toolExposureMode, setToolExposureMode] = useState<ToolExposureMode>(
+    "search_and_run_only",
+  );
   // What the record will actually do. `isEnforcing` in
   // agent-credential-readiness refuses to enforce on an `accessAllTools`
   // record, so an Auto agent asks when a tool needs one whatever is stored —
@@ -1719,7 +1731,7 @@ export function AgentForm({
             runtime: initialValues?.runtime ?? null,
             // New agents default to "Auto" (implicit access to all tools);
             // admins can switch to "Custom" (explicitly assigned tools).
-            toolExposureMode: "full",
+            toolExposureMode: "search_and_run_only",
             missingCredentialBehavior: "allow",
             accessAllTools: initialValues?.accessAllTools ?? true,
             accessAllSubagents: true,
@@ -2918,6 +2930,7 @@ export function AgentForm({
     isDirty,
     canSubmit,
     readOnly,
+    hasRuntime: runtime !== null,
   };
   // Keep the popover portaled: choosing a credential changes the model control
   // while Radix closes its focus scope, and reconciling both in the form tree
@@ -3225,15 +3238,15 @@ export function AgentForm({
                     </IdentityFields>
                   )}
 
-                  {showsModelControl &&
-                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
-                    modelBlock}
-
                   {/* Description (hidden for built-in agents) */}
                   {shouldShowDescriptionField({ agentType, isBuiltIn }) && (
                     <div className="space-y-2">
                       <Label htmlFor="agentDescription">Description</Label>
+                      <FieldDescription id="agent-description-hint">
+                        An internal description of what this agent does.
+                      </FieldDescription>
                       <Textarea
+                        aria-describedby="agent-description-hint"
                         id="agentDescription"
                         value={description}
                         onChange={(e) => setDescription(e.target.value)}
@@ -3242,6 +3255,10 @@ export function AgentForm({
                       />
                     </div>
                   )}
+
+                  {showsModelControl &&
+                    (agent || !isInternalAgent || !agentRuntimeEnabled) &&
+                    modelBlock}
 
                   {/* Instructions: what the agent is told to do. Saved with the
                       rest of this panel, so one Save covers the whole tab. */}
@@ -3274,16 +3291,6 @@ export function AgentForm({
                         }
                       />
                     </div>
-                  )}
-
-                  {!agent && agentType !== "llm_proxy" && (
-                    <InitialResourcePermissions
-                      resource={
-                        agentType === "mcp_gateway" ? "mcpGateway" : "agent"
-                      }
-                      grants={initialGrants}
-                      onChange={setInitialGrants}
-                    />
                   )}
 
                   {!agent && isInternalAgent && agentRuntimeEnabled && (
@@ -3460,7 +3467,7 @@ export function AgentForm({
                           }
                         }}
                       >
-                        <TabsList>
+                        <TabsList size="sm">
                           <TabsTrigger value="auto">All</TabsTrigger>
                           <TabsTrigger value="custom">Manual</TabsTrigger>
                         </TabsList>
@@ -3722,7 +3729,7 @@ export function AgentForm({
                           value={accessAllSubagents ? "auto" : "custom"}
                           onValueChange={handleSubagentModeChange}
                         >
-                          <TabsList>
+                          <TabsList size="sm">
                             <TabsTrigger value="auto">All</TabsTrigger>
                             <TabsTrigger value="custom">Manual</TabsTrigger>
                           </TabsList>
@@ -3870,16 +3877,12 @@ export function AgentForm({
             agentType === "agent" &&
             agentRuntimeEnabled &&
             !isBuiltIn && (
-              <SettingsSectionGroup
-                className={cn(!isActiveSection("runtime") && "hidden")}
-              >
-                <SettingsSection aria-label="Agent runtime">
-                  <AgentRuntimeFields
-                    value={runtime}
-                    onChange={setAgentRuntime}
-                  />
-                </SettingsSection>
-              </SettingsSectionGroup>
+              <div className={cn(!isActiveSection("runtime") && "hidden")}>
+                <AgentRuntimeFields
+                  value={runtime}
+                  onChange={setAgentRuntime}
+                />
+              </div>
             )}
 
           {/* The Advanced step: security, passthrough
@@ -3889,6 +3892,16 @@ export function AgentForm({
             <SettingsSectionGroup
               className={cn(!isActiveSection("advanced") && "hidden")}
             >
+              {!agent && agentType !== "llm_proxy" && (
+                <InitialResourcePermissions
+                  layout="settings"
+                  resource={
+                    agentType === "mcp_gateway" ? "mcpGateway" : "agent"
+                  }
+                  grants={initialGrants}
+                  onChange={setInitialGrants}
+                />
+              )}
               {/* Skills served over MCP (SEP-2640). Gateways only, behind the
                   draft-extension feature flag. It sits in Advanced rather than
                   beside Tools & Knowledge: these are resources the gateway
@@ -4105,8 +4118,8 @@ export function AgentForm({
                               <Button
                                 type="button"
                                 variant="ghost"
-                                size="icon"
-                                className="absolute top-2 right-2 h-6 w-6"
+                                size="icon-xs"
+                                className="absolute top-2 right-2"
                                 aria-label="Remove suggested prompt"
                                 onClick={() => {
                                   setSuggestedPrompts((prev) => {
@@ -4367,8 +4380,8 @@ export function AgentForm({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
+              size="xs"
+              className="shrink-0 self-center bg-background/80"
               disabled={environmentConflicts.isRemoving || isSaving}
               onClick={() => void handleRemoveEnvironmentConflicts()}
             >
@@ -4410,8 +4423,8 @@ export function AgentForm({
             <Button
               type="button"
               variant="outline"
-              size="sm"
-              className="h-7 shrink-0 self-center bg-background/80 px-2 text-xs"
+              size="xs"
+              className="shrink-0 self-center bg-background/80"
               onClick={() =>
                 agentToolsEditorRef.current?.removeIncompatibleTools()
               }

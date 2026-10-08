@@ -54,9 +54,19 @@ export interface AnthropicStubOptions {
    * buffered (non-streaming) response, e.g. a gateway `run_tool` dispatch with
    * a client-decorated name. Implies a `tool_use` stop reason.
    */
-  nonStreamingToolUse?: { name: string; input: Record<string, unknown> };
+  nonStreamingToolUse?: {
+    name: string;
+    input: Record<string, unknown>;
+    /** The call id; `toolu_test_weather` when absent. */
+    id?: string;
+  };
   /** Emit this tool call through the streamed input-json deltas. */
-  streamingToolUse?: { name: string; input: Record<string, unknown> };
+  streamingToolUse?: {
+    name: string;
+    input: Record<string, unknown>;
+    /** The call id; `toolu_test_weather` when absent. */
+    id?: string;
+  };
 }
 
 export interface GeminiStubOptions {
@@ -146,12 +156,14 @@ export function createOpenAiTestClient(options: OpenAiStubOptions = {}) {
 export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
   return {
     messages: {
-      create: async (params: Anthropic.Messages.MessageCreateParams) => {
+      // Typed as the plain async form tests wrap; the streaming result also
+      // carries the SDK's `asResponse()` at runtime.
+      create: ((params: Anthropic.Messages.MessageCreateParams) => {
         if (params.stream) {
-          return createAnthropicStream(options);
+          return anthropicStreamPromise(createAnthropicStream(options));
         }
 
-        return {
+        return Promise.resolve({
           id: "msg-test-anthropic",
           type: "message",
           container: null,
@@ -166,7 +178,7 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
                   },
                   {
                     type: "tool_use",
-                    id: "toolu_test_weather",
+                    id: options.nonStreamingToolUse?.id ?? "toolu_test_weather",
                     name: options.nonStreamingToolUse?.name ?? "get_weather",
                     input: options.nonStreamingToolUse?.input ?? {
                       location: "SF",
@@ -194,8 +206,12 @@ export function createAnthropicTestClient(options: AnthropicStubOptions = {}) {
             cache_creation_input_tokens: 0,
             cache_read_input_tokens: options.cacheReadInputTokens ?? 0,
           },
-        } as unknown as Anthropic.Message;
-      },
+        } as unknown as Anthropic.Message);
+      }) as (
+        params: Anthropic.Messages.MessageCreateParams,
+      ) => Promise<
+        ReturnType<typeof createAnthropicStream> | Anthropic.Message
+      >,
       stream: () => createAnthropicStream(options),
     },
   };
@@ -508,7 +524,7 @@ function createAnthropicStream(options: AnthropicStubOptions) {
         index: 0,
         content_block: {
           type: "tool_use",
-          id: "toolu_test_weather",
+          id: options.streamingToolUse?.id ?? "toolu_test_weather",
           caller: { type: "direct" },
           name: options.streamingToolUse?.name ?? "get_weather",
           input: {},
@@ -690,4 +706,48 @@ function createGeminiStream(options: GeminiStubOptions) {
       };
     },
   };
+}
+
+/**
+ * A streaming `messages.create()` result shaped like the SDK's: awaitable as
+ * the event iterable, or read as the raw SSE `Response` through
+ * `asResponse()`, which is what the proxy consumes.
+ */
+export function anthropicStreamPromise(
+  events: AsyncIterable<unknown> | Promise<AsyncIterable<unknown>>,
+) {
+  const promise = Promise.resolve(events);
+  return Object.assign(promise, {
+    asResponse: async () => anthropicSseResponse(await promise),
+  });
+}
+
+function anthropicSseResponse(events: AsyncIterable<unknown>): Response {
+  const encoder = new TextEncoder();
+  const iterator = events[Symbol.asyncIterator]();
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      try {
+        const next = await iterator.next();
+        if (next.done) {
+          controller.close();
+          return;
+        }
+        const event = next.value as { type?: string };
+        controller.enqueue(
+          encoder.encode(
+            `event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`,
+          ),
+        );
+      } catch (error) {
+        controller.error(error);
+      }
+    },
+    async cancel() {
+      await iterator.return?.();
+    },
+  });
+  return new Response(body, {
+    headers: { "content-type": "text/event-stream" },
+  });
 }

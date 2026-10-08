@@ -1181,9 +1181,7 @@ function getMcpIdleHibernationConfig() {
 
   return {
     ...parsed,
-    betaEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_ORCHESTRATOR_MCP_IDLE_HIBERNATION_ENABLED,
-    ),
+    betaEnabled: process.env.ARCHESTRA_BETA === "true",
     lastUsedRefreshIntervalMs: acceleratedE2eTiming ? 1_000 : 30_000,
     demandHeartbeatIntervalMs: acceleratedE2eTiming ? 500 : 15_000,
   };
@@ -2050,7 +2048,7 @@ export function parseOpenAppaConfig(
   const isEnabled = betaEnabled === "true";
   if (isEnabled && secret.length === 0) {
     logger.warn(
-      "OpenAPPA is enabled without a signing key. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret, or signed remedy, native-question, session-receipt, and external-client tool-call requests will fail closed (503) until every replica uses the same secret.",
+      "OpenAPPA is enabled without a signing key. Signed delegation, history-based trajectory recovery, and peer inbox calls are unavailable. Set ARCHESTRA_OPENAPPA_OFFER_SIGNING_SECRET or configure an auth secret to use those paths.",
     );
   }
   return {
@@ -2366,18 +2364,12 @@ const config = {
     /**
      * Both directions of the draft MCP Skills extension: publishing local
      * Skills through gateways and projecting external Skills from installed
-     * servers. Deployment-global; blank falls back to ARCHESTRA_BETA.
+     * servers. Deployment-global; follows the ARCHESTRA_BETA master switch,
+     * with no flag of its own.
      */
-    skillsEnabled: betaFeatureEnabled(process.env.ARCHESTRA_MCP_SKILLS_ENABLED),
+    skillsEnabled: process.env.ARCHESTRA_BETA === "true",
   },
   mcpServer: {
-    /**
-     * BETA: operational attention facets, issue diagnostics and per-viewer
-     * dismissals. Off by default; blank falls back to ARCHESTRA_BETA.
-     */
-    alertingEnabled: betaFeatureEnabled(
-      process.env.ARCHESTRA_MCP_SERVER_ALERTING_ENABLED,
-    ),
     /**
      * Opt-in periodic re-discovery of installed MCP servers' tools. Every N
      * minutes each installed server's catalog tool snapshot is re-synced from
@@ -2543,11 +2535,11 @@ const config = {
   },
   plugins: {
     /**
-     * Opaque plugins execute on connected developer machines, so
-     * authoring and automatic connection delivery ship off by default. Blank
-     * follows the ARCHESTRA_BETA master switch; an explicit false wins.
+     * Opaque plugins execute on connected developer machines, so authoring
+     * and automatic connection delivery ship off by default. Plugins have no
+     * flag of their own: the ARCHESTRA_BETA master switch turns them on.
      */
-    enabled: betaFeatureEnabled(process.env.ARCHESTRA_PLUGINS_ENABLED),
+    enabled: process.env.ARCHESTRA_BETA === "true",
   },
   git: {
     binaryPath: process.env.ARCHESTRA_GIT_BINARY_PATH?.trim() || "git",
@@ -2780,6 +2772,12 @@ const config = {
       enabled: Boolean(process.env.ARCHESTRA_VOYAGE_BASE_URL),
       baseUrl:
         process.env.ARCHESTRA_VOYAGE_BASE_URL || "https://api.voyageai.com/v1",
+    },
+    jev: {
+      // The full decisions endpoint the proxy posts to, not an API root.
+      baseUrl:
+        process.env.ARCHESTRA_JEV_BASE_URL ||
+        "https://api.typesafe.ai/v1/systemone",
     },
     cerebras: {
       baseUrl:
@@ -3937,22 +3935,23 @@ const config = {
       undefined,
   },
   /**
-   * Locked chats: per-conversation encryption under a browser-held key.
+   * Encrypted chats: per-conversation encryption under a browser-held key.
    * Configuring `escrowPublicKey` is the whole switch — the feature is off
    * until one is set, and unsetting it turns the feature off again.
    */
-  lockedChat: {
+  encryptedChat: {
     /**
      * The PEM (or base64-of-PEM) RSA public key conversation keys are escrowed
      * to for break-glass recovery; the private half stays offline with the
-     * customer's security team. Setting it enables locked chats; an
+     * customer's security team. Setting it enables encrypted chats; an
      * unparseable or undersized key fails startup (see
-     * verifyLockedChatConfig).
+     * verifyEncryptedChatConfig).
      */
     escrowPublicKey:
-      process.env.ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY?.trim() ||
-      // Former name, still honored so an existing deployment does not silently
+      process.env.ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY?.trim() ||
+      // Former names, still honored so an existing deployment does not silently
       // lose the feature between the config rollout and the image rollout.
+      process.env.ARCHESTRA_LOCKED_CHAT_ESCROW_PUBLIC_KEY?.trim() ||
       process.env.ARCHESTRA_CHAT_INCOGNITO_ESCROW_PUBLIC_KEY?.trim() ||
       undefined,
   },

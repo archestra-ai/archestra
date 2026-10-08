@@ -1,16 +1,21 @@
 import {
+  ARCHESTRA_MCP_CATALOG_ID,
   type ArchestraToolFullName,
   type ArchestraToolShortName,
   getArchestraToolFullName,
   getArchestraToolShortName,
   isAgentTool,
+  isImplicitOpenAppaReadToolShortName,
   isSkillTool,
+  OPENAPPA_RUNTIME_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
   TOOL_CANCEL_RUN_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
   TOOL_STEER_RUN_SHORT_NAME,
@@ -18,12 +23,22 @@ import {
 import type { CallToolResult } from "@modelcontextprotocol/sdk/types.js";
 import { ZodError, type ZodType, z } from "zod";
 import config from "@/config";
+import OpenAppaSessionModel from "@/models/openappa-session";
+import OpenAppaSpawnCorrelationModel from "@/models/openappa-spawn-correlation";
+import {
+  RUNTIME_TOOL_PROOF_ARGUMENT,
+  verifyRuntimeToolProof,
+} from "@/openappa/runtime-tool-claims";
 import {
   isAppaDelegatedRun,
   openappaEnabled,
   openappaYellEnabled,
 } from "@/openappa/service";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import { authenticatedRuntimeSpender } from "@/services/agent-runtime/runtime-identity";
+import {
+  agentToolExclusionsService,
+  isToolIdentityExcluded,
+} from "@/services/agent-tool-exclusions";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ApiError } from "@/types";
 import { trackBackgroundWork } from "@/utils/background-work";
@@ -261,7 +276,25 @@ function getPluginToolNames(): ReadonlySet<string> {
 
 export function getArchestraMcpTools() {
   return brandTools(
-    getAllTools().filter((tool) => isToolRuntimeEnabled(tool.name)),
+    getAllTools()
+      .filter((tool) => isToolRuntimeEnabled(tool.name))
+      .map((tool) => {
+        const short = archestraMcpBranding.getToolShortName(tool.name);
+        if (!short || !runtimeToolNames.has(short)) return tool;
+        return {
+          ...tool,
+          inputSchema: {
+            ...tool.inputSchema,
+            properties: {
+              ...tool.inputSchema.properties,
+              [RUNTIME_TOOL_PROOF_ARGUMENT]: {
+                type: "string",
+                description: "Source-session proof supplied by the proxy.",
+              },
+            },
+          },
+        };
+      }),
   );
 }
 
@@ -278,9 +311,10 @@ export function getAllArchestraMcpTools() {
 /**
  * JSON input schema of a built-in Archestra tool, resolved by its published
  * (branding-aware) full name or canonical `archestra__` name — derived from the
- * same zod schema `tools/list` advertises. Returns undefined for names that are
- * not built-ins (agent delegations, third-party names). Consumed by run_tool's
- * schema-aware envelope repair.
+ * handler's full zod schema, which `tools/list` advertises unless the tool has
+ * a `publicSchema`. Returns undefined for names that are not built-ins (agent
+ * delegations, third-party names). Consumed by run_tool's schema-aware
+ * envelope repair.
  */
 export function getArchestraToolInputSchema(
   toolName: string,
@@ -304,6 +338,54 @@ export async function executeArchestraTool(
   args: Record<string, unknown> | undefined,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
+  const runtimeProof = args?.[RUNTIME_TOOL_PROOF_ARGUMENT];
+  if (runtimeProof !== undefined) {
+    const action = archestraMcpBranding.getToolShortName(toolName) ?? toolName;
+    const verified = context.organizationId
+      ? verifyRuntimeToolProof({
+          proof: runtimeProof,
+          organizationId: context.organizationId,
+          callerId: authenticatedRuntimeSpender({
+            userId: context.userId,
+            callerId: context.openappaSession?.caller_id,
+          }),
+          action,
+          arguments: args ?? {},
+          secret: config.openappa.offerSigningSecret,
+        })
+      : null;
+    if (!verified || (!runtimeToolNames.has(action) && !isAgentTool(action))) {
+      return errorResult(
+        "OpenAPPA could not verify this runtime tool's source.",
+      );
+    }
+    const source = await OpenAppaSessionModel.familySession({
+      organizationId: verified.session.organization_id,
+      sessionId: verified.session.session_id,
+      callerId: verified.session.caller_id,
+    });
+    if (!source || source.parentId !== (verified.session.parent_id ?? null)) {
+      return errorResult(
+        "OpenAPPA could not find the recorded source session.",
+      );
+    }
+    const released = await OpenAppaSpawnCorrelationModel.releasedCalls({
+      organizationId: verified.session.organization_id,
+      callerId: verified.session.caller_id,
+      sessionId: verified.session.session_id,
+      toolCallIds: [verified.toolCallId],
+    });
+    if (released.get(verified.toolCallId)?.spawn !== verified.spawn) {
+      return errorResult("OpenAPPA has no matching released runtime call.");
+    }
+    context = {
+      ...context,
+      openappaRuntimeCall: verified,
+      currentToolCallId: verified.toolCallId,
+    };
+    const { [RUNTIME_TOOL_PROOF_ARGUMENT]: _proof, ...original } = args ?? {};
+    args = original;
+  }
   if (
     archestraMcpBranding.getToolShortName(toolName) === "yell" &&
     (!openappaYellEnabled() || !(await isGuardrailsV2Active()))
@@ -315,14 +397,17 @@ export async function executeArchestraTool(
   const remedyShortName = archestraMcpBranding.getToolShortName(toolName);
   if (
     (remedyShortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
-      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME) &&
+      remedyShortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
+      remedyShortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      remedyShortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME) &&
     !(await isGuardrailsV2Active())
   ) {
     throw { code: -32601, message: "Guardrails v2 is disabled" };
   }
   if (
     (!openappaEnabled() ||
-      isAppaDelegatedRun(context.agent.id, context.delegationChain)) &&
+      (!context.openappaSubagent &&
+        isAppaDelegatedRun(context.agent.id, context.delegationChain))) &&
     isOpenappaTool(archestraMcpBranding.getToolShortName(toolName))
   ) {
     throw {
@@ -333,13 +418,18 @@ export async function executeArchestraTool(
   // Agent delegation tools are dynamic (one per agent) and not in TOOL_PERMISSIONS,
   // so they bypass centralized RBAC. They enforce team-based access checks internally.
   if (isAgentTool(toolName)) {
-    const parsedArgs = validateToolArgs(
-      delegationToolArgsSchema,
+    const parsedArgs = validateToolArgs({
+      schema: delegationToolArgsSchema,
       args,
       toolName,
-    );
+    });
     if ("error" in parsedArgs) {
       return parsedArgs.error;
+    }
+    if (runtimeProof !== undefined && !(await claimRuntimeDispatch(context))) {
+      return errorResult(
+        "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
+      );
     }
     return handleDelegation(toolName, parsedArgs.value, context);
   }
@@ -348,11 +438,11 @@ export async function executeArchestraTool(
   // agent-designated skill. Like agent delegation, they bypass centralized
   // RBAC and enforce skill + agent access checks internally.
   if (isSkillTool(toolName)) {
-    const parsedArgs = validateToolArgs(
-      delegationToolArgsSchema,
+    const parsedArgs = validateToolArgs({
+      schema: delegationToolArgsSchema,
       args,
       toolName,
-    );
+    });
     if ("error" in parsedArgs) {
       return parsedArgs.error;
     }
@@ -362,6 +452,11 @@ export async function executeArchestraTool(
   const admitted = await admitArchestraToolCall({ toolName, args, context });
   if ("error" in admitted) return admitted.error;
   const { toolEntry, resolvedToolName } = admitted;
+  if (runtimeProof !== undefined && !(await claimRuntimeDispatch(context))) {
+    return errorResult(
+      "This released runtime call was already claimed or is no longer executable. Do not redispatch it; retrieve its status before requesting a new action.",
+    );
+  }
 
   // Mutating built-ins get an org-audit row, same event vocabulary as their
   // /api/* twins (the MCP surface bypasses the HTTP audit hook entirely).
@@ -423,6 +518,8 @@ export async function executeArchestraTool(
     throw error;
   }
 }
+
+const runtimeToolNames = new Set<string>(OPENAPPA_RUNTIME_TOOL_SHORT_NAMES);
 
 /**
  * Validates a built-in tool call without executing it.
@@ -508,7 +605,7 @@ const ASSIGNMENT_EXEMPT_SHORT_NAMES = new Set<ArchestraToolShortName>([
 // isDynamicallyAvailableArchestraTool passes (feature gates, per-agent
 // exclusions, and the query_knowledge_sources connector check) — nothing is
 // assigned. RBAC already ran before this gate, so e.g. the sandbox tools
-// still require sandbox:execute.
+// still require agent:read.
 async function resolveToolAssignment(
   toolName: string,
   context: ArchestraContext,
@@ -524,6 +621,8 @@ async function resolveToolAssignment(
   if (
     (shortName === TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME ||
       shortName === TOOL_GET_REMEDY_PLANS_SHORT_NAME ||
+      shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+      shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME ||
       (shortName === "yell" && openappaYellEnabled())) &&
     (await isGuardrailsV2Active())
   )
@@ -534,6 +633,18 @@ async function resolveToolAssignment(
   const exclusionSets = await agentToolExclusionsService.getActiveExclusionSets(
     context.agentId,
   );
+  if (
+    openappaEnabled() &&
+    isImplicitOpenAppaReadToolShortName(shortName) &&
+    !isToolIdentityExcluded(
+      {
+        catalogId: ARCHESTRA_MCP_CATALOG_ID,
+        name: archestraMcpBranding.getToolName(shortName),
+      },
+      exclusionSets,
+    )
+  )
+    return null;
   const available = await isArchestraToolAvailableToAgent({
     toolName,
     agentId: context.agentId,
@@ -597,7 +708,12 @@ async function admitArchestraToolCall(params: {
     };
   }
 
-  const parsedArgs = validateToolArgs(toolEntry.schema, args, toolName);
+  const parsedArgs = validateToolArgs({
+    schema: toolEntry.schema,
+    publicSchema: toolEntry.publicSchema,
+    args,
+    toolName,
+  });
   if ("error" in parsedArgs) return parsedArgs;
   return { toolEntry, resolvedToolName, args: parsedArgs.value };
 }
@@ -644,11 +760,18 @@ export const __test = {
   zodValidationErrorResult,
 };
 
-function validateToolArgs(
-  schema: ZodType,
-  args: Record<string, unknown> | undefined,
-  toolName: string,
-): { value: Record<string, unknown> } | { error: CallToolResult } {
+function validateToolArgs(params: {
+  schema: ZodType;
+  /**
+   * The advertised schema. Errors describe it rather than `schema`, so a
+   * malformed call never shows the model members only the proxy writes.
+   */
+  publicSchema?: ZodType;
+  args: Record<string, unknown> | undefined;
+  toolName: string;
+}): { value: Record<string, unknown> } | { error: CallToolResult } {
+  const { schema, args, toolName } = params;
+  const describedSchema = params.publicSchema ?? schema;
   const parsed = schema.safeParse(args ?? {});
 
   if (parsed.success) {
@@ -674,13 +797,17 @@ function validateToolArgs(
       error: zodValidationErrorResult({
         toolName,
         error: reparsed.error,
-        schema,
+        schema: describedSchema,
       }),
     };
   }
 
   return {
-    error: zodValidationErrorResult({ toolName, error: parsed.error, schema }),
+    error: zodValidationErrorResult({
+      toolName,
+      error: parsed.error,
+      schema: describedSchema,
+    }),
   };
 }
 
@@ -706,6 +833,20 @@ function reparseStringifiedObjectArgs(
     }
   }
   return repaired;
+}
+
+async function claimRuntimeDispatch(
+  context: ArchestraContext,
+): Promise<boolean> {
+  const call = context.openappaRuntimeCall;
+  if (!call) return false;
+  return OpenAppaSpawnCorrelationModel.claimRuntimeDispatch({
+    organizationId: call.session.organization_id,
+    callerId: call.session.caller_id,
+    sessionId: call.session.session_id,
+    toolCallId: call.toolCallId,
+    spawn: call.spawn,
+  });
 }
 
 /**
@@ -742,10 +883,10 @@ function zodValidationErrorResult(params: {
   if (skeleton) {
     const requiredNote =
       skeleton.required.length > 0
-        ? `; required: ${skeleton.required.map((key) => JSON.stringify(key)).join(", ")}`
-        : "";
+        ? `required: ${skeleton.required.map((key) => JSON.stringify(key)).join(", ")}`
+        : "none is required";
     lines.push(
-      `The tool's parameters are shaped like ${skeleton.skeleton} (replace each <…> with a real value${requiredNote}).`,
+      `The tool's parameters are shaped like ${skeleton.skeleton} (send only the parameters you need; ${requiredNote}).`,
     );
   }
   return {

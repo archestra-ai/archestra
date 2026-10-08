@@ -1210,6 +1210,17 @@ function normalizeKnownModelCapabilities(params: {
   const { provider, modelId, underlyingModelName, capabilities } = params;
   const normalizedModelId = modelId.toLowerCase();
 
+  // Jev answers decisions, not prompts: no text output, which is what keeps its
+  // models out of every chat picker (`ModelModel.supportsTextChat`).
+  if (provider === "jev") {
+    return {
+      ...capabilities,
+      inputModalities: ["text"],
+      outputModalities: [],
+      supportsToolCalling: false,
+    };
+  }
+
   if (provider === "gemini" && normalizedModelId === "gemini-embedding-2") {
     return {
       ...capabilities,

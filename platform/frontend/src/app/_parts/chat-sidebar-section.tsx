@@ -25,7 +25,7 @@ import { ChatListSkeleton } from "@/app/_parts/chat-list-skeleton";
 import { ConversationProjectActions } from "@/app/_parts/conversation-project-actions";
 import { groupSidebarTasks } from "@/app/_parts/scheduled-run-sidebar.utils";
 import { AgentIcon } from "@/components/agent-icon";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -63,6 +63,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { TypingText } from "@/components/ui/typing-text";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { ATTENTION_DOT_CLASS } from "@/lib/agent-run-status-marks";
 import {
   useCancelAgentRun,
@@ -90,9 +91,9 @@ import {
   getConversationShareTooltip,
 } from "@/lib/chat/chat-utils";
 import { conversationHref } from "@/lib/chat/conversation-href";
+import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
 import { groupConversationsByDay } from "@/lib/chat/group-conversations-by-date";
-import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import { buildPinnedSidebarItems } from "@/lib/chat/pinned-sidebar-items";
 import { useFeature } from "@/lib/config/config.query";
 import type { Once } from "@/lib/hooks/use-once";
@@ -451,9 +452,6 @@ export function ChatSidebarSection({
                 }}
               />
             )}
-            {(canUpdateConversation || canDeleteConversation) && (
-              <span className="w-4 shrink-0" aria-hidden />
-            )}
           </div>
         </SidebarMenuSubItem>
       );
@@ -474,11 +472,13 @@ export function ChatSidebarSection({
       generateTitleMutation.variables?.id === conv.id;
     const isMenuOpen = openMenuId === conv.id;
     const isPinned = !!conv.pinnedAt;
+    const showChatMenu =
+      editingId !== conv.id && (canUpdateConversation || canDeleteConversation);
     const showProjectActions =
       canUpdateConversation === true &&
       canReadProjects === true &&
       isActionAvailableForConversation(conv, "changeProject");
-    // AI title generation is rejected for locked chats (the server would
+    // AI title generation is rejected for encrypted chats (the server would
     // have to read encrypted messages), so hide both regenerate affordances.
     const canRegenerateTitle = isActionAvailableForConversation(
       conv,
@@ -489,8 +489,11 @@ export function ChatSidebarSection({
       <SidebarMenuSubItem key={conv.id}>
         <div
           className={cn(
-            "flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
+            "relative flex items-center justify-between w-full gap-2 rounded-md pr-2 hover:bg-sidebar-accent focus-within:bg-sidebar-accent",
             isCurrentConversation && "bg-sidebar-accent",
+            // Reserve the menu gutter only while the menu trigger is visible.
+            showChatMenu && "hover:pr-7 focus-within:pr-7",
+            showChatMenu && isMenuOpen && "pr-7",
           )}
         >
           {editingId === conv.id ? (
@@ -550,13 +553,13 @@ export function ChatSidebarSection({
               className="cursor-pointer flex-1 justify-between"
             >
               <span className="flex items-center gap-2 min-w-0 flex-1">
-                {conv.lockedChat && (
+                {conv.encryptedChat && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
-                        <LockedChatIcon className="h-3.5 w-3.5" />
+                        <EncryptedChatIcon className="h-3.5 w-3.5" />
                       </TooltipTrigger>
-                      <TooltipContent side="top">Locked chat</TooltipContent>
+                      <TooltipContent side="top">Encrypted chat</TooltipContent>
                     </Tooltip>
                   </TooltipProvider>
                 )}
@@ -635,119 +638,116 @@ export function ChatSidebarSection({
               }}
             />
           )}
-          {/* Sibling of the row button (not nested inside it): interactive
-              controls must not be nested, and the trigger must be a real
-              button rather than a bare svg. */}
-          {editingId !== conv.id &&
-            (canUpdateConversation || canDeleteConversation) && (
-              <DropdownMenu
-                open={isMenuOpen}
-                onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
-              >
-                <DropdownMenuTrigger asChild>
-                  {/* A real button: ARIA menu attributes are not valid on a
+          {/* Absolute so the trigger never permanently narrows the title. */}
+          {showChatMenu && (
+            <DropdownMenu
+              open={isMenuOpen}
+              onOpenChange={(open) => setOpenMenuId(open ? conv.id : null)}
+            >
+              <DropdownMenuTrigger asChild>
+                {/* A real button: ARIA menu attributes are not valid on a
                     bare <svg>, and an svg is not keyboard-operable. */}
-                  <button
-                    type="button"
-                    aria-label="Chat actions"
-                    className={cn(
-                      "shrink-0 transition-opacity",
-                      isMenuOpen
-                        ? "opacity-100"
-                        : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
-                    )}
-                    onClick={(e) => e.stopPropagation()}
-                  >
-                    <MoreHorizontal className="h-4 w-4 p-0" />
-                  </button>
-                </DropdownMenuTrigger>
-                <DropdownMenuContent align="start" side="right">
-                  {canUpdateConversation && (
-                    <>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleTogglePin(conv.id, isPinned);
-                        }}
-                      >
-                        {isPinned ? (
-                          <>
-                            <PinOff className="h-4 w-4 mr-2" />
-                            Unpin
-                          </>
-                        ) : (
-                          <>
-                            <Pin className="h-4 w-4 mr-2" />
-                            Pin
-                          </>
-                        )}
-                      </DropdownMenuItem>
-                      <DropdownMenuItem
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleStartEdit(conv.id, displayTitle);
-                        }}
-                      >
-                        <Pencil className="h-4 w-4 mr-2" />
-                        Rename
-                      </DropdownMenuItem>
-                      {canRegenerateTitle && (
-                        <DropdownMenuItem
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleRegenerateTitle(conv.id);
-                          }}
-                          disabled={generateTitleMutation.isPending}
-                        >
-                          <Sparkles className="h-4 w-4 mr-2" />
-                          Regenerate title
-                        </DropdownMenuItem>
-                      )}
-                      {showProjectActions && (
-                        <ConversationProjectActions
-                          projectId={conv.projectId}
-                          projects={projectsData ?? []}
-                          isPending={
-                            updateConversationMutation.isPending ||
-                            createProjectMutation.isPending
-                          }
-                          onCreateProject={
-                            canCreateProject === true
-                              ? async (name) => {
-                                  const project =
-                                    await createProjectMutation.mutateAsync({
-                                      name,
-                                    });
-                                  if (project)
-                                    await handleChangeProject(
-                                      conv.id,
-                                      project.id,
-                                    );
-                                }
-                              : undefined
-                          }
-                          onProjectChange={(projectId) =>
-                            handleChangeProject(conv.id, projectId)
-                          }
-                        />
-                      )}
-                    </>
+                <UnstyledButton
+                  type="button"
+                  aria-label="Chat actions"
+                  className={cn(
+                    "absolute right-1 top-1/2 -translate-y-1/2 transition-opacity",
+                    isMenuOpen
+                      ? "opacity-100"
+                      : "opacity-0 group-hover/menu-sub-item:opacity-100 focus-visible:opacity-100",
                   )}
-                  {canDeleteConversation && (
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <MoreHorizontal className="h-4 w-4 p-0" />
+                </UnstyledButton>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="start" side="right">
+                {canUpdateConversation && (
+                  <>
                     <DropdownMenuItem
                       onClick={(e) => {
                         e.stopPropagation();
-                        setDeleteConfirmId(conv.id);
+                        handleTogglePin(conv.id, isPinned);
                       }}
-                      className="text-destructive focus:text-destructive"
                     >
-                      <Trash2 className="h-4 w-4 mr-2" />
-                      Delete
+                      {isPinned ? (
+                        <>
+                          <PinOff className="h-4 w-4 mr-2" />
+                          Unpin
+                        </>
+                      ) : (
+                        <>
+                          <Pin className="h-4 w-4 mr-2" />
+                          Pin
+                        </>
+                      )}
                     </DropdownMenuItem>
-                  )}
-                </DropdownMenuContent>
-              </DropdownMenu>
-            )}
+                    <DropdownMenuItem
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleStartEdit(conv.id, displayTitle);
+                      }}
+                    >
+                      <Pencil className="h-4 w-4 mr-2" />
+                      Rename
+                    </DropdownMenuItem>
+                    {canRegenerateTitle && (
+                      <DropdownMenuItem
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          handleRegenerateTitle(conv.id);
+                        }}
+                        disabled={generateTitleMutation.isPending}
+                      >
+                        <Sparkles className="h-4 w-4 mr-2" />
+                        Regenerate title
+                      </DropdownMenuItem>
+                    )}
+                    {showProjectActions && (
+                      <ConversationProjectActions
+                        projectId={conv.projectId}
+                        projects={projectsData ?? []}
+                        isPending={
+                          updateConversationMutation.isPending ||
+                          createProjectMutation.isPending
+                        }
+                        onCreateProject={
+                          canCreateProject === true
+                            ? async (name) => {
+                                const project =
+                                  await createProjectMutation.mutateAsync({
+                                    name,
+                                  });
+                                if (project)
+                                  await handleChangeProject(
+                                    conv.id,
+                                    project.id,
+                                  );
+                              }
+                            : undefined
+                        }
+                        onProjectChange={(projectId) =>
+                          handleChangeProject(conv.id, projectId)
+                        }
+                      />
+                    )}
+                  </>
+                )}
+                {canDeleteConversation && (
+                  <DropdownMenuItem
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setDeleteConfirmId(conv.id);
+                    }}
+                    className="text-destructive focus:text-destructive"
+                  >
+                    <Trash2 className="h-4 w-4 mr-2" />
+                    Delete
+                  </DropdownMenuItem>
+                )}
+              </DropdownMenuContent>
+            </DropdownMenu>
+          )}
         </div>
       </SidebarMenuSubItem>
     );
@@ -827,7 +827,7 @@ export function ChatSidebarSection({
               onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
             >
               <DropdownMenuTrigger asChild>
-                <button
+                <UnstyledButton
                   type="button"
                   aria-label="Run actions"
                   className={cn(
@@ -838,7 +838,7 @@ export function ChatSidebarSection({
                   )}
                 >
                   <MoreHorizontal className="size-4" />
-                </button>
+                </UnstyledButton>
               </DropdownMenuTrigger>
               <DropdownMenuContent align="start" side="right">
                 <DropdownMenuItem
@@ -951,7 +951,7 @@ export function ChatSidebarSection({
             onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
           >
             <DropdownMenuTrigger asChild>
-              <button
+              <UnstyledButton
                 type="button"
                 aria-label="Project actions"
                 className={cn(
@@ -962,7 +962,7 @@ export function ChatSidebarSection({
                 )}
               >
                 <MoreHorizontal className="h-4 w-4 p-0" />
-              </button>
+              </UnstyledButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="right">
               <DropdownMenuItem
@@ -1022,7 +1022,7 @@ export function ChatSidebarSection({
             onOpenChange={(open) => setOpenMenuId(open ? menuKey : null)}
           >
             <DropdownMenuTrigger asChild>
-              <button
+              <UnstyledButton
                 type="button"
                 aria-label="App actions"
                 className={cn(
@@ -1033,7 +1033,7 @@ export function ChatSidebarSection({
                 )}
               >
                 <MoreHorizontal className="h-4 w-4 p-0" />
-              </button>
+              </UnstyledButton>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="start" side="right">
               <DropdownMenuItem
@@ -1218,7 +1218,8 @@ function CollapsibleSidebarGroup({
           <CollapsibleTrigger asChild>
             <Button
               variant="ghost"
-              className="group/section h-8 w-full justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
+              size="sm"
+              className="group/section w-full justify-start gap-1 px-2 text-xs font-medium text-sidebar-foreground/70 hover:bg-transparent"
             >
               <span>{label}</span>
               <ChevronDown

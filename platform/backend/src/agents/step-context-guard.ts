@@ -11,24 +11,28 @@
  * (memoized across steps, updated incrementally as the run grows). When
  * summarization is unavailable or fails, it falls back to deterministic
  * trimming so the step still fits.
+ *
+ * When `promptCache` is set, the guard also moves the cache breakpoint to the
+ * newest message of each step that it does not trim, so later steps read the
+ * earlier tool calls and results from the cache.
  */
 import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
 import type { ModelMessage } from "ai";
 import type { LLMModel } from "@/clients/llm-client";
 import logger from "@/logging";
 import { trimMessagesToTokenLimit } from "@/routes/chat/context-trimming";
+import { applyStepPromptCacheBreakpoint } from "@/routes/chat/normalization/apply-prompt-cache";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
 import {
-  CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
+  CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
+  type CompactionSummarizer,
+  chooseRecentSuffixStart,
   compactionSummaryText,
-  composeCompactionPrompt,
-  summarizeCompactionTranscript,
+  createCompactionSummarizer,
+  renderCompactionTranscript,
+  type TranscriptEntry,
 } from "@/services/context-compaction";
-
-interface SummarizeParams {
-  transcript: string;
-  previousSummary: string | null;
-}
+import { MAX_TOOL_RESULT_CONTEXT_CHARS } from "@/utils/tool-result-cap";
 
 /**
  * Create a `prepareStep` guard bound to one agent run. State (the memoized
@@ -44,17 +48,22 @@ export function createStepContextGuard(params: {
   systemPrompt?: string;
   abortSignal?: AbortSignal;
   logContext?: Record<string, unknown>;
-  summarizeTranscript?: (params: SummarizeParams) => Promise<string | null>;
+  summarizeTranscript?: CompactionSummarizer;
+  /** The provider and model whose cache breakpoint moves with each step. */
+  promptCache?: {
+    provider: string;
+    model: string;
+    anthropicNativeEndpoint: boolean;
+  };
 }): (options: { messages: ModelMessage[] }) => Promise<{
   messages: ModelMessage[];
 }> {
-  const { model, contextLength, systemPrompt, abortSignal } = params;
+  const { model, contextLength, systemPrompt, abortSignal, promptCache } =
+    params;
   const logContext = params.logContext ?? {};
   const summarize =
     params.summarizeTranscript ??
-    (model
-      ? (p: SummarizeParams) => summarizeWithModel({ model, abortSignal, ...p })
-      : null);
+    (model ? createCompactionSummarizer({ model, abortSignal }) : null);
 
   // Step messages are append-only across steps (initial prompt + accumulated
   // responses), so messages[0..throughIndex) stays covered by `summary` on
@@ -62,9 +71,17 @@ export function createStepContextGuard(params: {
   let state: { summary: string; throughIndex: number } | null = null;
   let summarizationDisabled = summarize === null;
 
+  // For a view that the next step extends: mark its newest message, so the
+  // next step reads this whole view from the cache.
+  const withStepBreakpoint = (messages: ModelMessage[]) => ({
+    messages: promptCache
+      ? applyStepPromptCacheBreakpoint({ ...promptCache, messages })
+      : messages,
+  });
+
   return async ({ messages }) => {
     const capped = capOversizedToolResults(messages);
-    if (!contextLength) return { messages: capped };
+    if (!contextLength) return withStepBreakpoint(capped);
 
     const budgetTokens = Math.floor(
       contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
@@ -79,7 +96,7 @@ export function createStepContextGuard(params: {
     );
 
     let view = applySummary(capped, state);
-    if (charSize(view) <= budgetChars) return { messages: view };
+    if (charSize(view) <= budgetChars) return withStepBreakpoint(view);
 
     if (!summarizationDisabled && summarize) {
       const minIndex = state?.throughIndex ?? 0;
@@ -91,8 +108,8 @@ export function createStepContextGuard(params: {
       if (boundary > minIndex) {
         try {
           const summary = await summarize({
-            transcript: serializeForTranscript(
-              capped.slice(minIndex, boundary),
+            transcript: renderCompactionTranscript(
+              capped.slice(minIndex, boundary).flatMap(transcriptEntries),
             ),
             previousSummary: state?.summary ?? null,
           });
@@ -107,7 +124,7 @@ export function createStepContextGuard(params: {
               "[StepContextGuard] compacted step context with summary",
             );
             view = applySummary(capped, state);
-            if (charSize(view) <= budgetChars) return { messages: view };
+            if (charSize(view) <= budgetChars) return withStepBreakpoint(view);
           } else {
             summarizationDisabled = true;
             logger.warn(
@@ -125,6 +142,9 @@ export function createStepContextGuard(params: {
       }
     }
 
+    // No cache breakpoint: as the run grows, trimming usually drops more of the
+    // oldest messages, which changes the start of the view. A cache write for
+    // this view would rarely be read and would cost more than no marker.
     return {
       messages: trimMessagesToTokenLimit({
         messages: view,
@@ -138,22 +158,6 @@ export function createStepContextGuard(params: {
 // =============================================================================
 // INTERNAL
 // =============================================================================
-
-function summarizeWithModel(params: {
-  model: LLMModel;
-  transcript: string;
-  previousSummary: string | null;
-  abortSignal?: AbortSignal;
-}): Promise<string | null> {
-  return summarizeCompactionTranscript({
-    model: params.model,
-    prompt: composeCompactionPrompt({
-      previousSummary: params.previousSummary,
-      transcript: params.transcript,
-    }),
-    abortSignal: params.abortSignal,
-  });
-}
 
 function applySummary(
   messages: ModelMessage[],
@@ -176,7 +180,7 @@ function buildSummaryMessage(summary: string): ModelMessage {
 
 /**
  * Pick the index up to which messages get summarized: keep a recent suffix of
- * roughly RECENT_KEEP_RATIO of the char budget (always including at least the
+ * roughly the keep ratio of the char budget (always including at least the
  * last message), and never split an assistant tool call from its tool results
  * (the suffix must not start with a tool message).
  */
@@ -186,16 +190,12 @@ function chooseCompactionBoundary(params: {
   budgetChars: number;
 }): number {
   const { messages, minIndex, budgetChars } = params;
-  const keepChars = budgetChars * RECENT_KEEP_RATIO;
-
-  let boundary = messages.length - 1;
-  let kept = charSize([messages[messages.length - 1]]);
-  while (boundary > minIndex) {
-    const next = charSize([messages[boundary - 1]]);
-    if (kept + next > keepChars) break;
-    kept += next;
-    boundary--;
-  }
+  let boundary = chooseRecentSuffixStart({
+    count: messages.length,
+    sizeOf: (index) => charSize([messages[index]]),
+    keepBudget: budgetChars * CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
+    minIndex,
+  });
 
   // keep tool-call/tool-result pairs on the same side of the boundary
   while (
@@ -204,57 +204,34 @@ function chooseCompactionBoundary(params: {
   ) {
     boundary++;
   }
-  if (messages[boundary]?.role === "tool") return minIndex;
-
-  return boundary > minIndex ? boundary : minIndex;
+  return messages[boundary]?.role === "tool" ? minIndex : boundary;
 }
 
-/** Render messages as a plain-text transcript for the summarization prompt. */
-function serializeForTranscript(messages: ModelMessage[]): string {
-  const lines: string[] = [];
-  for (const message of messages) {
-    if (typeof message.content === "string") {
-      lines.push(`[${message.role}]: ${message.content}`);
-      continue;
-    }
-    if (!Array.isArray(message.content)) continue;
-    for (const part of message.content as Array<Record<string, unknown>>) {
-      switch (part.type) {
-        case "text":
-          lines.push(`[${message.role}]: ${part.text as string}`);
-          break;
-        case "tool-call":
-          lines.push(
-            `[assistant → tool ${part.toolName as string}]: ${truncate(
-              safeJson(part.input),
-              TRANSCRIPT_TOOL_INPUT_MAX_CHARS,
-            )}`,
-          );
-          break;
-        case "tool-result":
-          lines.push(
-            `[tool ${part.toolName as string} result]: ${truncate(
-              safeJson(part.output),
-              TRANSCRIPT_TOOL_RESULT_MAX_CHARS,
-            )}`,
-          );
-          break;
-        case "file":
-        case "image":
-          lines.push(`[${message.role} attached a ${part.type}]`);
-          break;
-        default:
-          break;
-      }
-    }
+function transcriptEntries(message: ModelMessage): TranscriptEntry[] {
+  if (typeof message.content === "string") {
+    return [{ kind: "text", role: message.role, text: message.content }];
   }
-  const transcript = lines.join("\n");
-  // keep the tail — recent context matters most for continuing the task
-  return transcript.length <= CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS
-    ? transcript
-    : transcript.slice(
-        transcript.length - CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
-      );
+  return message.content.flatMap((part): TranscriptEntry[] => {
+    switch (part.type) {
+      case "text":
+        return [{ kind: "text", role: message.role, text: part.text }];
+      case "tool-call":
+        return [
+          { kind: "tool_call", toolName: part.toolName, input: part.input },
+        ];
+      case "tool-result":
+        return [
+          { kind: "tool_result", toolName: part.toolName, output: part.output },
+        ];
+      case "file":
+      case "image":
+        return [
+          { kind: "attachment", role: message.role, attachment: part.type },
+        ];
+      default:
+        return [];
+    }
+  });
 }
 
 /**
@@ -272,7 +249,12 @@ function capOversizedToolResults(messages: ModelMessage[]): ModelMessage[] {
     let messageChanged = false;
     const content = message.content.map((part) => {
       if (part.type !== "tool-result") return part;
-      const serialized = JSON.stringify(part.output);
+      // Budget text by its own length: JSON escaping would push a result the
+      // chat tools already capped back over the limit and cut its tail.
+      const serialized =
+        part.output.type === "text"
+          ? part.output.value
+          : JSON.stringify(part.output);
       if (serialized.length <= MAX_TOOL_RESULT_CONTEXT_CHARS) return part;
       messageChanged = true;
       return {
@@ -290,35 +272,6 @@ function capOversizedToolResults(messages: ModelMessage[]): ModelMessage[] {
   return changed ? result : messages;
 }
 
-function charSize(messages: Array<ModelMessage | undefined>): number {
-  return messages.reduce(
-    (sum, m) => sum + (m ? JSON.stringify(m.content).length : 0),
-    0,
-  );
+function charSize(messages: ModelMessage[]): number {
+  return messages.reduce((sum, m) => sum + JSON.stringify(m.content).length, 0);
 }
-
-function truncate(text: string, maxChars: number): string {
-  return text.length <= maxChars ? text : `${text.slice(0, maxChars)}…`;
-}
-
-function safeJson(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return String(value);
-  }
-}
-
-// ~25k tokens at typical densities — generous enough for legitimate large
-// outputs (file reads, API listings) while keeping a single result from
-// consuming a meaningful fraction of the context window.
-const MAX_TOOL_RESULT_CONTEXT_CHARS = 100_000;
-
-// Share of the char budget preserved verbatim as the recent suffix when
-// compacting — the rest of the prefix goes into the summary.
-const RECENT_KEEP_RATIO = 0.3;
-
-// Per-entry caps for the ModelMessage transcript serializer above (the
-// whole-transcript ceiling is the shared CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS).
-const TRANSCRIPT_TOOL_INPUT_MAX_CHARS = 2_000;
-const TRANSCRIPT_TOOL_RESULT_MAX_CHARS = 8_000;

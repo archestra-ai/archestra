@@ -66,11 +66,12 @@ import {
   isVertexAiEnabled,
   resolveVertexLocation,
 } from "@/clients/gemini-client";
+import { internalCallHeader } from "@/clients/internal-call";
 import { getLlmUpstreamDispatcher } from "@/clients/llm-upstream-dispatcher";
 import { openRouterAttributionHeaders } from "@/clients/openrouter-attribution";
 import { createResponseHealingFetch } from "@/clients/openrouter-response-healing";
 import config from "@/config";
-import { LOCKED_CHAT_KEY_HEADER } from "@/content-encryption/locked-chat";
+import { ENCRYPTED_CHAT_KEY_HEADER } from "@/content-encryption/encrypted-chat";
 import logger from "@/logging";
 import ModelModel from "@/models/model";
 import {
@@ -78,6 +79,7 @@ import {
   APPA_SESSION_HEADER,
   openappaEnabled,
 } from "@/openappa/service";
+import { APPA_SUBAGENT_BINDING_HEADER } from "@/openappa/subagent-binding";
 import { ApiError } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
@@ -193,18 +195,20 @@ export function createLLMModel(params: {
   externalAgentId?: string;
   sessionId?: string;
   appaParentId?: string;
+  /** Signed binding of an in-process subagent run to its child trajectory. */
+  appaSubagentToken?: string;
   source?: InteractionSource;
   baseUrl: string | null;
   contextIsTrusted?: boolean;
   chatApiKeyId?: string;
   dualLlmProgressChannel?: string;
   /**
-   * Locked chat key. Forwarded so the proxy can store this
+   * Encrypted chat key. Forwarded so the proxy can store this
    * interaction's content encrypted under it instead of redacting it. The
    * proxy re-validates it against the conversation's stored fingerprint and
    * only honours it on its loopback chat path.
    */
-  lockedChatKey?: Buffer | null;
+  encryptedChatKey?: Buffer | null;
   /**
    * Caller environment for advisor delegation billing. Loopback-gated on the
    * proxy side; see DELEGATION_BILLING_ENVIRONMENT_HEADER.
@@ -218,6 +222,8 @@ export function createLLMModel(params: {
   appId?: string | null;
   /** See ProviderModelConfig.createModel — resolved only on the agent path. */
   supportedEndpoints?: SupportedProviderEndpoint[] | null;
+  /** A platform guardrail call, exempt from blocking unrecognized clients. */
+  internalCall?: boolean;
 }): LLMModel {
   const {
     provider,
@@ -232,14 +238,16 @@ export function createLLMModel(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
-    lockedChatKey,
+    encryptedChatKey,
     delegationBillingEnvironmentId,
     appId,
     supportedEndpoints,
   } = params;
 
   // Build headers for LLM Proxy
-  const clientHeaders: Record<string, string> = {};
+  const clientHeaders: Record<string, string> = params.internalCall
+    ? internalCallHeader()
+    : {};
   if (externalAgentId) {
     clientHeaders[EXTERNAL_AGENT_ID_HEADER] = externalAgentId;
   }
@@ -252,6 +260,8 @@ export function createLLMModel(params: {
   }
   if (openappaEnabled() && params.appaParentId)
     clientHeaders[APPA_PARENT_HEADER] = params.appaParentId;
+  if (openappaEnabled() && params.appaSubagentToken)
+    clientHeaders[APPA_SUBAGENT_BINDING_HEADER] = params.appaSubagentToken;
   if (source) {
     clientHeaders[SOURCE_HEADER] = source;
   }
@@ -295,8 +305,9 @@ export function createLLMModel(params: {
 
   // Never logged: the header name is on the logging redaction denylist and
   // OTel captures no request headers.
-  if (lockedChatKey) {
-    clientHeaders[LOCKED_CHAT_KEY_HEADER] = lockedChatKey.toString("base64url");
+  if (encryptedChatKey) {
+    clientHeaders[ENCRYPTED_CHAT_KEY_HEADER] =
+      encryptedChatKey.toString("base64url");
   }
 
   const headers =
@@ -338,16 +349,18 @@ export async function createLLMModelForAgent(params: {
   /** Per-turn dual LLM progress channel id; only the chat main turn sets it. */
   dualLlmProgressChannel?: string;
   /**
-   * Locked chat key, forwarded to the proxy so this turn's
+   * Encrypted chat key, forwarded to the proxy so this turn's
    * interaction content is stored encrypted rather than redacted.
    */
-  lockedChatKey?: Buffer | null;
+  encryptedChatKey?: Buffer | null;
   /**
    * Caller environment for advisor delegation billing; forwarded as a
    * loopback-gated proxy header. Set only by the A2A executor when the
    * executed agent is the advisor built-in.
    */
   delegationBillingEnvironmentId?: string | null;
+  /** Signed binding of an in-process subagent run to its child trajectory. */
+  appaSubagentToken?: string;
 }): Promise<{
   model: LLMModel;
   provider: SupportedProvider;
@@ -474,8 +487,9 @@ export async function createLLMModelForAgent(params: {
     contextIsTrusted,
     chatApiKeyId,
     dualLlmProgressChannel,
-    lockedChatKey: params.lockedChatKey,
+    encryptedChatKey: params.encryptedChatKey,
     delegationBillingEnvironmentId: params.delegationBillingEnvironmentId,
+    appaSubagentToken: params.appaSubagentToken,
     supportedEndpoints,
   });
 
@@ -612,6 +626,16 @@ const providerModelConfigs: Record<SupportedProvider, ProviderModelConfig> = {
       );
     },
     defaultBaseUrl: config.llm.voyage.baseUrl,
+  },
+  // Decisions-only provider: it answers classification questions and has no
+  // chat API, so the same loud failure applies.
+  jev: {
+    createModel: () => {
+      throw new Error(
+        "Jev is a decisions-only provider and cannot serve chat requests",
+      );
+    },
+    defaultBaseUrl: config.llm.jev.baseUrl,
   },
 
   // --- Native SDK providers (use their own SDK, call client(modelName)) ---

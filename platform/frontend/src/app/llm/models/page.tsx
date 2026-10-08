@@ -16,7 +16,6 @@ import {
   Plus,
   RefreshCw,
   Server,
-  Shield,
   UserRoundCheck,
   Users,
 } from "lucide-react";
@@ -46,7 +45,6 @@ import {
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
 import { ResourceListActions } from "@/components/resource-list-actions";
-import { ResourcePermissionDialog } from "@/components/resource-permission-dialog";
 import { SearchInput } from "@/components/search-input";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -113,9 +111,6 @@ export default function ModelsPage() {
   const syncModelsMutation = useSyncLlmModels();
   const updateModel = useUpdateModel();
   const [isRefreshingModels, setIsRefreshingModels] = useState(false);
-  const [permissionModelId, setPermissionModelId] = useState<string | null>(
-    null,
-  );
   const { data: baseCanUpdate } = useHasPermissions({ llmModel: ["update"] });
   const { data: scopedCapabilities } = useScopedCapabilities();
   const canUpdateModel = useCallback(
@@ -562,11 +557,6 @@ export default function ModelsPage() {
                 disabled: !canUpdateModel(row.original.id),
                 onClick: () => openEditDialog(row.original),
               },
-              {
-                icon: <Shield className="h-4 w-4" />,
-                label: "Permissions",
-                onClick: () => setPermissionModelId(row.original.id),
-              },
             ]}
           />
         ),
@@ -819,17 +809,6 @@ export default function ModelsPage() {
         description="Add a new LLM provider API key to load its available models."
       />
 
-      {permissionModelId && (
-        <ResourcePermissionDialog
-          resource="llmModel"
-          scope={permissionModelId}
-          title="Model permissions"
-          open
-          onOpenChange={(open) => {
-            if (!open) setPermissionModelId(null);
-          }}
-        />
-      )}
       {editingModel && (
         <EditModelDialog
           model={editingModel}

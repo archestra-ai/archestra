@@ -69,7 +69,11 @@ export type HostedToolCall = {
 export interface CreateClientOptions {
   /** Base URL override for the provider API */
   baseUrl?: string;
-  /** Agent for observability metrics (request duration, tokens) */
+  /**
+   * Agent for observability metrics (request duration, tokens). The ChatGPT
+   * subscription clients also derive their Codex session from it (see
+   * `sessionId`).
+   */
   agent?: GatewayAgent;
   /** Default headers to include with every request */
   defaultHeaders?: Record<string, string>;
@@ -106,6 +110,13 @@ export interface CreateClientOptions {
    * cache, or use this credential outside the Responses adapter.
    */
   openAiCodexPassthrough?: OpenAiCodexPassthrough;
+  /**
+   * The request's Archestra session, such as the agent run, the conversation,
+   * or the ChatOps thread. The ChatGPT subscription clients derive their Codex
+   * session from it and the agent. The backend keeps the requests of one Codex
+   * session on the same prompt cache.
+   */
+  sessionId?: string;
 }
 
 export interface OpenAiCodexPassthrough {
@@ -456,6 +467,10 @@ export interface LLMStreamAdapter<TChunk, TResponse> {
    * produced in the same turn has already been streamed to the client, so this
    * must continue that message rather than open a new one — unlike
    * {@link formatCompleteTextSSE}, which replaces the response wholesale.
+   *
+   * OpenAI Responses also replaces its retained output and terminal snapshot.
+   * Passing no calls clears held executable output. At unexpected EOF the
+   * caller must discard the returned frames, which can synthesize a terminal.
    *
    * Optional: an adapter that does not implement it keeps the pre-existing
    * behavior for its provider (the calls are refused with the

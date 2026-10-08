@@ -66,7 +66,12 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
-import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+  useSession,
+} from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { reportBulkOutcome } from "@/lib/bulk-action";
 import { useFeature } from "@/lib/config/config.query";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
@@ -119,7 +124,7 @@ const DEFAULT_FORM_VALUES: LlmProviderApiKeyFormValues = {
 };
 
 export default function ApiKeysPage() {
-  const docsUrl = getFrontendDocsUrl("platform-supported-llm-providers");
+  const docsUrl = getFrontendDocsUrl("llm-proxy/providers");
   const { searchParams, updateQueryParams } = useDataTableQueryParams();
   const search = searchParams.get("search") || "";
   const providerFilter = searchParams.get("provider") || "all";
@@ -148,6 +153,14 @@ export default function ApiKeysPage() {
   // wholesale, and the Access column should fall back to the scope label
   // rather than crash the table (same convention as `user-share-field.tsx`).
   const currentUserId = useSession()?.data?.user?.id;
+  const { data: scopedGrants } = useScopedCapabilities();
+  const isOwnSubscriptionCredential = useCallback(
+    (credential: LlmProviderApiKeyResponse) =>
+      credential.scope === "personal" &&
+      credential.userId === currentUserId &&
+      subscriptionKindOfCredential(credential) !== null,
+    [currentUserId],
+  );
   const updateMutation = useUpdateLlmProviderApiKey();
   const deleteMutation = useDeleteLlmProviderApiKey();
   const bulkDeleteMutation = useBulkDeleteLlmProviderApiKeys();
@@ -219,9 +232,9 @@ export default function ApiKeysPage() {
     defaultValues: DEFAULT_FORM_VALUES,
   });
   const [editLabels, setEditLabels] = useState<ProfileLabel[]>([]);
-  const [editSection, setEditSection] = useState<
-    "general" | "connectivity" | "permissions"
-  >("general");
+  const [editSection, setEditSection] = useState<"general" | "permissions">(
+    "general",
+  );
   const editLabelsRef = useRef<ProfileLabelsRef>(null);
 
   // Reset edit form with selected key values when dialog opens
@@ -348,6 +361,7 @@ export default function ApiKeysPage() {
   const addApiKeyButton = (
     <div className="flex items-center gap-2">
       <Button
+        size="sm"
         onClick={() => setIsCreateDialogOpen(true)}
         data-testid={E2eTestId.AddChatApiKeyButton}
       >
@@ -456,6 +470,16 @@ export default function ApiKeysPage() {
         : "are configured",
   });
   const selectedApiKeys = selected;
+  const canDeleteSelected = selectedApiKeys.every(
+    (credential) =>
+      isOwnSubscriptionCredential(credential) ||
+      holdsItemGrant({
+        grants: scopedGrants,
+        resource: "llmProviderApiKey",
+        action: "delete",
+        id: credential.id,
+      }),
+  );
 
   const columns: ColumnDef<LlmProviderApiKeyResponse>[] = useMemo(
     () => [
@@ -581,6 +605,7 @@ export default function ApiKeysPage() {
           return (
             <TableRowActions
               itemName={credential.name}
+              permissionScope={credential.id}
               actions={[
                 {
                   icon: <Pencil className="h-4 w-4" />,
@@ -599,12 +624,9 @@ export default function ApiKeysPage() {
                   variant: "destructive",
                   // Hidden providers keep their subscriptions in this table.
                   // Owners must still be able to disconnect those credentials.
-                  permissions:
-                    credential.scope === "personal" &&
-                    credential.userId === currentUserId &&
-                    subscriptionKindOfCredential(credential) !== null
-                      ? {}
-                      : { llmProviderApiKey: ["delete"] },
+                  permissions: isOwnSubscriptionCredential(credential)
+                    ? {}
+                    : { llmProviderApiKey: ["delete"] },
                   disabled: isSystem || isInUse,
                   disabledTooltip: isInUse
                     ? `${keyUsage}. Remove it from Settings > Knowledge before deleting.`
@@ -626,7 +648,7 @@ export default function ApiKeysPage() {
       azureOpenAiEntraIdEnabled,
       anthropicKeylessAuthEnabled,
       providerCatalog,
-      currentUserId,
+      isOwnSubscriptionCredential,
     ],
   );
 
@@ -742,7 +764,13 @@ export default function ApiKeysPage() {
               selectAllMatching={selectAllMatching}
             >
               <PermissionButton
-                permissions={{ llmProviderApiKey: ["delete"] }}
+                permissions={{}}
+                disabled={!canDeleteSelected}
+                tooltip={
+                  canDeleteSelected
+                    ? undefined
+                    : "You can't delete every selected API key"
+                }
                 variant="destructive"
                 size="sm"
                 onClick={() => setIsBulkDeleteDialogOpen(true)}
@@ -821,7 +849,6 @@ export default function ApiKeysPage() {
           activeSection={editSection}
           navItems={[
             { id: "general", label: "General" },
-            { id: "connectivity", label: "Connectivity" },
             { id: "permissions", label: "Permissions" },
           ]}
           onActiveSectionChange={setEditSection}
@@ -856,9 +883,6 @@ export default function ApiKeysPage() {
                 form={editForm}
                 isPending={updateMutation.isPending}
                 progressive
-                activeSection={
-                  editSection === "connectivity" ? "connectivity" : "general"
-                }
                 hidePermissions
                 labels={editLabels}
                 onLabelsChange={setEditLabels}

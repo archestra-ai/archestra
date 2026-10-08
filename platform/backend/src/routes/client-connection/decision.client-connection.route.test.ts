@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { and, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import { Authnz } from "@/auth/fastify-plugin/middleware";
@@ -36,11 +37,16 @@ describe("browser-approved client connection", () => {
     await app.close();
   });
 
-  async function start() {
+  async function start(exclude?: string[], deviceName?: string) {
     const response = await app.inject({
       method: "POST",
       url: "/api/client-connections",
-      payload: { clientId: "claude-code", platform: "linux" },
+      payload: {
+        clientId: "claude-code",
+        platform: "linux",
+        exclude,
+        deviceName,
+      },
     });
     expect(response.statusCode).toBe(200);
     expect(response.headers["cache-control"]).toBe("no-store");
@@ -55,6 +61,7 @@ describe("browser-approved client connection", () => {
       userId?: string;
       clientId?: "cursor";
       platform?: "windows";
+      includeSkills?: boolean;
     } = {},
   ) {
     return ConnectionSetupModel.create({
@@ -137,6 +144,45 @@ describe("browser-approved client connection", () => {
       });
       expect(JSON.stringify(rows)).not.toContain(pending.deviceCode);
     });
+  });
+
+  test("the installer's machine name is shown for approval and kept on the bound setup", async () => {
+    const pending = await start(undefined, "  work-laptop ");
+    const details = await app.inject({
+      url: `/api/client-connections/${pending.id}`,
+    });
+    expect(details.json()).toMatchObject({ deviceName: "work-laptop" });
+    const ticket = await setup();
+    expect((await decide(pending.id, ticket.setup.id)).statusCode).toBe(200);
+    const claimed = await ConnectionSetupModel.claimByToken({
+      rawToken: `archestra_con_${pending.deviceCode}`,
+    });
+    expect(claimed?.deviceName).toBe("work-laptop");
+
+    const legacy = await start();
+    const legacyDetails = await app.inject({
+      url: `/api/client-connections/${legacy.id}`,
+    });
+    expect(legacyDetails.json()).toMatchObject({ deviceName: null });
+  });
+
+  test("a setup with a part the prompt left out cannot be approved", async () => {
+    const refused = await start(["skills"]);
+    const details = await app.inject({
+      url: `/api/client-connections/${refused.id}`,
+    });
+    expect(details.json()).toMatchObject({ exclude: ["skills"] });
+    const withSkills = await setup({ includeSkills: true });
+    expect((await decide(refused.id, withSkills.setup.id)).statusCode).toBe(
+      400,
+    );
+
+    const pending = await start(["tools", "skills", "proxy", "plugins"]);
+    const withoutSkills = await setup();
+    expect((await decide(pending.id, withoutSkills.setup.id)).statusCode).toBe(
+      200,
+    );
+    expect(await poll(pending.deviceCode)).toBe("approved");
   });
 
   test("denial prevents binding and subsequent approval", async () => {
@@ -241,12 +287,164 @@ describe("browser-approved client connection", () => {
     expect(response.statusCode).toBe(429);
   });
 
+  test("approval survives a poll publication fault and is claimed once", async () => {
+    const pending = await start();
+    const ticket = await setup();
+    const other = await setup();
+    const installerToken = `archestra_con_${pending.deviceCode}`;
+    const pollKey =
+      `${CacheKey.ClientConnection}-poll-${createHash("sha256").update(pending.deviceCode).digest("hex")}` as const;
+    const before = await cacheManager.get<{ expiresAt: number }>(pollKey);
+    const originalSet = cacheManager.set.bind(cacheManager);
+    const publication = vi
+      .spyOn(cacheManager, "set")
+      .mockImplementation(async (key, value, ttl) => {
+        if (
+          value &&
+          typeof value === "object" &&
+          "status" in value &&
+          value.status === "approved"
+        ) {
+          throw new Error(
+            "cache write failed for keyv:client-connection-poll-secret",
+          );
+        }
+        return originalSet(key, value, ttl);
+      });
+    let approved: Awaited<ReturnType<typeof decide>>;
+    try {
+      approved = await decide(pending.id, ticket.setup.id);
+    } catch (error) {
+      publication.mockRestore();
+      throw error;
+    }
+    expect(approved.statusCode).toBe(200);
+    expect(approved.json()).toMatchObject({
+      status: "approved",
+      clientId: "claude-code",
+      platform: "linux",
+    });
+    expect(approved.body).not.toContain(pending.deviceCode);
+    expect(approved.body).not.toContain("client-connection");
+    expect(approved.body).not.toContain(pending.id);
+    expect(await poll(pending.deviceCode)).toBe("approved");
+    const after = await cacheManager.get<{
+      status: string;
+      expiresAt: number;
+    }>(pollKey);
+    expect(after?.expiresAt).toBe(before?.expiresAt);
+    expect(after?.status).toBe("pending");
+    publication.mockRestore();
+    expect((await decide(pending.id, other.setup.id)).statusCode).toBe(410);
+    expect((await ConnectionSetupModel.findByToken(other.rawToken))?.id).toBe(
+      other.setup.id,
+    );
+    expect(
+      (await ConnectionSetupModel.claimByToken({ rawToken: installerToken }))
+        ?.id,
+    ).toBe(ticket.setup.id);
+    expect(
+      await ConnectionSetupModel.claimByToken({ rawToken: installerToken }),
+    ).toBeNull();
+    await cacheManager.delete(pollKey);
+    expect(await poll(pending.deviceCode)).toBe("expired");
+  });
+
+  test("a denied publication fault does not invent approval", async () => {
+    const pending = await start();
+    const originalSet = cacheManager.set.bind(cacheManager);
+    const publication = vi
+      .spyOn(cacheManager, "set")
+      .mockImplementation(async (key, value, ttl) => {
+        if (
+          value &&
+          typeof value === "object" &&
+          "status" in value &&
+          value.status === "denied"
+        ) {
+          throw new Error("cache write failed for poll-status");
+        }
+        return originalSet(key, value, ttl);
+      });
+    const denied = await decide(pending.id);
+    publication.mockRestore();
+    expect(denied.statusCode).toBe(503);
+    expect(denied.body).not.toContain(pending.deviceCode);
+    expect(denied.body).not.toContain(pending.id);
+    expect(denied.json().error.message).not.toMatch(/expired|approved/i);
+    expect(await poll(pending.deviceCode)).toBe("pending");
+    expect(
+      await ConnectionSetupModel.findByToken(
+        `archestra_con_${pending.deviceCode}`,
+      ),
+    ).toBeNull();
+    expect((await decide(pending.id)).statusCode).toBe(200);
+    expect(await poll(pending.deviceCode)).toBe("denied");
+  });
+
+  test("a decision cache fault is unavailable and does not consume the request", async () => {
+    const pending = await start();
+    const ticket = await setup();
+    const fault = vi
+      .spyOn(cacheManager, "getAndDelete")
+      .mockRejectedValueOnce(
+        new Error(
+          `cache read failed for keyv:client-connection-pending-${pending.id}`,
+        ),
+      );
+    const response = await decide(pending.id, ticket.setup.id);
+    expect(response.statusCode).toBe(503);
+    expect(response.body).not.toContain(pending.id);
+    expect(response.body).not.toContain("client-connection");
+    expect(response.body).not.toContain(pending.deviceCode);
+    expect(response.json().error.message).not.toMatch(
+      /expired|Start the installer again/i,
+    );
+    fault.mockRestore();
+    const approved = await decide(pending.id, ticket.setup.id);
+    expect(approved.statusCode).toBe(200);
+    expect(await poll(pending.deviceCode)).toBe("approved");
+    expect(
+      (
+        await ConnectionSetupModel.claimByToken({
+          rawToken: `archestra_con_${pending.deviceCode}`,
+        })
+      )?.id,
+    ).toBe(ticket.setup.id);
+    expect(
+      await ConnectionSetupModel.claimByToken({
+        rawToken: `archestra_con_${pending.deviceCode}`,
+      }),
+    ).toBeNull();
+  });
+
   test("losing pending cache state fails closed", async () => {
     const pending = await start();
     await cacheManager.delete(
       `${CacheKey.ClientConnection}-pending-${pending.id}`,
     );
     expect((await decide(pending.id)).statusCode).toBe(410);
+  });
+
+  test("a lost request does not promise that the same approval can be retried", async () => {
+    const pending = await start();
+    const fault = vi
+      .spyOn(cacheManager, "set")
+      .mockRejectedValue(new Error("cache write unavailable"));
+    const response = await decide(pending.id);
+    fault.mockRestore();
+    expect(response.statusCode).toBe(503);
+    expect(response.json().error.message).toBe(
+      "Connection request could not be restored. Stop the installer and start again.",
+    );
+    expect(response.body).not.toContain(pending.deviceCode);
+    expect(response.body).not.toContain(pending.id);
+    expect((await decide(pending.id)).statusCode).toBe(410);
+    expect(
+      await ConnectionSetupModel.findByToken(
+        `archestra_con_${pending.deviceCode}`,
+      ),
+    ).toBeNull();
   });
 });
 

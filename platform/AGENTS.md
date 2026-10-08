@@ -12,7 +12,7 @@
 2. **Use Tilt for development** - `tilt up` to start the full environment
 4. **Documentation Updates** - For any feature or system changes, audit `../docs/pages` to determine if existing content needs modification/updates or if new documentation should be added. Follow the `archestra-docs-writer` skill for all docs writing and editing.
 5. **Add Tests for Behavior** - When a change alters observable behavior, add or update tests that pin that behavior (unit, integration, or e2e under `platform/e2e-tests/tests`). Favor behavior-focused tests over implementation-detail ones — skip tests that only assert wiring, prop plumbing, or incidental markup. Tests exercise real code; mock only true process boundaries (network, clock, subprocesses, externally-owned storage). Skipping tests is a judgment call to state explicitly, not a silent default. Load the `archestra-dev-testing` skill to choose the level and to avoid the "fluff test" anti-pattern
-6. **Enterprise Licensing** — The repo is dual-licensed: AGPL-3.0 by default (`../LICENSE_AGPL`), Enterprise License (`../LICENSE_ENTERPRISE`) for marked code. See the license router at `../LICENSE.md` for the resolution rules. Pricing and scope: docs/pages/platform-pricing-model.md. When you add or modify code of enterprise features, tag it as Enterprise using mechanism described in LICENSE.md.
+6. **Enterprise Licensing** — The repo is dual-licensed: AGPL-3.0 by default (`../LICENSE_AGPL`), Enterprise License (`../LICENSE_ENTERPRISE`) for marked code. See the license router at `../LICENSE.md` for the resolution rules. Pricing and scope: the Licensing section of docs/pages/get-started/index.md. When you add or modify code of enterprise features, tag it as Enterprise using mechanism described in LICENSE.md.
 7. **Commit Freely, Push With Approval** - Committing locally as you land reviewable slices is fine. Never push, open, or update a PR without explicit user approval, and never amend commits
 8. **No Database Modifications Without Approval** - NEVER run INSERT, UPDATE, DELETE, or any data-modifying SQL queries without explicit user approval. SELECT queries for reading data are allowed. Always ask before modifying database data directly.
 9. **NEVER MENTION REAL CUSTOMER NAMES OR IDENTIFIERS ANYWHERE IN CODE, COMMENTS, TESTS, DOCS, COMMITS, OR PR TEXT!!!!!!!!!!**
@@ -117,7 +117,7 @@ tilt trigger <pnpm-dev-backend|pnpm-dev-frontend|wiremock|etc> # Trigger an upda
 
 1. **Consume in `backend/src/config.ts`** - Parse and validate the env var here. If a custom parse/validation function is needed, export it and add tests in `backend/src/config.test.ts`
 2. **Add to `platform/.env.example`** - Every new env var MUST be listed here with a short comment, so local setups and deployments discover it
-3. **Document in `../docs/pages/platform-deployment.md`** - All new env vars MUST be documented in the Environment Variables section. Use best judgement on whether it warrants a new subsection
+3. **Document in `../docs/pages/reference/configuration.md`** - All new env vars MUST be documented there, under the matching section. Use best judgement on whether it warrants a new section
 4. **Frontend access via `/api/config`** - If the frontend needs to reference an env var value, expose it through `backend/src/routes/config.ts` response and consume via the `useFeature()` hook
 
 ## Architecture
@@ -394,6 +394,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Archestra MCP Server**:
 
 - Tools must be explicitly assigned to Agents (not auto-injected)
+- Exception: while OpenAPPA is enabled, the policy read tools in `IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES` (`shared/archestra-mcp-server.ts`) are listed and admitted for every agent and gateway, subject to RBAC, exclusions, and the delegated-run gate; policy writes stay assignment-only
 - Tools prefixed with `archestra__` to avoid conflicts
 - Implementation: `backend/src/archestra-mcp-server/` (modular directory with one file per tool group)
 - Catalog entry: Created automatically on startup with fixed ID `ARCHESTRA_MCP_CATALOG_ID`
@@ -404,7 +405,7 @@ pnpm rebuild <package-name>  # Enable scripts for specific package
 **Skill Sandbox Runtime** (gated behind the sandbox feature flag):
 
 - DB-backed, Dagger-materialized execution sandbox for Agent Skills. Code lives in `backend/src/skills-sandbox/` (see its README for replay semantics and limits)
-- MCP tools exposed by `archestra-mcp-server/sandbox.ts` (`archestra-mcp-server/rbac.ts`): the execution tools (`run_command`, `upload_file`, `download_file`) are gated by `sandbox:execute`, the file tools (`search_files`, `read_file`, `save_file`, `edit_file`, `delete_file`) by `file:manage`. The execution tools accept a `target?: { fresh: true } | { id }` — omitted resolves a lazy per-conversation default sandbox:
+- MCP tools exposed by `archestra-mcp-server/sandbox.ts` (`archestra-mcp-server/rbac.ts`): the execution tools (`run_command`, `upload_file`, `download_file`) and the file tools (`search_files`, `read_file`, `save_file`, `edit_file`, `delete_file`) are all gated by `agent:read`. The execution tools accept a `target?: { fresh: true } | { id }` — omitted resolves a lazy per-conversation default sandbox:
   - `run_command` — materializes the sandbox in a fresh Dagger container, replays the persisted ordered replay log, executes a command, appends it to the log. Python runs in a uv project at `/home/sandbox` (`python3` is the project venv; install packages with `uv add --project /home/sandbox <pkg>`)
   - `upload_file` — writes an input file (chat attachment, base64, or text) into the sandbox as an ordered replay event so it materializes on later runs
   - `download_file` — exports a file from a materialized sandbox into `skill_sandbox_files` (kind `artifact`) and returns a metadata reference (no download link; the file is reached via the chat Files panel, which fetches bytes from the `/api/skill-sandbox/artifacts/:id` route directly)

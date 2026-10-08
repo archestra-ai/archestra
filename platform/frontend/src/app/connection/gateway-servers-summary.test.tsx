@@ -9,6 +9,8 @@ import { GatewayServersSummary } from "./gateway-servers-summary";
 vi.mock("@/lib/agent.query", () => ({ useProfile: vi.fn() }));
 vi.mock("@/lib/mcp/internal-mcp-catalog.query", () => ({
   useInternalMcpCatalog: vi.fn(),
+  useAllCatalogTools: () => ({ data: undefined }),
+  groupCatalogTools: () => new Map(),
 }));
 vi.mock("@/lib/auth/use-can-manage-gateway", () => ({
   useCanManageGateway: vi.fn(),
@@ -32,6 +34,7 @@ function mockCatalog(
     name: string;
     description?: string;
     toolCount?: number;
+    serverType?: string;
   }[],
 ) {
   vi.mocked(useInternalMcpCatalog).mockReturnValue({
@@ -113,6 +116,28 @@ describe("GatewayServersSummary", () => {
     expect(item).toHaveTextContent("Linear");
     // catalog-less servers have no detail page → not a link
     expect(screen.queryByRole("link")).not.toBeInTheDocument();
+  });
+
+  it("names an app's tools after the app", async () => {
+    mockGateway([{ name: "standup__post_update", catalogId: "c-app" }]);
+    mockCatalog([{ id: "c-app", name: "Standup Bot", serverType: "app" }]);
+
+    render(<GatewayServersSummary gatewayId="g1" />);
+    await expandList();
+
+    expect(screen.getByRole("listitem")).toHaveTextContent("Standup Bot");
+  });
+
+  it("leaves apps out of an 'access all tools' gateway's server list", async () => {
+    mockGateway([], { accessAllTools: true });
+    mockCatalog([
+      { id: "c-github", name: "GitHub", toolCount: 91 },
+      { id: "c-app", name: "Standup Bot", toolCount: 1, serverType: "app" },
+    ]);
+
+    render(<GatewayServersSummary gatewayId="g1" />);
+
+    expect(screen.getByRole("button")).toHaveTextContent(/All 1 MCP server/);
   });
 
   it("says so when the gateway exposes no servers", () => {

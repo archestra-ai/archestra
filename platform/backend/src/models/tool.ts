@@ -13,6 +13,7 @@ import {
   MCP_SERVER_TOOL_NAME_SEPARATOR,
   PROJECTS_FILE_ARCHESTRA_TOOL_SHORT_NAMES,
   parseFullToolName,
+  REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
   slugify,
@@ -86,6 +87,7 @@ import InternalMcpCatalogModel from "./internal-mcp-catalog";
 import McpCatalogTeamModel from "./mcp-catalog-team";
 import McpServerModel from "./mcp-server";
 import OrganizationModel from "./organization";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 import ToolInvocationPolicyModel from "./tool-invocation-policy";
 import TrustedDataPolicyModel from "./trusted-data-policy";
 
@@ -955,7 +957,11 @@ class ToolModel {
    * Note: Archestra tools are no longer automatically assigned - they must be
    * explicitly assigned like any other MCP server tools.
    */
-  static async getMcpToolsByAgent(agentId: string): Promise<Tool[]> {
+  static async getMcpToolsByAgent(
+    agentId: string,
+    /** The agent's environment, when the caller already read the agent. */
+    known?: { environmentId: string | null },
+  ): Promise<Tool[]> {
     const brandedKnowledgeToolName = archestraMcpBranding.getToolName(
       TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
     );
@@ -963,7 +969,9 @@ class ToolModel {
     // The agent's environment scopes which assigned tools it may use (environment
     // isolation). Knowledge-source surfacing is intentionally env-agnostic; the
     // knowledge query path enforces isolation.
-    const agentEnvironmentId = await AgentModel.findEnvironmentId(agentId);
+    const agentEnvironmentId = known
+      ? known.environmentId
+      : await AgentModel.findEnvironmentId(agentId);
 
     // Get tool IDs assigned via junction table (MCP tools) and agent's knowledge sources
     const [assignedToolIds, hasKnowledgeSources] = await Promise.all([
@@ -1989,15 +1997,11 @@ class ToolModel {
    */
   static async backfillOpenAppaToolsToAllAgents(): Promise<void> {
     if (!config.openappa.enabled) return;
-    const shortNames: ArchestraToolShortName[] = [
-      "get_remedy_plans",
-      "execute_remedy_plan",
-    ];
     const organizationIds = await OrganizationModel.findAllIds();
     for (const organizationId of organizationIds) {
       const toolIds = await ToolModel.getToolIdsForOrgByShortNames(
         organizationId,
-        shortNames,
+        REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
       );
       if (toolIds.length === 0) continue;
       const agentIds =
@@ -2176,13 +2180,7 @@ class ToolModel {
     // method assigns just the tools every agent gets.
     const defaultToolShortNames: ArchestraToolShortName[] = [
       ...DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES,
-      ...(config.openappa.enabled
-        ? ([
-            "get_remedy_plans",
-            "execute_remedy_plan",
-            "yell",
-          ] as ArchestraToolShortName[])
-        : []),
+      ...(config.openappa.enabled ? REQUIRED_OPENAPPA_TOOL_SHORT_NAMES : []),
     ];
 
     const defaultToolNames = defaultToolShortNames.map((shortName) =>
@@ -2923,8 +2921,18 @@ class ToolModel {
       accessAllTools: boolean;
     }>;
   }> {
+    const principals = visibility
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId: visibility.userId,
+          organizationId,
+        })
+      : [];
     const accessibleIds = visibility
-      ? await AgentTeamModel.getUserAccessibleAgentIds(visibility.userId, false)
+      ? await AgentTeamModel.getUserAccessibleAgentIds(
+          visibility.userId,
+          false,
+          principals,
+        )
       : undefined;
     const entityRows = await db
       .select({
@@ -2952,9 +2960,10 @@ class ToolModel {
                 ...((visibility.excludeOtherPersonalTypes?.length ?? 0) > 0
                   ? [
                       or(
-                        AgentModel.notOthersPersonalCondition(
-                          visibility.userId,
-                        ),
+                        AgentModel.notOthersPersonalCondition({
+                          userId: visibility.userId,
+                          principals,
+                        }),
                         notInArray(
                           schema.agentsTable.agentType,
                           visibility.excludeOtherPersonalTypes ?? [],

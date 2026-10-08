@@ -1,11 +1,12 @@
 import { describe, expect, it } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import type { ChatMessage } from "@/types";
-import { __testEstimateChatMessagesTokens } from "./context-compaction";
+import { estimateChatMessagesTokens } from "./compaction/message-text";
 import {
   BINARY_BYTES_PER_TOKEN,
   buildContextWindowBreakdown,
   CHARS_PER_TOKEN,
+  estimateEachToolTokens,
   estimateToolsTokens,
   IMAGE_TOKEN_MAX_ESTIMATE,
   PDF_BYTES_PER_TOKEN,
@@ -636,11 +637,11 @@ describe("buildContextWindowBreakdown", () => {
       ...refMessage,
       parts: [{ type: "text" as const, text: "" }],
     };
-    const withRef = __testEstimateChatMessagesTokens({
+    const withRef = estimateChatMessagesTokens({
       provider: "anthropic",
       messages: [refMessage as ChatMessage],
     });
-    const withoutRef = __testEstimateChatMessagesTokens({
+    const withoutRef = estimateChatMessagesTokens({
       provider: "anthropic",
       messages: [headerOnly as ChatMessage],
     });
@@ -828,5 +829,38 @@ describe("refreshBreakdownUsedTokens", () => {
     expect(refreshed.usedTokens).toBe(5_000);
     expect(refreshed.freeTokens).toBeNull();
     expect(refreshed.usedPercent).toBeNull();
+  });
+});
+
+describe("estimateEachToolTokens", () => {
+  it("counts each tool on the same yardstick as the breakdown's tools row", () => {
+    const tools = {
+      github__create_issue: {
+        description: "Create an issue in a repository",
+        inputSchema: {
+          jsonSchema: {
+            type: "object",
+            properties: { title: { type: "string" } },
+          },
+        },
+      },
+      archestra__search_tools: {
+        description: "Find tools",
+        inputSchema: { jsonSchema: {} },
+      },
+      broken: null,
+    };
+    const each = estimateEachToolTokens({ provider: "openai", tools });
+
+    expect(Object.keys(each).sort()).toEqual([
+      "archestra__search_tools",
+      "github__create_issue",
+    ]);
+    expect(each.github__create_issue).toBeGreaterThan(
+      each.archestra__search_tools,
+    );
+    expect(each.github__create_issue + each.archestra__search_tools).toBe(
+      estimateToolsTokens({ provider: "openai", model: "gpt-4o", tools }),
+    );
   });
 });

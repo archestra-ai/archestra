@@ -56,6 +56,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import { useStartAgentRun } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
@@ -181,12 +182,10 @@ function ProjectDetail() {
     <div className="flex h-full w-full min-h-0">
       <div className="min-w-0 flex-1 overflow-y-auto">
         <PageLayout
-          title={
-            <span className="flex items-center gap-2">
-              <AgentIcon icon={project.icon} fallbackType="project" size={22} />
-              <span className="min-w-0 truncate">{project.name}</span>
-            </span>
+          icon={
+            <AgentIcon icon={project.icon} fallbackType="project" size={24} />
           }
+          title={<span className="block min-w-0 truncate">{project.name}</span>}
           description={project.description ?? ""}
           actionButton={
             <div className="flex items-center gap-2">
@@ -209,7 +208,7 @@ function ProjectDetail() {
                 <DropdownMenuTrigger asChild>
                   <Button
                     variant="ghost"
-                    size="icon"
+                    size="icon-sm"
                     aria-label="Project actions"
                   >
                     <MoreHorizontal className="h-4 w-4" />
@@ -485,7 +484,7 @@ function ScheduledRecentRow({
   };
 
   return (
-    <button
+    <UnstyledButton
       type="button"
       onClick={openLatestRun}
       disabled={isResolving}
@@ -512,7 +511,7 @@ function ScheduledRecentRow({
       <span className="shrink-0 text-xs text-muted-foreground">
         {formatRelativeTimeFromNow(conv.lastMessageAt)}
       </span>
-    </button>
+    </UnstyledButton>
   );
 }
 
@@ -771,7 +770,7 @@ function ProjectFilesSidebar({
               {/* Rendered markdown can hold links and code-copy buttons, which
                   can't nest inside a button — so the whole preview is covered
                   by one transparent button that opens the full view. */}
-              <button
+              <UnstyledButton
                 type="button"
                 aria-label="Open instructions"
                 className="absolute inset-0 rounded-md transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring"

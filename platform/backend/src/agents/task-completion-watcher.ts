@@ -1,5 +1,6 @@
 import { SpanKind, SpanStatusCode, trace } from "@opentelemetry/api";
 import { a2aTaskEventNotifier } from "@/agents/a2a/a2a-task-event-notifier";
+import { CHATOPS_NO_REPLY_SENTINEL } from "@/agents/chatops/constants";
 import { buildTaskCompletionNotification } from "@/agents/task-completion-notification";
 import logger from "@/logging";
 import { A2AArtifactModel, A2ATaskModel, AgentRunModel } from "@/models";
@@ -92,6 +93,8 @@ async function deliver(params: {
   text: string;
 }): Promise<void> {
   if (params.target.type === "chatops") {
+    // The Agent chose to stay silent in a group conversation: post nothing.
+    if (params.text.includes(CHATOPS_NO_REPLY_SENTINEL)) return;
     const { chatOpsManager } = await import("@/agents/chatops/chatops-manager");
     await chatOpsManager.notifyBindingThread({
       bindingId: params.target.bindingId,

@@ -31,3 +31,28 @@ export type ConversationCompaction = z.infer<
 export type InsertConversationCompaction = z.infer<
   typeof InsertConversationCompactionSchema
 >;
+
+export const ContextCompactionStatusSchema = z.enum([
+  "created",
+  "existing",
+  "skipped",
+  "failed",
+]);
+
+export type ContextCompactionStatus = z.infer<
+  typeof ContextCompactionStatusSchema
+>;
+
+export const ContextCompactionReasonSchema = z.enum([
+  "below_threshold",
+  "using_existing_summary",
+  "nothing_to_compact",
+  "missing_boundary_message_id",
+  "not_beneficial",
+  "aborted",
+  "summary_generation_failed",
+]);
+
+export type ContextCompactionReason = z.infer<
+  typeof ContextCompactionReasonSchema
+>;

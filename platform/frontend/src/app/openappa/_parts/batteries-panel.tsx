@@ -21,16 +21,6 @@ import {
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { type ReactNode, useEffect, useState } from "react";
-import {
-  siCloudflare,
-  siDatabricks,
-  siGithub,
-  siHuggingface,
-  siLinear,
-  siNotion,
-  siPagerduty,
-  siPosthog,
-} from "simple-icons";
 import { AgentNameCell } from "@/components/agent-name-cell";
 import {
   openRowOnPlainClick,
@@ -46,6 +36,10 @@ import {
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RuntimeCredentialIcon,
+  runtimeCredentialIconOf,
+} from "@/components/runtime-credential-icon";
 import { SearchInput } from "@/components/search-input";
 import {
   StandardDialog,
@@ -92,21 +86,30 @@ import {
   useDeleteBatteryPackage,
   usePolicyDeclarations,
   useRemoveBatteryInclude,
-  useUpdateBatteryInstall,
+  useSetCredentialBinding,
   useUploadBatteryPackage,
 } from "@/lib/openappa-batteries.query";
 import { useCoverageSummary } from "@/lib/openappa-coverage.query";
+import { useAppaGithubSync } from "@/lib/openappa-github-sync.query";
 import {
   type RuntimeCredentialDefinition,
   useRuntimeCredentials,
 } from "@/lib/runtime-credentials.query";
 import { cn } from "@/lib/utils/tailwind";
 import {
+  type BatteryCredential,
+  batteryCredentials,
+} from "./battery-credentials";
+import { BatteryIcon, type CatalogEntry } from "./battery-icon";
+import {
   BATTERY_STATUS,
   BATTERY_STATUS_GROUPS,
   type BatteryStatusGroup,
 } from "./battery-status";
-import { GithubManagedPolicyNotice } from "./github-managed-policy-notice";
+import {
+  GithubManagedPolicyNotice,
+  githubPolicyFileUrl,
+} from "./github-managed-policy-notice";
 import { batteryStatusBadge } from "./policy-decorations";
 
 type BatteryStatus = PolicyBattery["status"];
@@ -152,8 +155,7 @@ export function BatteriesUploadAction() {
   const pathname = usePathname();
   const declarations = usePolicyDeclarations();
   const { data: canBind } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
     credential: ["update"],
   });
   const [uploading, setUploading] = useState(false);
@@ -165,7 +167,7 @@ export function BatteriesUploadAction() {
     return null;
   return (
     <>
-      <Button onClick={() => setUploading(true)}>
+      <Button size="sm" onClick={() => setUploading(true)}>
         <Upload className="size-4" />
         <span>Upload package</span>
       </Button>
@@ -182,14 +184,12 @@ export function BatteriesPanel() {
   // The batteries that fit a server, as the overview counts them.
   const summary = useCoverageSummary();
   const { data: canManage } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
   });
   // Binding a credential hands its value to helper code, and an uploaded
   // package may carry such code, so both take the credential permission too.
   const { data: canBind } = useHasPermissions({
-    organization: ["update"],
-    toolPolicy: ["update"],
+    openappaPolicy: ["update"],
     credential: ["update"],
   });
   // Filters and page live in the URL, so a reload or a shared link keeps them.
@@ -203,7 +203,10 @@ export function BatteriesPanel() {
   const search = searchParams.get("search") ?? "";
   const sourceFilter = knownFilter(SOURCE_OPTIONS, searchParams.get("source"));
   const statusFilter = knownFilter(STATUS_OPTIONS, searchParams.get("status"));
-  const [editing, setEditing] = useState<string | null>(null);
+  // `?battery=<name>` opens that battery, so other pages can link to it.
+  const [editing, setEditing] = useState<string | null>(
+    searchParams.get("battery"),
+  );
   const [removing, setRemoving] = useState<string | null>(null);
   const [deletingPackage, setDeletingPackage] = useState<BatterySummary | null>(
     null,
@@ -242,9 +245,10 @@ export function BatteriesPanel() {
   // entry resolved to, so no entry may claim to be active.
   const enforced = lastError === null;
   // The repository owns the text while it syncs: an edit here would be undone
-  // by the next pull, so the panel only reads.
+  // by the next pull, so the panel only reads it. Bindings live beside the
+  // text, so they stay open.
   const writable = canManage === true && !managedInGithub;
-  const bindable = canBind === true && !managedInGithub;
+  const bindable = canBind === true;
   // Unknown while the catalog loads; only a loaded catalog can say a server is gone.
   const catalogName = (catalogId: string) =>
     catalog.data
@@ -268,14 +272,6 @@ export function BatteriesPanel() {
     if (!rows.some((row) => row.name === entry.name))
       rows.push({ name: entry.name, summary: null, included: entry });
   }
-  const boundCredentials = new Map(
-    included.flatMap((battery) =>
-      battery.credentials.map((credential) => [
-        credential.variable,
-        credential,
-      ]),
-    ),
-  );
   const fitting = new Set(
     summary.data?.batteries.available.map((battery) => battery.name),
   );
@@ -310,7 +306,9 @@ export function BatteriesPanel() {
         <AgentNameCell
           name={row.original.name}
           description={row.original.summary?.description}
-          icon={<BatteryIcon row={row.original} catalog={catalog.data ?? []} />}
+          icon={
+            <RowBatteryIcon row={row.original} catalog={catalog.data ?? []} />
+          }
         />
       ),
     },
@@ -451,12 +449,21 @@ export function BatteriesPanel() {
           row={editingRow}
           catalog={catalog.data ?? []}
           installedCatalogIds={installedCatalogIds}
-          boundCredentials={boundCredentials}
+          credentials={batteryCredentials({
+            declarations: declarations.data,
+            name: editingRow.name,
+            variables: editingRow.summary?.credentials ?? [],
+          })}
           catalogName={catalogName}
           enforced={enforced}
           writable={writable}
           bindable={bindable}
-          onClose={() => setEditing(null)}
+          managedInGithub={managedInGithub}
+          onClose={() => {
+            setEditing(null);
+            if (searchParams.has("battery"))
+              updateQueryParams({ battery: null });
+          }}
         />
       )}
       {removing && (
@@ -501,22 +508,7 @@ type BatteryTableRow = {
   included: PolicyBattery | null;
 };
 
-const BUNDLED_PROVIDER_ICONS: Record<string, { path: string; hex: string }> = {
-  cloudflare: siCloudflare,
-  databricks: siDatabricks,
-  github: siGithub,
-  huggingface: siHuggingface,
-  linear: siLinear,
-  notion: siNotion,
-  pagerduty: siPagerduty,
-  posthog: siPosthog,
-};
-
 const UNBOUND = "__unbound__";
-
-type BatteryCredential = PolicyBattery["credentials"][number];
-
-type CatalogEntry = { id: string; name: string; icon?: string | null };
 
 function HeldPullNotice({
   heldPull,
@@ -557,38 +549,24 @@ function HeldPullNotice({
   );
 }
 
-/** A row's mark: its catalog entry's icon, else the bundled provider's, else a battery. */
-function BatteryIcon({
+/** A row's mark, as the shared battery icon resolves it. */
+function RowBatteryIcon({
   row,
   catalog,
 }: {
   row: BatteryTableRow;
   catalog: CatalogEntry[];
 }) {
-  const match = catalog.find(
-    (entry) =>
-      row.summary?.installs.some((install) => install.catalogId === entry.id) ||
-      entry.name.toLowerCase() === row.name.toLowerCase(),
+  return (
+    <BatteryIcon
+      name={row.name}
+      bundled={row.summary?.source === "bundled"}
+      catalogIds={
+        row.summary?.installs.map((install) => install.catalogId) ?? []
+      }
+      catalog={catalog}
+    />
   );
-  const providerIcon = BUNDLED_PROVIDER_ICONS[row.name];
-  if (match?.icon)
-    return <McpCatalogIcon icon={match.icon} catalogId={match.id} size={20} />;
-  if (row.summary?.source === "bundled" && providerIcon)
-    return (
-      <svg
-        aria-hidden="true"
-        viewBox="0 0 24 24"
-        className="size-5 shrink-0"
-        fill={
-          providerIcon.hex === "000000" || providerIcon.hex === "181717"
-            ? "currentColor"
-            : `#${providerIcon.hex}`
-        }
-      >
-        <path d={providerIcon.path} />
-      </svg>
-    );
-  return <BatteryCharging className="size-5 shrink-0 text-muted-foreground" />;
 }
 
 function sourceLabel(row: BatteryTableRow) {
@@ -607,33 +585,32 @@ function BatteryDialog({
   row,
   catalog,
   installedCatalogIds,
-  boundCredentials,
+  credentials,
   catalogName,
   enforced,
   writable,
   bindable,
+  managedInGithub,
   onClose,
 }: {
   row: BatteryTableRow;
   catalog: CatalogEntry[];
   installedCatalogIds: Set<string> | null;
-  boundCredentials: Map<string, BatteryCredential>;
+  credentials: BatteryCredential[];
   catalogName: (catalogId: string) => string;
   enforced: boolean;
   writable: boolean;
   bindable: boolean;
+  managedInGithub: boolean;
   onClose: () => void;
 }) {
   const { summary, included } = row;
   const create = useCreateBatteryInstall();
-  const update = useUpdateBatteryInstall();
+  const bind = useSetCredentialBinding();
   const detach = useDeleteBatteryInstall();
   const remove = useRemoveBatteryInclude();
   const pending =
-    create.isPending ||
-    update.isPending ||
-    detach.isPending ||
-    remove.isPending;
+    create.isPending || bind.isPending || detach.isPending || remove.isPending;
   const organizationWide =
     (included?.scope ?? summary?.scope) === "organization";
   const status = included ? (enforced ? included.status : "refused") : null;
@@ -645,15 +622,6 @@ function BatteryDialog({
       .map((server) => server.catalogId)
       .filter((id): id is string => id !== null),
   );
-  // An entry not in the policy yet reads the organization's credential table
-  // like any other: a variable another battery binds already has its key.
-  const credentials: BatteryCredential[] =
-    included?.credentials ??
-    (summary?.credentials ?? []).map(
-      (variable) =>
-        boundCredentials.get(variable) ?? { variable, key: null, readers: [] },
-    );
-  const bindingInstall = installs[0];
   return (
     <StandardDialog
       open
@@ -663,7 +631,7 @@ function BatteryDialog({
       size="medium"
       title={
         <span className="flex items-center gap-2.5">
-          <BatteryIcon row={row} catalog={catalog} />
+          <RowBatteryIcon row={row} catalog={catalog} />
           <span>{row.name}</span>
           {badge && (
             <Badge variant={badge.variant} className="font-normal">
@@ -705,6 +673,17 @@ function BatteryDialog({
               }
             />
           </div>
+          {managedInGithub && (
+            <p className="text-xs text-muted-foreground">
+              <span>
+                The policy repository decides which batteries are included. Add
+                it to{" "}
+              </span>
+              <code className="font-mono">include</code>
+              <span> there. </span>
+              <PolicyFileLink />
+            </p>
+          )}
           {status === "unrouted" && (
             <p className="text-xs text-muted-foreground">
               No policy rule routes a tool to its annotators yet. Add one to the
@@ -790,30 +769,11 @@ function BatteryDialog({
         <CredentialsSection
           batteryName={row.name}
           credentials={credentials}
-          onChange={(variable, key) => {
-            if (!bindingInstall) return;
-            update.mutate({
-              id: bindingInstall.id,
-              body: {
-                credentialBindings: Object.fromEntries(
-                  credentials
-                    .map((credential) => [
-                      credential.variable,
-                      credential.variable === variable ? key : credential.key,
-                    ])
-                    .filter(([, value]) => value !== null && value !== UNBOUND),
-                ),
-              },
-            });
-          }}
-          disabledReason={
-            bindingInstall
-              ? null
-              : organizationWide
-                ? "Include the battery to bind the keys its helpers read."
-                : "Attach the battery to a server to bind the keys its helpers read."
+          onChange={(variable, key) =>
+            bind.mutate({ variable, key: key === UNBOUND ? null : key })
           }
           bindable={bindable}
+          managedInGithub={managedInGithub}
           pending={pending}
         />
       )}
@@ -1003,35 +963,46 @@ function ServerOption({ entry }: { entry: CatalogEntry }) {
  * The keys a battery's helpers read, each picked from the organization's
  * credentials. Those are set up on the Credentials settings page, which opens
  * in a new tab so the dialog's edits survive; the list reloads on return.
+ *
+ * Anyone who can read credentials sees the list, so a bound key reads as what
+ * it is even when this reader cannot change it. While the repository owns the
+ * policy, a pick is a draft: nothing is saved here, and the section shows the
+ * line to change in the repository instead.
  */
 function CredentialsSection({
   batteryName,
   credentials,
   onChange,
-  disabledReason,
   bindable,
+  managedInGithub,
   pending,
 }: {
   batteryName: string;
   credentials: BatteryCredential[];
   onChange: (variable: string, key: string) => void;
-  disabledReason: string | null;
   bindable: boolean;
+  managedInGithub: boolean;
   pending: boolean;
 }) {
-  const available = useRuntimeCredentials(bindable);
+  const { data: canRead } = useHasPermissions({ credential: ["read"] });
+  const listable = canRead === true;
+  const available = useRuntimeCredentials(listable);
   const { refetch } = available;
   useEffect(() => {
-    if (!bindable) return;
+    if (!listable) return;
     const reload = () => refetch();
     window.addEventListener("focus", reload);
     return () => window.removeEventListener("focus", reload);
-  }, [bindable, refetch]);
+  }, [listable, refetch]);
   const options = available.data ?? [];
   return (
     <DialogSection
       title="Credentials"
-      description={disabledReason ?? "Keys its helpers read when they run."}
+      description={
+        bindable
+          ? "Which saved credential fills each key this battery's helpers read."
+          : "Changing a key takes permission to update guardrails and credentials."
+      }
       action={
         <Button asChild variant="link" size="sm" className="h-auto p-0">
           <Link href="/settings/credentials" target="_blank" rel="noreferrer">
@@ -1058,7 +1029,9 @@ function CredentialsSection({
             credential={credential}
             value={credential.key ?? UNBOUND}
             options={options}
-            disabled={!bindable || pending || disabledReason !== null}
+            listed={available.isSuccess}
+            managedInGithub={managedInGithub}
+            disabled={!bindable || pending || credential.source === "policy"}
             onChange={(key) => onChange(credential.variable, key)}
           />
         ))}
@@ -1072,6 +1045,8 @@ function CredentialRow({
   credential,
   value,
   options,
+  listed,
+  managedInGithub,
   disabled,
   onChange,
 }: {
@@ -1079,14 +1054,17 @@ function CredentialRow({
   credential: BatteryCredential;
   value: string;
   options: RuntimeCredentialDefinition[];
+  /** The organization's credentials loaded, so a key missing from them is gone. */
+  listed: boolean;
+  managedInGithub: boolean;
   disabled: boolean;
   onChange: (key: string) => void;
 }) {
   const [kept, setKept] = useState(false);
   const others = credential.readers.filter((reader) => reader !== batteryName);
-  // The policy can name a key the list does not offer — deleted, closed to
-  // the organization, or a list this reader never loads — and the binding
-  // still has to read as what it is.
+  // The policy can name a key the list does not offer — deleted, never
+  // created, or a list this reader cannot load — and the binding still has
+  // to read as what it is. Only a loaded list can say the key is missing.
   const unlisted =
     credential.key !== null &&
     !options.some((entry) => entry.key === credential.key)
@@ -1113,11 +1091,18 @@ function CredentialRow({
         <SelectTrigger id={id} className="w-full">
           <SelectValue />
         </SelectTrigger>
-        <SelectContent>
+        <SelectContent
+          position="popper"
+          className="w-[var(--radix-select-trigger-width)]"
+        >
           <SelectItem value={UNBOUND}>Not bound</SelectItem>
           {unlisted !== null && (
-            <SelectItem value={unlisted} disabled>
-              {`${unlisted} (not available)`}
+            <SelectItem
+              value={unlisted}
+              disabled
+              description={listed ? "No credential has this key" : undefined}
+            >
+              <CredentialOptionLabel icon={null} name={unlisted} />
             </SelectItem>
           )}
           {options.map((entry) => (
@@ -1127,16 +1112,53 @@ function CredentialRow({
               // The helper runs for the whole organization, so a personal-only
               // credential cannot be bound; it is listed as such rather than hidden.
               disabled={!entry.allowOrganization}
+              description={
+                <span className="line-clamp-2 whitespace-normal">
+                  <span>
+                    {!entry.allowOrganization
+                      ? "Personal credential · batteries need an organization credential"
+                      : entry.organizationConfigured
+                        ? "Organization credential"
+                        : "Organization credential · no organization value yet"}
+                  </span>
+                  {entry.description && (
+                    <span>{` · ${entry.description}`}</span>
+                  )}
+                </span>
+              }
             >
-              {!entry.allowOrganization
-                ? `${entry.name} (personal only)`
-                : entry.organizationConfigured
-                  ? entry.name
-                  : `${entry.name} (no organization value)`}
+              <CredentialOptionLabel
+                icon={runtimeCredentialIconOf(entry)}
+                name={entry.name}
+              />
             </SelectItem>
           ))}
         </SelectContent>
       </Select>
+      {credential.source === "policy" &&
+        (managedInGithub ? (
+          <p className="text-xs text-muted-foreground">
+            <span>
+              Set in the policy repository. Remove its line there to manage it
+              here.
+            </span>
+            <span> </span>
+            <PolicyFileLink />
+          </p>
+        ) : (
+          <p className="text-xs text-muted-foreground">
+            <span>
+              Set by a [credentials] line in the policy text. Remove it on the{" "}
+            </span>
+            <Link
+              href="/openappa/policy"
+              className="underline underline-offset-2 hover:no-underline"
+            >
+              Policy tab
+            </Link>
+            <span> to manage it here.</span>
+          </p>
+        ))}
       {others.length > 0 && (
         <p className="text-xs text-muted-foreground">
           Also read by: {others.join(", ")}
@@ -1152,6 +1174,43 @@ function CredentialRow({
         </InlineNotice>
       )}
     </div>
+  );
+}
+
+/** The synced policy file on GitHub, when the sync names one. */
+function PolicyFileLink() {
+  const { data } = useAppaGithubSync();
+  const href = githubPolicyFileUrl(data?.source, "blob");
+  if (!href) return null;
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noopener noreferrer"
+      className="inline-flex items-center gap-1 underline underline-offset-2 hover:no-underline"
+    >
+      <span>Open the policy file</span>
+      <ExternalLink className="size-3" aria-hidden />
+      <span className="sr-only">(opens in new tab)</span>
+    </a>
+  );
+}
+
+/** A credential's icon and name, which the select's trigger shows as well. */
+function CredentialOptionLabel({
+  icon,
+  name,
+}: {
+  icon: string | null;
+  name: string;
+}) {
+  // One row of its own: Radix drops ItemText's class, so the open list would
+  // otherwise stack the block-level icon above the name.
+  return (
+    <span className="flex min-w-0 items-center gap-2">
+      <RuntimeCredentialIcon icon={icon} className="size-4" size={16} />
+      <span className="truncate">{name}</span>
+    </span>
   );
 }
 
@@ -1342,7 +1401,7 @@ function UploadPackageDialog({
         <span>
           Pick the package folder: its manifest, policy and helper scripts.{" "}
           <a
-            href={getDocsUrl(DocsPage.PlatformAiToolGuardrails, "batteries")}
+            href={getDocsUrl(DocsPage.PlatformAiToolGuardrailsBatteries)}
             target="_blank"
             rel="noreferrer"
             className="inline-flex items-center gap-1 underline underline-offset-4"

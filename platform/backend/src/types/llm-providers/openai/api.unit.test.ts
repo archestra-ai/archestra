@@ -6,7 +6,10 @@ import {
 } from "./api";
 
 describe("ChatCompletionRequestSchema", () => {
-  test("keeps reasoning_effort and max_completion_tokens through validation", () => {
+  test.each([
+    "none",
+    "max",
+  ])("keeps reasoning_effort %s and max_completion_tokens through validation", (effort) => {
     // Fastify's zod validator replaces the body with the parsed value, so a
     // stripped field never reaches the adapter. These two carried the dual
     // LLM guardrail's reasoning-off knob and its output cap on reasoning
@@ -14,12 +17,12 @@ describe("ChatCompletionRequestSchema", () => {
     const result = ChatCompletionRequestSchema.safeParse({
       model: "gpt-5.2",
       messages: [{ role: "user", content: "hi" }],
-      reasoning_effort: "none",
+      reasoning_effort: effort,
       max_completion_tokens: 2048,
     });
     expect(result.success).toBe(true);
     expect(result.data).toMatchObject({
-      reasoning_effort: "none",
+      reasoning_effort: effort,
       max_completion_tokens: 2048,
     });
   });

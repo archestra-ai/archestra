@@ -1444,6 +1444,8 @@ const providerErrorHandlers: Record<SupportedProvider, ProviderErrorHandler> = {
   // OpenAI-compatible handler stands in so an unexpected caller still gets a
   // classified error rather than a crash.
   voyage: openAiCompatibleErrorHandler,
+  // Decisions-only provider: never on the chat path either.
+  jev: openAiCompatibleErrorHandler,
   openai: openAiCompatibleErrorHandler,
   archestra: openAiCompatibleErrorHandler,
   anthropic: providerErrorHandler(parseAnthropicError, mapAnthropicErrorToCode),
@@ -1836,21 +1838,38 @@ export function mapProviderError(
     // (status + body) delivery shape. Only the fields those consumers read are
     // copied, so arbitrary (possibly circular) extra properties are ignored.
     // Error instances are excluded: their fields are non-enumerable, so
-    // wrapping them would serialize to nothing.
-    if (
-      !responseBody &&
-      !(error instanceof Error) &&
-      typeof obj.message === "string"
-    ) {
+    // wrapping them would serialize to nothing. The AI SDK's Responses parser
+    // relays the whole `{ type: "error", error: {...} }` chunk instead, so the
+    // part's fields may sit one level down.
+    const nested = (obj.error ?? undefined) as
+      | Record<string, unknown>
+      | undefined;
+    const part =
+      error instanceof Error
+        ? undefined
+        : typeof obj.message === "string"
+          ? obj
+          : typeof nested === "object" && typeof nested.message === "string"
+            ? nested
+            : undefined;
+    if (!responseBody && part) {
+      // The Responses stream frame carries the normalized code in `code`,
+      // since that schema has no `internal_code` field.
+      const internalCode =
+        typeof part.internal_code === "string"
+          ? part.internal_code
+          : part === nested
+            ? part.code
+            : undefined;
       responseBody = JSON.stringify({
         error: {
-          message: obj.message,
-          ...(typeof obj.type === "string" ? { type: obj.type } : {}),
-          ...(typeof obj.code === "string" || typeof obj.code === "number"
-            ? { code: obj.code }
+          message: part.message,
+          ...(typeof part.type === "string" ? { type: part.type } : {}),
+          ...(typeof part.code === "string" || typeof part.code === "number"
+            ? { code: part.code }
             : {}),
-          ...(typeof obj.internal_code === "string"
-            ? { internal_code: obj.internal_code }
+          ...(typeof internalCode === "string"
+            ? { internal_code: internalCode }
             : {}),
         },
       });

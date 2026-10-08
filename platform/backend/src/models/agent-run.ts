@@ -23,6 +23,7 @@ import type {
   InsertAgentRunRecord,
 } from "@/types";
 import { A2A_TERMINAL_TASK_STATES } from "@/types/a2a-task";
+import type { AgentWorkspace } from "@/types/agent-workspace";
 import A2AMessageModel from "./a2a/message";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 
@@ -85,6 +86,22 @@ class AgentRunModel {
       .where(eq(schema.agentRunsTable.taskId, taskId))
       .limit(1);
     return run ?? null;
+  }
+
+  /**
+   * The run a live virtual key was minted for. Two rows for one key is not a
+   * binding: the caller must fail closed rather than pick a workspace.
+   */
+  static async findByVirtualApiKeyId(
+    virtualApiKeyId: string,
+  ): Promise<AgentRunRecord | "ambiguous" | null> {
+    const rows = await db
+      .select()
+      .from(schema.agentRunsTable)
+      .where(eq(schema.agentRunsTable.virtualApiKeyId, virtualApiKeyId))
+      .limit(2);
+    if (rows.length === 1) return rows[0];
+    return rows.length === 0 ? null : "ambiguous";
   }
 
   /** Resolve an owned session URL (or any of its task aliases) to its current turn. */
@@ -201,6 +218,61 @@ class AgentRunModel {
       result.workspace.expiresAt.getTime() > Date.now()
       ? result.run
       : null;
+  }
+
+  /**
+   * The latest run a person started on this Agent from one chat thread, with
+   * its workspace. A follow-up message in the thread continues that workspace,
+   * the same way a protocol task continues its context's latest workspace.
+   */
+  static async findLatestInChatOpsThread(params: {
+    bindingId: string;
+    threadId: string;
+    agentId: string;
+    organizationId: string;
+    actorKind: AgentRunRecord["actorKind"];
+    actorId: string;
+  }): Promise<{
+    run: AgentRunRecord;
+    workspace: Pick<
+      AgentWorkspace,
+      "state" | "expiresAt" | "activeTaskId"
+    > | null;
+  } | null> {
+    const [result] = await db
+      .select({
+        run: getTableColumns(schema.agentRunsTable),
+        workspace: {
+          state: schema.agentWorkspacesTable.state,
+          expiresAt: schema.agentWorkspacesTable.expiresAt,
+          activeTaskId: schema.agentWorkspacesTable.activeTaskId,
+        },
+      })
+      .from(schema.agentRunsTable)
+      .leftJoin(
+        schema.agentWorkspacesTable,
+        eq(
+          schema.agentRunsTable.workloadName,
+          schema.agentWorkspacesTable.workloadName,
+        ),
+      )
+      .where(
+        and(
+          sql`${schema.agentRunsTable.completionTarget}->>'type' = 'chatops'`,
+          sql`${schema.agentRunsTable.completionTarget}->>'bindingId' = ${params.bindingId}`,
+          sql`${schema.agentRunsTable.completionTarget}->>'threadId' = ${params.threadId}`,
+          eq(schema.agentRunsTable.agentId, params.agentId),
+          eq(schema.agentRunsTable.organizationId, params.organizationId),
+          eq(schema.agentRunsTable.actorKind, params.actorKind),
+          eq(schema.agentRunsTable.actorId, params.actorId),
+        ),
+      )
+      .orderBy(
+        desc(schema.agentRunsTable.startedAt),
+        desc(schema.agentRunsTable.id),
+      )
+      .limit(1);
+    return result ?? null;
   }
 
   static async updateAttentionState(params: {

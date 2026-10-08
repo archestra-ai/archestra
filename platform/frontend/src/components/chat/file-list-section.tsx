@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import type { MouseEvent, ReactNode } from "react";
 import { Checkbox } from "@/components/ui/checkbox";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 
 /** One row of a file list: a previewable item with a byte endpoint. */
@@ -123,7 +124,7 @@ export function FileSection({
               {/* Clicking the row body opens the preview (or toggles selection);
                   the trailing actions are siblings, so we never nest
                   interactive elements. */}
-              <button
+              <UnstyledButton
                 type="button"
                 onClick={(event) =>
                   rowSelectable
@@ -134,7 +135,7 @@ export function FileSection({
               >
                 <FileRowIcon name={item.name} mimeType={item.mimeType} />
                 <span className="min-w-0 flex-1 truncate">{item.name}</span>
-              </button>
+              </UnstyledButton>
               {!selecting &&
                 (customActions ??
                   (item.contentUrl && (

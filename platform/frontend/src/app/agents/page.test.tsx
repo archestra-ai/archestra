@@ -17,12 +17,13 @@ const { serverCanAccessPageMock, serverHasPermissionsMock } = vi.hoisted(
 );
 
 vi.mock("@archestra/shared", () => ({
+  DEFAULT_RESOURCE_ACCESS_RELATIONS: ["mine", "shared", "org"],
   archestraApiSdk: {
     getAgentCatalog: getAgentCatalogMock,
     getTeams: getTeamsMock,
   },
-  DocsPage: { PlatformOrchestrator: "platform-orchestrator" },
-  getDocsUrl: () => "/docs/platform-orchestrator",
+  DocsPage: { PlatformOrchestrator: "mcp/orchestrator" },
+  getDocsUrl: () => "/docs/mcp/orchestrator",
 }));
 
 vi.mock("@/lib/utils/server", () => ({

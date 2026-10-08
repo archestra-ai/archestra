@@ -17,7 +17,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
+import { formatMissingPermissions } from "@/lib/auth/auth.utils";
 
 type TableRowAction = {
   permissionScope?: string;
@@ -255,7 +255,7 @@ function ActionButton({
 }
 
 function DropdownActionButton({ action }: { action: TableRowAction }) {
-  const { data: hasPermission } = useHasPermissions(
+  const { data: hasPermission, missingPermissions } = useHasPermissions(
     (action.permissions as Permissions) || {},
     action.permissionScope,
   );
@@ -268,7 +268,9 @@ function DropdownActionButton({ action }: { action: TableRowAction }) {
   // is announced as the control's description.
   let reason: string | undefined;
   if (action.permissions && !hasPermission) {
-    reason = formatPermissionConstraint(action.permissions as Permissions);
+    reason = formatMissingPermissions(
+      missingPermissions ?? (action.permissions as Permissions),
+    );
   } else if (action.disabled && action.disabledTooltip) {
     reason = action.disabledTooltip;
   }

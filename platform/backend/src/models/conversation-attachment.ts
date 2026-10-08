@@ -1,12 +1,12 @@
 import { createHash } from "node:crypto";
 import { and, asc, desc, eq, inArray, isNull } from "drizzle-orm";
 import {
-  decryptLockedChatBytes,
-  decryptLockedChatText,
-  encryptLockedChatBytes,
-  encryptLockedChatText,
-  lockedChatContentHash,
-} from "@/content-encryption/locked-chat";
+  decryptEncryptedChatBytes,
+  decryptEncryptedChatText,
+  encryptEncryptedChatBytes,
+  encryptEncryptedChatText,
+  encryptedChatContentHash,
+} from "@/content-encryption/encrypted-chat";
 import db, { schema } from "@/database";
 import type { ConversationContentKey } from "@/types/conversation";
 import { normalizeByteaField } from "@/utils/normalize-bytea";
@@ -18,13 +18,13 @@ type ConversationAttachmentInsert =
   typeof schema.conversationAttachmentsTable.$inferInsert;
 
 /**
- * The conversation's browser-held key, for attachments belonging to a locked
+ * The conversation's browser-held key, for attachments belonging to an encrypted
  * chat. Passed to every method that reads or writes a content column, and
  * `null`/omitted for an ordinary chat, whose columns are plaintext.
  *
- * Reads are lenient about a row that is not marked `lockedChat` — passing a key
+ * Reads are lenient about a row that is not marked `encryptedChat` — passing a key
  * for a plaintext row returns it unchanged — because a conversation can hold
- * rows from both sides of the moment it was locked. Writes are not: a key means
+ * rows from both sides of the moment it was encrypted. Writes are not: a key means
  * the row is sealed.
  */
 type AttachmentKey = ConversationContentKey | null | undefined;
@@ -40,7 +40,7 @@ const metadataColumns = {
   contentHash: schema.conversationAttachmentsTable.contentHash,
   textPreview: schema.conversationAttachmentsTable.textPreview,
   textPreviewStatus: schema.conversationAttachmentsTable.textPreviewStatus,
-  lockedChat: schema.conversationAttachmentsTable.lockedChat,
+  encryptedChat: schema.conversationAttachmentsTable.encryptedChat,
   createdAt: schema.conversationAttachmentsTable.createdAt,
   deletedAt: schema.conversationAttachmentsTable.deletedAt,
 } as const;
@@ -48,14 +48,14 @@ const metadataColumns = {
 class ConversationAttachmentModel {
   /**
    * Store an attachment. With a `conversationKey` the content columns are
-   * sealed under it and the row is marked `lockedChat`, so later reads know to
+   * sealed under it and the row is marked `encryptedChat`, so later reads know to
    * open them; `contentHash` must already have been computed with
    * {@link computeContentHash} under the same key.
    */
   static async create(
     params: Omit<
       ConversationAttachmentInsert,
-      "id" | "createdAt" | "deletedAt" | "lockedChat"
+      "id" | "createdAt" | "deletedAt" | "encryptedChat"
     >,
     conversationKey?: AttachmentKey,
   ): Promise<ConversationAttachment> {
@@ -70,17 +70,17 @@ class ConversationAttachmentModel {
           ? {
               id,
               ...params,
-              lockedChat: true,
-              originalName: encryptLockedChatText(params.originalName, {
+              encryptedChat: true,
+              originalName: encryptEncryptedChatText(params.originalName, {
                 ...conversationKey,
                 context: "conversation_attachments.original_name",
               }),
-              fileData: encryptLockedChatBytes(params.fileData, {
+              fileData: encryptEncryptedChatBytes(params.fileData, {
                 ...conversationKey,
                 context: "conversation_attachments.file_data",
               }),
               textPreview: params.textPreview
-                ? encryptLockedChatText(params.textPreview, {
+                ? encryptEncryptedChatText(params.textPreview, {
                     ...conversationKey,
                     context: "conversation_attachments.text_preview",
                   })
@@ -142,7 +142,7 @@ class ConversationAttachmentModel {
     conversationKey?: AttachmentKey,
   ): Promise<ConversationAttachment | null> {
     const { conversationId, originalName } = params;
-    // A locked chat stores the name sealed, and every envelope of the same
+    // An encrypted chat stores the name sealed, and every envelope of the same
     // name differs (random IV), so there is nothing to match on in SQL. Read
     // the conversation's rows newest-first and compare opened names instead —
     // the same latest-wins selection, decided in memory.
@@ -237,7 +237,7 @@ class ConversationAttachmentModel {
   /**
    * Dedup lookup. `contentHash` must have been produced by
    * {@link computeContentHash} with the same key the row was written under —
-   * for a locked chat that is a per-conversation HMAC, so the column stays
+   * for an encrypted chat that is a per-conversation HMAC, so the column stays
    * matchable in SQL without holding a recomputable digest of the bytes.
    */
   static async findByConversationAndContentHash(
@@ -297,7 +297,7 @@ class ConversationAttachmentModel {
       .set({
         textPreview:
           conversationKey && textPreview
-            ? encryptLockedChatText(textPreview, {
+            ? encryptEncryptedChatText(textPreview, {
                 ...conversationKey,
                 context: "conversation_attachments.text_preview",
               })
@@ -322,7 +322,7 @@ class ConversationAttachmentModel {
   /**
    * The dedup key for a set of bytes. Under a `conversationKey` it is an HMAC
    * bound to that conversation instead of a bare digest — see
-   * {@link lockedChatContentHash} for why a plain hash of a locked chat's
+   * {@link encryptedChatContentHash} for why a plain hash of an encrypted chat's
    * bytes is itself a leak.
    */
   static computeContentHash(
@@ -330,7 +330,7 @@ class ConversationAttachmentModel {
     conversationKey?: AttachmentKey,
   ): string {
     return conversationKey
-      ? lockedChatContentHash(buffer, conversationKey)
+      ? encryptedChatContentHash(buffer, conversationKey)
       : createHash("sha256").update(buffer).digest("hex");
   }
 }
@@ -341,23 +341,23 @@ export default ConversationAttachmentModel;
 
 /**
  * Open the content columns of a metadata row (no bytes). A row that is not
- * marked `lockedChat` is returned untouched, so a caller may pass the
+ * marked `encryptedChat` is returned untouched, so a caller may pass the
  * conversation key uniformly across a conversation whose rows straddle the
- * moment it was locked.
+ * moment it was encrypted.
  */
 function openMetadata<T extends Omit<ConversationAttachment, "fileData">>(
   row: T,
   conversationKey: AttachmentKey,
 ): T {
-  if (!conversationKey || !row.lockedChat) return row;
+  if (!conversationKey || !row.encryptedChat) return row;
   return {
     ...row,
-    originalName: decryptLockedChatText(row.originalName, {
+    originalName: decryptEncryptedChatText(row.originalName, {
       ...conversationKey,
       context: "conversation_attachments.original_name",
     }),
     textPreview: row.textPreview
-      ? decryptLockedChatText(row.textPreview, {
+      ? decryptEncryptedChatText(row.textPreview, {
           ...conversationKey,
           context: "conversation_attachments.text_preview",
         })
@@ -370,10 +370,10 @@ function openRow(
   row: ConversationAttachment,
   conversationKey: AttachmentKey,
 ): ConversationAttachment {
-  if (!conversationKey || !row.lockedChat) return row;
+  if (!conversationKey || !row.encryptedChat) return row;
   return {
     ...openMetadata(row, conversationKey),
-    fileData: decryptLockedChatBytes(row.fileData, {
+    fileData: decryptEncryptedChatBytes(row.fileData, {
       ...conversationKey,
       context: "conversation_attachments.file_data",
     }),

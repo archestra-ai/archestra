@@ -1,5 +1,7 @@
 name: Build Agent Catalog Images
 
+# Reusable via workflow_call (release + dev publishes); also runs a build-only
+# validation (no push) on pull requests that touch the image inputs.
 on:
   workflow_call:
     inputs:
@@ -26,16 +28,31 @@ on:
         required: false
       GCP_SERVICE_ACCOUNT_NAME:
         required: false
+  pull_request:
+    paths:
+      # Dockerfile, native wrappers, in-image tests, and patches. Context is platform/.
+      - "platform/agent_images/**"
+      # Shared helper copied into every catalog target.
+      - "platform/backend/src/static/workspace-files.py"
+      - "platform/.dockerignore"
+      - ".github/workflows/build-agent-catalog-images.yml"
+      - ".github/workflows/build-native-multi-arch-image.yml"
+      # Local build action and the builder recipe it invokes.
+      - ".github/actions/build-docker-image/**"
+      - ".github/actions/setup-docker-builder/**"
 
 permissions: {}
 
 concurrency:
-  group: build-agent-catalog-images-${{ inputs.version }}-${{ github.ref }}
+  group: build-agent-catalog-images-${{ inputs.version || github.event.pull_request.number || github.ref }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
+  # Reusable callers pass a version, including PRs with the deploy label.
+  # The caller's event can be pull_request, so the version selects publication.
   build:
     name: Build ${{ matrix.image }}
+    if: ${{ inputs.version != '' }}
     strategy:
       fail-fast: false
       matrix:
@@ -64,3 +81,43 @@ jobs:
     secrets:
       GCP_SERVICE_ACCOUNT_NAME: ${{ secrets.GCP_SERVICE_ACCOUNT_NAME }}
       GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER: ${{ secrets.GCP_WORKLOAD_IDENTITY_PROVIDER_IDENTIFIER }}
+
+  # Direct PR builds test both native architectures without publishing images.
+  # This job does not request the reusable publish workflow's OIDC permission.
+  # Keep both matrices aligned with the five Dockerfile targets.
+  validate-agent-catalog-images:
+    name: Validate ${{ matrix.image }} (${{ matrix.arch }})
+    if: ${{ inputs.version == '' }}
+    runs-on: ${{ matrix.arch == 'arm64' && 'ubuntu-24.04-arm' || 'ubuntu-latest' }}
+    timeout-minutes: 45
+    permissions:
+      contents: read # Required to checkout the repository and build the image.
+    strategy:
+      fail-fast: false
+      matrix:
+        arch: [amd64, arm64]
+        image:
+          - agent-claude-code
+          - agent-codex
+          - agent-opencode
+          - agent-hermes
+          - agent-openclaw
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          fetch-depth: 1
+
+      - name: Build agent catalog image
+        uses: ./.github/actions/build-docker-image
+        with:
+          context: ./platform
+          dockerfile: ./platform/agent_images/Dockerfile
+          target: ${{ matrix.image }}
+          platforms: linux/${{ matrix.arch }}
+          push: "false"
+          load: "true"
+          tags: ${{ matrix.image }}:${{ github.sha }}
+          # Read-only: the publish paths own cache export for this image.
+          cache-from: type=registry,ref=europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public/${{ matrix.image }}:buildcache-${{ matrix.arch }}

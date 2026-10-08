@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { ADMIN_ROLE_NAME } from "@archestra/shared";
+import { ADMIN_ROLE_NAME, MEMBER_ROLE_NAME } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
@@ -13,6 +13,7 @@ import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-deployment.routes";
 
 describe("Deployment-wide Guardrails v2 switch", () => {
@@ -30,6 +31,7 @@ describe("Deployment-wide Guardrails v2 switch", () => {
       Object.assign(request, { user, organizationId });
     });
     registerAuditLogHook(app);
+    registerRoutePermissions(app);
     await app.register(routes);
   });
   afterEach(async () => {
@@ -117,10 +119,12 @@ describe("Deployment-wide Guardrails v2 switch", () => {
 
   test("a setting saved in one organization applies to another and is audited", async ({
     makeOrganization,
+    makeMember,
   }) => {
     const originalOrg = organizationId;
     await set(true);
     organizationId = (await makeOrganization()).id;
+    await makeMember(userId, organizationId, { role: ADMIN_ROLE_NAME });
     const response = await app.inject({
       method: "GET",
       url: "/api/guardrails-deployment",
@@ -171,5 +175,19 @@ describe("Deployment-wide Guardrails v2 switch", () => {
     expect((await set(true)).statusCode).toBe(403);
     expect((await setUnsupportedClientAction("block")).statusCode).toBe(403);
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
+  });
+
+  test("members can read the status but not change it", async () => {
+    await db
+      .update(schema.membersTable)
+      .set({ role: MEMBER_ROLE_NAME })
+      .where(eq(schema.membersTable.userId, userId));
+    const read = await app.inject({
+      method: "GET",
+      url: "/api/guardrails-deployment",
+    });
+    expect(read.statusCode, read.body).toBe(200);
+    expect(read.json()).toMatchObject({ unsupportedClientAction: "bypass" });
+    expect((await set(true)).statusCode).toBe(403);
   });
 });

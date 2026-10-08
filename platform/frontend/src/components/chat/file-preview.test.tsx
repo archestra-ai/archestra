@@ -13,16 +13,16 @@ import {
 } from "vitest";
 import { FilePreview } from "@/components/chat/file-preview";
 import {
-  LOCKED_CHAT_KEY_HEADER,
-  storeLockedChatKey,
-} from "@/lib/chat/locked-chat";
+  ENCRYPTED_CHAT_KEY_HEADER,
+  storeEncryptedChatKey,
+} from "@/lib/chat/encrypted-chat";
 
 const API_ORIGIN = "http://localhost:9000";
 const ARTIFACT_URL = `${API_ORIGIN}/api/skill-sandbox/artifacts/svg-1`;
 const CSV_URL = `${API_ORIGIN}/api/skill-sandbox/artifacts/report.csv`;
 const SEALED_URL = "/api/chat/attachments/att-1/content";
 const CONVERSATION_ID = "conv-1";
-const LOCKED_CHAT_KEY = "a".repeat(43);
+const ENCRYPTED_CHAT_KEY = "a".repeat(43);
 const SVG_PREVIEW_MAX_BYTES = 10 * 1024 * 1024;
 
 // A non-ASCII character pins that the bytes reach the data URL untouched
@@ -69,10 +69,10 @@ function decodeDataUrl(src: string): number[] {
 
 /**
  * jsdom implements neither `URL.createObjectURL` nor a `blob:`-capable fetch,
- * so the locked-chat path runs against a hand-rolled fetch: the sealed route
+ * so the encrypted-chat path runs against a hand-rolled fetch: the sealed route
  * answers with a Blob, the resulting `blob:` URL answers with bytes.
  */
-function stubLockedChatFetch(blobBytes: Uint8Array) {
+function stubEncryptedChatFetch(blobBytes: Uint8Array) {
   const fetchSpy = vi.fn(async (url: string, _init?: RequestInit) => {
     if (url === SEALED_URL) {
       return {
@@ -94,7 +94,7 @@ function stubLockedChatFetch(blobBytes: Uint8Array) {
   vi.stubGlobal("fetch", fetchSpy);
   URL.createObjectURL = vi.fn(() => "blob:sealed");
   URL.revokeObjectURL = vi.fn();
-  storeLockedChatKey(CONVERSATION_ID, LOCKED_CHAT_KEY);
+  storeEncryptedChatKey(CONVERSATION_ID, ENCRYPTED_CHAT_KEY);
   return fetchSpy;
 }
 
@@ -167,8 +167,8 @@ describe("FilePreview svg", () => {
     expect(arrayBuffer).not.toHaveBeenCalled();
   });
 
-  it("in a locked chat, reads the sealed bytes once with the key and converts the blob", async () => {
-    const fetchSpy = stubLockedChatFetch(SVG_BYTES);
+  it("in an encrypted chat, reads the sealed bytes once with the key and converts the blob", async () => {
+    const fetchSpy = stubEncryptedChatFetch(SVG_BYTES);
 
     render(
       <FilePreview
@@ -191,12 +191,12 @@ describe("FilePreview svg", () => {
     );
     expect(sealedCalls).toHaveLength(1);
     expect(sealedCalls[0]?.[1]).toEqual({
-      headers: { [LOCKED_CHAT_KEY_HEADER]: LOCKED_CHAT_KEY },
+      headers: { [ENCRYPTED_CHAT_KEY_HEADER]: ENCRYPTED_CHAT_KEY },
     });
   });
 
-  it("in a locked chat, the size-cap fallback downloads the resolved blob", async () => {
-    stubLockedChatFetch(new Uint8Array(SVG_PREVIEW_MAX_BYTES + 1));
+  it("in an encrypted chat, the size-cap fallback downloads the resolved blob", async () => {
+    stubEncryptedChatFetch(new Uint8Array(SVG_PREVIEW_MAX_BYTES + 1));
 
     render(
       <FilePreview

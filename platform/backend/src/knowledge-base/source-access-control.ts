@@ -8,9 +8,12 @@ import {
   KbDocumentModel,
   KbExternalUserGroupModel,
   KnowledgeBaseConnectorModel,
-  TeamModel,
 } from "@/models";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+  type PrincipalSource,
+} from "@/models/resource-permission-subject";
 import * as metrics from "@/observability/metrics";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {
@@ -48,6 +51,8 @@ interface KnowledgeSourceAccessControlContext {
   organizationId?: string;
   grants?: ScopedPermission[];
   userId?: string;
+  /** The caller's grant subjects, resolved once for the request's queries. */
+  principal?: GrantPrincipal;
   canReadAll: boolean;
   teamIds: string[];
 }
@@ -207,25 +212,32 @@ class KnowledgeSourceAccessControlService {
   async buildAccessControlContext(params: {
     userId: string;
     organizationId: string;
+    lookups?: PrincipalSource;
   }): Promise<KnowledgeSourceAccessControlContext> {
-    const [canReadAll, teamIds, grants] = await Promise.all([
-      ResourcePermissions.allows({
-        userId: params.userId,
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      params.lookups,
+      { userId: params.userId, organizationId: params.organizationId },
+    );
+    const grants = await ResourcePermissions.resolveAll(principal);
+    const canReadAll = hasScopedPermission({
+      grants,
+      required: {
         organizationId: params.organizationId,
         resource: "knowledgeBase",
         scope: "*",
         action: "update",
-      }),
-      TeamModel.getUserTeamIds(params.userId),
-      ResourcePermissions.resolveAll(params),
-    ]);
+      },
+    });
 
     return {
       userId: params.userId,
       organizationId: params.organizationId,
+      principal,
       grants,
       canReadAll,
-      teamIds,
+      teamIds: principal.subjects.flatMap((subject) =>
+        subject.type === "team" ? [subject.id] : [],
+      ),
     };
   }
 

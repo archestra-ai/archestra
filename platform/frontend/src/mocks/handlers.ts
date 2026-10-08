@@ -128,6 +128,15 @@ const LABELLED_ENTITY_PATHS = [
 ];
 
 export const handlers: HttpHandler[] = [
+  ...getJson("/api/openappa/trust-audience", {
+    trust: ["suspicious", "trusted"],
+    audiences: [
+      { name: "public", kind: "builtin" },
+      { name: "internal", kind: "builtin" },
+      { name: "self", kind: "builtin" },
+    ],
+  }),
+  ...getJson("/api/openappa/policy-tests/runs", []),
   ...getJson("/api/openappa/yells/summary", { unresolved: 0 }),
   ...getJson("/api/openappa/yells", {
     data: [],
@@ -140,6 +149,8 @@ export const handlers: HttpHandler[] = [
     ...getJson(`${entity}/labels/values`, []),
   ]),
   ...getJson("/api/auth/get-session", sessionSeed),
+  // Every signed-in user loads the banner; no notice is active by default.
+  ...getJson("/api/site-notification", null),
   ...getJson("/api/auth/default-credentials-status", { enabled: false }),
   ...getJson("/api/auth/organization/list", []),
   ...getJson("/api/auth/organization/get-full-organization", betterAuthOrgSeed),
@@ -222,6 +233,9 @@ export const handlers: HttpHandler[] = [
     activatedAt: null,
   }),
   ...getJson("/api/organization/mcp-preset-entries", []),
+  ...getJson("/api/connected-clients", []),
+  // The Connect page reads the gateway's tool list for its token estimate.
+  ...getJson("/api/chat/agents/:agentId/mcp-tools", []),
   ...getJson("/api/projects", []),
   ...getJson("/api/apps", {
     data: [],
@@ -358,6 +372,14 @@ export const handlers: HttpHandler[] = [
   // sidebar. Default empty so dialog open doesn't blow up the leak guard.
   ...getJson("/api/chat/conversations", []),
   ...getJson("/api/chat/conversations/:id/openappa-status", null),
+  ...getJson("/api/agent-runs/:taskId/openappa-review", {
+    status: "none",
+    canDecide: false,
+    offerId: null,
+    text: null,
+    tool: null,
+    arguments: null,
+  }),
   ...getJson("/api/roles", {
     data: [],
     pagination: {
@@ -543,7 +565,6 @@ export const handlers: HttpHandler[] = [
     "/api/connectors/:id/runs",
     paginated(connectorRunsSeed, { total: 178 }),
   ),
-  ...getJson("/api/connectors/:id/knowledge-bases", { data: [] }),
   ...getJson("/api/connectors/:id/permission-coverage", {
     connectorId: CONNECTOR_ID,
     totalDocuments: connectorSeed.totalDocsIngested,

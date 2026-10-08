@@ -8,6 +8,7 @@ import {
   useDecideClientConnection,
 } from "@/lib/client-connection.query";
 import { ClaudeDesktopGatewaySteps } from "./claude-desktop-gateway-steps";
+import { CONNECT_CLIENTS } from "./clients";
 
 export function ClientConnectionApproval({
   requestId,
@@ -30,6 +31,8 @@ export function ClientConnectionApproval({
   proxyUsesVirtualKey: boolean;
   skillsSelected: boolean;
 }) {
+  const clientLabel =
+    CONNECT_CLIENTS.find((c) => c.id === clientId)?.label ?? "your agent";
   const request = useClientConnection(requestId);
   const decision = useDecideClientConnection(requestId);
   const [confirmed, setConfirmed] = useState(false);
@@ -39,6 +42,27 @@ export function ClientConnectionApproval({
         {decision.data.status === "approved" ? (
           <>
             <p>Connection approved. Return to your terminal to finish setup.</p>
+            {(gatewaySelected || skillsSelected || proxySelected) && (
+              <div className="space-y-1.5 rounded-md border bg-muted/30 p-3">
+                <p className="font-medium">What happens next</p>
+                <p className="text-muted-foreground">
+                  Once setup is complete, start a new {clientLabel} session. It
+                  will have access to:
+                </p>
+                <ul className="list-disc space-y-0.5 pl-5 text-muted-foreground">
+                  {gatewaySelected && <li>The tools from {gatewayName}</li>}
+                  {skillsSelected && (
+                    <li>Your organization&apos;s shared skills</li>
+                  )}
+                  {proxySelected && (
+                    <li>Model requests routed through the LLM Proxy</li>
+                  )}
+                </ul>
+                <p className="text-muted-foreground">
+                  Ask {clientLabel} to use them like any other tool or skill.
+                </p>
+              </div>
+            )}
             {clientId === "cursor" && (
               <ul className="list-disc space-y-1 pl-5 text-muted-foreground">
                 {gatewaySelected && (
@@ -96,11 +120,19 @@ export function ClientConnectionApproval({
     <div className="space-y-4 p-5">
       <p className="text-sm text-muted-foreground">
         Confirm the code matches your terminal. Approval lets your AI apply the
-        setup above to your client.
+        selected setup to your client.
       </p>
       <p className="font-mono text-2xl font-semibold tracking-wider">
         {request.data.userCode}
       </p>
+      {request.data.deviceName && (
+        <p className="text-sm text-muted-foreground">
+          <span>Requested from </span>
+          <span className="font-medium text-foreground">
+            {request.data.deviceName}
+          </span>
+        </p>
+      )}
       <label
         htmlFor="confirm-connection-code"
         className="flex items-center gap-2 text-sm"

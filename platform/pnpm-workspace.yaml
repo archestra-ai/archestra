@@ -9,6 +9,7 @@ packages:
   - "archestra-rs/app-runtime-rs"
   - "archestra-rs/image-rs"
   - "e2e-tests"
+  - "docs-screenshots"
 
 catalog:
   ai: ^6.0.193
@@ -55,8 +56,9 @@ overrides:
   # CVE-2026-54466 (GHSA-xv26-6w52-cph6, message corruption via protocol
   # length-header abuse) fixed in 0.7.5, the package's latest release.
   websocket-driver: '>=0.7.5'
-  # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6.
-  next: 16.3.6
+  # GHSA-vcvr-r3jv-pc5j (CRITICAL) fixed in 16.3.6; CVE-2026-94483 (HIGH, SSRF)
+  # fixed in 16.3.8.
+  next: 16.3.8
   # form-data 3.0.5 / 4.0.6 fix CVE-2026-12143 (HIGH). Floors rather than exact
   # pins, and bounded per major so a <4 consumer is not jumped onto 4.x.
   form-data@>=4: '>=4.0.6'
@@ -127,6 +129,11 @@ overrides:
   # carried two postcss copies (8.5.11 and 8.5.17) under the old >=8.5.10
   # floor, so the floor has to clear the higher of the two fixes.
   postcss: '>=8.5.18'
+  # CVE-2026-90711 (CRITICAL, authentication bypass by spoofing) fixed in 2.0.8.
+  proxy-addr: '>=2.0.8 <3'
+  # CVE-2026-93749 (HIGH, improper validation of specified quantity) fixed in
+  # 1.2.2.
+  source-map-js: '>=1.2.2'
   # CVE-2026-67213 (GHSA-2v37-7h3g-55p8, HIGH, custom generators loop forever
   # when size is 0): the 3.3.17 fix was incomplete, advisory now requires
   # 3.3.18 on the v3 line. Transitive via postcss and points-on-path; scoped
@@ -155,7 +162,9 @@ overrides:
   # GHSA-f88m-g3jw-g9cj (HIGH, dependency on vulnerable third-party component)
   # fixed in 0.35.0. Transitive-only (optional dep of next's image optimizer).
   # GHSA-rgj7-g3m4-5g8c: heap buffer overflow fixed in 0.35.4.
-  sharp: 0.35.4
+  # GHSA-wq5f-xc86-pv6w (HIGH, dependency on vulnerable third-party component)
+  # fixed in 0.35.5.
+  sharp: 0.35.5
 packageExtensions:
   '@hookform/resolvers@*':
     dependencies:
@@ -208,7 +217,6 @@ verifyDepsBeforeRun: false
 # 10080 minutes = 7 days.
 # https://daniakash.com/posts/simplest-supply-chain-defense/
 minimumReleaseAge: 10080
-
 # OpenTelemetry instrumentation requires these packages hoisted to root.
 # @hookform/resolvers/zod statically imports `zod/v4/core` but does not declare
 # zod as a peer dependency, so hoist zod to the root node_modules.

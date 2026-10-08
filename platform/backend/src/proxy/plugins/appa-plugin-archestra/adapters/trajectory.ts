@@ -1,11 +1,27 @@
 import { posix } from "node:path";
 import { APPA_PARENT_HEADER, APPA_SESSION_HEADER } from "@archestra/shared";
-import { verifyChildTrajectoryReceipt } from "@/openappa/child-trajectory-receipt";
-import { verifyDelegationMarker } from "@/openappa/delegation";
+import { childSessionId } from "@/openappa/actor";
+import {
+  type AppaChildTrajectoryReceipt,
+  verifyChildTrajectoryReceipt,
+} from "@/openappa/child-trajectory-receipt";
+import { verifyDelegatedPrompt } from "@/openappa/delegation";
 import { isWellFormedAppaId } from "@/openappa/service";
 import { ApiError } from "@/types";
 import type { AppaChildTrajectory, AppaMatchContext } from "../types";
-import { readHeader, withCallerScope } from "../utils";
+import { readHeader, withCallerScope, withoutCallerScope } from "../utils";
+
+/** Validates opaque native IDs before any fallback or minted child binding. */
+export function nativeId(
+  value: unknown,
+  description = "child trajectory id",
+): string | undefined {
+  if (value === undefined) return undefined;
+  if (!isWellFormedAppaId(value)) {
+    throw correlationError(`OpenAPPA requires a well-formed ${description}`);
+  }
+  return value;
+}
 
 /** Recognizes native transcript paths even when their child id is a glob. */
 export function referencesChildTranscriptPath(params: {
@@ -70,19 +86,19 @@ export function namesChildrenFromArguments(params: {
     (agent) => agent !== params.rootId && !ancestors.has(agent),
   );
   unique.sort();
-  return unique.map((agent) =>
-    mintChildTrajectoryId({ parentId: params.rootId, childNativeId: agent }),
-  );
+  return unique.map((agent) => childSessionId(params.rootId, agent));
 }
 
 /**
  * Binds a child under verified trajectory evidence or trusted native metadata.
  * The signed child ID stays stable when native metadata appears after compaction.
- * An actual native child ID is optional correlation metadata.
+ * Native metadata may arrive after minting; it is not an expected sealed claim.
+ * If the receipt already seals a native identity, that identity must agree.
  */
 export function bindMintedChildTrajectory(params: {
   context: AppaMatchContext;
   parentNativeId: string | undefined;
+  /** Trusted client metadata, which may be assigned after the receipt's birth. */
   childNativeId: string | undefined;
 }): AppaChildTrajectory | undefined {
   const claims = claimedIds(params.context);
@@ -114,17 +130,44 @@ export function bindMintedChildTrajectory(params: {
     childNativeId,
     expectedParentId: delegated?.parentId,
   });
-  const parentId = delegated?.parentId ?? recorded?.parentId ?? parentNativeId;
-  const sessionId =
-    recorded?.childId ??
-    (childNativeId
-      ? mintChildTrajectoryId({ parentId, childNativeId })
-      : delegated?.spawnCallId
-        ? mintChildTrajectoryId({
-            parentId,
-            childNativeId: delegated.spawnCallId,
-          })
-        : undefined);
+  const anchor = workspaceAnchor({
+    context: params.context,
+    claimedSession: claims.sessionId,
+    parentNativeId,
+    childNativeId,
+  });
+  const nested = runtimeNest({
+    context: params.context,
+    claimedSession: claims.sessionId,
+    childNativeId,
+    delegated,
+    recorded,
+  });
+  if (anchor && childNativeId && !nested) {
+    const mintedChild = childSessionId(anchor, childNativeId);
+    if (
+      (delegated && delegated.parentId !== anchor) ||
+      (recorded &&
+        (recorded.parentId !== anchor || recorded.childId !== mintedChild))
+    ) {
+      throw correlationError(
+        "OpenAPPA signed child lineage does not match the authenticated session root",
+      );
+    }
+  }
+  const parentId = nested
+    ? nested.parentId
+    : anchor
+      ? anchor
+      : (delegated?.parentId ?? recorded?.parentId ?? parentNativeId);
+  const sessionId = nested
+    ? nested.sessionId
+    : (recorded?.childId ??
+      (childNativeId
+        ? childSessionId(parentId, childNativeId)
+        : delegated?.spawnCallId
+          ? childSessionId(parentId, delegated.spawnCallId)
+          : undefined));
   if (!sessionId) {
     if (claims.parentId) {
       throw correlationError(
@@ -135,7 +178,13 @@ export function bindMintedChildTrajectory(params: {
   }
   const resolvedChildNativeId = childNativeId ?? recorded?.childNativeId;
   return {
-    ...bindChildLineage({ context: params.context, parentId, sessionId }),
+    ...bindChildLineage({
+      context: params.context,
+      parentId,
+      sessionId,
+      anchored: anchor !== undefined && !nested,
+      runtimeClaim: nested?.runtimeClaim,
+    }),
     lineage: {
       source: recorded ? "receipt" : delegated ? "marker" : "native",
       nativeParentId: parentNativeId,
@@ -147,6 +196,9 @@ export function bindMintedChildTrajectory(params: {
         : recorded?.spawnCallId
           ? { spawnCallId: recorded.spawnCallId }
           : {}),
+      ...(delegated?.promptDigest
+        ? { spawnPromptDigest: delegated.promptDigest }
+        : {}),
     },
   };
 }
@@ -158,6 +210,8 @@ function bindChildLineage(params: {
   context: AppaMatchContext;
   parentId: string;
   sessionId: string;
+  anchored?: boolean;
+  runtimeClaim?: string;
 }): { sessionId: string; parentId: string } {
   const { parentId, sessionId } = params;
   const claims = claimedIds(params.context);
@@ -191,12 +245,17 @@ function bindChildLineage(params: {
       "OpenAPPA parent trajectory is not bound to this server-minted root",
     );
   }
-  if (claimedSession && claimedSession !== sessionId) {
+  if (
+    claimedSession &&
+    claimedSession !== sessionId &&
+    !(params.anchored && claimedSession === parentId) &&
+    !(params.runtimeClaim && claimedSession === params.runtimeClaim)
+  ) {
     throw correlationError(
       "OpenAPPA child trajectory does not match the server-minted child id",
     );
   }
-  if (claimedSession === parentId) {
+  if (claimedSession === parentId && !params.anchored) {
     throw correlationError(
       "OpenAPPA child trajectory cannot reuse the parent id",
     );
@@ -254,9 +313,9 @@ function recordedNativeParent(params: {
         organizationId: trusted.session.organization_id,
         callerId: trusted.session.caller_id,
         spawnerNativeId,
-        childNativeId: params.childNativeId,
       })
     ) {
+      assertReceiptNativeCorrelation(receipt, params.childNativeId);
       return spawnerNativeId;
     }
   }
@@ -275,6 +334,7 @@ function recordedChild(params: {
       childId: string;
       childNativeId?: string;
       spawnCallId?: string;
+      runtimeSessionId?: string;
     }
   | undefined {
   const trusted = params.context.trustedContext;
@@ -286,13 +346,19 @@ function recordedChild(params: {
         organizationId: trusted.session.organization_id,
         callerId: trusted.session.caller_id,
         spawnerNativeId: params.parentNativeId,
-        childNativeId: params.childNativeId,
       })
     ) {
       continue;
     }
-    if (params.expectedParentId && receipt.parentId !== params.expectedParentId)
-      continue;
+    assertReceiptNativeCorrelation(receipt, params.childNativeId);
+    if (
+      params.expectedParentId &&
+      receipt.parentId !== params.expectedParentId
+    ) {
+      throw correlationError(
+        "OpenAPPA signed child lineage does not match the delegated parent",
+      );
+    }
     return {
       parentId: receipt.parentId,
       childId: receipt.childId,
@@ -300,9 +366,30 @@ function recordedChild(params: {
         ? { childNativeId: receipt.childNativeId }
         : {}),
       ...(receipt.spawnCallId ? { spawnCallId: receipt.spawnCallId } : {}),
+      ...(receipt.runtimeSessionId
+        ? { runtimeSessionId: receipt.runtimeSessionId }
+        : {}),
     };
   }
   return undefined;
+}
+
+/** Called only after verifying receipt ownership, never to waive verification. */
+function assertReceiptNativeCorrelation(
+  receipt: AppaChildTrajectoryReceipt,
+  observedChildNativeId: string | undefined,
+): void {
+  // Birth receipts can precede native ID assignment. Their stable child scope
+  // is signed; late trusted client metadata correlates it, not attests to it.
+  if (
+    receipt.childNativeId !== undefined &&
+    observedChildNativeId !== undefined &&
+    receipt.childNativeId !== observedChildNativeId
+  ) {
+    throw correlationError(
+      "OpenAPPA signed child lineage does not match the native child id",
+    );
+  }
 }
 
 /**
@@ -314,28 +401,136 @@ function delegatedParent(params: {
   context: AppaMatchContext;
   parentNativeId: string;
   childNativeId: string | undefined;
-}): { parentId: string; spawnCallId?: string } | undefined {
+}):
+  | {
+      parentId: string;
+      spawnCallId?: string;
+      promptDigest?: string;
+      runtimeSessionId?: string;
+    }
+  | undefined {
   const trusted = params.context.trustedContext;
   if (!trusted) return undefined;
   for (const marker of trusted.request.delegation?.markers ?? []) {
-    if (
-      !verifyDelegationMarker({
-        marker,
-        organizationId: trusted.session.organization_id,
-        callerId: trusted.session.caller_id,
-        spawnerNativeId: params.parentNativeId,
-      })
-    )
-      continue;
+    const verified = verifyDelegatedPrompt({
+      marker,
+      organizationId: trusted.session.organization_id,
+      callerId: trusted.session.caller_id,
+      spawnerNativeId: params.parentNativeId,
+    });
+    if (!verified) continue;
     const childIdentity = params.childNativeId ?? marker.spawnCallId;
     if (childIdentity && `:${marker.parentId}:`.includes(`:${childIdentity}:`))
       continue;
     return {
       parentId: marker.parentId,
       ...(marker.spawnCallId ? { spawnCallId: marker.spawnCallId } : {}),
+      ...(marker.runtimeSessionId
+        ? { runtimeSessionId: marker.runtimeSessionId }
+        : {}),
+      ...verified,
     };
   }
   return undefined;
+}
+
+/**
+ * An intermediate parent signed under the server-verified runtime workspace.
+ * A marker or receipt without that field, or signed for another workspace,
+ * is not a nest. Direct children of the workspace stay on the header anchor.
+ */
+function runtimeNest(params: {
+  context: AppaMatchContext;
+  claimedSession: string | undefined;
+  childNativeId: string | undefined;
+  delegated?: {
+    parentId: string;
+    runtimeSessionId?: string;
+  };
+  recorded?: {
+    parentId: string;
+    childId: string;
+    runtimeSessionId?: string;
+  };
+}): { parentId: string; sessionId: string; runtimeClaim: string } | undefined {
+  const markerAnchor = params.delegated?.runtimeSessionId;
+  const receiptAnchor = params.recorded?.runtimeSessionId;
+  if (!markerAnchor && !receiptAnchor) {
+    return undefined;
+  }
+  const trusted = params.context.trustedContext;
+  const runtimeRoot = trusted?.runtimeSessionId;
+  const session = trusted?.session;
+  if (
+    !runtimeRoot ||
+    !session ||
+    !params.childNativeId ||
+    (markerAnchor && markerAnchor !== runtimeRoot) ||
+    (receiptAnchor && receiptAnchor !== runtimeRoot) ||
+    (params.delegated &&
+      params.recorded &&
+      (params.delegated.parentId !== params.recorded.parentId ||
+        params.delegated.runtimeSessionId !== params.recorded.runtimeSessionId))
+  ) {
+    throw correlationError(
+      "OpenAPPA signed child lineage does not match the authenticated session root",
+    );
+  }
+  const runtimeClaim = withoutCallerScope(session, runtimeRoot);
+  if (
+    !runtimeClaim ||
+    runtimeClaim === runtimeRoot ||
+    params.claimedSession !== runtimeClaim
+  ) {
+    throw correlationError(
+      "OpenAPPA signed child lineage does not match the authenticated session root",
+    );
+  }
+  const parentId = params.delegated?.parentId ?? params.recorded?.parentId;
+  if (!parentId || parentId === runtimeClaim) return undefined;
+  const minted = childSessionId(parentId, params.childNativeId);
+  if (params.recorded && params.recorded.childId !== minted) {
+    throw correlationError(
+      "OpenAPPA signed child lineage does not match the authenticated session root",
+    );
+  }
+  return {
+    parentId,
+    sessionId: params.recorded?.childId ?? minted,
+    runtimeClaim,
+  };
+}
+
+/**
+ * The already-bound trusted session, when the client header names that same
+ * root and native metadata names a child of it. An explicit child-session
+ * claim, a parent header for a different trajectory, or a client with no
+ * native child id is not an anchor.
+ */
+function workspaceAnchor(params: {
+  context: AppaMatchContext;
+  claimedSession: string | undefined;
+  parentNativeId: string;
+  childNativeId: string | undefined;
+}): string | undefined {
+  const session = params.context.trustedContext?.session;
+  if (!session || !params.claimedSession || !params.childNativeId) {
+    return undefined;
+  }
+  const root = withoutCallerScope(session, session.session_id);
+  if (
+    !root ||
+    root !== params.claimedSession ||
+    root === params.childNativeId
+  ) {
+    return undefined;
+  }
+  if (root === childSessionId(params.parentNativeId, params.childNativeId)) {
+    return undefined;
+  }
+  const claimedParent = claimedIds(params.context).parentId;
+  if (claimedParent && claimedParent !== root) return undefined;
+  return root;
 }
 
 /** Returns explicit IDs claimed by the client, excluding derived proxy IDs. */
@@ -358,29 +553,8 @@ function claimedIds(context: AppaMatchContext): {
   };
 }
 
-function nativeId(value: string | undefined): string | undefined {
-  if (value === undefined) return undefined;
-  if (
-    value.length === 0 ||
-    Buffer.byteLength(value, "utf8") > 512 ||
-    /\p{Cc}/u.test(value)
-  ) {
-    throw correlationError(
-      "OpenAPPA requires a well-formed child trajectory id",
-    );
-  }
-  return value;
-}
-
 function correlationError(message: string): ApiError {
   return new ApiError(400, message);
-}
-
-function mintChildTrajectoryId(params: {
-  parentId: string;
-  childNativeId: string;
-}): string {
-  return `${params.parentId}:${params.childNativeId}`;
 }
 
 function collectNamedChildren(

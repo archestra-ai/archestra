@@ -177,13 +177,6 @@ beforeEach(() => {
   vi.mocked(useAppAccess).mockReturnValue({
     canEdit: true,
     canDeleteApp: true,
-    canModify: true,
-    isAdmin: true,
-    isTeamAdmin: true,
-    canUpdate: true,
-    canDelete: true,
-    currentUserId: "author-id",
-    userTeamIds: new Set(),
     isPending: false,
   });
   vi.mocked(useOrganizationMembers).mockReturnValue({

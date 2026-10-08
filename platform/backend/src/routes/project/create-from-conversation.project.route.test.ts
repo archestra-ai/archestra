@@ -116,7 +116,7 @@ describe("POST /api/projects/from-conversation", () => {
     expect(second.statusCode).toBe(409);
   });
 
-  test("rejects a locked chat", async ({ makeConversation }) => {
+  test("rejects an encrypted chat", async ({ makeConversation }) => {
     // Same rule as creating or moving a chat into a project: this turns the
     // conversation into a project chat, which would list it in a shared space
     // nobody there can open. The sidebar hides the action; this is the check a
@@ -124,7 +124,7 @@ describe("POST /api/projects/from-conversation", () => {
     const conv = await makeConversation(agentId, {
       userId: user.id,
       organizationId,
-      lockedChat: true,
+      encryptedChat: true,
     });
 
     const response = await app.inject({
@@ -134,7 +134,7 @@ describe("POST /api/projects/from-conversation", () => {
     });
 
     expect(response.statusCode).toBe(400);
-    expect(response.json().error.message).toContain("Locked chats");
+    expect(response.json().error.message).toContain("Encrypted chats");
   });
 
   test("rejects a malformed conversation id with 400", async () => {

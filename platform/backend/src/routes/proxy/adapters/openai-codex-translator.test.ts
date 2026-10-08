@@ -1,6 +1,7 @@
 import type { ResponseStreamEvent } from "openai/resources/responses/responses";
 import { describe, expect, it } from "vitest";
 import type { OpenAi } from "@/types";
+import { OpenAIStreamAdapter } from "./openai";
 import {
   buildCodexResponsesRequest,
   codexResponsesStreamToChatChunks,
@@ -47,6 +48,19 @@ describe("buildCodexResponsesRequest", () => {
     expect(typeof body.instructions).toBe("string");
     expect((body.instructions as string).length).toBeGreaterThan(0);
     expect(body.model).toBe("gpt-5.5-codex");
+  });
+
+  it("adds the session's prompt cache key", () => {
+    const fromSession = buildCodexResponsesRequest(
+      req(),
+      "session-key",
+    ) as unknown as Record<string, unknown>;
+    const withoutSession = buildCodexResponsesRequest(
+      req(),
+    ) as unknown as Record<string, unknown>;
+
+    expect(fromSession.prompt_cache_key).toBe("session-key");
+    expect(withoutSession).not.toHaveProperty("prompt_cache_key");
   });
 
   it("maps chat messages, tool calls, and tool results into responses input", () => {
@@ -201,6 +215,36 @@ describe("codexResponsesStreamToChatChunks + fold", () => {
     expect(response.usage).toMatchObject({ prompt_tokens: 10 });
   });
 
+  it("keeps cached and reasoning tokens in the chat usage", async () => {
+    // Without the cached tokens, the proxy records every prompt token as
+    // uncached input and reports no cache reads for these requests.
+    const events = [
+      { type: "response.output_text.delta", delta: "Hi" },
+      {
+        type: "response.completed",
+        response: {
+          usage: {
+            input_tokens: 1000,
+            input_tokens_details: { cached_tokens: 896 },
+            output_tokens: 20,
+            output_tokens_details: { reasoning_tokens: 5 },
+            total_tokens: 1020,
+          },
+        },
+      },
+    ];
+
+    const chunks = await collect(
+      codexResponsesStreamToChatChunks({ stream: streamOf(events), ...base }),
+    );
+
+    expect(chunks.at(-1)?.usage).toMatchObject({
+      prompt_tokens: 1000,
+      prompt_tokens_details: { cached_tokens: 896 },
+      completion_tokens_details: { reasoning_tokens: 5 },
+    });
+  });
+
   it("translates a streamed tool call into tool_calls chunks and finish_reason tool_calls", async () => {
     const events = [
       {
@@ -243,6 +287,360 @@ describe("codexResponsesStreamToChatChunks + fold", () => {
     });
   });
 
+  it.each([
+    "added",
+    "arguments.done",
+    "item.done",
+    "completed",
+  ])("preserves single-call arguments supplied only by %s", async (source) => {
+    const item = {
+      id: "fc_lookup",
+      call_id: "call_lookup",
+      type: "function_call",
+      name: "public_lookup",
+      arguments: '{"topic":"batch-case"}',
+    };
+    const events = [
+      {
+        type: "response.output_item.added",
+        item: { ...item, arguments: source === "added" ? item.arguments : "" },
+      },
+      ...(source === "arguments.done"
+        ? [
+            {
+              type: "response.function_call_arguments.done",
+              item_id: item.id,
+              arguments: item.arguments,
+            },
+          ]
+        : []),
+      ...(source === "item.done"
+        ? [{ type: "response.output_item.done", item }]
+        : []),
+      {
+        type: "response.completed",
+        response: {
+          output: source === "completed" ? [item] : [],
+          usage: null,
+        },
+      },
+    ];
+    const adapter = new OpenAIStreamAdapter();
+    for await (const chunk of codexResponsesStreamToChatChunks({
+      stream: streamOf(events),
+      ...base,
+    })) {
+      adapter.processChunk(chunk);
+    }
+    expect(adapter.state.toolCalls).toEqual([
+      { id: item.call_id, name: item.name, arguments: item.arguments },
+    ]);
+    expect(adapter.toProviderResponse().choices[0].finish_reason).toBe(
+      "tool_calls",
+    );
+  });
+
+  it("preserves one assistant batch with interleaved calls and completed snapshots", async () => {
+    const items = [
+      {
+        id: "fc_public",
+        call_id: "call_public",
+        type: "function_call",
+        name: "public_lookup",
+        arguments: '{"topic":"batch-case"}',
+      },
+      {
+        id: "fc_approval",
+        call_id: "call_approval",
+        type: "function_call",
+        name: "approval_action",
+        arguments: '{"case_id":"batch-case"}',
+      },
+      {
+        id: "fc_terminal",
+        call_id: "call_terminal",
+        type: "function_call",
+        name: "terminal_action",
+        arguments: '{"note":"batch-case"}',
+      },
+    ];
+    const events = [
+      ...items.map((item) => ({
+        type: "response.output_item.added",
+        item: { ...item, arguments: "" },
+      })),
+      {
+        type: "response.function_call_arguments.delta",
+        item_id: items[1].id,
+        delta: '{"case_id":',
+      },
+      {
+        type: "response.function_call_arguments.done",
+        item_id: items[1].id,
+        arguments: items[1].arguments,
+      },
+      { type: "response.output_item.done", item: items[0] },
+      {
+        type: "response.completed",
+        response: {
+          output: items,
+          usage: { input_tokens: 10, output_tokens: 30, total_tokens: 40 },
+        },
+      },
+    ];
+    const chunks = await collect(
+      codexResponsesStreamToChatChunks({ stream: streamOf(events), ...base }),
+    );
+    const adapter = new OpenAIStreamAdapter();
+    for (const chunk of chunks) adapter.processChunk(chunk);
+    expect(adapter.state.toolCalls).toEqual(
+      items.map((item) => ({
+        id: item.call_id,
+        name: item.name,
+        arguments: item.arguments,
+      })),
+    );
+    const response = await foldChatChunksToResponse({
+      chunks: codexResponsesStreamToChatChunks({
+        stream: streamOf(events),
+        ...base,
+      }),
+      ...base,
+    });
+    expect(response.choices[0].message.tool_calls).toEqual(
+      adapter.toProviderResponse().choices[0].message.tool_calls,
+    );
+    const toolChunks = chunks.filter(
+      (chunk) => chunk.choices[0].delta.tool_calls?.length,
+    );
+    expect(toolChunks).toHaveLength(1);
+    expect(toolChunks[0].choices[0].delta.tool_calls).toHaveLength(3);
+    expect(chunks.at(-1)?.usage).toMatchObject({ completion_tokens: 30 });
+  });
+
+  it("does not duplicate fully streamed arguments echoed in done and completed events", async () => {
+    const item = {
+      id: "fc_review",
+      call_id: "call_review",
+      type: "function_call",
+      name: "review_action",
+      arguments: '{"offer_id":"test-offer","plan":"Submit for approval"}',
+    };
+    const events = [
+      { type: "response.output_item.added", item: { ...item, arguments: "" } },
+      {
+        type: "response.function_call_arguments.delta",
+        item_id: item.id,
+        delta: item.arguments,
+      },
+      {
+        type: "response.function_call_arguments.done",
+        item_id: item.id,
+        arguments: item.arguments,
+      },
+      { type: "response.output_item.done", item },
+      { type: "response.completed", response: { output: [item], usage: null } },
+    ];
+    const response = await foldChatChunksToResponse({
+      chunks: codexResponsesStreamToChatChunks({
+        stream: streamOf(events),
+        ...base,
+      }),
+      ...base,
+    });
+    expect(response.choices[0].message.tool_calls?.[0]).toMatchObject({
+      id: item.call_id,
+      function: { name: item.name, arguments: item.arguments },
+    });
+    const nextRequest = buildCodexResponsesRequest(
+      req({
+        messages: [
+          { role: "user", content: "Request review" },
+          {
+            ...response.choices[0].message,
+            tool_calls: response.choices[0].message.tool_calls ?? undefined,
+          },
+          {
+            role: "tool",
+            tool_call_id: item.call_id,
+            content: '{"outcome":"review_required"}',
+          },
+          { role: "user", content: "Approve" },
+        ],
+      }),
+    );
+    expect(nextRequest.input).toEqual([
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Request review" }],
+      },
+      {
+        type: "function_call",
+        call_id: item.call_id,
+        name: item.name,
+        arguments: item.arguments,
+      },
+      {
+        type: "function_call_output",
+        call_id: item.call_id,
+        output: '{"outcome":"review_required"}',
+      },
+      {
+        type: "message",
+        role: "user",
+        content: [{ type: "input_text", text: "Approve" }],
+      },
+    ]);
+  });
+
+  it.each([
+    "",
+    '{"case_id":',
+    "null",
+    "[]",
+    '"text"',
+  ])("leaves malformed or non-object provider arguments %j unchanged for refusal", async (argumentsText) => {
+    const adapter = new OpenAIStreamAdapter();
+    for await (const chunk of codexResponsesStreamToChatChunks({
+      stream: streamOf([
+        {
+          type: "response.output_item.added",
+          item: {
+            id: "fc_invalid",
+            call_id: "call_invalid",
+            type: "function_call",
+            name: "approval_action",
+            arguments: "",
+          },
+        },
+        {
+          type: "response.function_call_arguments.done",
+          item_id: "fc_invalid",
+          arguments: argumentsText,
+        },
+        { type: "response.completed", response: { usage: null } },
+      ]),
+      ...base,
+    })) {
+      adapter.processChunk(chunk);
+    }
+    expect(adapter.state.toolCalls[0].arguments).toBe(argumentsText);
+    expect(
+      adapter.toProviderResponse().choices[0].message.tool_calls?.[0],
+    ).toMatchObject({ function: { arguments: argumentsText } });
+  });
+
+  it.each([
+    { arguments: '{"topic":"different"}' },
+    { name: "other_action", arguments: '{"topic":"batch-case"}' },
+    { call_id: "call_other", arguments: '{"topic":"batch-case"}' },
+  ])("refuses inconsistent final call snapshots %j before emitting any tool calls", async (override) => {
+    const chunks: OpenAi.Types.ChatCompletionChunk[] = [];
+    const item = {
+      id: "fc_consistent",
+      call_id: "call_consistent",
+      type: "function_call",
+      name: "public_lookup",
+      arguments: '{"topic":"batch-case"}',
+    };
+    await expect(
+      (async () => {
+        for await (const chunk of codexResponsesStreamToChatChunks({
+          stream: streamOf([
+            { type: "response.output_item.added", item },
+            {
+              type: "response.completed",
+              response: { output: [{ ...item, ...override }], usage: null },
+            },
+          ]),
+          ...base,
+        })) {
+          chunks.push(chunk);
+        }
+      })(),
+    ).rejects.toMatchObject({ statusCode: 502 });
+    expect(chunks.every((chunk) => !chunk.choices[0].delta.tool_calls)).toBe(
+      true,
+    );
+  });
+
+  it("refuses an unknown argument item instead of attaching it to the first call", async () => {
+    await expect(
+      collect(
+        codexResponsesStreamToChatChunks({
+          stream: streamOf([
+            {
+              type: "response.output_item.added",
+              item: {
+                id: "fc_known",
+                call_id: "call_known",
+                type: "function_call",
+                name: "public_lookup",
+                arguments: "",
+              },
+            },
+            {
+              type: "response.function_call_arguments.delta",
+              item_id: "fc_unknown",
+              delta: '{"topic":"wrong-call"}',
+            },
+          ]),
+          ...base,
+        }),
+      ),
+    ).rejects.toMatchObject({ statusCode: 502 });
+  });
+
+  it.each([
+    "incomplete",
+    "failed",
+    "eof",
+  ])("does not emit held executable calls after %s", async (terminal) => {
+    const chunks: OpenAi.Types.ChatCompletionChunk[] = [];
+    const run = async () => {
+      for await (const chunk of codexResponsesStreamToChatChunks({
+        stream: streamOf([
+          {
+            type: "response.output_item.added",
+            item: {
+              id: "fc_partial",
+              call_id: "call_partial",
+              type: "function_call",
+              name: "approval_action",
+              arguments: '{"case_id":"batch-case"}',
+            },
+          },
+          ...(terminal === "eof"
+            ? []
+            : [
+                {
+                  type: `response.${terminal}`,
+                  response: {
+                    status: terminal,
+                    incomplete_details: { reason: "max_output_tokens" },
+                    error: { message: "generation failed" },
+                    usage: null,
+                  },
+                },
+              ]),
+        ]),
+        ...base,
+      })) {
+        chunks.push(chunk);
+      }
+    };
+    await expect(run()).rejects.toMatchObject({
+      statusCode: 502,
+      isIncompleteTerminal: terminal === "incomplete",
+      completion: { status: terminal === "eof" ? "incomplete" : terminal },
+    });
+    expect(chunks.every((chunk) => !chunk.choices[0].finish_reason)).toBe(true);
+    expect(chunks.every((chunk) => !chunk.choices[0].delta.tool_calls)).toBe(
+      true,
+    );
+  });
+
   it("throws on response.failed instead of masking it as a successful turn", async () => {
     const events = [
       {
@@ -257,25 +655,98 @@ describe("codexResponsesStreamToChatChunks + fold", () => {
     ).rejects.toMatchObject({ statusCode: 502 });
   });
 
-  it("carries usage and finish_reason on response.incomplete (max tokens)", async () => {
+  it.each([
+    "max_output_tokens",
+    "content_filter",
+    "max_messages",
+  ])("carries partial text and usage in a typed incomplete failure (%s)", async (reason) => {
     const events = [
       { type: "response.output_text.delta", delta: "partial" },
       {
         type: "response.incomplete",
         response: {
+          id: "resp_incomplete",
+          status: "incomplete",
           usage: { input_tokens: 5, output_tokens: 2, total_tokens: 7 },
-          incomplete_details: { reason: "max_output_tokens" },
+          incomplete_details: { reason },
         },
       },
     ];
-    const chunks = await collect(
-      codexResponsesStreamToChatChunks({ stream: streamOf(events), ...base }),
-    );
-    const last = chunks.at(-1);
-    expect(last?.choices[0].finish_reason).toBe("length");
-    expect(last?.usage).toMatchObject({
-      prompt_tokens: 5,
-      completion_tokens: 2,
+    await expect(
+      foldChatChunksToResponse({
+        chunks: codexResponsesStreamToChatChunks({
+          stream: streamOf(events),
+          ...base,
+        }),
+        ...base,
+      }),
+    ).rejects.toMatchObject({
+      statusCode: 502,
+      isIncompleteTerminal: true,
+      completion: {
+        object: "chat.completion",
+        status: "incomplete",
+        provider_response_id: "resp_incomplete",
+        incomplete_details: { reason },
+        choices: [
+          {
+            message: { content: "partial" },
+            finish_reason:
+              reason === "content_filter" ? "content_filter" : "length",
+          },
+        ],
+        usage: { prompt_tokens: 5, completion_tokens: 2 },
+      },
+    });
+  });
+
+  it.each([
+    false,
+    true,
+  ])("rejects tool-free clean EOF rather than minting stop (partial=%s)", async (partial) => {
+    await expect(
+      collect(
+        codexResponsesStreamToChatChunks({
+          stream: streamOf(
+            partial
+              ? [
+                  {
+                    type: "response.created",
+                    response: {
+                      id: "resp_eof",
+                      usage: {
+                        input_tokens: 3,
+                        output_tokens: 2,
+                        total_tokens: 5,
+                      },
+                    },
+                  },
+                  { type: "response.output_text.delta", delta: "partial" },
+                ]
+              : [],
+          ),
+          ...base,
+        }),
+      ),
+    ).rejects.toMatchObject({
+      isIncompleteTerminal: false,
+      completion: {
+        status: "incomplete",
+        incomplete_details: null,
+        error: { code: "proxy_stream_incomplete" },
+        choices: [
+          {
+            message: { content: partial ? "partial" : null },
+            finish_reason: "error",
+          },
+        ],
+        ...(partial
+          ? {
+              provider_response_id: "resp_eof",
+              usage: { prompt_tokens: 3, completion_tokens: 2 },
+            }
+          : {}),
+      },
     });
   });
 });

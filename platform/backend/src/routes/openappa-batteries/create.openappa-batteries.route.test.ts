@@ -24,6 +24,7 @@ import {
 } from "@/services/agent-runtime/runtime-credentials";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./openappa-batteries.routes";
 
 const PACKAGE_FILES = [
@@ -66,6 +67,7 @@ describe("guardrails batteries", () => {
       Object.assign(request, { user, organizationId });
     });
     registerAuditLogHook(app);
+    registerRoutePermissions(app);
     await app.register(routes);
   });
   afterEach(async () => {
@@ -95,6 +97,20 @@ describe("guardrails batteries", () => {
     });
     return { APPA_PROVIDER_GITHUB_TOKEN: "github-token" };
   };
+
+  /** Bind a helper variable organization-wide, or unbind it with a null key. */
+  const bindCredential = (variable: string, key: string | null) =>
+    app.inject({
+      method: "PUT",
+      url: `/api/openappa/credential-bindings/${variable}`,
+      payload: { key },
+    });
+
+  /** One battery of a declarations view a binding answered with. */
+  const batteryIn = (response: { json: () => unknown }, name: string) =>
+    (response.json() as { batteries: Array<{ name: string }> }).batteries.find(
+      (battery) => battery.name === name,
+    );
 
   /** The declarations view, less the battery the shipped default includes. */
   const declarations = async () => {
@@ -187,18 +203,21 @@ describe("guardrails batteries", () => {
       lastError: null,
     });
 
-    const credentialBindings = await bindGithubToken();
+    await bindGithubToken();
     const [row] = await installRows();
-    const updated = await app.inject({
-      method: "PATCH",
-      url: `/api/openappa/battery-installs/${row.id}`,
-      payload: { credentialBindings },
-    });
+    const updated = await bindCredential(
+      "APPA_PROVIDER_GITHUB_TOKEN",
+      "github-token",
+    );
     expect(updated.statusCode).toBe(200);
-    expect(updated.json()).toMatchObject({
+    expect(batteryIn(updated, "github")).toMatchObject({
       status: "active",
       credentials: [
-        { variable: "APPA_PROVIDER_GITHUB_TOKEN", key: "github-token" },
+        {
+          variable: "APPA_PROVIDER_GITHUB_TOKEN",
+          key: "github-token",
+          source: "binding",
+        },
       ],
     });
     // The row keeps its identity across the recompose the edit triggered.
@@ -263,12 +282,10 @@ describe("guardrails batteries", () => {
     expect(records.map((record) => record.action).sort()).toEqual([
       "openappaBatteryInstall.created",
       "openappaBatteryInstall.updated",
-      "openappaBatteryInstall.updated",
     ]);
     // A declaration has no id of its own, so each write names the row it made,
     // falling back to the battery once the unbind leaves no row to name.
     expect(records.map((record) => record.resourceId)).toEqual([
-      row.id,
       row.id,
       "github",
     ]);
@@ -385,7 +402,7 @@ describe("guardrails batteries", () => {
     });
   });
 
-  test("unbinding one battery keeps a variable another included battery reads", async ({
+  test("one binding serves every included battery that reads the variable", async ({
     makeInternalMcpCatalog,
     makeTool,
   }) => {
@@ -407,7 +424,7 @@ describe("guardrails batteries", () => {
       name: "acme_prod__list",
       rawName: "list",
     });
-    const credentialBindings = await bindGithubToken();
+    await bindGithubToken();
     // A second battery whose helper reads the same provider variable: a package
     // owns the variables under its own prefix, and `github-token` owns this one.
     const uploaded = await app.inject({
@@ -444,46 +461,35 @@ describe("guardrails batteries", () => {
       expect(created.statusCode, created.body).toBe(200);
       expect(created.json()).toMatchObject({ status: "missing_credentials" });
     }
-    const rowOf = async (batteryName: string) => {
-      const row = (await installRows()).find(
-        (install) => install.batteryName === batteryName,
-      );
-      if (!row) throw new Error(`the ${batteryName} battery derived no row`);
-      return row;
-    };
-    const bound = await app.inject({
-      method: "PATCH",
-      url: `/api/openappa/battery-installs/${(await rowOf("github")).id}`,
-      payload: { credentialBindings },
-    });
+    const bound = await bindCredential(
+      "APPA_PROVIDER_GITHUB_TOKEN",
+      "github-token",
+    );
     expect(bound.statusCode, bound.body).toBe(200);
-    expect(
-      (await declarations()).batteries.map(
-        (battery: { status: string }) => battery.status,
-      ),
-    ).toEqual(["active", "active"]);
-    const unbound = await app.inject({
-      method: "PATCH",
-      url: `/api/openappa/battery-installs/${(await rowOf("github")).id}`,
-      payload: { credentialBindings: {} },
-    });
-    expect(unbound.statusCode, unbound.body).toBe(200);
-    // The table is one per organization: the other helper still reads the key.
+    // The binding is one per organization and variable: both readers take it.
     expect(await declarations()).toMatchObject({
-      batteries: expect.arrayContaining([
+      batteries: ["github", "github-token"].map((name) =>
         expect.objectContaining({
-          name: "github-token",
+          name,
           status: "active",
           credentials: [
             {
               variable: "APPA_PROVIDER_GITHUB_TOKEN",
               key: "github-token",
+              source: "binding",
               readers: ["github", "github-token"],
             },
           ],
         }),
-      ]),
+      ),
     });
+    const unbound = await bindCredential("APPA_PROVIDER_GITHUB_TOKEN", null);
+    expect(unbound.statusCode, unbound.body).toBe(200);
+    expect(
+      (await declarations()).batteries.map(
+        (battery: { status: string }) => battery.status,
+      ),
+    ).toEqual(["missing_credentials", "missing_credentials"]);
   });
 
   test("a second catalog installs an included battery under the entry the text has", async ({
@@ -923,8 +929,8 @@ describe("guardrails batteries", () => {
     const manager = await makeUser();
     const role = await makeCustomRole(organizationId, {
       permission: {
-        organization: ["update"],
-        toolPolicy: ["read", "update"],
+        organizationSettings: ["update"],
+        openappaPolicy: ["read", "update"],
       },
     });
     await makeMember(manager.id, organizationId, { role: role.role });
@@ -937,11 +943,12 @@ describe("guardrails batteries", () => {
       name: "github__get_me",
       rawName: "get_me",
     });
-    const credentialBindings = await bindGithubToken();
+    await bindGithubToken();
     const managerApp = createFastifyInstance();
     managerApp.addHook("onRequest", async (request) => {
       Object.assign(request, { user: manager, organizationId });
     });
+    registerRoutePermissions(managerApp);
     await managerApp.register(routes);
     try {
       const unbound = await managerApp.inject({
@@ -951,27 +958,24 @@ describe("guardrails batteries", () => {
       });
       expect(unbound.statusCode).toBe(200);
       expect(unbound.json()).toMatchObject({ status: "missing_credentials" });
-      const [row] = await installRows();
-      const rebound = await managerApp.inject({
-        method: "PATCH",
-        url: `/api/openappa/battery-installs/${row.id}`,
-        payload: { credentialBindings },
+      const bindAs = (target: FastifyInstanceWithZod, key: string | null) =>
+        target.inject({
+          method: "PUT",
+          url: "/api/openappa/credential-bindings/APPA_PROVIDER_GITHUB_TOKEN",
+          payload: { key },
+        });
+      expect((await bindAs(managerApp, "github-token")).statusCode).toBe(403);
+      const boundByAdmin = await bindAs(app, "github-token");
+      expect(batteryIn(boundByAdmin, "github")).toMatchObject({
+        status: "active",
       });
-      expect(rebound.statusCode).toBe(403);
-      const boundByAdmin = await app.inject({
-        method: "PATCH",
-        url: `/api/openappa/battery-installs/${row.id}`,
-        payload: { credentialBindings },
-      });
-      expect(boundByAdmin.json()).toMatchObject({ status: "active" });
-      // Removing the grant again takes no credential permission.
-      const removed = await managerApp.inject({
-        method: "PATCH",
-        url: `/api/openappa/battery-installs/${row.id}`,
-        payload: { credentialBindings: {} },
-      });
-      expect(removed.statusCode).toBe(200);
-      expect(removed.json()).toMatchObject({ status: "missing_credentials" });
+      // The binding is a credential write either way, so unbinding takes it too.
+      expect((await bindAs(managerApp, null)).statusCode).toBe(403);
+      expect(
+        (await declarations()).batteries.map(
+          (battery: { status: string }) => battery.status,
+        ),
+      ).toEqual(["active"]);
       // Helper code would run with whatever gets bound to it later.
       const planted = await managerApp.inject({
         method: "PUT",
@@ -1092,14 +1096,13 @@ describe("guardrails batteries", () => {
       credentialId: "jev-key",
       value: "jev_test",
     });
-    const updated = await app.inject({
-      method: "PATCH",
-      url: `/api/openappa/battery-installs/${row.id}`,
-      payload: { credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "jev-key" } },
-    });
+    const updated = await bindCredential(
+      "APPA_PROVIDER_JEV_API_KEY",
+      "jev-key",
+    );
     expect(updated.statusCode, updated.body).toBe(200);
     // The initial root routes every tool to `noop`, so nothing consults jev yet.
-    expect(updated.json()).toMatchObject({
+    expect(batteryIn(updated, "jev")).toMatchObject({
       status: "unrouted",
       servers: [],
     });
@@ -1178,18 +1181,15 @@ describe("guardrails batteries", () => {
         .select()
         .from(schema.auditLogsTable)
         .where(eq(schema.auditLogsTable.organizationId, organizationId))
-    ).filter(
-      (record) =>
-        record.action.startsWith("openappaBatteryInstall") &&
-        record.httpStatus === 200,
-    );
-    // Every write the organization-wide row answered names it.
+    ).filter((record) => record.httpStatus === 200);
+    // Every write the organization-wide row answered names it; the binding is
+    // recorded against the variable it binds.
     expect(
       records.map((record) => [record.action, record.resourceId]).sort(),
     ).toEqual([
       ["openappaBatteryInstall.created", row.id],
       ["openappaBatteryInstall.deleted", row.id],
-      ["openappaBatteryInstall.updated", row.id],
+      ["openappaCredentialBinding.updated", "APPA_PROVIDER_JEV_API_KEY"],
     ]);
   });
 
@@ -1239,10 +1239,6 @@ describe("guardrails batteries", () => {
     });
     await openappaBatteriesService.recompile(organizationId);
 
-    const jevRow = (await installRows()).find(
-      (install) => install.batteryName === "jev",
-    );
-    if (!jevRow) throw new Error("jev derived no row");
     // The profile composes though it has no credential: a dispatch carries no
     // key, so jev answers nothing, which refuses the calls routed to it rather
     // than the whole policy.
@@ -1281,13 +1277,12 @@ describe("guardrails batteries", () => {
       credentialId: "jev-key",
       value: "jev_test",
     });
-    const bound = await app.inject({
-      method: "PATCH",
-      url: `/api/openappa/battery-installs/${jevRow.id}`,
-      payload: { credentialBindings: { APPA_PROVIDER_JEV_API_KEY: "jev-key" } },
-    });
+    const bound = await bindCredential("APPA_PROVIDER_JEV_API_KEY", "jev-key");
     expect(bound.statusCode, bound.body).toBe(200);
-    expect(bound.json()).toMatchObject({ status: "active", composed: true });
+    expect(batteryIn(bound, "jev")).toMatchObject({
+      status: "active",
+      composed: true,
+    });
     expect(
       (await OpenAppaEffectivePolicyModel.find(organizationId))?.lastError,
     ).toBeNull();
@@ -1332,7 +1327,7 @@ describe("guardrails batteries", () => {
     expect(failure.retryAfterSeconds).toBeUndefined();
   });
 
-  test("a member without organization management cannot install", async ({
+  test("a member without policy update cannot install", async ({
     makeUser,
     makeMember,
   }) => {
@@ -1342,6 +1337,7 @@ describe("guardrails batteries", () => {
     memberApp.addHook("onRequest", async (request) => {
       Object.assign(request, { user: member, organizationId });
     });
+    registerRoutePermissions(memberApp);
     await memberApp.register(routes);
     try {
       expect(

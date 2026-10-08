@@ -55,6 +55,7 @@ import {
 } from "@/lib/mcp/pending-install";
 import { buildRemoteInstallCredentialPayload } from "@/lib/mcp/remote-install-payload";
 import websocketService from "@/lib/websocket/websocket";
+import { selectInstallSuccessToastIds } from "./install-success-toasts";
 import {
   LocalServerInstallDialog,
   type LocalServerInstallResult,
@@ -209,12 +210,28 @@ export function useCatalogInstall(opts?: {
           return newSet;
         });
 
+        // Multi-tenant catalogs share one deployment across every install
+        // row, so a single rollout toasts once per catalog, not once per row.
+        const toastServerIds = new Set(
+          selectInstallSuccessToastIds({
+            completedIds: completedServerIds.filter(
+              (id) => !restartingServerIds.has(id),
+            ),
+            servers: installedServers,
+            multitenantCatalogIds: new Set(
+              (catalogItems ?? [])
+                .filter((item) => item.multitenant)
+                .map((item) => item.id),
+            ),
+          }),
+        );
+
         // Show toasts for completed installations and invalidate tools queries
         completedServerIds.forEach((serverId) => {
           const server = installedServers.find((s) => s.id === serverId);
           if (server) {
             if (server.localInstallationStatus === "success") {
-              if (!restartingServerIds.has(serverId)) {
+              if (toastServerIds.has(serverId)) {
                 const catalogName = catalogItems?.find(
                   (item) => item.id === server.catalogId,
                 )?.name;
@@ -821,7 +838,6 @@ export function useCatalogInstall(opts?: {
         installResult.scope === "team"
           ? (installResult.teamId ?? undefined)
           : undefined,
-      serviceAccount: installResult.serviceAccount,
       dontShowToast: true,
     });
 

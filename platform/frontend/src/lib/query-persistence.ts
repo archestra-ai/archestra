@@ -128,9 +128,9 @@ const WRITE_DEBOUNCE_MS = 500;
  * token), and nothing the UI reads before revalidation needs one.
  *
  * The string check matters: several of these words are also permission
- * resource names, so the permission map contains `secret: ["read", …]` and
- * `apiKey: ["read", …]`. Redacting those would make a restored page look like
- * the user had lost access to secrets until the refetch landed. A credential
+ * resource names, so the permission map contains `apiKey: ["read", …]`.
+ * Redacting that would make a restored page look like the user had lost
+ * access to API keys until the refetch landed. A credential
  * is a string; a list of allowed actions is not.
  */
 const REDACTED_FIELDS = new Set([

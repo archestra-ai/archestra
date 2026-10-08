@@ -18,12 +18,12 @@ import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "sonner";
-import { AgentBadge } from "@/components/agent-badge";
 import { AgentForm, type AgentFormSection } from "@/components/agent-form";
 import { AgentIcon } from "@/components/agent-icon";
 import { AgentRuntimeCredentialsDeepLink } from "@/components/agent-runtime-credentials-dialog";
 import { AgentSavedSetupBanner } from "@/components/agent-saved-setup-banner";
 import { AgentVersionHistoryDialog } from "@/components/agent-version-history-dialog";
+import { BuiltInAgentBadge } from "@/components/built-in-agent-badge";
 import { RuntimeCapableIndicator } from "@/components/chat/runtime-capable-indicator";
 import { CloneAgentDialog } from "@/components/clone-agent-dialog";
 import { CreatedByCell } from "@/components/created-by-cell";
@@ -64,6 +64,7 @@ import {
   useExportAgent,
   useProfile,
 } from "@/lib/agent.query";
+import { useAgentRuns } from "@/lib/agent-runtime.query";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { formatPermissionConstraint } from "@/lib/auth/auth.utils";
 import { useFeature } from "@/lib/config/config.query";
@@ -271,12 +272,21 @@ function AgentDetails({
   // section only exists for a reader who may see them — the same check the
   // editor's own host used to make inline.
   const { data: canReadAgentTriggers } = useHasPermissions({
-    agentTrigger: ["read"],
+    organizationSettings: ["read"],
   });
 
   const showConnect = connectAction.visible;
   const hasAgentRuntime =
     runtimeEnabled && kind === "agent" && agent.runtime != null;
+  const runsQuery = useAgentRuns(agent.id, hasAgentRuntime);
+  // A failed lookup keeps its recovery surface accessible; only a known
+  // empty result hides the tab. While the list loads, a link that asked for
+  // runs keeps them, so the page does not flash another section first.
+  const hasRuns =
+    hasAgentRuntime &&
+    ((runsQuery.data?.length ?? 0) > 0 ||
+      runsQuery.isError ||
+      (runsQuery.isPending && searchParams.get("section") === "runs"));
 
   // The record's own sections, listed down the side of its page. The setup
   // wizard's steps supply the editable ones, in the order it walks them, with
@@ -315,9 +325,9 @@ function AgentDetails({
             ? (["advanced"] as const)
             : []),
         ]),
-    ...(showConnect && !connectFirst ? (["connect"] as const) : []),
-    ...(hasAgentRuntime ? (["runs"] as const) : []),
+    ...(hasRuns ? (["runs"] as const) : []),
     ...(!isBuiltIn ? (["permissions"] as const) : []),
+    ...(showConnect && !connectFirst ? (["connect"] as const) : []),
   ];
   const sectionParam = searchParams.get("section");
   const section = resolveAgentDetailSection(sections, sectionParam);
@@ -336,8 +346,18 @@ function AgentDetails({
   // does not keep asking for a section that is not on this page.
   useEffect(() => {
     if (!sectionParam || sectionParam === section) return;
+    if (sectionParam === "runs" && hasAgentRuntime && runsQuery.isPending)
+      return;
     router.replace(agentDetailHref(kind, agent.id, section), { scroll: false });
-  }, [sectionParam, section, kind, agent.id, router]);
+  }, [
+    sectionParam,
+    section,
+    kind,
+    agent.id,
+    router,
+    hasAgentRuntime,
+    runsQuery.isPending,
+  ]);
 
   // Unsaved edits guard every way off the current tab that is not a save:
   // another tab, the back link, the header's own links. The pending
@@ -455,20 +475,17 @@ function AgentDetails({
           ? "clip"
           : "auto"
       }
+      icon={
+        <AgentIcon
+          icon={agent.icon}
+          fallbackType={config.defaultIconType}
+          size={24}
+        />
+      }
       title={
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <AgentIcon
-              icon={agent.icon}
-              fallbackType={config.defaultIconType}
-              size={24}
-            />
-          </div>
+        <div className="flex min-w-0 items-center gap-2">
           <span className="min-w-0 truncate">{agent.name}</span>
-          <AgentBadge
-            type={isBuiltIn ? "builtIn" : agent.scope}
-            className="font-normal"
-          />
+          {isBuiltIn && <BuiltInAgentBadge className="font-normal" />}
           {/* Hidden below sm: the header is one clipped line, and the Start
               run button below already carries the glyph. */}
           {hasAgentRuntime && (
@@ -532,7 +549,7 @@ function AgentDetails({
             </p>
           )}
           {chatAction.visible && chatAction.href && (
-            <Button variant="outline" asChild>
+            <Button variant="outline" size="sm" asChild>
               <Link href={chatAction.href}>
                 {chatAction.startsRun ? (
                   <TerminalSquare className="h-4 w-4" />
@@ -545,7 +562,7 @@ function AgentDetails({
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon-sm">
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">More actions</span>
               </Button>
@@ -624,6 +641,7 @@ function AgentDetails({
       <div className="min-w-0">
         {section === "permissions" ? (
           <ResourcePermissions
+            layout="settings"
             resource={
               agent.agentType === "mcp_gateway" ? "mcpGateway" : "agent"
             }
@@ -686,6 +704,7 @@ function AgentDetails({
                     <WizardFooter className="sm:justify-end">
                       <Button
                         type="submit"
+                        size="sm"
                         form={formId}
                         disabled={
                           !canSubmit || isGone || isSaving || !formDirty

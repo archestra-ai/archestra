@@ -6,6 +6,7 @@ import {
   isModelSelectionComplete,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
   RouteId,
   TOOL_LOAD_SKILL_SHORT_NAME,
 } from "@archestra/shared";
@@ -25,7 +26,6 @@ import {
 // must keep running in those tests rather than silently becoming no-ops.
 import type { AgentTypePermissionChecker } from "@/auth/agent-type-permissions";
 import { getSkillPermissionChecker } from "@/auth/skill-permissions";
-import config from "@/config";
 import { createPaginatedResult } from "@/database/utils/pagination";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base";
 import {
@@ -36,12 +36,9 @@ import {
   AgentVersionModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
-  LlmProviderApiKeyModel,
-  LlmProviderApiKeyModelLinkModel,
   MemberModel,
   OrganizationModel,
   ProjectModel,
-  TeamModel,
 } from "@/models";
 import { initializeObservabilityMetrics } from "@/observability";
 import { listPolicyIndependentAvailableAgentSkills } from "@/services/agent-activation-skill-candidates";
@@ -56,7 +53,10 @@ import { importAgentFromPayload } from "@/services/agent-import";
 import { agentKnowledgeSourceExclusionsService } from "@/services/agent-knowledge-source-exclusions";
 import { populateAgentListActivationSkillCounts } from "@/services/agent-list";
 import { transferAgentOwnership } from "@/services/agent-ownership";
-import { getResolvedAgentRuntimeModelCompatibility } from "@/services/agent-runtime/model-compatibility";
+import {
+  assertAgentRuntimeModelCompatibility,
+  requireAgentRuntimePermission,
+} from "@/services/agent-runtime/agent-config-validation";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { agentSubagentExclusionsService } from "@/services/agent-subagent-exclusions";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
@@ -74,7 +74,6 @@ import {
   AgentExportPayloadSchema,
   AgentKnowledgeSourceExclusionsSchema,
   AgentListItemSchema,
-  type AgentRuntime,
   type AgentScope,
   AgentScopeFilterSchema,
   AgentSkillAssignmentsResponseSchema,
@@ -162,6 +161,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
               .describe(
                 "Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.",
               ),
+            access: ResourceAccessQuerySchema,
             labels: z
               .string()
               .optional()
@@ -236,6 +236,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           teamIds,
           authorIds,
           excludeAuthorIds,
+          access,
           labels,
           excludeOtherPersonalAgents,
           status,
@@ -295,6 +296,7 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeOtherPersonalAgents: isAdmin
             ? excludeOtherPersonalAgents
             : undefined,
+          access,
           labels: parseLabelsParam(labels),
           status,
           providerApiKeyId,
@@ -1848,14 +1850,23 @@ const agentRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
 
-      // Check update permission (return 404 to avoid leaking existence)
+      // Refuse with 403 if the caller can see the agent, and with 404 if not,
+      // so a refused edit never reveals an agent the caller can't read.
       try {
         checker.require(existingAgent.agentType, {
           action: "update",
           scope: existingAgent.id,
         });
-      } catch {
-        throw new ApiError(404, "Agent not found");
+      } catch (error) {
+        try {
+          checker.require(existingAgent.agentType, {
+            action: "read",
+            scope: existingAgent.id,
+          });
+        } catch {
+          throw new ApiError(404, "Agent not found");
+        }
+        throw error;
       }
       requireAgentRuntimePermission({
         agentType: existingAgent.agentType,
@@ -2775,79 +2786,3 @@ const AGENT_READ_FORBIDDEN_MESSAGE =
  */
 const LLM_PROXY_MANAGED_MESSAGE =
   "The LLM Proxy is managed on the LLM Proxy page.";
-
-function requireAgentRuntimePermission(params: {
-  agentType: AgentType;
-  runtime?: AgentRuntime | null;
-  isAdmin: boolean;
-}): void {
-  if (params.runtime == null) return;
-  if (!config.agentRuntime.enabled) {
-    throw new ApiError(400, "Agent Runtime is not enabled");
-  }
-  if (params.agentType !== "agent") {
-    throw new ApiError(400, "Agent Runtime can only be configured for Agents");
-  }
-  if (params.runtime.privileged && !params.isAdmin) {
-    throw new ApiError(
-      403,
-      "Only Agent administrators can enable a privileged background deployment",
-    );
-  }
-  if (params.runtime.privileged && !config.agentRuntime.allowPrivileged) {
-    throw new ApiError(
-      403,
-      "Privileged background deployments are disabled by the deployment operator",
-    );
-  }
-}
-
-async function assertAgentRuntimeModelCompatibility(params: {
-  runtime:
-    | Pick<AgentRuntime, "command" | "inferenceProtocol">
-    | null
-    | undefined;
-  agent: Pick<Agent, "llmApiKeyId" | "modelId">;
-  organizationId: string;
-  userId: string;
-}): Promise<void> {
-  const { runtime } = params;
-  if (!runtime) return;
-  if (params.agent.llmApiKeyId || params.agent.modelId) {
-    if (!params.agent.llmApiKeyId || !params.agent.modelId) {
-      throw new ApiError(
-        400,
-        "An agent's model and API key must be set together",
-      );
-    }
-    const userTeamIds = await TeamModel.getUserTeamIds(params.userId);
-    const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
-      params.organizationId,
-      params.userId,
-      userTeamIds,
-    );
-    const selectedKey = availableKeys.find(
-      (key) => key.id === params.agent.llmApiKeyId,
-    );
-    const selectedModelIsLinked = selectedKey
-      ? (
-          await LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds([
-            selectedKey.id,
-          ])
-        ).some(({ model }) => model.id === params.agent.modelId)
-      : false;
-    if (!selectedModelIsLinked) {
-      throw new ApiError(
-        400,
-        "The selected model and API key must be linked and available to you",
-      );
-    }
-  }
-  const result = await getResolvedAgentRuntimeModelCompatibility({
-    ...params,
-    runtime,
-  });
-  if (!result.compatibility.compatible) {
-    throw new ApiError(409, result.compatibility.message);
-  }
-}

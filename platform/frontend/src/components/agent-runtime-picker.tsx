@@ -5,7 +5,7 @@ import {
   E2eTestId,
   getAgentRuntimeAllowedProtocols,
 } from "@archestra/shared";
-import { CircleAlert, Code } from "lucide-react";
+import { Code } from "lucide-react";
 import { type ReactNode, useEffect, useId, useState } from "react";
 import {
   CatalogAgentIcon,
@@ -22,20 +22,16 @@ import {
   AgentRuntimeSteeringField,
   defaultAgentRuntime,
 } from "@/components/agent-runtime-fields";
+import { ConfigurationRow } from "@/components/configuration-row";
 import { QueryLoadError } from "@/components/query-load-error";
-import {
-  Accordion,
-  AccordionContent,
-  AccordionItem,
-  AccordionTrigger,
-} from "@/components/ui/accordion";
+import { Accordion } from "@/components/ui/accordion";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
 import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/tooltip";
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
+
 import { useFeature } from "@/lib/config/config.query";
 import { useAppIconLogo, useAppName } from "@/lib/hooks/use-app-name";
 import { cn } from "@/lib/utils/tailwind";
@@ -128,10 +124,8 @@ export function AgentRuntimePicker({
             key={option.id}
             htmlFor={`${id}-option-${option.id}`}
             className={cn(
-              "flex cursor-pointer items-center gap-2 rounded-md border px-3 py-2 font-normal transition-colors has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-50 has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-ring",
-              visibleSelectedId === option.id
-                ? "border-primary bg-primary/10"
-                : "hover:bg-muted/50",
+              "flex cursor-pointer items-center gap-2 rounded-md px-3 py-2 font-normal",
+              radioCardClass({ checked: visibleSelectedId === option.id }),
             )}
           >
             <RadioGroupItem
@@ -178,7 +172,7 @@ export function AgentRuntimePicker({
         onValueChange={setExpandedRows}
         className="overflow-hidden rounded-md border"
       >
-        <RuntimeRow
+        <ConfigurationRow
           id={`${id}-model`}
           value="model"
           title={
@@ -190,10 +184,10 @@ export function AgentRuntimePicker({
           attention={modelAttention}
         >
           {modelBlock}
-        </RuntimeRow>
+        </ConfigurationRow>
         {value && (
           <>
-            <RuntimeRow
+            <ConfigurationRow
               id={`${id}-image`}
               value="image"
               title="Image"
@@ -222,8 +216,8 @@ export function AgentRuntimePicker({
                   });
                 }}
               />
-            </RuntimeRow>
-            <RuntimeRow
+            </ConfigurationRow>
+            <ConfigurationRow
               id={`${id}-inference`}
               value="inference"
               title="Inference API"
@@ -235,8 +229,8 @@ export function AgentRuntimePicker({
                 hideLabel
                 constrainToHarness
               />
-            </RuntimeRow>
-            <RuntimeRow
+            </ConfigurationRow>
+            <ConfigurationRow
               id={`${id}-steering`}
               value="steering"
               title="Steering"
@@ -247,16 +241,16 @@ export function AgentRuntimePicker({
                 onChange={onChange}
                 hideLabel
               />
-            </RuntimeRow>
-            <RuntimeRow
+            </ConfigurationRow>
+            <ConfigurationRow
               id={`${id}-controls`}
               value="controls"
               title="Run controls"
               summary={runControlsSummary(value)}
             >
               <AgentRuntimeRunControls value={value} onChange={onChange} />
-            </RuntimeRow>
-            <RuntimeRow
+            </ConfigurationRow>
+            <ConfigurationRow
               id={`${id}-environment`}
               value="environment"
               title="Environment variables"
@@ -267,65 +261,11 @@ export function AgentRuntimePicker({
                 value={value}
                 onChange={onChange}
               />
-            </RuntimeRow>
+            </ConfigurationRow>
           </>
         )}
       </Accordion>
     </section>
-  );
-}
-
-function RuntimeRow({
-  id,
-  value,
-  title,
-  summary,
-  attention,
-  children,
-}: {
-  id: string;
-  value: string;
-  title: string;
-  summary: string;
-  attention?: string;
-  children: ReactNode;
-}) {
-  const [tooltipOpen, setTooltipOpen] = useState(false);
-  return (
-    <AccordionItem id={id} value={value} className="px-4 last:border-b-0">
-      <AccordionTrigger
-        className="min-w-0 items-center hover:no-underline"
-        onFocus={() => setTooltipOpen(true)}
-        onBlur={() => setTooltipOpen(false)}
-      >
-        <span className="flex min-w-0 flex-1 flex-col gap-1 text-left sm:flex-row sm:items-center sm:gap-4">
-          <span className="flex shrink-0 items-center gap-2 sm:w-36">
-            {title}
-            {attention && (
-              <Tooltip open={tooltipOpen} onOpenChange={setTooltipOpen}>
-                <TooltipTrigger asChild>
-                  <span
-                    role="img"
-                    aria-label={attention}
-                    className="inline-flex shrink-0"
-                  >
-                    <CircleAlert
-                      className="size-4 text-amber-600 dark:text-amber-400"
-                      aria-hidden="true"
-                    />
-                  </span>
-                </TooltipTrigger>
-                <TooltipContent side="top">{attention}</TooltipContent>
-              </Tooltip>
-            )}
-          </span>
-          <span className="min-w-0 truncate font-normal text-muted-foreground">
-            {summary}
-          </span>
-        </span>
-      </AccordionTrigger>
-      <AccordionContent className="pt-2">{children}</AccordionContent>
-    </AccordionItem>
   );
 }
 

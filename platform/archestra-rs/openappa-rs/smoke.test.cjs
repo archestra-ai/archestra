@@ -140,13 +140,21 @@ builtin = "hitl"
   });
   const restarted = (session, event) => onReplica({ ...session, ...event });
   const offerInput = (session, event) => {
-    const { original_arguments, ...rest } = event;
+    const {
+      original_arguments,
+      tool: _tool,
+      spelling: _spelling,
+      dispatch: _dispatch,
+      ...rest
+    } = event;
     return {
       organization_id: session.organization_id,
-      caller_id: session.caller_id,
-      session_id: session.session_id,
-      parent_id: session.parent_id,
-      owner_caller_id: session.owner_caller_id ?? session.caller_id,
+      ...(session.caller_id ? { caller_id: session.caller_id } : {}),
+      trajectory: {
+        v: 1,
+        session_id: session.session_id,
+        ...(session.parent_id ? { parent_id: session.parent_id } : {}),
+      },
       execution_mode: event.tool_call_id ? 'tracked' : 'untracked',
       original_arguments: JSON.stringify(original_arguments || event.arguments),
       presentation: { control_tool: 'archestra__execute_remedy_plan', supports_delegation: false },
@@ -290,31 +298,62 @@ builtin = "hitl"
     assert.equal(sanitizations, before + 1, 'accepting staged material does not rerun the sanitizer');
   });
 
-  await t.test('wrong organization and personal owner are indistinguishable unknowns', async () => {
+  await t.test('a wrong run is unknown and does not spend the offer', async () => {
     const session = scope();
     const denied = await call(session, 'held', 'read_untrusted');
     const offer_id = denied.offers[0].offer_id;
-    const event = { tool_call_id: 'provider-remedy-scope', arguments: { offer_id } };
-    const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, event);
-    const wrongUser = await byOffer({ ...session, caller_id: 'user:wrong', owner_caller_id: 'user:owner' }, event);
-    for (const response of [wrongOrganization, wrongUser]) {
+    const event = { arguments: { offer_id } };
+    const wrongOrganization = await byOffer({ ...session, organization_id: `other-${randomUUID()}` }, {
+      ...event, tool_call_id: 'wrong-org',
+    });
+    const wrongSession = await byOffer({ ...session, session_id: randomUUID() }, {
+      ...event, tool_call_id: 'wrong-session',
+    });
+    const wrongParent = await byOffer({ ...session, parent_id: 'not-the-parent' }, {
+      ...event, tool_call_id: 'wrong-parent',
+    });
+    for (const response of [wrongOrganization, wrongSession, wrongParent]) {
       assert.equal(response.offer.status, 'unknown');
       assert.equal(response.reason, 'unknown_control_call');
       assert.equal(response.output_source, 'runtime');
-      assert.equal(response.approved_output, response.result.content[0].text);
     }
-    assert.equal(wrongOrganization.approved_output, wrongUser.approved_output);
+    const other = scope();
+    await call(other, 'other-open', 'read_plain');
+    const wrongActor = await byOffer(other, { ...event, tool_call_id: 'wrong-actor' });
+    assert.equal(wrongActor.offer.status, 'known');
+    assert.equal(wrongActor.result.isError, true);
+    assert.ok(!/Authorized/.test(wrongActor.approved_output), wrongActor.approved_output);
+
+    const spent = await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy',
+    });
+    assert.equal(spent.offer.status, 'known');
+    assert.match(spent.approved_output, /Authorized/);
+    assert.deepEqual((await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy',
+    })).result, spent.result);
+    const again = await byOffer({ ...session, caller_id: 'user:other' }, {
+      ...event, tool_call_id: 'spender-remedy-again',
+    });
+    assert.equal(again.offer.status, 'known');
+    assert.equal(again.result.isError, true);
+    assert.ok(!/Authorized/.test(again.approved_output));
   });
 
-  await t.test('credential-owned offers permit an authenticated same-organization spender', async () => {
-    const session = scope('virtual-key:credential');
-    const denied = await call(session, 'held', 'read_untrusted');
-    const response = await byOffer({ ...session, caller_id: 'user:spender', owner_caller_id: 'virtual-key:credential' }, {
-      tool_call_id: 'credential-remedy',
+  await t.test('an anonymous organization token can spend the stamped session', async () => {
+    const session = scope();
+    const denied = await call(session, 'anon-held', 'read_untrusted');
+    const { caller_id: _caller, ...anonymous } = session;
+    const response = await byOffer(anonymous, {
+      tool_call_id: 'anon-remedy',
       arguments: { offer_id: denied.offers[0].offer_id },
     });
     assert.equal(response.offer.status, 'known');
-    assert.notEqual(response.result.isError, true);
+    assert.match(response.approved_output, /Authorized/);
+    assert.deepEqual((await byOffer(anonymous, {
+      tool_call_id: 'anon-remedy',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    })).result, response.result);
   });
 
   await t.test('a direct remedy cannot spend an offer from another trajectory', async () => {
@@ -733,6 +772,53 @@ builtin = "hitl"
     return staged.value;
   };
 
+  await t.test('a runtime workspace binds to its released spawn and returns across replica restarts without ending', async () => {
+    const { parent, proposeSpawn } = await openReturnDeclaredParent();
+    assert.equal((await proposeSpawn('runtime-start')).decision, 'allow_call');
+    const child = { ...parent, session_id: `workspace-${randomUUID()}`, parent_id: parent.session_id };
+    assert.ok(!child.session_id.startsWith(`${parent.session_id}:`));
+    const started = await hook(child, { event: 'session_start', spawn_call_id: 'runtime-start' });
+    assert.ok(['ack', 'context'].includes(started.decision), JSON.stringify(started));
+    assert.deepEqual(await restarted(child, { event: 'session_start' }), started, 'a continuation retains its return contract');
+    const wrongParent = scope();
+    await hook(wrongParent, { event: 'session_start' });
+    const foreign = await hook(wrongParent, { event: 'child_address', operation_id: 'foreign-address', spawned_id: child.session_id, output: '' });
+    assert.notEqual(foreign.decision, 'ack');
+    const addressed = await restarted(parent, { event: 'child_address', operation_id: 'runtime-steer', spawned_id: child.session_id, output: '' });
+    assert.equal(addressed.decision, 'ack', JSON.stringify(addressed));
+    const cross = async (turn, text) => {
+      const operation_id = `runtime-return:task:${turn}`;
+      const returned = await restarted(child, { event: 'child_return', operation_id, output: text });
+      assert.ok(['ack', 'child_return'].includes(returned.decision), JSON.stringify(returned));
+      const approved = returned.decision === 'ack' ? text : returned.value;
+      if (returned.decision === 'child_return') {
+        const echo = await restarted(child, { event: 'child_return', operation_id: `${operation_id}:echo`, output: approved });
+        assert.equal(echo.decision, 'ack', JSON.stringify(echo));
+      }
+      const records = await native.loadChildReturns(organization_id, parent.session_id);
+      assert.ok(records.some(record => record.childSessionId === child.session_id && record.operationId.startsWith(operation_id) && record.value === approved));
+      return approved;
+    };
+    await cross('first', 'runtime result one');
+    const next = await call(child, 'read-next', 'read_plain');
+    assert.equal(next.decision, 'allow_call', JSON.stringify(next));
+    const held = await hook(child, { event: 'child_return', operation_id: 'runtime-return:task:pending', output: 'must not settle read-next' });
+    assert.equal(held.decision, 'block', JSON.stringify(held));
+    await result(child, 'read-next', 'private report');
+    const admittedSecond = await cross('second', 'runtime result two');
+    const latest = await native.loadChildReturns(organization_id, parent.session_id, {
+      childSessionId: child.session_id, operationPrefix: 'runtime-return:task:',
+    });
+    assert.equal(latest.length, 1);
+    assert.equal(latest[0].value, admittedSecond);
+    assert.ok(latest[0].operationId.includes(':second'));
+    assert.deepEqual(await native.loadChildReturns(organization_id, parent.session_id, {
+      childSessionId: child.session_id, operationPrefix: 'runtime-return:another-task:',
+    }), []);
+    assert.equal((await call(child, 'read-third', 'read_plain')).decision, 'allow_call', 'returning did not end the workspace');
+    await result(child, 'read-third', 'next report');
+  });
+
   await t.test('a void child end never poisons the durable child-return ledger', async () => {
     const { parent, proposeSpawn } = await openReturnDeclaredParent();
     assert.equal((await proposeSpawn('spawn-real')).decision, 'allow_call');
@@ -790,6 +876,195 @@ builtin = "hitl"
     assert.equal(crossings.length, 2, 'each authentic return survives without its echo');
   });
 
+  // Teammates: a lead spawns a child that keeps running and trades messages
+  // with it. A message crosses the same checked return as a child's end, and a
+  // message to the child carries the lead's label into it.
+  const openTeammate = async (lead, name, label, sanitizer) => {
+    const presentation = {
+      control_tool: 'archestra__execute_remedy_plan',
+      supports_delegation: true,
+    };
+    const proposeSpawn = (id) => hook(lead, {
+      event: 'tool_call',
+      operation_id: `call:${id}`,
+      tool: 'spawn_worker',
+      arguments: { prompt: `Work as ${name}`, name },
+      spawn: true,
+      presentation,
+    });
+    const held = await proposeSpawn(`${name}-held`);
+    assert.equal(held.decision, 'deny_call', JSON.stringify(held));
+    const plan = held.offers?.find((offer) => (sanitizer
+      ? offer.returns?.sanitizer === sanitizer
+      : offer.returns === 'as_spoken'));
+    assert.ok(plan?.offer_id, `the spawn offered the return plan: ${JSON.stringify(held)}`);
+    const declaration = await byOffer(lead, {
+      tool_call_id: `${name}-declare`,
+      arguments: { offer_id: plan.offer_id, label },
+      presentation,
+    });
+    assert.notEqual(declaration.result?.isError, true, JSON.stringify(declaration));
+    assert.equal((await proposeSpawn(`${name}-spawn`)).decision, 'allow_call');
+    return `${name}-spawn`;
+  };
+  const readUntrusted = async (session, id) => {
+    const held = await call(session, `${id}-held`, 'read_untrusted');
+    if (held.decision === 'deny_call') {
+      await byOffer(session, {
+        tool_call_id: `${id}-accept`,
+        arguments: { offer_id: held.offers[0].offer_id },
+      });
+    }
+    assert.equal((await call(session, id, 'read_untrusted')).decision, 'allow_call');
+    await result(session, id, 'untrusted text');
+  };
+
+  await t.test('a teammate message crosses its fork mid-turn and narrows its lead', async () => {
+    const lead = scope();
+    const spawnCallId = await openTeammate(lead, 'auditor', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'auditor@team');
+    assert.equal((await call(lead, 'lead-before', 'write_public')).decision, 'allow_call');
+    await result(lead, 'lead-before', 'posted');
+
+    await readUntrusted(teammate, 'teammate-read');
+    const sent = await hook(teammate, {
+      event: 'child_end',
+      operation_id: 'child_send:message-1',
+      output: 'Three triggers are stuck',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'auditor@team',
+    });
+    assert.equal(sent.decision, 'ack', JSON.stringify(sent));
+
+    // The teammate works on after its message; nothing ended it.
+    assert.equal((await call(teammate, 'teammate-after', 'read_plain')).decision, 'allow_call');
+    await result(teammate, 'teammate-after', 'plain text');
+    // The lead absorbed the message's label the moment it crossed.
+    const write = await call(lead, 'lead-after', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    // The crossing is the record the lead's side verifies the message against.
+    const crossings = await native.loadChildReturns(organization_id, lead.session_id);
+    assert.ok(crossings.some((record) => record.childSessionId === teammate.session_id
+      && record.value === 'Three triggers are stuck'));
+  });
+
+  await t.test('a teammate message through a sanitizing return reaches its lead as the sanitizer output', async () => {
+    const lead = scope();
+    const spawnCallId = await openTeammate(lead, 'scrubbed', { audience: ['insider'] }, 'scrub');
+    const teammate = await startChild(lead, 'scrubbed@team');
+    const read = await call(teammate, 'scrubbed-read-held', 'read_return_only');
+    await byOffer(teammate, {
+      tool_call_id: 'scrubbed-accept',
+      arguments: { offer_id: read.offers[0].offer_id },
+    });
+    assert.equal((await call(teammate, 'scrubbed-read', 'read_return_only')).decision, 'allow_call');
+    await result(teammate, 'scrubbed-read', 'CUSTOMER-RAW-7731');
+
+    const message = {
+      event: 'child_end',
+      operation_id: 'child_send:scrubbed',
+      output: 'CUSTOMER-RAW-7731 is affected',
+      spawn_call_id: spawnCallId,
+      child_native_id: 'scrubbed@team',
+    };
+    const staged = await hook(teammate, message);
+    assert.equal(staged.decision, 'child_return', JSON.stringify(staged));
+    assert.equal(staged.value, 'approved scrubbed output');
+    const crossed = await hook(teammate, {
+      ...message,
+      operation_id: 'child_send:scrubbed:echo',
+      output: staged.value,
+    });
+    assert.equal(crossed.decision, 'ack', JSON.stringify(crossed));
+    const values = (await native.loadChildReturns(organization_id, lead.session_id))
+      .filter((record) => record.childSessionId === teammate.session_id)
+      .map((record) => record.value);
+    assert.deepEqual(values, ['approved scrubbed output'], 'only the sanitizer output crossed');
+    // The teammate keeps working after its message.
+    assert.equal((await call(teammate, 'scrubbed-after', 'read_plain')).decision, 'allow_call');
+  });
+
+  await t.test('a lead message carries the lead label into its started teammate', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'writer', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'writer@team');
+    assert.equal((await call(teammate, 'writer-before', 'write_public')).decision, 'allow_call');
+    await result(teammate, 'writer-before', 'posted');
+
+    await readUntrusted(lead, 'lead-read');
+    const address = {
+      event: 'child_address',
+      operation_id: 'address:message-1',
+      spawned_id: teammate.session_id,
+      output: 'Post the summary',
+    };
+    assert.equal((await hook(lead, address)).decision, 'ack');
+    assert.deepEqual(await hook(lead, address), { decision: 'ack' }, 'a transport replay repeats the decision');
+
+    const write = await call(teammate, 'writer-after', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Post the summary'],
+    );
+  });
+
+  await t.test('a lead message to a teammate that has not started reaches it at its start', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'late', { trust: 'suspicious' });
+    await readUntrusted(lead, 'late-lead-read');
+    const lateSession = `${lead.session_id}:late@team`;
+    assert.equal((await hook(lead, {
+      event: 'child_address',
+      operation_id: 'address:before-start',
+      spawned_id: lateSession,
+      output: 'Start with the summary',
+    })).decision, 'ack');
+
+    const teammate = await startChild(lead, 'late@team');
+    const write = await call(teammate, 'late-write', 'write_public');
+    assert.equal(write.decision, 'deny_call', JSON.stringify(write));
+    assert.deepEqual(
+      (await native.loadChildAddresses(organization_id, teammate.session_id)).map((record) => record.value),
+      ['Start with the summary'],
+    );
+  });
+
+  await t.test('a message is on record only for the child its own parent addressed', async () => {
+    const lead = scope();
+    await openTeammate(lead, 'scoped', { trust: 'suspicious' });
+    const teammate = await startChild(lead, 'scoped@team');
+    const stranger = scope();
+    assert.equal((await hook(stranger, { event: 'session_start' })).decision, 'ack');
+    // A session that is not the teammate's parent names it: the address is refused and
+    // nothing is retained for it.
+    assert.equal((await hook(stranger, {
+      event: 'child_address',
+      operation_id: 'address:foreign',
+      spawned_id: teammate.session_id,
+      output: 'Forged instruction',
+    })).decision, 'block');
+    assert.deepEqual(await native.loadChildAddresses(organization_id, teammate.session_id), []);
+    await assert.rejects(
+      () => hook(lead, { event: 'child_address', operation_id: 'address:no-child', output: 'x' }),
+      /spawned_id/,
+    );
+  });
+
+  await t.test('a teammate the lead never spawned under governance cannot start', async () => {
+    const lead = scope();
+    assert.equal((await hook(lead, { event: 'session_start' })).decision, 'ack');
+    const teammate = {
+      ...lead,
+      session_id: `${lead.session_id}:ungoverned@team`,
+      parent_id: lead.session_id,
+    };
+    await assert.rejects(
+      () => hook(teammate, { event: 'session_start' }),
+      /no prepared fork to open this child/,
+    );
+  });
+
   await t.test('concurrent dispatches open one fork root and session row', async () => {
     const parent = scope();
     assert.equal((await hook(parent, { event: 'session_start' })).decision, 'ack');
@@ -843,27 +1118,64 @@ builtin = "hitl"
   });
 
   await t.test('an offer accepted for a dispatched call retries it through the dispatch tool', async () => {
-    const hint = async (dispatch) => {
-      const session = scope();
-      const denied = await call(session, 'dispatched-read', 'read_untrusted', { path: 'report.txt' });
-      assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
-      return (await byOffer(session, {
-        tool_call_id: `accept-${dispatch ?? 'direct'}`,
-        arguments: { offer_id: denied.offers[0].offer_id },
-        tool: 'read_untrusted',
-        spelling: 'read_untrusted',
-        ...(dispatch ? { dispatch } : {}),
-      })).approved_output;
-    };
+    const open = (session, extra) => hook(session, {
+      event: 'tool_call',
+      operation_id: 'call:dispatched-read',
+      tool: 'read_untrusted',
+      arguments: { path: 'report.txt' },
+      ...extra,
+    });
+    const accept = (session, denied) => byOffer(session, {
+      tool_call_id: 'accept-recorded',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    });
 
-    const [prefix, retry] = (await hint('my_gateway_archestra__run_tool')).split('exactly these arguments: ');
+    const dispatched = scope();
+    const denied = await open(dispatched, {
+      spelling: 'client.read_untrusted',
+      dispatch: 'my_gateway_archestra__run_tool',
+    });
+    assert.ok(denied.offers?.length > 0, JSON.stringify(denied));
+    const [prefix, retry] = (await accept(dispatched, denied)).approved_output.split('exactly these arguments: ');
     assert.equal(prefix, '[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with ');
     assert.deepEqual(JSON.parse(retry), { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } });
-    // A direct call keeps naming the tool itself.
+
+    const direct = scope();
+    const named = await open(direct, { spelling: 'client.read_untrusted' });
     assert.match(
-      await hint(undefined),
-      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the read_untrusted tool again/,
+      (await accept(direct, named)).approved_output,
+      /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the client\.read_untrusted tool again/,
     );
+  });
+
+  await t.test('a restarted replica recovers dispatch retry text, and an old row falls back', async () => {
+    const session = scope();
+    const denied = await hook(session, {
+      event: 'tool_call',
+      operation_id: 'call:restart-read',
+      tool: 'read_untrusted',
+      arguments: { path: 'report.txt' },
+      spelling: 'client.read_untrusted',
+      dispatch: 'my_gateway_archestra__run_tool',
+    });
+    const restarted = await remoteOffer(session, {
+      tool_call_id: 'accept-restart',
+      arguments: { offer_id: denied.offers[0].offer_id },
+    });
+    assert.match(restarted.approved_output, /Call the my_gateway_archestra__run_tool tool again/);
+    assert.deepEqual(
+      JSON.parse(restarted.approved_output.split('exactly these arguments: ')[1]),
+      { tool_name: 'read_untrusted', tool_args: { path: 'report.txt' } },
+    );
+
+    const legacy = scope();
+    const old = await call(legacy, 'legacy-read', 'read_untrusted', { path: 'report.txt' });
+    const text = (await byOffer(legacy, {
+      tool_call_id: 'accept-legacy',
+      arguments: { offer_id: old.offers[0].offer_id },
+    })).approved_output;
+    assert.match(text, /Call the read_untrusted tool again/);
+    assert.doesNotMatch(text, /run_tool/);
   });
 
   await t.test('a human denial is final, reads as one, and replays', async () => {
@@ -906,7 +1218,7 @@ builtin = "hitl"
     const approved = await byOffer(session, {
       tool_call_id: 'post-other-approve', tool: 'publish_post', arguments: { offer_id: remaining }, ruling: 'approve',
     });
-    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the publish_post tool again/);
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the publish_post tool again/);
   });
 
   await t.test('a precheck refusal answers the remedy without touching the offer', async () => {
@@ -934,7 +1246,7 @@ builtin = "hitl"
     const approved = await byOffer(session, {
       tool_call_id: 'email-after-precheck', tool: 'send_email', arguments: { offer_id }, ruling: 'approve',
     });
-    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\. Call the send_email tool again/);
+    assert.match(approved.approved_output, /^\[appa\] Authorized\. Tell the user in your reply which plan was accepted\..* Call the send_email tool again/);
 
     await assert.rejects(
       () => byOffer(session, {

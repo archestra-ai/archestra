@@ -10,7 +10,11 @@ import { enterpriseTier } from "@/enterprise-tier";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 // SPDX-SnippetEnd
-import { McpServerModel, PlaywrightRuntimeModel } from "@/models";
+import {
+  InternalMcpCatalogModel,
+  McpServerModel,
+  PlaywrightRuntimeModel,
+} from "@/models";
 import McpServerUserModel from "@/models/mcp-server-user";
 import { secretManager } from "@/secrets-manager";
 import {
@@ -908,6 +912,44 @@ describe("mcp server inspect route", () => {
     expect(k8sStartServerMock.mock.calls[0]?.[1]).toEqual({
       header_x_api_key: "header-value",
     });
+  });
+
+  test("personal install cannot override the catalog-owned Kubernetes service account", async ({
+    makeInternalMcpCatalog,
+  }) => {
+    const catalog = await makeInternalMcpCatalog({
+      organizationId,
+      name: "Catalog-Owned Runtime Identity",
+      serverType: "local",
+      localConfig: {
+        command: "node",
+        arguments: ["server.js"],
+        environment: [],
+        transportType: "streamable-http",
+        httpPort: 8080,
+        httpPath: "/mcp",
+        serviceAccount: "default",
+      },
+    });
+
+    hasPermissionMock.mockResolvedValue({ success: false, error: null });
+    userHasPermissionMock.mockResolvedValue(false);
+
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/mcp_server",
+      payload: {
+        name: "Catalog-Owned Runtime Identity",
+        catalogId: catalog.id,
+        scope: "personal",
+        serviceAccount: "request-supplied-runtime",
+      },
+    });
+
+    expect(response.statusCode).toBe(200);
+    const updatedCatalog = await InternalMcpCatalogModel.findById(catalog.id);
+    expect(updatedCatalog?.localConfig?.serviceAccount).toBe("default");
+    expect(k8sStartServerMock).toHaveBeenCalledTimes(1);
   });
 
   test("installs a local MCP server with both secret env vars and prompted header user config", async ({

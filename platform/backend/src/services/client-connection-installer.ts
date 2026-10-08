@@ -1,16 +1,21 @@
+import {
+  CONNECT_SETUP_PARTS,
+  INSTALLER_CLIENT_IDS,
+} from "@archestra/shared/connection-setup";
+
 /** Public bootstrap: secrets stay in process memory; only the approved script reaches disk. */
 export const CLIENT_CONNECTION_INSTALLER = String.raw`#!/usr/bin/env node
 const { spawn, spawnSync } = require('node:child_process');
 const { createHash } = require('node:crypto');
-const { mkdtemp, open, writeFile, readFile, rm } = require('node:fs/promises');
-const { tmpdir } = require('node:os');
+const { mkdtemp, open, writeFile, readFile, rm, access } = require('node:fs/promises');
+const { hostname, tmpdir } = require('node:os');
 const { join } = require('node:path');
 
 async function main() {
   const args = process.argv.slice(2);
   const value = (flag) => { const i = args.indexOf(flag); return i < 0 ? undefined : args[i + 1]; };
   if (args.includes('--help')) {
-    console.log('Usage: node connect.cjs --url https://deployment.example --client claude-code|claude-desktop|cursor|codex|copilot-cli|opencode [--no-open]');
+    console.log('Usage: node connect.cjs --url https://deployment.example --client ${INSTALLER_CLIENT_IDS.join("|")} [--exclude ${CONNECT_SETUP_PARTS.join(",")}] [--no-open]');
     return;
   }
   const origin = new URL(value('--url'));
@@ -21,7 +26,9 @@ async function main() {
   const clientId = value('--client');
   const setupToken = value('--setup-token');
   if (setupToken && (clientId !== 'claude-desktop' || !/^archestra_con_[A-Za-z0-9_-]{32,43}$/.test(setupToken))) throw new Error('Invalid Desktop setup ticket.');
-  if (!['claude-code', 'claude-desktop', 'cursor', 'codex', 'copilot-cli', 'opencode'].includes(clientId)) throw new Error('Choose --client claude-code, claude-desktop, cursor, codex, copilot-cli, or opencode.');
+  if (!${JSON.stringify(INSTALLER_CLIENT_IDS)}.includes(clientId)) throw new Error('Choose --client ${INSTALLER_CLIENT_IDS.slice(0, -1).join(", ")}, or ${INSTALLER_CLIENT_IDS.at(-1)}.');
+  const exclude = (value('--exclude') ?? '').split(',').filter(Boolean);
+  if (exclude.some(part => !${JSON.stringify(CONNECT_SETUP_PARTS)}.includes(part))) throw new Error('--exclude takes a comma-separated list of ${CONNECT_SETUP_PARTS.join(", ")}.');
   const platform = { darwin: 'macos', linux: 'linux', win32: 'windows' }[process.platform];
   if (!platform) throw new Error('Supported operating systems: macOS, Linux, Windows.');
   if (typeof fetch !== 'function') throw new Error('Node.js 18 or newer is required.');
@@ -38,18 +45,20 @@ async function main() {
   }
   const releaseLock = await acquireConnectionLock({ origin: origin.origin, clientId, platform });
   try {
-    await runConnection({ args, clientId, networkOrigin, origin, platform });
+    await runConnection({ args, clientId, exclude, networkOrigin, origin, platform });
   } finally {
     await releaseLock();
   }
 }
-async function runConnection({ args, clientId, networkOrigin, origin, platform }) {
+async function runConnection({ args, clientId, exclude, networkOrigin, origin, platform }) {
   const request = async (path, body) => {
     const response = await fetch(new URL(path, networkOrigin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(15000) });
     if (!response.ok) { const error = new Error('Connection request failed (HTTP ' + response.status + '). Restart the installer or check the deployment URL.'); error.retryable = response.status === 429 || response.status >= 500; throw error; }
     return response.json();
   };
-  const started = await request('/api/client-connections', { clientId, platform });
+  const deviceName = hostname().trim().slice(0, 64);
+  const started = await request('/api/client-connections', { clientId, platform, ...(exclude.length ? { exclude } : {}), ...(deviceName ? { deviceName } : {}) });
+  if (exclude.length) console.log('Leaving out: ' + exclude.join(', ') + '.');
   if (!Number.isSafeInteger(started.interval) || started.interval < 1 || started.interval > 600) throw new Error('Invalid polling interval.');
   const pollIntervalMs = started.interval * 1000;
   const verificationUrl = new URL(started.verificationPath, origin);
@@ -57,13 +66,7 @@ async function runConnection({ args, clientId, networkOrigin, origin, platform }
   console.log('Open ' + verificationUrl.href);
   console.log('Check that the browser shows code ' + started.userCode + ', then review and approve the setup.');
   console.log('Waiting for browser approval. Press Ctrl+C to cancel.');
-  if (!args.includes('--no-open')) {
-    const command = platform === 'macos' ? 'open' : platform === 'windows' ? 'rundll32' : 'xdg-open';
-    const openArgs = platform === 'windows' ? ['url.dll,FileProtocolHandler', verificationUrl.href] : [verificationUrl.href];
-    const child = spawn(command, openArgs, { stdio: 'ignore' });
-    child.on('error', () => console.log('Open the URL above in your browser.'));
-    child.unref();
-  }
+  if (!args.includes('--no-open')) await openApprovalBrowser(verificationUrl.href);
   const deadline = Math.min(Date.parse(started.expiresAt), Date.now() + 600000);
   if (!Number.isFinite(deadline)) throw new Error('Invalid connection expiry.');
   while (Date.now() < deadline) {
@@ -85,6 +88,73 @@ async function runConnection({ args, clientId, networkOrigin, origin, platform }
     return;
   }
   throw new Error('Connection expired. Start the installer again.');
+}
+function commandOnPath(name) {
+  const found = spawnSync('which', [name], { encoding: 'utf8' });
+  if (!found || found.status !== 0 || !found.stdout) return '';
+  const line = String(found.stdout).trim().split('\n')[0];
+  return line.indexOf(name) === -1 ? '' : line;
+}
+async function pathExists(filePath) {
+  try { await access(filePath); return true; } catch { return false; }
+}
+async function selectBrowserLaunch(url) {
+  if (process.platform === 'darwin') return { command: 'open', args: [url] };
+  if (process.platform === 'win32') return { command: 'rundll32.exe', args: ['url.dll,FileProtocolHandler', url] };
+  const wsl = process.platform === 'linux' && (process.env.WSL_DISTRO_NAME || process.env.WSL_INTEROP);
+  if (wsl) {
+    const view = commandOnPath('wslview');
+    if (view) return { command: view, args: [url] };
+    if (process.env.WSL_INTEROP) {
+      const windowsRundll = '/mnt/c/Windows/System32/rundll32.exe';
+      const rundll = commandOnPath('rundll32.exe') || (await pathExists(windowsRundll) ? windowsRundll : '');
+      if (rundll) return { command: rundll, args: ['url.dll,FileProtocolHandler', url], interop: true };
+    }
+  }
+  return { command: 'xdg-open', args: [url] };
+}
+function classifySpawnError(error) {
+  const code = error && error.code;
+  if (code === 'EACCES') return 'eacces';
+  if (code === 'ENOEXEC') return 'enoexec';
+  return 'error';
+}
+function spawnBrowser(command, args) {
+  return new Promise((resolve) => {
+    let child;
+    try {
+      child = spawn(command, args, { stdio: 'ignore' });
+    } catch (error) {
+      resolve(classifySpawnError(error));
+      return;
+    }
+    let settled = false;
+    const finish = (value) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      resolve(value);
+    };
+    const timer = setTimeout(() => {
+      child.unref();
+      finish('timeout');
+    }, 5000);
+    child.once('error', (error) => finish(classifySpawnError(error)));
+    child.once('exit', (code) => finish(code === 0 ? 'ok' : 'exit'));
+  });
+}
+async function openApprovalBrowser(url) {
+  const launch = await selectBrowserLaunch(url);
+  const failed = () => console.log('Browser did not open. Use the approval URL above.');
+  if (!launch) { failed(); return; }
+  const result = await spawnBrowser(launch.command, launch.args);
+  if (result === 'ok') return;
+  if (result === 'eacces') { failed(); return; }
+  if (result === 'enoexec' && launch.interop && process.env.WSL_INTEROP && await pathExists('/init')) {
+    const bridged = await spawnBrowser('/init', [launch.command].concat(launch.args));
+    if (bridged === 'ok') return;
+  }
+  failed();
 }
 async function acquireConnectionLock({ origin, clientId, platform }) {
   const digest = createHash('sha256').update(origin + '\n' + clientId + '\n' + platform).digest('hex').slice(0, 24);

@@ -208,8 +208,8 @@ export function ToolResultPolicyCondition({
       {removable && (
         <Button
           variant="ghost"
-          size="sm"
-          className="w-6 h-6 p-0 hover:text-red-500 shrink-0"
+          size="icon-xs"
+          className="hover:text-red-500 shrink-0"
           onClick={onRemove}
           title="Remove condition"
           aria-label="Remove condition"

@@ -40,12 +40,16 @@ export function conversationStorageKeys(conversationId: string) {
     draft: `archestra_chat_draft_${conversationId}`,
     messageQueue: `archestra_chat_queue_${conversationId}`,
     reviewContext: `archestra-chat-review-context-${conversationId}`,
-    lockedChatKey: `archestra_locked_chat_key_${conversationId}`,
+    encryptedChatKey: `archestra_encrypted_chat_key_${conversationId}`,
     /**
-     * Where the locked-chat key lived before the feature was renamed. Read
-     * (and migrated) on access, never written — see `getLockedChatKey`.
+     * Where the encrypted-chat key lived under the feature's former names
+     * ("locked chat", then "incognito"), newest first. Read (and migrated) on
+     * access, never written — see `getEncryptedChatKey`.
      */
-    legacyLockedChatKey: `archestra_incognito_key_${conversationId}`,
+    legacyEncryptedChatKeys: [
+      `archestra_locked_chat_key_${conversationId}`,
+      `archestra_incognito_key_${conversationId}`,
+    ],
   };
 }
 
@@ -171,9 +175,12 @@ export function getConversationShareTooltip(
   return "Shared with your organization";
 }
 
+type ManualCompactionResponse =
+  archestraApiTypes.CompactChatConversationResponses["200"];
+
 export function getManualCompactionSkippedMessage(
-  reason: string | undefined,
-  status?: string,
+  reason: ManualCompactionResponse["reason"],
+  status?: ManualCompactionResponse["status"],
 ): string {
   switch (reason) {
     case "nothing_to_compact":

@@ -6,7 +6,10 @@ mod batteries;
 mod consults;
 mod declarations;
 mod deployments;
+#[allow(dead_code)]
+mod peer;
 mod policy;
+mod replay;
 
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
@@ -21,8 +24,8 @@ use appa_runtime::{
     hooks,
 };
 use appa_runtime_api::{
-    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnRef,
-    ToolOutcome, TrajectoryId, WireDecision,
+    Actor, CanonicalTool, HookDecision, HookEvent, OutcomeBody, ProposedCall, Ruling, SpawnBinding,
+    SpawnKind, SpawnRef, ToolOutcome, TrajectoryId, WireDecision,
 };
 use futures_util::FutureExt;
 use napi_derive::napi;
@@ -89,15 +92,14 @@ fn state_mutex() -> &'static Mutex<Option<State>> {
     STATE.get_or_init(|| Mutex::new(None))
 }
 
-/// Identity context associated with a denial offer for cross-replica routing.
+/// Route resolved from the proxy-stamped trajectory and the session row, plus
+/// the original call's retry text recovered from that call's stored context.
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq)]
 pub struct OfferOwner {
     pub organization_id: String,
-    pub caller_id: Option<String>,
     pub session_id: String,
     pub parent_id: Option<String>,
     pub root: String,
-    pub arguments: Option<String>,
     pub tool: Option<String>,
     pub spelling: Option<String>,
     /// Client spelling of the dispatch tool (`run_tool`) used for this call.
@@ -109,31 +111,14 @@ pub struct OfferOwner {
 #[serde(transparent)]
 pub struct OfferId(pub String);
 
-#[derive(Clone, Debug, PartialEq, Eq)]
-enum Principal {
-    User(String),
-    App(String),
-    VirtualKey(String),
-    Opaque(String),
-}
-
-impl Principal {
-    fn parse(value: &str) -> napi::Result<Self> {
-        let parsed = if let Some(id) = value.strip_prefix("user:") {
-            Self::User(id.to_owned())
-        } else if let Some(id) = value.strip_prefix("app:") {
-            Self::App(id.to_owned())
-        } else if let Some(id) = value.strip_prefix("virtual-key:") {
-            Self::VirtualKey(id.to_owned())
-        } else {
-            Self::Opaque(value.to_owned())
-        };
-        if matches!(&parsed, Self::User(id) | Self::App(id) | Self::VirtualKey(id) if id.is_empty())
-        {
-            return Err(error("invalid caller identity"));
-        }
-        Ok(parsed)
-    }
+/// The current trajectory the proxy stamps on a remedy. Not a client claim.
+#[derive(Deserialize)]
+#[serde(deny_unknown_fields)]
+struct TrajectoryStamp {
+    v: u8,
+    session_id: String,
+    #[serde(default)]
+    parent_id: Option<String>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Serialize, PartialEq, Eq)]
@@ -148,21 +133,11 @@ pub enum RulingInput {
 #[serde(deny_unknown_fields)]
 struct OfferInput {
     organization_id: String,
-    /// Authenticated caller identity.
+    /// Authenticated spender, recorded on a caller-bound receipt. Absent for an
+    /// anonymous organization token; never compared to an offer owner.
     #[serde(default)]
     caller_id: Option<String>,
-    session_id: String,
-    #[serde(default)]
-    parent_id: Option<String>,
-    /// Principal that minted the offer, from verified host claims.
-    #[serde(default)]
-    owner_caller_id: Option<String>,
-    #[serde(default)]
-    tool: Option<String>,
-    #[serde(default)]
-    spelling: Option<String>,
-    #[serde(default)]
-    dispatch: Option<String>,
+    trajectory: TrajectoryStamp,
     /// Client tool call ID for binding durable remedy receipts.
     #[serde(default)]
     tool_call_id: Option<String>,
@@ -248,8 +223,9 @@ struct Input {
     /// Fully scoped child trajectory on a parent-side SpawnResult.
     #[serde(default)]
     spawned_id: Option<String>,
-    /// Spawn call a ChildEnd answers, retained with the operation so the
-    /// parent side can bind a returned value to its fork without a carrier.
+    /// Raw spawn-call id, not `call:<id>`. A ChildEnd retains it so the parent
+    /// can bind a returned value without a carrier. A child's first event uses
+    /// it to load the sealed binding on the parent's `call:<id>` receipt.
     #[serde(default)]
     spawn_call_id: Option<String>,
     /// Client-native child identity a ChildEnd answers, retained likewise.
@@ -287,6 +263,15 @@ enum HookEventKind {
     Prompt,
     TurnEnd,
     ChildEnd,
+    /// A return that does not end the child. The value crosses as a stop's
+    /// would. Open tool calls stay open; the runtime refuses the return until
+    /// they report.
+    ChildReturn,
+    /// A parent addresses a child it already started, as when a lead sends
+    /// its teammate a message: the parent's current label flows into the
+    /// child. `spawned_id` names the child session and `output` the message,
+    /// which the operation retains so the child's side can verify it.
+    ChildAddress,
 }
 
 #[derive(Clone, Copy, Deserialize, PartialEq, Eq)]
@@ -313,10 +298,58 @@ struct RecordedCall {
     spawn: bool,
     #[serde(default)]
     presentation: Option<PresentationInput>,
+    /// Host retry text. Absent on rows written before it was stored. Not part
+    /// of the call the runtime judges, so a result does not read them; they
+    /// are accepted so a stored context still decodes.
+    #[serde(default)]
+    #[allow(dead_code)]
+    spelling: Option<String>,
+    #[serde(default)]
+    #[allow(dead_code)]
+    dispatch: Option<String>,
 }
 
 fn error(message: impl ToString) -> napi::Error {
     napi::Error::from_reason(message.to_string())
+}
+
+/// The upstream pin and host replay boundary version stored with each run.
+#[napi(js_name = "getOpenappaReplayEngineVersion")]
+pub fn get_openappa_replay_engine_version() -> String {
+    replay::ENGINE_VERSION.to_string()
+}
+
+/// Parse scenario files into tools and assertion counts without loading a policy
+/// or evaluating any call.
+#[napi(js_name = "inspectOpenappaPolicyTests")]
+pub async fn inspect_openappa_policy_tests(input: String) -> napi::Result<String> {
+    AssertUnwindSafe(async move {
+        let response = replay::inspect(&input).map_err(error)?;
+        serde_json::to_string(&response).map_err(error)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| error("OpenAPPA scenario inspection failed unexpectedly"))?
+}
+
+/// Evaluate bounded `.appa` scenarios against the supplied effective policy. The
+/// replay core refuses live consults and keeps every trajectory in memory.
+#[napi(js_name = "replayOpenappaPolicy")]
+pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
+    static REPLAY_SLOT: Semaphore = Semaphore::const_new(1);
+    AssertUnwindSafe(async move {
+        let _permit = REPLAY_SLOT
+            .try_acquire()
+            .map_err(|_| error("An OpenAPPA replay is already running; retry later"))?;
+        let request = replay::Request::parse(&input).map_err(error)?;
+        let response = tokio::time::timeout(Duration::from_secs(15), replay::run(request))
+            .await
+            .map_err(|_| error("OpenAPPA replay exceeded its 15 second limit"))?;
+        serde_json::to_string(&response).map_err(error)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| error("OpenAPPA replay failed unexpectedly"))?
 }
 fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> {
     value
@@ -763,6 +796,7 @@ pub struct BatteryPackage {
     pub helpers: Vec<String>,
     pub credentials: Vec<String>,
     pub externals: Vec<BatteryExternal>,
+    pub benefit: Option<String>,
     pub setup: Option<String>,
     pub files: Vec<BatteryFileInput>,
 }
@@ -788,6 +822,7 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
                     token_env: external.token_env.clone(),
                 })
                 .collect(),
+            benefit: info.benefit.clone(),
             setup: info.setup.clone(),
             files: info
                 .files
@@ -806,13 +841,11 @@ impl From<&batteries::BatteryInfo> for BatteryPackage {
 #[napi(js_name = "listBundledOpenappaBatteries")]
 pub async fn list_bundled_openappa_batteries() -> napi::Result<Vec<BatteryPackage>> {
     tokio::task::spawn_blocking(|| {
-        std::panic::catch_unwind(|| {
-            batteries::bundled()
-                .iter()
-                .map(BatteryPackage::from)
-                .collect()
-        })
-        .map_err(|_| error("bundled OpenAPPA batteries failed to load"))
+        let loaded = std::panic::catch_unwind(batteries::bundled)
+            .map_err(|_| error("bundled OpenAPPA batteries failed to load"))?;
+        loaded
+            .map_err(error)
+            .map(|batteries| batteries.iter().map(BatteryPackage::from).collect())
     })
     .await
     .map_err(error)?
@@ -919,6 +952,7 @@ fn validate(input: &Input) -> napi::Result<()> {
         ("fork", &input.fork_of),
         ("operation", &input.operation_id),
         ("tool call", &input.tool_call_id),
+        ("spawn call", &input.spawn_call_id),
     ] {
         if let Some(value) = value
             && (value.is_empty() || value.len() > 1024 || value.chars().any(char::is_control))
@@ -979,12 +1013,28 @@ fn validate(input: &Input) -> napi::Result<()> {
                 serde_json::from_str(required_arguments(input)?).map_err(error)?;
         }
         HookEventKind::Remedy => {
-            required(&input.caller_id, "caller_id")?;
             let _: ExecuteRemedyPlanArgs =
                 serde_json::from_str(required_arguments(input)?).map_err(error)?;
         }
         HookEventKind::Prompt | HookEventKind::TurnEnd | HookEventKind::ChildEnd => {
             required(&input.operation_id, "operation_id")?;
+        }
+        HookEventKind::ChildReturn => {
+            required(&input.operation_id, "operation_id")?;
+            required(&input.parent_id, "parent_id")?;
+            if input.output.is_none() {
+                return Err(error("missing output"));
+            }
+        }
+        HookEventKind::ChildAddress => {
+            required(&input.operation_id, "operation_id")?;
+            let child = required(&input.spawned_id, "spawned_id")?;
+            if child.len() > 1024 || child.chars().any(char::is_control) {
+                return Err(error("invalid child identity"));
+            }
+            if input.output.is_none() {
+                return Err(error("missing output"));
+            }
         }
     }
     Ok(())
@@ -1024,7 +1074,8 @@ async fn initialized() -> napi::Result<State> {
         .ok_or_else(|| error("OpenAPPA is not initialized"))
 }
 
-/// Executes a remedy plan by offer ID, resolving the owner session from PostgreSQL.
+/// Executes a remedy for the proxy-stamped trajectory, resolving that session
+/// from PostgreSQL. The caller, when present, is the receipt spender.
 #[napi(js_name = "executeRemedyByOffer")]
 pub async fn execute_remedy_by_offer(
     input: String,
@@ -1037,12 +1088,7 @@ pub async fn execute_remedy_by_offer(
     {
         return Err(error("invalid organization identity"));
     }
-    if input.session_id.is_empty()
-        || input.session_id.len() > 1024
-        || input.session_id.chars().any(char::is_control)
-    {
-        return Err(error("invalid session identity"));
-    }
+    validate_trajectory(&input.trajectory)?;
     match (input.execution_mode, &input.tool_call_id) {
         (ExecutionMode::Tracked, Some(tool_call_id))
             if !tool_call_id.is_empty()
@@ -1057,19 +1103,10 @@ pub async fn execute_remedy_by_offer(
     let visible_arguments = object_raw(&input.arguments, "remedy arguments")?;
     let original_arguments = original_arguments_raw(&input.original_arguments)?;
     let _: ExecuteRemedyPlanArgs = serde_json::from_str(visible_arguments.get()).map_err(error)?;
-    let caller = input
-        .caller_id
-        .as_deref()
-        .map(Principal::parse)
-        .transpose()?;
     let state = initialized().await?;
     let owner = {
         let leased = state.lease().await?;
-        routing_owner(
-            postgres_store(&leased.state.store)?,
-            &input,
-            caller.as_ref(),
-        )?
+        routing_owner(postgres_store(&leased.state.store)?, &input)?
     };
     let Some(owner) = owner else {
         return Ok(
@@ -1079,7 +1116,8 @@ pub async fn execute_remedy_by_offer(
     let input = Input {
         yell_receiver: None,
         organization_id: owner.organization_id,
-        // Scopes receipt to the authenticated spender to prevent replay.
+        // Scopes a caller-bound receipt to the authenticated spender. Absent
+        // for an anonymous organization token.
         caller_id: input.caller_id.clone(),
         session_id: owner.session_id,
         parent_id: owner.parent_id,
@@ -1088,7 +1126,7 @@ pub async fn execute_remedy_by_offer(
         event: HookEventKind::Remedy,
         operation_id: None,
         tool_call_id: input.tool_call_id,
-        tool: owner.tool.clone(),
+        tool: None,
         arguments: Some(visible_arguments),
         original_arguments: Some(original_arguments),
         spawn: false,
@@ -1098,8 +1136,8 @@ pub async fn execute_remedy_by_offer(
         child_native_id: None,
         outcome: None,
         owner_root: Some(owner.root),
-        spelling: owner.spelling,
-        dispatch: owner.dispatch,
+        spelling: None,
+        dispatch: None,
         presentation: Some(input.presentation),
         ruling: input.ruling,
         precheck_refusal: input.precheck_refusal,
@@ -1124,7 +1162,7 @@ pub struct OfferReviewOutput {
 }
 
 /// Loads the review entry for an offer from the retained DenyCall in PostgreSQL.
-/// Session routing comes from the verified offer claims; no offer-owner lookup.
+/// Session routing comes from the proxy-stamped current trajectory; no offer-owner lookup.
 #[napi(js_name = "loadOfferReview")]
 pub async fn load_offer_review(
     organization_id: String,
@@ -1185,6 +1223,15 @@ pub async fn load_offer_review(
 }
 
 #[napi(object)]
+#[derive(Default)]
+pub struct ChildReturnLookup {
+    /// Narrow the authority lookup to one registered child when known.
+    pub child_session_id: Option<String>,
+    /// Load only the latest admitted operation with this task prefix.
+    pub operation_prefix: Option<String>,
+}
+
+#[napi(object)]
 #[derive(Serialize)]
 pub struct ChildReturnRecord {
     /// Fully scoped session id of the child whose return crossed.
@@ -1193,18 +1240,22 @@ pub struct ChildReturnRecord {
     pub spawn_call_id: Option<String>,
     /// The client-native child identity, when the child named one.
     pub child_native_id: Option<String>,
+    /// The operation that durably recorded this crossing. An echo keeps its
+    /// `:echo` suffix so a task prefix still matches.
+    pub operation_id: Option<String>,
     /// The exact bytes the runtime admitted across the child boundary.
     pub value: String,
 }
 
 /// Loads the child returns a parent's family durably crossed, from the
-/// retained ChildEnd operations in PostgreSQL. This is the authority the
-/// parent side verifies an arriving completion against; nothing the client
-/// carries proves a return.
+/// retained ChildEnd and admitted ChildReturn operations in PostgreSQL. This
+/// is the authority the parent side verifies an arriving completion against;
+/// nothing the client carries proves a return.
 #[napi(js_name = "loadChildReturns")]
 pub async fn load_child_returns(
     organization_id: String,
     parent_session_id: String,
+    lookup: Option<ChildReturnLookup>,
 ) -> napi::Result<Vec<ChildReturnRecord>> {
     // Mirror load_offer_review: clone state, drop the mutex, then lease a
     // connection before host SQL so lookups never contend with dispatches.
@@ -1218,45 +1269,327 @@ pub async fn load_child_returns(
     let pg = postgres_store(&leased.state.store)?;
     pg.with_client(move |client| {
         // session_id is the leading PK column of openappa_operations, and
-        // organization_id is an additional tenancy guard. Each crossing has
-        // one base ChildEnd: a staged return carries decision.value and a
-        // released one carries input.output. The echo repeats those bytes but
-        // is not another crossing. An earlier crossing stays beside a later
-        // one, even for the same spawn call, so a completion already delivered
-        // to the parent still verifies. A bare end that crossed nothing has
-        // no value and is skipped — it must never fail the whole lookup.
-        // Blocked ends are not crossings and never qualify either.
-        let rows = client.query(
+        // organization_id is an additional tenancy guard. ChildEnd keeps its
+        // existing reading: a staged end carries decision.value, a released
+        // one carries input.output, and the echo is not another crossing.
+        // ChildReturn is a mid-turn crossing. Only an ack is admitted — a
+        // child_return decision is still staged, or is a substitution the
+        // host has not echoed — and the ack's output is the exact bytes that
+        // crossed. The echo ack is that crossing, so its operation id is kept,
+        // suffix included. A row this filter drops must not fail the lookup.
+        use postgres::{fallible_iterator::FallibleIterator, types::ToSql};
+        let lookup = lookup.unwrap_or_default();
+        let limit: i64 = if lookup.operation_prefix.is_some() { 1 } else { 10_001 };
+        // PostgreSQL's heterogeneous bind-parameter API, not domain type erasure.
+        let params: &[&(dyn ToSql + Sync)] = &[
+            &organization_id, &parent_session_id, &lookup.child_session_id,
+            &lookup.operation_prefix, &limit,
+        ];
+        let mut rows = client.query_raw(
             "SELECT o.session_id AS child_session_id, \
+              o.operation_id, \
+              COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event, \
+              o.decision->>'decision' AS decision, \
+              o.decision->>'value' AS decision_value, \
               COALESCE(o.input->'semantic'->>'spawn_call_id', o.input->>'spawn_call_id') AS spawn_call_id, \
               COALESCE(o.input->'semantic'->>'child_native_id', o.input->>'child_native_id') AS child_native_id, \
-              COALESCE(o.decision->>'value', o.input->'semantic'->>'output', o.input->>'output') AS value \
+              COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS output \
               FROM openappa_operations o \
               WHERE o.organization_id=$1 AND o.status='complete' \
               AND EXISTS (SELECT 1 FROM openappa_sessions s \
                 WHERE s.session_id=o.session_id AND s.organization_id=$1 AND s.parent_id=$2) \
-              AND o.operation_id NOT LIKE '%:echo' \
-              AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_end' \
-              AND o.decision->>'decision' IN ('ack', 'child_return') \
-              AND COALESCE(o.decision->>'value', o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
-              ORDER BY o.session_id, o.created_at DESC",
-            &[&organization_id, &parent_session_id],
+              AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') IN ('child_end', 'child_return') \
+              AND (o.decision->>'decision' = 'ack' OR \
+                (COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_end' \
+                 AND o.decision->>'decision' = 'child_return')) \
+              AND ((COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_return' \
+                    AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL) \
+                OR (COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_end' \
+                    AND o.operation_id NOT LIKE '%:echo' \
+                    AND ((o.decision->>'decision' = 'ack' \
+                          AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL) \
+                      OR (o.decision->>'decision' = 'child_return' AND o.decision->>'value' IS NOT NULL)))) \
+              AND ($3::text IS NULL OR o.session_id=$3) \
+              AND ($4::text IS NULL OR left(o.operation_id,length($4))=$4) \
+              ORDER BY o.created_at DESC, o.session_id, o.operation_id DESC LIMIT $5",
+            params.iter().copied(),
         )?;
-        let mut records = Vec::with_capacity(rows.len());
-        for row in &rows {
-            let value: Option<String> = row.get("value");
+        let mut records = Vec::new();
+        let mut budget = ReceiptLookupBudget::default();
+        while let Some(row) = rows.next()? {
+            let event: Option<String> = row.get("event");
+            let operation_id: String = row.get("operation_id");
+            let decision: Option<String> = row.get("decision");
+            let decision_value: Option<String> = row.get("decision_value");
+            let output: Option<String> = row.get("output");
+            budget.take(decision_value.as_deref().unwrap_or("").len()
+                .saturating_add(output.as_deref().unwrap_or("").len()))?;
+            let Some(crossed) = crossed_return(ReturnReceipt {
+                event: event.as_deref().unwrap_or(""),
+                operation_id: &operation_id,
+                decision: decision.as_deref().unwrap_or(""),
+                decision_value: decision_value.as_deref(),
+                output: output.as_deref(),
+            }) else {
+                continue;
+            };
             records.push(ChildReturnRecord {
                 child_session_id: row.get("child_session_id"),
                 spawn_call_id: row.get("spawn_call_id"),
                 child_native_id: row.get("child_native_id"),
+                operation_id: Some(crossed.operation_id),
+                value: crossed.value,
+            });
+        }
+        Ok(records)
+    })
+    .map_err(error)
+}
+
+#[napi(object)]
+#[derive(Serialize)]
+pub struct ChildAddressRecord {
+    /// Fully scoped session id of the parent that addressed the child.
+    pub parent_session_id: String,
+    /// The exact message the parent addressed to the child.
+    pub value: String,
+}
+
+/// Loads the messages a child's parent addressed to it, from the retained
+/// ChildAddress operations in PostgreSQL. This is the authority the child side
+/// verifies an arriving message against; nothing the client carries proves one.
+#[napi(js_name = "loadChildAddresses")]
+pub async fn load_child_addresses(
+    organization_id: String,
+    child_session_id: String,
+) -> napi::Result<Vec<ChildAddressRecord>> {
+    // Mirror load_child_returns: clone state, drop the mutex, then lease a
+    // connection before host SQL so lookups never contend with dispatches.
+    let state = {
+        let slot = state_mutex().lock().await;
+        slot.as_ref()
+            .ok_or_else(|| error("OpenAPPA is not initialized"))?
+            .clone()
+    };
+    let leased = state.lease().await?;
+    let pg = postgres_store(&leased.state.store)?;
+    pg.with_client(move |client| {
+        // Only the child's own parent addresses it, and only an address the
+        // runtime acknowledged carried the parent's label into the child.
+        use postgres::{fallible_iterator::FallibleIterator, types::ToSql};
+        let params: &[&(dyn ToSql + Sync)] = &[&organization_id, &child_session_id];
+        let mut rows = client.query_raw(
+            "SELECT o.session_id AS parent_session_id, \
+              COALESCE(o.input->'semantic'->>'output', o.input->>'output') AS value \
+              FROM openappa_operations o \
+              WHERE o.organization_id=$1 AND o.status='complete' \
+              AND EXISTS (SELECT 1 FROM openappa_sessions s \
+                WHERE s.organization_id=$1 AND s.session_id=$2 AND s.parent_id=o.session_id) \
+              AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_address' \
+              AND COALESCE(o.input->'semantic'->>'spawned_id', o.input->>'spawned_id') = $2 \
+              AND o.decision->>'decision' = 'ack' \
+              AND COALESCE(o.input->'semantic'->>'output', o.input->>'output') IS NOT NULL \
+              ORDER BY o.created_at LIMIT 10001",
+            params.iter().copied(),
+        )?;
+        let mut records = Vec::new();
+        let mut budget = ReceiptLookupBudget::default();
+        while let Some(row) = rows.next()? {
+            let value: Option<String> = row.get("value");
+            budget.take(value.as_deref().unwrap_or("").len())?;
+            records.push(ChildAddressRecord {
+                parent_session_id: row.get("parent_session_id"),
                 value: value.ok_or_else(|| {
-                    PostgresError("OpenAPPA retained a child return without a value".into())
+                    PostgresError("OpenAPPA retained a child address without a value".into())
                 })?,
             });
         }
         Ok(records)
     })
     .map_err(error)
+}
+
+/// Whether this child's parent addressed it before the child's first event.
+fn addressed_before_start(pg: &LeasedPostgres, input: &Input) -> napi::Result<bool> {
+    let Some(parent) = input.parent_id.clone() else {
+        return Ok(false);
+    };
+    let (organization_id, child) = (input.organization_id.clone(), input.session_id.clone());
+    pg.with_client(move |client| {
+        Ok(client
+            .query_one(
+                "SELECT EXISTS (SELECT 1 FROM openappa_operations o \
+                  WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                  AND COALESCE(o.input->'semantic'->>'event', o.input->>'event') = 'child_address' \
+                  AND COALESCE(o.input->'semantic'->>'spawned_id', o.input->>'spawned_id') = $3)",
+                &[&organization_id, &parent, &child],
+            )?
+            .get::<_, bool>(0))
+    })
+    .map_err(error)
+}
+
+/// Receipt key for a spawn call. The host's id is raw; the operation the tool-call
+/// dispatch stored is `call:<id>`. The engine does not accept either string as a
+/// [`SpawnRef`].
+fn spawn_operation_id(spawn_call_id: &str) -> String {
+    format!("call:{spawn_call_id}")
+}
+
+/// Refuse the whole authority lookup on overflow: partial history cannot prove
+/// that an omitted child never crossed, including enforcement-off recovery.
+#[derive(Default)]
+struct ReceiptLookupBudget {
+    records: usize,
+    bytes: usize,
+}
+
+impl ReceiptLookupBudget {
+    fn take(&mut self, bytes: usize) -> Result<(), PostgresError> {
+        self.records = self.records.saturating_add(1);
+        self.bytes = self.bytes.saturating_add(bytes);
+        if self.records > 10_000 || self.bytes > 8 * 1024 * 1024 {
+            return Err(PostgresError(
+                "OpenAPPA receipt history exceeds its bounded lookup; narrow the child/task lookup"
+                    .into(),
+            ));
+        }
+        Ok(())
+    }
+}
+
+struct ReturnReceipt<'a> {
+    event: &'a str,
+    operation_id: &'a str,
+    decision: &'a str,
+    decision_value: Option<&'a str>,
+    output: Option<&'a str>,
+}
+
+struct CrossedReturn {
+    operation_id: String,
+    value: String,
+}
+
+/// Which retained receipt is a crossing the parent may read back.
+///
+/// ChildEnd is unchanged: the base operation carries the admitted bytes, and
+/// its echo is not a second crossing. ChildReturn admits only an ack. A
+/// `child_return` decision is still staged, or is a substitution the host has
+/// not echoed, so it is not a value. The echo ack is the crossing, and its
+/// operation id keeps the `:echo` suffix.
+fn crossed_return(receipt: ReturnReceipt<'_>) -> Option<CrossedReturn> {
+    let value = match receipt.event {
+        "child_end"
+            if !receipt.operation_id.ends_with(":echo")
+                && matches!(receipt.decision, "ack" | "child_return") =>
+        {
+            receipt.decision_value.or(receipt.output)
+        }
+        "child_return" if receipt.decision == "ack" => receipt.output,
+        _ => None,
+    }?;
+    Some(CrossedReturn {
+        operation_id: receipt.operation_id.to_owned(),
+        value: value.to_owned(),
+    })
+}
+
+/// A named spawn call binds only through the receipt's sealed binding. Omitting the
+/// call id keeps the native in-flight path. A named call with no binding does not
+/// guess.
+fn spawn_ref_from_receipt(
+    spawn_call_id: Option<&str>,
+    binding: Option<String>,
+) -> Result<SpawnRef, &'static str> {
+    match spawn_call_id {
+        None => Ok(SpawnRef::InFlight),
+        Some(_) => {
+            let Some(binding) = binding.filter(|binding| !binding.is_empty()) else {
+                return Err("spawn call has no released binding");
+            };
+            Ok(SpawnRef::Binding(SpawnBinding(binding)))
+        }
+    }
+}
+
+/// The sealed binding a released spawn handed back, from the parent's completed
+/// allow-call receipt. `None` when that receipt is absent, incomplete, or not a
+/// spawn release.
+fn released_spawn_binding(
+    pg: &LeasedPostgres,
+    organization_id: &str,
+    parent_session_id: &str,
+    spawn_call_id: &str,
+) -> napi::Result<Option<String>> {
+    let organization_id = organization_id.to_owned();
+    let parent_session_id = parent_session_id.to_owned();
+    let operation_id = spawn_operation_id(spawn_call_id);
+    pg.with_client(move |client| {
+        let Some(row) = client.query_opt(
+            "SELECT input, status, decision FROM openappa_operations \
+             WHERE organization_id = $1 AND session_id = $2 AND operation_id = $3",
+            &[&organization_id, &parent_session_id, &operation_id],
+        )?
+        else {
+            return Ok(None);
+        };
+        let status: String = row.get("status");
+        if status != "complete" {
+            return Ok(None);
+        }
+        let input: Value = row.get("input");
+        let decision: Option<Value> = row.get("decision");
+        let Some(decision) = decision else {
+            return Ok(None);
+        };
+        let semantic = input.get("semantic").unwrap_or(&input);
+        if semantic.get("spawn").and_then(Value::as_bool) != Some(true) {
+            return Ok(None);
+        }
+        if decision.get("decision").and_then(Value::as_str) != Some("allow_call") {
+            return Ok(None);
+        }
+        Ok(decision
+            .get("spawn_binding")
+            .and_then(Value::as_str)
+            .filter(|binding| !binding.is_empty())
+            .map(str::to_owned))
+    })
+    .map_err(error)
+}
+
+enum AddressedChild {
+    /// Exact persisted child. The string is the stored actor, not a synthesized id.
+    Rebind(String),
+    /// Native `{parent}:` name with no row yet. The first event joins the label.
+    UnstartedNative,
+    /// No exact row, and not an unstarted native child.
+    Foreign,
+}
+
+fn classify_addressed_child(
+    parent: &str,
+    child_session: &str,
+    stored_actor: Option<String>,
+) -> AddressedChild {
+    if let Some(actor) = stored_actor {
+        return AddressedChild::Rebind(actor);
+    }
+    if child_session.starts_with(&format!("{parent}:")) {
+        AddressedChild::UnstartedNative
+    } else {
+        AddressedChild::Foreign
+    }
+}
+
+/// Re-bind a started child to the dispatcher's family root and the actor the row stored.
+fn rebind_child(root: &TrajectoryId, stored_actor: String) -> HookEvent {
+    HookEvent::ChildStart {
+        root: root.clone(),
+        child: TrajectoryId(stored_actor),
+        spawn: SpawnRef::InFlight,
+    }
 }
 
 struct SessionLock<'a> {
@@ -1503,13 +1836,7 @@ impl State {
             ));
         }
 
-        let actor = Actor {
-            root: TrajectoryId(root.clone()),
-            child: input
-                .parent_id
-                .is_some()
-                .then(|| TrajectoryId(key.actor.clone())),
-        };
+        let actor = expected_actor(&root, &input.session_id, input.parent_id.as_deref());
         let lookup = key.clone();
         let existing = pg
             .with_client(move |client| {
@@ -1549,17 +1876,41 @@ impl State {
                 HookEvent::ChildStart {
                     root: actor.root.clone(),
                     child: child.clone(),
-                    spawn: SpawnRef::InFlight,
+                    spawn: self.child_spawn_ref(pg, &input)?,
                 }
             } else {
                 HookEvent::SessionStart {
                     root: actor.root.clone(),
                     principal: input.principal.clone(),
+                    address: None,
+                    title: None,
+                    start: None,
+                    launch: None,
                 }
             };
             let decision = hooks::handle(&self.runtime, start).await;
             if !matches!(decision, HookDecision::Ack | HookDecision::Context { .. }) {
                 return Err(error(wire(&decision)?));
+            }
+            // A child opens under its fork's seed: the parent's label when it spawned
+            // the child. A parent that addressed the child before this first event may
+            // have read more since, so the child takes the parent's current label now,
+            // as a later address would give it.
+            if let Some(child) = &actor.child
+                && addressed_before_start(pg, &input)?
+            {
+                let readdress = hooks::handle(
+                    &self.runtime,
+                    HookEvent::ChildStart {
+                        root: actor.root.clone(),
+                        child: child.clone(),
+                        spawn: SpawnRef::InFlight,
+                    },
+                )
+                .await;
+                if !matches!(readdress, HookDecision::Ack | HookDecision::Context { .. }) {
+                    return Err(error(wire(&readdress)?));
+                }
             }
             // A return contract must be delivered before the child starts work.
             // Keep it in the start receipt so repeat SessionStart can deliver it.
@@ -1593,9 +1944,7 @@ impl State {
         if input.event == HookEventKind::Remedy {
             let operation = remedy_operation(&input)?;
             let request = remedy_request(&input)?;
-            let binding = ReceiptBinding::Caller {
-                caller_id: required(&input.caller_id, "caller_id")?.to_owned(),
-            };
+            let binding = remedy_binding(&input.caller_id);
             if let Some(decision) = claim_operation(
                 &self.store,
                 &input,
@@ -1660,7 +2009,8 @@ impl State {
                     actor: actor.clone(),
                     call,
                     call_id: None,
-                    spawn: false,
+                    spawn: None,
+                    prompt: None,
                     ruling,
                 },
             )
@@ -1682,20 +2032,26 @@ impl State {
                     response,
                 );
             }
+            // Before the runtime spends the offer. A missing row is empty
+            // presentation, not an error, so an old call still redeems.
+            let recorded = recorded_call_presentation(
+                pg,
+                &input.organization_id,
+                &input.session_id,
+                &offer_id,
+            )?;
             let outcome = self
                 .runtime
                 .execute_embedded_remedy_with_options(&actor, args, presentation_options(&input))
                 .await;
             let owner = OfferOwner {
                 organization_id: input.organization_id.clone(),
-                caller_id: input.caller_id.clone(),
                 session_id: input.session_id.clone(),
                 parent_id: input.parent_id.clone(),
                 root: root.clone(),
-                arguments: None,
-                tool: input.tool.clone(),
-                spelling: input.spelling.clone(),
-                dispatch: input.dispatch.clone(),
+                tool: recorded.tool,
+                spelling: recorded.spelling,
+                dispatch: recorded.dispatch,
             };
             let response = render_remedy_outcome(
                 outcome,
@@ -1727,19 +2083,16 @@ impl State {
                 return Ok(decision);
             }
         }
-        let mut request = json!({ "event": input.event, "tool": input.tool, "arguments": input.arguments, "spawn": input.spawn, "output": input.output, "spawn_call_id": input.spawn_call_id, "child_native_id": input.child_native_id });
-        let context = (input.event == HookEventKind::ToolCall).then(|| {
-            json!({
-                "tool": input.tool,
-                "arguments": input.arguments,
-                "spawn": input.spawn,
-                "presentation": input.presentation,
-            })
-        });
+        let mut request = operation_semantic(&input);
+        let context = (input.event == HookEventKind::ToolCall).then(|| tool_call_context(&input));
         if input.event == HookEventKind::ToolCall {
             // The receipt key is also the host call identity. Results reconstruct
             // the same namespace from the provider's tool-call ID.
             request["call_id"] = json!(operation);
+        }
+        if input.event == HookEventKind::ChildAddress {
+            // Retained so the child's side can find what its parent addressed to it.
+            request["spawned_id"] = json!(input.spawned_id);
         }
         if let Some(decision) = claim_operation(
             &self.store,
@@ -1779,18 +2132,24 @@ impl State {
                 Err(reason) => (true, format!("[appa] Not reported: {reason}")),
             };
             json!({ "decision": "mcp_result", "result": { "isError": is_error, "content": [{ "type": "text", "text": message }] } })
+        } else if input.event == HookEventKind::ChildAddress {
+            self.address_child(pg, &input, &actor).await?
         } else {
             let event = match input.event {
                 HookEventKind::ToolCall => HookEvent::ToolCall {
                     actor: actor.clone(),
                     call: proposed(&input)?,
                     call_id: Some(operation.clone()),
-                    spawn: input.spawn,
+                    spawn: input.spawn.then_some(SpawnKind::Single),
+                    prompt: None,
                     ruling: None,
                 },
                 HookEventKind::Prompt => HookEvent::Prompt {
                     actor: actor.clone(),
                     text: String::new(),
+                    settles: None,
+                    peer: None,
+                    title: None,
                 },
                 HookEventKind::TurnEnd => HookEvent::TurnEnd {
                     actor: actor.clone(),
@@ -1803,11 +2162,23 @@ impl State {
                         .ok_or_else(|| error("not a child session"))?,
                     value: input.output.clone(),
                 },
+                HookEventKind::ChildReturn => HookEvent::ChildReturn {
+                    root: actor.root.clone(),
+                    child: actor
+                        .child
+                        .clone()
+                        .ok_or_else(|| error("not a child session"))?,
+                    value: input
+                        .output
+                        .clone()
+                        .ok_or_else(|| error("missing output"))?,
+                },
                 HookEventKind::SessionStart
                 | HookEventKind::ToolResult
                 | HookEventKind::CancelCall
                 | HookEventKind::Remedy
-                | HookEventKind::Yell => return Err(error("unsupported OpenAPPA event")),
+                | HookEventKind::Yell
+                | HookEventKind::ChildAddress => return Err(error("unsupported OpenAPPA event")),
             };
             let outcome = hooks::handle_embedded_with_options(
                 &self.runtime,
@@ -1827,6 +2198,78 @@ impl State {
         Ok(decision)
     }
 
+    /// The sealed spawn binding on the parent's completed allow-call receipt, or the
+    /// family's in-flight fork when the host named no spawn call. A supplied call id
+    /// never falls back to in-flight: the engine has no call-id spawn reference, and
+    /// the receipt's `spawn_binding` is the reference it minted.
+    fn child_spawn_ref(&self, pg: &LeasedPostgres, input: &Input) -> napi::Result<SpawnRef> {
+        let binding = match input.spawn_call_id.as_deref() {
+            Some(spawn_call_id) => {
+                let parent = required(&input.parent_id, "parent_id")?;
+                released_spawn_binding(pg, &input.organization_id, parent, spawn_call_id)?
+            }
+            None => None,
+        };
+        spawn_ref_from_receipt(input.spawn_call_id.as_deref(), binding).map_err(error)
+    }
+
+    /// The parent addresses a child it started, so the parent's current label flows into
+    /// the child before the child reads the message. The runtime reads a start for a child
+    /// it already bound as exactly this. A child that has not started yet is left to its
+    /// first event, which takes the parent's label at that point (`addressed_before_start`).
+    ///
+    /// A started child is the `openappa_sessions` row for this organization whose
+    /// `session_id` and `parent_id` are exactly the addressed session and this dispatcher.
+    /// That row authorizes a runtime workspace id that does not use the native prefix.
+    /// An unstarted native child still has to be named `{parent}:` plus a suffix. A prefix
+    /// alone never selects a row: a grandchild or a same-prefix foreign session does not
+    /// match `parent_id` and is not joined.
+    ///
+    /// ChildStart names this dispatcher's family root and the stored child actor, not the
+    /// dispatcher's own child trajectory. The dispatch already holds the family lock.
+    async fn address_child(
+        &self,
+        pg: &LeasedPostgres,
+        input: &Input,
+        actor: &Actor,
+    ) -> napi::Result<Value> {
+        let (parent, child_session) = (
+            input.session_id.clone(),
+            required(&input.spawned_id, "spawned_id")?.to_owned(),
+        );
+        let (lookup_org, lookup_parent, lookup_child) = (
+            input.organization_id.clone(),
+            parent.clone(),
+            child_session.clone(),
+        );
+        let started = pg
+            .with_client(move |client| {
+                Ok(client
+                    .query_opt(
+                        "SELECT actor FROM openappa_sessions WHERE organization_id = $1 AND session_id = $2 AND parent_id = $3",
+                        &[&lookup_org, &lookup_child, &lookup_parent],
+                    )?
+                    .map(|row| row.get::<_, String>(0)))
+            })
+            .map_err(error)?;
+        let stored_actor = match classify_addressed_child(&parent, &child_session, started) {
+            AddressedChild::Rebind(stored_actor) => stored_actor,
+            AddressedChild::UnstartedNative => return Ok(json!({ "decision": "ack" })),
+            AddressedChild::Foreign => {
+                return Ok(json!({
+                    "decision": "block",
+                    "feedback": "OpenAPPA did not send this message: its recipient is not a child of this session.",
+                }));
+            }
+        };
+        let decision = hooks::handle(&self.runtime, rebind_child(&actor.root, stored_actor)).await;
+        match decision {
+            // The contract text is the child's to read at its own start, not the parent's.
+            HookDecision::Ack | HookDecision::Context { .. } => Ok(json!({ "decision": "ack" })),
+            other => wire(&other),
+        }
+    }
+
     async fn result(
         &self,
         pg: &LeasedPostgres,
@@ -1834,6 +2277,9 @@ impl State {
         actor: &Actor,
     ) -> napi::Result<Value> {
         let call_id = required(&input.tool_call_id, "tool_call_id")?.to_owned();
+        if let Some(withheld) = peer::forged_read_result(pg, input, &call_id)? {
+            return Ok(withheld);
+        }
         let key = processed_result_key(input, call_id.clone());
         match self
             .store
@@ -2265,7 +2711,7 @@ fn render_released_call(status: &str, call: &ProposedCall, owner: Option<&OfferO
     // The user may have accepted the plan through ask_user, so the text does
     // not credit the model with the choice.
     format!(
-        "[appa] {status}. Tell the user in your reply which plan was accepted. Call the {tool} tool again with exactly these arguments: {}",
+        "[appa] {status}. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, the session keeps its current label and calls that need the plan stay blocked. Call the {tool} tool again with exactly these arguments: {}",
         call.arguments.get()
     )
 }
@@ -2432,9 +2878,16 @@ fn authoritative_unexecuted_response(decision: Value) -> napi::Result<Value> {
 /// short name every spelling keeps. Which question tool to use follows
 /// ask_user's own description: the client's own first. A plan is carried out
 /// by the call the ruling shows for it, which is not always the remedy tool (a
-/// redispatch plan names another tool to run first).
-const UNEXECUTED_CALL_HINT: &str = "The tool was not executed. If the ruling offers a plan, choose one yourself and make the call it shows now, exactly as shown. If only the user can make this choice, ask them with a question tool (the client's own if it has one, otherwise ask_user), never as a plain-text question. In questions and replies, describe the block and any plan only in the ruling's own words, and never guess who the readers are or how access would change. If no plan is offered, explain the ruling.";
+/// redispatch plan names another tool to run first). The hint says what to do
+/// and who decides; provider safety classifiers refused requests that told the
+/// model to skip the user.
+const UNEXECUTED_CALL_HINT: &str = "The tool did not run. A plan fits unless the narrower session could no longer do what the user asked for or will clearly ask next. Apply a fitting plan with the exact call that the ruling shows for it. If no plan fits, ask the user with a question tool, not in plain text: the client's own question tool if it has one, otherwise ask_user, and say which part of their request the plan would prevent. In questions and replies, describe the block and any plan in the ruling's own words, and do not guess who the readers are beyond the audiences the ruling names. If the ruling offers no plan, explain the ruling to the user.";
 
+/// A result for a call this session never released. The code tells the proxy
+/// that nothing ran on the runtime's side: a remedy the gateway never ran
+/// comes back this way, and the proxy shows the model what the client returned
+/// instead of this text. It is a separate field because callers read `reason`
+/// as the text of a block.
 fn unknown_result_response() -> Value {
     let approved_output =
         "[appa] Tool output withheld: this result has no record of releasing a call.".to_owned();
@@ -2443,8 +2896,11 @@ fn unknown_result_response() -> Value {
         "feedback": approved_output,
         "approved_output": approved_output,
         "output_source": OutputSource::Runtime,
+        "code": UNRELEASED_CALL_CODE,
     })
 }
+
+const UNRELEASED_CALL_CODE: &str = "unreleased_call";
 
 fn cancellation_operation(call_id: &str) -> String {
     format!("cancel:{call_id}")
@@ -2557,51 +3013,200 @@ fn spelled_tool(canonical: &str) -> String {
         .unwrap_or_else(|| canonical.to_owned())
 }
 
-fn routing_owner(
-    pg: &LeasedPostgres,
-    input: &OfferInput,
-    spender: Option<&Principal>,
-) -> napi::Result<Option<OfferOwner>> {
-    if !owner_can_be_spent_by(input.owner_caller_id.as_deref(), spender) {
-        return Ok(None);
+fn validate_trajectory(trajectory: &TrajectoryStamp) -> napi::Result<()> {
+    if trajectory.v != 1 {
+        return Err(error("invalid trajectory"));
     }
-    let key = SessionKey::new(&input.organization_id, &input.session_id);
-    let root = pg
+    if trajectory.session_id.is_empty()
+        || trajectory.session_id.len() > 1024
+        || trajectory.session_id.chars().any(char::is_control)
+    {
+        return Err(error("invalid session identity"));
+    }
+    if let Some(parent) = &trajectory.parent_id
+        && (parent.is_empty() || parent.len() > 1024 || parent.chars().any(char::is_control))
+    {
+        return Err(error("invalid parent identity"));
+    }
+    Ok(())
+}
+
+/// The actor the runtime must match. A child stamp names this session; a root
+/// stamp does not.
+fn expected_actor(root: &str, session_id: &str, parent_id: Option<&str>) -> Actor {
+    Actor {
+        root: TrajectoryId(root.to_owned()),
+        child: parent_id
+            .is_some()
+            .then(|| TrajectoryId(session_actor(session_id))),
+    }
+}
+
+/// A present caller is the receipt spender. An anonymous token has no user id,
+/// so its receipt is session-bound and still not an owner match.
+fn remedy_binding(caller_id: &Option<String>) -> ReceiptBinding {
+    match caller_id {
+        Some(caller_id) => ReceiptBinding::Caller {
+            caller_id: caller_id.clone(),
+        },
+        None => ReceiptBinding::Session { caller_id: None },
+    }
+}
+
+fn operation_semantic(input: &Input) -> Value {
+    json!({
+        "event": input.event,
+        "tool": input.tool,
+        "arguments": input.arguments,
+        "spawn": input.spawn,
+        "output": input.output,
+        "spawn_call_id": input.spawn_call_id,
+        "child_native_id": input.child_native_id,
+    })
+}
+
+/// Host retry text lives beside the call, not in the idempotency key. Absent
+/// fields are omitted so an old row and a call without them stay the same shape.
+fn tool_call_context(input: &Input) -> Value {
+    let mut context = json!({
+        "tool": input.tool,
+        "arguments": input.arguments,
+        "spawn": input.spawn,
+        "presentation": input.presentation,
+    });
+    if let Some(spelling) = &input.spelling {
+        context["spelling"] = Value::String(spelling.clone());
+    }
+    if let Some(dispatch) = &input.dispatch {
+        context["dispatch"] = Value::String(dispatch.clone());
+    }
+    context
+}
+
+#[derive(Default)]
+struct CallPresentation {
+    tool: Option<String>,
+    spelling: Option<String>,
+    dispatch: Option<String>,
+}
+
+fn presentation_from_context(context: Option<&Value>) -> CallPresentation {
+    let Some(context) = context else {
+        return CallPresentation::default();
+    };
+    CallPresentation {
+        tool: json_string(context, "tool"),
+        spelling: json_string(context, "spelling"),
+        dispatch: json_string(context, "dispatch"),
+    }
+}
+
+fn presentation_from_row(context: Option<&Value>, tool: Option<String>) -> CallPresentation {
+    let mut presentation = presentation_from_context(context);
+    if presentation.tool.is_none() {
+        presentation.tool = present(tool);
+    }
+    presentation
+}
+
+fn presentation_from_receipt(
+    context: Option<&Value>,
+    tool: Option<String>,
+    event: Option<&str>,
+) -> CallPresentation {
+    let mut presentation = presentation_from_row(context, tool);
+    if presentation.spelling.is_none() && event == Some("peer_read_notice") {
+        presentation.spelling = presentation.tool.clone();
+    }
+    presentation
+}
+
+fn json_string(value: &Value, key: &str) -> Option<String> {
+    present(value.get(key).and_then(Value::as_str).map(str::to_owned))
+}
+
+fn present(value: Option<String>) -> Option<String> {
+    value.filter(|text| !text.is_empty())
+}
+
+/// The original call's retry text. A missing row or missing fields is an empty
+/// presentation, not a refusal: the runtime still decides whether the offer is
+/// live, and old rows fall back to the canonical tool spelling.
+fn recorded_call_presentation(
+    pg: &LeasedPostgres,
+    organization_id: &str,
+    session_id: &str,
+    offer_id: &str,
+) -> napi::Result<CallPresentation> {
+    let (organization_id, session_id, offer_id) = (
+        organization_id.to_owned(),
+        session_id.to_owned(),
+        offer_id.to_owned(),
+    );
+    let row = pg
         .with_client(move |client| {
             Ok(client
                 .query_opt(
-                    "SELECT root FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
-                    &[&key.organization_id, &key.actor],
+                    "SELECT o.input->'context' AS context, \
+                     COALESCE(o.input->'context'->>'tool', o.input->'semantic'->>'tool', o.input->>'tool') AS tool, \
+                     COALESCE(o.input->'semantic'->>'event', o.input->>'event') AS event \
+                     FROM openappa_operations o \
+                     WHERE o.organization_id=$1 AND o.session_id=$2 AND o.status='complete' \
+                     AND ( \
+                       EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(o.decision->'offers', '[]'::jsonb)) AS offer \
+                         WHERE offer->>'offer_id' = $3) \
+                       OR EXISTS (SELECT 1 FROM jsonb_array_elements(COALESCE(o.decision->'review', '[]'::jsonb)) AS entry \
+                         WHERE entry->>'offer_id' = $3) \
+                     ) \
+                     ORDER BY o.created_at DESC \
+                     LIMIT 1",
+                    &[&organization_id, &session_id, &offer_id],
                 )?
-                .map(|row| row.get::<_, String>(0)))
+                .map(|row| {
+                    (
+                        row.get::<_, Option<Value>>("context"),
+                        row.get::<_, Option<String>>("tool"),
+                        row.get::<_, Option<String>>("event"),
+                    )
+                }))
         })
         .map_err(error)?;
-    Ok(root.map(|root| OfferOwner {
-        organization_id: input.organization_id.clone(),
-        caller_id: input.owner_caller_id.clone(),
-        session_id: input.session_id.clone(),
-        parent_id: input.parent_id.clone(),
-        root,
-        arguments: None,
-        tool: input.tool.clone(),
-        spelling: input.spelling.clone(),
-        dispatch: input.dispatch.clone(),
-    }))
+    Ok(match row {
+        Some((context, tool, event)) => {
+            presentation_from_receipt(context.as_ref(), tool, event.as_deref())
+        }
+        None => CallPresentation::default(),
+    })
 }
 
-fn owner_can_be_spent_by(owner: Option<&str>, spender: Option<&Principal>) -> bool {
-    let Some(spender) = spender else {
-        return false;
+fn routing_owner(pg: &LeasedPostgres, input: &OfferInput) -> napi::Result<Option<OfferOwner>> {
+    let key = SessionKey::new(&input.organization_id, &input.trajectory.session_id);
+    let stamped_parent = input.trajectory.parent_id.clone();
+    let row = pg
+        .with_client(move |client| {
+            Ok(client
+                .query_opt(
+                    "SELECT root, parent_id FROM openappa_sessions WHERE organization_id = $1 AND actor = $2",
+                    &[&key.organization_id, &key.actor],
+                )?
+                .map(|row| (row.get::<_, String>(0), row.get::<_, Option<String>>(1))))
+        })
+        .map_err(error)?;
+    let Some((root, recorded_parent)) = row else {
+        return Ok(None);
     };
-    match owner.map(Principal::parse).transpose() {
-        Ok(Some(Principal::User(owner))) => {
-            matches!(spender, Principal::User(actual) if actual == &owner)
-        }
-        // Credential owners are organization scoped. The caller has already
-        // authenticated into the organization selected by the owner lookup.
-        Ok(Some(Principal::App(_) | Principal::VirtualKey(_) | Principal::Opaque(_))) => true,
-        Ok(None) | Err(_) => false,
+    if recorded_parent != stamped_parent {
+        return Ok(None);
     }
+    Ok(Some(OfferOwner {
+        organization_id: input.organization_id.clone(),
+        session_id: input.trajectory.session_id.clone(),
+        parent_id: stamped_parent,
+        root,
+        tool: None,
+        spelling: None,
+        dispatch: None,
+    }))
 }
 
 fn claim_operation(
@@ -2734,8 +3339,8 @@ mod root_lock_tests {
 mod typed_tests {
     use super::{
         OfferId, OfferOwner, RemedyAct, RemedyOutcome, RemedyPresentation,
-        authoritative_unexecuted_response, owner_can_be_spent_by, presentation_offer_ids,
-        render_released_call, render_remedy_outcome,
+        authoritative_unexecuted_response, presentation_from_context, presentation_offer_ids,
+        render_released_call, render_remedy_outcome, unknown_result_response,
     };
     use appa_runtime_api::OfferedRemedy;
     use serde_json::Value;
@@ -2823,30 +3428,211 @@ mod typed_tests {
     }
 
     #[test]
-    fn only_the_personal_owner_may_spend_a_personal_offer() {
-        let owner = super::Principal::parse("user:owner").unwrap();
-        let stranger = super::Principal::parse("user:stranger").unwrap();
-        let credential = super::Principal::parse("virtual-key:credential").unwrap();
+    fn a_remedy_takes_a_stamped_trajectory_and_rejects_owner_claims() {
+        let accepted = serde_json::from_str::<super::OfferInput>(
+            r#"{
+                "organization_id": "organization",
+                "caller_id": "user:spender",
+                "trajectory": {"v": 1, "session_id": "session"},
+                "arguments": {"offer_id": "0123456789abcdef"},
+                "execution_mode": "untracked",
+                "original_arguments": "{}",
+                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
+            }"#,
+        );
+        assert!(accepted.is_ok());
+        assert_eq!(accepted.unwrap().caller_id.as_deref(), Some("user:spender"));
 
-        assert!(owner_can_be_spent_by(Some("user:owner"), Some(&owner)));
-        assert!(!owner_can_be_spent_by(Some("user:owner"), Some(&stranger)));
-        assert!(owner_can_be_spent_by(
-            Some("virtual-key:credential"),
-            Some(&stranger)
-        ));
-        assert!(!owner_can_be_spent_by(Some("virtual-key:credential"), None));
-        assert!(matches!(credential, super::Principal::VirtualKey(_)));
+        for claimed in [
+            r#""owner_caller_id": "user:owner""#,
+            r#""session_id": "session""#,
+            r#""tool": "read_untrusted""#,
+            r#""spelling": "client_tool""#,
+            r#""dispatch": "run_tool""#,
+            r#""protected": "header""#,
+        ] {
+            let payload = format!(
+                r#"{{
+                    "organization_id": "organization",
+                    {claimed},
+                    "trajectory": {{"v": 1, "session_id": "session"}},
+                    "arguments": {{"offer_id": "0123456789abcdef"}},
+                    "execution_mode": "untracked",
+                    "original_arguments": "{{}}",
+                    "presentation": {{"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}}
+                }}"#
+            );
+            assert!(
+                serde_json::from_str::<super::OfferInput>(&payload).is_err(),
+                "{claimed} must not select a route"
+            );
+        }
+    }
+
+    #[test]
+    fn an_anonymous_remedy_omits_the_spender_and_a_foreign_version_is_invalid() {
+        let anonymous = serde_json::from_str::<super::OfferInput>(
+            r#"{
+                "organization_id": "organization",
+                "trajectory": {"v": 1, "session_id": "session", "parent_id": null},
+                "arguments": {"offer_id": "0123456789abcdef"},
+                "execution_mode": "untracked",
+                "original_arguments": "{}",
+                "presentation": {"control_tool": "archestra__execute_remedy_plan", "supports_delegation": false}
+            }"#,
+        )
+        .unwrap();
+        assert!(anonymous.caller_id.is_none());
+        assert!(anonymous.trajectory.parent_id.is_none());
+        assert!(super::validate_trajectory(&anonymous.trajectory).is_ok());
+
+        let foreign = super::TrajectoryStamp {
+            v: 2,
+            session_id: "session".to_owned(),
+            parent_id: None,
+        };
+        assert_eq!(
+            super::validate_trajectory(&foreign).unwrap_err().reason,
+            "invalid trajectory"
+        );
+    }
+
+    #[test]
+    fn a_child_stamp_is_the_expected_actor_and_a_root_stamp_is_not() {
+        let child = super::expected_actor("recorded-root", "child-session", Some("parent"));
+        let child_actor = super::session_actor("child-session");
+        assert_eq!(child.root.0, "recorded-root");
+        assert_eq!(
+            child.child.as_ref().map(|id| id.0.as_str()),
+            Some(child_actor.as_str())
+        );
+        assert!(
+            super::expected_actor("recorded-root", "session", None)
+                .child
+                .is_none()
+        );
+    }
+
+    #[test]
+    fn retry_text_comes_from_recorded_context_and_old_rows_fall_back() {
+        let recorded = presentation_from_context(Some(&serde_json::json!({
+            "tool": "archestra__whoami",
+            "arguments": {"verbose": true},
+            "spawn": false,
+            "spelling": "client_whoami",
+            "dispatch": "my_gateway_archestra__run_tool"
+        })));
+        let call = appa_runtime_api::ProposedCall {
+            tool: "mcp/archestra/whoami".to_owned(),
+            arguments: serde_json::value::to_raw_value(&serde_json::json!({ "verbose": true }))
+                .unwrap(),
+            cwd: None,
+        };
+        let hint = render_released_call("Authorized", &call, Some(&owner_from(recorded)));
+        let (prefix, arguments) = hint.split_once("exactly these arguments: ").unwrap();
+        assert_eq!(
+            prefix,
+            "[appa] Authorized. Call the my_gateway_archestra__run_tool tool again with "
+        );
+        assert_eq!(
+            serde_json::from_str::<Value>(arguments).unwrap(),
+            serde_json::json!({ "tool_name": "archestra__whoami", "tool_args": { "verbose": true } })
+        );
+
+        let legacy = presentation_from_context(Some(&serde_json::json!({
+            "tool": "read_untrusted",
+            "arguments": {"path": "report.txt"},
+            "spawn": false
+        })));
+        assert!(legacy.spelling.is_none());
+        assert!(legacy.dispatch.is_none());
+        let direct = render_released_call(
+            "Authorized",
+            &appa_runtime_api::ProposedCall {
+                tool: "read_untrusted".to_owned(),
+                arguments: serde_json::value::to_raw_value(
+                    &serde_json::json!({ "path": "report.txt" }),
+                )
+                .unwrap(),
+                cwd: None,
+            },
+            Some(&owner_from(legacy)),
+        );
+        assert!(direct.contains("Call the read_untrusted tool again"));
+        assert!(!direct.contains("run_tool"));
+        assert!(presentation_from_context(None).tool.is_none());
+    }
+
+    #[test]
+    fn a_peer_read_notice_uses_its_stored_tool_as_retry_spelling() {
+        let peer = super::presentation_from_receipt(
+            None,
+            Some("acme__read_peer_message".to_owned()),
+            Some("peer_read_notice"),
+        );
+        assert_eq!(peer.spelling.as_deref(), Some("acme__read_peer_message"));
+        let ordinary = super::presentation_from_receipt(
+            None,
+            Some("read_untrusted".to_owned()),
+            Some("tool_call"),
+        );
+        assert!(ordinary.spelling.is_none());
+        assert_eq!(ordinary.tool.as_deref(), Some("read_untrusted"));
+    }
+
+    #[test]
+    fn retry_fields_stay_in_context_and_out_of_the_idempotency_key() {
+        let input: super::Input = serde_json::from_value(serde_json::json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "tool": "read_untrusted",
+            "arguments": {"path": "report.txt"},
+            "spelling": "client.read_untrusted",
+            "dispatch": "my_gateway_archestra__run_tool"
+        }))
+        .unwrap();
+        let semantic = super::operation_semantic(&input);
+        assert!(semantic.get("spelling").is_none());
+        assert!(semantic.get("dispatch").is_none());
+        let context = super::tool_call_context(&input);
+        assert_eq!(context["spelling"], "client.read_untrusted");
+        assert_eq!(context["dispatch"], "my_gateway_archestra__run_tool");
+
+        let legacy: super::Input = serde_json::from_value(serde_json::json!({
+            "organization_id": "organization",
+            "session_id": "session",
+            "event": "tool_call",
+            "tool": "read_untrusted",
+            "arguments": {}
+        }))
+        .unwrap();
+        let old = super::tool_call_context(&legacy);
+        assert!(old.get("spelling").is_none());
+        assert!(old.get("dispatch").is_none());
+        assert!(super::recorded_call(Some(context), serde_json::json!({})).is_ok());
+        assert!(super::recorded_call(Some(old), serde_json::json!({})).is_ok());
+    }
+
+    fn owner_from(presentation: super::CallPresentation) -> OfferOwner {
+        OfferOwner {
+            organization_id: "organization".to_owned(),
+            session_id: "session".to_owned(),
+            parent_id: None,
+            root: "root".to_owned(),
+            tool: presentation.tool,
+            spelling: presentation.spelling,
+            dispatch: presentation.dispatch,
+        }
     }
 
     #[test]
     fn released_call_uses_saved_spelling_and_reports_the_accepted_plan() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
             tool: Some("canonical_tool".to_owned()),
             spelling: Some("client_tool".to_owned()),
             dispatch: None,
@@ -2879,27 +3665,44 @@ mod typed_tests {
         let text = response["approved_output"].as_str().unwrap();
         // The ruling stays verbatim and first: it is the only account of the
         // block the model has.
-        assert!(text.starts_with(&format!("{ruling}\n\nThe tool was not executed.")));
+        assert!(text.starts_with(&format!("{ruling}\n\nThe tool did not run.")));
         // A plan is carried out by the call the ruling shows, which for a
         // redispatch plan is another tool rather than the remedy tool.
-        assert!(text.contains("choose one yourself and make the call it shows now"));
+        assert!(
+            text.contains("Apply a fitting plan with the exact call that the ruling shows for it")
+        );
         assert!(!text.contains("remedy tool"));
         // The same order of question tools as ask_user's own description.
-        assert!(text.contains("the client's own if it has one, otherwise ask_user"));
-        assert!(text.contains("never as a plain-text question"));
-        assert!(text.contains("only in the ruling's own words"));
-        assert!(text.contains("never guess who the readers are"));
+        assert!(text.contains("the client's own question tool if it has one, otherwise ask_user"));
+        assert!(text.contains("not in plain text"));
+        assert!(text.contains("in the ruling's own words"));
+        assert!(text.contains("do not guess who the readers are"));
+        // Who decides, not an instruction to skip the user.
+        assert!(!text.contains("choose one yourself"));
+    }
+
+    #[test]
+    fn an_unreleased_result_is_withheld_and_says_why() {
+        let response = unknown_result_response();
+
+        assert_eq!(response["decision"], "block");
+        assert_eq!(response["output_source"], "runtime");
+        assert_eq!(response["code"], "unreleased_call");
+        // Callers read `reason` as the text of a block, so the code stays out of it.
+        assert!(response.get("reason").is_none());
+        assert_eq!(
+            response["approved_output"],
+            "[appa] Tool output withheld: this result has no record of releasing a call."
+        );
     }
 
     #[test]
     fn authorized_remedy_uses_released_arguments_and_saved_spelling() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: Some(r#"{ "value": 1 }"#.to_owned()),
             tool: Some("canonical_tool".to_owned()),
             spelling: Some("client_tool".to_owned()),
             dispatch: None,
@@ -2923,7 +3726,9 @@ mod typed_tests {
         let (prefix, arguments) = text.split_once("exactly these arguments: ").unwrap();
         assert_eq!(
             prefix,
-            "[appa] Authorized. Tell the user in your reply which plan was accepted. Call the client_tool tool again with "
+            "[appa] Authorized. Tell the user in your reply which plan was accepted. Make this your next call: until it runs, \
+             the session keeps its current label and calls that need the plan stay blocked. Call the client_tool tool \
+             again with "
         );
         assert_eq!(
             serde_json::from_str::<Value>(arguments).unwrap(),
@@ -2954,14 +3759,29 @@ mod typed_tests {
     }
 
     #[test]
+    fn receipt_lookup_refuses_record_or_byte_overflow_instead_of_partial_authority() {
+        let mut by_records = super::ReceiptLookupBudget::default();
+        for _ in 0..10_000 {
+            by_records.take(0).unwrap();
+        }
+        assert!(by_records.take(0).is_err());
+        let mut by_bytes = super::ReceiptLookupBudget::default();
+        by_bytes.take(8 * 1024 * 1024).unwrap();
+        assert!(by_bytes.take(1).is_err());
+        assert!(
+            super::ReceiptLookupBudget::default()
+                .take(usize::MAX)
+                .is_err()
+        );
+    }
+
+    #[test]
     fn a_dispatched_call_is_retried_through_the_dispatch_tool() {
         let owner = OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: None,
             tool: Some("archestra__whoami".to_owned()),
             spelling: Some("archestra__whoami".to_owned()),
             dispatch: Some("my_gateway_archestra__run_tool".to_owned()),
@@ -3012,11 +3832,9 @@ mod remedy_tests {
     fn owner(spelling: Option<&str>) -> OfferOwner {
         OfferOwner {
             organization_id: "organization".to_owned(),
-            caller_id: Some("user:owner".to_owned()),
             session_id: "session".to_owned(),
             parent_id: None,
             root: "root".to_owned(),
-            arguments: None,
             tool: Some("archestra__todo_write".to_owned()),
             spelling: spelling.map(str::to_owned),
             dispatch: None,
@@ -3178,8 +3996,498 @@ mod remedy_tests {
     }
 
     #[test]
-    fn a_remedy_requires_a_caller() {
-        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_err());
+    fn a_remedy_accepts_an_anonymous_spender() {
+        assert!(validate(&remedy_input(json!({ "caller_id": null }))).is_ok());
         assert!(validate(&remedy_input(json!({}))).is_ok());
+        assert!(validate(&remedy_input(json!({ "caller_id": "" }))).is_err());
+    }
+}
+
+#[cfg(test)]
+mod runtime_child_tests {
+    use super::{
+        AddressedChild, HookEventKind, Input, ReturnReceipt, classify_addressed_child,
+        crossed_return, rebind_child, spawn_operation_id, spawn_ref_from_receipt, validate, wire,
+    };
+    use appa_eventlog::{Backend, LogStore};
+    use appa_runtime::{
+        api::{AuditEvent, LabelSpelling, OfferId, RemedyArguments, RemedyOutcome},
+        hooks,
+    };
+    use appa_runtime_api::{
+        Actor, HookDecision, HookEvent, OfferedReturn, OutcomeBody, ProposedCall, SpawnBinding,
+        SpawnKind, SpawnRef, ToolOutcome, TrajectoryId,
+    };
+    use serde_json::{Value, json};
+    use std::sync::Arc;
+
+    fn event_input(event: &str, extra: Value) -> Input {
+        let mut input = json!({
+            "organization_id": "organization",
+            "session_id": "child-session",
+            "parent_id": "parent-session",
+            "event": event,
+            "operation_id": "return-1",
+            "output": "exact bytes",
+        });
+        input
+            .as_object_mut()
+            .unwrap()
+            .extend(extra.as_object().unwrap().clone());
+        serde_json::from_value(input).unwrap()
+    }
+
+    #[test]
+    fn child_return_requires_a_child_operation_and_output_before_a_receipt() {
+        assert!(validate(&event_input("child_return", json!({}))).is_ok());
+        let mut missing_output = event_input("child_return", json!({}));
+        missing_output.output = None;
+        assert_eq!(
+            validate(&missing_output).unwrap_err().reason,
+            "missing output"
+        );
+        let mut missing_parent = event_input("child_return", json!({}));
+        missing_parent.parent_id = None;
+        assert_eq!(
+            validate(&missing_parent).unwrap_err().reason,
+            "missing parent_id"
+        );
+        let mut missing_operation = event_input("child_return", json!({}));
+        missing_operation.operation_id = None;
+        assert_eq!(
+            validate(&missing_operation).unwrap_err().reason,
+            "missing operation_id"
+        );
+        assert!(matches!(
+            event_input("child_return", json!({})).event,
+            HookEventKind::ChildReturn
+        ));
+    }
+
+    #[test]
+    fn a_spawn_call_id_stays_raw_and_does_not_fall_back_to_in_flight() {
+        assert_eq!(spawn_operation_id("toolu_1"), "call:toolu_1");
+        assert_eq!(spawn_operation_id("call:toolu_1"), "call:call:toolu_1");
+        assert!(matches!(
+            spawn_ref_from_receipt(None, None).unwrap(),
+            SpawnRef::InFlight
+        ));
+        match spawn_ref_from_receipt(Some("toolu_1"), Some("sealed".into())).unwrap() {
+            SpawnRef::Binding(binding) => assert_eq!(binding.0, "sealed"),
+            other => panic!("a released receipt must bind explicitly, got {other:?}"),
+        }
+        assert_eq!(
+            spawn_ref_from_receipt(Some("toolu_1"), None).unwrap_err(),
+            "spawn call has no released binding"
+        );
+        assert_eq!(
+            spawn_ref_from_receipt(Some("toolu_1"), Some(String::new())).unwrap_err(),
+            "spawn call has no released binding"
+        );
+    }
+
+    #[test]
+    fn an_exact_row_authorizes_an_arbitrary_id_and_a_prefix_does_not_rebind() {
+        let parent = "user:1|workload";
+        let stored = "archestra:stored-actor".to_owned();
+        match classify_addressed_child(parent, "workspace-9f3c", Some(stored.clone())) {
+            AddressedChild::Rebind(actor) => assert_eq!(actor, stored),
+            _ => panic!("an exact row must rebind the stored actor"),
+        }
+        assert!(matches!(
+            classify_addressed_child(parent, &format!("{parent}:native"), None),
+            AddressedChild::UnstartedNative
+        ));
+        assert!(matches!(
+            classify_addressed_child(parent, &format!("{parent}:child:grand"), None),
+            AddressedChild::UnstartedNative
+        ));
+        assert!(matches!(
+            classify_addressed_child(parent, "workspace-9f3c", None),
+            AddressedChild::Foreign
+        ));
+        assert!(matches!(
+            classify_addressed_child(parent, &format!("{parent}:other"), None),
+            AddressedChild::UnstartedNative
+        ));
+    }
+
+    #[test]
+    fn a_rebind_uses_the_family_root_and_the_stored_actor() {
+        let root = TrajectoryId("archestra:family".into());
+        let event = rebind_child(&root, "archestra:stored".into());
+        match event {
+            HookEvent::ChildStart {
+                root: bound_root,
+                child,
+                spawn,
+            } => {
+                assert_eq!(bound_root, root);
+                assert_eq!(child.0, "archestra:stored");
+                assert_eq!(spawn, SpawnRef::InFlight);
+            }
+            other => panic!("rebind must be a child start, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn child_return_wire_keeps_the_exact_value_and_a_block_names_its_reason() {
+        let staged = wire(&HookDecision::ChildReturn {
+            value: "scrubbed".into(),
+        })
+        .unwrap();
+        assert_eq!(staged["decision"], "child_return");
+        assert_eq!(staged["value"], "scrubbed");
+        let blocked = wire(&HookDecision::Block {
+            reason: "the child has a call still open; report its outcome before the child ends"
+                .into(),
+        })
+        .unwrap();
+        assert_eq!(blocked["decision"], "block");
+        assert_eq!(
+            blocked["reason"],
+            "the child has a call still open; report its outcome before the child ends"
+        );
+        assert!(blocked.get("feedback").is_none());
+    }
+
+    #[test]
+    fn a_loader_keeps_admitted_child_returns_and_drops_an_unechoed_stage() {
+        let admitted = crossed_return(ReturnReceipt {
+            event: "child_return",
+            operation_id: "runtime-return:task-1:req-1",
+            decision: "ack",
+            decision_value: None,
+            output: Some("exact file bytes"),
+        })
+        .expect("an ack is a crossing");
+        assert_eq!(admitted.operation_id, "runtime-return:task-1:req-1");
+        assert_eq!(admitted.value, "exact file bytes");
+
+        assert!(
+            crossed_return(ReturnReceipt {
+                event: "child_return",
+                operation_id: "runtime-return:task-1:req-2",
+                decision: "child_return",
+                decision_value: Some("staged"),
+                output: Some("raw"),
+            })
+            .is_none(),
+            "an unechoed stage is not a crossing"
+        );
+
+        let echo = crossed_return(ReturnReceipt {
+            event: "child_return",
+            operation_id: "runtime-return:task-1:req-2:echo",
+            decision: "ack",
+            decision_value: None,
+            output: Some("canonical"),
+        })
+        .expect("the echo ack is the crossing");
+        assert_eq!(echo.operation_id, "runtime-return:task-1:req-2:echo");
+        assert!(echo.operation_id.starts_with("runtime-return:task-1:"));
+        assert_eq!(echo.value, "canonical");
+
+        assert!(
+            crossed_return(ReturnReceipt {
+                event: "child_return",
+                operation_id: "runtime-return:task-1:req-3",
+                decision: "block",
+                decision_value: None,
+                output: Some("held"),
+            })
+            .is_none()
+        );
+
+        let ended = crossed_return(ReturnReceipt {
+            event: "child_end",
+            operation_id: "end-1",
+            decision: "child_return",
+            decision_value: Some("canonical end"),
+            output: Some("raw end"),
+        })
+        .expect("a child end still carries its staged value");
+        assert_eq!(ended.value, "canonical end");
+        assert!(
+            crossed_return(ReturnReceipt {
+                event: "child_end",
+                operation_id: "end-1:echo",
+                decision: "ack",
+                decision_value: None,
+                output: Some("canonical end"),
+            })
+            .is_none(),
+            "a child-end echo is not a second crossing"
+        );
+    }
+
+    fn arguments() -> Box<serde_json::value::RawValue> {
+        serde_json::value::RawValue::from_string("{}".into()).unwrap()
+    }
+
+    fn policy(delegate: &str, read: &str) -> String {
+        format!(
+            "[policy]\nversion = 2\n[[policy.tool]]\nname = \"{delegate}\"\ndelta = {{}}\n[[policy.tool]]\nname = \"{read}\"\ndelta = {{}}\n[policy.deployment]\ncontext_control = true\n"
+        )
+    }
+
+    fn open_runtime(delegate: &str, read: &str) -> appa_runtime::api::Runtime {
+        let store = Arc::new(LogStore::open(Backend::Memory).unwrap());
+        crate::policy::open(
+            crate::policy::compile(&policy(delegate, read), |_| None).unwrap(),
+            store,
+        )
+        .unwrap()
+    }
+
+    fn tool_call(
+        root: &TrajectoryId,
+        child: Option<&TrajectoryId>,
+        tool: &str,
+        call_id: Option<&str>,
+        spawn: bool,
+    ) -> HookEvent {
+        HookEvent::ToolCall {
+            actor: Actor {
+                root: root.clone(),
+                child: child.cloned(),
+            },
+            call: ProposedCall {
+                tool: tool.to_owned(),
+                arguments: arguments(),
+                cwd: None,
+            },
+            call_id: call_id.map(str::to_owned),
+            spawn: spawn.then_some(SpawnKind::Single),
+            prompt: None,
+            ruling: None,
+        }
+    }
+
+    async fn released_binding(
+        runtime: &appa_runtime::api::Runtime,
+        root: &TrajectoryId,
+        tool: &str,
+    ) -> SpawnBinding {
+        let spawn = || tool_call(root, None, tool, None, true);
+        let HookDecision::DenyCall { offers, .. } = hooks::handle(runtime, spawn()).await else {
+            panic!("a marked spawn blocks until its return is declared");
+        };
+        let offer = offers
+            .iter()
+            .find(|offer| offer.returns == Some(OfferedReturn::AsSpoken))
+            .expect("the menu offers an as-spoken return");
+        let outcome = runtime
+            .execute_remedy_with(
+                &Actor {
+                    root: root.clone(),
+                    child: None,
+                },
+                OfferId(offer.id.clone()),
+                RemedyArguments {
+                    label: Some(LabelSpelling::default()),
+                    return_schema: None,
+                },
+            )
+            .await;
+        assert!(
+            matches!(outcome, RemedyOutcome::Authorized { .. }),
+            "{outcome:?}"
+        );
+        let released = hooks::handle(runtime, spawn()).await;
+        let HookDecision::AllowCall {
+            spawn: Some(binding),
+            ..
+        } = released
+        else {
+            panic!("the declared spawn must release a binding, got {released:?}");
+        };
+        binding
+    }
+
+    fn start(root: &TrajectoryId) -> HookEvent {
+        HookEvent::SessionStart {
+            root: root.clone(),
+            principal: None,
+            address: None,
+            title: None,
+            start: None,
+            launch: None,
+        }
+    }
+
+    fn child_of(root: &TrajectoryId) -> TrajectoryId {
+        let child = TrajectoryId("archestra:workspace-9f3c".into());
+        assert!(
+            !child.0.starts_with(&format!("{}:", root.0)),
+            "the workspace id must not pass the native prefix check"
+        );
+        child
+    }
+
+    async fn opened_child(
+        runtime: &appa_runtime::api::Runtime,
+        root: &TrajectoryId,
+        child: &TrajectoryId,
+        delegate: &str,
+    ) {
+        assert_eq!(hooks::handle(runtime, start(root)).await, HookDecision::Ack);
+        let binding = released_binding(runtime, root, delegate).await;
+        let forged = hooks::handle(
+            runtime,
+            HookEvent::ChildStart {
+                root: root.clone(),
+                child: child.clone(),
+                spawn: SpawnRef::Binding(SpawnBinding("not-a-seal".into())),
+            },
+        )
+        .await;
+        assert!(
+            matches!(forged, HookDecision::Refuse { .. }),
+            "a forged binding must not fall back to in-flight, got {forged:?}"
+        );
+        assert!(
+            runtime
+                .audit(root)
+                .unwrap()
+                .iter()
+                .all(|entry| entry.trajectory != child.0)
+        );
+        let started = hooks::handle(
+            runtime,
+            HookEvent::ChildStart {
+                root: root.clone(),
+                child: child.clone(),
+                spawn: SpawnRef::Binding(binding),
+            },
+        )
+        .await;
+        assert!(
+            matches!(started, HookDecision::Ack | HookDecision::Context { .. }),
+            "{started:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_sealed_binding_opens_an_arbitrary_child_and_a_return_leaves_it_live() {
+        let delegate = super::canonical_tool("delegate").unwrap();
+        let read = super::canonical_tool("read").unwrap();
+        let runtime = open_runtime(&delegate, &read);
+        let root = TrajectoryId("archestra:parent-root".into());
+        let child = child_of(&root);
+        opened_child(&runtime, &root, &child, &delegate).await;
+
+        let returned = hooks::handle(
+            &runtime,
+            HookEvent::ChildReturn {
+                root: root.clone(),
+                child: child.clone(),
+                value: "exact file bytes".into(),
+            },
+        )
+        .await;
+        assert_eq!(returned, HookDecision::Ack);
+        assert!(runtime.audit(&root).unwrap().iter().any(|entry| {
+            entry.trajectory == child.0 && matches!(entry.event, AuditEvent::ChildReturn { .. })
+        }));
+
+        let later = hooks::handle(
+            &runtime,
+            tool_call(&root, Some(&child), &read, Some("call:later"), false),
+        )
+        .await;
+        assert!(
+            matches!(later, HookDecision::AllowCall { .. }),
+            "the child stays live after a return, got {later:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_child_return_does_not_settle_an_open_call() {
+        let delegate = super::canonical_tool("delegate").unwrap();
+        let read = super::canonical_tool("read").unwrap();
+        let runtime = open_runtime(&delegate, &read);
+        let root = TrajectoryId("archestra:parent-root".into());
+        let child = child_of(&root);
+        opened_child(&runtime, &root, &child, &delegate).await;
+
+        let opened = hooks::handle(
+            &runtime,
+            tool_call(&root, Some(&child), &read, Some("call:read-1"), false),
+        )
+        .await;
+        assert!(
+            matches!(opened, HookDecision::AllowCall { .. }),
+            "{opened:?}"
+        );
+        let blocked = hooks::handle(
+            &runtime,
+            HookEvent::ChildReturn {
+                root: root.clone(),
+                child: child.clone(),
+                value: "pending".into(),
+            },
+        )
+        .await;
+        let HookDecision::Block { reason } = blocked else {
+            panic!("an open call must hold the return, got {blocked:?}");
+        };
+        assert!(
+            reason.contains("call still open"),
+            "held reason was {reason}"
+        );
+        assert!(runtime.audit(&root).unwrap().iter().all(|entry| {
+            entry.trajectory != child.0 || !matches!(entry.event, AuditEvent::ChildReturn { .. })
+        }));
+        assert!(
+            runtime.audit(&root).unwrap().iter().all(|entry| {
+                entry.trajectory != child.0 || !matches!(entry.event, AuditEvent::Closed { .. })
+            }),
+            "the open call must stay open"
+        );
+
+        let reported = hooks::handle(
+            &runtime,
+            HookEvent::ToolResult {
+                actor: Actor {
+                    root: root.clone(),
+                    child: Some(child.clone()),
+                },
+                call: ProposedCall {
+                    tool: read.clone(),
+                    arguments: arguments(),
+                    cwd: None,
+                },
+                call_id: Some("call:read-1".into()),
+                outcome: ToolOutcome::Success {
+                    body: OutcomeBody::Available("note".into()),
+                },
+            },
+        )
+        .await;
+        assert!(
+            matches!(reported, HookDecision::Ack),
+            "the withheld return must not have settled the call, got {reported:?}"
+        );
+
+        let returned = hooks::handle(
+            &runtime,
+            HookEvent::ChildReturn {
+                root: root.clone(),
+                child: child.clone(),
+                value: "exact file bytes".into(),
+            },
+        )
+        .await;
+        assert_eq!(returned, HookDecision::Ack);
+        let later = hooks::handle(
+            &runtime,
+            tool_call(&root, Some(&child), &read, Some("call:after"), false),
+        )
+        .await;
+        assert!(
+            matches!(later, HookDecision::AllowCall { .. }),
+            "a later call still runs after the crossing, got {later:?}"
+        );
     }
 }

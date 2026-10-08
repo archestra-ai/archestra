@@ -29,6 +29,7 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { cn } from "@/lib/utils/tailwind";
 import { ServiceLogoPicker } from "./service-logo-picker";
 
@@ -148,7 +149,7 @@ export function AgentIconPicker({
       }}
     >
       <PopoverTrigger asChild>
-        <button
+        <UnstyledButton
           type="button"
           aria-label={disabled ? "Icon" : value ? "Change icon" : "Choose icon"}
           disabled={disabled}
@@ -192,7 +193,7 @@ export function AgentIconPicker({
               <X className="h-2.5 w-2.5" />
             </div>
           )}
-        </button>
+        </UnstyledButton>
       </PopoverTrigger>
       <PopoverContent
         className="w-[352px] overflow-hidden rounded-lg p-0"

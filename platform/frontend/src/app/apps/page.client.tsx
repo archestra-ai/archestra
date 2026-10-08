@@ -23,6 +23,7 @@ import { LoadingWrapper } from "@/components/loading";
 import { AppSettingsDialog } from "@/components/mcp-app/app-settings-dialog";
 import { PageLayout } from "@/components/page-layout";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
@@ -44,6 +45,7 @@ import {
 } from "@/components/ui/select";
 import {
   APPS_FIRST_PAGE,
+  countApps,
   useAppLabelKeys,
   useAppLabelValues,
   useApps,
@@ -74,7 +76,7 @@ export default function AppsPage() {
   // Scope/owner filtering is server-side (mirroring the Projects list) so an
   // app admin's "Personal → Other users" view can reach apps that aren't in the
   // default page. The scope filter component owns these URL params.
-  const { scope, authorIds, excludeAuthorIds } = useScopeFilterParams();
+  const { scope, authorIds, excludeAuthorIds, access } = useScopeFilterParams();
   const settingsId = searchParams.get("settings");
   // Label filtering is server-side too: an owned app matches its own labels, an
   // external one its backing MCP server's, so both halves of the list filter.
@@ -89,6 +91,7 @@ export default function AppsPage() {
       scope,
       authorIds,
       excludeAuthorIds,
+      access,
       labels: labelsFromUrl || undefined,
     },
     { toastOnError: false },
@@ -174,6 +177,7 @@ export default function AppsPage() {
         <div className="flex items-center gap-2">
           <PermissionButton
             permissions={{ app: ["create"] }}
+            size="sm"
             onClick={() => setCreateOpen(true)}
           >
             <Plus className="h-4 w-4" />
@@ -197,6 +201,11 @@ export default function AppsPage() {
               />
             }
           >
+            <ResourceAccessFilter
+              resource="app"
+              noun="apps"
+              countItems={countApps}
+            />
             <Select
               value={kind}
               onValueChange={(value) =>
@@ -364,6 +373,12 @@ export function AppSection({
   const selectedOwnedApps = selected.filter(
     (app): app is OwnedApp => app.source === "owned",
   );
+  // Like every other bulk action: only offered when it can succeed for all.
+  const canDeleteSelected =
+    selectedOwnedApps.length > 0 &&
+    selectedOwnedApps.every(
+      (app) => computeAppAccess(app, accessContext).canDeleteApp,
+    );
   const selectedApps = selectedOwnedApps.map((app) => ({
     id: app.id,
     name: app.name,
@@ -384,7 +399,13 @@ export function AppSection({
         selectAllMatching={selectAllMatching}
       >
         <PermissionButton
-          permissions={{ app: ["delete"] }}
+          permissions={{}}
+          disabled={!canDeleteSelected}
+          tooltip={
+            canDeleteSelected
+              ? undefined
+              : "You do not have permission to delete every selected app"
+          }
           variant="destructive"
           size="sm"
           onClick={() => setBulkDeleteOpen(true)}

@@ -1,8 +1,12 @@
 import {
   ARCHESTRA_MCP_CATALOG_ID,
   isAlwaysExposedArchestraToolShortName,
+  isImplicitOpenAppaReadToolShortName,
+  isRequiredOpenAppaToolShortName,
   parseFullToolName,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   TOOL_RUN_COMMAND_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_SEARCH_TOOLS_SHORT_NAME,
@@ -16,12 +20,21 @@ import {
   InternalMcpCatalogModel,
   McpServerModel,
 } from "@/models";
-import { openappaEnabled, openappaYellEnabled } from "@/openappa/service";
-import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
+import {
+  isAppaDelegatedRun,
+  openappaEnabled,
+  openappaYellEnabled,
+} from "@/openappa/service";
+import {
+  type AgentToolExclusionSets,
+  agentToolExclusionsService,
+  isToolIdentityExcluded,
+} from "@/services/agent-tool-exclusions";
 import {
   appLaunchToolDescription,
   sanitizeAppNameForToolMetadata,
 } from "@/services/apps/app-run-link";
+import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { buildKnowledgeSourcesDescription } from "@/services/knowledge-sources-description";
 import { isSkillSandboxAvailableForAgent } from "@/skills/skill-sandbox-availability";
 import { APP_LAUNCH_TOOL_NAME } from "@/types/app";
@@ -205,6 +218,7 @@ const registry = defineArchestraTools([
         organizationId: context.organizationId,
         userId: context.userId,
         conversationId: context.conversationId,
+        delegationChain: context.delegationChain,
       });
 
       let matches: SearchCandidate[];
@@ -322,20 +336,45 @@ export const __test = {
 
 // === Internal helpers ===
 
-function openappaSearchTools(): Array<{
-  name: string;
-  description: string | null;
-  catalogId: string | null;
-  parameters: Record<string, unknown>;
-}> {
+async function openappaSearchTools(
+  exclusionSets: AgentToolExclusionSets,
+): Promise<
+  Array<{
+    name: string;
+    description: string | null;
+    catalogId: string | null;
+    parameters: Record<string, unknown>;
+  }>
+> {
   if (!openappaEnabled()) return [];
+  const remediesActive = await isGuardrailsV2Active();
   return openappaMcpTools.flatMap((tool) => {
     const shortName = archestraMcpBranding.getToolShortName(tool.name);
-    if (!isOpenappaTool(shortName)) return [];
+    if (
+      !isImplicitOpenAppaReadToolShortName(shortName) &&
+      !isRequiredOpenAppaToolShortName(shortName ?? "")
+    )
+      return [];
+    if (
+      (shortName === "get_remedy_plans" ||
+        shortName === "execute_remedy_plan" ||
+        shortName === TOOL_LIST_PEER_MESSAGES_SHORT_NAME ||
+        shortName === TOOL_READ_PEER_MESSAGE_SHORT_NAME) &&
+      !remediesActive
+    ) {
+      return [];
+    }
     if (shortName === "yell" && !openappaYellEnabled()) return [];
     const name = shortName
       ? archestraMcpBranding.getToolName(shortName)
       : tool.name;
+    if (
+      isToolIdentityExcluded(
+        { catalogId: ARCHESTRA_MCP_CATALOG_ID, name },
+        exclusionSets,
+      )
+    )
+      return [];
     return [
       {
         name,
@@ -352,8 +391,10 @@ async function getSearchableTools(params: {
   organizationId?: string;
   userId?: string;
   conversationId?: string;
+  delegationChain?: string;
 }): Promise<SearchCandidate[]> {
   const { agentId, conversationId, organizationId, userId } = params;
+  const delegatedRun = isAppaDelegatedRun(agentId, params.delegationChain);
   // Per-agent exclusions (Auto-tool mode): loaded once per search and applied
   // to BOTH the assigned contribution and the discoverable widening below.
   // Empty (no-op) unless the agent's accessAllTools setting is on.
@@ -373,9 +414,11 @@ async function getSearchableTools(params: {
     organizationId,
     exclusionSets,
   });
-  // OpenAPPA tools are reachable on every agent when the feature is on —
-  // assignment and Auto-mode extras must not hide them from search_tools.
-  const injectedOpenappaTools = openappaSearchTools();
+  // OpenAPPA runtime and policy read tools are reachable on every agent when
+  // the feature is on; policy writes come only from assignment or Auto mode.
+  const injectedOpenappaTools = delegatedRun
+    ? []
+    : await openappaSearchTools(exclusionSets);
   const injectedOpenappaNames = new Set(
     injectedOpenappaTools.map((tool) => tool.name),
   );
@@ -385,7 +428,13 @@ async function getSearchableTools(params: {
     ...discoverableTools.filter(
       (tool) => !injectedOpenappaNames.has(tool.name),
     ),
-  ];
+  ].filter(
+    (tool) =>
+      !(
+        delegatedRun &&
+        isOpenappaTool(archestraMcpBranding.getToolShortName(tool.name))
+      ),
+  );
   const permittedNames = await filterToolNamesByPermission(
     searchSpace.map((tool) => tool.name),
     userId,
@@ -1277,7 +1326,7 @@ function visitSchema(
 // the always-exposed runtime tools (skills + sandbox) are already
 // top-level — returning them as results would be redundant noise. But "always-exposed" only
 // holds once a tool is assigned: an unassigned sandbox tool the user can reach
-// via sandbox:execute is NOT top-level, so surface it here so the model can
+// via agent:read is NOT top-level, so surface it here so the model can
 // discover and run it. Meta tools are never useful as results.
 function isExcludedFromSearchResults(
   toolName: string,

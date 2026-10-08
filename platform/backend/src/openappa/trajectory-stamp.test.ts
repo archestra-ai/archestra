@@ -1,6 +1,7 @@
 import { describe, expect, test } from "vitest";
 import {
   parseTrajectoryStamp,
+  restoreTrajectoryStampText,
   stampedSessions,
   stampToolCallId,
 } from "./trajectory-stamp";
@@ -223,5 +224,21 @@ describe("trajectory stamps", () => {
       );
       expect(body).toEqual(restored);
     }
+  });
+
+  test("restores stamps standing alone in text and leaves look-alike tokens", () => {
+    const id = stamp("0d3990dc-ace0-4952-8ac5-2d5281e7261b", "toolu_01AbC");
+    expect(restoreTrajectoryStampText(`<tool-use-id>${id}</tool-use-id>`)).toBe(
+      "<tool-use-id>toolu_01AbC</tool-use-id>",
+    );
+    for (const text of [
+      "appat1notastampatall0000000000",
+      `x${id}`,
+      `${id}x_`,
+    ]) {
+      expect(restoreTrajectoryStampText(text)).toBe(text);
+    }
+    const plain = "no stamp here";
+    expect(restoreTrajectoryStampText(plain)).toBe(plain);
   });
 });

@@ -24,6 +24,7 @@ import { vi } from "vitest";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import config from "@/config";
 import { ModelModel } from "@/models";
+import { buildNoticeArguments, type RemedyExecution } from "@/openappa/notice";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { createGeminiTestClient } from "@/test/llm-provider-stubs";
 import { ApiError } from "@/types";
@@ -955,6 +956,182 @@ describe("Gemini countTokens passthrough", () => {
         },
       ],
     );
+  });
+
+  test("takes OpenAPPA's call-bound notices, legacy offers and remedy receipts out of a wrapped request", async () => {
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa.offerSigningSecret = secret;
+    // Leftover offer material from persisted history. Not minted, and not a route.
+    const offer = {
+      protected: "eyJhbGciOiJIUzI1NiJ9",
+      payload: JSON.stringify({ session_id: "historical-offer-session" }),
+      signature: "historical-offer",
+    };
+    const notice = (offers?: Array<typeof offer>) => ({
+      ...buildNoticeArguments({
+        id: "call_weather",
+        tool: "get_weather",
+        arguments: { location: "SF" },
+        result: "[appa] get_weather is blocked until a plan is approved.",
+      }),
+      ...(offers ? { offers } : {}),
+    });
+    const remedy = { offer_id: "offer-weather", plan: "approve" };
+    const execution = {
+      v: 1,
+      kind: "appa_remedy",
+      call_id: "call_remedy",
+      tool_name: "archestra__execute_remedy_plan",
+      original_arguments: JSON.stringify(remedy),
+    } satisfies RemedyExecution;
+    // Gemini supports optional call/response IDs. Both transport records name
+    // their own calls; the catch-all has no resolved gateway identity.
+    // Legacy offer fields are removed without verifying or routing them.
+    const contents = (noticeArgs: object, remedyArgs: object) => [
+      { role: "user", parts: [{ text: "What's the weather in SF?" }] },
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: {
+              id: "call_weather",
+              name: "archestra__get_remedy_plans",
+              args: noticeArgs,
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              id: "call_weather",
+              name: "archestra__get_remedy_plans",
+              response: { result: "rendered for the user" },
+            },
+          },
+        ],
+      },
+      {
+        role: "model",
+        parts: [
+          {
+            functionCall: {
+              id: "call_remedy",
+              name: "archestra__execute_remedy_plan",
+              args: remedyArgs,
+            },
+          },
+        ],
+      },
+      {
+        role: "user",
+        parts: [
+          {
+            functionResponse: {
+              id: "call_remedy",
+              name: "archestra__execute_remedy_plan",
+              response: { result: "Plan authorized." },
+            },
+          },
+        ],
+      },
+    ];
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
+        headers: { "content-type": "application/json" },
+        payload: {
+          generateContentRequest: {
+            contents: contents(notice([offer]), {
+              ...remedy,
+              execution,
+              ...offer,
+            }),
+          },
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+    expect(forwardedBodies).toHaveLength(1);
+    expect(forwardedBodies[0]).not.toMatch(
+      /"notice"|"offers"|"execution"|"protected"|"payload"|"signature"/,
+    );
+    const { notice: _notice, ...publicNotice } = notice();
+    expect(JSON.parse(forwardedBodies[0])).toEqual({
+      generateContentRequest: { contents: contents(publicNotice, remedy) },
+    });
+  });
+
+  test("preserves an unowned Gemini lookalike's application fields in a wrapped request", async () => {
+    const names = [
+      "archestra__get_remedy_plans",
+      "archestra__execute_remedy_plan",
+      "archestra__ask_user",
+    ];
+    const args = {
+      ...buildNoticeArguments({
+        id: "call_application",
+        tool: "get_weather",
+        arguments: { location: "SF" },
+        result: "An application's own ruling.",
+      }),
+      offers: [{ offer_id: "application-offer" }],
+      remedy_offers: [{ offer_id: "application-remedy" }],
+      trajectory: { stage: "application-workflow" },
+      execution: { kind: "application-record" },
+      protected: "application-header",
+      payload: "application-payload",
+      signature: "application-signature",
+    };
+    // Neither unmarked declarations nor same-leaf names and field presence
+    // bind these ID-less application calls to platform transport records.
+    const payload = {
+      generateContentRequest: {
+        tools: [
+          {
+            functionDeclarations: names.map((name) => ({
+              name,
+              description: "An application's own tool.",
+            })),
+          },
+        ],
+        contents: [
+          {
+            role: "model",
+            parts: names.map((name) => ({ functionCall: { name, args } })),
+          },
+        ],
+      },
+    };
+    const app = Fastify().withTypeProvider<ZodTypeProvider>();
+    app.setValidatorCompiler(validatorCompiler);
+    app.setSerializerCompiler(serializerCompiler);
+    await app.register(geminiProxyRoutes);
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/v1/gemini/v1beta/models/gemini-2.5-pro:countTokens",
+        headers: { "content-type": "application/json" },
+        payload,
+      });
+      expect(response.statusCode).toBe(200);
+    } finally {
+      await app.close();
+    }
+    expect(forwardedBodies).toEqual([JSON.stringify(payload)]);
+    expect(JSON.parse(forwardedBodies[0])).toEqual(payload);
   });
 });
 

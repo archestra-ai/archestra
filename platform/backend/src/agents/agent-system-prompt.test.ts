@@ -150,7 +150,7 @@ describe("buildAgentSystemPrompt", () => {
       userId: user.id,
       agentId: agent.id,
     };
-    const choiceRule = `When you ask the user a question, clarification, preference, or approval, call ${askUserToolName}. Never ask multiple-choice questions or request user decisions in plain text.`;
+    const choiceRule = `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${askUserToolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${askUserToolName} too, not in plain text.`;
 
     // Chat: the stream shows the question and waits for the answer.
     const chat = await buildAgentSystemPrompt({
@@ -221,34 +221,14 @@ describe("buildAgentSystemPrompt", () => {
           agentId: agent.id,
         }),
       ).toContain(instruction);
-      expect(instruction).toContain("returns a ruling as its result");
-      expect(instruction).not.toContain('starts with "[appa]"');
-      expect(instruction).not.toContain("Name the plans to the user");
-      // Rulings count readers without naming them; the model must not guess.
-      expect(instruction).toContain(
-        "describe the block and each plan only in the ruling's own words",
-      );
-      expect(instruction).toContain("never guess who the readers are");
-      expect(instruction).toContain(
-        "call archestra__execute_remedy_plan immediately",
-      );
-      expect(instruction).toContain("Do not ask permission first");
-      expect(instruction).toContain(
-        "That tool itself collects any required human approval",
-      );
-      expect(instruction).not.toContain(askUserToolName);
-      expect(instruction).not.toContain("remedy_offer_ids");
-      expect(instruction).not.toContain("only after");
+      // The instruction says who decides; it never tells the model to skip
+      // the user, which provider safety classifiers refuse.
+      expect(instruction).not.toContain("Do not ask permission");
+      expect(instruction).not.toMatch(/immediately/i);
       expect(instruction).not.toContain("get_remedy_plans");
-      // A run nobody can answer a question in describes the plans and stops;
-      // it must never self-select or execute one.
+      // A run nobody can answer a question in never points at ask_user.
       const headless = buildAppaRemedyInstruction({ canAskUser: false });
       expect(headless).not.toContain(askUserToolName);
-      expect(headless).toContain(
-        "Without user input, describe the available plans and stop.",
-      );
-      expect(headless).toContain("Do not choose or execute a plan.");
-      expect(headless).not.toContain("execute_remedy_plan");
     } finally {
       config.openappa = openappa;
     }

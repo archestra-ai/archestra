@@ -199,6 +199,7 @@ function OauthClientsTable() {
       <div className="flex items-center gap-2">
         <PermissionButton
           permissions={{ llmOauthClient: ["create"] }}
+          size="sm"
           onClick={() => setCreateOpen(true)}
         >
           <Plus className="h-4 w-4" />
@@ -322,6 +323,7 @@ function OauthClientsTable() {
         return (
           <TableRowActions
             itemName={row.original.client.name}
+            permissionScope={row.original.client.id}
             actions={[
               {
                 icon: <Pencil className="h-4 w-4" />,

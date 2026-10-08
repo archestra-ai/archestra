@@ -1452,7 +1452,7 @@ describe("KnowledgeSettingsPage", () => {
       expect(screen.queryByText(/ago/)).not.toBeInTheDocument();
     });
 
-    it("keeps the factors read-only without knowledgeSettings:update", () => {
+    it("keeps the factors read-only without organizationSettings:update", () => {
       mockOrganization = { ...baseOrg, kbBm25K1: null, kbBm25B: null };
       mockFeatures();
       vi.mocked(useHasPermissions).mockReturnValue({
@@ -1462,7 +1462,7 @@ describe("KnowledgeSettingsPage", () => {
       renderAdvancedPage();
 
       // The status line still reports where ranking stands — that only needs
-      // knowledgeSettings:read — but neither factor can be edited.
+      // organizationSettings:read — but neither factor can be edited.
       expect(screen.getByLabelText("Term Saturation")).toBeDisabled();
       expect(screen.getByLabelText("Length Normalization")).toBeDisabled();
     });
@@ -1480,9 +1480,9 @@ describe("KnowledgeSettingsPage", () => {
 
       const links = screen.getAllByRole("link", { name: /Learn more/ });
       expect(links.map((link) => link.getAttribute("href"))).toEqual([
-        "https://archestra.ai/docs/platform-knowledge#reranking",
-        "https://archestra.ai/docs/platform-knowledge#keyword-ranking",
-        "https://archestra.ai/docs/platform-knowledge#contextual-retrieval",
+        "https://archestra.ai/docs/knowledge/settings#reranking",
+        "https://archestra.ai/docs/knowledge/settings#keyword-ranking",
+        "https://archestra.ai/docs/knowledge/settings#contextual-retrieval",
       ]);
     });
 

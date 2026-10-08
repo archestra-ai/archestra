@@ -2,7 +2,6 @@
 
 import type { UIMessage } from "@ai-sdk/react";
 import {
-  BUILT_IN_AGENT_IDS,
   type ChatExternalMcpSkillMetadata,
   ChatExternalMcpSkillMetadataSchema,
   type ChatMessageFeedback,
@@ -60,8 +59,8 @@ import {
 import { ChatStatusAnnouncer } from "@/components/chat/chat-status-announcer";
 import { ConversationFilesPanel } from "@/components/chat/conversation-files-panel";
 import { ConversationHeader } from "@/components/chat/conversation-header";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { OnboardingWizardButton } from "@/components/chat/onboarding-wizard-button";
 import {
   AppsPanelContent,
@@ -75,9 +74,6 @@ import { useChatApps } from "@/components/chat/use-chat-apps";
 import { CreateLlmProviderApiKeyDialog } from "@/components/create-llm-provider-api-key-dialog";
 import { DefaultModelOnboardingStep } from "@/components/default-model-onboarding";
 import { LoadingState } from "@/components/loading";
-import MessageThread, {
-  type PartialUIMessage,
-} from "@/components/message-thread";
 import { NoApiKeySetup } from "@/components/no-api-key-setup";
 import { getScheduledRunChatState } from "@/components/scheduled-tasks/schedule-trigger.utils";
 import { ScheduledRunInProgress } from "@/components/scheduled-tasks/scheduled-run-in-progress";
@@ -157,14 +153,15 @@ import {
   getMessageFeedback,
   mergePersistedMessageMetadata,
 } from "@/lib/chat/chat-utils";
+import { isConversationShared } from "@/lib/chat/conversation-sharing";
 import { resolveEnabledToolIds } from "@/lib/chat/enabled-tools-selection";
+import {
+  generateEncryptedChatKey,
+  isActionAvailableForConversation,
+} from "@/lib/chat/encrypted-chat";
 import { downloadConversationMarkdown } from "@/lib/chat/export-markdown";
 import { useChatSession, useGlobalChat } from "@/lib/chat/global-chat.context";
 import { createLatestWriteQueue } from "@/lib/chat/latest-write-queue";
-import {
-  generateLockedChatKey,
-  isActionAvailableForConversation,
-} from "@/lib/chat/locked-chat";
 import {
   drainPendingChatHandoffFiles,
   hasPendingChatHandoffFiles,
@@ -195,6 +192,7 @@ import {
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
+import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useLlmModels, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import {
   type SupportedProvider,
@@ -358,7 +356,7 @@ export function ChatPageContent({
   });
   const { data: canSeeAgentPicker, isLoading: isAgentPickerPermissionLoading } =
     useHasPermissions({
-      chatAgentPicker: ["enable"],
+      chat: ["full-view"],
     });
   const { data: canCreateProjectPerm } = useHasPermissions({
     project: ["create"],
@@ -495,21 +493,21 @@ export function ChatPageContent({
     isInitialRuntimeMode,
   );
 
-  // Whether the NEXT chat created from the new-chat composer is a locked chat.
+  // Whether the NEXT chat created from the new-chat composer is an encrypted chat.
   // Only meaningful pre-conversation; reset after a successful create so a
   // later new chat never inherits it silently.
-  const [isLockedChatDraft, setIsLockedChatDraft] = useState(false);
+  const [isEncryptedChatDraft, setIsEncryptedChatDraft] = useState(false);
 
-  // `?locked-chat=1` (command palette entry / Alt+I) arms the composer toggle.
+  // `?encryptedChat=1` (command palette entry / Alt+I) arms the composer toggle.
   // One-shot, same posture as user_prompt and skillId: the param is stripped
   // once applied, so a reload can't silently re-arm it and a second Alt+I is a
   // real navigation rather than a no-op push of an identical URL.
-  const urlLockedChatDraft = searchParams.get("lockedChat") === "1";
+  const urlEncryptedChatDraft = searchParams.get("encryptedChat") === "1";
   useEffect(() => {
-    if (!urlLockedChatDraft) return;
-    setIsLockedChatDraft(true);
-    clearLockedChatQueryParam({ pathname, router, searchParams });
-  }, [urlLockedChatDraft, pathname, router, searchParams]);
+    if (!urlEncryptedChatDraft) return;
+    setIsEncryptedChatDraft(true);
+    clearEncryptedChatQueryParam({ pathname, router, searchParams });
+  }, [urlEncryptedChatDraft, pathname, router, searchParams]);
 
   // Persist the user's (model, key) pick as their member default for the
   // existing-conversation handlers below (the initial handlers persist via the
@@ -841,7 +839,7 @@ export function ChatPageContent({
           // sharing of one chat.
           grant.scope === conversationId,
       ) === true) &&
-    // Locked chats cannot be shared (the backend rejects it).
+    // Encrypted chats cannot be shared (the backend rejects it).
     isActionAvailableForConversation(conversation, "share");
 
   // Turning this chat into a project is owner-only (same as sharing) and
@@ -860,17 +858,10 @@ export function ChatPageContent({
     canManageShare === true,
   );
   const isShared = sharingPolicy.data
-    ? [
-        ...sharingPolicy.data.grants,
-        ...sharingPolicy.data.inheritedGrants,
-      ].some(
-        (grant) =>
-          grant.actions.includes("read") &&
-          !(
-            grant.subject.type === "user" &&
-            grant.subject.id === conversation?.userId
-          ),
-      )
+    ? isConversationShared({
+        grants: sharingPolicy.data.grants,
+        ownerId: conversation?.userId,
+      })
     : !!conversation?.share;
   const isReadOnlyConversation =
     !!conversationId &&
@@ -895,10 +886,6 @@ export function ChatPageContent({
     enabled: shouldEnableChatSession,
   });
   const connectivity = useConnectivity();
-  const sharedConversationMessages = useMemo(
-    () => (conversation?.messages ?? []) as PartialUIMessage[],
-    [conversation?.messages],
-  );
   const sharedConversationAgentId =
     conversation?.agentId ?? conversation?.agent?.id ?? null;
   const {
@@ -989,9 +976,6 @@ export function ChatPageContent({
   const activeSelectionAgent = conversationId
     ? conversationAgent
     : initialAgent;
-  const isOpenAppaConfigChat =
-    activeSelectionAgent?.builtInAgentConfig?.name ===
-    BUILT_IN_AGENT_IDS.OPENAPPA_CONFIG;
   const suggestionPreview = resolveSuggestionPreview(
     initialAgent?.suggestedPrompts,
     hoveredSuggestionPrompt,
@@ -1799,8 +1783,7 @@ export function ChatPageContent({
   // resend is genuinely issued (so the card disappears without wiping the
   // error when the resend never starts) — same as the regenerate action on a
   // message. If the resend itself fails, the card stays so the user still sees
-  // the error. Owner-editable chats only (read-only viewers render
-  // MessageThread instead of this).
+  // the error. Owner-editable chats only (read-only viewers get no retry).
   const handleChatErrorRetry = useCallback(async () => {
     try {
       await resendLastUserMessage();
@@ -1864,8 +1847,12 @@ export function ChatPageContent({
     [setMessages],
   );
 
+  // Sync once the turn has settled — including a failed one. regenerate (and
+  // the error card's "Try again") resolves the live message to its saved id
+  // through this stamp; skipping it after an error left the just-sent message
+  // unresolvable, so regenerating it silently did nothing.
   useEffect(() => {
-    if (status !== "ready") {
+    if (status === "submitted" || status === "streaming") {
       return;
     }
 
@@ -1917,7 +1904,8 @@ export function ChatPageContent({
   const isContextCompacting =
     !!contextCompaction?.isCompacting || compactConversationMutation.isPending;
 
-  const handleCompactConversation = useCallback(async () => {
+  // Stable identity: passed to the memoized composer (see handleSubmit).
+  const handleCompactConversation = useStableCallback(async () => {
     // The composer stays usable for the whole compaction, so `/compact` is
     // reachable again while one is already running — this guard is what stops
     // a second run re-entering.
@@ -2015,16 +2003,7 @@ export function ChatPageContent({
     } finally {
       endManualContextCompaction?.();
     }
-  }, [
-    beginManualContextCompaction,
-    compactConversationMutation,
-    conversationId,
-    endManualContextCompaction,
-    isContextCompacting,
-    isReadOnlyConversation,
-    recordContextCompaction,
-    syncPersistedMessageMetadata,
-  ]);
+  });
 
   useEffect(() => {
     if (
@@ -2199,7 +2178,10 @@ export function ChatPageContent({
     });
   }, []);
 
-  const handleStopStreaming = () => {
+  // The composer is memoized so streamed chunks (which re-render this page)
+  // skip it; its handlers therefore keep one identity across renders while
+  // still reading the latest messages/status when invoked.
+  const handleStopStreaming = useStableCallback(() => {
     if (conversationId) {
       stop?.({
         preserveQueuedMessages: true,
@@ -2208,13 +2190,12 @@ export function ChatPageContent({
     } else {
       stop?.();
     }
-  };
+  });
 
-  const handleSubmit: ArchestraPromptInputProps["onSubmit"] = async (
-    message,
-    e,
-    options,
-  ) => {
+  const handleSubmit = useStableCallback<
+    Parameters<ArchestraPromptInputProps["onSubmit"]>,
+    ReturnType<ArchestraPromptInputProps["onSubmit"]>
+  >(async (message, e, options) => {
     e.preventDefault();
 
     // Enqueue this submission instead of sending it now (throws on inputs that
@@ -2397,7 +2378,7 @@ export function ChatPageContent({
         conversationId,
       });
     }
-  };
+  });
 
   const isBrowserPanelVisible = isBrowserPanelOpen;
   const isReviewPanelVisible = isReviewTabOpen && !!reviewContext;
@@ -2611,11 +2592,13 @@ export function ChatPageContent({
       if (!input) {
         return false;
       }
-      // LockedChat: the conversation DEK is generated here, in the browser,
+      // EncryptedChat: the conversation DEK is generated here, in the browser,
       // BEFORE the create request. It rides along as a header; the mutation's
       // onSuccess stores it under the fresh conversation id before any
       // navigation or stream start reads it.
-      const lockedChatKey = isLockedChatDraft ? generateLockedChatKey() : null;
+      const encryptedChatKey = isEncryptedChatDraft
+        ? generateEncryptedChatKey()
+        : null;
 
       // Chained off the promise, not mutate's per-call onSuccess: an auto-send
       // can fire from the mount effect, and StrictMode's effect replay then
@@ -2624,12 +2607,14 @@ export function ChatPageContent({
       // already reported by the hook.
       createConversationMutation
         .mutateAsync(
-          lockedChatKey ? { ...input, lockedChat: true, lockedChatKey } : input,
+          encryptedChatKey
+            ? { ...input, encryptedChat: true, encryptedChatKey }
+            : input,
         )
         .then(
           (newConversation) => {
             if (!newConversation) return;
-            setIsLockedChatDraft(false);
+            setIsEncryptedChatDraft(false);
             // A recording started from scratch (before this chat had an id)
             // becomes this conversation's recording now that its id exists,
             // so the timer and buffered capture carry across the transition.
@@ -2652,7 +2637,7 @@ export function ChatPageContent({
       initialAgentId,
       initialModel,
       initialApiKeyId,
-      isLockedChatDraft,
+      isEncryptedChatDraft,
       initialThinkingEffort,
       createConversationMutation,
       searchParams,
@@ -3033,7 +3018,7 @@ export function ChatPageContent({
   // suppresses it while the org record is still loading — so a returning admin
   // who already has a default never flashes the step during that window.
   const { data: canSetDefaultModel } = useHasPermissions({
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
   const [firstKeyAdded, setFirstKeyAdded] = useState(false);
   const showDefaultModelStep =
@@ -3147,6 +3132,7 @@ export function ChatPageContent({
         <EmptyContent>
           {!canCreateAgent ? (
             <ButtonWithTooltip
+              size="sm"
               disabled
               disabledText={"You don't have permission to create agents"}
             >
@@ -3154,7 +3140,7 @@ export function ChatPageContent({
               Create Agent
             </ButtonWithTooltip>
           ) : (
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/agents/new">
                 <Plus className="h-4 w-4" />
                 Create Agent
@@ -3183,7 +3169,7 @@ export function ChatPageContent({
               The conversation may have been deleted, or you may not have
               permission to view it.
             </p>
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/chat">Start a new chat</Link>
             </Button>
           </CardContent>
@@ -3192,7 +3178,7 @@ export function ChatPageContent({
     );
   }
 
-  // LockedChat tombstone: the conversation exists and the viewer may see it,
+  // EncryptedChat tombstone: the conversation exists and the viewer may see it,
   // but this browser holds no (valid) encryption key, so the server returned
   // the locked view. Deliberately its own branch — this is not a 404, the
   // chat is real but undecryptable here.
@@ -3201,19 +3187,19 @@ export function ChatPageContent({
       <div className="flex h-full w-full items-center justify-center p-8">
         <Card className="w-full max-w-xl">
           <CardHeader className="justify-items-center text-center gap-3 pt-8">
-            <LockedChatIcon className="mx-auto block size-14" />
+            <EncryptedChatIcon className="mx-auto block size-14" />
             <CardTitle className="text-xl">
               This chat can&apos;t be unlocked
             </CardTitle>
             <CardDescription className="max-w-md text-sm leading-relaxed">
-              This is a locked chat. Its encryption key existed only in the
+              This is an encrypted chat. Its encryption key existed only in the
               browser that created it and wasn&apos;t found here — clearing
               browser data or switching browsers removes the key. {appName}{" "}
               cannot decrypt the messages.
             </CardDescription>
           </CardHeader>
           <CardContent className="flex justify-center pb-8">
-            <Button asChild>
+            <Button size="sm" asChild>
               <Link href="/chat">Start a new chat</Link>
             </Button>
           </CardContent>
@@ -3351,20 +3337,10 @@ export function ChatPageContent({
                     >
                       {isReadOnlyConversation && isScheduledRunInProgress ? (
                         <ScheduledRunInProgress />
-                      ) : isReadOnlyConversation ? (
-                        <MessageThread
-                          messages={sharedConversationMessages}
-                          chatErrors={conversation?.chatErrors ?? []}
-                          conversationId={conversationId}
-                          containerClassName="h-full"
-                          hideDivider
-                          profileId={conversation?.agent?.id}
-                          agentName={conversation?.agent?.name}
-                          selectedModel={conversation?.modelId ?? undefined}
-                        />
                       ) : (
                         <ChatMessages
                           conversationId={conversationId}
+                          readOnly={isReadOnlyConversation}
                           agentId={
                             currentProfileId || initialAgentId || undefined
                           }
@@ -3390,7 +3366,7 @@ export function ChatPageContent({
                               : internalAgents.find(
                                   (a) => a.id === initialAgentId,
                                 )
-                            )?.name
+                            )?.name ?? conversation?.agent?.name
                           }
                           selectedModel={conversationModelId ?? initialModel}
                           modelSource={
@@ -3399,8 +3375,18 @@ export function ChatPageContent({
                           chatErrors={conversation?.chatErrors ?? []}
                           compactions={conversation?.compactions ?? []}
                           onRegenerateUserMessage={regenerateUserMessage}
-                          onProviderConnected={handleProviderConnected}
-                          onChatErrorRetry={handleChatErrorRetry}
+                          // Both re-send the owner's last prompt, which a
+                          // read-only viewer cannot do.
+                          onProviderConnected={
+                            isReadOnlyConversation
+                              ? undefined
+                              : handleProviderConnected
+                          }
+                          onChatErrorRetry={
+                            isReadOnlyConversation
+                              ? undefined
+                              : handleChatErrorRetry
+                          }
                           error={error}
                           onToolApprovalResponse={
                             addToolApprovalResponse
@@ -3419,7 +3405,7 @@ export function ChatPageContent({
                   </ViewTransition>
 
                   {isReadOnlyConversation ? (
-                    <div className="sticky bottom-0 bg-background border-t p-4">
+                    <div className="sticky bottom-0 bg-background p-4">
                       <div className="max-w-4xl mx-auto space-y-3">
                         <div className="relative">
                           <div className="border-input dark:bg-input/30 relative flex w-full flex-col rounded-md border shadow-xs opacity-30 blur-[3px] pointer-events-none select-none">
@@ -3444,7 +3430,7 @@ export function ChatPageContent({
                               </div>
                             </div>
                           </div>
-                          {/* Forking is rejected for locked chats, so the
+                          {/* Forking is rejected for encrypted chats, so the
                               affordance is hidden rather than left to fail. */}
                           {isActionAvailableForConversation(
                             conversation,
@@ -3473,7 +3459,7 @@ export function ChatPageContent({
                       </div>
                     </div>
                   ) : isAgentDeleted ? (
-                    <div className="sticky bottom-0 bg-background border-t p-4">
+                    <div className="sticky bottom-0 bg-background p-4">
                       <div className="max-w-4xl mx-auto">
                         <div className="flex items-center justify-between gap-4 p-4 rounded-lg border border-muted bg-muted/50">
                           <div className="flex items-center gap-3 text-muted-foreground">
@@ -3483,7 +3469,10 @@ export function ChatPageContent({
                               been deleted.
                             </span>
                           </div>
-                          <Button onClick={() => router.push("/chat")}>
+                          <Button
+                            size="sm"
+                            onClick={() => router.push("/chat")}
+                          >
                             <Plus className="h-4 w-4" />
                             New Conversation
                           </Button>
@@ -3496,12 +3485,12 @@ export function ChatPageContent({
                     /* Review chat with no LLM key: the replay plays in the panel
                        without a key, but chatting needs one — prompt for it here
                        instead of the composer (which assumes a selected model). */
-                    <div className="sticky bottom-0 bg-background border-t p-4">
+                    <div className="sticky bottom-0 bg-background p-4">
                       <ReviewChatNoKeyNotice onKeyAdded={handleFirstKeyAdded} />
                     </div>
                   ) : (
                     activeAgentId && (
-                      <div className="sticky bottom-0 bg-background border-t p-4">
+                      <div className="sticky bottom-0 bg-background p-4">
                         {/* Shared-element pair with the centered New Chat
                             composer (and the project-page composer): on the
                             splash → conversation swap the box morphs from
@@ -3566,7 +3555,6 @@ export function ChatPageContent({
                                   : undefined
                               }
                               selectorAgentId={activeAgentId}
-                              agentSelectorReadOnly={isOpenAppaConfigChat}
                               onAgentChange={handleConversationAgentChange}
                               modelSource={conversationModelSource}
                               onResetModelOverride={
@@ -3780,17 +3768,16 @@ export function ChatPageContent({
                                     initialPerUserConnect.provider
                                   }
                                   selectorAgentId={initialAgentId}
-                                  agentSelectorReadOnly={isOpenAppaConfigChat}
                                   onAgentChange={handleInitialAgentChange}
-                                  lockedChat={
+                                  encryptedChat={
                                     isInitialRuntimeMode
                                       ? false
-                                      : isLockedChatDraft
+                                      : isEncryptedChatDraft
                                   }
-                                  onLockedChatChange={
+                                  onEncryptedChatChange={
                                     isInitialRuntimeMode
                                       ? undefined
-                                      : setIsLockedChatDraft
+                                      : setIsEncryptedChatDraft
                                   }
                                   modelSource={initialModelSource}
                                   onResetModelOverride={
@@ -3972,15 +3959,15 @@ function clearUserPromptQueryParam(params: {
   params.router.replace(nextUrl);
 }
 
-// `locked-chat` arms the composer toggle once (command palette / Alt+I) and is
+// `encrypted-chat` arms the composer toggle once (command palette / Alt+I) and is
 // then dropped, same one-shot posture as user_prompt and skillId.
-function clearLockedChatQueryParam(params: {
+function clearEncryptedChatQueryParam(params: {
   pathname: string;
   router: ReturnType<typeof useRouter>;
   searchParams: URLSearchParams;
 }) {
   const nextSearchParams = new URLSearchParams(params.searchParams.toString());
-  nextSearchParams.delete("lockedChat");
+  nextSearchParams.delete("encryptedChat");
   const nextUrl = nextSearchParams.toString()
     ? `${params.pathname}?${nextSearchParams.toString()}`
     : params.pathname;
@@ -4092,7 +4079,11 @@ function ReviewChatNoKeyNotice({ onKeyAdded }: { onKeyAdded: () => void }) {
             submission. The replay on the right plays without a key.
           </span>
         </div>
-        <Button className="shrink-0" onClick={() => setIsDialogOpen(true)}>
+        <Button
+          size="sm"
+          className="shrink-0"
+          onClick={() => setIsDialogOpen(true)}
+        >
           <Plus className="h-4 w-4" />
           Add API key
         </Button>

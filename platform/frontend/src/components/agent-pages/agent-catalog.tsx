@@ -1,6 +1,9 @@
 import {
   AGENT_CATALOG_IMAGE_REGISTRY,
+  AGENT_CATALOG_NAMES,
   type AgentCatalogId,
+  buildAgentCatalogRuntime,
+  buildAgentCatalogSystemPrompt,
   getAgentCatalogImages,
   isIntegrationHidden,
 } from "@archestra/shared";
@@ -23,13 +26,7 @@ export interface AgentCatalogTemplate {
 }
 
 /** Shared by the catalog card and the runtime pill. */
-export const AGENT_CATALOG_TEMPLATE_NAMES: Record<AgentCatalogId, string> = {
-  "claude-code": "Claude Code",
-  codex: "Codex",
-  opencode: "OpenCode",
-  hermes: "Hermes",
-  openclaw: "OpenClaw",
-};
+export const AGENT_CATALOG_TEMPLATE_NAMES = AGENT_CATALOG_NAMES;
 
 /** The maintained image per template, as this deployment pulls it. */
 export function useAgentCatalogImages(): Record<AgentCatalogId, string> {
@@ -55,9 +52,6 @@ export function getAgentCatalogTemplates(
       description: `Anthropic's coding agent with personal Claude sign-in or provider billing, connected to the ${appName} MCP gateway.`,
       platformName: appName,
       image: images["claude-code"],
-      command: ["archestra-claude-code"],
-      inferenceProtocol: "anthropic",
-      steerMode: "tmux_keys",
     }),
     template({
       id: "codex",
@@ -66,9 +60,6 @@ export function getAgentCatalogTemplates(
       description: `OpenAI's coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
       image: images.codex,
-      command: ["archestra-codex"],
-      inferenceProtocol: "openai_responses",
-      steerMode: "tmux_keys",
     }),
     template({
       id: "opencode",
@@ -77,9 +68,6 @@ export function getAgentCatalogTemplates(
       description: `The open source coding agent, preconfigured to use the ${appName} LLM proxy and MCP gateway.`,
       platformName: appName,
       image: images.opencode,
-      command: ["archestra-opencode"],
-      inferenceProtocol: "openai_responses",
-      steerMode: "tmux_keys",
     }),
     template({
       id: "hermes",
@@ -88,9 +76,6 @@ export function getAgentCatalogTemplates(
       description: `The Hermes coding agent with its model and remote MCP tools supplied by ${appName}.`,
       platformName: appName,
       image: images.hermes,
-      command: ["archestra-hermes"],
-      inferenceProtocol: "openai_chat",
-      steerMode: "tmux_keys",
     }),
     template({
       id: "openclaw",
@@ -99,9 +84,6 @@ export function getAgentCatalogTemplates(
       description: `OpenClaw in an isolated task pod, with inference and MCP access kept behind ${appName}.`,
       platformName: appName,
       image: images.openclaw,
-      command: ["archestra-openclaw"],
-      inferenceProtocol: "openai_chat",
-      steerMode: "tmux_keys",
     }),
   ] as const;
 }
@@ -288,9 +270,6 @@ function template(params: {
   icon: string | null;
   platformName: string;
   image: string;
-  command: string[] | null;
-  inferenceProtocol: "openai_responses" | "openai_chat" | "anthropic";
-  steerMode: "pipe" | "tmux_keys";
 }): AgentCatalogTemplate {
   return {
     id: params.id,
@@ -301,25 +280,12 @@ function template(params: {
       name: params.name,
       icon: params.icon,
       description: params.description,
-      systemPrompt: `You are ${params.name}, an autonomous coding agent. Complete delegated tasks carefully, use the tools available through ${params.platformName}, verify your work, and report the concrete result.`,
+      systemPrompt: buildAgentCatalogSystemPrompt({
+        name: params.name,
+        platformName: params.platformName,
+      }),
       accessAllTools: true,
-      runtime: {
-        image: params.image,
-        command: params.command,
-        inferenceProtocol: params.inferenceProtocol,
-        backend: "kubernetes",
-        steerMode: params.steerMode,
-        privileged: false,
-        resources: null,
-        environment: null,
-        credentials: [],
-        ...(params.id === "claude-code" && {
-          claudeCode: { authentication: "subscription" as const },
-        }),
-        ttlHours: null,
-        maxCostUsd: null,
-        idleTimeoutMinutes: null,
-      },
+      runtime: buildAgentCatalogRuntime({ id: params.id, image: params.image }),
     },
   };
 }

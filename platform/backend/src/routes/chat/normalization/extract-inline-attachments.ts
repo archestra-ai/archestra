@@ -1,3 +1,4 @@
+import { createRequire } from "node:module";
 import { promisify } from "node:util";
 import { gunzip } from "node:zlib";
 import {
@@ -13,7 +14,6 @@ import type {
   ChatMessagePart,
   ConversationContentKey,
 } from "@/types";
-import { loadPdfParser } from "../context-compaction";
 
 const ATTACHMENT_URL_PREFIX = "/api/chat/attachments/";
 const ATTACHMENT_URL_SUFFIX = "/content";
@@ -26,10 +26,10 @@ const SYNC_PDF_PARSE_MAX_BYTES = 10 * 1024 * 1024; // 10MB
  * reference. Mutates `messages` in place. Idempotent across re-uploads of the
  * same bytes within an org (content-hash dedup).
  *
- * In a locked chat every stored column that carries content — the bytes, the
+ * In an encrypted chat every stored column that carries content — the bytes, the
  * filename, the extracted text — is sealed under `conversationKey`, and the
  * dedup hash is keyed by it. The route resolves that key before calling here
- * and fails the turn without one, so a locked chat never reaches this with a
+ * and fails the turn without one, so an encrypted chat never reaches this with a
  * null key and never writes an attachment in the clear.
  */
 export async function extractInlineAttachments(args: {
@@ -310,7 +310,7 @@ async function extractTextPreview(
     const parsed = await loadPdfParser()(buffer);
     // NUL bytes are valid in PDF streams but Postgres text columns reject
     // them ("invalid byte sequence for encoding UTF8: 0x00"). Strip them
-    // before storing — same as context-compaction.ts does at write time.
+    // before storing — same as compaction/message-text.ts does at write time.
     const text = (parsed.text ?? "")
       .replaceAll(String.fromCharCode(0), "")
       .slice(0, TEXT_PREVIEW_MAX_CHARS);
@@ -473,3 +473,16 @@ function formatBytes(bytes: number): string {
 }
 
 export { ATTACHMENT_URL_PREFIX, ATTACHMENT_URL_SUFFIX };
+
+type PdfParser = (buffer: Buffer) => Promise<{ text: string }>;
+let pdfParserCache: PdfParser | null = null;
+
+// pdf-parse's public entry runs test code on import; the internal path is the
+// standard workaround. cache the require so we don't repeat it per file part.
+export function loadPdfParser(): PdfParser {
+  if (!pdfParserCache) {
+    const require = createRequire(import.meta.url);
+    pdfParserCache = require("pdf-parse/lib/pdf-parse.js") as PdfParser;
+  }
+  return pdfParserCache;
+}

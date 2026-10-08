@@ -6,6 +6,7 @@ import {
   MCP_CATALOG_REAUTH_QUERY_PARAM,
   MCP_CATALOG_SERVER_QUERY_PARAM,
   type McpDeploymentStatusEntry,
+  RESOURCE_ACCESS_RELATIONS,
 } from "@archestra/shared";
 import { CheckCircle2, Route, Trash2 } from "lucide-react";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
@@ -30,6 +31,7 @@ import {
   OAuthConfirmationDialog,
   type OAuthInstallResult,
 } from "@/components/oauth-confirmation-dialog";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import {
@@ -70,7 +72,9 @@ import { useBulkSelection } from "@/lib/hooks/use-bulk-selection";
 import { useDialogs } from "@/lib/hooks/use-dialog";
 import { useDialogUrlParam } from "@/lib/hooks/use-dialog-url-param";
 import {
+  countInternalMcpCatalog,
   useInternalMcpCatalog,
+  useInternalMcpCatalogAccessIds,
   useMcpCatalogLabelKeys,
   useMcpCatalogLabelValues,
   useReinstallInternalMcpCatalogItem,
@@ -163,6 +167,11 @@ export function InternalMCPCatalog({
   } = useInternalMcpCatalog({
     initialData,
   });
+  const { data: accessIds } = useInternalMcpCatalogAccessIds(
+    ownershipFilters.access.length < RESOURCE_ACCESS_RELATIONS.length
+      ? ownershipFilters.access
+      : undefined,
+  );
   const { data: installedServers } = useMcpServers({
     initialData: initialInstalledServers,
   });
@@ -195,19 +204,9 @@ export function InternalMCPCatalog({
   const currentUserId = session?.user?.id;
   const { data: environmentList } = useEnvironments();
   const byosEnabled = Boolean(useFeature("byosEnabled"));
-  const alertingFeature = useFeature("mcpServerAlertingEnabled");
-  const alertingEnabled = alertingFeature === true;
 
   const [sort, setSort] = useState<SortKey>("attention");
-  const sortOptions =
-    alertingFeature === false
-      ? SORT_OPTIONS.filter((option) => option.key !== "attention")
-      : SORT_OPTIONS;
-  useEffect(() => {
-    if (alertingFeature === false && sort === "attention") {
-      setSort("name-asc");
-    }
-  }, [alertingFeature, sort]);
+  const sortOptions = SORT_OPTIONS;
   // The filters live in the URL, not in component state: the sidebar badge
   // and the retired `?tab=attention` links both have to be able to point at a
   // filtered list, and Back has to undo a filter change rather than leave the
@@ -521,7 +520,6 @@ export function InternalMCPCatalog({
               environmentValues: installResult.environmentValues,
               userConfigValues: installResult.userConfigValues,
               isByosVault: installResult.isByosVault,
-              serviceAccount: installResult.serviceAccount,
             }),
           ),
         );
@@ -904,23 +902,12 @@ export function InternalMCPCatalog({
   // surface renders. This feeds the audience facets, Issue filter and table.
   const { issuesByCatalog, facetCounts } =
     useMcpServerIssues(deploymentStatuses);
-  const selectedFacet = alertingEnabled
-    ? selectedAttentionFacet(filters.status)
-    : null;
+  const selectedFacet = selectedAttentionFacet(filters.status);
   useEffect(() => {
-    const requestedFacet = selectedAttentionFacet(filters.status);
-    if (alertingFeature === false && requestedFacet) {
-      selectFacet(null);
-    } else if (userIsMcpServerAdmin && selectedFacet === "others") {
+    if (userIsMcpServerAdmin && selectedFacet === "others") {
       selectFacet("you");
     }
-  }, [
-    alertingFeature,
-    filters.status,
-    userIsMcpServerAdmin,
-    selectedFacet,
-    selectFacet,
-  ]);
+  }, [userIsMcpServerAdmin, selectedFacet, selectFacet]);
   // The facet's membership and its count come out of the same call, so the
   // number on the button is always the number of rows below it.
   const facetCatalogIds = useMemo(
@@ -943,6 +930,7 @@ export function InternalMCPCatalog({
     ) {
       return false;
     }
+    if (accessIds && !accessIds.has(item.id)) return false;
     if (facetCatalogIds && !facetCatalogIds.has(item.id)) return false;
     if (filters.issue.size > 0) {
       const itemIssues = issuesByCatalog.get(item.id) ?? [];
@@ -1128,7 +1116,13 @@ export function InternalMCPCatalog({
     params.delete("search");
     params.delete("labels");
     for (const group of FILTER_GROUPS) params.delete(group);
-    for (const group of ["scope", "teamIds", "authorIds", "excludeAuthorIds"]) {
+    for (const group of [
+      "scope",
+      "teamIds",
+      "authorIds",
+      "excludeAuthorIds",
+      "access",
+    ]) {
       params.delete(group);
     }
     const qs = params.toString();
@@ -1186,6 +1180,12 @@ export function InternalMCPCatalog({
               />
             }
           >
+            <ResourceAccessFilter
+              resource="mcpRegistry"
+              noun="MCP servers"
+              countItems={countInternalMcpCatalog}
+              navigate={replaceRegistryListUrl}
+            />
             <McpCatalogLabelFilter active={Boolean(hasLabelFilters)} />
 
             {selectedFacet ? (

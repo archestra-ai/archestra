@@ -58,6 +58,9 @@ import { trackBackgroundWork } from "@/utils/background-work";
 import { chunkForBulkStatement } from "@/utils/db";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessFilter,
+} from "./resource-permission-subject";
 import SkillVersionModel, { type VersionFileInput } from "./skill-version";
 
 /**
@@ -352,6 +355,8 @@ class SkillModel {
     status?: SkillRecordStatus;
     /** Skill ids matching a `?labels=` filter; omit when not filtering. */
     labelFilteredIds?: string[];
+    /** The list's "Show" filter; omit when not filtering. */
+    access?: ResourceAccessFilter;
     sorting?: { sortBy?: SkillSortBy; sortDirection?: SortDirection };
   }): Promise<Skill[]> {
     let query = db
@@ -396,6 +401,8 @@ class SkillModel {
     status?: SkillRecordStatus;
     /** Skill ids matching a `?labels=` filter; omit when not filtering. */
     labelFilteredIds?: string[];
+    /** Same "Show" filter as `findByOrganization`. */
+    access?: ResourceAccessFilter;
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
@@ -588,7 +595,7 @@ class SkillModel {
             action: "use",
           }),
           skillUriKeyPredicate(params),
-          skillReadablePredicate({
+          await skillReadablePredicate({
             organizationId: params.organizationId,
             readableBy: params.readableBy,
           }),
@@ -1742,6 +1749,7 @@ function buildOrgFilters(params: {
    * route so the list and count queries agree without resolving twice.
    */
   labelFilteredIds?: string[];
+  access?: ResourceAccessFilter;
 }) {
   const normalizedSearch = params.search?.trim();
   const normalizedSourceRepo = params.sourceRepo?.trim();
@@ -1775,6 +1783,17 @@ function buildOrgFilters(params: {
             resource: "skill",
             scopeColumn: schema.skillsTable.id,
             action: "use",
+          }),
+        ]
+      : []),
+    ...(params.access
+      ? [
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            ...params.access,
+            organizationId: schema.skillsTable.organizationId,
+            resource: "skill",
+            scopeColumn: schema.skillsTable.id,
+            ownerColumn: schema.skillsTable.authorId,
           }),
         ]
       : []),
@@ -1890,10 +1909,10 @@ export const MAX_URI_MATCHES = 20;
  * grants, a caller with no user through what is published to the whole
  * organization. Undefined (no narrowing) when no caller is given.
  */
-export function skillReadablePredicate(params: {
+export async function skillReadablePredicate(params: {
   organizationId: string;
   readableBy?: { userId: string | null };
-}): SQL | undefined {
+}): Promise<SQL | undefined> {
   if (!params.readableBy) return undefined;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -1906,8 +1925,10 @@ export function skillReadablePredicate(params: {
         action: "read",
       })
     : ResourcePermissionPolicyModel.grantCondition({
-        organizationId: params.organizationId,
-        userId: params.readableBy.userId,
+        ...(await ResourcePermissionSubjectModel.resolvePrincipal({
+          organizationId: params.organizationId,
+          userId: params.readableBy.userId,
+        })),
         resource: "skill",
         action: "read",
         scopeColumn: schema.skillsTable.id,

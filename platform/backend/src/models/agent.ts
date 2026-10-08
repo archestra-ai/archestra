@@ -8,6 +8,7 @@ import {
   PLAYWRIGHT_MCP_CATALOG_ID,
   parseFullToolName,
   providerRequiresPerUserCredential,
+  type ResourceAccessRelation,
   type ResourcePermissionGrant,
   SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
   SKILL_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -29,7 +30,6 @@ import {
   isNotNull,
   isNull,
   max,
-  min,
   ne,
   not,
   notInArray,
@@ -85,9 +85,14 @@ import AgentToolModel from "./agent-tool";
 import AgentUserModel from "./agent-user";
 import AgentVersionModel from "./agent-version";
 import CreatedByModel from "./created-by";
+import { latestCreatedAtByKey } from "./latest-created-at";
 import McpToolCallModel from "./mcp-tool-call";
 import OrganizationModel from "./organization";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+  type PrincipalSource,
+} from "./resource-permission-subject";
 import ToolModel from "./tool";
 
 type AgentListFilters = {
@@ -102,6 +107,13 @@ type AgentListFilters = {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonalAgents?: boolean;
+  /** The list's "Show" filter; see {@link ResourceAccessRelation}. */
+  access?: ResourceAccessRelation[];
+  /**
+   * Add the built-in agents to the list. The `access` filter does not apply to
+   * them: they have no author and are listed only to agent admins.
+   */
+  includeBuiltIn?: boolean;
   labels?: Record<string, string[]>;
   status?: AgentRecordStatus;
   providerApiKeyId?: string;
@@ -399,11 +411,14 @@ class AgentModel {
    * overseer who can read every agent still does not list others' private
    * ones.
    */
-  static notOthersPersonalCondition(userId: string): SQL {
+  static notOthersPersonalCondition(params: {
+    userId: string;
+    principals: GrantPrincipal[];
+  }): SQL {
     return or(
       not(agentAudienceIs("personal")),
-      eq(schema.agentsTable.authorId, userId),
-      explicitAgentReadCondition(userId),
+      eq(schema.agentsTable.authorId, params.userId),
+      explicitAgentReadCondition(params.principals),
     ) as SQL;
   }
 
@@ -518,32 +533,16 @@ class AgentModel {
    * with none. Read straight off `interactions` rather than through
    * `InteractionModel`, which imports this module — the same reason the
    * `lastUsedAt` sort below reads `mcpToolCallsTable` directly.
-   *
-   * The `IN` list is one page of agents, so the
-   * `(profile_id, created_at DESC)` index answers each agent's max with a
-   * backward scan instead of walking a very large table.
    */
   private static async getLastInteractionAtForAgents(
     agentIds: string[],
   ): Promise<Map<string, Date>> {
-    if (agentIds.length === 0) return new Map();
-
-    const rows = await db
-      .select({
-        profileId: schema.interactionsTable.profileId,
-        lastInteractionAt: max(schema.interactionsTable.createdAt),
-      })
-      .from(schema.interactionsTable)
-      .where(inArray(schema.interactionsTable.profileId, agentIds))
-      .groupBy(schema.interactionsTable.profileId);
-
-    const lastInteractionMap = new Map<string, Date>();
-    for (const row of rows) {
-      if (row.profileId && row.lastInteractionAt) {
-        lastInteractionMap.set(row.profileId, row.lastInteractionAt);
-      }
-    }
-    return lastInteractionMap;
+    return latestCreatedAtByKey({
+      table: schema.interactionsTable,
+      keyColumn: schema.interactionsTable.profileId,
+      createdAtColumn: schema.interactionsTable.createdAt,
+      keys: agentIds,
+    });
   }
 
   /**
@@ -997,10 +996,16 @@ class AgentModel {
     // Tools are attached afterwards as slim refs via one batched query:
     // joining them here multiplied every agent row (system prompt included)
     // by that agent's tool count.
+    const principals = userId
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId,
+          organizationId: options?.authorization?.organizationId,
+        })
+      : [];
     // Build where conditions
     const whereConditions: SQL[] = [
       getAgentStatusCondition(options?.status ?? "active"),
-      ...(userId ? [agentListFence(userId)] : []),
+      ...(userId ? [agentListFence(principals)] : []),
     ];
     if (options?.authorization) {
       if (!userId) return [];
@@ -1012,7 +1017,7 @@ class AgentModel {
         whereConditions.push(
           or(
             inArray(schema.agentsTable.agentType, baseReadTypes),
-            explicitAgentReadCondition(userId),
+            explicitAgentReadCondition(principals),
           ) as SQL,
         );
       }
@@ -1056,7 +1061,9 @@ class AgentModel {
 
     // Keep oversight-only personal agents hidden, while honoring explicit shares.
     if (options?.excludeOtherPersonalAgents && userId) {
-      whereConditions.push(AgentModel.notOthersPersonalCondition(userId));
+      whereConditions.push(
+        AgentModel.notOthersPersonalCondition({ userId, principals }),
+      );
     }
 
     // Apply access control filtering for non-agent admins
@@ -1064,6 +1071,7 @@ class AgentModel {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
+        principals,
       );
 
       if (accessibleAgentIds.length === 0) {
@@ -1292,6 +1300,34 @@ class AgentModel {
       );
   }
 
+  static async findRuntimeTargets(organizationId: string) {
+    return db
+      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          isNotNull(schema.agentsTable.runtime),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
+
+  /** Agents a delegation call starts as an OpenAPPA child: the organization's own, built-ins excluded. */
+  static async findSpawnTargets(organizationId: string) {
+    return db
+      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .from(schema.agentsTable)
+      .where(
+        and(
+          eq(schema.agentsTable.organizationId, organizationId),
+          eq(schema.agentsTable.agentType, "agent"),
+          eq(schema.agentsTable.builtIn, false),
+          notDeleted(schema.agentsTable),
+        ),
+      );
+  }
+
   /**
    * Find all agents for an organization filtered by accessible agent IDs
    * Returns only agents the user has access to via team membership
@@ -1432,6 +1468,8 @@ class AgentModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const principal =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
     return db
       .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
       .from(schema.agentsTable)
@@ -1442,10 +1480,9 @@ class AgentModel {
           eq(schema.agentsTable.builtIn, false),
           notDeleted(schema.agentsTable),
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId: schema.agentsTable.organizationId,
+            ...principal,
             resource: "agent",
             scopeColumn: schema.agentsTable.id,
-            userId: params.userId,
             action: "use",
           }),
           params.includePersonal ? undefined : not(agentAudienceIs("personal")),
@@ -1522,8 +1559,11 @@ class AgentModel {
     filters?: AgentListFilters;
     userId: string;
     isAgentAdmin: boolean;
-    canManageExternalAgents: boolean;
-    includeExternalAgents?: boolean;
+    /**
+     * The grant an external agent row needs. A bulk selection asks for
+     * `delete`, the only bulk action, so it lists only rows it can act on.
+     */
+    externalAgentAction?: "read" | "delete";
     excludeOtherPersonalExternalAgents?: boolean;
   }): Promise<AgentCatalogCandidatePage> {
     const regularWhereClause = await AgentModel.buildListWhereClause({
@@ -1535,7 +1575,6 @@ class AgentModel {
       isAgentAdmin: params.isAgentAdmin,
     });
     const includeExternalAgents =
-      (params.includeExternalAgents ?? true) &&
       (params.filters?.status ?? "active") === "active" &&
       !params.filters?.labels &&
       !params.filters?.providerApiKeyId &&
@@ -1561,28 +1600,17 @@ class AgentModel {
       params.filters?.scope === "org"
     ) {
       externalWhereConditions.push(
-        eq(schema.a2aRemoteAgentsTable.scope, params.filters.scope),
+        externalAgentAudienceIs(params.filters.scope),
       );
     }
     if (params.filters?.teamIds?.length) {
       externalWhereConditions.push(
-        exists(
-          db
-            .select({ value: sql`1` })
-            .from(schema.a2aRemoteAgentTeamsTable)
-            .where(
-              and(
-                eq(
-                  schema.a2aRemoteAgentTeamsTable.remoteAgentId,
-                  schema.a2aRemoteAgentsTable.id,
-                ),
-                inArray(
-                  schema.a2aRemoteAgentTeamsTable.teamId,
-                  params.filters.teamIds,
-                ),
-              ),
-            ),
-        ),
+        ResourcePermissionPolicyModel.grantsReadToAnyTeam({
+          organizationId: schema.a2aRemoteAgentsTable.organizationId,
+          resource: "externalAgent",
+          scopeColumn: schema.a2aRemoteAgentsTable.id,
+          teamIds: params.filters.teamIds,
+        }),
       );
     }
     if (params.filters?.authorIds?.length) {
@@ -1602,20 +1630,31 @@ class AgentModel {
         externalWhereConditions.push(excludeAuthorsCondition);
       }
     }
+    if (params.filters?.access) {
+      const externalAccessCondition = await externalAgentAccessCondition({
+        userId: params.userId,
+        organizationId: params.filters.organizationId,
+        relations: params.filters.access,
+      });
+      if (externalAccessCondition)
+        externalWhereConditions.push(externalAccessCondition);
+    }
     if (params.excludeOtherPersonalExternalAgents) {
       const ownPersonalOnlyCondition = or(
-        ne(schema.a2aRemoteAgentsTable.scope, "personal"),
+        not(externalAgentAudienceIs("personal")),
         eq(schema.a2aRemoteAgentsTable.authorId, params.userId),
       );
       if (ownPersonalOnlyCondition) {
         externalWhereConditions.push(ownPersonalOnlyCondition);
       }
     }
-    if (!params.canManageExternalAgents) {
-      externalWhereConditions.push(
-        A2aRemoteAgentModel.visibilityCondition(params.userId),
-      );
-    }
+    externalWhereConditions.push(
+      await A2aRemoteAgentModel.accessCondition({
+        organizationId: params.filters?.organizationId ?? "",
+        userId: params.userId,
+        action: params.externalAgentAction ?? "read",
+      }),
+    );
     externalWhereConditions.push(
       exists(
         db
@@ -1637,18 +1676,6 @@ class AgentModel {
       ),
     );
 
-    const externalTeamNames = db
-      .select({
-        agentId: schema.a2aRemoteAgentTeamsTable.remoteAgentId,
-        teamName: min(schema.teamsTable.name).as("team_name"),
-      })
-      .from(schema.a2aRemoteAgentTeamsTable)
-      .innerJoin(
-        schema.teamsTable,
-        eq(schema.teamsTable.id, schema.a2aRemoteAgentTeamsTable.teamId),
-      )
-      .groupBy(schema.a2aRemoteAgentTeamsTable.remoteAgentId)
-      .as("external_catalog_team_names");
     const regularCandidates = db
       .select({
         resourceType: sql<"agent" | "external">`'agent'`.as("resource_type"),
@@ -1677,20 +1704,17 @@ class AgentModel {
         id: schema.a2aRemoteAgentsTable.id,
         name: schema.a2aRemoteAgentsTable.name,
         createdAt: schema.a2aRemoteAgentsTable.createdAt,
-        teamName: sql<string>`COALESCE(${externalTeamNames.teamName}, '')`.as(
-          "team_name",
-        ),
+        teamName:
+          sql<string>`COALESCE(${externalAgentFirstGrantedTeamName()}, '')`.as(
+            "team_name",
+          ),
         personalPriority: sql<number>`CASE
-          WHEN ${schema.a2aRemoteAgentsTable.scope} = 'personal'
+          WHEN ${externalAgentAudienceIs("personal")}
             AND ${schema.a2aRemoteAgentsTable.authorId} = ${params.userId}
           THEN 0 ELSE 1 END`.as("personal_priority"),
         pinnedAt: sql<Date | null>`NULL::timestamp`.as("pinned_at"),
       })
       .from(schema.a2aRemoteAgentsTable)
-      .leftJoin(
-        externalTeamNames,
-        eq(externalTeamNames.agentId, schema.a2aRemoteAgentsTable.id),
-      )
       .where(and(...externalWhereConditions));
     const candidates = unionAll(regularCandidates, externalCandidates).as(
       "agent_catalog_candidates",
@@ -2029,9 +2053,16 @@ class AgentModel {
     isAgentAdmin?: boolean;
   }): Promise<SQL | undefined> {
     const { filters, userId, isAgentAdmin } = params;
+    const principals = userId
+      ? await ResourcePermissionSubjectModel.resolvePrincipals({
+          userId,
+          organizationId:
+            filters?.authorization?.organizationId ?? filters?.organizationId,
+        })
+      : [];
     const whereConditions: SQL[] = [
       getAgentStatusCondition(filters?.status ?? "active"),
-      ...(userId ? [agentListFence(userId)] : []),
+      ...(userId ? [agentListFence(principals)] : []),
     ];
 
     if (filters?.organizationId) {
@@ -2049,7 +2080,7 @@ class AgentModel {
         whereConditions.push(
           or(
             inArray(schema.agentsTable.agentType, baseReadTypes),
-            explicitAgentReadCondition(userId),
+            explicitAgentReadCondition(principals),
           ) as SQL,
         );
     }
@@ -2081,20 +2112,17 @@ class AgentModel {
       whereConditions.push(eq(schema.agentsTable.agentType, filters.agentType));
     }
 
+    const includeBuiltIn =
+      filters?.includeBuiltIn === true && isAgentAdmin && !filters?.scope;
     if (filters?.scope === "built_in") {
-      whereConditions.push(eq(schema.agentsTable.builtIn, true));
-      if (config.openappa.enabled) {
-        whereConditions.push(
-          notInArray(
-            sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`,
-            [
-              BUILT_IN_AGENT_IDS.POLICY_CONFIG,
-              BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
-              BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
-            ],
-          ),
-        );
-      }
+      whereConditions.push(listedBuiltInAgentCondition());
+    } else if (includeBuiltIn) {
+      whereConditions.push(
+        or(
+          eq(schema.agentsTable.builtIn, false),
+          listedBuiltInAgentCondition(),
+        ) as SQL,
+      );
     } else if (
       filters?.scope === "personal" ||
       filters?.scope === "team" ||
@@ -2126,12 +2154,22 @@ class AgentModel {
       if (condition) whereConditions.push(condition);
     }
     if (filters?.excludeOtherPersonalAgents && userId) {
-      const condition = or(
-        not(agentAudienceIs("personal")),
-        eq(schema.agentsTable.authorId, userId),
-        explicitAgentReadCondition(userId),
+      whereConditions.push(
+        AgentModel.notOthersPersonalCondition({ userId, principals }),
       );
-      if (condition) whereConditions.push(condition);
+    }
+    if (filters?.access && userId) {
+      const accessCondition = agentAccessCondition({
+        userId,
+        principals,
+        relations: filters.access,
+      });
+      if (accessCondition)
+        whereConditions.push(
+          includeBuiltIn
+            ? (or(eq(schema.agentsTable.builtIn, true), accessCondition) as SQL)
+            : accessCondition,
+        );
     }
     if (filters?.labels) {
       for (const [key, values] of Object.entries(filters.labels)) {
@@ -2192,6 +2230,7 @@ class AgentModel {
       const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
         userId,
         false,
+        principals,
       );
       whereConditions.push(
         accessibleAgentIds.length > 0
@@ -2587,7 +2626,11 @@ class AgentModel {
   static async findAccessibleIdsForUser(
     userId: string,
     isAgentAdmin = false,
+    principals?: GrantPrincipal[],
   ): Promise<string[]> {
+    const readers =
+      principals ??
+      (await ResourcePermissionSubjectModel.resolvePrincipals({ userId }));
     const rows = await db
       .select({ id: schema.agentsTable.id })
       .from(schema.agentsTable)
@@ -2595,7 +2638,7 @@ class AgentModel {
         and(
           notDeleted(schema.agentsTable),
           or(
-            explicitAgentReadCondition(userId),
+            explicitAgentReadCondition(readers),
             isAgentAdmin ? sql`true` : undefined,
             organizationLlmProxyCondition(userId),
           ),
@@ -2629,6 +2672,7 @@ class AgentModel {
      * reachable from every environment.
      */
     environmentId: string | null;
+    lookups?: PrincipalSource;
   }): Promise<
     Pick<Agent, "id" | "name" | "description" | "builtInAgentConfig">[]
   > {
@@ -2679,6 +2723,10 @@ class AgentModel {
         .orderBy(asc(schema.agentsTable.name));
     }
 
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      params.lookups,
+      { organizationId, userId },
+    );
     return db
       .select({
         id: schema.agentsTable.id,
@@ -2694,8 +2742,7 @@ class AgentModel {
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId: schema.agentsTable.organizationId,
-            userId,
+            ...principal,
             resource: "agent",
             scopeColumn: schema.agentsTable.id,
             action: "use",
@@ -2708,9 +2755,13 @@ class AgentModel {
 
   static async findDelegationTarget(
     id: string,
-  ): Promise<Pick<Agent, "id" | "name"> | null> {
+  ): Promise<Pick<Agent, "id" | "name" | "agentType"> | null> {
     const [targetAgent] = await db
-      .select({ id: schema.agentsTable.id, name: schema.agentsTable.name })
+      .select({
+        id: schema.agentsTable.id,
+        name: schema.agentsTable.name,
+        agentType: schema.agentsTable.agentType,
+      })
       .from(schema.agentsTable)
       .where(and(eq(schema.agentsTable.id, id), notDeleted(schema.agentsTable)))
       .limit(1);
@@ -4795,7 +4846,7 @@ const CHAT_AGENT_ROW_COLUMNS = {
   end`,
 };
 
-function explicitAgentReadCondition(userId: string) {
+function explicitAgentReadCondition(principals: GrantPrincipal[]) {
   const table = schema.agentsTable;
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -4803,9 +4854,9 @@ function explicitAgentReadCondition(userId: string) {
   return or(
     and(
       inArray(table.agentType, ["agent", "profile"]),
-      ResourcePermissionPolicyModel.grantCondition({
-        organizationId: table.organizationId,
-        userId,
+      ResourcePermissionPolicyModel.grantConditionForAny({
+        principals,
+        organizationColumn: table.organizationId,
         resource: "agent",
         scopeColumn: table.id,
         action: "read",
@@ -4813,9 +4864,9 @@ function explicitAgentReadCondition(userId: string) {
     ),
     and(
       eq(table.agentType, "mcp_gateway"),
-      ResourcePermissionPolicyModel.grantCondition({
-        organizationId: table.organizationId,
-        userId,
+      ResourcePermissionPolicyModel.grantConditionForAny({
+        principals,
+        organizationColumn: table.organizationId,
         resource: "mcpGateway",
         scopeColumn: table.id,
         action: "read",
@@ -4830,13 +4881,13 @@ function explicitAgentReadCondition(userId: string) {
  * grants, and LLM proxies unfenced here because they have no grant namespace
  * of their own — the caller's own conditions decide those.
  */
-function agentListFence(userId: string): SQL {
+function agentListFence(principals: GrantPrincipal[]): SQL {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
   return or(
     eq(schema.agentsTable.agentType, "llm_proxy"),
-    explicitAgentReadCondition(userId),
+    explicitAgentReadCondition(principals),
   ) as SQL;
   // SPDX-SnippetEnd
 }
@@ -4885,6 +4936,106 @@ function agentAudienceIs(audience: "personal" | "team" | "org"): SQL {
   // SPDX-SnippetEnd
 }
 
+/**
+ * {@link ResourcePermissionPolicyModel.accessRelationCondition} for every
+ * agent kind. The organization's LLM proxy has no grant namespace and serves
+ * the whole organization, so it is always `org`.
+ */
+function agentAccessCondition(params: {
+  userId: string;
+  principals: GrantPrincipal[];
+  relations: ResourceAccessRelation[];
+}): SQL | undefined {
+  const table = schema.agentsTable;
+  const subjects = params.principals.flatMap((principal) => principal.subjects);
+  const byResource = (resource: "agent" | "mcpGateway") =>
+    ResourcePermissionPolicyModel.accessRelationCondition({
+      organizationId: table.organizationId,
+      resource,
+      scopeColumn: table.id,
+      ownerColumn: table.authorId,
+      userId: params.userId,
+      subjects,
+      relations: params.relations,
+    });
+  const agentCondition = byResource("agent");
+  if (!agentCondition) return undefined;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return or(
+    and(inArray(table.agentType, ["agent", "profile"]), agentCondition),
+    and(eq(table.agentType, "mcp_gateway"), byResource("mcpGateway")),
+    and(
+      eq(table.agentType, "llm_proxy"),
+      params.relations.includes("org") ? sql`true` : sql`false`,
+    ),
+  ) as SQL;
+  // SPDX-SnippetEnd
+}
+
+/**
+ * The "Show" filter for external A2A agents, read from their own policies like
+ * internal agents.
+ */
+async function externalAgentAccessCondition(params: {
+  userId: string;
+  organizationId?: string;
+  relations: ResourceAccessRelation[];
+}): Promise<SQL | undefined> {
+  const table = schema.a2aRemoteAgentsTable;
+  const principals = await ResourcePermissionSubjectModel.resolvePrincipals({
+    userId: params.userId,
+    organizationId: params.organizationId,
+  });
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissionPolicyModel.accessRelationCondition({
+    organizationId: table.organizationId,
+    resource: "externalAgent",
+    scopeColumn: table.id,
+    ownerColumn: table.authorId,
+    userId: params.userId,
+    subjects: principals.flatMap((principal) => principal.subjects),
+    relations: params.relations,
+  });
+  // SPDX-SnippetEnd
+}
+
+/** An external agent's audience, read from its own policy. */
+function externalAgentAudienceIs(audience: "personal" | "team" | "org"): SQL {
+  const table = schema.a2aRemoteAgentsTable;
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  return ResourcePermissionPolicyModel.audienceIs({
+    organizationId: table.organizationId,
+    resource: "externalAgent",
+    scopeColumn: table.id,
+    ownerColumn: table.authorId,
+    audience,
+  });
+  // SPDX-SnippetEnd
+}
+
+/** The alphabetically first team an external agent's policy grants read to. */
+function externalAgentFirstGrantedTeamName() {
+  const table = schema.a2aRemoteAgentsTable;
+  return sql<string | null>`(
+    SELECT min(granted_team.name)
+    FROM resource_permission_policies team_policy,
+      jsonb_array_elements(team_policy.grants) team_entry,
+      team granted_team
+    WHERE team_policy.organization_id = ${table.organizationId}
+      AND team_policy.resource = 'externalAgent'
+      AND team_policy.scope = ${table.id}::text
+      AND (team_entry->'actions') ? 'read'
+      AND team_entry->'subject'->>'type' = 'team'
+      AND granted_team.id = team_entry->'subject'->>'id'
+  )`;
+}
+
 /** Agents whose own policy grants read to any of `teamIds`. */
 function agentGrantsReadToAnyTeam(teamIds: string[]): SQL {
   const table = schema.agentsTable;
@@ -4928,4 +5079,21 @@ function agentGrantedTeamIds() {
         AND team_entry->'subject'->>'type' = 'team'
     ) granted_team
   ), array[]::text[])`;
+}
+
+/**
+ * The built-in agents the Agents page lists. With OpenAPPA on, the policy
+ * configuration and dual-LLM agents are internal and stay hidden.
+ */
+function listedBuiltInAgentCondition(): SQL {
+  const builtIn = eq(schema.agentsTable.builtIn, true);
+  if (!config.openappa.enabled) return builtIn;
+  return and(
+    builtIn,
+    notInArray(sql<string>`${schema.agentsTable.builtInAgentConfig}->>'name'`, [
+      BUILT_IN_AGENT_IDS.POLICY_CONFIG,
+      BUILT_IN_AGENT_IDS.DUAL_LLM_MAIN,
+      BUILT_IN_AGENT_IDS.DUAL_LLM_QUARANTINE,
+    ]),
+  ) as SQL;
 }

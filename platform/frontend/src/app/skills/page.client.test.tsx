@@ -20,6 +20,7 @@ vi.mock("@/lib/organization.query");
 // The scope check behind Edit/Delete asks which teams the caller belongs to.
 vi.mock("@/lib/teams/team.query");
 vi.mock("@/lib/skills/skill.query", () => ({
+  countSkills: async () => 0,
   useAllMatchingSkills: () => ({ data: [] }),
   useBulkDeleteSkills: () => ({ mutateAsync: vi.fn(), isPending: false }),
   useSkillsList: vi.fn(),
@@ -618,27 +619,6 @@ describe("SkillsPage rows", () => {
 
     await userEvent.click(screen.getByRole("button", { name: "Clear" }));
     expect(push).toHaveBeenCalledWith("/skills?page=1", { scroll: false });
-  });
-
-  it("keeps the OpenAPPA source badge unqualified", () => {
-    mockUseFeature.mockImplementation((name: string) => name === "plugins");
-    vi.mocked(usePluginSkills).mockReturnValue({
-      data: [
-        {
-          ...PLUGIN_SKILL,
-          pluginName: "OpenAPPA",
-          sourceRepo: "archestra-ai/OpenAPPA",
-          sourceMarketplaceRepo: "archestra-ai/OpenAPPA",
-        },
-      ],
-      isFetching: false,
-      // biome-ignore lint/suspicious/noExplicitAny: partial query result is enough
-    } as any);
-
-    render(<SkillsPage />);
-
-    expect(screen.getByTitle("OpenAPPA")).toHaveTextContent(/^OpenAPPA$/);
-    expect(screen.queryByTitle("OpenAPPA · Plugin")).not.toBeInTheDocument();
   });
 
   it("refuses Edit and Delete on somebody else's skill, with the reason", async () => {

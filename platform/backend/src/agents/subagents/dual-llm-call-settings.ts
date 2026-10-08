@@ -72,6 +72,8 @@ const providerReasoningTuning: Record<SupportedProvider, TuningBuilder> = {
   // Embeddings-only provider — it never serves a dual-LLM chat call, so there
   // is no reasoning knob to tune.
   voyage: noTuning,
+  // Decisions-only provider — no dual-LLM chat call either.
+  jev: noTuning,
   // The AI-SDK swallows `thinking: {type: "disabled"}` (its body builder only
   // serializes enabled/adaptive), so the knob rides a marker header consumed
   // by createAnthropicThinkingDisplayFetch, which writes the disable — or the

@@ -44,11 +44,11 @@ import {
   validateFieldAgainstRegex,
 } from "./environment-validation-helpers";
 import { InlineCredentialFormShell } from "./inline-credential-form-shell";
+import { getLocalInstallationCopy } from "./local-installation-copy";
 import {
   type McpServerInstallScope,
   SelectMcpServerCredentialTypeAndTeams,
 } from "./select-mcp-server-credential-type-and-teams";
-import { ServiceAccountField } from "./service-account-field";
 
 const InlineVaultSecretSelector = lazy(
   () =>
@@ -122,8 +122,6 @@ export interface LocalServerInstallResult {
   teamId?: string | null;
   /** Whether environmentValues contains BYOS vault references in path#key format */
   isByosVault?: boolean;
-  /** Kubernetes service account for the MCP server pod */
-  serviceAccount?: string;
 }
 
 interface LocalServerInstallDialogProps {
@@ -176,9 +174,6 @@ export function LocalServerInstallDialog({
         : "personal",
   );
   const [canInstall, setCanInstall] = useState(true);
-  const [serviceAccount, setServiceAccount] = useState<string | undefined>(
-    catalogItem?.localConfig?.serviceAccount,
-  );
   const userConfig =
     (catalogItem?.userConfig as UserConfigType | null | undefined) || {};
   const promptableUserConfig = Object.fromEntries(
@@ -214,9 +209,7 @@ export function LocalServerInstallDialog({
     personalOnlyProp ||
     (catalogItem ? isPlaywrightCatalogItem(catalogItem.id) : false);
   const hasPromptedConfiguration =
-    promptedEnvVars.length > 0 ||
-    Object.keys(promptableUserConfig).length > 0 ||
-    catalogItem?.localConfig?.serviceAccount !== undefined;
+    promptedEnvVars.length > 0 || Object.keys(promptableUserConfig).length > 0;
   const nonSecretEnvVars = promptedEnvVars.filter(
     (env) => env.type !== "secret",
   );
@@ -393,7 +386,6 @@ export function LocalServerInstallDialog({
         (secretEnvVars.length > 0 ||
           secretFileVars.length > 0 ||
           hasPromptedSensitiveUserConfig),
-      serviceAccount: serviceAccount || undefined,
     });
 
     // Reset form
@@ -435,7 +427,6 @@ export function LocalServerInstallDialog({
     setVaultTeamId(null);
     setVaultSecrets({});
     setUserConfigVaultSecrets({});
-    setServiceAccount(catalogItem?.localConfig?.serviceAccount);
   };
 
   const handleClose = () => {
@@ -617,8 +608,11 @@ export function LocalServerInstallDialog({
 
       {!isReauth && personalOnly && !hasPromptedConfiguration && (
         <p className="text-sm text-muted-foreground">
-          This server needs no credentials or configuration. Install creates a
-          private hosted instance available only to you.
+          This server needs no credentials or configuration.{" "}
+          {
+            getLocalInstallationCopy(catalogItem?.multitenant === true)
+              .installForMe
+          }
         </p>
       )}
 
@@ -658,14 +652,6 @@ export function LocalServerInstallDialog({
             </SelectContent>
           </Select>
         </div>
-      )}
-
-      {canInstall && catalogItem?.localConfig?.serviceAccount !== undefined && (
-        <ServiceAccountField
-          value={serviceAccount}
-          onChange={setServiceAccount}
-          disabled={isInstalling}
-        />
       )}
 
       {canInstall && (

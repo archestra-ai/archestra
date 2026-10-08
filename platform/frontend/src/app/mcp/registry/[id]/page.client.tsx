@@ -30,6 +30,10 @@ import {
 import { PageBackLink } from "@/components/page-back-link";
 import { PageLayout } from "@/components/page-layout";
 import { ResourcePermissions } from "@/components/resource-permissions";
+import {
+  SettingsSection,
+  SettingsSectionGroup,
+} from "@/components/settings-section";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -71,6 +75,7 @@ import {
   useMcpServers,
 } from "@/lib/mcp/mcp-server.query";
 import type { McpServerIssue } from "@/lib/mcp/mcp-server-issues";
+import { useMcpDeploymentPermission } from "@/lib/mcp/use-mcp-deployment-permission";
 import { useMcpServerIssues } from "@/lib/mcp/use-mcp-server-issues";
 import {
   useDefaultEnvironment,
@@ -90,8 +95,8 @@ import {
 } from "../_parts/deployment-status";
 import { buildDetailTabHref } from "../_parts/detail-tab-href";
 import { InlineMcpReauthentication } from "../_parts/inline-mcp-reauthentication";
+import { getLocalInstallationCopy } from "../_parts/local-installation-copy";
 import { ManageUsersContent } from "../_parts/manage-users-dialog";
-import { McpCapabilityBadges } from "../_parts/mcp-capability-badges";
 import { transformCatalogItemToFormValues } from "../_parts/mcp-catalog-form.utils";
 import { McpLogsContent, type McpLogsTab } from "../_parts/mcp-logs-dialog";
 import {
@@ -270,6 +275,9 @@ function CatalogItemDetails({
   const { data: userCanCreateCatalogItem } = useHasPermissions({
     mcpRegistry: ["create"],
   });
+  const { data: userCanViewDeploymentYaml } = useMcpDeploymentPermission(
+    item.id,
+  );
 
   const { data: allMcpServers } = useMcpServers();
   const { statuses: deploymentStatuses, state: deploymentFeedState } =
@@ -335,10 +343,14 @@ function CatalogItemDetails({
   const diagnosticPanels = DIAGNOSTIC_PANELS.filter(
     (panel) =>
       (variant === "local" || !panel.localOnly) &&
-      !(isPlaywright && panel.id === "yaml"),
+      !(isPlaywright && panel.id === "yaml") &&
+      (panel.id !== "yaml" || userCanViewDeploymentYaml),
   );
-  // Diagnostics need at least one install to read from.
-  const diagnosticTabs = allInstalls.length > 0 ? diagnosticPanels : [];
+  // Runtime diagnostics read an installation. YAML edits the catalog template
+  // and must also be reachable before the first installation.
+  const diagnosticTabs = diagnosticPanels.filter(
+    (panel) => panel.id === "yaml" || allInstalls.length > 0,
+  );
   // Remote servers manage credentials; local servers manage hosted
   // installations. Built-ins need neither.
   const showConnectionsTab = variant !== "builtin" && !isPlaywright;
@@ -417,11 +429,6 @@ function CatalogItemDetails({
       href: tabHref("overview"),
       selected: effectiveTab === "overview",
     },
-    {
-      label: <TabLabel title="Usage" count={agentUsageCount} />,
-      href: tabHref("usage"),
-      selected: effectiveTab === "usage",
-    },
     ...(tabIds.includes("permissions")
       ? [
           {
@@ -431,11 +438,25 @@ function CatalogItemDetails({
           },
         ]
       : []),
-    ...diagnosticTabs.map((panel) => ({
-      label: panel.title,
-      href: tabHref(panel.id),
-      selected: effectiveTab === panel.id,
-    })),
+    ...diagnosticTabs
+      .filter((panel) => panel.id !== "yaml")
+      .map((panel) => ({
+        label: panel.title,
+        href: tabHref(panel.id),
+        selected: effectiveTab === panel.id,
+      })),
+    {
+      label: <TabLabel title="Usage" count={agentUsageCount} />,
+      href: tabHref("usage"),
+      selected: effectiveTab === "usage",
+    },
+    ...diagnosticTabs
+      .filter((panel) => panel.id === "yaml")
+      .map((panel) => ({
+        label: panel.title,
+        href: tabHref(panel.id),
+        selected: effectiveTab === panel.id,
+      })),
   ];
   const isLogsTab =
     effectiveTab === "logs" ||
@@ -480,27 +501,8 @@ function CatalogItemDetails({
     <PageLayout
       // The wizard's column, so Edit opens in the same one this page reads in.
       maxWidth="wizard"
-      title={
-        <div className="flex min-w-0 items-center gap-3">
-          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border bg-muted/40">
-            <McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />
-          </div>
-          <span className="min-w-0 truncate">{item.name}</span>
-          <Badge variant="secondary" className="capitalize font-normal">
-            {item.serverType}
-          </Badge>
-          <McpCapabilityBadges
-            providesUi={item.providesUi}
-            providesSkills={item.providesSkills}
-            skillCount={item.skillCount}
-          />
-          {item.serverType !== "builtin" && (
-            <Badge variant="outline" className="font-normal">
-              {environmentLabel ?? defaultEnvironment.name}
-            </Badge>
-          )}
-        </div>
-      }
+      icon={<McpCatalogIcon icon={item.icon} catalogId={item.id} size={24} />}
+      title={<span className="block min-w-0 truncate">{item.name}</span>}
       status={
         statusIssue ? undefined : (
           <ServerStatus
@@ -513,13 +515,16 @@ function CatalogItemDetails({
       }
       documentTitle={item.name}
       backLink={<PageBackLink href="/mcp/registry">MCP Registry</PageBackLink>}
-      description={item.description ?? ""}
+      description={
+        effectiveTab === "yaml" ? undefined : (item.description ?? "")
+      }
       tabs={tabs}
       actionButton={
         <div className="flex shrink-0 items-center gap-2">
           {showChatButton && (
             <Button
               variant="outline"
+              size="sm"
               disabled={isChatCreating}
               onClick={() => startChat(item)}
             >
@@ -527,8 +532,8 @@ function CatalogItemDetails({
               {isChatCreating ? "Creating..." : "Chat"}
             </Button>
           )}
-          {canModify && (
-            <Button asChild>
+          {canModify && effectiveTab !== "yaml" && (
+            <Button size="sm" asChild>
               <Link href={mcpServerActionHref(editAction)}>
                 <Pencil className="h-4 w-4" />
                 {editAction.label}
@@ -540,7 +545,7 @@ function CatalogItemDetails({
             (canModify && !isPlaywright)) && (
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button variant="outline" size="icon">
+                <Button variant="outline" size="icon-sm">
                   <MoreHorizontal className="h-4 w-4" />
                   <span className="sr-only">More actions</span>
                 </Button>
@@ -593,6 +598,7 @@ function CatalogItemDetails({
       <div className="space-y-4">
         {effectiveTab === "permissions" && (
           <ResourcePermissions
+            layout="settings"
             resource="mcpRegistry"
             scope={item.id}
             onDirtyChange={setPermissionsDirty}
@@ -606,42 +612,69 @@ function CatalogItemDetails({
         )}
 
         {effectiveTab === "overview" && (
-          <div className="space-y-10">
-            {item.serverType !== "builtin" && (
-              <OverviewSummary
-                headingId="mcp-overview-heading"
-                facts={overviewFacts}
-                configHref={
-                  canModify ? mcpServerActionHref(editAction) : undefined
-                }
-              />
-            )}
-
+          <div className="space-y-6">
             <CardIssues
               item={item}
               issues={itemIssues}
               servers={allServersForCatalog}
             />
 
-            {showConnectionsTab && (
-              <section
-                id={MCP_CONNECTIONS_SECTION_ID}
-                aria-labelledby="mcp-connections-heading"
-                className="scroll-mt-24 space-y-4"
-              >
-                <h2
-                  id="mcp-connections-heading"
-                  className="text-base font-semibold tracking-tight text-foreground"
-                  data-testid={E2eTestId.McpServerSettingsConnectionsNavButton}
+            <SettingsSectionGroup>
+              {item.serverType !== "builtin" && (
+                <OverviewSummary
+                  facts={[
+                    {
+                      label: "Hosting",
+                      value:
+                        item.serverType === "local"
+                          ? "Managed deployment"
+                          : "External server",
+                    },
+                    {
+                      label: "Environment",
+                      value: environmentLabel ?? defaultEnvironment.name,
+                    },
+                    ...(item.providesUi
+                      ? [{ label: "Interactive tools", value: "Available" }]
+                      : []),
+                    ...(item.providesSkills
+                      ? [
+                          {
+                            label: "Skills",
+                            value: `${item.skillCount ?? 0} available`,
+                          },
+                        ]
+                      : []),
+                    ...overviewFacts,
+                  ]}
+                />
+              )}
+
+              {showConnectionsTab && (
+                <SettingsSection
+                  id={MCP_CONNECTIONS_SECTION_ID}
+                  className="scroll-mt-24"
+                  title={
+                    <span
+                      data-testid={
+                        E2eTestId.McpServerSettingsConnectionsNavButton
+                      }
+                    >
+                      <TabLabel
+                        title={
+                          variant === "local" ? "Installations" : "Credentials"
+                        }
+                        count={connectionsCount}
+                      />
+                    </span>
+                  }
+                  description={
+                    variant === "local"
+                      ? getLocalInstallationCopy(item.multitenant === true)
+                          .section
+                      : "The credentials this server is used with."
+                  }
                 >
-                  <TabLabel
-                    title={
-                      variant === "local" ? "Installations" : "Credentials"
-                    }
-                    count={connectionsCount}
-                  />
-                </h2>
-                <div className="space-y-4 rounded-lg border bg-card p-4">
                   {reauthServer ? (
                     <InlineMcpReauthentication
                       item={item}
@@ -671,9 +704,9 @@ function CatalogItemDetails({
                       variant === "local" ? openPodLogs : undefined
                     }
                   />
-                </div>
-              </section>
-            )}
+                </SettingsSection>
+              )}
+            </SettingsSectionGroup>
           </div>
         )}
 
@@ -681,7 +714,7 @@ function CatalogItemDetails({
           pod selector and live stream survive switching between them. */}
         {isLogsTab && (
           <Card className="py-0">
-            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
+            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-4">
               <McpLogsContent
                 isActive={isLogsTab}
                 serverName={item.name}
@@ -697,11 +730,9 @@ function CatalogItemDetails({
         )}
 
         {effectiveTab === "yaml" && (
-          <Card className="py-0">
-            <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col p-6">
-              <YamlConfigContent item={item} onClose={() => {}} hideHeader />
-            </div>
-          </Card>
+          <div className="flex h-[calc(100dvh-16rem)] min-h-[480px] flex-col">
+            <YamlConfigContent item={item} onClose={() => {}} hideHeader />
+          </div>
         )}
 
         {/* Inline install flow (remote/local/no-auth/OAuth) — no navigation. */}

@@ -331,6 +331,59 @@ describe("GET /api/openappa/coverage/entities", () => {
     ]);
   });
 
+  test("the default policy covers run_command at the root and search_tools, search_files, and load_skill through the archestra battery, and leaves other built-in tools to the fallback", async ({
+    makeAgent,
+    makeAgentTool,
+    makeInternalMcpCatalog,
+    makeTool,
+  }) => {
+    const gateway = await makeAgent({
+      organizationId: ctx.organizationId,
+      agentType: "mcp_gateway",
+      name: "Gateway",
+    });
+    const builtInCatalog = await makeInternalMcpCatalog({
+      id: ARCHESTRA_MCP_CATALOG_ID,
+      organizationId: null,
+      name: "Archestra",
+    });
+    for (const rawName of [
+      "run_command",
+      "search_tools",
+      "search_files",
+      "load_skill",
+      "list_skills",
+    ]) {
+      const tool = await makeTool({
+        catalogId: builtInCatalog.id,
+        name: `archestra__${rawName}`,
+        rawName,
+      });
+      await makeAgentTool(gateway.id, tool.id);
+    }
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/openappa/coverage/tools?entityId=${gateway.id}&limit=10`,
+    });
+    expect(response.statusCode).toBe(200);
+    const sources = Object.fromEntries(
+      (
+        response.json().data as Array<{
+          fullName: string;
+          policySource: string;
+        }>
+      ).map((row) => [row.fullName, row.policySource]),
+    );
+    expect(sources).toEqual({
+      archestra__run_command: "root",
+      archestra__search_tools: "battery",
+      archestra__search_files: "battery",
+      archestra__load_skill: "battery",
+      archestra__list_skills: "not_covered",
+    });
+  });
+
   test("reports gateways and registry servers by policy coverage while omitting apps", async ({
     makeInternalMcpCatalog,
     makeTool,
@@ -368,6 +421,33 @@ describe("GET /api/openappa/coverage/entities", () => {
       rawName: "search_tools",
     });
     await makeAgentTool(agent.id, builtInTool.id);
+
+    const serverList = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/coverage/entities?type=mcp_server&limit=100",
+    });
+    expect(serverList.statusCode).toBe(200);
+    expect(serverList.json().data).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          id: ARCHESTRA_MCP_CATALOG_ID,
+          name: "Archestra",
+          type: "mcp_server",
+          toolCount: 1,
+        }),
+        expect.objectContaining({ id: catalogIds.docs }),
+      ]),
+    );
+    expect(
+      serverList
+        .json()
+        .data.every((entity: { type: string }) => entity.type === "mcp_server"),
+    ).toBe(true);
+    const listedIds = serverList
+      .json()
+      .data.map((entity: { id: string }) => entity.id);
+    expect(listedIds).not.toContain(agent.id);
+    expect(listedIds).not.toContain(gateway.id);
 
     const appCatalog = await makeInternalMcpCatalog({
       organizationId: ctx.organizationId,

@@ -1,4 +1,4 @@
-import { LOCKED_CHAT_REDACTED_VALUES } from "@archestra/shared";
+import { ENCRYPTED_CHAT_REDACTED_VALUES } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
 import { z } from "zod";
 import { schema } from "@/database";
@@ -20,6 +20,14 @@ export const MCPGatewayAuthMethodSchema = z.enum([
 export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
 
 /**
+ * Who sent a call over the HTTP gateway: any outside agent ("api"), or the
+ * built-in chat's loopback client ("chat"), which marks itself with the
+ * X-Archestra-Source header.
+ */
+export const McpGatewayCallSourceSchema = z.enum(["api", "chat"]);
+export type McpGatewayCallSource = z.infer<typeof McpGatewayCallSourceSchema>;
+
+/**
  * Select schema for MCP tool calls (includes joined userName from users table)
  * Note: toolResult structure varies by method type:
  * - tools/call: { id, content, isError, error? }
@@ -27,12 +35,12 @@ export type MCPGatewayAuthMethod = z.infer<typeof MCPGatewayAuthMethodSchema>;
  * - initialize: { capabilities, serverInfo }
  */
 /**
- * The two shapes a locked-chat row's content takes when it is not available to
+ * The two shapes an encrypted-chat row's content takes when it is not available to
  * the reader: encrypted under the browser key, or never stored.
  */
-const LockedChatUnavailableContentSchema = z.union([
-  z.object({ __lockedChatSealed: z.string() }),
-  z.object({ __redacted: z.enum(LOCKED_CHAT_REDACTED_VALUES) }),
+const EncryptedChatUnavailableContentSchema = z.union([
+  z.object({ __encryptedChatSealed: z.string() }),
+  z.object({ __redacted: z.enum(ENCRYPTED_CHAT_REDACTED_VALUES) }),
 ]);
 
 export const SelectMcpToolCallSchema = createSelectSchema(
@@ -42,12 +50,13 @@ export const SelectMcpToolCallSchema = createSelectSchema(
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable(),
+    source: McpGatewayCallSourceSchema.nullable(),
   },
 )
   // Server-side plumbing telling the read path which key the row is under.
   // Clients never need it: a locked row announces itself through the sentinel,
   // which carries the conversation id.
-  .omit({ lockedChatConversationId: true })
+  .omit({ encryptedChatConversationId: true })
   .extend({
     userName: z.string().nullable(),
     // Name of the owning app for app-owned calls; null for agent-owned calls
@@ -69,6 +78,7 @@ export const InsertMcpToolCallSchema = createInsertSchema(
     // toolResult can have different structures depending on the method type
     toolResult: z.unknown().nullable(),
     authMethod: MCPGatewayAuthMethodSchema.nullable().optional(),
+    source: McpGatewayCallSourceSchema.nullable().optional(),
   },
 )
   .extend({
@@ -109,7 +119,7 @@ export const InsertMcpToolCallSchema = createInsertSchema(
   });
 
 /**
- * What routes serialize. A locked-chat row carries a sentinel where the
+ * What routes serialize. An encrypted-chat row carries a sentinel where the
  * recorded call would be — unavailable, not malformed — so the response schema
  * has to admit it or one such row fails serialization for the whole list.
  * Deliberately separate from the select schema above: widening that would push
@@ -118,7 +128,7 @@ export const InsertMcpToolCallSchema = createInsertSchema(
  */
 export const McpToolCallResponseSchema = SelectMcpToolCallSchema.extend({
   toolCall: z
-    .union([CommonToolCallSchema, LockedChatUnavailableContentSchema])
+    .union([CommonToolCallSchema, EncryptedChatUnavailableContentSchema])
     .nullable(),
 });
 

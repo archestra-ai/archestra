@@ -14,10 +14,11 @@ import {
   UsersRound,
   X,
 } from "lucide-react";
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useForm } from "react-hook-form";
 import { useFormDialogView } from "@/components/form-dialog-view";
+import { PermissionLevelSelect } from "@/components/permission-level-select";
 import {
   PermissionRecipientIdentity,
   PermissionRecipientSelect,
@@ -25,15 +26,6 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { StandardDialog } from "@/components/standard-dialog";
 import { Button } from "@/components/ui/button";
-import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { DialogCancelButton } from "@/components/unsaved-changes-guard";
 import { useDebouncedValue } from "@/lib/hooks/use-debounced-value";
 import {
@@ -115,7 +107,6 @@ export function ResourceAccessPicker({
   const [category, setCategory] = useState<PermissionSubject["type"] | null>(
     null,
   );
-  const fieldId = useId();
   const categoryTitleRef = useRef<HTMLHeadingElement>(null);
   const firstCategoryRef = useRef<HTMLButtonElement>(null);
   const form = useForm<{
@@ -354,38 +345,29 @@ export function ResourceAccessPicker({
               <span>No recipients available to add.</span>
             </output>
           ) : null}
-          {category === "organization" && (
-            <fieldset className="space-y-3 pt-3">
-              <legend className="text-sm font-medium">Permission</legend>
-              <RadioGroup
-                value={permission}
-                onValueChange={(value) => form.setValue("permission", value)}
-                aria-label="Permission"
-              >
-                {presets.map((preset) => (
-                  <Label
-                    key={preset.value}
-                    htmlFor={`${fieldId}-permission-${preset.value}`}
-                    className="items-start gap-3 py-1 font-normal"
-                  >
-                    <RadioGroupItem
-                      id={`${fieldId}-permission-${preset.value}`}
-                      value={preset.value}
-                      disabled={preset.disabled}
-                      className="mt-0.5"
-                    />
-                    <span className="space-y-1">
-                      <span className="block text-sm font-medium">
-                        {preset.label}
-                      </span>
-                      <span className="block text-xs text-muted-foreground">
-                        {preset.description}
-                      </span>
-                    </span>
-                  </Label>
-                ))}
-              </RadioGroup>
-            </fieldset>
+          {category === "organization" && available.length > 0 && (
+            // The same row and level dropdown as any other recipient, so a
+            // level reads the same wherever access is granted.
+            <div className="divide-y border-y">
+              {available.map((recipient) => (
+                <div
+                  key={subjectKey(recipient.subject)}
+                  className="flex items-center gap-3 py-2"
+                >
+                  <div className="min-w-0 flex-1">
+                    <PermissionRecipientIdentity recipient={recipient} />
+                  </div>
+                  <PermissionLevelSelect
+                    value={permission}
+                    onValueChange={(value) =>
+                      form.setValue("permission", value)
+                    }
+                    options={presets}
+                    ariaLabel={`Permission for ${recipient.name}`}
+                  />
+                </div>
+              ))}
+            </div>
           )}
         </div>
       )}
@@ -399,7 +381,7 @@ export function ResourceAccessPicker({
               <div className="min-w-0 flex-1">
                 <PermissionRecipientIdentity recipient={recipient} />
               </div>
-              <Select
+              <PermissionLevelSelect
                 value={recipient.permission}
                 onValueChange={(value) =>
                   form.setValue(
@@ -411,26 +393,9 @@ export function ResourceAccessPicker({
                     ),
                   )
                 }
-              >
-                <SelectTrigger
-                  size="sm"
-                  className="w-32 shrink-0"
-                  aria-label={`Permission for ${recipient.name}`}
-                >
-                  <SelectValue />
-                </SelectTrigger>
-                <SelectContent>
-                  {presets.map((preset) => (
-                    <SelectItem
-                      key={preset.value}
-                      value={preset.value}
-                      disabled={preset.disabled}
-                    >
-                      <span>{preset.label}</span>
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
+                options={presets}
+                ariaLabel={`Permission for ${recipient.name}`}
+              />
               <Button
                 type="button"
                 variant="ghost"

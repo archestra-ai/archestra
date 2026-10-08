@@ -9,11 +9,23 @@ import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { ApiError } from "@/types";
 import type { UnsupportedAppaClientAction } from "@/types/guardrails-policy";
 
+export type GuardrailsV2Activation = "active" | "inactive";
+
+/**
+ * One read of the admin switch for every channel.
+ * A failed read throws. Callers must not treat that as the switch being off.
+ */
+export async function readGuardrailsV2Activation(
+  readEnabled: () => Promise<boolean> = () =>
+    GuardrailsDeploymentModel.isEnabled(),
+): Promise<GuardrailsV2Activation> {
+  if (!config.openappa.enabled) return "inactive";
+  return (await readEnabled()) ? "active" : "inactive";
+}
+
 /** Read shared state at request boundaries so all replicas see the same switch. */
 export async function isGuardrailsV2Active(): Promise<boolean> {
-  return (
-    config.openappa.enabled && (await GuardrailsDeploymentModel.isEnabled())
-  );
+  return (await readGuardrailsV2Activation()) === "active";
 }
 export async function getGuardrailsDeployment() {
   const { enabled, unsupportedClientAction } =
@@ -70,13 +82,18 @@ export async function firstPolicyRefusal(
     return { enabled: current.active, turnedOn: false };
   if (
     !userId ||
-    !(await userHasPermission(userId, organizationId, "organization", "update"))
+    !(await userHasPermission(
+      userId,
+      organizationId,
+      "organizationSettings",
+      "update",
+    ))
   )
     return {
       enabled: false,
       turnedOn: false,
       reason:
-        "Only an administrator can turn enforcement on, from the OpenAPPA policy page.",
+        "Turning enforcement on needs permission to update organization settings. Ask an administrator to turn it on from the OpenAPPA overview.",
     };
   return null;
 }

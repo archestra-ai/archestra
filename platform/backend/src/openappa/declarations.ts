@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, timingSafeEqual } from "node:crypto";
 import type {
   ComposeBatteryInput,
   ComposedPolicy,
@@ -11,13 +11,18 @@ import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import { OpenappaCredentialError } from "@/openappa/failure";
-import { OPENAPPA_HELPERS_PREFIX } from "@/routes/route-paths";
+import {
+  OPENAPPA_ARCHESTRA_ANNOTATOR_PATH,
+  OPENAPPA_HELPERS_PREFIX,
+} from "@/routes/route-paths";
 import { resolveCredentialValue } from "@/services/credentials";
 import { ApiError } from "@/types";
 import type {
   BatteryPackageFile,
   BatterySource,
+  CredentialSource,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import { archestraAudience } from "./archestra-audience";
@@ -55,6 +60,17 @@ export type PolicyResolution = {
    * not make sense of, and an entry spelled outside the two admitted forms.
    */
   errors: string[];
+};
+
+/**
+ * A root document as the host composes it: the stored text with the stored
+ * bindings applied for every variable an included battery reads and the text
+ * itself does not bind. The content is never saved.
+ */
+type BoundPolicy = {
+  content: string;
+  resolution: PolicyResolution;
+  credentialSource: Record<string, CredentialSource>;
 };
 
 /**
@@ -123,7 +139,9 @@ class OpenAppaDeclarations {
 
   /**
    * Publishes the bridge bearer where the runtime reads it, and answers the
-   * variable a composition must name for it.
+   * variable a composition must name for it. The `builtin = "archestra"`
+   * annotator's endpoint is published beside it: the addon posts there with
+   * the same bearer.
    *
    * The addon resolves the host's own `APPA_ARCHESTRA_*` variables from this
    * process's environment and refuses a document whose variable is unset, so
@@ -132,7 +150,19 @@ class OpenAppaDeclarations {
    */
   publishBridgeToken(): string {
     process.env[OPENAPPA_BRIDGE_TOKEN_ENV] = this.bridgeToken;
+    process.env[OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV] =
+      `http://127.0.0.1:${config.api.port}${OPENAPPA_ARCHESTRA_ANNOTATOR_PATH}`;
     return OPENAPPA_BRIDGE_TOKEN_ENV;
+  }
+
+  /** Whether an `Authorization` header carries this process's bridge bearer. */
+  presentsBridgeToken(authorization: string | undefined): boolean {
+    const expected = Buffer.from(`Bearer ${this.bridgeToken}`);
+    const presented = Buffer.from(authorization ?? "");
+    return (
+      presented.length === expected.length &&
+      timingSafeEqual(presented, expected)
+    );
   }
 
   /** Read a root document's declarations and resolve every include entry. */
@@ -190,6 +220,72 @@ class OpenAppaDeclarations {
       ),
       routedAnnotators: declarations.routedAnnotators,
       errors,
+    };
+  }
+
+  /**
+   * Resolve a root document with the organization's stored bindings applied.
+   * A `[credentials]` line in the text wins; a stored binding fills a variable
+   * the text leaves out, and only when an included battery reads it, since the
+   * runtime refuses a `[credentials]` variable no helper reads.
+   */
+  async resolveWithBindings(params: {
+    organizationId: string;
+    content: string;
+  }): Promise<BoundPolicy> {
+    const { organizationId, content } = params;
+    const [resolution, bindings] = await Promise.all([
+      this.resolve(params),
+      OpenAppaCredentialBindingModel.list(organizationId),
+    ]);
+    const credentialSource: Record<string, CredentialSource> =
+      Object.fromEntries(
+        Object.keys(resolution.credentials).map((variable) => [
+          variable,
+          "policy",
+        ]),
+      );
+    const read = new Set(
+      resolution.entries.flatMap((entry) => entry.battery?.credentials ?? []),
+    );
+    const filling = bindings.filter(
+      (binding) =>
+        read.has(binding.variable) && !(binding.variable in credentialSource),
+    );
+    if (filling.length === 0) return { content, resolution, credentialSource };
+    const native = await loadNative();
+    const edited = await native.editOpenappaPolicy(
+      content,
+      filling.map((binding) => ({
+        kind: "setCredential",
+        variable: binding.variable,
+        key: binding.credentialKey,
+      })),
+    );
+    if (edited.content === undefined || edited.content === null) {
+      logger.warn(
+        { organizationId, errors: edited.errors },
+        "OpenAPPA credential bindings could not be applied to the policy",
+      );
+      return { content, resolution, credentialSource };
+    }
+    return {
+      content: edited.content,
+      resolution: {
+        ...resolution,
+        credentials: {
+          ...resolution.credentials,
+          ...Object.fromEntries(
+            filling.map((binding) => [binding.variable, binding.credentialKey]),
+          ),
+        },
+      },
+      credentialSource: {
+        ...credentialSource,
+        ...Object.fromEntries(
+          filling.map((binding) => [binding.variable, "binding" as const]),
+        ),
+      },
     };
   }
 
@@ -478,6 +574,9 @@ const STUB_POLICY = "[policy]\nversion = 2\n";
 
 /** The variable a composed policy names for the bridge bearer; its value is per process. */
 const OPENAPPA_BRIDGE_TOKEN_ENV = "APPA_ARCHESTRA_BRIDGE_TOKEN";
+
+/** Where the addon's `builtin = "archestra"` annotator posts; read by `openappa-rs`. */
+const OPENAPPA_ARCHESTRA_ANNOTATOR_URL_ENV = "APPA_ARCHESTRA_ANNOTATOR_URL";
 
 /**
  * The owner a document being checked names for its helpers. No install row has

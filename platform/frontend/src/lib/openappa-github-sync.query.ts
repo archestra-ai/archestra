@@ -1,6 +1,7 @@
 import { archestraApiSdk, type archestraApiTypes } from "@archestra/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import {
   appaGithubSyncQueryKey,
   invalidatePolicyViews,
@@ -8,7 +9,11 @@ import {
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 export function useAppaGithubSync() {
+  const { data: canRead } = useHasPermissions({
+    organizationSettings: ["read"],
+  });
   return useQuery({
+    enabled: canRead === true,
     queryKey: appaGithubSyncQueryKey,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getAppaGithubSync();

@@ -14,8 +14,12 @@ import {
 import type { ConnectionSetupClientId } from "@/types";
 import { archestraMarkWithText } from "./archestra-mark";
 import {
+  CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
+  claudeCodeAppaPermissionRules,
+  claudeCodeAppaPermissionsAreLiteral,
   claudeCodeOAuthNextStep,
   codexAttributionHeaderLines,
+  codexConnectionVerificationOptions,
   copilotAttributionHeadersValue,
   legacyServerNames,
   opencodeOAuthNextStep,
@@ -23,10 +27,12 @@ import {
   opencodeProxyHeaders,
   opencodeRestartNextStep,
   type SetupScriptContext,
+  type SetupScriptMcpSection,
   type SetupScriptProxySection,
 } from "./connection-setup-script";
 import { describeMarketplaceContents } from "./marketplace-copy";
 import { renderOpenCodeRoutingPlugin } from "./opencode-routing-plugin";
+import { renderPowerShellJsonWriter } from "./powershell-json";
 import {
   buildStartupGuardContext,
   type StartupGuardClient,
@@ -316,7 +322,7 @@ function nextStepsFor(ctx: SetupScriptContext): string[] {
       }
       if (ctx.mcp || ctx.proxy) {
         steps.push(
-          `Verification command: & (Join-Path $env:USERPROFILE ${psq(`${CODEX_GUARD_CLIENT.psScriptRelpath}.verify.ps1`)}) -CodexPath (Get-Command codex -CommandType Application | Select-Object -First 1).Source -OptionsBase64 ${psq(Buffer.from(JSON.stringify({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName })).toString("base64"))}`,
+          `Verification command: & (Join-Path $env:USERPROFILE ${psq(`${CODEX_GUARD_CLIENT.psScriptRelpath}.verify.ps1`)}) -CodexPath (Get-Command codex -CommandType Application | Select-Object -First 1).Source -OptionsBase64 ${psq(Buffer.from(JSON.stringify(codexConnectionVerificationOptions({ server: ctx.mcp?.serverName, provider: ctx.proxy?.proxyName, toolPrefix: ctx.toolPrefix }))).toString("base64"))}`,
         );
       }
       if (ctx.proxy) {
@@ -536,7 +542,195 @@ if ($LASTEXITCODE -ne 0) { Warn ${psq(`Could not install the skills automaticall
 ${pluginInstalls}`);
   }
 
+  if (ctx.mcp) {
+    sections.push(claudeAppaPermissionsSection(ctx.mcp));
+  }
+
   return withWindowsStartupGuard(ctx, CLAUDE_CODE_GUARD_CLIENT, sections);
+}
+
+/**
+ * MCP connect allowlists the four APPA helpers in Claude Code settings, with
+ * or without a proxy. Ownership lives in ~/.archestra/claude-appa-permissions.json,
+ * or CLAUDE_CONFIG_DIR/.archestra when that profile is selected, and only covers
+ * rules this installer added. Invalid JSON or types abort
+ * before any write. JSON uses ConvertFrom-Json -AsHashtable on PowerShell 6+
+ * and JavaScriptSerializer on Windows PowerShell 5.1, so one-element arrays
+ * stay arrays.
+ */
+function claudeAppaPermissionsSection(mcp: SetupScriptMcpSection): string {
+  if (!claudeCodeAppaPermissionsAreLiteral(mcp)) {
+    return `# >>> archestra:claude-appa-permissions >>>
+Warn ${psq(CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING)}
+# <<< archestra:claude-appa-permissions <<<`;
+  }
+  const rulesJson = JSON.stringify(claudeCodeAppaPermissionRules(mcp));
+  const legacyJson = JSON.stringify(legacyServerNames(mcp));
+  return `# >>> archestra:claude-appa-permissions >>>
+Say 'Configuring exact APPA helper permissions for Claude Code'
+${claudeAppaPermissionsSnippet({ serverName: mcp.serverName, rulesJson, legacyJson })}
+Write-Host ('Updated ' + $archAppaSettingsPath)
+Ok 'APPA helper calls are pre-approved for Claude Code, including auto mode. Claude skips its approval prompt and classifier for these helpers. Gateway authorization and required human review still apply.'
+# <<< archestra:claude-appa-permissions <<<`;
+}
+
+function claudeAppaPermissionsSnippet(params: {
+  serverName: string;
+  rulesJson: string;
+  legacyJson: string;
+}): string {
+  const { serverName, rulesJson, legacyJson } = params;
+  return `$archAppaServer = ${psq(serverName)}
+$archAppaDesiredJson = ${psq(rulesJson)}
+$archAppaLegacyJson = ${psq(legacyJson)}
+function New-ArchAppaObject {
+  return ,(New-Object System.Collections.Hashtable ([StringComparer]::Ordinal))
+}
+function ConvertFrom-ArchAppaJson([string]$Raw) {
+  if ($PSVersionTable.PSVersion.Major -ge 6) {
+    $archAppaParse = @{ InputObject = $Raw; AsHashtable = $true; Depth = 100; ErrorAction = 'Stop' }
+    $archAppaParameters = (Get-Command ConvertFrom-Json).Parameters
+    if ($archAppaParameters.ContainsKey('NoEnumerate')) { $archAppaParse['NoEnumerate'] = $true }
+    if ($archAppaParameters.ContainsKey('DateKind')) { $archAppaParse['DateKind'] = 'String' }
+    $archAppaParsed = ConvertFrom-Json @archAppaParse
+    if (-not $archAppaParse.ContainsKey('NoEnumerate') -and $Raw.TrimStart().StartsWith('[')) {
+      if ($Raw -match '^\\[\\s*\\]$') { return ,(New-Object object[] 0) }
+      return ,@($archAppaParsed)
+    }
+    return ,$archAppaParsed
+  }
+  Add-Type -AssemblyName System.Web.Extensions -ErrorAction Stop
+  $archAppaSerializer = New-Object System.Web.Script.Serialization.JavaScriptSerializer
+  $archAppaSerializer.MaxJsonLength = 67108864
+  $archAppaSerializer.RecursionLimit = 256
+  return ,($archAppaSerializer.DeserializeObject($Raw))
+}
+${renderPowerShellJsonWriter("ConvertTo-ArchAppaJson")}
+function Test-ArchAppaObject($Value) { return $Value -is [System.Collections.IDictionary] }
+function Test-ArchAppaStringList($Value) {
+  if ($null -eq $Value -or $Value -is [string] -or $Value -is [System.Collections.IDictionary]) { return $false }
+  if ($Value -isnot [System.Collections.IList]) { return $false }
+  foreach ($item in @($Value)) { if ($item -isnot [string]) { return $false } }
+  return $true
+}
+function ConvertTo-ArchAppaExactArray($Items) {
+  $archAppaItems = @($Items)
+  $archAppaArray = New-Object object[] $archAppaItems.Count
+  for ($archAppaIndex = 0; $archAppaIndex -lt $archAppaItems.Count; $archAppaIndex++) { $archAppaArray[$archAppaIndex] = $archAppaItems[$archAppaIndex] }
+  return ,$archAppaArray
+}
+function Find-ArchAppaKey($Map, [string]$Wanted) {
+  if ($Map -isnot [System.Collections.IDictionary]) { return $null }
+  foreach ($key in @($Map.Keys)) { if ([string]$key -ceq $Wanted) { return [string]$key } }
+  return $null
+}
+function Read-ArchAppaJsonFile([string]$Path, [bool]$MissingIsEmpty, [bool]$BlankIsEmpty) {
+  if (-not (Test-Path -LiteralPath $Path)) {
+    if ($MissingIsEmpty) { return ,(New-ArchAppaObject) }
+    throw 'invalid JSON'
+  }
+  $text = [System.IO.File]::ReadAllText($Path)
+  if ($text.Length -gt 0 -and [int][char]$text[0] -eq 65279) { $text = $text.Substring(1) }
+  if ([string]::IsNullOrWhiteSpace($text)) {
+    if ($BlankIsEmpty) { return ,(New-ArchAppaObject) }
+    throw 'invalid JSON'
+  }
+  return ,(ConvertFrom-ArchAppaJson $text)
+}
+function Write-ArchAppaJsonAtomic([string]$Path, [string]$Json) {
+  $dir = Split-Path -Parent $Path
+  if ($dir -and -not (Test-Path -LiteralPath $dir)) { New-Item -ItemType Directory -Force -Path $dir | Out-Null }
+  $tmp = $Path + '.' + [guid]::NewGuid().ToString('n') + '.tmp'
+  $utf8 = New-Object System.Text.UTF8Encoding $false
+  try {
+    [System.IO.File]::WriteAllText($tmp, $Json.TrimEnd() + [Environment]::NewLine, $utf8)
+    Move-Item -LiteralPath $tmp -Destination $Path -Force
+  } catch {
+    if (Test-Path -LiteralPath $tmp) { Remove-Item -LiteralPath $tmp -Force -ErrorAction SilentlyContinue }
+    throw
+  }
+}
+if ([string]::IsNullOrEmpty($env:USERPROFILE)) { throw 'USERPROFILE is not set' }
+if ([string]::IsNullOrEmpty($env:CLAUDE_CONFIG_DIR)) {
+  $archAppaConfigDir = Join-Path $env:USERPROFILE '.claude'
+  $archAppaStateRoot = $env:USERPROFILE
+} else {
+  $archAppaConfigDir = $env:CLAUDE_CONFIG_DIR
+  $archAppaStateRoot = $env:CLAUDE_CONFIG_DIR
+}
+$archAppaSettingsPath = Join-Path $archAppaConfigDir 'settings.json'
+$archAppaStatePath = Join-Path (Join-Path $archAppaStateRoot '.archestra') 'claude-appa-permissions.json'
+$archAppaDesired = ConvertFrom-ArchAppaJson $archAppaDesiredJson
+$archAppaLegacy = ConvertFrom-ArchAppaJson $archAppaLegacyJson
+if (-not (Test-ArchAppaStringList $archAppaDesired) -or -not (Test-ArchAppaStringList $archAppaLegacy)) { throw 'invalid JSON' }
+try { $archAppaSettings = Read-ArchAppaJsonFile $archAppaSettingsPath $true $true } catch { throw 'Claude settings and APPA permission state must be JSON objects' }
+try { $archAppaState = Read-ArchAppaJsonFile $archAppaStatePath $true $false } catch { throw 'Claude settings and APPA permission state must be JSON objects' }
+if (-not (Test-ArchAppaObject $archAppaSettings) -or -not (Test-ArchAppaObject $archAppaState)) { throw 'Claude settings and APPA permission state must be JSON objects' }
+foreach ($archAppaKey in @($archAppaState.Keys)) {
+  if (-not (Test-ArchAppaStringList $archAppaState[$archAppaKey])) { throw 'Invalid APPA permission ownership state' }
+}
+$archAppaPermKey = Find-ArchAppaKey $archAppaSettings 'permissions'
+if ($null -eq $archAppaPermKey) {
+  $archAppaPermissions = New-ArchAppaObject
+  $archAppaSettings['permissions'] = $archAppaPermissions
+  $archAppaPermKey = 'permissions'
+} else {
+  $archAppaPermissions = $archAppaSettings[$archAppaPermKey]
+  if (-not (Test-ArchAppaObject $archAppaPermissions)) { throw 'Claude permissions must be a JSON object' }
+}
+$archAppaAllowKey = Find-ArchAppaKey $archAppaPermissions 'allow'
+if ($null -eq $archAppaAllowKey) {
+  $archAppaAllowed = New-Object object[] 0
+  $archAppaAllowKey = 'allow'
+} else {
+  $archAppaAllowed = $archAppaPermissions[$archAppaAllowKey]
+  if (-not (Test-ArchAppaStringList $archAppaAllowed)) { throw 'Claude permissions.allow must be an array of strings' }
+}
+$archAppaNames = New-Object System.Collections.Generic.List[string]
+[void]$archAppaNames.Add($archAppaServer)
+foreach ($archAppaLegacyName in $archAppaLegacy) { [void]$archAppaNames.Add([string]$archAppaLegacyName) }
+$archAppaPrevious = New-Object 'System.Collections.Generic.HashSet[string]'
+foreach ($archAppaName in $archAppaNames) {
+  $archAppaMatched = Find-ArchAppaKey $archAppaState ([string]$archAppaName)
+  if ($null -ne $archAppaMatched) {
+    foreach ($archAppaRule in @($archAppaState[$archAppaMatched])) { [void]$archAppaPrevious.Add([string]$archAppaRule) }
+    [void]$archAppaState.Remove($archAppaMatched)
+  }
+}
+$archAppaDesiredSet = New-Object 'System.Collections.Generic.HashSet[string]'
+foreach ($archAppaRule in $archAppaDesired) { [void]$archAppaDesiredSet.Add([string]$archAppaRule) }
+$archAppaFiltered = New-Object System.Collections.ArrayList
+foreach ($archAppaRule in @($archAppaAllowed)) {
+  if ((-not $archAppaPrevious.Contains([string]$archAppaRule)) -or $archAppaDesiredSet.Contains([string]$archAppaRule)) {
+    [void]$archAppaFiltered.Add($archAppaRule)
+  }
+}
+$archAppaFilteredSet = New-Object 'System.Collections.Generic.HashSet[string]'
+foreach ($archAppaRule in $archAppaFiltered) { [void]$archAppaFilteredSet.Add([string]$archAppaRule) }
+$archAppaOwned = New-Object System.Collections.ArrayList
+foreach ($archAppaRule in $archAppaDesired) {
+  if ($archAppaPrevious.Contains([string]$archAppaRule) -or -not $archAppaFilteredSet.Contains([string]$archAppaRule)) {
+    [void]$archAppaOwned.Add([string]$archAppaRule)
+  }
+}
+foreach ($archAppaRule in $archAppaDesired) {
+  if (-not $archAppaFilteredSet.Contains([string]$archAppaRule)) {
+    [void]$archAppaFiltered.Add([string]$archAppaRule)
+    [void]$archAppaFilteredSet.Add([string]$archAppaRule)
+  }
+}
+$archAppaPermissions[$archAppaAllowKey] = ConvertTo-ArchAppaExactArray $archAppaFiltered
+if ($archAppaOwned.Count -gt 0) { $archAppaState[$archAppaServer] = ConvertTo-ArchAppaExactArray $archAppaOwned }
+$archAppaSettingsJson = [string](ConvertTo-ArchAppaJson $archAppaSettings)
+$archAppaStateJson = [string](ConvertTo-ArchAppaJson $archAppaState)
+if (-not $archAppaSettingsJson -or -not $archAppaStateJson) { throw 'empty json' }
+$archAppaBackup = $archAppaSettingsPath + '.archestra-backup'
+if ((Test-Path -LiteralPath $archAppaSettingsPath) -and -not (Test-Path -LiteralPath $archAppaBackup)) {
+  Copy-Item -LiteralPath $archAppaSettingsPath -Destination $archAppaBackup
+}
+# Record ownership first so a failed settings write remains recoverable.
+Write-ArchAppaJsonAtomic $archAppaStatePath $archAppaStateJson
+Write-ArchAppaJsonAtomic $archAppaSettingsPath $archAppaSettingsJson`;
 }
 
 /**

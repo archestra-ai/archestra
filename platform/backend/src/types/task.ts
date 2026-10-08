@@ -33,6 +33,7 @@ export const TaskTypeSchema = z.enum([
   "content_encryption_backfill",
   "check_due_openappa_github_syncs",
   "openappa_github_sync",
+  "openappa_policy_validation",
   "check_due_skill_github_syncs",
   "skill_github_sync",
   "check_due_plugin_github_syncs",
@@ -41,6 +42,7 @@ export const TaskTypeSchema = z.enum([
   "p4_shim_reconcile",
   "kb_bm25_stats_refresh",
   "openappa_effective_policy_recompile",
+  "openappa_unenforced_cleanup",
 ]);
 export type TaskType = z.infer<typeof TaskTypeSchema>;
 
@@ -85,6 +87,7 @@ export const TASK_LANES = {
     "content_encryption_backfill",
     "check_due_openappa_github_syncs",
     "openappa_github_sync",
+    "openappa_policy_validation",
     "check_due_skill_github_syncs",
     "skill_github_sync",
     "check_due_plugin_github_syncs",
@@ -93,6 +96,7 @@ export const TASK_LANES = {
     "p4_shim_reconcile",
     "kb_bm25_stats_refresh",
     "openappa_effective_policy_recompile",
+    "openappa_unenforced_cleanup",
   ],
 } as const satisfies Record<string, TaskType[]>;
 

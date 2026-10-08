@@ -1,4 +1,7 @@
-import type { ResourcePermissionGrant } from "@archestra/shared";
+import type {
+  ResourceAccessRelation,
+  ResourcePermissionGrant,
+} from "@archestra/shared";
 import {
   and,
   count,
@@ -23,6 +26,7 @@ import type {
 import CreatedByModel from "./created-by";
 import KnowledgeBaseConnectorModel from "./knowledge-base-connector";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /**
  * Filters shared by the list and its count, so a page can never show N rows
@@ -30,7 +34,7 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
  * picks the lifecycle slice: `deleted` is the trash view, every other read
  * stays `notDeleted`.
  */
-function buildOrgFilters(params: {
+async function buildOrgFilters(params: {
   organizationId: string;
   search?: string;
   status?: "active" | "deleted";
@@ -47,19 +51,26 @@ function buildOrgFilters(params: {
   authorIds?: string[];
   excludeAuthorIds?: string[];
   excludeOtherPersonal?: boolean;
+  /** The list's "Show" filter, read against `viewerUserId`. */
+  access?: ResourceAccessRelation[];
 }) {
   const normalizedSearch = params.search?.trim();
+  const viewer = params.viewerUserId
+    ? await ResourcePermissionSubjectModel.resolvePrincipal({
+        organizationId: params.organizationId,
+        userId: params.viewerUserId,
+      })
+    : null;
   return [
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-    ...(params.viewerUserId
+    ...(viewer
       ? [
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId: params.organizationId,
+            ...viewer,
             resource: "knowledgeBase",
             scopeColumn: schema.knowledgeBasesTable.id,
-            userId: params.viewerUserId,
             action: "read",
           }),
         ]
@@ -102,6 +113,16 @@ function buildOrgFilters(params: {
           ResourcePermissionPolicyModel.grantsReadToAnyTeam({
             ...ownAudienceContext(params.organizationId),
             teamIds: params.teamIds,
+          }),
+        ]
+      : []),
+    ...(viewer && params.viewerUserId && params.access
+      ? [
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            ...ownAudienceContext(params.organizationId),
+            userId: params.viewerUserId,
+            subjects: viewer.subjects,
+            relations: params.access,
           }),
         ]
       : []),
@@ -173,8 +194,10 @@ class KnowledgeBaseModel {
     authorIds?: string[];
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
+    /** The list's "Show" filter, read against `viewerUserId`. */
+    access?: ResourceAccessRelation[];
   }): Promise<KnowledgeBase[]> {
-    const filters = buildOrgFilters(params);
+    const filters = await buildOrgFilters(params);
 
     let query = db
       .select()
@@ -436,11 +459,13 @@ class KnowledgeBaseModel {
     authorIds?: string[];
     excludeAuthorIds?: string[];
     excludeOtherPersonal?: boolean;
+    /** The list's "Show" filter, read against `viewerUserId`. */
+    access?: ResourceAccessRelation[];
   }): Promise<number> {
     const [result] = await db
       .select({ count: count() })
       .from(schema.knowledgeBasesTable)
-      .where(and(...buildOrgFilters(params)));
+      .where(and(...(await buildOrgFilters(params))));
 
     return result?.count ?? 0;
   }

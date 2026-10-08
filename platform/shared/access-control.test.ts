@@ -7,9 +7,11 @@ import {
   findUngrantablePermissions,
   memberPermissions,
   permissionDescriptions,
+  platformAdminPermissions,
   predefinedPermissionsMap,
   requiredEndpointPermissionsMap,
   requiredPagePermissionsMap,
+  withDerivedPermissions,
 } from "./access-control";
 import {
   type Action,
@@ -20,6 +22,24 @@ import { ADMIN_ROLE_NAME } from "./roles";
 import { RouteId } from "./routes";
 
 describe("access-control", () => {
+  test("every route and page gate names an action its resource has", () => {
+    // A gate on an action no role can hold locks everyone out, silently.
+    const unreachable: string[] = [];
+    for (const [gate, permissions] of [
+      ...Object.entries(requiredEndpointPermissionsMap),
+      ...Object.entries(requiredPagePermissionsMap),
+    ]) {
+      for (const [resource, actions] of Object.entries(permissions ?? {})) {
+        for (const action of actions ?? []) {
+          if (!allAvailableActions[resource as Resource]?.includes(action)) {
+            unreachable.push(`${gate}: ${resource}:${action}`);
+          }
+        }
+      }
+    }
+    expect(unreachable).toEqual([]);
+  });
+
   test("every resource:action combination has a permissionDescription", () => {
     const missing: string[] = [];
 
@@ -73,46 +93,18 @@ describe("access-control", () => {
       expect(permissionDescriptions["auditLog:read"].length).toBeGreaterThan(0);
     });
 
-    test("auditLog only exposes the read action", () => {
-      expect(allAvailableActions.auditLog).toEqual(["read"]);
+    test("auditLog exposes own and organization-wide visibility", () => {
+      expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
     });
   });
 
-  describe("MCP deleted-resource lifecycle (manage-deleted)", () => {
-    // Soft-deleted MCP servers and catalog entries are viewable and restorable
-    // only through the dedicated manage-deleted capability. Of the predefined
-    // roles only admin holds it — delete (which members hold for their own
-    // uninstalls) must not unlock the org-wide tombstone view.
-    test("admin role has manage-deleted on both MCP resources", () => {
-      const admin = predefinedPermissionsMap[ADMIN_ROLE_NAME];
-      expect(admin.mcpServerInstallation).toContain("manage-deleted");
-      expect(admin.mcpRegistry).toContain("manage-deleted");
+  test("restoring installs uses delete while catalog restore authorizes the resolved object", () => {
+    expect(requiredEndpointPermissionsMap[RouteId.RestoreMcpServer]).toEqual({
+      mcpServerInstallation: ["delete"],
     });
-
-    test("editor role does not have manage-deleted", () => {
-      expect(editorPermissions.mcpServerInstallation).not.toContain(
-        "manage-deleted",
-      );
-      expect(editorPermissions.mcpRegistry).not.toContain("manage-deleted");
-    });
-
-    test("member role does not have manage-deleted", () => {
-      expect(memberPermissions.mcpServerInstallation).not.toContain(
-        "manage-deleted",
-      );
-      expect(memberPermissions.mcpRegistry).not.toContain("manage-deleted");
-    });
-
-    test("restore routes require manage-deleted", () => {
-      expect(requiredEndpointPermissionsMap[RouteId.RestoreMcpServer]).toEqual({
-        mcpServerInstallation: ["manage-deleted"],
-      });
-      expect(
-        requiredEndpointPermissionsMap[RouteId.RestoreInternalMcpCatalogItem],
-      ).toEqual({
-        mcpRegistry: ["manage-deleted"],
-      });
-    });
+    expect(
+      requiredEndpointPermissionsMap[RouteId.RestoreInternalMcpCatalogItem],
+    ).toEqual({});
   });
 
   describe("complete-onboarding route", () => {
@@ -156,65 +148,141 @@ describe("access-control", () => {
       expect(requiredPagePermissionsMap["/agents/new"]).toBeUndefined();
     });
 
-    test("credential-bearing configuration mutations require agent settings administration", () => {
+    test("connecting an external agent takes the same permission as creating a local one", () => {
       for (const routeId of [
         RouteId.InspectA2aRemoteAgent,
         RouteId.CreateA2aRemoteAgent,
-        RouteId.UpdateA2aRemoteAgent,
-        RouteId.DeleteA2aRemoteAgent,
       ]) {
         expect(requiredEndpointPermissionsMap[routeId]).toEqual({
-          agentSettings: ["update"],
+          agent: ["create"],
         });
       }
     });
 
-    test("run metadata is restricted while approved target summaries remain assignable", () => {
+    test("each external agent's own grants decide everything after it exists", () => {
+      // The route gate only admits agent readers. The handler then checks the
+      // external agent's permission policy for the action it performs.
+      for (const routeId of [
+        RouteId.ListA2aRemoteAgents,
+        RouteId.GetA2aRemoteAgent,
+        RouteId.UpdateA2aRemoteAgent,
+        RouteId.DeleteA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgentRuns,
+        RouteId.TransferRemoteAgentOwnership,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).toEqual({
+          agent: ["read"],
+        });
+      }
+    });
+
+    test("organization settings play no part in external agents", () => {
+      for (const routeId of [
+        RouteId.InspectA2aRemoteAgent,
+        RouteId.CreateA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgents,
+        RouteId.GetA2aRemoteAgent,
+        RouteId.UpdateA2aRemoteAgent,
+        RouteId.DeleteA2aRemoteAgent,
+        RouteId.ListA2aRemoteAgentRuns,
+        RouteId.TransferRemoteAgentOwnership,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).not.toHaveProperty(
+          "organizationSettings",
+        );
+      }
+    });
+  });
+
+  describe("organization settings", () => {
+    test("only admin roles can see or change organization settings", () => {
+      expect(adminPermissions.organizationSettings).toEqual(["read", "update"]);
+      expect(platformAdminPermissions.organizationSettings).toEqual([
+        "read",
+        "update",
+      ]);
+      expect(editorPermissions.organizationSettings).toEqual([]);
+      expect(memberPermissions.organizationSettings).toEqual([]);
+    });
+
+    test("every signed-in user sees the site notification banner, admins manage it", () => {
       expect(
-        requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgentRuns],
-      ).toEqual({ agentSettings: ["read"] });
+        requiredEndpointPermissionsMap[RouteId.GetSiteNotification],
+      ).toEqual({});
+      for (const routeId of [
+        RouteId.CreateSiteNotification,
+        RouteId.UpdateSiteNotification,
+        RouteId.DeleteSiteNotification,
+      ]) {
+        expect(requiredEndpointPermissionsMap[routeId]).toEqual({
+          organizationSettings: ["update"],
+        });
+      }
+    });
+  });
+
+  describe("invitations follow member:create", () => {
+    test("a role that can add members can invite and cancel invitations", () => {
       expect(
-        requiredEndpointPermissionsMap[RouteId.ListA2aRemoteAgents],
-      ).toEqual({ agent: ["read"] });
-      expect(memberPermissions.agentSettings).toEqual([]);
-      expect(editorPermissions.agentSettings).toEqual([]);
+        withDerivedPermissions({ member: ["read", "create"] }).invitation,
+      ).toEqual(["create", "cancel"]);
+    });
+
+    test("a stored invitation grant without member:create is dropped", () => {
+      expect(
+        withDerivedPermissions({
+          member: ["read"],
+          invitation: ["create", "cancel"],
+        }),
+      ).toEqual({ member: ["read"] });
+    });
+
+    test("invitations are hidden from the role editor", () => {
+      expect(internalResources).toContain("invitation");
     });
   });
 
   describe("sandbox artifact route", () => {
-    // the download_file tool (sandbox:execute) hands out this artifact URL, so
+    // the download_file tool (agent:read) hands out this artifact URL, so
     // the fetch route must require the same permission — otherwise a role that
     // produced an artifact gets a 403 on a URL it just earned.
-    test("getSkillSandboxArtifact requires sandbox:execute", () => {
+    test("getSkillSandboxArtifact requires agent:read", () => {
       const required =
         requiredEndpointPermissionsMap[RouteId.GetSkillSandboxArtifact];
-      expect(required?.sandbox).toContain("execute");
+      expect(required).toEqual({ agent: ["read"] });
     });
   });
 
   describe("project file routes", () => {
-    // Project file surfaces combine project-level access with the files gate;
-    // the sandbox permission is reserved for actual sandbox execution
-    // (run_command/upload_file/download_file).
-    test("GetProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
-      const required = requiredEndpointPermissionsMap[RouteId.GetProjectFiles];
-      expect(required?.project).toContain("read");
-      expect(required?.file).toContain("manage");
-      expect(required?.sandbox).toBeUndefined();
+    // Project files follow project access; there is no separate files gate.
+    test.each([
+      RouteId.GetProjectFiles,
+      RouteId.UploadProjectFiles,
+    ])("%s requires only project:read", (routeId) => {
+      expect(requiredEndpointPermissionsMap[routeId]).toEqual({
+        project: ["read"],
+      });
+    });
+  });
+
+  describe("secrets routes", () => {
+    // The secrets backend is organization configuration; reading one stored
+    // Vault reference serves the MCP catalog form for one entry.
+    test("the secrets backend is organization settings", () => {
+      expect(requiredEndpointPermissionsMap[RouteId.GetSecretsType]).toEqual({
+        organizationSettings: ["read"],
+      });
+      expect(
+        requiredEndpointPermissionsMap[RouteId.CheckSecretsConnectivity],
+      ).toEqual({ organizationSettings: ["update"] });
+      expect(requiredPagePermissionsMap["/settings/secrets"]).toEqual({
+        organizationSettings: ["read"],
+      });
     });
 
-    test("UploadProjectFiles requires project:read + file:manage, not sandbox:execute", () => {
-      const required =
-        requiredEndpointPermissionsMap[RouteId.UploadProjectFiles];
-      expect(required?.project).toContain("read");
-      expect(required?.file).toContain("manage");
-      expect(required?.sandbox).toBeUndefined();
-    });
-
-    test("all predefined roles have file:manage", () => {
-      for (const permissions of Object.values(predefinedPermissionsMap)) {
-        expect(permissions.file).toContain("manage");
-      }
+    test("reading a Vault reference is decided per registry entry", () => {
+      // The handler requires an update grant on the owning entry.
+      expect(requiredEndpointPermissionsMap[RouteId.GetSecret]).toEqual({});
     });
   });
 
@@ -306,10 +374,10 @@ describe("buildForbiddenErrorMessage", () => {
     expect(
       buildForbiddenErrorMessage({
         routeId: RouteId.UploadProjectFiles,
-        missingPermissions: { file: ["manage"] },
+        missingPermissions: { project: ["read"] },
       }),
     ).toBe(
-      "You don't have permission to upload project files. Missing permission: file:manage (List, read, write, and delete files in chats and projects).",
+      "You don't have permission to upload project files. Missing permission: project:read (View projects and your own sessions inside them).",
     );
   });
 
@@ -321,16 +389,16 @@ describe("buildForbiddenErrorMessage", () => {
 
   test("lists multiple missing permissions in stable order", () => {
     const message = buildForbiddenErrorMessage({
-      missingPermissions: { project: ["read"], file: ["manage"] },
+      missingPermissions: { project: ["read"], agent: ["read"] },
     });
     expect(message).toContain("Missing permissions:");
     expect(message).toContain(
-      "file:manage (List, read, write, and delete files in chats and projects)",
+      "agent:read (Open Agents, and use the code sandboxes and files of agents you can use)",
     );
     expect(message).toContain(
       "project:read (View projects and your own sessions inside them)",
     );
-    expect(message.indexOf("file:manage")).toBeLessThan(
+    expect(message.indexOf("agent:read")).toBeLessThan(
       message.indexOf("project:read"),
     );
   });
@@ -342,14 +410,13 @@ describe("buildForbiddenErrorMessage", () => {
   });
 });
 
-describe("own-vs-all log split (log/auditLog read vs a grant at *)", () => {
-  // Seeing every member's rows is `read` on the resource at `*`, a grant; the
-  // role action only covers the caller's own rows.
-  test("read is the only role action on both resources", () => {
-    expect(allAvailableActions.log).toEqual(["read"]);
-    expect(allAvailableActions.auditLog).toEqual(["read"]);
-    expect(permissionDescriptions["log:admin"]).toBeUndefined();
-    expect(permissionDescriptions["auditLog:admin"]).toBeUndefined();
+describe("own-vs-all log split (Read and Admin role actions)", () => {
+  // Read covers own rows; Admin expands organization-wide visibility.
+  test("Read and Admin are the only role actions on both resources", () => {
+    expect(allAvailableActions.log).toEqual(["read", "admin"]);
+    expect(allAvailableActions.auditLog).toEqual(["read", "admin"]);
+    expect(permissionDescriptions["log:admin"]).toBeDefined();
+    expect(permissionDescriptions["auditLog:admin"]).toBeDefined();
   });
 
   test("editor sees only own logs; member has neither log resource", () => {
@@ -361,14 +428,17 @@ describe("own-vs-all log split (log/auditLog read vs a grant at *)", () => {
 });
 
 describe("platform_admin predefined role", () => {
-  test("holds everything except member:impersonate", () => {
+  test("withholds impersonation and organization-wide diagnostics", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(p.log).toEqual(["read"]);
     expect(p.auditLog).toEqual(["read"]);
     expect(p.member).not.toContain("impersonate");
-    // …and is otherwise the full admin set (modulo the UI-behavior resource).
+    expect(p.openappaDiagnostics).toEqual(["read", "update"]);
+    // …and is otherwise the full admin set.
     for (const [resource, actions] of Object.entries(allAvailableActions)) {
-      if (["log", "auditLog", "member", "simpleView"].includes(resource)) {
+      if (
+        ["log", "auditLog", "member", "openappaDiagnostics"].includes(resource)
+      ) {
         continue;
       }
       expect(p[resource as keyof typeof p]).toEqual(actions);
@@ -378,7 +448,12 @@ describe("platform_admin predefined role", () => {
   test("cannot grant the withheld permissions (no-escalation rule)", () => {
     const p = predefinedPermissionsMap.platform_admin;
     expect(findUngrantablePermissions(p, adminPermissions)).toEqual(
-      expect.arrayContaining(["member:impersonate"]),
+      expect.arrayContaining([
+        "member:impersonate",
+        "openappaDiagnostics:admin",
+        "log:admin",
+        "auditLog:admin",
+      ]),
     );
     // …while granting its own role or member stays possible.
     expect(findUngrantablePermissions(p, p)).toEqual([]);

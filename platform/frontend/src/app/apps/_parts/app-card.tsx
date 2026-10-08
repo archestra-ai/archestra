@@ -14,7 +14,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { LabelTags } from "@/components/label-tags";
 import { AppVersionHistoryDialog } from "@/components/mcp-app/app-version-history-dialog";
@@ -31,6 +31,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useResourceOwnershipTransfer } from "@/components/use-resource-ownership-transfer";
 import {
   type PinAppTarget,
@@ -148,7 +149,7 @@ function OwnedAppCard({
   });
   const openApp = useOpenAppInChat();
   const pinApp = usePinApp();
-  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
+  const encryptedChatEnabled = useFeature("encryptedChatEnabled") ?? false;
   const access = useAppAccess(app);
   // A personal app the caller only reaches through app:admin oversight
   // (viewerRole "admin") — i.e. someone else's personal app — gets a visible
@@ -175,10 +176,10 @@ function OwnedAppCard({
     action: "delete",
   });
 
-  const handleOpen = async (lockedChat = false) => {
+  const handleOpen = async (encryptedChat = false) => {
     if (isOpening) return;
     setIsOpening(true);
-    const result = await openApp.mutateAsync({ appId: app.id, lockedChat });
+    const result = await openApp.mutateAsync({ appId: app.id, encryptedChat });
     if (result?.conversationId) {
       router.push(`/chat/${result.conversationId}`);
     } else {
@@ -190,6 +191,7 @@ function OwnedAppCard({
       icon: <Settings className="h-4 w-4" />,
       label: "Settings",
       permissions: { app: ["update"] },
+      permissionScope: app.id,
       disabled: !!settingsDisabledReason,
       disabledTooltip: settingsDisabledReason,
       onClick: () => onOpenSettings?.(app),
@@ -213,6 +215,7 @@ function OwnedAppCard({
       icon: <History className="h-4 w-4" />,
       label: "Version history",
       permissions: { app: ["update"] },
+      permissionScope: app.id,
       disabled: !!settingsDisabledReason,
       disabledTooltip: settingsDisabledReason,
       onClick: () => setHistoryOpen(true),
@@ -223,11 +226,11 @@ function OwnedAppCard({
       href: appRunUrl(app),
       external: true,
     },
-    ...(lockedChatEnabled
+    ...(encryptedChatEnabled
       ? [
           {
-            icon: <LockedChatIcon className="h-4 w-4" />,
-            label: "Open as locked chat",
+            icon: <EncryptedChatIcon className="h-4 w-4" />,
+            label: "Open as encrypted chat",
             onClick: () => void handleOpen(true),
           } satisfies TableRowAction,
         ]
@@ -237,6 +240,7 @@ function OwnedAppCard({
       label: "Delete",
       variant: "destructive",
       permissions: { app: ["delete"] },
+      permissionScope: app.id,
       disabled: !!deleteDisabledReason,
       disabledTooltip: deleteDisabledReason,
       onClick: () => setDeleteOpen(true),
@@ -249,7 +253,7 @@ function OwnedAppCard({
         icon={<AppTypeIcon owned icon={app.icon} />}
         title={
           <span className="flex min-w-0 items-center gap-1.5">
-            <button
+            <UnstyledButton
               type="button"
               className="truncate text-left"
               disabled={isOpening}
@@ -257,7 +261,7 @@ function OwnedAppCard({
               onClick={() => void handleOpen()}
             >
               {app.name}
-            </button>
+            </UnstyledButton>
             <LabelTags labels={app.labels} />
           </span>
         }
@@ -339,20 +343,20 @@ function ExternalAppCard({
   // Stays true from click through the redirect; see OwnedAppCard for the same
   // reasoning. Only a failure resets it (the card unmounts on success).
   const [isOpening, setIsOpening] = useState(false);
-  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
+  const encryptedChatEnabled = useFeature("encryptedChatEnabled") ?? false;
 
   // Standalone run page (chrome-less /a namespace, like the owned /a/[appId]),
   // pinned to this exact install for explicit "open in new tab".
   const runHref = `/a/catalog/${app.catalogId}?install=${encodeURIComponent(app.mcpServerId)}&resource=${encodeURIComponent(app.resourceUri)}`;
   const serverHref = `/mcp/registry/${app.catalogId}`;
 
-  const handleOpen = async (lockedChat = false) => {
+  const handleOpen = async (encryptedChat = false) => {
     if (isOpening) return;
     setIsOpening(true);
     const result = await openApp.mutateAsync({
       mcpServerId: app.mcpServerId,
       resourceUri: app.resourceUri,
-      lockedChat,
+      encryptedChat,
     });
     if (result?.conversationId) {
       if (result.mode === "prompt" && result.prompt) {
@@ -402,11 +406,11 @@ function ExternalAppCard({
             external: true,
           } satisfies TableRowAction,
         ]),
-    ...(lockedChatEnabled
+    ...(encryptedChatEnabled
       ? [
           {
-            icon: <LockedChatIcon className="h-4 w-4" />,
-            label: "Open as locked chat",
+            icon: <EncryptedChatIcon className="h-4 w-4" />,
+            label: "Open as encrypted chat",
             onClick: () => void handleOpen(true),
           } satisfies TableRowAction,
         ]
@@ -418,7 +422,7 @@ function ExternalAppCard({
       icon={<AppTypeIcon owned={false} icon={app.icon} />}
       title={
         <span className="flex min-w-0 items-center gap-1.5">
-          <button
+          <UnstyledButton
             type="button"
             className="truncate text-left"
             disabled={isOpening}
@@ -426,7 +430,7 @@ function ExternalAppCard({
             onClick={() => void handleOpen()}
           >
             {app.name}
-          </button>
+          </UnstyledButton>
           <LabelTags labels={app.labels} />
         </span>
       }

@@ -17,7 +17,11 @@ import {
 import { QueryLoadError } from "@/components/query-load-error";
 import { Button } from "@/components/ui/button";
 import { useProfiles } from "@/lib/agent.query";
-import { useHasPermissions } from "@/lib/auth/auth.query";
+import {
+  useHasPermissions,
+  useScopedCapabilities,
+} from "@/lib/auth/auth.query";
+import { holdsItemGrant } from "@/lib/auth/auth.utils";
 import { copyToClipboard } from "@/lib/clipboard";
 import {
   useCreateMcpOauthClient,
@@ -52,8 +56,14 @@ export function McpOauthManagement({
 }) {
   const { data: canRead } = useHasPermissions({ mcpOauthClient: ["read"] });
   const { data: canCreate } = useHasPermissions({ mcpOauthClient: ["create"] });
-  const { data: canUpdate } = useHasPermissions({ mcpOauthClient: ["update"] });
-  const { data: canDelete } = useHasPermissions({ mcpOauthClient: ["delete"] });
+  const { data: scopedGrants } = useScopedCapabilities();
+  const can = (client: Client, action: "update" | "delete") =>
+    holdsItemGrant({
+      grants: scopedGrants,
+      resource: "mcpOauthClient",
+      action,
+      id: client.id,
+    });
   const query = useMcpOauthClients({ enabled: canRead === true });
   const { data: resources = [] } = useProfiles({
     filters: { agentTypes: ["mcp_gateway", "agent"] },
@@ -156,7 +166,7 @@ export function McpOauthManagement({
                   </td>
                   <td className="py-1.5">
                     <div className="flex">
-                      {canUpdate && (
+                      {can(client, "update") && (
                         <>
                           <Button
                             variant="ghost"
@@ -176,7 +186,7 @@ export function McpOauthManagement({
                           </Button>
                         </>
                       )}
-                      {canDelete && (
+                      {can(client, "delete") && (
                         <Button
                           variant="ghost"
                           size="icon-sm"

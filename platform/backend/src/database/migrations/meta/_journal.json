@@ -3508,6 +3508,132 @@
       "when": 1790846106675,
       "tag": "0500_careless_miracleman",
       "breakpoints": true
+    },
+    {
+      "idx": 501,
+      "version": "7",
+      "when": 1790878174684,
+      "tag": "0501_openappa-rbac",
+      "breakpoints": true
+    },
+    {
+      "idx": 502,
+      "version": "7",
+      "when": 1790887388929,
+      "tag": "0502_short_rocket_racer",
+      "breakpoints": true
+    },
+    {
+      "idx": 503,
+      "version": "7",
+      "when": 1790943572257,
+      "tag": "0503_rename-locked-chat-to-encrypted-chat",
+      "breakpoints": true
+    },
+    {
+      "idx": 504,
+      "version": "7",
+      "when": 1790970086418,
+      "tag": "0504_reflective_cargill",
+      "breakpoints": true
+    },
+    {
+      "idx": 505,
+      "version": "7",
+      "when": 1790974534285,
+      "tag": "0505_simplify-role-permissions",
+      "breakpoints": true
+    },
+    {
+      "idx": 506,
+      "version": "7",
+      "when": 1790979396089,
+      "tag": "0506_openappa-unenforced-records",
+      "breakpoints": true
+    },
+    {
+      "idx": 507,
+      "version": "7",
+      "when": 1791074452370,
+      "tag": "0507_peer-message-inbox",
+      "breakpoints": true
+    },
+    {
+      "idx": 508,
+      "version": "7",
+      "when": 1791126427875,
+      "tag": "0508_mcp-registry-configure-deployment-spec",
+      "breakpoints": true
+    },
+    {
+      "idx": 509,
+      "version": "7",
+      "when": 1791132816653,
+      "tag": "0509_fold-rbac-settings-resources",
+      "breakpoints": true
+    },
+    {
+      "idx": 510,
+      "version": "7",
+      "when": 1791162080909,
+      "tag": "0510_remove-simple-view-role-resource",
+      "breakpoints": true
+    },
+    {
+      "idx": 511,
+      "version": "7",
+      "when": 1791216758274,
+      "tag": "0511_clammy_hydra",
+      "breakpoints": true
+    },
+    {
+      "idx": 512,
+      "version": "7",
+      "when": 1791220916971,
+      "tag": "0512_faulty_zaladane",
+      "breakpoints": true
+    },
+    {
+      "idx": 513,
+      "version": "7",
+      "when": 1791288500105,
+      "tag": "0513_bent_hobgoblin",
+      "breakpoints": true
+    },
+    {
+      "idx": 514,
+      "version": "7",
+      "when": 1791378014772,
+      "tag": "0514_glossy_stellaris",
+      "breakpoints": true
+    },
+    {
+      "idx": 515,
+      "version": "7",
+      "when": 1791381491937,
+      "tag": "0515_wise_fabian_cortez",
+      "breakpoints": true
+    },
+    {
+      "idx": 516,
+      "version": "7",
+      "when": 1791390810332,
+      "tag": "0516_happy_ma_gnuci",
+      "breakpoints": true
+    },
+    {
+      "idx": 517,
+      "version": "7",
+      "when": 1791394688603,
+      "tag": "0517_spooky_microbe",
+      "breakpoints": true
+    },
+    {
+      "idx": 518,
+      "version": "7",
+      "when": 1791408048672,
+      "tag": "0518_bored_ben_parker",
+      "breakpoints": true
     }
   ]
 }

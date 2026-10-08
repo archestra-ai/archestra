@@ -15,19 +15,11 @@ import {
   SUBSCRIPTION_CREDENTIALS,
   subscriptionKindForProvider,
 } from "@archestra/shared";
-import { CheckCircle2, ChevronDown, Trash2 } from "lucide-react";
+import { CheckCircle2, Trash2 } from "lucide-react";
 import Link from "next/link";
-import {
-  lazy,
-  type Ref,
-  Suspense,
-  useEffect,
-  useMemo,
-  useRef,
-  useState,
-} from "react";
+import { lazy, type Ref, Suspense, useEffect, useMemo, useRef } from "react";
 import { type UseFormReturn, useFieldArray } from "react-hook-form";
-import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
+import { AdvancedSection } from "@/components/advanced-section";
 import {
   type ProfileLabel,
   ProfileLabels,
@@ -81,8 +73,8 @@ export type LlmProviderApiKeyFormValues = {
   /** Edited as an array of rows; serialized to Record<string, string> on submit. */
   extraHeaders: Array<{ name: string; value: string }>;
   /**
-   * "Just for me" (false: the key is yours and only you use it) or "Shared"
-   * (true: no owner; the initial grants say who uses it).
+   * API ownership metadata: ordinary new keys have no owner and use grants.
+   * Existing personal keys and subscription credentials retain their owner.
    */
   shared: boolean;
   /** The team whose vault folder the secret picker browses. Not submitted. */
@@ -250,6 +242,17 @@ const PROVIDER_CONFIG: Record<
     consoleName: "Voyage AI Dashboard",
     description:
       "Embeddings only. Voyage serves no chat models, so this key is used to embed knowledge-base documents rather than to answer prompts.",
+  },
+  jev: {
+    name: "Jev",
+    icon: "/model-logos/jev.svg",
+    placeholder: "...",
+    enabled: true,
+    consoleUrl: "https://console.typesafe.ai/",
+    consoleName: "TypeSafe Console",
+    description:
+      "Decisions only. Jev classifies content and serves no chat models. To reach Jev through another service, set the base URL to its full decisions endpoint, such as https://openrouter.ai/api/alpha/decisions.",
+    supportsEmbeddings: false,
   },
   cohere: {
     name: "Cohere",
@@ -473,7 +476,7 @@ interface LlmProviderApiKeyFormProps {
   hideUnavailableProviders?: boolean;
   /** Hide the ownership and primary-key controls when the parent fixes them. */
   hideScopeAndPrimary?: boolean;
-  /** The host dialog renders permissions in its own tab. */
+  /** Defer permissions until editing, or let the host render its own tab. */
   hidePermissions?: boolean;
   /** When true, providers without embedding support are disabled in the picker. */
   forEmbedding?: boolean;
@@ -483,10 +486,8 @@ interface LlmProviderApiKeyFormProps {
   credentialMode?: "api-key" | "subscription";
   /** The caller is satisfying an agent pin that requires this exact subscription kind. */
   requiresExactSubscriptionCredential?: boolean;
-  /** Hide optional API-key fields behind an Advanced settings disclosure. */
+  /** Hide optional API-key fields behind an Advanced disclosure. */
   progressive?: boolean;
-  /** Dialog section shown when advanced fields have their own tab. */
-  activeSection?: "general" | "connectivity";
   /** Called when a subscription sign-in returns a credential. */
   onSubscriptionCredential?: (credential: string) => void | Promise<void>;
   labels?: ProfileLabel[];
@@ -513,7 +514,6 @@ export function LlmProviderApiKeyForm({
   credentialMode,
   requiresExactSubscriptionCredential = false,
   progressive = false,
-  activeSection,
   onSubscriptionCredential,
   labels,
   onLabelsChange,
@@ -527,7 +527,6 @@ export function LlmProviderApiKeyForm({
   const isEditMode = Boolean(existingKey);
   const isSubscriptionFlow = credentialMode === "subscription";
   const hasLabelsEditor = labels !== undefined && onLabelsChange !== undefined;
-  const [advancedSettingsOpen, setAdvancedSettingsOpen] = useState(false);
 
   const provider = form.watch("provider");
   const apiKey = form.watch("apiKey");
@@ -589,7 +588,7 @@ export function LlmProviderApiKeyForm({
   /**
    * Where the Base URL field belongs. For a self-hosted provider the endpoint
    * *is* the credential — nothing about the key identifies which server it
-   * reaches — so it is a primary field and sits above "Advanced settings" with
+   * reaches — so it is a primary field and sits above "Advanced" with
    * the rest of them, whether or not it is strictly required. Everywhere else
    * the base URL only overrides a working default, which is what advanced
    * means. Bedrock is deliberately excluded: its primary field is the region,
@@ -818,9 +817,6 @@ export function LlmProviderApiKeyForm({
   const isPerUserProvider = providerRequiresPerUserCredential(provider);
   const isPerUserCredential = isPerUserProvider || isCredentialSubscriptionMode;
   const hasAdvancedSettings = !isSubscriptionFlow && !isPerUserCredential;
-  const showAdvancedSettings =
-    hasAdvancedSettings &&
-    (!progressive || advancedSettingsOpen || !!activeSection);
   // The subscription this form is currently connecting, if any: implied by the
   // provider when it is per-user outright, chosen by the auth-method tabs when
   // the provider also accepts API keys. Drives every piece of vendor copy below.
@@ -964,7 +960,7 @@ export function LlmProviderApiKeyForm({
     />
   );
 
-  // Rendered either above "Advanced settings" or inside it, depending on
+  // Rendered either above "Advanced" or inside it, depending on
   // `showBaseUrlUpFront`, so the field itself is defined once.
   const baseUrlField = (
     <div className="space-y-2">
@@ -1040,10 +1036,165 @@ export function LlmProviderApiKeyForm({
     </div>
   );
 
+  const advancedFields = (
+    <div className="space-y-4">
+      {hasAdvancedSettings && !isSubscriptionFlow && !hideScopeAndPrimary && (
+        <div className="flex items-center justify-between">
+          <div className="space-y-0.5">
+            <Label htmlFor="llm-provider-api-key-is-primary">Primary key</Label>
+            <FieldDescription>
+              <span>
+                {existingPrimaryKey
+                  ? `"${existingPrimaryKey.name}" is already ${shared ? "the primary shared key" : "your primary key"} for this provider.`
+                  : shared
+                    ? "When there are several shared keys for one provider, the primary key is preferred."
+                    : "When you have several keys for one provider, your primary key is preferred."}
+              </span>{" "}
+              {/* The mechanism, which the sentence above only implies: key
+                      resolution takes the conversation's pinned key, then the
+                      agent's configured one, and only then falls through a
+                      owner's or the shared keys — primary first, oldest
+                      after. */}
+              <span>
+                Chats and agents without a key of their own fall back to it;
+                with no primary set, the oldest key is used.
+              </span>
+            </FieldDescription>
+          </div>
+          <Switch
+            id="llm-provider-api-key-is-primary"
+            checked={form.watch("isPrimary")}
+            onCheckedChange={(checked) =>
+              form.setValue("isPrimary", checked, { shouldDirty: true })
+            }
+            disabled={isPending || Boolean(existingPrimaryKey)}
+          />
+        </div>
+      )}
+
+      {!isSubscriptionFlow &&
+        !showBaseUrlUpFront &&
+        hasAdvancedSettings &&
+        baseUrlField}
+
+      {!isSubscriptionFlow && hasAdvancedSettings && provider === "azure" && (
+        <div className="space-y-2">
+          <Label htmlFor="llm-provider-api-key-inference-base-url">
+            Inference URL{" "}
+            <span className="font-normal text-muted-foreground">
+              (optional)
+            </span>
+          </Label>
+          <FieldDescription>
+            Runtime endpoint for chat and embeddings when it differs from the
+            Base URL used for Azure deployment discovery.
+          </FieldDescription>
+          <Input
+            id="llm-provider-api-key-inference-base-url"
+            type="url"
+            placeholder="https://<resource>.openai.azure.com/openai"
+            disabled={isPending}
+            {...form.register("inferenceBaseUrl", {
+              validate: (value) => {
+                if (!value) return true;
+
+                try {
+                  const url = new URL(value);
+                  if (!["http:", "https:"].includes(url.protocol)) {
+                    return "URL must use http or https protocol";
+                  }
+                  return true;
+                } catch {
+                  return "Please enter a valid URL (e.g. https://api.example.com)";
+                }
+              },
+            })}
+          />
+          {form.formState.errors.inferenceBaseUrl && (
+            <p className="text-xs text-destructive">
+              {form.formState.errors.inferenceBaseUrl.message}
+            </p>
+          )}
+        </div>
+      )}
+
+      {!isSubscriptionFlow && hasAdvancedSettings && (
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-4">
+            <div className="space-y-2">
+              <Label>
+                Extra HTTP headers{" "}
+                <span className="font-normal text-muted-foreground">
+                  (optional)
+                </span>
+              </Label>
+              <FieldDescription>
+                Sent on every request to the provider. Useful for gateways that
+                require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
+              </FieldDescription>
+            </div>
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              className="shrink-0"
+              disabled={isPending}
+              onClick={() =>
+                extraHeadersFieldArray.append({ name: "", value: "" })
+              }
+            >
+              <span>Add header</span>
+            </Button>
+          </div>
+          {extraHeadersFieldArray.fields.length > 0 && (
+            <div className="space-y-2">
+              {extraHeadersFieldArray.fields.map((field, index) => (
+                <div key={field.id} className="flex items-start gap-2">
+                  <Input
+                    aria-label="Header name"
+                    placeholder="Header name"
+                    disabled={isPending}
+                    className="flex-1"
+                    {...form.register(`extraHeaders.${index}.name` as const)}
+                  />
+                  <Input
+                    aria-label="Header value"
+                    placeholder="Header value"
+                    disabled={isPending}
+                    className="flex-1"
+                    {...form.register(`extraHeaders.${index}.value` as const)}
+                  />
+                  <Button
+                    type="button"
+                    variant="ghost"
+                    size="icon"
+                    disabled={isPending}
+                    onClick={() => extraHeadersFieldArray.remove(index)}
+                    aria-label={`Remove header ${index + 1}`}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </Button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      )}
+
+      {!isSubscriptionFlow && hasLabelsEditor && (
+        <ProfileLabels
+          ref={labelsRef}
+          labels={labels}
+          onLabelsChange={onLabelsChange}
+        />
+      )}
+    </div>
+  );
+
   return (
     <div data-testid={E2eTestId.ChatApiKeyForm}>
       <div className="space-y-4">
-        <div hidden={activeSection === "connectivity"} className="space-y-4">
+        <div className="space-y-4">
           <DetailFacts facts={[createdByFact(existingKey?.createdBy)]} />
           {!isSubscriptionFlow && (
             <div
@@ -1495,49 +1646,26 @@ export function LlmProviderApiKeyForm({
           {/* SPDX-SnippetBegin
             SPDX-SnippetCopyrightText: 2026 Archestra Inc.
             SPDX-License-Identifier: LicenseRef-Archestra-Enterprise */}
-          {!hideScopeAndPrimary && !isPerUserCredential && !existingKey?.id && (
-            <div className="space-y-2">
-              <Label>Who uses this key</Label>
-              <Tabs
-                value={shared ? "shared" : "just-me"}
-                onValueChange={(value) =>
-                  form.setValue("shared", value === "shared", {
+          {!hideScopeAndPrimary &&
+            !hidePermissions &&
+            !isPerUserCredential &&
+            !existingKey?.id &&
+            shared && (
+              <ResourceAccessSection
+                resource="llmProviderApiKey"
+                grants={form.watch("initialGrants") ?? []}
+                onGrantsChange={(grants) =>
+                  form.setValue("initialGrants", grants, {
                     shouldDirty: true,
                   })
                 }
-              >
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="just-me" disabled={isPending}>
-                    Just for me
-                  </TabsTrigger>
-                  <TabsTrigger value="shared" disabled={isPending}>
-                    Shared
-                  </TabsTrigger>
-                </TabsList>
-              </Tabs>
-              <FieldDescription>
-                {shared
-                  ? "No one owns a shared key."
-                  : "Only you use this key. It is picked before any shared key."}
-              </FieldDescription>
-              {shared && !hidePermissions && (
-                <ResourceAccessSection
-                  resource="llmProviderApiKey"
-                  grants={form.watch("initialGrants") ?? []}
-                  onGrantsChange={(grants) =>
-                    form.setValue("initialGrants", grants, {
-                      shouldDirty: true,
-                    })
-                  }
-                />
-              )}
-            </div>
-          )}
+              />
+            )}
           {/* SPDX-SnippetEnd */}
 
           {/* Region is a primary Bedrock field, not an advanced one: AWS enables
             models per region, so a key is unusable until it points at the right
-            one. The endpoint it writes lives under Advanced settings below. */}
+            one. The endpoint it writes lives under Advanced below. */}
           {!isSubscriptionFlow && isBedrock && (
             <div className="space-y-2">
               <Label htmlFor="llm-provider-api-key-bedrock-region">
@@ -1570,8 +1698,8 @@ export function LlmProviderApiKeyForm({
               </Select>
               {hasUnresolvedBedrockRegion && (
                 <p className="text-xs text-amber-600 dark:text-amber-500">
-                  The custom endpoint in Advanced settings carries no
-                  recognizable region, so requests will run against{" "}
+                  The custom endpoint in Advanced carries no recognizable
+                  region, so requests will run against{" "}
                   <code>{DEFAULT_BEDROCK_REGION}</code>. Use a{" "}
                   <code>bedrock-runtime.&lt;region&gt;.amazonaws.com</code>{" "}
                   endpoint to pin a different one.
@@ -1580,187 +1708,13 @@ export function LlmProviderApiKeyForm({
             </div>
           )}
 
-          {showAdvancedSettings &&
-            !isSubscriptionFlow &&
-            !hideScopeAndPrimary && (
-              <div className="flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <Label htmlFor="llm-provider-api-key-is-primary">
-                    Primary key
-                  </Label>
-                  <FieldDescription>
-                    <span>
-                      {existingPrimaryKey
-                        ? `"${existingPrimaryKey.name}" is already ${shared ? "the primary shared key" : "your primary key"} for this provider.`
-                        : shared
-                          ? "When there are several shared keys for one provider, the primary key is preferred."
-                          : "When you have several keys for one provider, your primary key is preferred."}
-                    </span>{" "}
-                    {/* The mechanism, which the sentence above only implies: key
-                      resolution takes the conversation's pinned key, then the
-                      agent's configured one, and only then falls through a
-                      owner's or the shared keys — primary first, oldest
-                      after. */}
-                    <span>
-                      Chats and agents without a key of their own fall back to
-                      it; with no primary set, the oldest key is used.
-                    </span>
-                  </FieldDescription>
-                </div>
-                <Switch
-                  id="llm-provider-api-key-is-primary"
-                  checked={form.watch("isPrimary")}
-                  onCheckedChange={(checked) =>
-                    form.setValue("isPrimary", checked, { shouldDirty: true })
-                  }
-                  disabled={isPending || Boolean(existingPrimaryKey)}
-                />
-              </div>
-            )}
-
           {!isSubscriptionFlow && showBaseUrlUpFront && baseUrlField}
-          {activeSection === "general" && hasLabelsEditor && (
-            <AdvancedLabelsSection
-              ref={labelsRef}
-              labels={labels}
-              onLabelsChange={onLabelsChange}
-            />
-          )}
         </div>
-        <div hidden={activeSection === "general"} className="space-y-4">
-          {progressive && hasAdvancedSettings && !activeSection && (
-            <Button
-              type="button"
-              variant="ghost"
-              className="h-auto w-full justify-between rounded-none border-t px-0 pt-4 pb-2 text-sm"
-              aria-expanded={advancedSettingsOpen}
-              onClick={() => setAdvancedSettingsOpen((open) => !open)}
-            >
-              Advanced settings
-              <ChevronDown
-                className={`size-4 transition-transform ${advancedSettingsOpen ? "rotate-180" : ""}`}
-              />
-            </Button>
-          )}
-
-          {!isSubscriptionFlow &&
-            !showBaseUrlUpFront &&
-            showAdvancedSettings &&
-            baseUrlField}
-
-          {!isSubscriptionFlow &&
-            showAdvancedSettings &&
-            provider === "azure" && (
-              <div className="space-y-2">
-                <Label htmlFor="llm-provider-api-key-inference-base-url">
-                  Inference URL{" "}
-                  <span className="font-normal text-muted-foreground">
-                    (optional)
-                  </span>
-                </Label>
-                <FieldDescription>
-                  Runtime endpoint for chat and embeddings when it differs from
-                  the Base URL used for Azure deployment discovery.
-                </FieldDescription>
-                <Input
-                  id="llm-provider-api-key-inference-base-url"
-                  type="url"
-                  placeholder="https://<resource>.openai.azure.com/openai"
-                  disabled={isPending}
-                  {...form.register("inferenceBaseUrl", {
-                    validate: (value) => {
-                      if (!value) return true;
-
-                      try {
-                        const url = new URL(value);
-                        if (!["http:", "https:"].includes(url.protocol)) {
-                          return "URL must use http or https protocol";
-                        }
-                        return true;
-                      } catch {
-                        return "Please enter a valid URL (e.g. https://api.example.com)";
-                      }
-                    },
-                  })}
-                />
-                {form.formState.errors.inferenceBaseUrl && (
-                  <p className="text-xs text-destructive">
-                    {form.formState.errors.inferenceBaseUrl.message}
-                  </p>
-                )}
-              </div>
-            )}
-
-          {!isSubscriptionFlow && showAdvancedSettings && (
-            <div className="space-y-2">
-              <Label>
-                Extra HTTP headers{" "}
-                <span className="font-normal text-muted-foreground">
-                  (optional)
-                </span>
-              </Label>
-              <FieldDescription>
-                Sent on every request to the provider. Useful for gateways that
-                require custom RBAC headers (e.g. <code>kubeflow-userid</code>).
-              </FieldDescription>
-              {extraHeadersFieldArray.fields.length > 0 && (
-                <div className="space-y-2">
-                  {extraHeadersFieldArray.fields.map((field, index) => (
-                    <div key={field.id} className="flex items-start gap-2">
-                      <Input
-                        aria-label="Header name"
-                        placeholder="Header name"
-                        disabled={isPending}
-                        className="flex-1"
-                        {...form.register(
-                          `extraHeaders.${index}.name` as const,
-                        )}
-                      />
-                      <Input
-                        aria-label="Header value"
-                        placeholder="Header value"
-                        disabled={isPending}
-                        className="flex-1"
-                        {...form.register(
-                          `extraHeaders.${index}.value` as const,
-                        )}
-                      />
-                      <Button
-                        type="button"
-                        variant="ghost"
-                        size="icon"
-                        disabled={isPending}
-                        onClick={() => extraHeadersFieldArray.remove(index)}
-                        aria-label={`Remove header ${index + 1}`}
-                      >
-                        <Trash2 className="h-4 w-4" />
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              )}
-              <Button
-                type="button"
-                variant="outline"
-                size="sm"
-                disabled={isPending}
-                onClick={() =>
-                  extraHeadersFieldArray.append({ name: "", value: "" })
-                }
-              >
-                Add header
-              </Button>
-            </div>
-          )}
-
-          {!activeSection && showAdvancedSettings && hasLabelsEditor && (
-            <ProfileLabels
-              ref={labelsRef}
-              labels={labels}
-              onLabelsChange={onLabelsChange}
-            />
-          )}
-        </div>
+        {progressive
+          ? (hasAdvancedSettings || (existingKey && hasLabelsEditor)) && (
+              <AdvancedSection>{advancedFields}</AdvancedSection>
+            )
+          : advancedFields}
       </div>
     </div>
   );

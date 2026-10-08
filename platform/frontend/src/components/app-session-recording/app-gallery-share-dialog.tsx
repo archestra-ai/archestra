@@ -43,6 +43,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   acquireGithubToken,
   buildGallerySubmissionFiles,
@@ -493,9 +494,9 @@ export function AppGalleryShareButton(props: {
       <Button
         type="button"
         variant="ghost"
-        size="icon"
+        size="icon-xs"
         className={cn(
-          "size-7 border border-primary/30 bg-primary/5 text-primary shadow-sm hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10",
+          "border border-primary/30 bg-primary/5 text-primary shadow-sm hover:bg-primary/10 hover:text-primary focus-visible:bg-primary/10",
           !shareDisabled && "hackathon-glitter hackathon-edge-shimmer",
         )}
         aria-label="Submit this session to Archestra for review"
@@ -840,13 +841,13 @@ function ShareDialogBody(props: {
           <AlertTriangle />
           <InlineNoticeText>{state.message}</InlineNoticeText>
         </InlineNotice>
-        <button
+        <UnstyledButton
           type="button"
           className="w-fit text-xs text-muted-foreground underline underline-offset-2 hover:text-foreground"
           onClick={props.onManual}
         >
           Learn how to submit your demo manually.
-        </button>
+        </UnstyledButton>
       </div>
     );
   }
@@ -977,7 +978,7 @@ function ConnectStep(props: {
           <Github className="mr-2 h-4 w-4" />
           Copy code &amp; open GitHub
         </Button>
-        <button
+        <UnstyledButton
           type="button"
           className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest hover:bg-muted/70"
           aria-label="Copy code"
@@ -989,7 +990,7 @@ function ConnectStep(props: {
           ) : (
             <Copy className="h-4 w-4 text-muted-foreground" />
           )}
-        </button>
+        </UnstyledButton>
         <span className="flex items-center gap-1 text-xs text-muted-foreground">
           <Loader2 className="h-3 w-3 animate-spin" />
           Waiting for authorization…
@@ -1081,13 +1082,13 @@ function ManualStep(props: {
         {props.files.map((file, index) => (
           <span key={file.name}>
             {index > 0 && <span> and </span>}
-            <button
+            <UnstyledButton
               type="button"
               className={LINK_CLASS}
               onClick={() => downloadSubmissionFile(file)}
             >
               {file.name}
-            </button>
+            </UnstyledButton>
           </span>
         ))}{" "}
         bundle file{plural}.
@@ -1154,7 +1155,7 @@ function CopyChip(props: { text: string; multiline?: boolean }) {
   useEffect(() => () => clearTimeout(resetTimeout.current), []);
 
   return (
-    <button
+    <UnstyledButton
       type="button"
       className={cn(
         "flex w-fit max-w-full items-start gap-1 rounded bg-muted px-2 py-1 text-left font-mono text-sm hover:bg-muted/70",
@@ -1182,7 +1183,7 @@ function CopyChip(props: { text: string; multiline?: boolean }) {
       ) : (
         <Copy className="h-4 w-4 shrink-0 text-muted-foreground" />
       )}
-    </button>
+    </UnstyledButton>
   );
 }
 

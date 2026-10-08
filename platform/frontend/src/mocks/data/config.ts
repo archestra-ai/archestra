@@ -35,7 +35,6 @@ export function makeConfig(
       betaEnabled: false,
       orchestratorK8sRuntime: false,
       mcpIdleHibernationBetaEnabled: false,
-      mcpServerAlertingEnabled: false,
       sandbox: false,
       agentRuntime: false,
       agentRuntimeCatalogImages: getAgentCatalogImages({
@@ -64,7 +63,7 @@ export function makeConfig(
       virtualKeyDefaultExpirationSeconds: 3600,
       mcpSandboxDomain: null,
       chatSecretScanEnabled: true,
-      lockedChatEnabled: false,
+      encryptedChatEnabled: false,
       openappaEnabled: false,
       agentHooksEnabled: false,
       chatopsTelegramEnabled: false,

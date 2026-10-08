@@ -4,7 +4,6 @@ import {
   E2eTestId,
   getChatApiKeySelectorOptionTestId,
   getChatApiKeySelectorProviderGroupTestId,
-  type ResourceVisibilityScope,
   type SupportedProvider,
 } from "@archestra/shared";
 import { CheckIcon, ChevronDown, Key, Plus, TriangleAlert } from "lucide-react";
@@ -12,7 +11,6 @@ import Image from "next/image";
 import { useMemo } from "react";
 import { PromptInputButton } from "@/components/ai-elements/prompt-input";
 import { PROVIDER_CONFIG } from "@/components/llm-provider-api-key-form";
-import { SCOPE_META, scopeLabel } from "@/components/scope-vocabulary";
 import { SubscriptionBrandIcon } from "@/components/subscription-brand-icon";
 import { SubscriptionReconnectNotice } from "@/components/subscription-reconnect-notice";
 import { Badge } from "@/components/ui/badge";
@@ -151,10 +149,11 @@ export function LlmProviderApiKeyDropdown({
         {triggerVariant === "button" || triggerVariant === "select" ? (
           <Button
             variant="outline"
-            size="sm"
             disabled={disabled}
             className={cn(
-              "h-9 min-w-0 justify-start gap-1.5 px-3 text-sm",
+              // Default (input) height and `--input` edge: it stands in for a
+              // Select in forms and filter bars.
+              "min-w-0 justify-start gap-1.5 border-input px-3",
               triggerVariant === "select" && "justify-between",
               triggerClassName,
             )}
@@ -328,7 +327,7 @@ export function LlmProviderApiKeyDropdown({
               <div className="border-t px-3 pb-1 pt-2 text-xs">
                 <div className="font-medium text-foreground">API keys</div>
                 <div className="text-muted-foreground">
-                  Stored credentials shared according to scope
+                  Stored credentials shared through permissions
                 </div>
               </div>
             )}
@@ -359,22 +358,13 @@ export function LlmProviderApiKeyDropdown({
                         : undefined
                     }
                     value={key.id}
-                    keywords={[provider, key.name, key.teamName ?? ""]}
+                    keywords={[provider, key.name]}
                     disabled={providerFilter?.(key.provider) === false}
                     onSelect={() => onSelectKey(key.id)}
                     className="cursor-pointer"
                   >
                     <div className="flex min-w-0 flex-1 items-center gap-2">
-                      {key.scope ? <ScopeIcon scope={key.scope} /> : null}
                       <span className="truncate">{key.name}</span>
-                      {key.scope === "team" && key.teamName ? (
-                        <Badge
-                          variant="outline"
-                          className="px-1 py-0 text-[10px]"
-                        >
-                          {key.teamName}
-                        </Badge>
-                      ) : null}
                     </div>
                     {selectedApiKeyId === key.id && (
                       <CheckIcon className="h-4 w-4 shrink-0" />
@@ -429,23 +419,6 @@ function ProviderIcon({ provider }: { provider: SupportedProvider }) {
       height={14}
       className="shrink-0 rounded dark:invert"
     />
-  );
-}
-
-/**
- * The scope glyph next to a key's name. It is the only thing distinguishing a
- * personal key from an organization one here, and there is no room for text in
- * this popover, so it carries the scope label as its accessible name (and as a
- * hover title) rather than being a mute 12px decoration.
- */
-function ScopeIcon({ scope }: { scope: ResourceVisibilityScope }) {
-  const Icon = SCOPE_META[scope].icon;
-  const label = scopeLabel(scope);
-
-  return (
-    <span role="img" aria-label={label} title={label} className="inline-flex">
-      <Icon className="h-3 w-3" />
-    </span>
   );
 }
 

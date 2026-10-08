@@ -9,6 +9,7 @@ export const ExternalConsultRoleSchema = z.enum([
   "annotator",
   "audience_source",
   "input",
+  "context_provider",
 ]);
 export type ExternalConsultRole = z.infer<typeof ExternalConsultRoleSchema>;
 
@@ -20,6 +21,7 @@ export const ExternalConsultBackendSchema = z.enum([
   "jev",
   "claude_code",
   "hitl",
+  "archestra",
 ]);
 export type ExternalConsultBackend = z.infer<
   typeof ExternalConsultBackendSchema

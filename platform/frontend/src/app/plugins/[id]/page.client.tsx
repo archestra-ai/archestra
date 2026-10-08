@@ -18,7 +18,6 @@ import {
   useRef,
   useState,
 } from "react";
-import { AgentBadge } from "@/components/agent-badge";
 import type { ProfileLabelsRef } from "@/components/agent-labels";
 import { CreatedByCell } from "@/components/created-by-cell";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
@@ -68,9 +67,7 @@ import { PluginForm } from "../_parts/plugin-form";
 import { PluginGithubUpdatesDialog } from "../_parts/plugin-github-updates-dialog";
 import { PluginInstallDialog } from "../_parts/plugin-install-dialog";
 import {
-  ARCHESTRA_PLUGIN_AUTHOR_LABEL,
   CLIENT_LABELS,
-  isArchestraPlugin,
   PLUGIN_DESCRIPTION_FALLBACK,
 } from "../_parts/plugin-page-config";
 import {
@@ -78,6 +75,7 @@ import {
   PluginNotFound,
   PluginPageLoading,
 } from "../_parts/plugin-page-shell";
+import { PluginSourceGlyph } from "../_parts/plugin-source-icon";
 
 /**
  * `/plugins/[id]` — one plugin's page. Its metadata, payload and access are
@@ -179,7 +177,6 @@ function PluginDetailView({
   const createGithubPat = useCreateGithubPat();
 
   const isGithubPlugin = plugin.sourceKind === "github";
-  const isArchestra = isArchestraPlugin(plugin);
   const actionModel = getPluginActionModel({
     pluginId: plugin.id,
     hasPendingUpdate: !!plugin.pendingSourceSha,
@@ -356,24 +353,19 @@ function PluginDetailView({
 
   return (
     <PageLayout
+      icon={<PluginSourceGlyph plugin={plugin} />}
       title={
         <div className="flex min-w-0 flex-wrap items-center gap-2">
           <span className="min-w-0 truncate">{plugin.displayName}</span>
-          <AgentBadge type={plugin.scope} className="font-normal" />
           <Badge variant="secondary" className="font-normal">
             {CLIENT_LABELS[plugin.clientType] ?? plugin.clientType}
           </Badge>
-          {isGithubPlugin && !isArchestra && (
+          {isGithubPlugin && (
             <Badge variant="secondary" className="gap-1 font-normal">
               <Github className="h-3 w-3" />
               {plugin.githubSyncInterval
                 ? "Checked against GitHub"
                 : "Imported from GitHub"}
-            </Badge>
-          )}
-          {isArchestra && (
-            <Badge variant="secondary" className="font-normal">
-              {ARCHESTRA_PLUGIN_AUTHOR_LABEL}
             </Badge>
           )}
           {!plugin.enabled && (
@@ -421,6 +413,7 @@ function PluginDetailView({
               permissions={installAction.permissions}
               permissionScope={installAction.permissionScope}
               variant="outline"
+              size="sm"
               onClick={() => setInstallOpen(true)}
             >
               <PackagePlus className="h-4 w-4" />
@@ -429,7 +422,7 @@ function PluginDetailView({
           )}
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
-              <Button variant="outline" size="icon">
+              <Button variant="outline" size="icon-sm">
                 <MoreHorizontal className="h-4 w-4" />
                 <span className="sr-only">More actions</span>
               </Button>
@@ -538,7 +531,7 @@ function PluginDetailView({
           activeSection={activeSection}
         />
 
-        {!isReadOnly && (
+        {activeSection === "general" && !isReadOnly && (
           <WizardFooter>
             <div>
               {isDirty && !isSaving && (

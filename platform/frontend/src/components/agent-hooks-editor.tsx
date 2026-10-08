@@ -429,8 +429,8 @@ const AgentHooksEditorContent = forwardRef<
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground"
+                    size="icon-xs"
+                    className="text-muted-foreground"
                     onClick={() => setPanel({ mode: "edit", row })}
                     aria-label={`Edit ${row.fileName}`}
                   >
@@ -447,8 +447,8 @@ const AgentHooksEditorContent = forwardRef<
                   <Button
                     type="button"
                     variant="ghost"
-                    size="icon"
-                    className="h-7 w-7 text-muted-foreground hover:text-destructive"
+                    size="icon-xs"
+                    className="text-muted-foreground hover:text-destructive"
                     disabled={deleteHook.isPending}
                     onClick={() => handleDelete(row)}
                     aria-label={`Delete ${row.fileName}`}

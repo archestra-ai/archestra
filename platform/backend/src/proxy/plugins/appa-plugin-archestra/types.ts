@@ -31,13 +31,27 @@ export type AppaTrustedContext = {
   request: AppaPreparedRequest;
   /** Server-recognized client maintenance, not a child completion. */
   compaction?: boolean;
+  /** Stable teammate identity from this caller's allowed native spawn. */
+  claudeTeammateNativeId?: string;
   /**
    * Raw X-Appa-* headers from the client before proxy derivation.
    * Child lineage checks compare against these claims.
    */
   claims?: { sessionId?: string; parentId?: string };
+  /**
+   * Persisted workspace session (`caller|workload`), including its stored
+   * parent. Not a client header. Native child session ids do not equal it.
+   */
+  runtimeSessionId?: string;
+  /** Current task from the authenticated runtime credential, not a request header. */
+  runtimeTaskId?: string;
   /** Present only for the proxy's loopback Chat call path. */
   chatSource?: AppaChatSource;
+  /**
+   * Activation captured for this request. Later phases must not re-read the
+   * switch, so a change between requests does not land mid-stream.
+   */
+  enforcement?: "active" | "inactive";
 };
 
 export type AppaMatchContext = {
@@ -60,8 +74,12 @@ export type AppaChildTrajectory = {
     nativeParentId: string;
     /** Actual client-native child ID, when the client reports one. */
     childNativeId?: string;
+    /** Original conversation for a server-correlated split-pane teammate. */
+    nativeConversationId?: string;
     /** Signed spawn correlation. Marker-only children use this without generating a fake native ID. */
     spawnCallId?: string;
+    /** Digest of the opening prompt the verified delegation marker closes. */
+    spawnPromptDigest?: string;
   };
 };
 
@@ -134,6 +152,50 @@ export type AppaClientAdapter = {
   isChildCompletionResult?(result: CommonToolResult): boolean;
   /** Returns bounded launch metadata and strips arbitrary acknowledgment text. */
   normalizeChildLaunchResult?(result: CommonToolResult): string | undefined;
+  /**
+   * Reads a native message between agents of one session, such as a
+   * teammate writing to its lead. `to` is the recipient as the client names
+   * it; `value` is the message text the runtime checks and retains.
+   */
+  relayMessage?(call: {
+    name: string;
+    arguments: unknown;
+  }): AppaRelayMessage | undefined;
+  /** True for the local tool that sends messages between agents. */
+  isRelayTool?(name: string): boolean;
+  /** True when a message call's result is only the client's delivery receipt. */
+  isRelayReceipt?(content: unknown): boolean;
+  /**
+   * Admits the report a message call returned from an agent it resumed,
+   * against the values this session's children are on record for returning.
+   */
+  admitRelayReport?(
+    content: unknown,
+    records: readonly string[],
+  ): { content: unknown; withheld: boolean };
+  /** Rewrites a native message call so the recipient gets `value` instead. */
+  rewriteRelayMessage?(args: unknown, value: string): string;
+  /**
+   * The messages that arrived in this request's history from other agents,
+   * each with a setter that replaces the message text the model reads.
+   */
+  relayArrivals?(requestBody: unknown): AppaRelayArrival[];
+  /** The teammates the history's launch receipts name, by name. */
+  teammateLaunches?(requestBody: unknown): Map<string, AppaTeammateLaunch>;
+  /**
+   * The teammate a durable launch receipt names. Used when compaction has
+   * dropped the receipt from the request but the runtime still retained it.
+   */
+  launchIdentity?(
+    text: string,
+  ): { name: string; childNativeId: string } | undefined;
+  /** The name a spawn call gives the teammate it starts, if it names one. */
+  teammateName?(call: { name: string; arguments: unknown }): string | undefined;
+  /**
+   * True for a child that reports to its parent in messages rather than in
+   * the result of the call that started it: a teammate.
+   */
+  isTeammate?(childNativeId: string): boolean;
   /** True when this local tool is the child's return to its parent. */
   isChildHandbackTool?(name: string): boolean;
   /** Payload carried by a native child handback call. */
@@ -151,6 +213,16 @@ export type AppaClientAdapter = {
     name: string,
     args: Record<string, unknown>,
   ): AppaSpawnPromptField | undefined;
+  /**
+   * Argument names the current native spawn declaration rejects.
+   * Absent when this client has no closed schema for the call.
+   */
+  unsupportedSpawnFields?(params: {
+    requestBody: unknown;
+    name: string;
+    namespace?: string;
+    arguments: unknown;
+  }): string[] | undefined;
   /** Native conversation ID that child subagents report as their parent. */
   nativeConversationId(context: AppaMatchContext): string | undefined;
   /**
@@ -173,6 +245,60 @@ export type AppaClientAdapter = {
   ): AppaChildTrajectory | undefined;
   /** Remove native child-carrier fields from a provider request body. */
   stripCarrierMetadata(request: unknown): void;
+};
+
+/** A message one agent sends another through the client. */
+export type AppaRelayMessage = {
+  /** The recipient: the lead, a teammate's name, or another session. */
+  to: AppaRelayRecipient;
+  value: string;
+  /** A protocol message (such as a shutdown request) rather than free text. */
+  structured: boolean;
+};
+
+export type AppaRelayRecipient =
+  | { kind: "lead" }
+  | { kind: "teammate"; name: string }
+  | { kind: "session"; id: string }
+  | { kind: "broadcast" };
+
+/** A teammate a launch receipt names: its child id, and the call that launched it. */
+export type AppaTeammateLaunch = { childNativeId: string; spawnCallId: string };
+
+/**
+ * A message the client delivered into a conversation from another agent: a
+ * teammate's or the lead's message, a subagent's message or hand-back, the
+ * main conversation's word to a background agent, or another session's.
+ */
+/** A free-text peer trailer. Malformed trailers must not use historic matching. */
+export type AppaPeerTrailer =
+  | { messageId: string; value: string }
+  | "malformed";
+
+export type AppaRelayArrival = {
+  kind: "teammate" | "agent" | "coordinator" | "session";
+  /** The sender as the client names it. */
+  from: string;
+  /** The message as its envelope carries it. */
+  body: string;
+  /**
+   * A peer-message trailer at the end of the body. Present only for new
+   * sends. Historic matching must not run when this is set.
+   */
+  peer?: AppaPeerTrailer;
+  /** A shutdown or plan body. It has no safe id slot and must stay byte-stable. */
+  structured: boolean;
+  /** Harness fields only, with no agent text. The proxy leaves this body unchanged. */
+  harnessOnly?: boolean;
+  /** Exact retained receipt. A field that merely equals an older string does not count. */
+  recorded?(records: readonly string[]): boolean;
+  /**
+   * Keeps the text the records show its sender sent here, and withholds the
+   * rest in the request the model reads. Records are the retained values.
+   */
+  admit(records: readonly string[]): { withheld: boolean };
+  /** Replaces the text the model reads. Does not decide whether it crossed. */
+  replace(text: string): void;
 };
 
 /** The arguments of the platform's ask_user tool. */

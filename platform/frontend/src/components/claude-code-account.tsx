@@ -24,8 +24,10 @@ export function ClaudeCodeAccount({
   model,
   onModelChange,
   variant = "card",
+  showDisconnectedNotice = true,
 }: {
   agentId: string;
+  showDisconnectedNotice?: boolean;
   variant?: "card" | "row" | "compact";
   model?: string;
   onModelChange?: (model: string) => void;
@@ -90,6 +92,8 @@ export function ClaudeCodeAccount({
             ? "Sign in once for all your Claude Code agents."
             : "Sign in to use this agent.";
 
+  if (agentId && !connected && !showDisconnectedNotice) return null;
+
   if (!agentId)
     return (
       <p className="text-sm text-muted-foreground">
@@ -107,8 +111,8 @@ export function ClaudeCodeAccount({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="ml-auto h-6 shrink-0 gap-1.5 bg-background px-2 text-xs"
+            size="xs"
+            className="ml-auto shrink-0 bg-background"
             onClick={() => setOpen(true)}
             disabled={account.isPending}
           >
@@ -139,8 +143,8 @@ export function ClaudeCodeAccount({
           <Button
             type="button"
             variant="outline"
-            size="sm"
-            className="h-7 shrink-0 gap-1.5 px-2.5 text-xs"
+            size="xs"
+            className="shrink-0"
             onClick={() => setOpen(true)}
             disabled={account.isPending}
           >

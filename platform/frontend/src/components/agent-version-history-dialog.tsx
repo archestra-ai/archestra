@@ -25,6 +25,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useProfile } from "@/lib/agent.query";
 import {
   type AgentVersionDetail,
@@ -289,6 +290,7 @@ function VersionHistory({
               RESTORE_PERMISSIONS_BY_AGENT_TYPE[agent?.agentType ?? "agent"] ??
               RESTORE_PERMISSIONS_BY_AGENT_TYPE.agent
             }
+            permissionScope={agentId ?? undefined}
             disabled={!canRestore}
             onClick={() => setConfirmingRestore(true)}
             tooltip={restoreTooltip({
@@ -445,7 +447,7 @@ function VersionTimeline({
           {group.versions.map((version) => {
             const isActive = version.version === activeVersion;
             return (
-              <button
+              <UnstyledButton
                 key={version.id}
                 type="button"
                 aria-current={isActive ? "true" : undefined}
@@ -471,7 +473,7 @@ function VersionTimeline({
                     {format(new Date(version.createdAt), "HH:mm")}
                   </span>
                 </span>
-              </button>
+              </UnstyledButton>
             );
           })}
         </div>

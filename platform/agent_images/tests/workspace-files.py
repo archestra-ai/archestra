@@ -9,6 +9,7 @@ import base64
 import hashlib
 import json
 import os
+import shutil
 from pathlib import Path
 import subprocess
 import sys
@@ -162,6 +163,17 @@ class WorkspaceFilesTest(unittest.TestCase):
         self.assertEqual(upload["sha256"], hashlib.sha256(data).hexdigest())
         self.run_helper("finalize", "a" * 32, "out/build.bin", upload["sha256"], "-", "0")
         self.assertEqual((self.root / "out" / "build.bin").read_bytes(), data)
+
+    def test_upload_to_another_root_leaves_the_workspace_untouched(self):
+        data = payload(64)
+        elsewhere = self.root.parent / (self.root.name + "-attachments") / "task"
+        self.addCleanup(shutil.rmtree, elsewhere.parent, True)
+        root = ("--root", str(elsewhere))
+        self.assertFalse(self.run_helper(*root, "stat", "shot.png")["present"])
+        upload = self.run_helper(*root, "write-stream", "c" * 32, stdin=data)
+        self.run_helper(*root, "finalize", "c" * 32, "shot.png", upload["sha256"], "-", "0")
+        self.assertEqual((elsewhere / "shot.png").read_bytes(), data)
+        self.assertEqual(list(self.root.iterdir()), [])
 
     def test_upload_refuses_a_missing_parent_directory(self):
         """Parents are never created implicitly, matching the bounded JSON path."""

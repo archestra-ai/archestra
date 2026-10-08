@@ -9,12 +9,12 @@ publish = false
 crate-type = ["cdylib"]
 
 [dependencies]
-# Pinned to OpenAPPA main at 05c04872, including the wildcard fallback fix (#515).
-# The embedded reporting helper currently requires upstream's daemon feature.
-appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
-appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
-appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd", features = ["postgres"] }
-appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "05c04872b8441dc45cdfcb6a79aa7aba667128bd" }
+# Actor-scoped peer messaging from OpenAPPA #593, the `archestra` annotator builtin from #595, and the `search_tools`, `search_files`, and `load_skill` battery rules from #596 and #601, and the shared guide core from #598.
+appa-runtime = { package = "appa", git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "10aa0e09e32d8c6704bdb030dc3c66140bf81915", features = ["archestra"] }
+appa-runtime-api = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "10aa0e09e32d8c6704bdb030dc3c66140bf81915" }
+appa-eventlog = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "10aa0e09e32d8c6704bdb030dc3c66140bf81915", features = ["postgres"] }
+appa-package = { git = "https://github.com/archestra-ai/OpenAPPA.git", rev = "10aa0e09e32d8c6704bdb030dc3c66140bf81915" }
+chrono = { version = "0.4", default-features = false, features = ["std"] }
 napi = { version = "3", features = ["tokio_rt"] }
 napi-derive = "3"
 serde = { version = "1", features = ["derive"] }
@@ -27,6 +27,8 @@ toml = "1.1"
 toml_edit = "0.25"
 tokio = { version = "1", features = ["sync", "time"] }
 futures-util = "0.3"
+# Stream bounded receipt lookups through the store's existing PostgreSQL client.
+postgres = "0.19"
 
 [dev-dependencies]
 # A paused clock: the connection-wait test does not spend its thirty seconds.
@@ -34,7 +36,6 @@ tokio = { version = "1", features = ["rt", "test-util"] }
 proptest = "1"
 # Building a consult record by hand: the runtime's own id and clock types.
 uuid = { version = "1", features = ["v7"] }
-chrono = { version = "0.4", default-features = false, features = ["std"] }
 
 [target.'cfg(target_env = "musl")'.dependencies]
 # Cross-builds need OpenSSL compiled for musl. The Docker builder uses its

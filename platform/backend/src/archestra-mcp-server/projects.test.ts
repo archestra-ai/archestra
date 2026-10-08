@@ -177,6 +177,56 @@ describe("project read tools (list_projects, get_project)", () => {
     expect(ids).not.toContain(hidden.id);
   });
 
+  test("narrows a project admin's list by access, reaching oversight rows through others", async ({
+    makeUser,
+    makeMember,
+  }) => {
+    const admin = await makeUser();
+    await makeMember(admin.id, organizationId, { role: "admin" });
+    const adminContext = { ...baseContext, userId: admin.id };
+    const mine = await projectService.create({
+      organizationId,
+      userId: admin.id,
+      name: "admins-own",
+      description: null,
+    });
+    const { project: orgShared } = await makeForeignProject(
+      makeUser,
+      makeMember,
+      "shared-with-org",
+      true,
+    );
+    const { project: foreignPrivate } = await makeForeignProject(
+      makeUser,
+      makeMember,
+      "strangers-private",
+      false,
+    );
+
+    const listIds = async (access?: string[]) => {
+      const result = await executeArchestraTool(
+        LIST_TOOL_NAME,
+        access ? { access } : {},
+        adminContext,
+      );
+      expect(result.isError).toBe(false);
+      return (
+        result.structuredContent as { projects: { id: string }[] }
+      ).projects
+        .map((p) => p.id)
+        .sort();
+    };
+
+    // Omitted keeps today's behaviour: the admin's wildcard grant reaches
+    // every project.
+    expect(await listIds()).toEqual(
+      [mine.id, orgShared.id, foreignPrivate.id].sort(),
+    );
+    expect(await listIds(["mine"])).toEqual([mine.id]);
+    expect(await listIds(["org"])).toEqual([orgShared.id]);
+    expect(await listIds(["others"])).toEqual([foreignPrivate.id]);
+  });
+
   test("narrows the list by query", async () => {
     await projectService.create({
       organizationId,

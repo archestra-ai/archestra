@@ -4,10 +4,10 @@ import {
   type AssignedCredentialUnavailableMcpToolError,
   type AuthExpiredMcpToolError,
   type AuthRequiredMcpToolError,
+  ENCRYPTED_CHAT_REDACTED_MARKER,
   getArchestraAppResourceUri,
   isPlaywrightCatalogItem,
   LINKED_IDP_SSO_MODE,
-  LOCKED_CHAT_REDACTED_MARKER,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
   MCP_CATALOG_INSTALL_PATH,
   MCP_CATALOG_INSTALL_QUERY_PARAM,
@@ -42,7 +42,7 @@ import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-re
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
@@ -109,6 +109,7 @@ import type {
   EnterpriseManagedCredentialConfig,
   InternalMcpCatalog,
   MCPGatewayAuthMethod,
+  McpGatewayCallSource,
   McpServer,
   McpToolAssignment,
   ResourceVisibilityScope,
@@ -296,6 +297,10 @@ export type TokenAuthContext = {
   rawToken?: string;
   /** True if authenticated via browser session (MCP proxy route) */
   isSessionAuth?: boolean;
+  /** OAuth client the caller signed in with, for OAuth tokens */
+  oauthClientId?: string;
+  /** Who sent the request over the HTTP gateway; unset for in-process calls */
+  source?: McpGatewayCallSource;
   /** Headers to forward to downstream MCP servers (extracted from incoming request per gateway allowlist) */
   passthroughHeaders?: Record<string, string>;
   /** Durable execution that issued this gateway request, when provided. */
@@ -322,6 +327,8 @@ type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
 type ToolCallAuthInfo = {
   userId?: string;
   authMethod?: MCPGatewayAuthMethod;
+  oauthClientId?: string;
+  source?: McpGatewayCallSource;
   executedAs?: McpExecutedAs;
   runId?: string;
 };
@@ -359,6 +366,8 @@ class ConnectionLimiter {
     return new Promise<T>((resolve, reject) => {
       const execute = () => {
         state.activeCount += 1;
+        // Adopt the complete operation, including its recursive retries, before
+        // releasing this lease. A retry must not acquire a second limiter slot.
         Promise.resolve()
           .then(fn)
           .then(resolve, reject)
@@ -445,29 +454,29 @@ interface ExecuteToolCallForOwnerOptions {
    */
   availableTool?: CatalogTool;
   /**
-   * Locked chat conversation: the persisted mcp_tool_calls row keeps the
+   * Encrypted chat conversation: the persisted mcp_tool_calls row keeps the
    * tool name but never stores plaintext arguments or result content.
    */
   suppressContentLogging?: boolean;
   /**
-   * Present only for a locked chat that has an escrow record: the
+   * Present only for an encrypted chat that has an escrow record: the
    * row's content is encrypted under the conversation key instead of being
    * thrown away. Without it a suppressed call falls back to redaction.
    */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
 }
 
 /**
  * How one call's persisted `mcp_tool_calls` row must handle content, resolved
  * once from the caller's options and threaded down every persist path.
- * `undefined` means "not a locked-chat call, store normally".
+ * `undefined` means "not an encrypted-chat call, store normally".
  *
  * Deliberately a parameter rather than a call-id-keyed registry: ids come from
  * the model, and a collision between two conversations would encrypt one's
  * content under the other's key — unreadable by either escrow record.
  */
 type ToolCallContentDisposition =
-  | { kind: "encrypt"; audit: LockedChatAuditContext }
+  | { kind: "encrypt"; audit: EncryptedChatAuditContext }
   | { kind: "redact" };
 
 class McpClient {
@@ -497,6 +506,7 @@ class McpClient {
   // with "Connection closed", which cannot be retried safely.
   private clientRequestsInFlight = new Map<Client, number>();
   private clientsClosingWhenIdle = new Set<Client>();
+  private connectionInitializationLocks = new Map<string, Promise<Client>>();
   private connectionLimiter = new ConnectionLimiter();
   // Cache of actual tool names per connection key: lowercased name -> original cased name
   private toolNameCache = new LRUCacheManager<Map<string, string>>({
@@ -608,7 +618,7 @@ class McpClient {
     // Decided once here and handed to every path that persists a row (success,
     // error, retry, cancellation), so a concurrent call on another
     // conversation can never influence how this one's content is stored.
-    const lockedChatContent = resolveContentDisposition(options);
+    const encryptedChatContent = resolveContentDisposition(options);
 
     // Derive auth info for logging. Until a credential resolves, the call is
     // one the platform is serving itself (it may never reach a server — an app
@@ -619,6 +629,8 @@ class McpClient {
         ? {
             userId: tokenAuth.userId,
             authMethod: deriveAuthMethod(tokenAuth),
+            oauthClientId: tokenAuth.oauthClientId,
+            source: tokenAuth.source,
             executedAs: platformExecutedAs(tokenAuth.userId),
             runId: tokenAuth.runId,
           }
@@ -629,7 +641,7 @@ class McpClient {
       toolCall,
       owner,
       options?.availableTool,
-      lockedChatContent,
+      encryptedChatContent,
     );
     if ("error" in validationResult) {
       return validationResult.error;
@@ -649,7 +661,7 @@ class McpClient {
         error: "Playwright requires an authenticated caller identity",
         mcpServerName: catalogItem.name,
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
 
@@ -708,7 +720,7 @@ class McpClient {
         isError: false,
         ...(resourceUri ? { _meta: { ui: { resourceUri } } } : {}),
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
 
@@ -720,7 +732,7 @@ class McpClient {
         tokenAuth,
         catalogItem,
         authInfo,
-        lockedChatContent,
+        encryptedChatContent,
       });
     if ("error" in targetMcpServerIdResult) {
       return targetMcpServerIdResult.error;
@@ -749,7 +761,7 @@ class McpClient {
               toolCall,
               toolResult: this.buildCancelledResult(toolCall, authInfo),
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
             });
             throw error;
           }
@@ -768,7 +780,7 @@ class McpClient {
             error: agentMessage,
             mcpServerName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           });
         }
       }
@@ -787,7 +799,7 @@ class McpClient {
             "Enterprise-managed credentials are enabled for this tool, but the MCP catalog item does not have enterprise-managed credential settings configured.",
           mcpServerName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
       // A catalog-level enterprise-managed config is authoritative: assignments
@@ -822,7 +834,7 @@ class McpClient {
           mcpServerName,
           authInfo,
           structuredError: authError,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
 
@@ -830,7 +842,7 @@ class McpClient {
         targetMcpServerId: targetMcpServerId,
         toolCall,
         owner,
-        lockedChatContent,
+        encryptedChatContent,
       });
       if ("error" in secretsResult) {
         return secretsResult.error;
@@ -928,6 +940,7 @@ class McpClient {
         // The client this attempt ran on. Recovery closes only this one: the
         // cached client may already be a fresh one a sibling call is using.
         let attemptClient: Client | undefined;
+        let attemptSessionId: string | undefined;
         try {
           const hasRefreshToken = !!(
             currentSecrets as { refresh_token?: string }
@@ -951,7 +964,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -981,6 +994,12 @@ class McpClient {
             options?.elicitationHandler,
           );
           attemptClient = client;
+          // The candidate transport may not be used when a cached client wins.
+          // Capture the actual session before a failed RPC or close mutates it.
+          attemptSessionId =
+            client.transport instanceof StreamableHTTPClientTransport
+              ? client.transport.sessionId
+              : undefined;
           this.clientRequestsInFlight.set(
             client,
             (this.clientRequestsInFlight.get(client) ?? 0) + 1,
@@ -1041,7 +1060,7 @@ class McpClient {
               isError: false,
               _meta: { resourceUri },
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
               structuredContent: {
                 contents: result.contents as unknown,
               },
@@ -1096,7 +1115,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1124,7 +1143,7 @@ class McpClient {
               mcpServerName,
               authInfo,
               structuredError: authError,
-              lockedChatContent,
+              encryptedChatContent,
             });
           }
 
@@ -1138,7 +1157,7 @@ class McpClient {
             isError: !!result.isError,
             _meta: result._meta,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
             structuredContent: result.structuredContent as
               | Record<string, unknown>
               | undefined,
@@ -1167,7 +1186,7 @@ class McpClient {
               toolCall,
               toolResult: this.buildCancelledResult(toolCall, authInfo),
               authInfo,
-              lockedChatContent,
+              encryptedChatContent,
             });
             throw error;
           }
@@ -1193,7 +1212,7 @@ class McpClient {
                 "Waiting for concurrent session recovery",
               );
               await existingRecovery;
-              return executeToolCall(getTransport, currentSecrets, true);
+              return await executeToolCall(getTransport, currentSecrets, true);
             }
 
             logger.info(
@@ -1209,13 +1228,24 @@ class McpClient {
             this.sessionRecoveryLocks.set(connectionKey, recoveryPromise);
 
             try {
-              try {
-                await McpHttpSessionModel.deleteStaleSession(connectionKey);
-              } catch (err) {
-                logger.warn(
-                  { connectionKey, err },
-                  "Failed to delete stale MCP HTTP session",
-                );
+              const cachedClient = this.activeConnections.get(connectionKey);
+              if (
+                attemptSessionId &&
+                (!cachedClient || cachedClient === attemptClient)
+              ) {
+                try {
+                  // Ownership can change across this await or on another pod;
+                  // the DB predicate must still match the failed session.
+                  await McpHttpSessionModel.deleteStaleSession(
+                    connectionKey,
+                    attemptSessionId,
+                  );
+                } catch (err) {
+                  logger.warn(
+                    { connectionKey, err },
+                    "Failed to delete stale MCP HTTP session",
+                  );
+                }
               }
               // Retire the client this attempt ran on. When a sibling already
               // replaced it, the cached client is fresh and in use: leave it
@@ -1291,7 +1321,7 @@ class McpClient {
               catalogItem,
               targetMcpServerId,
               tokenAuth,
-              lockedChatContent,
+              encryptedChatContent,
               enterpriseTransportCredential,
               toolCatalogId: tool.catalogId,
               toolCatalogName: tool.catalogName,
@@ -1360,7 +1390,7 @@ class McpClient {
                   mcpServerName,
                   authInfo,
                   structuredError: assignmentError,
-                  lockedChatContent,
+                  encryptedChatContent,
                 });
               }
               const authError = await this.buildExpiredAuthMessage({
@@ -1377,7 +1407,7 @@ class McpClient {
                 mcpServerName,
                 authInfo,
                 structuredError: authError,
-                lockedChatContent,
+                encryptedChatContent,
               });
             }
             // No server resolved → "auth required" message with install link
@@ -1393,7 +1423,7 @@ class McpClient {
               mcpServerName,
               authInfo,
               structuredError: authError,
-              lockedChatContent,
+              encryptedChatContent,
             });
           }
 
@@ -1403,7 +1433,7 @@ class McpClient {
             error: errorMessage,
             mcpServerName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           });
         } finally {
           if (attemptClient) this.releaseClient(attemptClient);
@@ -1504,11 +1534,59 @@ class McpClient {
     currentServerState: CachedServerState,
     elicitationHandler?: McpElicitationHandler,
   ): Promise<Client> {
-    const effectiveServerState = this.withLatestCredentialFingerprint(
+    // Snapshot this caller's headers before waiting: another transport for the
+    // same key can update the shared latest fingerprint during initialization.
+    // This caller-bound state is what a fresh initialization advertises.
+    const callerServerState = this.withLatestCredentialFingerprint(
       connectionKey,
       currentServerState,
     );
+    // A cold handshake must have one owner. Otherwise concurrent connects
+    // overwrite the cache and leave the displaced SDK's SSE retries alive.
+    while (this.connectionInitializationLocks.has(connectionKey)) {
+      await this.connectionInitializationLocks
+        .get(connectionKey)
+        ?.catch(() => {});
+    }
+    // Re-resolve after the wait: the lock holder may have rotated credentials
+    // (e.g. an OAuth refresh) while this caller was parked, leaving the
+    // pre-wait snapshot stale. The latest state only vetoes reuse of a cached
+    // client whose credentials are no longer current; it never substitutes
+    // for the caller-bound state a fresh initialization advertises.
+    const latestServerState = this.withLatestCredentialFingerprint(
+      connectionKey,
+      currentServerState,
+    );
+    // Publish ownership before invoking SDK code, including on a fresh retry.
+    // This lock ends at initialization, not at the subsequent tool RPC.
+    const initialization = Promise.resolve().then(() =>
+      this.initializeClient(
+        connectionKey,
+        transport,
+        targetMcpServerId,
+        { callerServerState, latestServerState },
+        elicitationHandler,
+      ),
+    );
+    this.connectionInitializationLocks.set(connectionKey, initialization);
+    try {
+      return await initialization;
+    } finally {
+      this.connectionInitializationLocks.delete(connectionKey);
+    }
+  }
 
+  private async initializeClient(
+    connectionKey: string,
+    transport: Transport,
+    targetMcpServerId: string,
+    serverStates: {
+      callerServerState: CachedServerState;
+      latestServerState: CachedServerState;
+    },
+    elicitationHandler?: McpElicitationHandler,
+  ): Promise<Client> {
+    const { callerServerState, latestServerState } = serverStates;
     // Check if we already have an active connection
     const existingClient = this.activeConnections.get(connectionKey);
     if (existingClient) {
@@ -1516,14 +1594,18 @@ class McpClient {
         this.activeConnectionServerState.get(connectionKey);
       if (
         !cachedServerState ||
-        !this.hasMatchingServerState(cachedServerState, effectiveServerState)
+        !this.hasMatchingServerState(cachedServerState, callerServerState) ||
+        // A cached client matching this caller's pre-wait snapshot is still
+        // stale when the credential fingerprint advanced during the lock
+        // wait; reusing it would skip the rebuild the rotation requires.
+        !this.hasMatchingServerState(cachedServerState, latestServerState)
       ) {
         logger.info(
           {
             connectionKey,
             targetMcpServerId,
             cachedSecretId: cachedServerState?.secretId ?? null,
-            currentSecretId: effectiveServerState.secretId,
+            currentSecretId: callerServerState.secretId,
           },
           "Discarding cached MCP client after MCP server credentials changed",
         );
@@ -1533,6 +1615,10 @@ class McpClient {
 
     const reusableClient = this.activeConnections.get(connectionKey);
     if (reusableClient) {
+      const reusableSessionId =
+        reusableClient.transport instanceof StreamableHTTPClientTransport
+          ? reusableClient.transport.sessionId
+          : undefined;
       // Health check idle clients to verify the connection is still alive.
       // Recently-used clients skip the ping and recover on actual call failure.
       try {
@@ -1541,14 +1627,16 @@ class McpClient {
           this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
         }
         logger.debug({ connectionKey }, "Reusing cached MCP client");
+        // The cached client won, so this caller's candidate transport is
+        // unused. Close it (fire-and-forget) so its sockets and abort
+        // controllers do not linger; the SDK's transport close never sends
+        // the session-terminating DELETE, so a stored session id is safe.
+        this.closeDiscardedTransport(connectionKey, transport);
         if (elicitationHandler) {
           configureMcpElicitation(reusableClient, elicitationHandler);
         }
         this.activeConnections.set(connectionKey, reusableClient);
-        this.activeConnectionServerState.set(
-          connectionKey,
-          effectiveServerState,
-        );
+        this.activeConnectionServerState.set(connectionKey, callerServerState);
         return reusableClient;
       } catch (error) {
         // Connection is dead, invalidate cache and create fresh client
@@ -1560,15 +1648,13 @@ class McpClient {
           "Client ping failed, creating fresh client",
         );
         this.clearConnectionState(connectionKey);
-        // If the transport carries a stored session ID the session is likely
-        // stale (e.g. Playwright pod restarted).  Delete it from the DB so
-        // the retry path creates a truly fresh connection instead of reading
-        // the same stale ID again.
-        if (
-          transport instanceof StreamableHTTPClientTransport &&
-          transport.sessionId
-        ) {
-          McpHttpSessionModel.deleteStaleSession(connectionKey).catch(() => {});
+        // Delete only the cached client's failed session, not the candidate
+        // transport's potentially newer session read from another pod's row.
+        if (reusableSessionId) {
+          McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            reusableSessionId,
+          ).catch(() => {});
         }
         // Fall through to create new client
       }
@@ -1595,19 +1681,24 @@ class McpClient {
     }
 
     // Track whether we're using a stored session ID (for stale session cleanup)
-    const usedStoredSession =
-      transport instanceof StreamableHTTPClientTransport &&
-      !!transport.sessionId;
+    const storedSessionId =
+      transport instanceof StreamableHTTPClientTransport
+        ? transport.sessionId
+        : undefined;
 
     try {
       await client.connect(transport);
     } catch (error) {
+      this.closeWhenIdle(connectionKey, client);
       // If we used a stored session ID and connection failed, the session is
       // likely stale (e.g. Playwright pod restarted).  Delete it and throw a
       // StaleSessionError so executeToolCall can retry with a fresh session.
-      if (usedStoredSession) {
+      if (storedSessionId) {
         try {
-          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+          await McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            storedSessionId,
+          );
         } catch (err) {
           logger.warn(
             { connectionKey, err },
@@ -1625,12 +1716,16 @@ class McpClient {
     // re-persisting the (potentially stale) session ID.  Without this check
     // concurrent calls would re-persist the stale ID into the DB, undoing
     // another call's cleanup and creating a thundering-herd loop.
-    if (usedStoredSession) {
+    if (storedSessionId) {
       try {
         await client.ping();
       } catch {
+        this.closeWhenIdle(connectionKey, client);
         try {
-          await McpHttpSessionModel.deleteStaleSession(connectionKey);
+          await McpHttpSessionModel.deleteStaleSession(
+            connectionKey,
+            storedSessionId,
+          );
         } catch (err) {
           logger.warn(
             { connectionKey, err },
@@ -1641,11 +1736,10 @@ class McpClient {
       }
     }
 
-    // Store the connection for reuse BEFORE persisting session ID.
-    // This prevents a race where a second request creates a duplicate connection
-    // while the upsert is in flight.
+    // Store the connection before releasing the initialization lock so waiting
+    // callers reuse it rather than starting another handshake.
     this.activeConnections.set(connectionKey, client);
-    this.activeConnectionServerState.set(connectionKey, effectiveServerState);
+    this.activeConnectionServerState.set(connectionKey, callerServerState);
     this.activeConnectionLastValidatedAt.set(connectionKey, Date.now());
 
     // Persist the MCP session ID so other backend pods can reuse it.
@@ -1654,7 +1748,7 @@ class McpClient {
     // Only persist *new* session IDs (obtained via fresh init), not stored ones
     // we just verified — those are already in the DB with the correct value.
     if (
-      !usedStoredSession &&
+      !storedSessionId &&
       transport instanceof StreamableHTTPClientTransport &&
       transport.sessionId
     ) {
@@ -1708,6 +1802,26 @@ class McpClient {
     });
   }
 
+  /**
+   * Close a candidate transport that lost the race to a cached client.
+   * Fire-and-forget like closeWhenIdle: the SDK's transport close only aborts
+   * pending streams and never sends the session-terminating DELETE, so a
+   * transport carrying a stored session id is safe to close here.
+   */
+  private closeDiscardedTransport(
+    connectionKey: string,
+    transport: Transport,
+  ): void {
+    Promise.resolve()
+      .then(() => transport.close())
+      .catch((error) => {
+        logger.warn(
+          { connectionKey, error },
+          "Error closing discarded MCP transport",
+        );
+      });
+  }
+
   private releaseClient(client: Client): void {
     const remaining = (this.clientRequestsInFlight.get(client) ?? 1) - 1;
     if (remaining > 0) {
@@ -1747,7 +1861,7 @@ class McpClient {
     toolCall: CommonToolCall,
     owner: ToolOwner,
     availableTool?: CatalogTool,
-    lockedChatContent?: ToolCallContentDisposition,
+    encryptedChatContent?: ToolCallContentDisposition,
   ): Promise<
     | {
         tool: McpToolAssignment;
@@ -1858,7 +1972,7 @@ class McpClient {
             message,
             toolName: toolCall.name,
           },
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1889,7 +2003,7 @@ class McpClient {
             message,
             toolName: toolCall.name,
           },
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1925,7 +2039,7 @@ class McpClient {
           owner,
           error: "Tool is missing catalogId",
           mcpServerName: tool.catalogName || "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1939,7 +2053,7 @@ class McpClient {
           owner,
           error: `No catalog item found for tool catalog ID ${tool.catalogId}`,
           mcpServerName: tool.catalogName || "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -1953,13 +2067,13 @@ class McpClient {
     targetMcpServerId,
     toolCall,
     owner,
-    lockedChatContent,
+    encryptedChatContent,
     serverLookup,
   }: {
     targetMcpServerId: string;
     toolCall: CommonToolCall;
     owner: ToolOwner;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     serverLookup?: ListingServerLookup;
   }): Promise<
     | {
@@ -1985,7 +2099,7 @@ class McpClient {
           owner,
           error: `MCP server not found when getting secrets for MCP server ${targetMcpServerId}`,
           mcpServerName: "unknown",
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2053,7 +2167,7 @@ class McpClient {
     owner,
     catalogItem,
     authInfo,
-    lockedChatContent,
+    encryptedChatContent,
     serverLookup,
   }: {
     tool: McpToolAssignment;
@@ -2061,7 +2175,7 @@ class McpClient {
     owner: ToolOwner;
     tokenAuth?: TokenAuthContext;
     catalogItem: InternalMcpCatalog;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     // Identity of the caller, so a refusal here is recorded and rendered like
     // any other result rather than as an anonymous error.
     authInfo?: ToolCallAuthInfo;
@@ -2116,7 +2230,7 @@ class McpClient {
           error: "The browser runtime is not available for this Environment.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2152,7 +2266,7 @@ class McpClient {
             mcpServerName: fallbackName,
             authInfo,
             structuredError: reconnectError,
-            lockedChatContent,
+            encryptedChatContent,
           }),
         };
       }
@@ -2206,7 +2320,7 @@ class McpClient {
               "Enterprise-managed credentials are configured, but no MCP server installation is available for this catalog.",
             mcpServerName: fallbackName,
             authInfo,
-            lockedChatContent,
+            encryptedChatContent,
           }),
         };
       }
@@ -2229,7 +2343,7 @@ class McpClient {
             "Dynamic team credential is enabled but no token authentication provided. Use a profile token to authenticate.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2242,7 +2356,7 @@ class McpClient {
             "Dynamic team credential is enabled but tool has no catalogId.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2322,7 +2436,7 @@ class McpClient {
             "Organization-wide tokens are not supported for tools with dynamic credential resolution. Use a personal or team token instead.",
           mcpServerName: fallbackName,
           authInfo,
-          lockedChatContent,
+          encryptedChatContent,
         }),
       };
     }
@@ -2384,7 +2498,7 @@ class McpClient {
         mcpServerName: fallbackName,
         authInfo,
         structuredError: authError,
-        lockedChatContent,
+        encryptedChatContent,
       }),
     };
   }
@@ -2948,7 +3062,7 @@ class McpClient {
     mcpServerName?: string;
     authInfo?: ToolCallAuthInfo;
     structuredError?: McpToolError;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -2957,7 +3071,7 @@ class McpClient {
       mcpServerName = "unknown",
       authInfo,
       structuredError,
-      lockedChatContent,
+      encryptedChatContent,
     } = opts;
     const normalizedError: McpToolError = structuredError ?? {
       type: "generic",
@@ -2985,7 +3099,7 @@ class McpClient {
       toolCall,
       toolResult: errorResult,
       authInfo,
-      lockedChatContent,
+      encryptedChatContent,
     });
     return errorResult;
   }
@@ -3002,7 +3116,7 @@ class McpClient {
     _meta?: Record<string, unknown>;
     authInfo?: ToolCallAuthInfo;
     structuredContent?: Record<string, unknown>;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<CommonToolResult> {
     const {
       toolCall,
@@ -3013,7 +3127,7 @@ class McpClient {
       _meta,
       authInfo,
       structuredContent,
-      lockedChatContent,
+      encryptedChatContent,
     } = opts;
 
     // `archestraError`, the seeded-app-render marker and the executed-as
@@ -3044,7 +3158,7 @@ class McpClient {
       toolCall,
       toolResult,
       authInfo,
-      lockedChatContent,
+      encryptedChatContent,
     });
     return toolResult;
   }
@@ -3070,7 +3184,7 @@ class McpClient {
     enterpriseTransportCredential?: ResolvedEnterpriseTransportCredential | null;
     toolCatalogId: string | null;
     toolCatalogName: string | null;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
     executeRetry: (
       getTransport: () => Promise<Transport>,
       secrets: Record<string, unknown>,
@@ -3091,7 +3205,7 @@ class McpClient {
       toolCatalogId,
       toolCatalogName,
       executeRetry,
-      lockedChatContent,
+      encryptedChatContent,
     } = params;
 
     logger.info(
@@ -3205,7 +3319,7 @@ class McpClient {
           error: authError.message,
           mcpServerName,
           structuredError: authError,
-          lockedChatContent,
+          encryptedChatContent,
         });
       }
 
@@ -3214,7 +3328,7 @@ class McpClient {
         owner,
         error: retryErrorMsg,
         mcpServerName,
-        lockedChatContent,
+        encryptedChatContent,
       });
     }
   }
@@ -3725,7 +3839,7 @@ class McpClient {
     toolCall: CommonToolCall;
     toolResult: CommonToolResult;
     authInfo?: ToolCallAuthInfo;
-    lockedChatContent?: ToolCallContentDisposition;
+    encryptedChatContent?: ToolCallContentDisposition;
   }): Promise<void> {
     const { owner, mcpServerName, toolCall, toolResult, authInfo } = params;
     // Skip high-frequency browser tool logging to prevent DB bloat
@@ -3734,27 +3848,27 @@ class McpClient {
       return;
     }
 
-    // Locked chat calls keep the tool name and owner/user metadata on the
+    // Encrypted chat calls keep the tool name and owner/user metadata on the
     // audit surface either way; what differs is the content. With an audit
     // context the real arguments and result are handed to the model, which
     // encrypts them under the conversation key (never encrypt here — that
     // would nest envelopes). Without one there is no key that could ever open
     // them, so the row is redacted instead.
-    const isLockedChat = params.lockedChatContent !== undefined;
+    const isEncryptedChat = params.encryptedChatContent !== undefined;
     const audit =
-      params.lockedChatContent?.kind === "encrypt"
-        ? params.lockedChatContent.audit
+      params.encryptedChatContent?.kind === "encrypt"
+        ? params.encryptedChatContent.audit
         : null;
-    const suppressContent = isLockedChat && audit === null;
+    const suppressContent = isEncryptedChat && audit === null;
     const storedToolCall: CommonToolCall = suppressContent
       ? {
           id: toolCall.id,
           name: toolCall.name,
-          arguments: LOCKED_CHAT_REDACTED_MARKER,
+          arguments: ENCRYPTED_CHAT_REDACTED_MARKER,
         }
       : toolCall;
     const storedToolResult: unknown = suppressContent
-      ? LOCKED_CHAT_REDACTED_MARKER
+      ? ENCRYPTED_CHAT_REDACTED_MARKER
       : toolResult;
 
     try {
@@ -3770,6 +3884,8 @@ class McpClient {
           userId: authInfo?.userId ?? null,
           runId: authInfo?.runId ?? null,
           authMethod: authInfo?.authMethod ?? null,
+          oauthClientId: authInfo?.oauthClientId ?? null,
+          source: authInfo?.source ?? null,
         },
         audit,
       );
@@ -3784,10 +3900,10 @@ class McpClient {
         toolName: toolCall.name,
       };
 
-      // The app log stays content-free for every locked-chat call, encrypted
+      // The app log stays content-free for every encrypted-chat call, encrypted
       // rows included: the row is protected at rest, the log line is not.
-      if (isLockedChat) {
-        logData.resultContent = "[redacted: locked chat]";
+      if (isEncryptedChat) {
+        logData.resultContent = "[redacted: encrypted chat]";
       } else if (toolResult.isError) {
         // Tool errors routinely echo request/response payloads — cap them
         // the same way as the success-path content preview.
@@ -4325,7 +4441,7 @@ class McpClient {
         }
 
         this.clearConnectionState(connectionKey);
-        await McpHttpSessionModel.deleteStaleSession(connectionKey).catch(
+        await McpHttpSessionModel.deleteByConnectionKey(connectionKey).catch(
           (error) => {
             logger.warn(
               { connectionKey, targetMcpServerId, error },
@@ -5957,8 +6073,8 @@ function resolveContentDisposition(
   options?: ExecuteToolCallForOwnerOptions,
 ): ToolCallContentDisposition | undefined {
   if (!options?.suppressContentLogging) return undefined;
-  return options.lockedChatAudit
-    ? { kind: "encrypt", audit: options.lockedChatAudit }
+  return options.encryptedChatAudit
+    ? { kind: "encrypt", audit: options.encryptedChatAudit }
     : { kind: "redact" };
 }
 

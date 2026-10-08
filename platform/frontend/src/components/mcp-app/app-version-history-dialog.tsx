@@ -29,7 +29,7 @@ export function AppVersionHistoryDialog({
 }) {
   const versionsQuery = useAppVersions(open ? app.id : null);
   const restoreVersion = useRestoreAppVersion();
-  const { data: canUpdate } = useHasPermissions({ app: ["update"] });
+  const { data: canUpdate } = useHasPermissions({ app: ["update"] }, app.id);
   const [restoreTarget, setRestoreTarget] = useState<AppVersion | null>(null);
   const headVersion = versionsQuery.data?.[0]?.version ?? app.latestVersion;
   const canRestore =
@@ -146,7 +146,7 @@ function restoreDisabledReason(
   app: OwnedApp,
   canUpdate: boolean,
 ): string | undefined {
-  if (!canUpdate) return "You do not have permission to update apps.";
+  if (!canUpdate) return "You do not have permission to update this app.";
   if (app.locked) return "Unlock the app before restoring a version.";
   if (!app.enabled) return "Enable the app before restoring a version.";
   if (app.viewerRole === "admin") {

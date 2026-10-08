@@ -16,6 +16,7 @@ import { format } from "date-fns";
 import { KeyRound, Plus, RefreshCw, Trash, User, Zap } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
+import { EmptyListState } from "@/components/empty-list-state";
 import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -48,8 +49,8 @@ import {
   TooltipProvider,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
-import { useFeature } from "@/lib/config/config.query";
 import {
   useInternalMcpCatalog,
   useUpdateInternalMcpCatalogItem,
@@ -65,6 +66,7 @@ import {
   getDeploymentLabel,
   STATE_PRIORITY,
 } from "./deployment-status";
+import { getLocalInstallationCopy } from "./local-installation-copy";
 
 type InstalledServer = archestraApiTypes.GetMcpServersResponses["200"][number];
 
@@ -353,6 +355,9 @@ export function ManageUsersContent({
     !split.hasOrgConnection &&
     !!hasMcpServerAdminPermission;
   const isLocalServer = catalogItem?.serverType === "local";
+  const installationCopy = getLocalInstallationCopy(
+    catalogItem?.multitenant === true,
+  );
   const isPersonalOnly =
     catalogItem != null && isPlaywrightCatalogItem(catalogItem.id);
   const canAddServiceAccount = !isPersonalOnly && (canAddTeam || canAddOrg);
@@ -404,7 +409,7 @@ export function ManageUsersContent({
             }
             description={
               isLocalServer
-                ? "A private hosted instance available only to its owner."
+                ? installationCopy.personal
                 : "Private to its owner — only that person can use it."
             }
             emptyText={
@@ -419,14 +424,13 @@ export function ManageUsersContent({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs"
                   disabled={isInstalling}
                   onClick={() => {
                     onClose();
                     onAddPersonalConnection?.();
                   }}
                 >
-                  <Plus className="mr-1 h-3 w-3" />
+                  <Plus className="h-4 w-4" />
                   {isInstalling
                     ? "Installing..."
                     : isLocalServer
@@ -444,7 +448,7 @@ export function ManageUsersContent({
             title={isLocalServer ? "Shared installations" : "Service accounts"}
             description={
               isLocalServer
-                ? "Hosted instances shared with a team or organization."
+                ? installationCopy.shared
                 : "Static credentials intentionally shared with a team or organization."
             }
             emptyText={
@@ -459,14 +463,13 @@ export function ManageUsersContent({
                 <Button
                   variant="outline"
                   size="sm"
-                  className="h-7 text-xs"
                   disabled={isInstalling}
                   data-testid={
                     E2eTestId.ManageCredentialsAddServiceAccountButton
                   }
                   onClick={() => setServiceAccountDialogOpen(true)}
                 >
-                  <Plus className="mr-1 h-3 w-3" />
+                  <Plus className="h-4 w-4" />
                   {isLocalServer
                     ? "Add shared installation"
                     : "Add service account"}
@@ -542,21 +545,23 @@ function ConnectionsSection({
   tableTestId: string;
 } & RowRenderProps) {
   return (
-    <div className="space-y-2">
-      <div className="flex items-start justify-between gap-4">
-        <div className="space-y-0.5">
-          <h4 className="text-sm font-medium">{title}</h4>
-          <p className="text-sm text-muted-foreground">{description}</p>
-        </div>
-        {action}
+    <div className="space-y-3">
+      <div className="space-y-0.5">
+        <h4 className="text-sm font-medium">{title}</h4>
+        <p className="text-xs text-muted-foreground">{description}</p>
       </div>
-      <div className="overflow-hidden rounded-lg border">
-        {rows.length > 0 ? (
-          <ConnectionsTable rows={rows} testId={tableTestId} {...rowProps} />
-        ) : (
-          <p className="text-sm text-muted-foreground px-4 py-3">{emptyText}</p>
-        )}
-      </div>
+      {rows.length > 0 ? (
+        <>
+          <div className="overflow-hidden rounded-lg border">
+            <ConnectionsTable rows={rows} testId={tableTestId} {...rowProps} />
+          </div>
+          {action}
+        </>
+      ) : action ? (
+        <EmptyListState message={emptyText} action={action} />
+      ) : (
+        <p className="text-sm text-muted-foreground">{emptyText}</p>
+      )}
     </div>
   );
 }
@@ -579,22 +584,30 @@ function ConnectionsTable({
   rows: ConnectionRow[];
   testId: string;
 } & RowRenderProps) {
-  const alertingEnabled = useFeature("mcpServerAlertingEnabled") === true;
   const hasDeploymentStatuses = rows.some(
     (r) => deploymentStatuses[r.server.id],
   );
 
   return (
-    <Table data-testid={testId}>
+    // A fixed-layout table squeezes its unsized columns to nothing on a
+    // narrow screen; a floor width makes it scroll sideways instead.
+    <Table
+      data-testid={testId}
+      className={hasDeploymentStatuses ? "min-w-[780px]" : "min-w-[600px]"}
+    >
       <TableHeader>
         <TableRow>
           <TableHead className="w-[200px] whitespace-nowrap">Owner</TableHead>
           {hasDeploymentStatuses && (
             <TableHead className="whitespace-nowrap">Pod</TableHead>
           )}
-          <TableHead className="whitespace-nowrap">Secret Storage</TableHead>
-          <TableHead className="whitespace-nowrap">Created At</TableHead>
-          <TableHead className="w-[280px] whitespace-nowrap text-right">
+          <TableHead className="w-[120px] whitespace-nowrap">
+            Secret Storage
+          </TableHead>
+          <TableHead className="w-[120px] whitespace-nowrap">
+            Created At
+          </TableHead>
+          <TableHead className="w-[200px] whitespace-nowrap text-right">
             Action
           </TableHead>
         </TableRow>
@@ -606,7 +619,7 @@ function ConnectionsTable({
             data-testid={E2eTestId.CredentialRow}
             data-server-id={server.id}
           >
-            <TableCell className="w-[200px] max-w-[220px] font-medium">
+            <TableCell className="font-medium">
               <div className="flex items-center gap-2">
                 <span
                   className="truncate"
@@ -677,7 +690,7 @@ function ConnectionsTable({
                     );
                   }
                   return (
-                    <button
+                    <UnstyledButton
                       type="button"
                       onClick={() => onOpenPodLogs?.(server.id)}
                       className="flex w-full items-center gap-1.5 text-sm hover:underline cursor-pointer font-mono min-w-0"
@@ -686,7 +699,7 @@ function ConnectionsTable({
                       <span className="truncate min-w-0 flex-1 text-left">
                         {podName}
                       </span>
-                    </button>
+                    </UnstyledButton>
                   );
                 })()}
               </TableCell>
@@ -700,9 +713,9 @@ function ConnectionsTable({
             >
               {format(new Date(server.createdAt), "PP")}
             </TableCell>
-            <TableCell className="w-[280px]">
+            <TableCell>
               <div className="flex items-center justify-end gap-2 whitespace-nowrap">
-                {alertingEnabled && server.oauthRefreshError && (
+                {server.oauthRefreshError && (
                   <TooltipProvider>
                     <Tooltip>
                       <TooltipTrigger asChild>
@@ -710,9 +723,8 @@ function ConnectionsTable({
                           <Button
                             onClick={() => handleReauthenticate(server)}
                             disabled={!canReauthenticate(server)}
-                            size="sm"
+                            size="xs"
                             variant="outline"
-                            className="h-7 text-xs"
                           >
                             <RefreshCw className="mr-1 h-3 w-3" />
                             Re-authenticate
@@ -734,9 +746,9 @@ function ConnectionsTable({
                         <Button
                           onClick={() => handleRevoke(server)}
                           disabled={isDeleting || !canRevoke(server)}
-                          size="sm"
+                          size="xs"
                           variant="ghost"
-                          className="h-7 text-xs text-muted-foreground hover:text-foreground"
+                          className="text-muted-foreground hover:text-foreground"
                           data-testid={
                             isYou
                               ? `${E2eTestId.RevokeCredentialButton}-personal`

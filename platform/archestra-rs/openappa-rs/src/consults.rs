@@ -182,7 +182,7 @@ fn role_name(role: ExternalRole) -> &'static str {
         ExternalRole::Sanitizer => "sanitizer",
         ExternalRole::Annotator => "annotator",
         ExternalRole::AudienceSource => "audience_source",
-        ExternalRole::Input => "input",
+        ExternalRole::ContextProvider => "context_provider",
     }
 }
 
@@ -195,6 +195,7 @@ fn backend_name(backend: ConsultBackend) -> &'static str {
         ConsultBackend::Jev => "jev",
         ConsultBackend::ClaudeCode => "claude_code",
         ConsultBackend::Hitl => "hitl",
+        ConsultBackend::Archestra => "archestra",
     }
 }
 
@@ -277,7 +278,7 @@ mod tests {
             ExternalRole::Sanitizer,
             ExternalRole::Annotator,
             ExternalRole::AudienceSource,
-            ExternalRole::Input,
+            ExternalRole::ContextProvider,
         ] {
             assert_eq!(serde_json::to_value(role).unwrap(), json!(role_name(role)));
         }
@@ -288,6 +289,7 @@ mod tests {
             ConsultBackend::Llm,
             ConsultBackend::ClaudeCode,
             ConsultBackend::Hitl,
+            ConsultBackend::Archestra,
         ] {
             assert_eq!(
                 serde_json::to_value(backend).unwrap(),

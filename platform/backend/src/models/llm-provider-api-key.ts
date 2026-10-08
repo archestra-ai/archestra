@@ -46,6 +46,7 @@ import ConversationModel from "./conversation";
 import CreatedByModel from "./created-by";
 import { LlmProviderApiKeyLabelModel } from "./entity-labels";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 class LlmProviderApiKeyModel {
   // SPDX-SnippetBegin
@@ -74,7 +75,7 @@ class LlmProviderApiKeyModel {
       .where(
         and(
           eq(schema.llmProviderApiKeysTable.id, apiKey.id),
-          LlmProviderApiKeyModel.accessCondition({
+          await LlmProviderApiKeyModel.accessCondition({
             organizationId: apiKey.organizationId,
             userId,
             action: "use",
@@ -261,7 +262,7 @@ class LlmProviderApiKeyModel {
     ];
 
     conditions.push(
-      LlmProviderApiKeyModel.accessCondition({
+      await LlmProviderApiKeyModel.accessCondition({
         organizationId,
         userId,
         action: "read",
@@ -408,7 +409,7 @@ class LlmProviderApiKeyModel {
     ];
 
     conditions.push(
-      LlmProviderApiKeyModel.accessCondition({
+      await LlmProviderApiKeyModel.accessCondition({
         organizationId,
         userId,
         action: "use",
@@ -779,7 +780,7 @@ class LlmProviderApiKeyModel {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          LlmProviderApiKeyModel.accessCondition({
+          await LlmProviderApiKeyModel.accessCondition({
             organizationId,
             userId,
             action: "use",
@@ -942,11 +943,13 @@ class LlmProviderApiKeyModel {
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-  private static accessCondition(params: {
+  private static async accessCondition(params: {
     organizationId: string;
     userId: string;
     action: "read" | "use";
   }) {
+    const principal =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
     // A key with an owner is that person's own key: no grant, not even `*`,
     // reaches it for anyone else.
     return and(
@@ -955,7 +958,8 @@ class LlmProviderApiKeyModel {
         eq(schema.llmProviderApiKeysTable.userId, params.userId),
       ),
       ResourcePermissionPolicyModel.grantCondition({
-        ...params,
+        ...principal,
+        action: params.action,
         resource: "llmProviderApiKey",
         scopeColumn: schema.llmProviderApiKeysTable.id,
       }),
@@ -992,7 +996,7 @@ class LlmProviderApiKeyModel {
           // SPDX-SnippetBegin
           // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
           // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-          LlmProviderApiKeyModel.accessCondition({
+          await LlmProviderApiKeyModel.accessCondition({
             organizationId,
             userId,
             action: "use",
@@ -1013,6 +1017,38 @@ class LlmProviderApiKeyModel {
   /**
    * Check if a user has access to a specific LLM provider API key based on scope.
    */
+
+  /**
+   * The key for `provider` when no user is acting: the configured key
+   * (`agentLlmApiKeyId`, an agent's own key or the organization default)
+   * when it belongs to this organization and provider, else the
+   * organization-wide key. Mirrors the agent-key rung of `getCurrentApiKey`:
+   * permission flows through whoever configured the key, so no further
+   * access check applies.
+   */
+  static async getOrganizationApiKey(params: {
+    organizationId: string;
+    provider: SupportedProvider;
+    agentLlmApiKeyId?: string | null;
+  }): Promise<LlmProviderApiKey | null> {
+    const { organizationId, provider, agentLlmApiKeyId } = params;
+    if (agentLlmApiKeyId) {
+      const configuredKey =
+        await LlmProviderApiKeyModel.findById(agentLlmApiKeyId);
+      if (
+        configuredKey &&
+        configuredKey.organizationId === organizationId &&
+        configuredKey.provider === provider &&
+        canUseProviderApiKey(configuredKey)
+      ) {
+        return configuredKey;
+      }
+    }
+    return LlmProviderApiKeyModel.findOrganizationWideKey(
+      organizationId,
+      provider,
+    );
+  }
 
   /**
    * The key for `provider` that the organization at large may use, for

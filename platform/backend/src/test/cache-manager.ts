@@ -47,6 +47,7 @@ const SPYABLE_METHODS = [
   "getAndDelete",
   "appendToList",
   "getAndDeleteMany",
+  "withLock",
   "deleteExpiredByPrefix",
   "deleteByPrefix",
 ] as const;

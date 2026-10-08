@@ -2755,6 +2755,46 @@ spec:
     });
   });
 
+  test("falls back to an isolated generated pod when custom YAML requests restricted fields", () => {
+    const deployment = createK8sDeploymentWithYaml(`
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  labels:
+    app.kubernetes.io/component: platform
+spec:
+  template:
+    spec:
+      serviceAccountName: platform-control-plane
+      hostPID: true
+      volumes:
+        - name: host-root
+          hostPath:
+            path: /
+      containers:
+        - name: mcp-server
+          image: test:latest
+          securityContext:
+            privileged: true
+`);
+
+    const spec = deployment.generateDeploymentSpec(
+      "test:latest",
+      { command: "node", arguments: ["server.js"] },
+      false,
+      8080,
+    );
+    const podSpec = spec.spec?.template.spec;
+
+    expect(podSpec?.serviceAccountName).toBeUndefined();
+    expect(podSpec?.hostPID).toBeUndefined();
+    expect(podSpec?.volumes).toBeUndefined();
+    expect(podSpec?.containers[0]?.securityContext).toBeUndefined();
+    expect(spec.metadata?.labels).not.toHaveProperty(
+      "app.kubernetes.io/component",
+    );
+  });
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

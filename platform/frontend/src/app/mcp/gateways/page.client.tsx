@@ -1,6 +1,10 @@
 "use client";
 
-import { type archestraApiTypes, E2eTestId } from "@archestra/shared";
+import {
+  type archestraApiTypes,
+  DEFAULT_RESOURCE_ACCESS_RELATIONS,
+  E2eTestId,
+} from "@archestra/shared";
 import type {
   ColumnDef,
   RowSelectionState,
@@ -44,6 +48,7 @@ import { PageLayout } from "@/components/page-layout";
 import { PERMANENT_DELETE_LABEL } from "@/components/permanent-delete";
 import { PersonalResourceOwner } from "@/components/personal-resource-owner";
 import { QueryLoadError } from "@/components/query-load-error";
+import { ResourceAccessFilter } from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
 import {
   ActiveFilterBadges,
@@ -73,6 +78,7 @@ import {
 } from "@/components/ui/tooltip";
 import { DEFAULT_SORT_BY, DEFAULT_SORT_DIRECTION } from "@/consts";
 import {
+  countGateways,
   useAllMatchingProfiles,
   useBulkDeleteProfiles,
   useDeleteProfile,
@@ -196,7 +202,7 @@ function McpGateways({
 }: {
   initialData?: McpGatewaysInitialData;
 }) {
-  const docsUrl = getFrontendDocsUrl("platform-mcp-gateway");
+  const docsUrl = getFrontendDocsUrl("mcp/gateway");
   const {
     searchParams,
     pageIndex,
@@ -258,6 +264,7 @@ function McpGateways({
     authorIds: scopeFilter.authorIds,
     excludeAuthorIds: scopeFilter.excludeAuthorIds,
     excludeOtherPersonalAgents: scopeFilter.excludeOtherPersonal,
+    access: scopeFilter.access,
     labels: labelsFromUrl || undefined,
     status: statusFromUrl || undefined,
   } satisfies Omit<
@@ -285,6 +292,7 @@ function McpGateways({
     offset,
     initialData: initialData?.agents ?? undefined,
     initialDataPinned: false,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     ...listFilters,
     pinned: isDeletedView ? undefined : false,
   });
@@ -299,6 +307,7 @@ function McpGateways({
     offset: pinnedPageIndex * pinnedPage.pageSize,
     initialData: initialData?.pinnedAgents ?? undefined,
     initialDataPinned: true,
+    initialDataAccess: DEFAULT_RESOURCE_ACCESS_RELATIONS,
     initialDataLimit: 100,
     enabled: !isDeletedView,
     ...listFilters,
@@ -706,6 +715,7 @@ function McpGateways({
                 teamIds: null,
                 authorIds: null,
                 excludeAuthorIds: null,
+                access: null,
                 labels: null,
                 status: null,
                 page: "1",
@@ -807,6 +817,7 @@ function McpGateways({
                 teamIds: null,
                 authorIds: null,
                 excludeAuthorIds: null,
+                access: null,
                 labels: null,
                 status: null,
                 page: "1",
@@ -888,6 +899,7 @@ function McpGateways({
         <div className="flex items-center gap-2">
           <PermissionButton
             permissions={{ mcpGateway: ["create"] }}
+            size="sm"
             onClick={() => router.push(agentNewHref("mcp_gateway"))}
             data-testid={E2eTestId.CreateAgentButton}
           >
@@ -917,6 +929,14 @@ function McpGateways({
                   />
                 }
               >
+                <ResourceAccessFilter
+                  resource="mcpGateway"
+                  noun="gateways"
+                  countItems={(params) =>
+                    countGateways({ ...params, agentTypes: gatewayAgentTypes })
+                  }
+                  countKey={gatewayAgentTypes}
+                />
                 <ResourceScopeFilter showLabels />
                 <ResourceDeletedStatusFilter
                   deletePermission={{ mcpGateway: ["delete"] }}

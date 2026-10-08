@@ -328,7 +328,7 @@ export type OpenAiChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -1308,6 +1308,7 @@ export type AnthropicMessagesRequestInput = {
             type: 'text';
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | {
             type: 'image';
             source: {
@@ -1339,6 +1340,7 @@ export type AnthropicMessagesRequestInput = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -1380,6 +1382,7 @@ export type AnthropicMessagesRequestInput = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -1411,6 +1414,7 @@ export type AnthropicMessagesRequestInput = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -1448,7 +1452,8 @@ export type AnthropicMessagesRequestInput = {
     } | null;
     mcp_servers?: Array<unknown>;
     metadata?: {
-        user_id: string | null;
+        user_id?: string | null;
+        [key: string]: unknown;
     };
     output_config?: {
         effort?: string | null;
@@ -1458,6 +1463,7 @@ export type AnthropicMessagesRequestInput = {
                 [key: string]: unknown;
             };
         } | null;
+        [key: string]: unknown;
     };
     service_tier?: unknown;
     speed?: 'fast' | 'standard';
@@ -1468,22 +1474,39 @@ export type AnthropicMessagesRequestInput = {
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | null;
+        [key: string]: unknown;
     } | Array<{
         type: 'text';
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | null;
+        [key: string]: unknown;
     }>;
     temperature?: number;
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
     } | {
         type: 'disabled';
+        [key: string]: unknown;
+    } | {
+        type: 'between_tools';
+        [key: string]: unknown;
     } | {
         type: 'adaptive';
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     };
     tool_choice?: {
         type: 'auto';
@@ -1543,6 +1566,7 @@ export type AnthropicMessagesRequestInput = {
     }>;
     top_k?: number;
     top_p?: number;
+    [key: string]: unknown;
 };
 
 export type AnthropicMessagesResponseInput = {
@@ -1551,11 +1575,13 @@ export type AnthropicMessagesResponseInput = {
         citations: Array<unknown> | null;
         text: string;
         type: 'text';
+        [key: string]: unknown;
     } | {
         id: string;
         input: unknown;
         name: string;
         type: 'tool_use';
+        [key: string]: unknown;
     }>;
     model: string;
     role: 'assistant';
@@ -1571,7 +1597,9 @@ export type AnthropicMessagesResponseInput = {
             ephemeral_1h_input_tokens?: number | null;
             ephemeral_5m_input_tokens?: number | null;
         } | null;
+        [key: string]: unknown;
     };
+    [key: string]: unknown;
 };
 
 export type CerebrasChatCompletionRequestInput = {
@@ -1890,7 +1918,7 @@ export type CerebrasChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -2404,7 +2432,7 @@ export type MistralChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -2798,7 +2826,7 @@ export type PerplexityChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3193,7 +3221,7 @@ export type GroqChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3587,7 +3615,7 @@ export type OpenrouterChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -3671,6 +3699,48 @@ export type OpenrouterChatCompletionResponseInput = {
          * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
          */
         prompt_tokens_details?: unknown;
+    };
+    [key: string]: unknown;
+};
+
+export type JevDecisionsRequestInput = {
+    model: string;
+    /**
+     * The content the questions are about
+     */
+    state: string | {
+        [key: string]: unknown;
+    } | Array<unknown>;
+    /**
+     * Decision questions keyed by name
+     */
+    questions: {
+        [key: string]: {
+            /**
+             * Question kind: noul, choice, or score
+             */
+            type: string;
+            instructions: string | {
+                [key: string]: unknown;
+            } | Array<unknown>;
+            criteria: unknown;
+            [key: string]: unknown;
+        };
+    };
+    [key: string]: unknown;
+};
+
+export type JevDecisionsResponseInput = {
+    id?: string;
+    model?: string;
+    answers: {
+        [key: string]: unknown;
+    };
+    usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        cost?: number;
+        [key: string]: unknown;
     };
     [key: string]: unknown;
 };
@@ -4973,7 +5043,7 @@ export type DeepSeekChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -5368,7 +5438,7 @@ export type ArchestraChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -6200,7 +6270,7 @@ export type XaiChatCompletionRequestInput = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -6634,7 +6704,7 @@ export type OpenAiChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -7614,6 +7684,7 @@ export type AnthropicMessagesRequest = {
             type: 'text';
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | {
             type: 'image';
             source: {
@@ -7645,6 +7716,7 @@ export type AnthropicMessagesRequest = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -7686,6 +7758,7 @@ export type AnthropicMessagesRequest = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -7717,6 +7790,7 @@ export type AnthropicMessagesRequest = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -7750,11 +7824,12 @@ export type AnthropicMessagesRequest = {
     max_tokens: number;
     container?: string | null;
     context_management?: {
-        [key: string]: never;
+        [key: string]: unknown;
     } | null;
     mcp_servers?: Array<unknown>;
     metadata?: {
-        user_id: string | null;
+        user_id?: string | null;
+        [key: string]: unknown;
     };
     output_config?: {
         effort?: string | null;
@@ -7764,6 +7839,7 @@ export type AnthropicMessagesRequest = {
                 [key: string]: unknown;
             };
         } | null;
+        [key: string]: unknown;
     };
     service_tier?: unknown;
     speed?: 'fast' | 'standard';
@@ -7774,22 +7850,39 @@ export type AnthropicMessagesRequest = {
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | null;
+        [key: string]: unknown;
     } | Array<{
         type: 'text';
         text: string;
         cache_control?: unknown;
         citations?: Array<unknown> | null;
+        [key: string]: unknown;
     }>;
     temperature?: number;
     thinking?: {
         type: 'enabled';
         budget_tokens: number;
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
     } | {
         type: 'disabled';
+        [key: string]: unknown;
+    } | {
+        type: 'between_tools';
+        [key: string]: unknown;
     } | {
         type: 'adaptive';
-        display?: 'summarized' | 'omitted';
+        display?: 'summarized' | 'omitted' | 'updates';
+        block_binding?: {
+            [key: string]: unknown;
+        } | null;
+        [key: string]: unknown;
+    } | {
+        type: string;
+        [key: string]: unknown;
     };
     tool_choice?: {
         type: 'auto';
@@ -7849,6 +7942,7 @@ export type AnthropicMessagesRequest = {
     }>;
     top_k?: number;
     top_p?: number;
+    [key: string]: unknown;
 };
 
 export type AnthropicMessagesResponse = {
@@ -7857,11 +7951,13 @@ export type AnthropicMessagesResponse = {
         citations: Array<unknown> | null;
         text: string;
         type: 'text';
+        [key: string]: unknown;
     } | {
         id: string;
         input: unknown;
         name: string;
         type: 'tool_use';
+        [key: string]: unknown;
     }>;
     model: string;
     role: 'assistant';
@@ -7877,7 +7973,9 @@ export type AnthropicMessagesResponse = {
             ephemeral_1h_input_tokens?: number | null;
             ephemeral_5m_input_tokens?: number | null;
         } | null;
+        [key: string]: unknown;
     };
+    [key: string]: unknown;
 };
 
 export type CerebrasChatCompletionRequest = {
@@ -8196,7 +8294,7 @@ export type CerebrasChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -8710,7 +8808,7 @@ export type MistralChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9104,7 +9202,7 @@ export type PerplexityChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9499,7 +9597,7 @@ export type GroqChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9893,7 +9991,7 @@ export type OpenrouterChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -9977,6 +10075,48 @@ export type OpenrouterChatCompletionResponse = {
          * https://github.com/openai/openai-node/blob/master/src/resources/completions.ts#L173
          */
         prompt_tokens_details?: unknown;
+    };
+    [key: string]: unknown;
+};
+
+export type JevDecisionsRequest = {
+    model: string;
+    /**
+     * The content the questions are about
+     */
+    state: string | {
+        [key: string]: unknown;
+    } | Array<unknown>;
+    /**
+     * Decision questions keyed by name
+     */
+    questions: {
+        [key: string]: {
+            /**
+             * Question kind: noul, choice, or score
+             */
+            type: string;
+            instructions: string | {
+                [key: string]: unknown;
+            } | Array<unknown>;
+            criteria: unknown;
+            [key: string]: unknown;
+        };
+    };
+    [key: string]: unknown;
+};
+
+export type JevDecisionsResponse = {
+    id?: string;
+    model?: string;
+    answers: {
+        [key: string]: unknown;
+    };
+    usage?: {
+        input_tokens?: number;
+        output_tokens?: number;
+        cost?: number;
+        [key: string]: unknown;
     };
     [key: string]: unknown;
 };
@@ -11279,7 +11419,7 @@ export type DeepSeekChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -11674,7 +11814,7 @@ export type ArchestraChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -12506,7 +12646,7 @@ export type XaiChatCompletionRequest = {
     temperature?: number | null;
     max_tokens?: number | null;
     max_completion_tokens?: number | null;
-    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+    reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
     stream?: boolean | null;
     stream_options?: {
         include_usage?: boolean;
@@ -13010,7 +13150,6 @@ export type ListA2aRemoteAgentsData = {
         scope?: 'personal' | 'team' | 'org';
         teamId?: string;
         authorId?: string;
-        accessibleOnly?: boolean;
     };
     url: '/api/a2a/remote-agents';
 };
@@ -13088,7 +13227,6 @@ export type ListA2aRemoteAgentsResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13133,15 +13271,6 @@ export type ListA2aRemoteAgentsResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     }>;
 };
 
@@ -13173,9 +13302,25 @@ export type CreateA2aRemoteAgentData = {
         };
         name?: string;
         description?: string | null;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
-        users?: Array<string>;
+        initialGrants?: Array<{
+            subject: {
+                type: 'user';
+                id: string;
+            } | {
+                type: 'team';
+                id: string;
+            } | {
+                type: 'serviceAccount';
+                id: string;
+            } | {
+                type: 'role';
+                id: string;
+            } | {
+                type: 'organization';
+                id: '*';
+            };
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
+        }>;
     };
     path?: never;
     query?: never;
@@ -13255,7 +13400,6 @@ export type CreateA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13300,15 +13444,6 @@ export type CreateA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -13481,7 +13616,6 @@ export type GetA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13526,15 +13660,6 @@ export type GetA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -13567,9 +13692,6 @@ export type UpdateA2aRemoteAgentData = {
             credential: string;
         };
         enabled?: boolean;
-        scope?: 'personal' | 'team' | 'org';
-        teams?: Array<string>;
-        users?: Array<string>;
     };
     path: {
         id: string;
@@ -13651,7 +13773,6 @@ export type UpdateA2aRemoteAgentResponses = {
         id: string;
         organizationId: string;
         authorId: string | null;
-        scope: 'personal' | 'team' | 'org';
         name: string;
         description: string | null;
         discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -13696,15 +13817,6 @@ export type UpdateA2aRemoteAgentResponses = {
             name: string | null;
             email: string | null;
         } | null;
-        teams: Array<{
-            id: string;
-            name: string;
-        }>;
-        users: Array<{
-            id: string;
-            name: string;
-            email: string;
-        }>;
     };
 };
 
@@ -14063,10 +14175,18 @@ export type GetAgentCatalogData = {
     query?: {
         name?: string;
         scope?: 'personal' | 'team' | 'org' | 'built_in';
+        /**
+         * Also list the built-in agents. Applies to agent admins only, and the access filter does not apply to these agents.
+         */
+        includeBuiltIn?: boolean;
         teamIds?: Array<string>;
         authorIds?: Array<string>;
         excludeAuthorIds?: Array<string>;
         excludeOtherPersonalAgents?: boolean;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
          * When true, omit external A2A agents unless the caller can manage external-agent settings. Used to enumerate rows for bulk selection on the Agents page.
          */
@@ -14289,7 +14409,7 @@ export type GetAgentCatalogResponses = {
                     summaryTitle: string;
                     prompt: string;
                 }>;
-                resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 resolvedLlmProviderKeyName?: string | null;
                 resolvedLlmModelName?: string | null;
                 llmProviderRequiresPerUserCredential?: boolean;
@@ -14304,7 +14424,6 @@ export type GetAgentCatalogResponses = {
                 id: string;
                 organizationId: string;
                 authorId: string | null;
-                scope: 'personal' | 'team' | 'org';
                 name: string;
                 description: string | null;
                 discoveryMode: 'well_known' | 'card_url' | 'inline_card';
@@ -14349,15 +14468,6 @@ export type GetAgentCatalogResponses = {
                     name: string | null;
                     email: string | null;
                 } | null;
-                teams: Array<{
-                    id: string;
-                    name: string;
-                }>;
-                users: Array<{
-                    id: string;
-                    name: string;
-                    email: string;
-                }>;
             };
         }>;
         pagination: {
@@ -14409,6 +14519,10 @@ export type GetAgentsData = {
          * Exclude agents by author user IDs (comma-separated). Admin-only, only used when scope=personal.
          */
         excludeAuthorIds?: Array<string>;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
@@ -14642,7 +14756,7 @@ export type GetAgentsResponses = {
                 summaryTitle: string;
                 prompt: string;
             }>;
-            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
@@ -14853,7 +14967,7 @@ export type CreateAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -15064,7 +15178,7 @@ export type CreateAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
@@ -15490,7 +15604,7 @@ export type GetAllAgentsResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
@@ -15797,7 +15911,7 @@ export type GetDefaultMcpGatewayResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
@@ -16096,7 +16210,7 @@ export type ImportAgentResponses = {
                 summaryTitle: string;
                 prompt: string;
             }>;
-            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             resolvedLlmProviderKeyName?: string | null;
             resolvedLlmModelName?: string | null;
             llmProviderRequiresPerUserCredential?: boolean;
@@ -16408,7 +16522,7 @@ export type GetAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
@@ -16722,7 +16836,7 @@ export type UpdateAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
@@ -17209,7 +17323,7 @@ export type RestoreAgentVersionResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
@@ -17240,7 +17354,7 @@ export type CloneAgentData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         scope?: unknown;
         teams?: unknown;
@@ -17453,7 +17567,7 @@ export type CloneAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
@@ -19782,7 +19896,7 @@ export type RestoreAgentResponses = {
             summaryTitle: string;
             prompt: string;
         }>;
-        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        resolvedLlmProvider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         resolvedLlmProviderKeyName?: string | null;
         resolvedLlmModelName?: string | null;
         llmProviderRequiresPerUserCredential?: boolean;
@@ -22055,6 +22169,186 @@ export type UpdateAgentRunResponses = {
 
 export type UpdateAgentRunResponse = UpdateAgentRunResponses[keyof UpdateAgentRunResponses];
 
+export type GetAgentRunOpenappaReviewData = {
+    body?: never;
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/openappa-review';
+};
+
+export type GetAgentRunOpenappaReviewErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentRunOpenappaReviewError = GetAgentRunOpenappaReviewErrors[keyof GetAgentRunOpenappaReviewErrors];
+
+export type GetAgentRunOpenappaReviewResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        status: 'none' | 'pending' | 'no_reviewer';
+        canDecide: boolean;
+        offerId: string | null;
+        text: string | null;
+        tool: string | null;
+        arguments: string | null;
+    };
+};
+
+export type GetAgentRunOpenappaReviewResponse = GetAgentRunOpenappaReviewResponses[keyof GetAgentRunOpenappaReviewResponses];
+
+export type DecideAgentRunOpenappaReviewData = {
+    body: {
+        decision: 'approve' | 'deny';
+        offerId: string;
+    };
+    path: {
+        taskId: string;
+    };
+    query?: never;
+    url: '/api/agent-runs/{taskId}/openappa-review';
+};
+
+export type DecideAgentRunOpenappaReviewErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DecideAgentRunOpenappaReviewError = DecideAgentRunOpenappaReviewErrors[keyof DecideAgentRunOpenappaReviewErrors];
+
+export type DecideAgentRunOpenappaReviewResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        decision: 'approve' | 'deny';
+        offerId: string;
+        steered: boolean;
+    };
+};
+
+export type DecideAgentRunOpenappaReviewResponse = DecideAgentRunOpenappaReviewResponses[keyof DecideAgentRunOpenappaReviewResponses];
+
 export type ContinueAgentRunData = {
     body: {
         message?: string;
@@ -22249,6 +22543,7 @@ export type StartAgentWorkspaceTransferData = {
         path: string;
         size: number;
         sha256: string;
+        location?: 'workspace' | 'attachments';
     };
     path: {
         taskId: string;
@@ -25238,6 +25533,10 @@ export type GetAppsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/apps';
 };
@@ -25408,7 +25707,7 @@ export type CreateAppData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         name: string;
         slug?: string;
@@ -28694,7 +28993,7 @@ export type GetAuditLogsData = {
         /**
          * Filter by action type (dotted name, e.g. agent.created)
          */
-        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
+        action?: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted';
         /**
          * Filter by outcome (success, failure, or denied)
          */
@@ -28798,7 +29097,7 @@ export type GetAuditLogsResponses = {
             actorName: string | null;
             actorEmail: string | null;
             impersonatedBy: string | null;
-            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+            action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
             outcome: 'success' | 'failure' | 'denied';
             resourceType: string | null;
             resourceId: string | null;
@@ -28917,7 +29216,7 @@ export type GetAuditLogResponses = {
         actorName: string | null;
         actorEmail: string | null;
         impersonatedBy: string | null;
-        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
+        action: 'resourcePermissions.updated' | 'hook.created' | 'hook.updated' | 'hook.deleted' | 'agent.created' | 'agent.updated' | 'agent.deleted' | 'agent.restored' | 'agent.imported' | 'agent.purged' | 'agent.bulk_updated' | 'agent.bulk_deleted' | 'agentRun.created' | 'agentRun.canceled' | 'agentRun.updated' | 'agentRun.deleted' | 'agentRun.reviewDecided' | 'agentRun.shared' | 'agentRun.unshared' | 'credential.created' | 'credential.updated' | 'credential.deleted' | 'runtimeCredential.created' | 'runtimeCredential.updated' | 'runtimeCredential.deleted' | 'agentTool.created' | 'agentTool.updated' | 'agentTool.deleted' | 'agentTool.bulk_assigned' | 'agentTool.bulk_removed' | 'agentTool.bulk_updated' | 'apiKey.created' | 'apiKey.deleted' | 'apiKey.bulk_deleted' | 'app.created' | 'app.updated' | 'app.deleted' | 'app.bulk_updated' | 'app.bulk_deleted' | 'chatOpsBinding.created' | 'chatOpsBinding.updated' | 'chatOpsBinding.deleted' | 'chatOpsBinding.refreshed' | 'chatOpsConfig.updated' | 'plugin.created' | 'plugin.updated' | 'plugin.deleted' | 'plugin.syncTriggered' | 'clientConnection.updated' | 'connectedClient.disconnected' | 'connectionPromptSession.created' | 'connector.created' | 'connector.updated' | 'connector.deleted' | 'connector.restored' | 'connector.purged' | 'connector.bulk_updated' | 'connector.bulk_deleted' | 'connector.permission_sync_triggered' | 'connector.synced' | 'defaultUserLimit.created' | 'defaultUserLimit.updated' | 'defaultUserLimit.deleted' | 'environment.created' | 'environment.updated' | 'environment.deleted' | 'environment.bulk_deleted' | 'githubAppConfig.created' | 'githubAppConfig.updated' | 'githubAppConfig.deleted' | 'githubPat.created' | 'githubPat.updated' | 'githubPat.deleted' | 'identityProvider.created' | 'identityProvider.updated' | 'identityProvider.deleted' | 'internalMcpCatalog.created' | 'internalMcpCatalog.updated' | 'internalMcpCatalog.deleted' | 'internalMcpCatalog.restored' | 'internalMcpCatalog.reinstalled' | 'invitation.created' | 'invitation.deleted' | 'knowledgeBase.created' | 'knowledgeBase.updated' | 'knowledgeBase.deleted' | 'knowledgeBase.restored' | 'knowledgeBase.purged' | 'knowledgeBase.bulk_deleted' | 'knowledgeDirectory.created' | 'knowledgeDirectory.updated' | 'knowledgeDirectory.deleted' | 'knowledgeDirectory.bulk_updated' | 'knowledgeDirectory.bulk_deleted' | 'knowledgeFile.created' | 'knowledgeFile.updated' | 'knowledgeFile.content_upserted' | 'knowledgeFile.deleted' | 'knowledgeFile.bulk_updated' | 'knowledgeFile.bulk_deleted' | 'limit.created' | 'limit.updated' | 'limit.deleted' | 'limit.bulk_deleted' | 'llmModel.updated' | 'llmModel.synced' | 'llmModel.bulk_updated' | 'llmOauthClient.created' | 'llmOauthClient.updated' | 'llmOauthClient.deleted' | 'llmOauthClient.rotated' | 'llmOauthClient.bulk_deleted' | 'llmProviderApiKey.created' | 'llmProviderApiKey.updated' | 'llmProviderApiKey.deleted' | 'llmProxy.updated' | 'llmProviderApiKey.bulk_deleted' | 'mcpOauthClient.created' | 'mcpOauthClient.updated' | 'mcpOauthClient.deleted' | 'mcpOauthClient.rotated' | 'mcpServer.created' | 'mcpServer.updated' | 'mcpServer.deleted' | 'mcpServer.restored' | 'mcpServer.reinstalled' | 'mcpServer.hardReset' | 'mcpServer.bulk_deleted' | 'member.bulk_deleted' | 'mcpServerInstallationRequest.created' | 'mcpServerInstallationRequest.updated' | 'member.created' | 'member.role_updated' | 'member.deleted' | 'optimizationRule.created' | 'optimizationRule.updated' | 'optimizationRule.deleted' | 'organization.updated' | 'project.created' | 'project.updated' | 'project.deleted' | 'project.restored' | 'project.purged' | 'project.bulk_updated' | 'project.bulk_deleted' | 'role.created' | 'role.updated' | 'role.deleted' | 'role.bulk_deleted' | 'scheduleTrigger.created' | 'scheduleTrigger.updated' | 'scheduleTrigger.deleted' | 'scheduleTrigger.triggered' | 'serviceAccount.created' | 'serviceAccount.updated' | 'serviceAccount.deleted' | 'serviceAccount.bulk_deleted' | 'serviceAccount.bulk_updated' | 'skill.created' | 'skill.updated' | 'skill.bulk_updated' | 'skill.deleted' | 'skill.bulk_deleted' | 'skill.restored' | 'skill.purged' | 'skill.imported' | 'skillShareLink.created' | 'skillShareLink.rotated' | 'skillShareLink.revoked' | 'team.created' | 'team.updated' | 'team.deleted' | 'team.bulk_deleted' | 'teamToken.rotated' | 'tool.deleted' | 'guardrailsPolicy.updated' | 'openappaYell.updated' | 'openappaBatteryInstall.created' | 'openappaBatteryInstall.updated' | 'openappaBatteryInstall.deleted' | 'openappaBatteryPackage.updated' | 'openappaBatteryPackage.deleted' | 'openappaCredentialBinding.updated' | 'toolInvocationPolicy.created' | 'toolInvocationPolicy.updated' | 'toolInvocationPolicy.deleted' | 'toolInvocationPolicy.bulk_defaulted' | 'toolInvocationPolicy.auto_configured' | 'trustedDataPolicy.created' | 'trustedDataPolicy.updated' | 'trustedDataPolicy.deleted' | 'trustedDataPolicy.bulk_defaulted' | 'user.password_reset' | 'userToken.rotated' | 'virtualApiKey.created' | 'virtualApiKey.deleted' | 'virtualApiKey.bulk_deleted' | 'auth.impersonation_started' | 'auth.impersonation_stopped' | 'auth.signed_in' | 'auth.signed_out' | 'auth.signed_up' | 'auth.sso_callback' | 'auth.sessions_revoked' | 'unknown.created' | 'unknown.updated' | 'unknown.deleted' | string;
         outcome: 'success' | 'failure' | 'denied';
         resourceType: string | null;
         resourceId: string | null;
@@ -30968,7 +31267,7 @@ export type AzureResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -31139,7 +31438,7 @@ export type AzureResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -33254,6 +33553,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -33285,6 +33585,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -33326,6 +33627,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -33357,6 +33659,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -33394,7 +33697,8 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         } | null;
         mcp_servers?: Array<unknown>;
         metadata?: {
-            user_id: string | null;
+            user_id?: string | null;
+            [key: string]: unknown;
         };
         output_config?: {
             effort?: string | null;
@@ -33404,6 +33708,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
                     [key: string]: unknown;
                 };
             } | null;
+            [key: string]: unknown;
         };
         service_tier?: unknown;
         speed?: 'fast' | 'standard';
@@ -33414,22 +33719,39 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | Array<{
             type: 'text';
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         }>;
         temperature?: number;
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -33492,6 +33814,7 @@ export type BedrockInvokeWithDefaultAgentAndModelData = {
         anthropic_version?: string;
         anthropic_beta?: Array<string>;
         _isStreaming?: boolean;
+        [key: string]: unknown;
     };
     headers?: {
         /**
@@ -33593,6 +33916,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -33624,6 +33948,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -33665,6 +33990,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -33696,6 +34022,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -33733,7 +34060,8 @@ export type BedrockInvokeWithAgentAndModelData = {
         } | null;
         mcp_servers?: Array<unknown>;
         metadata?: {
-            user_id: string | null;
+            user_id?: string | null;
+            [key: string]: unknown;
         };
         output_config?: {
             effort?: string | null;
@@ -33743,6 +34071,7 @@ export type BedrockInvokeWithAgentAndModelData = {
                     [key: string]: unknown;
                 };
             } | null;
+            [key: string]: unknown;
         };
         service_tier?: unknown;
         speed?: 'fast' | 'standard';
@@ -33753,22 +34082,39 @@ export type BedrockInvokeWithAgentAndModelData = {
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | Array<{
             type: 'text';
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         }>;
         temperature?: number;
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -33831,6 +34177,7 @@ export type BedrockInvokeWithAgentAndModelData = {
         anthropic_version?: string;
         anthropic_beta?: Array<string>;
         _isStreaming?: boolean;
+        [key: string]: unknown;
     };
     headers?: {
         /**
@@ -33933,6 +34280,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -33964,6 +34312,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -34005,6 +34354,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -34036,6 +34386,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -34073,7 +34424,8 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         } | null;
         mcp_servers?: Array<unknown>;
         metadata?: {
-            user_id: string | null;
+            user_id?: string | null;
+            [key: string]: unknown;
         };
         output_config?: {
             effort?: string | null;
@@ -34083,6 +34435,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
                     [key: string]: unknown;
                 };
             } | null;
+            [key: string]: unknown;
         };
         service_tier?: unknown;
         speed?: 'fast' | 'standard';
@@ -34093,22 +34446,39 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | Array<{
             type: 'text';
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         }>;
         temperature?: number;
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -34171,6 +34541,7 @@ export type BedrockInvokeStreamWithDefaultAgentAndModelData = {
         anthropic_version?: string;
         anthropic_beta?: Array<string>;
         _isStreaming?: boolean;
+        [key: string]: unknown;
     };
     headers?: {
         /**
@@ -34205,6 +34576,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                 type: 'text';
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | {
                 type: 'image';
                 source: {
@@ -34236,6 +34608,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -34277,6 +34650,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -34308,6 +34682,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -34345,7 +34720,8 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         } | null;
         mcp_servers?: Array<unknown>;
         metadata?: {
-            user_id: string | null;
+            user_id?: string | null;
+            [key: string]: unknown;
         };
         output_config?: {
             effort?: string | null;
@@ -34355,6 +34731,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
                     [key: string]: unknown;
                 };
             } | null;
+            [key: string]: unknown;
         };
         service_tier?: unknown;
         speed?: 'fast' | 'standard';
@@ -34365,22 +34742,39 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         } | Array<{
             type: 'text';
             text: string;
             cache_control?: unknown;
             citations?: Array<unknown> | null;
+            [key: string]: unknown;
         }>;
         temperature?: number;
         thinking?: {
             type: 'enabled';
             budget_tokens: number;
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
         } | {
             type: 'disabled';
+            [key: string]: unknown;
+        } | {
+            type: 'between_tools';
+            [key: string]: unknown;
         } | {
             type: 'adaptive';
-            display?: 'summarized' | 'omitted';
+            display?: 'summarized' | 'omitted' | 'updates';
+            block_binding?: {
+                [key: string]: unknown;
+            } | null;
+            [key: string]: unknown;
+        } | {
+            type: string;
+            [key: string]: unknown;
         };
         tool_choice?: {
             type: 'auto';
@@ -34443,6 +34837,7 @@ export type BedrockInvokeStreamWithAgentAndModelData = {
         anthropic_version?: string;
         anthropic_beta?: Array<string>;
         _isStreaming?: boolean;
+        [key: string]: unknown;
     };
     headers?: {
         /**
@@ -35173,7 +35568,7 @@ export type GetChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -35185,7 +35580,7 @@ export type GetChatConversationsResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35220,11 +35615,11 @@ export type GetChatConversationsResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -35264,7 +35659,7 @@ export type CreateChatConversationData = {
         modelId?: string | null;
         chatApiKeyId?: string | null;
         projectId?: string | null;
-        lockedChat?: boolean;
+        encryptedChat?: boolean;
         thinkingEffort?: 'low' | 'medium' | 'high';
     };
     path?: never;
@@ -35349,7 +35744,7 @@ export type CreateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -35361,7 +35756,7 @@ export type CreateChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35396,11 +35791,11 @@ export type CreateChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -35510,7 +35905,7 @@ export type GetDeletedChatConversationsResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -35522,7 +35917,7 @@ export type GetDeletedChatConversationsResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35557,11 +35952,11 @@ export type GetDeletedChatConversationsResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -35758,7 +36153,7 @@ export type GetChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -35770,7 +36165,7 @@ export type GetChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35805,11 +36200,11 @@ export type GetChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -35930,7 +36325,7 @@ export type UpdateChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -35942,7 +36337,7 @@ export type UpdateChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -35977,11 +36372,11 @@ export type UpdateChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -36619,7 +37014,7 @@ export type ForkChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -36631,7 +37026,7 @@ export type ForkChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -36666,11 +37061,11 @@ export type ForkChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -36780,6 +37175,7 @@ export type GetChatAgentMcpToolsResponses = {
         parameters: {
             [key: string]: unknown;
         } | null;
+        tokens: number;
     }>;
 };
 
@@ -36871,7 +37267,7 @@ export type RestoreChatConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -36883,7 +37279,7 @@ export type RestoreChatConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -36918,11 +37314,11 @@ export type RestoreChatConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -37113,7 +37509,7 @@ export type CompactChatConversationResponses = {
      */
     200: {
         status: 'created' | 'existing' | 'skipped' | 'failed';
-        reason?: string;
+        reason?: 'below_threshold' | 'using_existing_summary' | 'nothing_to_compact' | 'missing_boundary_message_id' | 'not_beneficial' | 'aborted' | 'summary_generation_failed';
         compaction: {
             id: string;
             conversationId: string;
@@ -37134,7 +37530,7 @@ export type CompactChatConversationResponses = {
             chatApiKeyId: string | null;
             title: string | null;
             selectedModel: string;
-            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             modelId: string | null;
             thinkingEffort: 'low' | 'medium' | 'high';
             hasCustomToolSelection: boolean;
@@ -37146,7 +37542,7 @@ export type CompactChatConversationResponses = {
             projectId: string | null;
             origin: 'user' | 'schedule_trigger' | 'app_open';
             titleIsPlaceholder: boolean;
-            lockedChat: boolean;
+            encryptedChat: boolean;
             pinnedAt: string | null;
             lastMessageAt: string;
             createdAt: string;
@@ -37181,11 +37577,11 @@ export type CompactChatConversationResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -37303,7 +37699,7 @@ export type GenerateChatConversationTitleResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -37315,7 +37711,7 @@ export type GenerateChatConversationTitleResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -37350,11 +37746,11 @@ export type GenerateChatConversationTitleResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -37471,7 +37867,7 @@ export type UpdateChatMessageResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -37483,7 +37879,7 @@ export type UpdateChatMessageResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -37518,11 +37914,11 @@ export type UpdateChatMessageResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -37908,6 +38304,15 @@ export type PostApiWebhooksChatopsMsTeamsErrors = {
      * Default Response
      */
     400: {
+        error: {
+            message: string;
+            type: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
         error: {
             message: string;
             type: string;
@@ -39405,6 +39810,89 @@ export type GenerateTelegramLinkCodeResponses = {
 
 export type GenerateTelegramLinkCodeResponse = GenerateTelegramLinkCodeResponses[keyof GenerateTelegramLinkCodeResponses];
 
+export type UnlinkTelegramChatOpsAccountData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/chatops/telegram/link';
+};
+
+export type UnlinkTelegramChatOpsAccountErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UnlinkTelegramChatOpsAccountError = UnlinkTelegramChatOpsAccountErrors[keyof UnlinkTelegramChatOpsAccountErrors];
+
+export type UnlinkTelegramChatOpsAccountResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type UnlinkTelegramChatOpsAccountResponse = UnlinkTelegramChatOpsAccountResponses[keyof UnlinkTelegramChatOpsAccountResponses];
+
 export type LinkTelegramChatOpsAccountData = {
     body: {
         code: string;
@@ -39591,8 +40079,10 @@ export type GetClientConnectionInstallerResponses = {
 
 export type StartClientConnectionData = {
     body: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
+        exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
+        deviceName?: string;
     };
     path?: never;
     query?: never;
@@ -39844,8 +40334,10 @@ export type GetClientConnectionResponses = {
      * Default Response
      */
     200: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
+        exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
+        deviceName: string | null;
         userCode: string;
         expiresAt: string;
     };
@@ -39938,7 +40430,7 @@ export type DecideClientConnectionResponses = {
      */
     200: {
         status: 'approved' | 'denied';
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
     };
 };
@@ -40194,7 +40686,6 @@ export type GetConfigResponses = {
             betaEnabled: boolean;
             orchestratorK8sRuntime: boolean;
             mcpIdleHibernationBetaEnabled: boolean;
-            mcpServerAlertingEnabled: boolean;
             sandbox: boolean;
             agentRuntime: boolean;
             agentRuntimeCatalogImages: {
@@ -40239,7 +40730,7 @@ export type GetConfigResponses = {
             mcpSandboxDomain: string | null;
             maintenanceMode: string | null;
             chatSecretScanEnabled: boolean;
-            lockedChatEnabled: boolean;
+            encryptedChatEnabled: boolean;
             openappaEnabled: boolean;
             agentHooksEnabled: boolean;
             chatopsTelegramEnabled: boolean;
@@ -40269,9 +40760,551 @@ export type GetConfigResponses = {
 
 export type GetConfigResponse = GetConfigResponses[keyof GetConfigResponses];
 
+export type GetConnectedClientsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/connected-clients';
+};
+
+export type GetConnectedClientsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectedClientsError = GetConnectedClientsErrors[keyof GetConnectedClientsErrors];
+
+export type GetConnectedClientsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        clientId: string;
+        name: string;
+        lastConnectedAt: string;
+        deviceNames: Array<string>;
+        lastSeenAt: string | null;
+    }>;
+};
+
+export type GetConnectedClientsResponse = GetConnectedClientsResponses[keyof GetConnectedClientsResponses];
+
+export type GetConnectedClientLogData = {
+    body?: never;
+    path?: never;
+    query?: {
+        limit?: number;
+        cursor?: string;
+        /**
+         * Only events for this user's clients
+         */
+        userId?: string;
+        /**
+         * Only connects or only disconnects
+         */
+        action?: 'connected' | 'disconnected';
+        /**
+         * Events on or after this date (ISO 8601)
+         */
+        startDate?: string;
+        /**
+         * Events on or before this date (ISO 8601)
+         */
+        endDate?: string;
+    };
+    url: '/api/connected-clients/log';
+};
+
+export type GetConnectedClientLogErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetConnectedClientLogError = GetConnectedClientLogErrors[keyof GetConnectedClientLogErrors];
+
+export type GetConnectedClientLogResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        data: Array<{
+            id: string;
+            action: 'connected' | 'disconnected';
+            occurredAt: string;
+            userId: string;
+            userName: string;
+            userEmail: string;
+            clientId: string | null;
+            agentName: string;
+            via: 'setup' | 'oauthSignIn';
+            platform: 'macos' | 'linux' | 'windows' | null;
+            deviceName: string | null;
+            mcpGateway: {
+                id: string;
+                name: string;
+            } | null;
+            llmProxy: {
+                id: string;
+                name: string;
+            } | null;
+            includeSkills: boolean;
+            skillCount: number;
+            disconnectedBy: {
+                id: string;
+                name: string;
+            } | null;
+        }>;
+        pagination: {
+            limit: number;
+            nextCursor: string | null;
+            hasNext: boolean;
+        };
+    };
+};
+
+export type GetConnectedClientLogResponse = GetConnectedClientLogResponses[keyof GetConnectedClientLogResponses];
+
+export type GetAgentAdoptionData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Traffic on or after this date (ISO 8601); the last 30 days when left out
+         */
+        startDate?: string;
+        /**
+         * Traffic on or before this date (ISO 8601); now when left out
+         */
+        endDate?: string;
+    };
+    url: '/api/connected-clients/adoption';
+};
+
+export type GetAgentAdoptionErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionError = GetAgentAdoptionErrors[keyof GetAgentAdoptionErrors];
+
+export type GetAgentAdoptionResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        since: string;
+        until: string;
+        members: Array<{
+            userId: string;
+            name: string;
+            email: string;
+            status: 'active' | 'inactive' | 'notConnected';
+            gatewayLastSeenAt: string | null;
+            llmLastSeenAt: string | null;
+            agents: Array<{
+                clientId: string | null;
+                name: string;
+                status: 'active' | 'inactive' | 'notConnected';
+                setupAt: string | null;
+                signedIn: boolean;
+                viaToken: boolean;
+                lastGatewayCallAt: string | null;
+                lastLlmCallAt: string | null;
+            }>;
+            gatewayUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+            llmUses: Array<{
+                via: {
+                    id: string | null;
+                    name: string;
+                };
+                agent: {
+                    clientId: string | null;
+                    name: string;
+                };
+                calls: number;
+                lastSeenAt: string;
+            }>;
+        }>;
+    };
+};
+
+export type GetAgentAdoptionResponse = GetAgentAdoptionResponses[keyof GetAgentAdoptionResponses];
+
+export type GetAgentAdoptionUsageData = {
+    body?: never;
+    path?: never;
+    query?: {
+        /**
+         * Traffic on or after this date (ISO 8601); the last 30 days when left out
+         */
+        startDate?: string;
+        /**
+         * Traffic on or before this date (ISO 8601); now when left out
+         */
+        endDate?: string;
+        /**
+         * Only this member's calls; the whole organization when left out
+         */
+        userId?: string;
+    };
+    url: '/api/connected-clients/adoption/usage';
+};
+
+export type GetAgentAdoptionUsageErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetAgentAdoptionUsageError = GetAgentAdoptionUsageErrors[keyof GetAgentAdoptionUsageErrors];
+
+export type GetAgentAdoptionUsageResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        since: string;
+        until: string;
+        days: Array<{
+            date: string;
+            gatewayCalls: number;
+            llmCalls: number;
+        }>;
+    };
+};
+
+export type GetAgentAdoptionUsageResponse = GetAgentAdoptionUsageResponses[keyof GetAgentAdoptionUsageResponses];
+
+export type DisconnectConnectedClientData = {
+    body?: never;
+    path: {
+        clientId: string;
+    };
+    query?: never;
+    url: '/api/connected-clients/{clientId}';
+};
+
+export type DisconnectConnectedClientErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type DisconnectConnectedClientError = DisconnectConnectedClientErrors[keyof DisconnectConnectedClientErrors];
+
+export type DisconnectConnectedClientResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        success: boolean;
+    };
+};
+
+export type DisconnectConnectedClientResponse = DisconnectConnectedClientResponses[keyof DisconnectConnectedClientResponses];
+
 export type BeginConnectionPromptSessionData = {
     body: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         origin: string;
     };
     path?: never;
@@ -40445,12 +41478,12 @@ export type GetConnectionHealthResponse = GetConnectionHealthResponses[keyof Get
 
 export type CreateConnectionSetupData = {
     body: {
-        clientId: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+        clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform?: 'macos' | 'linux' | 'windows';
         baseUrl: string;
         mcpGatewayId?: string;
         llmProxyId?: string;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         proxyAuth?: 'provider-key' | 'virtual-key';
         attributePassthrough?: boolean;
         model?: string;
@@ -40548,7 +41581,7 @@ export type CreateConnectionSetupResponses = {
             id: string;
             pluginSlug: string;
             displayName: string;
-            clientType: 'claude-code' | 'claude-desktop' | 'codex' | 'copilot-cli' | 'cursor' | 'opencode';
+            clientType: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         }>;
     };
 };
@@ -40557,7 +41590,7 @@ export type CreateConnectionSetupResponse = CreateConnectionSetupResponses[keyof
 
 export type CreateConnectionVirtualKeyData = {
     body: {
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
     };
     path?: never;
     query?: never;
@@ -44001,7 +45034,7 @@ export type GithubCopilotChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -44483,7 +45516,7 @@ export type GithubCopilotChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -44809,7 +45842,7 @@ export type GithubCopilotResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -44977,7 +46010,7 @@ export type GithubCopilotResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -47291,7 +48324,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -47305,9 +48338,9 @@ export type GetInteractionsResponses = {
             response: OpenAiChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47357,11 +48390,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47388,7 +48421,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -47504,7 +48537,7 @@ export type GetInteractionsResponses = {
                     output_tokens: number;
                     total_tokens: number;
                     [key: string]: unknown;
-                };
+                } | null;
                 [key: string]: unknown;
             } | {
                 id: string;
@@ -47550,9 +48583,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47602,11 +48635,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47633,7 +48666,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -47670,9 +48703,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47722,11 +48755,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47751,7 +48784,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -47788,9 +48821,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47840,11 +48873,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47869,7 +48902,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -47906,9 +48939,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -47958,11 +48991,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -47987,7 +49020,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -48024,9 +49057,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48076,11 +49109,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -48105,7 +49138,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -48119,9 +49152,9 @@ export type GetInteractionsResponses = {
             response: GeminiGenerateContentResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48171,11 +49204,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -48202,7 +49235,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -48216,9 +49249,9 @@ export type GetInteractionsResponses = {
             response: AnthropicMessagesResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48268,11 +49301,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -48299,7 +49332,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -48754,9 +49787,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -48806,11 +49839,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -48837,7 +49870,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -48850,6 +49883,7 @@ export type GetInteractionsResponses = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -48881,6 +49915,7 @@ export type GetInteractionsResponses = {
                                 type: 'text';
                                 cache_control?: unknown;
                                 citations?: Array<unknown> | null;
+                                [key: string]: unknown;
                             } | {
                                 type: 'image';
                                 source: {
@@ -48922,6 +49957,7 @@ export type GetInteractionsResponses = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -48953,6 +49989,7 @@ export type GetInteractionsResponses = {
                                     type: 'text';
                                     cache_control?: unknown;
                                     citations?: Array<unknown> | null;
+                                    [key: string]: unknown;
                                 } | {
                                     type: 'image';
                                     source: {
@@ -48986,11 +50023,12 @@ export type GetInteractionsResponses = {
                 max_tokens: number;
                 container?: string | null;
                 context_management?: {
-                    [key: string]: never;
+                    [key: string]: unknown;
                 } | null;
                 mcp_servers?: Array<unknown>;
                 metadata?: {
-                    user_id: string | null;
+                    user_id?: string | null;
+                    [key: string]: unknown;
                 };
                 output_config?: {
                     effort?: string | null;
@@ -49000,6 +50038,7 @@ export type GetInteractionsResponses = {
                             [key: string]: unknown;
                         };
                     } | null;
+                    [key: string]: unknown;
                 };
                 service_tier?: unknown;
                 speed?: 'fast' | 'standard';
@@ -49010,22 +50049,39 @@ export type GetInteractionsResponses = {
                     text: string;
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | Array<{
                     type: 'text';
                     text: string;
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 }>;
                 temperature?: number;
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'disabled';
+                    [key: string]: unknown;
+                } | {
+                    type: 'between_tools';
+                    [key: string]: unknown;
                 } | {
                     type: 'adaptive';
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -49088,6 +50144,7 @@ export type GetInteractionsResponses = {
                 anthropic_version?: string;
                 anthropic_beta?: Array<string>;
                 _isStreaming?: boolean;
+                [key: string]: unknown;
             } | {
                 [key: string]: unknown;
             };
@@ -49099,6 +50156,7 @@ export type GetInteractionsResponses = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -49130,6 +50188,7 @@ export type GetInteractionsResponses = {
                                 type: 'text';
                                 cache_control?: unknown;
                                 citations?: Array<unknown> | null;
+                                [key: string]: unknown;
                             } | {
                                 type: 'image';
                                 source: {
@@ -49171,6 +50230,7 @@ export type GetInteractionsResponses = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -49202,6 +50262,7 @@ export type GetInteractionsResponses = {
                                     type: 'text';
                                     cache_control?: unknown;
                                     citations?: Array<unknown> | null;
+                                    [key: string]: unknown;
                                 } | {
                                     type: 'image';
                                     source: {
@@ -49235,11 +50296,12 @@ export type GetInteractionsResponses = {
                 max_tokens: number;
                 container?: string | null;
                 context_management?: {
-                    [key: string]: never;
+                    [key: string]: unknown;
                 } | null;
                 mcp_servers?: Array<unknown>;
                 metadata?: {
-                    user_id: string | null;
+                    user_id?: string | null;
+                    [key: string]: unknown;
                 };
                 output_config?: {
                     effort?: string | null;
@@ -49249,6 +50311,7 @@ export type GetInteractionsResponses = {
                             [key: string]: unknown;
                         };
                     } | null;
+                    [key: string]: unknown;
                 };
                 service_tier?: unknown;
                 speed?: 'fast' | 'standard';
@@ -49259,22 +50322,39 @@ export type GetInteractionsResponses = {
                     text: string;
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | Array<{
                     type: 'text';
                     text: string;
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 }>;
                 temperature?: number;
                 thinking?: {
                     type: 'enabled';
                     budget_tokens: number;
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'disabled';
+                    [key: string]: unknown;
+                } | {
+                    type: 'between_tools';
+                    [key: string]: unknown;
                 } | {
                     type: 'adaptive';
-                    display?: 'summarized' | 'omitted';
+                    display?: 'summarized' | 'omitted' | 'updates';
+                    block_binding?: {
+                        [key: string]: unknown;
+                    } | null;
+                    [key: string]: unknown;
+                } | {
+                    type: string;
+                    [key: string]: unknown;
                 };
                 tool_choice?: {
                     type: 'auto';
@@ -49337,15 +50417,16 @@ export type GetInteractionsResponses = {
                 anthropic_version?: string;
                 anthropic_beta?: Array<string>;
                 _isStreaming?: boolean;
+                [key: string]: unknown;
             } | {
                 [key: string]: unknown;
             } | null;
             response: AnthropicMessagesResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49395,11 +50476,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -49426,7 +50507,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -49440,9 +50521,9 @@ export type GetInteractionsResponses = {
             response: CerebrasChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49492,11 +50573,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -49523,7 +50604,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -49537,9 +50618,9 @@ export type GetInteractionsResponses = {
             response: MistralChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49589,11 +50670,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -49620,7 +50701,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -49634,9 +50715,9 @@ export type GetInteractionsResponses = {
             response: PerplexityChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49686,11 +50767,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -49717,7 +50798,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -49731,9 +50812,9 @@ export type GetInteractionsResponses = {
             response: GroqChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49783,11 +50864,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -49814,7 +50895,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -49828,9 +50909,9 @@ export type GetInteractionsResponses = {
             response: XaiChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49880,11 +50961,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -49911,7 +50992,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -49925,9 +51006,9 @@ export type GetInteractionsResponses = {
             response: OpenrouterChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -49977,11 +51058,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -50008,7 +51089,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -50022,9 +51103,9 @@ export type GetInteractionsResponses = {
             response: VllmChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50074,11 +51155,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -50105,7 +51186,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -50119,9 +51200,9 @@ export type GetInteractionsResponses = {
             response: OllamaChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50171,11 +51252,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -50202,7 +51283,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -50216,9 +51297,9 @@ export type GetInteractionsResponses = {
             response: OllamaNativeChatResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50268,11 +51349,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -50299,7 +51380,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -50313,9 +51394,9 @@ export type GetInteractionsResponses = {
             response: CohereChatResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50365,11 +51446,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -50396,7 +51477,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -50410,9 +51491,9 @@ export type GetInteractionsResponses = {
             response: ZhipuaiChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50462,11 +51543,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -50493,7 +51574,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -50507,9 +51588,9 @@ export type GetInteractionsResponses = {
             response: DeepSeekChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -50559,11 +51640,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -50590,7 +51671,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -50911,7 +51992,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -51237,7 +52318,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -51318,9 +52399,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -51370,11 +52451,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -51401,7 +52482,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -51722,7 +52803,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52048,7 +53129,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52129,9 +53210,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -52181,11 +53262,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -52212,7 +53293,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -52533,7 +53614,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52859,7 +53940,7 @@ export type GetInteractionsResponses = {
                 temperature?: number | null;
                 max_tokens?: number | null;
                 max_completion_tokens?: number | null;
-                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+                reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
                 stream?: boolean | null;
                 stream_options?: {
                     include_usage?: boolean;
@@ -52940,9 +54021,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -52992,11 +54073,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -53023,7 +54104,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -53037,9 +54118,9 @@ export type GetInteractionsResponses = {
             response: MinimaxChatCompletionResponse | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53089,11 +54170,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -53120,7 +54201,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -53202,9 +54283,9 @@ export type GetInteractionsResponses = {
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53254,11 +54335,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -53285,7 +54366,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -53401,14 +54482,14 @@ export type GetInteractionsResponses = {
                     output_tokens: number;
                     total_tokens: number;
                     [key: string]: unknown;
-                };
+                } | null;
                 [key: string]: unknown;
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53458,11 +54539,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -53489,7 +54570,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -53605,14 +54686,14 @@ export type GetInteractionsResponses = {
                     output_tokens: number;
                     total_tokens: number;
                     [key: string]: unknown;
-                };
+                } | null;
                 [key: string]: unknown;
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53662,11 +54743,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -53693,7 +54774,7 @@ export type GetInteractionsResponses = {
             appId: string | null;
             sessionId: string | null;
             sessionSource: string | null;
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
             authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
             billingMode: 'metered' | 'subscription';
             authenticatedAppId: string | null;
@@ -53809,14 +54890,14 @@ export type GetInteractionsResponses = {
                     output_tokens: number;
                     total_tokens: number;
                     [key: string]: unknown;
-                };
+                } | null;
                 [key: string]: unknown;
             } | {
                 error: string;
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             };
             dualLlmAnalyses?: Array<{
                 toolCallId: string;
@@ -53866,11 +54947,11 @@ export type GetInteractionsResponses = {
                     usageLimitExceeded?: boolean;
                     usageLimitEntityType?: string;
                     authAction?: {
-                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         providerLabel: string;
                     };
                     originalError?: {
-                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                         status?: number;
                         message?: string;
                         type?: string;
@@ -53883,6 +54964,102 @@ export type GetInteractionsResponses = {
             virtualKey?: InteractionVirtualKey | null;
             passthroughVirtualKey?: InteractionVirtualKey | null;
             requestType?: 'main' | 'subagent';
+            externalAgentIdLabel?: string | null;
+        } | {
+            id: string;
+            profileId: string | null;
+            externalAgentId: string | null;
+            runId: string | null;
+            userId: string | null;
+            virtualKeyId: string | null;
+            passthroughVirtualKeyId: string | null;
+            environmentId: string | null;
+            connectorId: string | null;
+            appId: string | null;
+            sessionId: string | null;
+            sessionSource: string | null;
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+            billingMode: 'metered' | 'subscription';
+            authenticatedAppId: string | null;
+            authenticatedAppName: string | null;
+            request: JevDecisionsRequest | {
+                [key: string]: unknown;
+            };
+            processedRequest?: JevDecisionsRequest | {
+                [key: string]: unknown;
+            } | null;
+            response: JevDecisionsResponse | {
+                error: string;
+            } | {
+                __encryptedChatSealed: string;
+            } | {
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+            };
+            dualLlmAnalyses?: Array<{
+                toolCallId: string;
+                conversations: Array<{
+                    role: 'user' | 'assistant';
+                    content: string;
+                }>;
+                result: string;
+            }> | null;
+            unsafeContextBoundary?: {
+                kind: 'preexisting_untrusted';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            } | {
+                kind: 'tool_result';
+                reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+                toolCallId: string;
+                toolName: string;
+            } | null;
+            toolCallBlock?: {
+                reason: string;
+                blockedToolCallCount: number;
+            } | null;
+            type: 'jev:decisions';
+            model: string | null;
+            baselineModel: string | null;
+            inputTokens: number | null;
+            inputTokensEstimated: boolean;
+            outputTokens: number | null;
+            cacheReadTokens: number | null;
+            cacheWriteTokens: number | null;
+            cacheWrite1hTokens: number | null;
+            baselineCost: string | null;
+            cost: string | null;
+            cacheCost: string | null;
+            cacheSavings: string | null;
+            createdAt: string;
+            chatErrors?: Array<{
+                id: string;
+                conversationId: string;
+                error: {
+                    code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                    message: string;
+                    isRetryable: boolean;
+                    sessionId?: string;
+                    traceId?: string;
+                    spanId?: string;
+                    usageLimitExceeded?: boolean;
+                    usageLimitEntityType?: string;
+                    authAction?: {
+                        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        providerLabel: string;
+                    };
+                    originalError?: {
+                        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                        status?: number;
+                        message?: string;
+                        type?: string;
+                        raw?: unknown;
+                    };
+                };
+                createdAt: string;
+            }>;
+            connectorName?: string | null;
+            virtualKey?: InteractionVirtualKey | null;
+            passthroughVirtualKey?: InteractionVirtualKey | null;
             externalAgentIdLabel?: string | null;
         }>;
         pagination: {
@@ -54001,10 +55178,10 @@ export type GetInteractionSummariesResponses = {
             cost: string | null;
             baselineCost: string | null;
             createdAt: string;
-            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings';
+            type: 'openai:chatCompletions' | 'openai:responses' | 'openai:embeddings' | 'gemini:generateContent' | 'gemini:embeddings' | 'anthropic:messages' | 'bedrock:converse' | 'bedrock:invoke' | 'bedrock:embeddings' | 'cohere:chat' | 'cohere:embeddings' | 'cerebras:chatCompletions' | 'mistral:chatCompletions' | 'perplexity:chatCompletions' | 'perplexity:responses' | 'groq:chatCompletions' | 'xai:chatCompletions' | 'openrouter:chatCompletions' | 'vllm:chatCompletions' | 'ollama:chatCompletions' | 'ollama-native:chat' | 'zhipuai:chatCompletions' | 'deepseek:chatCompletions' | 'minimax:chatCompletions' | 'kimi:chatCompletions' | 'azure:chatCompletions' | 'azure:responses' | 'github-copilot:chatCompletions' | 'github-copilot:responses' | 'microsoft-365-copilot:chatCompletions' | 'archestra:chatCompletions' | 'voyage:embeddings' | 'jev:decisions';
             externalAgentIdLabel: string | null;
             requestType: 'main' | 'subagent';
-            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         }>;
         pagination: {
             currentPage: number;
@@ -54034,7 +55211,7 @@ export type GetInteractionSessionsData = {
         /**
          * Filter by interaction source
          */
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         /**
          * Filter by client app (queries external_agent_id; e.g. claude)
          */
@@ -54130,8 +55307,8 @@ export type GetInteractionSessionsResponses = {
         data: Array<{
             sessionId: string | null;
             sessionSource: string | null;
-            source: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
-            sources: Array<'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement'>;
+            source: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+            sources: Array<'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement'>;
             interactionId: string | null;
             requestCount: number;
             totalInputTokens: number;
@@ -54524,7 +55701,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -54538,9 +55715,9 @@ export type GetInteractionResponses = {
         response: OpenAiChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -54590,11 +55767,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54621,7 +55798,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -54737,7 +55914,7 @@ export type GetInteractionResponses = {
                 output_tokens: number;
                 total_tokens: number;
                 [key: string]: unknown;
-            };
+            } | null;
             [key: string]: unknown;
         } | {
             id: string;
@@ -54783,9 +55960,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -54835,11 +56012,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54866,7 +56043,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -54903,9 +56080,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -54955,11 +56132,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -54984,7 +56161,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -55021,9 +56198,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55073,11 +56250,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -55102,7 +56279,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -55139,9 +56316,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55191,11 +56368,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -55220,7 +56397,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -55257,9 +56434,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55309,11 +56486,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -55338,7 +56515,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -55352,9 +56529,9 @@ export type GetInteractionResponses = {
         response: GeminiGenerateContentResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55404,11 +56581,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -55435,7 +56612,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -55449,9 +56626,9 @@ export type GetInteractionResponses = {
         response: AnthropicMessagesResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -55501,11 +56678,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -55532,7 +56709,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -55987,9 +57164,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56039,11 +57216,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -56070,7 +57247,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -56083,6 +57260,7 @@ export type GetInteractionResponses = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -56114,6 +57292,7 @@ export type GetInteractionResponses = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -56155,6 +57334,7 @@ export type GetInteractionResponses = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -56186,6 +57366,7 @@ export type GetInteractionResponses = {
                                 type: 'text';
                                 cache_control?: unknown;
                                 citations?: Array<unknown> | null;
+                                [key: string]: unknown;
                             } | {
                                 type: 'image';
                                 source: {
@@ -56219,11 +57400,12 @@ export type GetInteractionResponses = {
             max_tokens: number;
             container?: string | null;
             context_management?: {
-                [key: string]: never;
+                [key: string]: unknown;
             } | null;
             mcp_servers?: Array<unknown>;
             metadata?: {
-                user_id: string | null;
+                user_id?: string | null;
+                [key: string]: unknown;
             };
             output_config?: {
                 effort?: string | null;
@@ -56233,6 +57415,7 @@ export type GetInteractionResponses = {
                         [key: string]: unknown;
                     };
                 } | null;
+                [key: string]: unknown;
             };
             service_tier?: unknown;
             speed?: 'fast' | 'standard';
@@ -56243,22 +57426,39 @@ export type GetInteractionResponses = {
                 text: string;
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | Array<{
                 type: 'text';
                 text: string;
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             }>;
             temperature?: number;
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
             } | {
                 type: 'disabled';
+                [key: string]: unknown;
+            } | {
+                type: 'between_tools';
+                [key: string]: unknown;
             } | {
                 type: 'adaptive';
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             };
             tool_choice?: {
                 type: 'auto';
@@ -56321,6 +57521,7 @@ export type GetInteractionResponses = {
             anthropic_version?: string;
             anthropic_beta?: Array<string>;
             _isStreaming?: boolean;
+            [key: string]: unknown;
         } | {
             [key: string]: unknown;
         };
@@ -56332,6 +57533,7 @@ export type GetInteractionResponses = {
                     type: 'text';
                     cache_control?: unknown;
                     citations?: Array<unknown> | null;
+                    [key: string]: unknown;
                 } | {
                     type: 'image';
                     source: {
@@ -56363,6 +57565,7 @@ export type GetInteractionResponses = {
                             type: 'text';
                             cache_control?: unknown;
                             citations?: Array<unknown> | null;
+                            [key: string]: unknown;
                         } | {
                             type: 'image';
                             source: {
@@ -56404,6 +57607,7 @@ export type GetInteractionResponses = {
                         type: 'text';
                         cache_control?: unknown;
                         citations?: Array<unknown> | null;
+                        [key: string]: unknown;
                     } | {
                         type: 'image';
                         source: {
@@ -56435,6 +57639,7 @@ export type GetInteractionResponses = {
                                 type: 'text';
                                 cache_control?: unknown;
                                 citations?: Array<unknown> | null;
+                                [key: string]: unknown;
                             } | {
                                 type: 'image';
                                 source: {
@@ -56468,11 +57673,12 @@ export type GetInteractionResponses = {
             max_tokens: number;
             container?: string | null;
             context_management?: {
-                [key: string]: never;
+                [key: string]: unknown;
             } | null;
             mcp_servers?: Array<unknown>;
             metadata?: {
-                user_id: string | null;
+                user_id?: string | null;
+                [key: string]: unknown;
             };
             output_config?: {
                 effort?: string | null;
@@ -56482,6 +57688,7 @@ export type GetInteractionResponses = {
                         [key: string]: unknown;
                     };
                 } | null;
+                [key: string]: unknown;
             };
             service_tier?: unknown;
             speed?: 'fast' | 'standard';
@@ -56492,22 +57699,39 @@ export type GetInteractionResponses = {
                 text: string;
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             } | Array<{
                 type: 'text';
                 text: string;
                 cache_control?: unknown;
                 citations?: Array<unknown> | null;
+                [key: string]: unknown;
             }>;
             temperature?: number;
             thinking?: {
                 type: 'enabled';
                 budget_tokens: number;
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
             } | {
                 type: 'disabled';
+                [key: string]: unknown;
+            } | {
+                type: 'between_tools';
+                [key: string]: unknown;
             } | {
                 type: 'adaptive';
-                display?: 'summarized' | 'omitted';
+                display?: 'summarized' | 'omitted' | 'updates';
+                block_binding?: {
+                    [key: string]: unknown;
+                } | null;
+                [key: string]: unknown;
+            } | {
+                type: string;
+                [key: string]: unknown;
             };
             tool_choice?: {
                 type: 'auto';
@@ -56570,15 +57794,16 @@ export type GetInteractionResponses = {
             anthropic_version?: string;
             anthropic_beta?: Array<string>;
             _isStreaming?: boolean;
+            [key: string]: unknown;
         } | {
             [key: string]: unknown;
         } | null;
         response: AnthropicMessagesResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56628,11 +57853,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -56659,7 +57884,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -56673,9 +57898,9 @@ export type GetInteractionResponses = {
         response: CerebrasChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56725,11 +57950,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -56756,7 +57981,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -56770,9 +57995,9 @@ export type GetInteractionResponses = {
         response: MistralChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56822,11 +58047,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -56853,7 +58078,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -56867,9 +58092,9 @@ export type GetInteractionResponses = {
         response: PerplexityChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -56919,11 +58144,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -56950,7 +58175,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -56964,9 +58189,9 @@ export type GetInteractionResponses = {
         response: GroqChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57016,11 +58241,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57047,7 +58272,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -57061,9 +58286,9 @@ export type GetInteractionResponses = {
         response: XaiChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57113,11 +58338,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57144,7 +58369,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -57158,9 +58383,9 @@ export type GetInteractionResponses = {
         response: OpenrouterChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57210,11 +58435,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57241,7 +58466,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -57255,9 +58480,9 @@ export type GetInteractionResponses = {
         response: VllmChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57307,11 +58532,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57338,7 +58563,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -57352,9 +58577,9 @@ export type GetInteractionResponses = {
         response: OllamaChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57404,11 +58629,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57435,7 +58660,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -57449,9 +58674,9 @@ export type GetInteractionResponses = {
         response: OllamaNativeChatResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57501,11 +58726,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57532,7 +58757,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -57546,9 +58771,9 @@ export type GetInteractionResponses = {
         response: CohereChatResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57598,11 +58823,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57629,7 +58854,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -57643,9 +58868,9 @@ export type GetInteractionResponses = {
         response: ZhipuaiChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57695,11 +58920,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57726,7 +58951,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -57740,9 +58965,9 @@ export type GetInteractionResponses = {
         response: DeepSeekChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -57792,11 +59017,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -57823,7 +59048,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -58144,7 +59369,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -58470,7 +59695,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -58551,9 +59776,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -58603,11 +59828,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -58634,7 +59859,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -58955,7 +60180,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -59281,7 +60506,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -59362,9 +60587,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -59414,11 +60639,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -59445,7 +60670,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -59766,7 +60991,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -60092,7 +61317,7 @@ export type GetInteractionResponses = {
             temperature?: number | null;
             max_tokens?: number | null;
             max_completion_tokens?: number | null;
-            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+            reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
             stream?: boolean | null;
             stream_options?: {
                 include_usage?: boolean;
@@ -60173,9 +61398,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60225,11 +61450,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -60256,7 +61481,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -60270,9 +61495,9 @@ export type GetInteractionResponses = {
         response: MinimaxChatCompletionResponse | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60322,11 +61547,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -60353,7 +61578,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -60435,9 +61660,9 @@ export type GetInteractionResponses = {
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60487,11 +61712,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -60518,7 +61743,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -60634,14 +61859,14 @@ export type GetInteractionResponses = {
                 output_tokens: number;
                 total_tokens: number;
                 [key: string]: unknown;
-            };
+            } | null;
             [key: string]: unknown;
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60691,11 +61916,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -60722,7 +61947,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -60838,14 +62063,14 @@ export type GetInteractionResponses = {
                 output_tokens: number;
                 total_tokens: number;
                 [key: string]: unknown;
-            };
+            } | null;
             [key: string]: unknown;
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -60895,11 +62120,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -60926,7 +62151,7 @@ export type GetInteractionResponses = {
         appId: string | null;
         sessionId: string | null;
         sessionSource: string | null;
-        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
         authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
         billingMode: 'metered' | 'subscription';
         authenticatedAppId: string | null;
@@ -61042,14 +62267,14 @@ export type GetInteractionResponses = {
                 output_tokens: number;
                 total_tokens: number;
                 [key: string]: unknown;
-            };
+            } | null;
             [key: string]: unknown;
         } | {
             error: string;
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         };
         dualLlmAnalyses?: Array<{
             toolCallId: string;
@@ -61099,11 +62324,11 @@ export type GetInteractionResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -61116,6 +62341,102 @@ export type GetInteractionResponses = {
         virtualKey?: InteractionVirtualKey | null;
         passthroughVirtualKey?: InteractionVirtualKey | null;
         requestType?: 'main' | 'subagent';
+        externalAgentIdLabel?: string | null;
+    } | {
+        id: string;
+        profileId: string | null;
+        externalAgentId: string | null;
+        runId: string | null;
+        userId: string | null;
+        virtualKeyId: string | null;
+        passthroughVirtualKeyId: string | null;
+        environmentId: string | null;
+        connectorId: string | null;
+        appId: string | null;
+        sessionId: string | null;
+        sessionSource: string | null;
+        source?: 'api' | 'model_router' | 'opencode:main' | 'opencode:subagent' | 'opencode:title' | 'opencode:compaction' | 'chat' | 'chat:compaction' | 'a2a:compaction' | 'chat:title_generation' | 'chat:tool_call_repair' | 'a2a:tool_call_repair' | 'skill:description_generation' | 'guardrail:dual_llm' | 'guardrail:annotator' | 'chatops:slack' | 'chatops:ms-teams' | 'chatops:telegram' | 'email' | 'schedule-trigger' | 'knowledge:embedding' | 'knowledge:reranker' | 'knowledge:query-expansion' | 'knowledge:contextual-retrieval' | 'knowledge:ocr' | 'app:llm_complete' | 'app:recording_enhancement';
+        authMethod?: 'provider_key' | 'virtual_key' | 'passthrough_virtual_key' | 'jwks' | 'oauth_client_credentials' | 'oauth_user' | 'internal' | 'unknown';
+        billingMode: 'metered' | 'subscription';
+        authenticatedAppId: string | null;
+        authenticatedAppName: string | null;
+        request: JevDecisionsRequest | {
+            [key: string]: unknown;
+        };
+        processedRequest?: JevDecisionsRequest | {
+            [key: string]: unknown;
+        } | null;
+        response: JevDecisionsResponse | {
+            error: string;
+        } | {
+            __encryptedChatSealed: string;
+        } | {
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
+        };
+        dualLlmAnalyses?: Array<{
+            toolCallId: string;
+            conversations: Array<{
+                role: 'user' | 'assistant';
+                content: string;
+            }>;
+            result: string;
+        }> | null;
+        unsafeContextBoundary?: {
+            kind: 'preexisting_untrusted';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+        } | {
+            kind: 'tool_result';
+            reason: 'agent_configured_untrusted' | 'inherited_from_parent' | 'tool_result_marked_untrusted' | 'tool_result_blocked';
+            toolCallId: string;
+            toolName: string;
+        } | null;
+        toolCallBlock?: {
+            reason: string;
+            blockedToolCallCount: number;
+        } | null;
+        type: 'jev:decisions';
+        model: string | null;
+        baselineModel: string | null;
+        inputTokens: number | null;
+        inputTokensEstimated: boolean;
+        outputTokens: number | null;
+        cacheReadTokens: number | null;
+        cacheWriteTokens: number | null;
+        cacheWrite1hTokens: number | null;
+        baselineCost: string | null;
+        cost: string | null;
+        cacheCost: string | null;
+        cacheSavings: string | null;
+        createdAt: string;
+        chatErrors?: Array<{
+            id: string;
+            conversationId: string;
+            error: {
+                code: 'rate_limit' | 'usage_limit_exceeded' | 'authentication' | 'permission_denied' | 'invalid_request' | 'provider_insufficient_balance' | 'not_found' | 'context_too_long' | 'request_too_large' | 'request_exceeds_rate_limit' | 'content_filtered' | 'server_error' | 'network_error' | 'empty_response' | 'incomplete_tool_call' | 'tool_call_output_truncated' | 'provider_auth_required' | 'tools_unsupported' | 'aborted' | 'unknown';
+                message: string;
+                isRetryable: boolean;
+                sessionId?: string;
+                traceId?: string;
+                spanId?: string;
+                usageLimitExceeded?: boolean;
+                usageLimitEntityType?: string;
+                authAction?: {
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    providerLabel: string;
+                };
+                originalError?: {
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
+                    status?: number;
+                    message?: string;
+                    type?: string;
+                    raw?: unknown;
+                };
+            };
+            createdAt: string;
+        }>;
+        connectorName?: string | null;
+        virtualKey?: InteractionVirtualKey | null;
+        passthroughVirtualKey?: InteractionVirtualKey | null;
         externalAgentIdLabel?: string | null;
     };
 };
@@ -61215,9 +62536,13 @@ export type GetInternalMcpCatalogData = {
     query?: {
         includeApps?: boolean;
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default).
+         * Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.
          */
         status?: 'active' | 'deleted';
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/internal_mcp_catalog';
 };
@@ -61449,7 +62774,7 @@ export type GetInternalMcpCatalogResponses = {
         appId?: string | null;
         appEnabled?: boolean | null;
         imageApprovalRequired?: boolean;
-        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        effectiveActions?: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
     }>;
 };
 
@@ -61594,7 +62919,7 @@ export type CreateInternalMcpCatalogItemData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         oauthClientSecretVaultPath?: string;
         oauthClientSecretVaultKey?: string;
@@ -63724,6 +65049,7 @@ export type GetDeploymentYamlPreviewResponse = GetDeploymentYamlPreviewResponses
 
 export type ValidateDeploymentYamlData = {
     body: {
+        catalogId?: string;
         yaml: string;
     };
     path?: never;
@@ -64237,6 +65563,190 @@ export type CheckInvitationResponses = {
 
 export type CheckInvitationResponse = CheckInvitationResponses[keyof CheckInvitationResponses];
 
+export type JevDecisionsWithDefaultAgentData = {
+    body: JevDecisionsRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/v1/jev/decisions';
+};
+
+export type JevDecisionsWithDefaultAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type JevDecisionsWithDefaultAgentError = JevDecisionsWithDefaultAgentErrors[keyof JevDecisionsWithDefaultAgentErrors];
+
+export type JevDecisionsWithDefaultAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: JevDecisionsResponse;
+};
+
+export type JevDecisionsWithDefaultAgentResponse = JevDecisionsWithDefaultAgentResponses[keyof JevDecisionsWithDefaultAgentResponses];
+
+export type JevDecisionsWithAgentData = {
+    body: JevDecisionsRequestInput;
+    headers: {
+        /**
+         * The user agent of the client
+         */
+        'user-agent'?: string;
+        /**
+         * Bearer token for OpenAI
+         */
+        authorization: string;
+    };
+    path: {
+        agentId: string;
+    };
+    query?: never;
+    url: '/v1/jev/{agentId}/decisions';
+};
+
+export type JevDecisionsWithAgentErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type JevDecisionsWithAgentError = JevDecisionsWithAgentErrors[keyof JevDecisionsWithAgentErrors];
+
+export type JevDecisionsWithAgentResponses = {
+    /**
+     * Default Response
+     */
+    200: JevDecisionsResponse;
+};
+
+export type JevDecisionsWithAgentResponse = JevDecisionsWithAgentResponses[keyof JevDecisionsWithAgentResponses];
+
 export type GetK8sCapabilitiesData = {
     body?: never;
     path?: never;
@@ -64650,7 +66160,7 @@ export type KimiChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -65132,7 +66642,7 @@ export type KimiChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -65653,6 +67163,10 @@ export type GetKnowledgeBasesData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/knowledge-bases';
 };
@@ -65803,7 +67317,7 @@ export type CreateKnowledgeBaseData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -67100,7 +68614,7 @@ export type CreateConnectorData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -70828,7 +72342,7 @@ export type UploadKnowledgeFileData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -71075,7 +72589,7 @@ export type PromoteAttachmentToKnowledgeFileData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         filename?: string;
         directoryId?: string | null;
@@ -73027,7 +74541,7 @@ export type GetLlmModelsData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         apiKeyId?: string;
         isEmbedding?: string;
     };
@@ -73107,7 +74621,7 @@ export type GetLlmModelsResponses = {
         id: string;
         dbId: string;
         displayName: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         createdAt?: string;
         capabilities?: {
             contextLength: number | null;
@@ -73216,7 +74730,7 @@ export type SyncLlmModelsResponses = {
         failures: Array<{
             apiKeyId: string;
             name: string;
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             requiresReauthentication: boolean;
         }>;
     };
@@ -73303,7 +74817,7 @@ export type GetModelsWithApiKeysResponses = {
     200: Array<{
         id: string;
         externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string;
         description: string | null;
         contextLength: number | null;
@@ -73594,7 +75108,7 @@ export type UpdateModelResponses = {
     200: {
         id: string;
         externalId: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string;
         description: string | null;
         contextLength: number | null;
@@ -73902,7 +75416,7 @@ export type GetLlmOauthClientsResponses = {
             organizationId: string;
             grantType: 'client_credentials' | 'authorization_code';
             providerApiKeys: Array<{
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
@@ -73943,7 +75457,7 @@ export type CreateLlmOauthClientData = {
         name: string;
         grantType?: 'client_credentials' | 'authorization_code';
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
@@ -73976,7 +75490,7 @@ export type CreateLlmOauthClientData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -74060,7 +75574,7 @@ export type CreateLlmOauthClientResponses = {
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -74178,7 +75692,7 @@ export type UpdateLlmOauthClientData = {
         name: string;
         grantType?: 'client_credentials' | 'authorization_code';
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
         }>;
         redirectUris?: Array<string>;
@@ -74275,7 +75789,7 @@ export type UpdateLlmOauthClientResponses = {
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -74387,7 +75901,7 @@ export type RotateLlmOauthClientSecretResponses = {
         organizationId: string;
         grantType: 'client_credentials' | 'authorization_code';
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -74684,7 +76198,7 @@ export type GetLlmProviderApiKeysData = {
     path?: never;
     query?: {
         search?: string;
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         /**
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
@@ -74766,7 +76280,7 @@ export type GetLlmProviderApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -74810,7 +76324,7 @@ export type GetLlmProviderApiKeysResponse = GetLlmProviderApiKeysResponses[keyof
 export type CreateLlmProviderApiKeyData = {
     body: {
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         apiKey?: string;
         baseUrl?: string | null;
         inferenceBaseUrl?: string | null;
@@ -74853,7 +76367,7 @@ export type CreateLlmProviderApiKeyData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -74934,7 +76448,7 @@ export type CreateLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -74979,7 +76493,7 @@ export type GetAvailableLlmProviderApiKeysData = {
     body?: never;
     path?: never;
     query?: {
-        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         includeKeyId?: string;
     };
     url: '/api/llm-provider-api-keys/available';
@@ -75058,7 +76572,7 @@ export type GetAvailableLlmProviderApiKeysResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -75266,7 +76780,7 @@ export type GetLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -75412,7 +76926,7 @@ export type UpdateLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -75537,7 +77051,7 @@ export type ReconnectLlmProviderApiKeyResponses = {
         id: string;
         organizationId: string;
         name: string;
-        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         secretId: string | null;
         scope: 'personal' | 'team' | 'org';
         userId: string | null;
@@ -76355,7 +77869,7 @@ export type CreateMcpOauthClientData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -76911,7 +78425,7 @@ export type GetMcpServersData = {
         assignmentScope?: 'personal' | 'team' | 'org';
         assignmentTeamIds?: Array<string>;
         /**
-         * Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires the manage-deleted permission (granted to admins by default).
+         * Filter by lifecycle status. `deleted` lists soft-deleted (uninstalled) installs and requires delete permission and is limited to connections you can uninstall.
          */
         status?: 'active' | 'deleted';
     };
@@ -77075,7 +78589,6 @@ export type InstallMcpServerData = {
         agentIds?: Array<string>;
         accessToken?: string;
         isByosVault?: boolean;
-        serviceAccount?: string;
     };
     path?: never;
     query?: never;
@@ -78258,7 +79771,6 @@ export type ReinstallMcpServerData = {
             [key: string]: string;
         };
         isByosVault?: boolean;
-        serviceAccount?: string;
         hibernationMode?: 'inherit' | 'enabled' | 'disabled';
     };
     path: {
@@ -78715,14 +80227,16 @@ export type GetMcpToolCallsResponses = {
                 };
                 kind?: 'function' | 'custom';
             } | {
-                __lockedChatSealed: string;
+                __encryptedChatSealed: string;
             } | {
-                __redacted: 'locked_chat' | 'incognito';
+                __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
             } | null;
             toolResult: unknown;
             userId: string | null;
             runId: string | null;
             authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+            oauthClientId: string | null;
+            source: 'api' | 'chat';
             createdAt: string;
             userName: string | null;
             appName: string | null;
@@ -78831,14 +80345,16 @@ export type GetMcpToolCallResponses = {
             };
             kind?: 'function' | 'custom';
         } | {
-            __lockedChatSealed: string;
+            __encryptedChatSealed: string;
         } | {
-            __redacted: 'locked_chat' | 'incognito';
+            __redacted: 'encrypted_chat' | 'locked_chat' | 'incognito';
         } | null;
         toolResult: unknown;
         userId: string | null;
         runId: string | null;
         authMethod: 'oauth' | 'user_token' | 'org_token' | 'team_token' | 'external_idp' | 'session';
+        oauthClientId: string | null;
+        source: 'api' | 'chat';
         createdAt: string;
         userName: string | null;
         appName: string | null;
@@ -79672,7 +81188,7 @@ export type Microsoft365CopilotChatCompletionsWithDefaultAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -80154,7 +81670,7 @@ export type Microsoft365CopilotChatCompletionsWithAgentData = {
         temperature?: number | null;
         max_tokens?: number | null;
         max_completion_tokens?: number | null;
-        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh';
+        reasoning_effort?: 'none' | 'minimal' | 'low' | 'medium' | 'high' | 'xhigh' | 'max';
         stream?: boolean | null;
         stream_options?: {
             include_usage?: boolean;
@@ -81421,7 +82937,7 @@ export type ModelRouterResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -81592,7 +83108,7 @@ export type ModelRouterResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -83620,7 +85136,7 @@ export type OpenAiResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -83791,7 +85307,7 @@ export type OpenAiResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -84640,6 +86156,95 @@ export type OpenaiCodexDeviceAuthPollResponses = {
 
 export type OpenaiCodexDeviceAuthPollResponse = OpenaiCodexDeviceAuthPollResponses[keyof OpenaiCodexDeviceAuthPollResponses];
 
+export type AnnotateOpenappaToolWithArchestraData = {
+    body: {
+        system: string;
+        input: string;
+        schema: {
+            [key: string]: unknown;
+        };
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/annotators/archestra';
+};
+
+export type AnnotateOpenappaToolWithArchestraErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type AnnotateOpenappaToolWithArchestraError = AnnotateOpenappaToolWithArchestraErrors[keyof AnnotateOpenappaToolWithArchestraErrors];
+
+export type AnnotateOpenappaToolWithArchestraResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        [key: string]: unknown;
+    };
+};
+
+export type AnnotateOpenappaToolWithArchestraResponse = AnnotateOpenappaToolWithArchestraResponses[keyof AnnotateOpenappaToolWithArchestraResponses];
+
 export type GetOpenappaBatteriesData = {
     body?: never;
     path?: never;
@@ -84840,6 +86445,7 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             credentials: Array<{
                 variable: string;
                 key: string | null;
+                source: 'policy' | 'binding' | null;
                 readers: Array<string>;
             }>;
             helpers: Array<string>;
@@ -84857,6 +86463,10 @@ export type GetOpenappaPolicyDeclarationsResponses = {
             sourceCommit: string;
             reasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
+        credentialBindings: Array<{
+            variable: string;
+            key: string;
+        }>;
     };
 };
 
@@ -85239,6 +86849,7 @@ export type CreateOpenappaBatteryInstallResponses = {
         credentials: Array<{
             variable: string;
             key: string | null;
+            source: 'policy' | 'binding' | null;
             readers: Array<string>;
         }>;
         helpers: Array<string>;
@@ -85335,9 +86946,6 @@ export type DeleteOpenappaBatteryInstallResponse = DeleteOpenappaBatteryInstallR
 export type UpdateOpenappaBatteryInstallData = {
     body: {
         enabled?: boolean;
-        credentialBindings?: {
-            [key: string]: string;
-        };
     };
     path: {
         id: string;
@@ -85431,6 +87039,7 @@ export type UpdateOpenappaBatteryInstallResponses = {
         credentials: Array<{
             variable: string;
             key: string | null;
+            source: 'policy' | 'binding' | null;
             readers: Array<string>;
         }>;
         helpers: Array<string>;
@@ -85523,6 +87132,130 @@ export type DeleteOpenappaBatteryIncludeResponses = {
 };
 
 export type DeleteOpenappaBatteryIncludeResponse = DeleteOpenappaBatteryIncludeResponses[keyof DeleteOpenappaBatteryIncludeResponses];
+
+export type SetOpenappaCredentialBindingData = {
+    body: {
+        key: string | null;
+    };
+    path: {
+        variable: string;
+    };
+    query?: never;
+    url: '/api/openappa/credential-bindings/{variable}';
+};
+
+export type SetOpenappaCredentialBindingErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type SetOpenappaCredentialBindingError = SetOpenappaCredentialBindingErrors[keyof SetOpenappaCredentialBindingErrors];
+
+export type SetOpenappaCredentialBindingResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        batteries: Array<{
+            entry: string;
+            name: string;
+            source: 'bundled' | 'upload';
+            packageHash: string | null;
+            status: 'unavailable' | 'missing_credentials' | 'naming_conflict' | 'server_missing' | 'unrouted' | 'refused' | 'active';
+            scope: 'catalogs' | 'organization';
+            composed: boolean;
+            line: number;
+            servers: Array<{
+                target: string;
+                catalogId: string | null;
+            }>;
+            credentials: Array<{
+                variable: string;
+                key: string | null;
+                source: 'policy' | 'binding' | null;
+                readers: Array<string>;
+            }>;
+            helpers: Array<string>;
+        }>;
+        unusedAliases: Array<{
+            namespace: string;
+            servers: Array<string>;
+            line: number;
+        }>;
+        rootRevision: number;
+        lastError: string | null;
+        managedInGithub: boolean;
+        heldPull: {
+            contentHash: string;
+            sourceCommit: string;
+            reasons: Array<'drops_batteries' | 'changes_credentials'>;
+        } | null;
+        credentialBindings: Array<{
+            variable: string;
+            key: string;
+        }>;
+    };
+};
+
+export type SetOpenappaCredentialBindingResponse = SetOpenappaCredentialBindingResponses[keyof SetOpenappaCredentialBindingResponses];
 
 export type UploadOpenappaBatteryPackageData = {
     body: {
@@ -86080,7 +87813,7 @@ export type GetOpenappaExternalConsultsData = {
     path?: never;
     query?: {
         externalName?: string;
-        role?: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+        role?: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
         outcome?: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
         /**
          * Recorded on or after this time (ISO 8601)
@@ -86180,9 +87913,9 @@ export type GetOpenappaExternalConsultsResponses = {
             createdAt: string;
             startedAt: string;
             durationMs: number;
-            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input';
+            role: 'authority' | 'sanitizer' | 'annotator' | 'audience_source' | 'input' | 'context_provider';
             externalName: string;
-            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl';
+            backend: 'url' | 'command' | 'module' | 'llm' | 'jev' | 'claude_code' | 'hitl' | 'archestra';
             request: unknown;
             outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
             answer: unknown;
@@ -86302,6 +88035,7 @@ export type GetAppaGithubSyncResponses = {
             heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
+        validationDirectory: string;
     };
 };
 
@@ -86410,6 +88144,7 @@ export type UpdateAppaGithubSyncResponses = {
             heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
+        validationDirectory: string;
     };
 };
 
@@ -86421,6 +88156,7 @@ export type ConfigureAppaGithubSyncData = {
         ref?: string | null;
         path: string;
         interval: '15m' | '1h' | '1d';
+        validationDirectory?: '' | string;
         githubPatId?: string | null;
         githubAppConfigId?: string | null;
     };
@@ -86518,6 +88254,7 @@ export type ConfigureAppaGithubSyncResponses = {
             heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
+        validationDirectory: string;
     };
 };
 
@@ -86624,6 +88361,7 @@ export type CreateAppaGithubRepositoryResponses = {
             heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
+        validationDirectory: string;
     };
 };
 
@@ -86731,6 +88469,7 @@ export type AcceptHeldAppaGithubPullResponses = {
                 heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
             } | null;
             hasPolicy: boolean;
+            validationDirectory: string;
         };
     };
 };
@@ -86824,6 +88563,760 @@ export type ConsultOpenappaBatteryHelperResponses = {
 };
 
 export type ConsultOpenappaBatteryHelperResponse = ConsultOpenappaBatteryHelperResponses[keyof ConsultOpenappaBatteryHelperResponses];
+
+export type InspectOpenAppaPolicyTestsData = {
+    body: {
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests/inspect';
+};
+
+export type InspectOpenAppaPolicyTestsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type InspectOpenAppaPolicyTestsError = InspectOpenAppaPolicyTestsErrors[keyof InspectOpenAppaPolicyTestsErrors];
+
+export type InspectOpenAppaPolicyTestsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        files: Array<{
+            path: string;
+            tools: Array<string>;
+            assertionCount: number | null;
+            error: string | null;
+        }>;
+    };
+};
+
+export type InspectOpenAppaPolicyTestsResponse = InspectOpenAppaPolicyTestsResponses[keyof InspectOpenAppaPolicyTestsResponses];
+
+export type GetOpenAppaPolicyTestsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests';
+};
+
+export type GetOpenAppaPolicyTestsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenAppaPolicyTestsError = GetOpenAppaPolicyTestsErrors[keyof GetOpenAppaPolicyTestsErrors];
+
+export type GetOpenAppaPolicyTestsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: 'local' | 'github';
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        version: string;
+        sourceCommit: string | null;
+        directory: string;
+        activeDirectory: string;
+        error: string | null;
+    };
+};
+
+export type GetOpenAppaPolicyTestsResponse = GetOpenAppaPolicyTestsResponses[keyof GetOpenAppaPolicyTestsResponses];
+
+export type UpdateOpenAppaPolicyTestsData = {
+    body: {
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        expectedVersion: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests';
+};
+
+export type UpdateOpenAppaPolicyTestsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateOpenAppaPolicyTestsError = UpdateOpenAppaPolicyTestsErrors[keyof UpdateOpenAppaPolicyTestsErrors];
+
+export type UpdateOpenAppaPolicyTestsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: 'local' | 'github';
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        version: string;
+        sourceCommit: string | null;
+        directory: string;
+        activeDirectory: string;
+        error: string | null;
+    };
+};
+
+export type UpdateOpenAppaPolicyTestsResponse = UpdateOpenAppaPolicyTestsResponses[keyof UpdateOpenAppaPolicyTestsResponses];
+
+export type RunOpenAppaPolicyTestsData = {
+    body: {
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        sourceVersion: string;
+        directory?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests/run';
+};
+
+export type RunOpenAppaPolicyTestsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RunOpenAppaPolicyTestsError = RunOpenAppaPolicyTestsErrors[keyof RunOpenAppaPolicyTestsErrors];
+
+export type RunOpenAppaPolicyTestsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        createdBy: string | null;
+        createdAt: string;
+        trigger?: 'manual' | 'github_sync' | 'policy_change';
+        executionError?: string;
+        source: 'local' | 'github';
+        sourceVersion: string;
+        sourceCommit: string | null;
+        definitionHash: string;
+        policyRevision: number;
+        policyHash: string;
+        effectivePolicyHash: string;
+        engineVersion: string;
+        draft: boolean;
+        files: Array<{
+            path: string;
+            assertionCount: number;
+            status: 'passed' | 'failed' | 'cannot_run';
+            error?: string | null;
+            contentHash: string;
+            steps: Array<{
+                line: number;
+                tool: string;
+                expected: string;
+                actual: string | null;
+                status: 'passed' | 'failed' | 'cannot_run';
+                error?: string | null;
+            }>;
+        }>;
+        validation: {
+            valid: boolean;
+            errors: Array<string>;
+            warnings: Array<string>;
+        };
+        stale: boolean;
+    };
+};
+
+export type RunOpenAppaPolicyTestsResponse = RunOpenAppaPolicyTestsResponses[keyof RunOpenAppaPolicyTestsResponses];
+
+export type GetOpenAppaPolicyTestRunsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests/runs';
+};
+
+export type GetOpenAppaPolicyTestRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenAppaPolicyTestRunsError = GetOpenAppaPolicyTestRunsErrors[keyof GetOpenAppaPolicyTestRunsErrors];
+
+export type GetOpenAppaPolicyTestRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        createdBy: string | null;
+        createdAt: string;
+        trigger?: 'manual' | 'github_sync' | 'policy_change';
+        executionError?: string;
+        source: 'local' | 'github';
+        sourceVersion: string;
+        sourceCommit: string | null;
+        definitionHash: string;
+        policyRevision: number;
+        policyHash: string;
+        effectivePolicyHash: string;
+        engineVersion: string;
+        draft: boolean;
+        files: Array<{
+            path: string;
+            assertionCount: number;
+            status: 'passed' | 'failed' | 'cannot_run';
+            error?: string | null;
+            contentHash: string;
+            steps: Array<{
+                line: number;
+                tool: string;
+                expected: string;
+                actual: string | null;
+                status: 'passed' | 'failed' | 'cannot_run';
+                error?: string | null;
+            }>;
+        }>;
+        validation: {
+            valid: boolean;
+            errors: Array<string>;
+            warnings: Array<string>;
+        };
+        stale: boolean;
+    }>;
+};
+
+export type GetOpenAppaPolicyTestRunsResponse = GetOpenAppaPolicyTestRunsResponses[keyof GetOpenAppaPolicyTestRunsResponses];
+
+export type PreviewOpenAppaPolicyTestData = {
+    body: {
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        sourceVersion: string;
+        directory?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests/preview';
+};
+
+export type PreviewOpenAppaPolicyTestErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PreviewOpenAppaPolicyTestError = PreviewOpenAppaPolicyTestErrors[keyof PreviewOpenAppaPolicyTestErrors];
+
+export type PreviewOpenAppaPolicyTestResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        trigger?: 'manual' | 'github_sync' | 'policy_change';
+        executionError?: string;
+        source: 'local' | 'github';
+        sourceVersion: string;
+        sourceCommit: string | null;
+        definitionHash: string;
+        policyRevision: number;
+        policyHash: string;
+        effectivePolicyHash: string;
+        engineVersion: string;
+        draft: boolean;
+        files: Array<{
+            path: string;
+            assertionCount: number;
+            status: 'passed' | 'failed' | 'cannot_run';
+            error?: string | null;
+            contentHash: string;
+            steps: Array<{
+                line: number;
+                tool: string;
+                expected: string;
+                actual: string | null;
+                status: 'passed' | 'failed' | 'cannot_run';
+                error?: string | null;
+            }>;
+        }>;
+        validation: {
+            valid: boolean;
+            errors: Array<string>;
+            warnings: Array<string>;
+        };
+        stale: boolean;
+    };
+};
+
+export type PreviewOpenAppaPolicyTestResponse = PreviewOpenAppaPolicyTestResponses[keyof PreviewOpenAppaPolicyTestResponses];
+
+export type GetOpenappaTrustAudienceData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/trust-audience';
+};
+
+export type GetOpenappaTrustAudienceErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenappaTrustAudienceError = GetOpenappaTrustAudienceErrors[keyof GetOpenappaTrustAudienceErrors];
+
+export type GetOpenappaTrustAudienceResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        trust: Array<string>;
+        audiences: Array<{
+            name: string;
+            kind: 'builtin';
+        } | {
+            name: string;
+            kind: 'mapped';
+            mappingLine: number | null;
+            from: Array<{
+                entry: string | null;
+                line: number | null;
+                source: string;
+                selector: string;
+                declaredBy: {
+                    battery: string;
+                    runBy: 'archestra' | 'helper';
+                    lastConsult: {
+                        outcome: 'answered' | 'unregistered' | 'unreachable' | 'dismissed' | 'non_success' | 'timeout' | 'transport' | 'malformed' | 'oversized' | 'unsupported_version' | 'module_error' | 'module_panicked';
+                        at: string;
+                    } | null;
+                } | null;
+            }>;
+            within: string | null;
+        } | {
+            name: string;
+            kind: 'unmapped';
+        }>;
+    };
+};
+
+export type GetOpenappaTrustAudienceResponse = GetOpenappaTrustAudienceResponses[keyof GetOpenappaTrustAudienceResponses];
 
 export type GetOpenAppaYellsData = {
     body?: never;
@@ -86921,6 +89414,17 @@ export type GetOpenAppaYellsResponses = {
             resolvedAt: string | null;
             resolvedBy: string | null;
             hasArchive: boolean;
+            caller: {
+                id: string;
+                type?: 'user' | 'service_account';
+                name: string | null;
+                email: string | null;
+            } | null;
+            conversation: {
+                id: string;
+                title: string | null;
+                createdAt: string;
+            } | null;
         }>;
         pagination: {
             limit: number;
@@ -87107,6 +89611,17 @@ export type GetOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        conversation: {
+            id: string;
+            title: string | null;
+            createdAt: string;
+        } | null;
     };
 };
 
@@ -87206,6 +89721,17 @@ export type UpdateOpenAppaYellResponses = {
         resolvedAt: string | null;
         resolvedBy: string | null;
         hasArchive: boolean;
+        caller: {
+            id: string;
+            type?: 'user' | 'service_account';
+            name: string | null;
+            email: string | null;
+        } | null;
+        conversation: {
+            id: string;
+            title: string | null;
+            createdAt: string;
+        } | null;
     };
 };
 
@@ -87499,7 +90025,7 @@ export type GetRolesResponses = {
             name: string;
             description: string | null;
             permission: {
-                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+                [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
             };
             createdAt: string;
             updatedAt: string | null;
@@ -87523,7 +90049,7 @@ export type CreateRoleData = {
         name: string;
         description?: string;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path?: never;
@@ -87607,7 +90133,7 @@ export type CreateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87793,7 +90319,7 @@ export type GetRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -87808,7 +90334,7 @@ export type UpdateRoleData = {
         name?: string;
         description?: string;
         permission?: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     };
     path: {
@@ -87897,7 +90423,7 @@ export type UpdateRoleResponses = {
         name: string;
         description: string | null;
         permission: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
         createdAt: string;
         updatedAt: string | null;
@@ -88014,7 +90540,7 @@ export type GetOrganizationResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -88339,7 +90865,7 @@ export type UpdateAppearanceSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -88547,7 +91073,7 @@ export type UpdateSecuritySettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -88750,7 +91276,7 @@ export type UpdateMcpSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -88953,7 +91479,7 @@ export type UpdateSkillsSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -89157,7 +91683,7 @@ export type UpdateAgentSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -89376,7 +91902,7 @@ export type UpdateConnectionSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -89610,7 +92136,7 @@ export type UpdateIntegrationSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -89823,7 +92349,7 @@ export type UpdateDefaultEnvironmentResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -90031,7 +92557,7 @@ export type UpdateAuthSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -90241,7 +92767,7 @@ export type UpdateKnowledgeSettingsResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -90441,7 +92967,7 @@ export type DropEmbeddingConfigResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -90991,7 +93517,7 @@ export type CompleteOnboardingResponses = {
         kbBm25B: number | null;
         kbContextualRetrievalMode: ContextualRetrievalMode | null;
         defaultLlmModel: string | null;
-        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        defaultLlmProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         defaultModelId: string | null;
         defaultLlmApiKeyId: string | null;
         defaultUserLimitValue: number | null;
@@ -91866,7 +94392,7 @@ export type PerplexityResponsesWithDefaultAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -92037,7 +94563,7 @@ export type PerplexityResponsesWithAgentResponses = {
             output_tokens: number;
             total_tokens: number;
             [key: string]: unknown;
-        };
+        } | null;
         [key: string]: unknown;
     };
 };
@@ -92306,6 +94832,10 @@ export type GetPluginsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/plugins';
 };
@@ -92476,7 +95006,7 @@ export type CreatePluginData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -92775,7 +95305,7 @@ export type ImportGithubPluginMarketplaceData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         syncInterval?: '15m' | '1h' | '1d' | null;
     };
@@ -93064,7 +95594,7 @@ export type ImportGithubPluginData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         approvedCommitSha: string;
         trackingRef?: string | null;
@@ -94717,6 +97247,10 @@ export type GetProjectsData = {
          * Lifecycle slice: `active` (default) or `deleted` (project admins only; org-wide soft-deleted projects for the restore view).
          */
         status?: 'active' | 'deleted';
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
     };
     url: '/api/projects';
 };
@@ -94850,7 +97384,7 @@ export type CreateProjectData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -98854,7 +101388,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         chatApiKeyId: string | null;
         title: string | null;
         selectedModel: string;
-        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+        selectedProvider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
         modelId: string | null;
         thinkingEffort: 'low' | 'medium' | 'high';
         hasCustomToolSelection: boolean;
@@ -98866,7 +101400,7 @@ export type CreateScheduleTriggerRunConversationResponses = {
         projectId: string | null;
         origin: 'user' | 'schedule_trigger' | 'app_open';
         titleIsPlaceholder: boolean;
-        lockedChat: boolean;
+        encryptedChat: boolean;
         pinnedAt: string | null;
         lastMessageAt: string;
         createdAt: string;
@@ -98901,11 +101435,11 @@ export type CreateScheduleTriggerRunConversationResponses = {
                 usageLimitExceeded?: boolean;
                 usageLimitEntityType?: string;
                 authAction?: {
-                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     providerLabel: string;
                 };
                 originalError?: {
-                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                    provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                     status?: number;
                     message?: string;
                     type?: string;
@@ -99497,7 +102031,7 @@ export type CreateServiceAccountData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -101337,6 +103871,10 @@ export type GetSkillsData = {
          * Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.
          */
         labels?: string;
+        /**
+         * Keep only objects the caller reaches in one of these ways (comma-separated): mine (authored by the caller), shared (shared with the caller or one of their teams), org (shared with the organization), others (visible only through organization-wide authority). Omit for every readable object.
+         */
+        access?: Array<'mine' | 'shared' | 'org' | 'others'>;
         sortBy?: 'usageCount' | 'lastUsedAt' | 'name' | 'createdAt';
         sortDirection?: 'asc' | 'desc';
     };
@@ -101541,7 +104079,7 @@ export type CreateSkillData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -103566,7 +106104,7 @@ export type ImportGithubSkillsData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
         /**
          * Pull schedule for the imported skills. Every import is synced from the repo and read-only in the app until disconnected. Defaults to daily.
@@ -108084,7 +110622,7 @@ export type GetUserPermissionSourcesResponses = {
             name: string;
         } | null;
         permissions: {
-            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+            [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
         };
     }>;
 };
@@ -108168,7 +110706,7 @@ export type GetUserPermissionsResponses = {
      * Default Response
      */
     200: {
-        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'enable' | 'query' | 'execute' | 'manage' | 'manage-deleted' | 'impersonate'>;
+        [key: string]: Array<'create' | 'read' | 'update' | 'delete' | 'cancel' | 'query' | 'impersonate' | 'full-view' | 'admin'>;
     };
 };
 
@@ -108798,7 +111336,7 @@ export type GetAllVirtualApiKeysResponses = {
                 email: string | null;
             } | null;
             providerApiKeys: Array<{
-                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+                provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
                 providerApiKeyId: string;
                 providerApiKeyName: string;
             }>;
@@ -108828,7 +111366,7 @@ export type CreateVirtualApiKeyData = {
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
         }>;
         labels?: Array<{
@@ -108855,7 +111393,7 @@ export type CreateVirtualApiKeyData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path?: never;
@@ -108958,7 +111496,7 @@ export type CreateVirtualApiKeyResponses = {
             email: string | null;
         } | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -109161,7 +111699,7 @@ export type GetVirtualApiKeyResponses = {
             email: string | null;
         } | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -109182,7 +111720,7 @@ export type UpdateVirtualApiKeyData = {
         keyType?: 'standard' | 'passthrough';
         expiresAt?: unknown;
         providerApiKeys?: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
         }>;
         labels?: Array<{
@@ -109293,7 +111831,7 @@ export type UpdateVirtualApiKeyResponses = {
             email: string | null;
         } | null;
         providerApiKeys: Array<{
-            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage';
+            provider: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
             providerApiKeyId: string;
             providerApiKeyName: string;
         }>;
@@ -112386,7 +114924,7 @@ export type UpdateIdentityProviderResponse = UpdateIdentityProviderResponses[key
 export type SearchInitialPermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
     };
     query?: {
         query?: string;
@@ -112565,9 +115103,9 @@ export type GetScopedCapabilitiesResponses = {
      */
     200: Array<{
         organizationId: string;
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
-        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions';
+        action: 'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec';
     }>;
 };
 
@@ -112576,7 +115114,7 @@ export type GetScopedCapabilitiesResponse = GetScopedCapabilitiesResponses[keyof
 export type SearchResourcePermissionSubjectsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: {
@@ -112681,7 +115219,7 @@ export type SearchResourcePermissionSubjectsResponse = SearchResourcePermissionS
 export type GetResourcePermissionsData = {
     body?: never;
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -112758,7 +115296,7 @@ export type GetResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -112779,7 +115317,7 @@ export type GetResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -112799,11 +115337,11 @@ export type GetResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
     };
 };
 
@@ -112829,11 +115367,11 @@ export type UpdateResourcePermissionsData = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
         }>;
     };
     path: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
     };
     query?: never;
@@ -112910,7 +115448,7 @@ export type UpdateResourcePermissionsResponses = {
      * Default Response
      */
     200: {
-        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask' | 'log' | 'auditLog';
+        resource: 'agent' | 'mcpGateway' | 'mcpRegistry' | 'skill' | 'app' | 'llmModel' | 'project' | 'conversation' | 'agentRun' | 'plugin' | 'knowledgeBase' | 'knowledgeConnector' | 'knowledgeFile' | 'llmVirtualKey' | 'llmProviderApiKey' | 'externalAgent' | 'mcpOauthClient' | 'llmOauthClient' | 'environment' | 'serviceAccount' | 'scheduledTask';
         scope: '*' | string;
         name: string;
         revision: number;
@@ -112931,7 +115469,7 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
             name: string;
         }>;
         inheritedGrants: Array<{
@@ -112951,11 +115489,11 @@ export type UpdateResourcePermissionsResponses = {
                 type: 'organization';
                 id: '*';
             };
-            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+            actions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
             name: string;
             sourceScope?: '*' | string;
         }>;
-        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions'>;
+        effectiveActions: Array<'read' | 'use' | 'update' | 'delete' | 'manage-permissions' | 'configure-deployment-spec'>;
     };
 };
 

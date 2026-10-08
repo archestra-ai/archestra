@@ -3,10 +3,10 @@ import { createHash } from "node:crypto";
 import { EventEmitter, once } from "node:events";
 import { readFileSync } from "node:fs";
 import * as fileSystem from "node:fs/promises";
-import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
 import { createServer, type Server } from "node:http";
 import { createServer as createSecureServer } from "node:https";
-import { tmpdir } from "node:os";
+import { hostname, tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 import { runInNewContext } from "node:vm";
@@ -21,10 +21,12 @@ let scriptBody: string;
 let downloads: number;
 let polls: number;
 let transientFailure: boolean;
+let readFaultStatus: number;
 let interval: number;
 let startedAt: number;
 let firstPollDelay: number;
 let starts: number;
+let startBody: Record<string, unknown>;
 let clockPath: string;
 
 beforeEach(async () => {
@@ -48,14 +50,21 @@ globalThis.setTimeout = (callback, timeout, ...args) => {
   downloads = 0;
   polls = 0;
   transientFailure = false;
+  readFaultStatus = 0;
   interval = 1;
   startedAt = 0;
   firstPollDelay = 0;
   starts = 0;
-  server = createServer((req, res) => {
+  server = createServer(async (req, res) => {
     if (req.url === "/api/client-connections") {
       starts++;
       startedAt = Date.now();
+      let raw = "";
+      req.on("data", (chunk) => {
+        raw += chunk;
+      });
+      await once(req, "end");
+      startBody = JSON.parse(raw);
       res.setHeader("Content-Type", "application/json");
       res.end(
         JSON.stringify({
@@ -69,8 +78,8 @@ globalThis.setTimeout = (callback, timeout, ...args) => {
     } else if (req.url === "/api/client-connections/poll") {
       polls++;
       if (polls === 1) firstPollDelay = Date.now() - startedAt;
-      if (transientFailure && polls === 1) {
-        res.writeHead(503);
+      if ((readFaultStatus !== 0 || transientFailure) && polls === 1) {
+        res.writeHead(readFaultStatus || 503);
         res.end();
         return;
       }
@@ -153,6 +162,10 @@ test("downloads and executes the approved script without logging polling credent
   expect(downloads).toBe(1);
   expect(result.output).toContain("ABCD-1234");
   expect(result.output).not.toContain("A".repeat(43));
+  expect(startBody).toMatchObject({
+    clientId: "cursor",
+    deviceName: hostname().trim().slice(0, 64),
+  });
 });
 
 function installerPlatform() {
@@ -305,7 +318,8 @@ test("writes the approved Windows setup with a UTF-8 BOM so powershell.exe -File
         if (name === "node:crypto") return { createHash };
         if (name === "node:fs/promises") return fileSystem;
         if (name === "node:path") return { join };
-        if (name === "node:os") return { tmpdir: () => directory };
+        if (name === "node:os")
+          return { hostname: () => "test-host", tmpdir: () => directory };
         if (name === "node:child_process")
           return {
             spawn,
@@ -377,7 +391,8 @@ test.each([
         if (name === "node:crypto") return { createHash };
         if (name === "node:fs/promises") return fileSystem;
         if (name === "node:path") return { join };
-        if (name === "node:os") return { tmpdir: () => directory };
+        if (name === "node:os")
+          return { hostname: () => "test-host", tmpdir: () => directory };
         if (name === "node:child_process")
           return {
             spawnSync,
@@ -435,6 +450,23 @@ test("polling survives a temporary deployment outage", async () => {
   expect(polls).toBe(2);
   expect(downloads).toBe(1);
 }, 25_000);
+
+test("an approved-state read fault does not open a second approval", async () => {
+  readFaultStatus = 500;
+  const result = await run();
+  expect(result.code).toBe(0);
+  expect(starts).toBe(1);
+  expect(polls).toBe(2);
+  expect(downloads).toBe(1);
+  expect(result.output.match(/ABCD-1234/g)).toEqual(["ABCD-1234"]);
+  expect(result.output.match(/Open /g)).toEqual(["Open "]);
+  expect(result.output.match(/Browser approval confirmed\./g)).toEqual([
+    "Browser approval confirmed.",
+  ]);
+  expect(result.output).not.toContain("xdg-open");
+  expect(result.output).not.toContain("Start the installer again");
+  expect(await readFile(join(directory, "applied"), "utf8")).toBe("applied");
+});
 
 test("refuses plaintext remote origins before requesting credentials", async () => {
   const result = await run("http://deployment.example");
@@ -550,3 +582,326 @@ test("a transport failure that is not a certificate problem still reports its ca
   expect(result.output).toContain("ECONNREFUSED");
   expect(result.output).not.toContain("NODE_EXTRA_CA_CERTS");
 }, 40_000);
+
+function openerEnv(bin: string, wsl: boolean) {
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    PATH: `${bin}:${process.env.PATH ?? ""}`,
+  };
+  delete env.WSL_DISTRO_NAME;
+  delete env.WSL_INTEROP;
+  delete env.WSL2_GUI_APPS_ENABLED;
+  delete env.WSLENV;
+  if (wsl) {
+    env.WSL_DISTRO_NAME = "test-distro";
+    env.WSL_INTEROP = "/run/WSL/test-interop";
+  }
+  return env;
+}
+
+function runOpened(env: NodeJS.ProcessEnv, extraArgs: string[] = []) {
+  return new Promise<{ code: number | null; output: string }>(
+    (resolve, reject) => {
+      const child = spawn(
+        process.execPath,
+        [
+          "--require",
+          clockPath,
+          join(directory, "connect.cjs"),
+          "--url",
+          origin,
+          "--client",
+          "codex",
+          ...extraArgs,
+        ],
+        { env },
+      );
+      let output = "";
+      child.stdout.on("data", (chunk) => {
+        output += chunk;
+      });
+      child.stderr.on("data", (chunk) => {
+        output += chunk;
+      });
+      child.on("error", reject);
+      child.on("close", (code) => resolve({ code, output }));
+    },
+  );
+}
+
+async function writeOpener(name: string, body: string) {
+  const bin = join(directory, "bin");
+  await mkdir(bin, { recursive: true });
+  await writeFile(join(bin, name), body, { mode: 0o755 });
+  return bin;
+}
+
+function approvalUrl() {
+  return `${origin}/connection?connectRequest=test`;
+}
+
+test("WSL uses wslview arguments and keeps one approval request", async () => {
+  const log = join(directory, "opener.log");
+  const bin = await writeOpener(
+    "wslview",
+    `#!/bin/sh\nprintf '%s\\n' "$0" "$@" > '${log}'\n`,
+  );
+  const result = await runOpened(openerEnv(bin, true));
+  expect(result.code).toBe(0);
+  expect(starts).toBe(1);
+  expect(polls).toBeGreaterThanOrEqual(1);
+  expect(downloads).toBe(1);
+  expect(result.output).toContain("ABCD-1234");
+  expect(result.output).toContain(approvalUrl());
+  expect(result.output.match(/Open /g)).toEqual(["Open "]);
+  expect(result.output).not.toContain("A".repeat(43));
+  expect(result.output).not.toContain("Browser did not open");
+  expect((await readFile(log, "utf8")).trim().split("\n").slice(1)).toEqual([
+    approvalUrl(),
+  ]);
+  expect(await readFile(log, "utf8")).not.toContain("cmd");
+  expect(await readFile(log, "utf8")).not.toContain("start");
+});
+
+test("WSL rundll32 receives the protocol-handler arguments and no shell", async () => {
+  const log = join(directory, "opener.log");
+  const bin = await writeOpener(
+    "rundll32.exe",
+    `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\n`,
+  );
+  const result = await runOpened(openerEnv(bin, true));
+  expect(result.code).toBe(0);
+  expect(starts).toBe(1);
+  expect(polls).toBeGreaterThanOrEqual(1);
+  expect(downloads).toBe(1);
+  expect((await readFile(log, "utf8")).trim().split("\n")).toEqual([
+    "url.dll,FileProtocolHandler",
+    approvalUrl(),
+  ]);
+  expect(result.output).not.toContain("A".repeat(43));
+  expect(result.output).not.toContain("Browser did not open");
+});
+
+test("a browser opener nonzero exit keeps the same approval URL and poller", async () => {
+  const bin = await writeOpener("wslview", "#!/bin/sh\nexit 1\n");
+  const result = await runOpened(openerEnv(bin, true));
+  expect(result.code).toBe(0);
+  expect(starts).toBe(1);
+  expect(polls).toBeGreaterThanOrEqual(1);
+  expect(downloads).toBe(1);
+  expect(result.output).toContain(
+    "Browser did not open. Use the approval URL above.",
+  );
+  expect(result.output.match(/Open /g)).toEqual(["Open "]);
+  expect(result.output).toContain(approvalUrl());
+  expect(result.output).toContain("ABCD-1234");
+  expect(result.output).not.toContain("A".repeat(43));
+});
+
+test("Linux without WSL still opens through xdg-open", async () => {
+  const log = join(directory, "opener.log");
+  const bin = await writeOpener(
+    "xdg-open",
+    `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\n`,
+  );
+  const result = await runOpened(openerEnv(bin, false));
+  expect(result.code).toBe(0);
+  expect(starts).toBe(1);
+  expect((await readFile(log, "utf8")).trim()).toBe(approvalUrl());
+  expect(result.output).not.toContain("Browser did not open");
+});
+
+test("--no-open does not launch a WSL browser", async () => {
+  const log = join(directory, "opener.log");
+  const bin = await writeOpener(
+    "wslview",
+    `#!/bin/sh\nprintf '%s\\n' "$@" > '${log}'\n`,
+  );
+  const result = await runOpened(openerEnv(bin, true), ["--no-open"]);
+  expect(result.code).toBe(0);
+  expect(starts).toBe(1);
+  await expect(readFile(log, "utf8")).rejects.toThrow();
+  expect(result.output).toContain(approvalUrl());
+});
+
+function installWithBrowser(params: {
+  platform: string;
+  env: Record<string, string>;
+  which: (name: string) => { status: number; stdout: string };
+  onSpawn: (
+    command: string,
+    args: string[],
+  ) => { errorCode?: string; exit?: number; pending?: boolean };
+  initExists?: boolean;
+  fakeSetup?: boolean;
+}) {
+  const calls: Array<{ command: string; args: string[] }> = [];
+  const logs: string[] = [];
+  const done = new Promise<void>((resolve, reject) => {
+    runInNewContext(CLIENT_CONNECTION_INSTALLER, {
+      __filename: join(directory, "connect.cjs"),
+      process: {
+        argv: [
+          process.execPath,
+          join(directory, "connect.cjs"),
+          "--url",
+          origin,
+          "--client",
+          "codex",
+        ],
+        platform: params.platform,
+        env: params.env,
+        execPath: process.execPath,
+        pid: process.pid,
+        kill: process.kill.bind(process),
+      },
+      URL,
+      fetch,
+      AbortSignal,
+      setTimeout,
+      clearTimeout,
+      console: {
+        log: (message: string) => {
+          logs.push(String(message));
+          if (String(message).includes("Setup applied")) resolve();
+        },
+        error: (message: string) => reject(new Error(String(message))),
+      },
+      require: (name: string) => {
+        if (name === "node:fs/promises" && params.initExists) {
+          const real = require("node:fs/promises");
+          return new Proxy(real, {
+            get(target, prop, receiver) {
+              if (prop === "access") {
+                return async (filePath: string, mode?: number) => {
+                  if (filePath === "/init") return;
+                  return target.access(filePath, mode);
+                };
+              }
+              const value = Reflect.get(target, prop, receiver);
+              return typeof value === "function" ? value.bind(target) : value;
+            },
+          });
+        }
+        if (name === "node:child_process") {
+          return {
+            spawn: (command: string, args: string[]) => {
+              calls.push({ command, args: [...args] });
+              const outcome = params.onSpawn(command, args);
+              const child = Object.assign(new EventEmitter(), { unref() {} });
+              queueMicrotask(() => {
+                if (outcome.pending) return;
+                if (outcome.errorCode) {
+                  const error = new Error(
+                    outcome.errorCode,
+                  ) as NodeJS.ErrnoException;
+                  error.code = outcome.errorCode;
+                  child.emit("error", error);
+                  return;
+                }
+                child.emit("exit", outcome.exit ?? 0);
+              });
+              return child;
+            },
+            spawnSync: (
+              command: string,
+              args: string[] = [],
+              options?: object,
+            ) => {
+              if (command === "which") return params.which(args[0] ?? "");
+              if (params.fakeSetup) return { status: 0 };
+              return spawnSync(command, args, options);
+            },
+          };
+        }
+        return require(name);
+      },
+    });
+  });
+  return { calls, logs, done };
+}
+
+test("WSL ENOEXEC uses /init with the protocol-handler arguments", async () => {
+  const opener = "/tmp/fake-rundll32.exe";
+  const { calls, logs, done } = installWithBrowser({
+    platform: "linux",
+    env: {
+      WSL_DISTRO_NAME: "test-distro",
+      WSL_INTEROP: "/run/WSL/test-interop",
+    },
+    which: (name) =>
+      name === "rundll32.exe"
+        ? { status: 0, stdout: `${opener}\n` }
+        : { status: 1, stdout: "" },
+    onSpawn: (command) =>
+      command === "/init" ? { exit: 0 } : { errorCode: "ENOEXEC" },
+    initExists: true,
+  });
+  await done;
+  expect(starts).toBe(1);
+  expect(polls).toBeGreaterThanOrEqual(1);
+  expect(downloads).toBe(1);
+  expect(calls.map((call) => call.command)).toEqual([opener, "/init"]);
+  expect(calls[1]?.args).toEqual([
+    opener,
+    "url.dll,FileProtocolHandler",
+    approvalUrl(),
+  ]);
+  expect(logs.join("\n")).toContain("ABCD-1234");
+  expect(logs.join("\n")).not.toContain("A".repeat(43));
+  expect(logs.join("\n")).not.toContain("Browser did not open");
+});
+
+test("browser launch EACCES stops and still polls the same request", async () => {
+  const { calls, logs, done } = installWithBrowser({
+    platform: "linux",
+    env: {
+      WSL_DISTRO_NAME: "test-distro",
+      WSL_INTEROP: "/run/WSL/test-interop",
+    },
+    which: (name) =>
+      name === "wslview"
+        ? { status: 0, stdout: "/tmp/wslview\n" }
+        : { status: 1, stdout: "" },
+    onSpawn: () => ({ errorCode: "EACCES" }),
+  });
+  await done;
+  expect(calls).toEqual([{ command: "/tmp/wslview", args: [approvalUrl()] }]);
+  expect(starts).toBe(1);
+  expect(polls).toBeGreaterThanOrEqual(1);
+  expect(downloads).toBe(1);
+  expect(logs.join("\n")).toContain(
+    "Browser did not open. Use the approval URL above.",
+  );
+  expect(logs.join("\n")).not.toContain("A".repeat(43));
+});
+
+test("an unfinished browser launcher retains the manual fallback", async () => {
+  const { logs, done } = installWithBrowser({
+    platform: "linux",
+    env: {},
+    which: () => ({ status: 1, stdout: "" }),
+    onSpawn: () => ({ pending: true }),
+  });
+  await done;
+  expect(logs.join("\n")).toContain("Browser did not open");
+  expect(starts).toBe(1);
+  expect(polls).toBeGreaterThanOrEqual(1);
+  expect(downloads).toBe(1);
+});
+
+test.each([
+  ["darwin", "open", []],
+  ["win32", "rundll32.exe", ["url.dll,FileProtocolHandler"]],
+] as const)("preserves the %s browser launcher", async (platform, command, prefix) => {
+  const { calls, done } = installWithBrowser({
+    platform,
+    env: {},
+    which: () => ({ status: 1, stdout: "" }),
+    onSpawn: () => ({ exit: 0 }),
+    fakeSetup: platform === "win32",
+  });
+  await done;
+  expect(calls).toEqual([{ command, args: [...prefix, approvalUrl()] }]);
+  expect(starts).toBe(1);
+});

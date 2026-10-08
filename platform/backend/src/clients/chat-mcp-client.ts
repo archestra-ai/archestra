@@ -4,6 +4,7 @@ import {
   isBrowserMcpTool,
   LOOPBACK_HOST,
   MCP_APPS_CLIENT_EXTENSION_CAPABILITIES,
+  SOURCE_HEADER,
   TimeInMs,
 } from "@archestra/shared";
 import type {
@@ -20,6 +21,7 @@ import {
   getAgentTools,
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
+import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
@@ -33,7 +35,7 @@ import {
 import type { SubagentToolStreamBridge } from "@/clients/subagent-tool-stream";
 import { ToolCallRepeatTracker } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import type { CollectedHookRun } from "@/hooks/hook-run-parts";
 import type { KbChunkForQuoteCheck } from "@/knowledge-base/quote-verification";
 import logger from "@/logging";
@@ -45,6 +47,8 @@ import {
   ToolModel,
   UserTokenModel,
 } from "@/models";
+import { isAppaDelegatedRun } from "@/openappa/service";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
@@ -81,6 +85,9 @@ export function createLoopbackGatewayTransport(
       headers: new Headers({
         Authorization: `Bearer ${authToken}`,
         Accept: "application/json, text/event-stream",
+        // Tells the gateway's call log this is the built-in chat, not an
+        // outside agent holding the same personal token.
+        [SOURCE_HEADER]: "chat",
       }),
     },
   });
@@ -847,8 +854,9 @@ export async function getChatMcpTools({
   taskBridge,
   repeatTracker,
   suppressContentLogging,
-  lockedChatAudit,
+  encryptedChatAudit,
   modelAcceptsImageToolResults,
+  appaSubagent,
 }: {
   agentName: string;
   agentId: string;
@@ -913,8 +921,8 @@ export async function getChatMcpTools({
    */
   repeatTracker?: ToolCallRepeatTracker;
   /**
-   * Locked chat: span content is suppressed and long calls never
-   * detach into durable tasks. Stable per scope key (the locked-chat flag is
+   * Encrypted chat: span content is suppressed and long calls never
+   * detach into durable tasks. Stable per scope key (the encrypted-chat flag is
    * immutable per conversation), so the cached tool context can safely retain
    * it.
    */
@@ -925,12 +933,18 @@ export async function getChatMcpTools({
    * has no escrow record. Stable per scope key for the same reason
    * `suppressContentLogging` is — escrow is settled at creation.
    */
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
   /**
    * Whether media returned by a tool may enter the selected model's context.
    * Omitted by headless/legacy callers to preserve their current behavior.
    */
   modelAcceptsImageToolResults?: boolean;
+  /**
+   * The child trajectory an OpenAPPA spawn bound this delegated run to. The
+   * run then governs its own calls, remedies included. Never cached: it is
+   * one spawn's.
+   */
+  appaSubagent?: SubagentBinding;
 }): Promise<Record<string, Tool>> {
   const scopeKey = isolationKey ?? conversationId;
   const toolCacheKey = getToolCacheKey(
@@ -939,7 +953,7 @@ export async function getChatMcpTools({
     scopeKey,
     delegationChain,
   );
-  const shouldUseToolCache = !abortSignal;
+  const shouldUseToolCache = !abortSignal && !appaSubagent;
 
   // Check in-memory tool cache first (cannot use distributed cacheManager - Tool objects have execute functions)
   // LRU eviction and TTL are handled automatically by LRUCacheManager
@@ -1024,8 +1038,17 @@ export async function getChatMcpTools({
     // Tools with _meta.ui.visibility that does not include "model" are intended
     // for app-iframe use only and must not appear in the LLM's tool list.
     // Default (no visibility field) = visible to both model and app.
+    // A2A-delegated runs cannot execute OpenAPPA tools, so do not offer them,
+    // unless a spawn bound the run to a child trajectory of its own.
+    const delegatedRun =
+      !appaSubagent && isAppaDelegatedRun(agentId, delegationChain);
     const filteredMcpTools = mcpTools.filter((tool) => {
       if (isAgentTool(tool.name)) return false;
+      if (
+        delegatedRun &&
+        isOpenappaTool(archestraMcpBranding.getToolShortName(tool.name))
+      )
+        return false;
       const uiVisibility = (tool._meta as { ui?: McpUiToolMeta } | undefined)
         ?.ui?.visibility;
       return !(uiVisibility && !uiVisibility.includes("model"));
@@ -1080,7 +1103,7 @@ export async function getChatMcpTools({
       mcpGwToken,
       considerContextUntrusted,
       suppressContentLogging,
-      lockedChatAudit,
+      encryptedChatAudit,
       modelAcceptsImageToolResults: modelAcceptsImageToolResults ?? true,
       teams,
       userTeams,
@@ -1088,6 +1111,7 @@ export async function getChatMcpTools({
       // otherwise a fresh one. On a cache hit it is rebound (see above) so
       // repeat counts never carry across runs.
       repeatTracker: repeatTracker ?? new ToolCallRepeatTracker(),
+      appaSubagent,
     };
     const aiTools: Record<string, Tool> = {};
 
@@ -1127,7 +1151,7 @@ export async function getChatMcpTools({
         ]);
 
         // Convert delegation tools to AI SDK Tool format.
-        // Locked chats exclude delegation entirely: a child-agent
+        // Encrypted chats exclude delegation entirely: a child-agent
         // run builds its own tool set and would log its tool calls with
         // content, outside the parent's suppression scope. Disable rather
         // than leak.

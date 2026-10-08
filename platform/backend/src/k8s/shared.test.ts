@@ -553,3 +553,38 @@ describe("withK8sApiRetry", () => {
     expect(fn).toHaveBeenCalledTimes(1);
   });
 });
+
+describe("describeK8sApiError", () => {
+  test("summarizes the status and the API server's reason without headers", async () => {
+    const { describeK8sApiError } = await import("./shared");
+    const headers = { "audit-id": "e803b90b", "content-type": "text/plain" };
+    expect(
+      describeK8sApiError({ code: 404, body: "404 page not found\n", headers }),
+    ).toBe("Kubernetes API returned 404: 404 page not found");
+    expect(
+      describeK8sApiError({
+        code: 403,
+        body: JSON.stringify({
+          kind: "Status",
+          message:
+            'sandboxes.agents.x-k8s.io is forbidden: User "x" cannot create',
+        }),
+        headers,
+      }),
+    ).toBe(
+      'Kubernetes API returned 403: sandboxes.agents.x-k8s.io is forbidden: User "x" cannot create',
+    );
+    expect(describeK8sApiError({ code: 500, body: "", headers })).toBe(
+      "Kubernetes API returned 500",
+    );
+  });
+
+  test("leaves errors that are not Kubernetes API errors alone", async () => {
+    const { describeK8sApiError } = await import("./shared");
+    const { ApiError } = await import("@/types");
+    expect(
+      describeK8sApiError(new ApiError(503, "Install it")),
+    ).toBeUndefined();
+    expect(describeK8sApiError(new Error("boom"))).toBeUndefined();
+  });
+});

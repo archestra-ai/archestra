@@ -1,8 +1,8 @@
 import {
   BillingModeSchema,
+  ENCRYPTED_CHAT_REDACTED_VALUES,
   InteractionSourceSchema,
-  isLockedChatUnavailableContent,
-  LOCKED_CHAT_REDACTED_VALUES,
+  isEncryptedChatUnavailableContent,
   SupportedProvidersDiscriminatorSchema,
 } from "@archestra/shared";
 import { createInsertSchema, createSelectSchema } from "drizzle-zod";
@@ -24,6 +24,7 @@ import {
   Gemini,
   GithubCopilot,
   Groq,
+  Jev,
   Kimi,
   Microsoft365Copilot,
   Minimax,
@@ -181,6 +182,7 @@ export const InteractionRequestSchema = z.union([
   OpenAi.API.ResponsesRequestSchema,
   Azure.API.ChatCompletionRequestSchema,
   Azure.API.ResponsesRequestSchema,
+  Jev.API.DecisionsRequestSchema,
 ]);
 
 /**
@@ -210,7 +212,7 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
   EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
-  Anthropic.API.MessagesResponseSchema,
+  Anthropic.API.MessagesResponseWireSchema,
   Bedrock.API.ConverseResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
   Mistral.API.ChatCompletionResponseSchema,
@@ -233,19 +235,20 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ResponsesCompactedResponseSchema,
   Azure.API.ChatCompletionResponseSchema,
   Azure.API.ResponsesResponseSchema,
+  Jev.API.DecisionsResponseSchema,
   InteractionErrorResponseSchema,
 ]);
 
 /**
- * The two shapes a locked chat's content takes when it is not
+ * The two shapes an encrypted chat's content takes when it is not
  * available to the reader: encrypted under the browser key (locked), or never
  * stored (redacted). Neither resembles a provider payload, so every read arm
- * has to accept them explicitly — otherwise one locked-chat row 500s the whole
+ * has to accept them explicitly — otherwise one encrypted-chat row 500s the whole
  * interactions list rather than rendering as unavailable.
  */
-const LockedChatUnavailableContentSchema = z.union([
-  z.object({ __lockedChatSealed: z.string() }),
-  z.object({ __redacted: z.enum(LOCKED_CHAT_REDACTED_VALUES) }),
+const EncryptedChatUnavailableContentSchema = z.union([
+  z.object({ __encryptedChatSealed: z.string() }),
+  z.object({ __redacted: z.enum(ENCRYPTED_CHAT_REDACTED_VALUES) }),
 ]);
 
 const extendedFields = {
@@ -294,7 +297,9 @@ const DELTA_ENCODING_COLUMNS = {
  * field, which also carries the conversation id — so it stays out of the
  * public API surface rather than widening it for nothing.
  */
-const INTERNAL_ENCRYPTION_COLUMNS = { lockedChatConversationId: true } as const;
+const INTERNAL_ENCRYPTION_COLUMNS = {
+  encryptedChatConversationId: true,
+} as const;
 
 const BaseSelectInteractionResponseSchema = BaseSelectInteractionSchema.omit({
   ...DELTA_ENCODING_COLUMNS,
@@ -373,15 +378,15 @@ const withReadFallback = <T extends z.ZodTypeAny>(schema: T) =>
 
 /**
  * Each arm's read schema accepts either the provider response, a persisted
- * error response, or unavailable locked-chat content, so a failed interaction
- * (stored with the provider `type`) and a locked-chat one both still serialize
+ * error response, or unavailable encrypted-chat content, so a failed interaction
+ * (stored with the provider `type`) and an encrypted-chat one both still serialize
  * on read-back.
  */
 const withErrorResponse = <T extends z.ZodTypeAny>(schema: T) =>
   z.union([
     schema,
     InteractionErrorResponseSchema,
-    LockedChatUnavailableContentSchema,
+    EncryptedChatUnavailableContentSchema,
   ]);
 
 /**
@@ -472,7 +477,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(Anthropic.API.MessagesResponseSchema),
+    response: withErrorResponse(Anthropic.API.MessagesResponseWireSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
@@ -495,7 +500,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(Bedrock.API.InvokeRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(Bedrock.API.InvokeResponseSchema),
+    response: withErrorResponse(Bedrock.API.InvokeResponseWireSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
@@ -729,6 +734,16 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
   }),
+  BaseSelectInteractionResponseSchema.extend({
+    type: z.enum(["jev:decisions"]),
+    request: withReadFallback(Jev.API.DecisionsRequestSchema),
+    processedRequest: withReadFallback(Jev.API.DecisionsRequestSchema)
+      .nullable()
+      .optional(),
+    response: withErrorResponse(Jev.API.DecisionsResponseSchema),
+    /** Resolved prompt name if externalAgentId matches a prompt ID */
+    externalAgentIdLabel: z.string().nullable().optional(),
+  }),
 ]);
 
 /**
@@ -752,11 +767,11 @@ export function normalizeInteractionResponse(
   type: string,
   response: unknown,
 ): unknown {
-  // A locked-chat row's content is deliberately unavailable, not malformed.
+  // An encrypted-chat row's content is deliberately unavailable, not malformed.
   // Both sentinels would fail the provider schema below, and reporting them as
   // corrupt would be actively misleading — one means "encrypted, an escrow
   // holder can recover it", the other "never stored".
-  if (isLockedChatUnavailableContent(response)) {
+  if (isEncryptedChatUnavailableContent(response)) {
     return response;
   }
   const schema = responseSchemaByInteractionType.get(type);

@@ -16,6 +16,10 @@ import type { AgentAccessContext, LabelWithDetails } from "@/types";
 import AgentModel from "./agent";
 import { findAgentAccessContextById } from "./agent-access-context";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type GrantPrincipal,
+  type PrincipalSource,
+} from "./resource-permission-subject";
 import TeamLabelModel from "./team-label";
 
 class AgentTeamModel {
@@ -54,6 +58,8 @@ class AgentTeamModel {
   static async getUserAccessibleAgentIds(
     userId: string,
     isAgentAdmin: boolean,
+    /** The caller's already-resolved principals, when the query has them. */
+    principals?: GrantPrincipal[],
   ): Promise<string[]> {
     logger.debug(
       { userId, isAgentAdmin },
@@ -62,6 +68,7 @@ class AgentTeamModel {
     const accessibleAgentIds = await AgentModel.findAccessibleIdsForUser(
       userId,
       isAgentAdmin,
+      principals,
     );
 
     logger.debug(
@@ -81,6 +88,7 @@ class AgentTeamModel {
     isAgentAdmin: boolean;
     agentAccessContext?: AgentAccessContext | null;
     action?: "read" | "use";
+    lookups?: PrincipalSource;
   }): Promise<boolean> {
     const {
       userId,
@@ -88,6 +96,7 @@ class AgentTeamModel {
       isAgentAdmin,
       agentAccessContext,
       action = "read",
+      lookups,
     } = params;
     logger.debug(
       { userId, agentId, isAgentAdmin },
@@ -101,6 +110,10 @@ class AgentTeamModel {
     }
 
     const table = schema.agentsTable;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      lookups,
+      { organizationId: agent.organizationId, userId },
+    );
     const [granted] = await db
       .select({ id: table.id })
       .from(table)
@@ -111,8 +124,7 @@ class AgentTeamModel {
             and(
               inArray(table.agentType, ["agent", "profile"]),
               ResourcePermissionPolicyModel.grantCondition({
-                organizationId: table.organizationId,
-                userId,
+                ...principal,
                 resource: "agent",
                 scopeColumn: table.id,
                 action,
@@ -121,8 +133,7 @@ class AgentTeamModel {
             and(
               eq(table.agentType, "mcp_gateway"),
               ResourcePermissionPolicyModel.grantCondition({
-                organizationId: table.organizationId,
-                userId,
+                ...principal,
                 resource: "mcpGateway",
                 scopeColumn: table.id,
                 action,
@@ -156,14 +167,21 @@ class AgentTeamModel {
    * Get team details with labels for a specific agent, shaped for trace span
    * attributes. Combines team id/name with each team's labels.
    */
-  static async getTeamLabelInfoForAgent(agentId: string): Promise<
+  static async getTeamLabelInfoForAgent(
+    agentId: string,
+    teamSource?: AgentTeamSource,
+  ): Promise<
     Array<{
       id: string;
       name: string;
       labels: LabelWithDetails[];
     }>
   > {
-    const teams = await AgentTeamModel.getTeamDetailsForAgent(agentId);
+    const teams = teamSource
+      ? await AgentTeamModel.findTeamDetails(
+          await teamSource.agentTeamIds(agentId),
+        )
+      : await AgentTeamModel.getTeamDetailsForAgent(agentId);
     if (teams.length === 0) {
       return [];
     }
@@ -305,7 +323,27 @@ class AgentTeamModel {
     agentIds: string[],
   ): Promise<Map<string, Array<{ id: string; name: string }>>> {
     const teamsByAgent = await AgentTeamModel.getTeamsForAgents(agentIds);
-    const teamIds = [...new Set([...teamsByAgent.values()].flat())];
+    const nameById = await AgentTeamModel.findTeamNames([
+      ...new Set([...teamsByAgent.values()].flat()),
+    ]);
+    return new Map(
+      agentIds.map((agentId) => [
+        agentId,
+        withTeamNames(teamsByAgent.get(agentId) ?? [], nameById),
+      ]),
+    );
+  }
+
+  private static async findTeamDetails(
+    teamIds: string[],
+  ): Promise<Array<{ id: string; name: string }>> {
+    const unique = [...new Set(teamIds)];
+    return withTeamNames(teamIds, await AgentTeamModel.findTeamNames(unique));
+  }
+
+  private static async findTeamNames(
+    teamIds: string[],
+  ): Promise<Map<string, string>> {
     const teams =
       teamIds.length === 0
         ? []
@@ -313,16 +351,7 @@ class AgentTeamModel {
             .select({ id: schema.teamsTable.id, name: schema.teamsTable.name })
             .from(schema.teamsTable)
             .where(inArray(schema.teamsTable.id, teamIds));
-    const nameById = new Map(teams.map((team) => [team.id, team.name]));
-    return new Map(
-      agentIds.map((agentId) => [
-        agentId,
-        (teamsByAgent.get(agentId) ?? []).flatMap((id) => {
-          const name = nameById.get(id);
-          return name === undefined ? [] : [{ id, name }];
-        }),
-      ]),
-    );
+    return new Map(teams.map((team) => [team.id, team.name]));
   }
 
   /** Agents and MCP gateways whose own policy grants read to `teamId`. */
@@ -349,6 +378,21 @@ class AgentTeamModel {
       teamColumn,
     });
   }
+}
+
+/** A request-scoped source of an agent's team ids, read once per request. */
+export type AgentTeamSource = {
+  agentTeamIds(agentId: string): Promise<string[]>;
+};
+
+function withTeamNames(
+  teamIds: string[],
+  nameById: Map<string, string>,
+): Array<{ id: string; name: string }> {
+  return teamIds.flatMap((id) => {
+    const name = nameById.get(id);
+    return name === undefined ? [] : [{ id, name }];
+  });
 }
 
 export default AgentTeamModel;

@@ -6,9 +6,11 @@ import {
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
-import { OpenappaExternalConsultModel } from "@/models";
-import { ResourcePermissions } from "@/services/resource-permissions";
+import {
+  exportExternalConsults,
+  externalConsultAccess,
+  listExternalConsults,
+} from "@/services/openappa-external-consults";
 import { constructResponseSchema } from "@/types";
 import {
   type ExternalConsult,
@@ -49,7 +51,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaExternalConsults,
         description:
-          "Export the external consults Guardrails recorded in the active organization, newest first. `log:read` returns the consults of the caller's own sessions. `log:read` at `*` (organization-wide) returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
+          "Export the external consults Guardrails recorded in the active organization, newest first. `openappaDiagnostics:read` returns the consults of the caller's own sessions. `openappaDiagnostics:admin` returns every consult in the organization. An audience source's consult names people, so its `request`, `answer`, `rawResponse` and `diagnostics` are null for a caller without `member:read`. Byte fields are base64.",
         tags: ["OpenAPPA"],
         querystring: QuerySchema,
         response: constructResponseSchema(
@@ -59,30 +61,21 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async ({ query, user, organizationId }, reply) => {
       const { format, limit, cursor, from, to, ...rest } = query;
-      // log:read scopes the export to the caller's own consults;
-      // log:read at `*` lifts it within the active organization.
-      const [canSeeAllLogs, canSeeMembers] = await Promise.all([
-        ResourcePermissions.allows({
-          userId: user.id,
-          organizationId,
-          resource: "log",
-          scope: "*",
-          action: "read",
-        }),
-        userHasPermission(user.id, organizationId, "member", "read"),
-      ]);
-      const toExport = exporter({ canSeeMembers });
-      const filters = {
+      const access = await externalConsultAccess({
+        userId: user.id,
+        organizationId,
+      });
+      const consultQuery = {
         ...rest,
         from: from ? new Date(from) : undefined,
         to: to ? new Date(to) : undefined,
-        callerId: canSeeAllLogs ? undefined : `user:${user.id}`,
       };
       switch (format) {
         case "json": {
-          const page = await OpenappaExternalConsultModel.findCursorPaginated({
+          const page = await listExternalConsults({
             organizationId,
-            filters,
+            access,
+            query: consultQuery,
             limit,
             cursor,
           });
@@ -92,9 +85,10 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           });
         }
         case "jsonl": {
-          const rows = OpenappaExternalConsultModel.exportRows({
+          const rows = exportExternalConsults({
             organizationId,
-            filters,
+            access,
+            query: consultQuery,
             max: JSONL_ROW_CAP,
             cursor,
           });
@@ -102,7 +96,7 @@ const routes: FastifyPluginAsyncZod = async (app) => {
           // describe one, so the cast only steps past the schema's type.
           return reply
             .type("application/x-ndjson")
-            .send(Readable.from(jsonLines(rows, toExport)) as never);
+            .send(Readable.from(jsonLines(rows)) as never);
         }
       }
     },
@@ -112,18 +106,12 @@ export default routes;
 
 // === Internal ===
 
-function exporter(viewer: {
-  canSeeMembers: boolean;
-}): (row: ExternalConsult) => ExternalConsultExport {
-  return (row) => {
-    const withheld = row.role === "audience_source" && !viewer.canSeeMembers;
-    return {
-      ...row,
-      request: withheld ? null : row.request,
-      answer: withheld ? null : row.answer,
-      rawResponse: withheld ? null : base64(row.rawResponse),
-      diagnostics: withheld ? null : base64(row.diagnostics),
-    };
+/** A stored consult as the export serves it: byte columns as base64. */
+function toExport(row: ExternalConsult): ExternalConsultExport {
+  return {
+    ...row,
+    rawResponse: base64(row.rawResponse),
+    diagnostics: base64(row.diagnostics),
   };
 }
 
@@ -134,7 +122,6 @@ function base64(bytes: Uint8Array | null): string | null {
 
 async function* jsonLines(
   rows: AsyncIterable<ExternalConsult>,
-  toExport: (row: ExternalConsult) => ExternalConsultExport,
 ): AsyncGenerator<string> {
   for await (const row of rows) yield `${JSON.stringify(toExport(row))}\n`;
 }

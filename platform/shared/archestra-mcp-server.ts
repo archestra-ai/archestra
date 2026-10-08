@@ -23,10 +23,13 @@ export const ARCHESTRA_TOOL_PREFIX = `${ARCHESTRA_MCP_SERVER_NAME}${MCP_SERVER_T
 
 export const TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME = "execute_remedy_plan";
 export const TOOL_GET_REMEDY_PLANS_SHORT_NAME = "get_remedy_plans";
+export const TOOL_LIST_PEER_MESSAGES_SHORT_NAME = "list_peer_messages";
+export const TOOL_READ_PEER_MESSAGE_SHORT_NAME = "read_peer_message";
 export const TOOL_WHOAMI_SHORT_NAME = "whoami";
 export const TOOL_CREATE_AGENT_SHORT_NAME = "create_agent";
 export const TOOL_GET_AGENT_SHORT_NAME = "get_agent";
 export const TOOL_LIST_AGENTS_SHORT_NAME = "list_agents";
+export const TOOL_LIST_LLM_MODELS_SHORT_NAME = "list_llm_models";
 export const TOOL_EDIT_AGENT_SHORT_NAME = "edit_agent";
 export const TOOL_LIST_HOOKS_SHORT_NAME = "list_hooks";
 export const TOOL_CREATE_HOOK_SHORT_NAME = "create_hook";
@@ -130,6 +133,13 @@ export const TOOL_UNASSIGN_KNOWLEDGE_CONNECTOR_FROM_AGENT_SHORT_NAME =
   "unassign_knowledge_connector_from_agent";
 export const TOOL_TODO_WRITE_SHORT_NAME = "todo_write";
 export const TOOL_ASK_USER_SHORT_NAME = "ask_user";
+/**
+ * The property `ask_user` adds to its requested schema for a typed answer.
+ * Chat renders only this property as an "Other" alternative to the options.
+ */
+export const ASK_USER_OTHER_ANSWER_FIELD = "archestra_other_answer";
+export const TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME =
+  "request_battery_credentials";
 // Turn the current chat into a project (moves the chat + its files into a new project).
 export const TOOL_CREATE_PROJECT_FROM_CONVERSATION_SHORT_NAME =
   "create_project_from_conversation";
@@ -248,13 +258,21 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
   "yell",
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "get_guardrails_policy",
+  "get_openappa_policy_tests",
+  "preview_openappa_validation_change",
+  "publish_openappa_validation_change",
   "get_openappa_yell",
+  "resolve_openappa_yell",
+  "list_openappa_consults",
   "list_guardrails_battery_fits",
   "inspect_guardrails_server",
   "validate_guardrails_policy",
   "preview_guardrails_policy_change",
   "update_guardrails_policy",
+  "bind_guardrails_credential",
   "get_guardrails_policy_change_status",
   "list_runtime_credentials",
   "get_runtime_credential",
@@ -262,10 +280,13 @@ export const ARCHESTRA_TOOL_SHORT_NAMES = [
   "update_runtime_credential",
   "delete_runtime_credential",
   "request_runtime_credential_setup",
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   "create_guardrails_repository",
+  "connect_guardrails_repository",
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
   TOOL_LIST_HOOKS_SHORT_NAME,
   TOOL_CREATE_HOOK_SHORT_NAME,
@@ -466,25 +487,36 @@ export const ARCHESTRA_TOOL_GROUP_BY_SHORT_NAME: Record<
   execute_remedy_plan: "openappa",
   yell: "openappa",
   get_remedy_plans: "openappa",
+  list_peer_messages: "openappa",
+  read_peer_message: "openappa",
   get_guardrails_policy: "openappa",
+  get_openappa_policy_tests: "openappa",
+  preview_openappa_validation_change: "openappa",
+  publish_openappa_validation_change: "openappa",
   get_openappa_yell: "openappa",
+  resolve_openappa_yell: "openappa",
+  list_openappa_consults: "openappa",
   list_guardrails_battery_fits: "openappa",
   inspect_guardrails_server: "openappa",
   validate_guardrails_policy: "openappa",
   preview_guardrails_policy_change: "openappa",
   update_guardrails_policy: "openappa",
+  bind_guardrails_credential: "openappa",
   get_guardrails_policy_change_status: "openappa",
   create_guardrails_repository: "openappa",
+  connect_guardrails_repository: "openappa",
   list_runtime_credentials: "openappa",
   get_runtime_credential: "openappa",
   create_runtime_credential: "openappa",
   update_runtime_credential: "openappa",
   delete_runtime_credential: "openappa",
   request_runtime_credential_setup: "openappa",
+  request_battery_credentials: "openappa",
 
   create_agent: "agents",
   get_agent: "agents",
   list_agents: "agents",
+  list_llm_models: "agents",
   edit_agent: "agents",
   list_hooks: "agents",
   create_hook: "agents",
@@ -852,6 +884,8 @@ export const DEFAULT_ARCHESTRA_TOOL_SHORT_NAMES = [
 export const REQUIRED_OPENAPPA_TOOL_SHORT_NAMES = [
   TOOL_GET_REMEDY_PLANS_SHORT_NAME,
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
+  TOOL_LIST_PEER_MESSAGES_SHORT_NAME,
+  TOOL_READ_PEER_MESSAGE_SHORT_NAME,
   "yell",
 ] as const satisfies readonly ArchestraToolShortName[];
 
@@ -859,6 +893,40 @@ export function isRequiredOpenAppaToolShortName(shortName: string): boolean {
   return (REQUIRED_OPENAPPA_TOOL_SHORT_NAMES as readonly string[]).includes(
     shortName,
   );
+}
+
+/**
+ * Side-effect-free OpenAPPA policy tools every agent and gateway may list and
+ * run while OpenAPPA is enabled, without an assignment. Per-tool RBAC,
+ * exclusions and the delegated-run gate still apply; policy writes stay
+ * assignment-only.
+ */
+export const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES = [
+  "get_guardrails_policy",
+  "list_guardrails_battery_fits",
+  "inspect_guardrails_server",
+  "validate_guardrails_policy",
+  "preview_guardrails_policy_change",
+  "get_guardrails_policy_change_status",
+  "get_openappa_yell",
+] as const satisfies readonly ArchestraToolShortName[];
+
+const IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET: ReadonlySet<string> = new Set(
+  IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAMES,
+);
+
+/** Tools whose chat card renders a policy diff from the result's structuredContent. */
+export const OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES = [
+  "preview_guardrails_policy_change",
+  "update_guardrails_policy",
+  "preview_openappa_validation_change",
+  "publish_openappa_validation_change",
+] as const satisfies readonly ArchestraToolShortName[];
+
+export function isImplicitOpenAppaReadToolShortName(
+  shortName: string | null | undefined,
+): boolean {
+  return IMPLICIT_OPENAPPA_READ_TOOL_SHORT_NAME_SET.has(shortName ?? "");
 }
 
 /**
@@ -947,11 +1015,11 @@ export const APP_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Code-execution runtime tools. Gated by `sandbox:execute` and only seeded when
+ * Code-execution runtime tools. Gated by `agent:read` and only seeded when
  * the skills-sandbox runtime is on (`config.skillsSandbox.enabled`). They
  * materialize a Dagger container, so they genuinely need the runtime, and they
  * participate in the `search_tools`/`run_tool` dynamic tool access relaxation
- * (see `dynamic-tools.ts`) so a user with `sandbox:execute` can reach them
+ * (see `dynamic-tools.ts`) so a user with `agent:read` can reach them
  * without a manual assignment.
  */
 export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
@@ -961,7 +1029,7 @@ export const SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES = [
 ] as const satisfies readonly ArchestraToolShortName[];
 
 /**
- * Persistent-files ("My Files" / Projects) tools. Also gated by `sandbox:execute`,
+ * Persistent-files ("My Files" / Projects) tools. Also gated by `agent:read`,
  * but they operate purely on persistent file storage and never touch the Dagger
  * runtime — their exposure and dynamic-access participation follow the sandbox
  * runtime flag (`config.skillsSandbox.enabled`), like the runtime tools (see
@@ -1015,7 +1083,7 @@ export const APP_FILE_ARCHESTRA_TOOL_SHORT_NAMES = [
 
 /**
  * The full sandbox tool group (runtime + persistent-files). All share the
- * `sandbox:execute` RBAC permission and require the runtime to execute.
+ * `agent:read` RBAC permission and require the runtime to execute.
  */
 const SANDBOX_ARCHESTRA_TOOL_SHORT_NAMES = [
   ...SANDBOX_RUNTIME_ARCHESTRA_TOOL_SHORT_NAMES,
@@ -1141,19 +1209,44 @@ export function buildElicitationMandateInstruction(params?: {
     tools.length > 1
       ? `${tools[0]} (or ${tools[1]})`
       : (tools[0] ?? TOOL_ASK_USER_SHORT_NAME);
-  return `When you ask the user a question, clarification, preference, or approval, call ${toolName}. Never ask multiple-choice questions or request user decisions in plain text.`;
+  return `When you need a decision, a clarification, a preference, or an approval from the user, ask with ${toolName}. The user then answers in the client's question interface. Ask multiple-choice questions with ${toolName} too, not in plain text.`;
 }
 
 /**
  * Maps tools to arguments stamped by the OpenAPPA proxy before dispatching to the client.
- * Includes signed remedy offers on `ask_user` and execution receipts on `execute_remedy_plan`.
+ * Includes the current trajectory, peer-message proofs, and the remedy receipt.
  * The model never writes these arguments. The proxy strips them from provider history
  * and tool declarations to keep provider state clean.
  */
+export const OPENAPPA_RUNTIME_TOOL_SHORT_NAMES = [
+  TOOL_START_RUN_SHORT_NAME,
+  TOOL_STEER_RUN_SHORT_NAME,
+  TOOL_GET_RUN_SHORT_NAME,
+  TOOL_LIST_RUNS_SHORT_NAME,
+  TOOL_LIST_AGENT_RUNS_SHORT_NAME,
+  TOOL_READ_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME,
+  TOOL_POST_RUN_FILE_SHORT_NAME,
+] as const satisfies readonly ArchestraToolShortName[];
+
 export const PROXY_STAMPED_TOOL_ARGUMENTS = {
-  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers"],
+  [TOOL_ASK_USER_SHORT_NAME]: ["remedy_offers", "trajectory"],
+  [TOOL_LIST_PEER_MESSAGES_SHORT_NAME]: ["peer_proof"],
+  [TOOL_READ_PEER_MESSAGE_SHORT_NAME]: ["peer_proof"],
+  [TOOL_START_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_STEER_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_GET_RUN_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_LIST_RUNS_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_LIST_AGENT_RUNS_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_READ_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_WRITE_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_TRANSFER_WORKSPACE_FILE_SHORT_NAME]: ["runtime_proof"],
+  [TOOL_POST_RUN_FILE_SHORT_NAME]: ["runtime_proof"],
   [TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME]: [
     "execution",
+    "trajectory",
+    // Strip legacy signed fields from persisted history without trusting them.
     "protected",
     "payload",
     "signature",

@@ -5,6 +5,7 @@ import {
   hasScopedPermission,
   isBuiltInCatalogId,
   isResourcePermissionPreset,
+  ManagedResourceSchema,
   ORGANIZATION_WIDE_RESOURCES,
   type PermissionSubject,
   PredefinedRoleNameSchema,
@@ -25,11 +26,10 @@ import AgentModel from "@/models/agent";
 import KbFileModel from "@/models/kb-file";
 import MemberModel from "@/models/member";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
-import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type PrincipalSource,
+} from "@/models/resource-permission-subject";
 import ResourcePermissionTargetModel from "@/models/resource-permission-target";
-import RoleCompositionModel from "@/models/role-composition";
-import ServiceAccountModel from "@/models/service-account";
-import TeamModel from "@/models/team";
 import { assertNoStaticPinsBrokenByTargetChange } from "@/services/agent-tool-assignment";
 import { resyncAppBackingInstallScope } from "@/services/apps/app-mcp-backing";
 import type { ListInternalMcpCatalog } from "@/types";
@@ -37,7 +37,18 @@ import { ApiError } from "@/types";
 import { CredentialResourcePermissions } from "./credential-resource-permissions";
 
 export class ResourcePermissions {
-  /** Assigning a role or team also delegates every scoped grant it carries. */
+  /**
+   * Assigning a role or team also delegates every scoped grant it carries.
+   *
+   * Grants on an object only its owner can share are the exception. No
+   * organization-wide grant reaches another member's session, their own
+   * provider key, or their encrypted chat or app, so nobody else can ever
+   * hold the authority this rule asks for. The owner chose the role or team
+   * as the audience, and whoever administers that audience decides who is in
+   * it. Without this, one member sharing a chat with the Member role would
+   * stop every administrator from assigning Member to anyone. Grants kept on
+   * a deleted object are skipped too: they reach nothing.
+   */
   static async validateSubjectAssignment(params: {
     organizationId: string;
     userId: string;
@@ -46,7 +57,13 @@ export class ResourcePermissions {
     const policies =
       await ResourcePermissionPolicyModel.findForSubjects(params);
     const keys = new Set(params.subjects.map(subjectKey));
+    const canManageGlobal =
+      await ResourcePermissions.canManageGlobalPolicy(params);
     for (const policy of policies) {
+      if (!ManagedResourceSchema.safeParse(policy.resource).success) continue;
+      if (policy.scope === "*" && canManageGlobal) continue;
+      if (isSessionObject({ resource: policy.resource, scope: policy.scope }))
+        continue;
       const requested = policy.grants
         .filter((grant) => keys.has(subjectKey(grant.subject)))
         .flatMap((grant) =>
@@ -57,11 +74,22 @@ export class ResourcePermissions {
             action,
           })),
         );
-      const { grants } = await ResourcePermissions.getEffective({
+      const context = {
         ...params,
         resource: policy.resource,
         scope: policy.scope,
-      });
+      };
+      const target =
+        policy.scope === "*"
+          ? null
+          : await ResourcePermissionTargetModel.find({
+              ...context,
+              id: policy.scope,
+            });
+      // A deleted object reaches nobody, so its grants hand out nothing.
+      if (policy.scope !== "*" && !target) continue;
+      if (reservedToAuthor({ ...context, target })) continue;
+      const grants = await ResourcePermissions.resolve(context);
       if (!canDelegateScopedPermissions({ grants, requested })) {
         throw new ApiError(
           403,
@@ -103,17 +131,54 @@ export class ResourcePermissions {
   }
 
   /** Load scoped capabilities once for a request that touches several targets. */
-  static async resolveAll(params: {
-    organizationId: string;
-    userId: string;
-  }): Promise<ScopedPermission[]> {
-    const subjects = await ResourcePermissions.getSubjects(params);
+  static async resolveAll(
+    params:
+      | { organizationId: string; userId: string; lookups?: PrincipalSource }
+      | { organizationId: string; subjects: PermissionSubject[] },
+  ): Promise<ManagedScopedPermission[]> {
+    const subjects =
+      "subjects" in params
+        ? params.subjects
+        : await ResourcePermissions.getSubjects(params);
     const policies = await ResourcePermissionPolicyModel.findForSubjects({
-      ...params,
+      organizationId: params.organizationId,
       subjects,
     });
     const keys = new Set(subjects.map(subjectKey));
     return expandScopedGrants({ policies, subjectKeys: keys });
+  }
+
+  /** Check a list of organization-owned environments with one policy read. */
+  static async getUsableEnvironmentIds(params: {
+    organizationId: string;
+    userId: string;
+    environmentIds: string[];
+  }): Promise<Set<string>> {
+    if (params.environmentIds.length === 0) return new Set();
+    const subjects = await ResourcePermissions.getSubjects(params);
+    if (subjects.length === 0) return new Set();
+    const policies = await ResourcePermissionPolicyModel.findApplicableBatch({
+      organizationId: params.organizationId,
+      resource: "environment",
+      scopes: params.environmentIds,
+    });
+    const grants = expandScopedGrants({
+      policies,
+      subjectKeys: new Set(subjects.map(subjectKey)),
+    });
+    return new Set(
+      params.environmentIds.filter((scope) =>
+        hasScopedPermission({
+          grants,
+          required: {
+            organizationId: params.organizationId,
+            resource: "environment",
+            scope,
+            action: "use",
+          },
+        }),
+      ),
+    );
   }
 
   /** Resolve a catalog page in batches; never query once per listed resource. */
@@ -222,7 +287,10 @@ export class ResourcePermissions {
   }
 
   static async require(
-    params: PermissionContext & { action: ResourcePermissionAction },
+    params: PermissionContext & {
+      action: ResourcePermissionAction;
+      includeDeleted?: boolean;
+    },
   ): Promise<void> {
     const effective = await ResourcePermissions.getEffective(params);
     if (!hasScopedPermission({ grants: effective.grants, required: params }))
@@ -251,12 +319,14 @@ export class ResourcePermissions {
 
   static async searchSubjects(params: PermissionContext & { query: string }) {
     const effective = await ResourcePermissions.getEffective(params);
-    if (
-      !hasScopedPermission({
-        grants: effective.grants,
-        required: { ...params, action: "manage-permissions" },
-      })
-    )
+    const canManage =
+      params.scope === "*"
+        ? await ResourcePermissions.canManageGlobalPolicy(params)
+        : hasScopedPermission({
+            grants: effective.grants,
+            required: { ...params, action: "manage-permissions" },
+          });
+    if (!canManage)
       throw new ApiError(
         403,
         "You do not have permission to manage access to this resource",
@@ -264,7 +334,11 @@ export class ResourcePermissions {
     return ResourcePermissions.findRecipients(params);
   }
 
-  static async getEffective(params: PermissionContext) {
+  static async getEffective(
+    params: PermissionContext & { includeDeleted?: boolean },
+  ) {
+    if (!ManagedResourceSchema.safeParse(params.resource).success)
+      throw new ApiError(400, "Logs use Read and Admin role permissions");
     if (!ResourcePermissionScopeSchema.safeParse(params.scope).success)
       throw new ApiError(400, "Invalid permission scope");
     if (
@@ -284,19 +358,7 @@ export class ResourcePermissions {
           });
     if (params.scope !== "*" && !target)
       throw new ApiError(404, "Resource not found");
-    if (
-      (params.resource === "app" || params.resource === "conversation") &&
-      target?.enabled === false &&
-      target.authorId !== params.userId
-    )
-      return { target, grants: [] as ScopedPermission[] };
-    // A provider key with an owner is that person's own key. Nobody else
-    // reaches it or its sharing, whatever `*` grants they hold.
-    if (
-      params.resource === "llmProviderApiKey" &&
-      target?.authorId &&
-      target.authorId !== params.userId
-    )
+    if (reservedToAuthor({ ...params, target }))
       return { target, grants: [] as ScopedPermission[] };
     // Stored grants are authoritative. `resolve` answers nothing for a
     // disabled service account or a user whose membership has been removed.
@@ -305,16 +367,18 @@ export class ResourcePermissions {
 
   static async getPolicy(params: PermissionContext) {
     const effective = await ResourcePermissions.getEffective(params);
-    if (
-      !hasScopedPermission({
-        grants: effective.grants,
-        required: { ...params, action: "read" },
-      }) &&
-      !hasScopedPermission({
-        grants: effective.grants,
-        required: { ...params, action: "manage-permissions" },
-      })
-    )
+    const canView =
+      params.scope === "*"
+        ? await ResourcePermissions.canViewGlobalPolicy(params)
+        : hasScopedPermission({
+            grants: effective.grants,
+            required: { ...params, action: "read" },
+          }) ||
+          hasScopedPermission({
+            grants: effective.grants,
+            required: { ...params, action: "manage-permissions" },
+          });
+    if (!canView)
       throw new ApiError(
         403,
         "You do not have permission to view this resource's permissions",
@@ -327,7 +391,7 @@ export class ResourcePermissions {
       scope: params.scope,
     });
     return {
-      resource: params.resource,
+      resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
       name: effective.target?.name ?? "All resources",
       revision: policy?.revision ?? 0,
@@ -369,7 +433,7 @@ export class ResourcePermissions {
         id: params.scope,
       });
       if (target?.enabled === false)
-        throw new ApiError(400, "Locked chats cannot be shared");
+        throw new ApiError(400, "Encrypted chats cannot be shared");
     }
     await ResourcePermissions.assertAdvisorStaysOrganizationWide(params);
     const effective = await ResourcePermissions.getEffective(params);
@@ -398,7 +462,7 @@ export class ResourcePermissions {
     }
     const updated = await ResourcePermissions.getEffective(params);
     return {
-      resource: params.resource,
+      resource: ManagedResourceSchema.parse(params.resource),
       scope: params.scope,
       name: effective.target?.name ?? "All resources",
       revision: policy.revision,
@@ -426,15 +490,19 @@ export class ResourcePermissions {
    * its author.
    */
   static async allows(
-    params: PermissionContext & { action: ResourcePermissionAction },
+    params: PermissionContext & {
+      action: ResourcePermissionAction;
+      lookups?: PrincipalSource;
+    },
   ): Promise<boolean> {
     const grants = await ResourcePermissions.resolve(params);
     return hasScopedPermission({ grants, required: params });
   }
 
   static async resolve(
-    context: PermissionContext,
+    context: PermissionContext & { lookups?: PrincipalSource },
   ): Promise<ScopedPermission[]> {
+    if (!ManagedResourceSchema.safeParse(context.resource).success) return [];
     const params = await ResourcePermissions.grantContext(context);
     const subjects = await ResourcePermissions.getSubjects(params);
     if (subjects.length === 0) return [];
@@ -525,20 +593,23 @@ export class ResourcePermissions {
           action,
         })),
     );
-    if (
-      !hasScopedPermission({
-        grants: params.authority,
-        required: {
-          ...params,
-          scope: params.scope,
-          action: "manage-permissions",
-        },
-      }) ||
-      !canDelegateScopedPermissions({ grants: params.authority, requested })
-    ) {
+    // Global policy administration is an explicit organization role action.
+    // It does not grant access to the underlying resources, and scoped
+    // manage-permissions never substitutes for it on a wildcard policy.
+    const canManage =
+      params.scope === "*"
+        ? await ResourcePermissions.canManageGlobalPolicy(params)
+        : hasScopedPermission({
+            grants: params.authority,
+            required: { ...params, action: "manage-permissions" },
+          }) &&
+          canDelegateScopedPermissions({ grants: params.authority, requested });
+    if (!canManage) {
       throw new ApiError(
         403,
-        "You can only grant permissions you hold on this resource",
+        params.scope === "*"
+          ? "You need accessPolicies:update to edit access policies"
+          : "You can only grant permissions you hold on this resource",
       );
     }
     if (!enterpriseTier.isCoreActive()) {
@@ -619,6 +690,26 @@ export class ResourcePermissions {
     });
   }
 
+  private static async canViewGlobalPolicy(params: {
+    userId: string;
+    organizationId: string;
+  }) {
+    const permissions = await getPermissionsForUserContext(params);
+    return (
+      permissions.accessPolicies?.some(
+        (action) => action === "read" || action === "update",
+      ) ?? false
+    );
+  }
+
+  private static async canManageGlobalPolicy(params: {
+    userId: string;
+    organizationId: string;
+  }) {
+    const permissions = await getPermissionsForUserContext(params);
+    return permissions.accessPolicies?.includes("update") ?? false;
+  }
+
   /**
    * The context whose grants answer for an object. A registry runtime variant
    * has no policy of its own: its parent's grants decide, as they do for reads.
@@ -687,47 +778,20 @@ export class ResourcePermissions {
   private static async getSubjects(params: {
     userId: string;
     organizationId: string;
+    lookups?: PrincipalSource;
   }): Promise<PermissionSubject[]> {
-    const subjects: PermissionSubject[] = [{ type: "organization", id: "*" }];
-    let identifiers: string[];
-    if (params.userId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)) {
-      const id = params.userId.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length);
-      const account = await ServiceAccountModel.findById(
-        id,
-        params.organizationId,
+    const { subjects } =
+      await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+        params.lookups,
+        { userId: params.userId, organizationId: params.organizationId },
       );
-      if (!account || account.disabled) return [];
-      subjects.push({ type: "serviceAccount", id });
-      identifiers = account.role.split(",");
-    } else {
-      const member = await MemberModel.getByUserId(
-        params.userId,
-        params.organizationId,
-      );
-      if (!member) return [];
-      const [teamIds, sources] = await Promise.all([
-        TeamModel.getUserTeamIds(params.userId),
-        RoleCompositionModel.getUserSources(params),
-      ]);
-      subjects.push(
-        { type: "user", id: params.userId },
-        ...teamIds.map((id) => ({ type: "team" as const, id })),
-      );
-      identifiers = sources.map((source) => source.role);
-    }
-    const roles = await ResourcePermissionSubjectModel.getRoleIds({
-      organizationId: params.organizationId,
-      identifiers,
-    });
-    subjects.push(
-      ...roles.map(({ id }) => ({ type: "role" as const, id })),
-      ...identifiers
-        .filter((id) => PredefinedRoleNameSchema.safeParse(id).success)
-        .map((id) => ({ type: "role" as const, id })),
-    );
     return subjects;
   }
 }
+
+type ManagedScopedPermission = ScopedPermission & {
+  resource: Exclude<ScopedResource, "log" | "auditLog">;
+};
 
 type PermissionContext = {
   userId: string;
@@ -745,6 +809,37 @@ type PermissionContext = {
  */
 function sessionOversightOnly(params: PermissionContext): boolean {
   return params.resource === "conversation" && params.scope !== "*";
+}
+
+/** A single chat or agent run. Only its owner holds authority over it. */
+function isSessionObject(params: {
+  resource: string;
+  scope: ResourcePermissionScope;
+}): boolean {
+  return (
+    (params.resource === "conversation" || params.resource === "agentRun") &&
+    params.scope !== "*"
+  );
+}
+
+/**
+ * An object only its author reaches, whatever `*` grants anyone else holds: an
+ * encrypted chat or a disabled app, and a provider key with an owner, which is
+ * that person's own key.
+ */
+function reservedToAuthor(params: {
+  userId: string;
+  resource: ScopedResource;
+  target: Awaited<ReturnType<typeof ResourcePermissionTargetModel.find>>;
+}): boolean {
+  const { target } = params;
+  if (!target || target.authorId === params.userId) return false;
+  if (
+    (params.resource === "app" || params.resource === "conversation") &&
+    target.enabled === false
+  )
+    return true;
+  return params.resource === "llmProviderApiKey" && !!target.authorId;
 }
 
 function subjectKey(subject: PermissionSubject): string {
@@ -767,15 +862,19 @@ function expandScopedGrants(params: {
     ReturnType<typeof ResourcePermissionPolicyModel.findForSubjects>
   >;
   subjectKeys: Set<string>;
-}): ScopedPermission[] {
+}): ManagedScopedPermission[] {
   return params.policies.flatMap((policy) => {
-    if (!ResourcePermissionScopeSchema.safeParse(policy.scope).success)
+    const resource = ManagedResourceSchema.safeParse(policy.resource);
+    if (
+      !resource.success ||
+      !ResourcePermissionScopeSchema.safeParse(policy.scope).success
+    )
       return [];
     return policy.grants.flatMap((grant) =>
       params.subjectKeys.has(subjectKey(grant.subject))
         ? grant.actions.map((action) => ({
             organizationId: policy.organizationId,
-            resource: policy.resource,
+            resource: resource.data,
             scope: policy.scope,
             action,
           }))

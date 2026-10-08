@@ -92,6 +92,29 @@ describe("createSubagentToolStreamBridge", () => {
     const data = bridge.collected()[0]?.data as { output: unknown };
     expect(data.output).toEqual({ value: 42 });
   });
+
+  it("collects one part per call, in first-seen order, carrying its latest state", () => {
+    const bridge = createSubagentToolStreamBridge();
+    bridge.emit({
+      parentToolCallId: "P1",
+      toolCallId: "C1",
+      toolName: "a",
+      state: "input-available",
+    });
+    bridge.emit({ parentToolCallId: "P1", toolCallId: "C2", toolName: "b" });
+    bridge.emit({
+      parentToolCallId: "P1",
+      toolCallId: "C1",
+      toolName: "a",
+      state: "output-available",
+      output: "done",
+    });
+
+    expect(bridge.collected().map((part) => part.data)).toMatchObject([
+      { toolCallId: "C1", state: "output-available", output: "done" },
+      { toolCallId: "C2" },
+    ]);
+  });
 });
 
 describe("applySubagentToolCallsToMessages", () => {

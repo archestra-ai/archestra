@@ -156,15 +156,10 @@ for (const viewport of [
         expect(created.name).toBe(name);
         expect(createRequests).toBe(1);
         if (family.title === "Agent") {
+          // Creating an agent opens chat with it selected.
           await expect(page).toHaveURL(
-            new RegExp(`${family.path}/${createdId}/created$`),
+            new RegExp(`/chat\\?agentId=${createdId}$`),
           );
-          await expect(
-            page.getByRole("heading", { name: "Agent created", exact: true }),
-          ).toBeVisible();
-          await expect(
-            page.getByRole("heading", { name, exact: true }),
-          ).toBeVisible();
         } else {
           await expect(page).toHaveURL(
             new RegExp(`${family.path}/${createdId}(\\?section=connect)?$`),

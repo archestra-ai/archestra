@@ -222,6 +222,21 @@ describe("cutover idempotency", () => {
     await db
       .insert(schema.virtualApiKeyTeamsTable)
       .values({ virtualApiKeyId: virtualKey.id, teamId: team.id });
+    const [externalAgent] = await db
+      .insert(schema.a2aRemoteAgentsTable)
+      .values({
+        organizationId: org.id,
+        authorId: owner.id,
+        scope: "team",
+        name: "Replay external agent",
+        discoveryMode: "inline_card",
+        agentCard: { name: "Replay external agent" },
+        cardHash: crypto.randomUUID(),
+      })
+      .returning();
+    await db
+      .insert(schema.a2aRemoteAgentTeamsTable)
+      .values({ remoteAgentId: externalAgent.id, teamId: team.id });
     const secret = await makeSecret();
     await makeLlmProviderApiKey(org.id, secret.id, {
       userId: owner.id,
@@ -304,6 +319,7 @@ describe("cutover idempotency", () => {
         "plugin",
         "llmVirtualKey",
         "llmProviderApiKey",
+        "externalAgent",
         "knowledgeBase",
         "knowledgeConnector",
         "knowledgeFile",
@@ -314,8 +330,6 @@ describe("cutover idempotency", () => {
         "mcpOauthClient",
         "llmOauthClient",
         "scheduledTask",
-        "log",
-        "auditLog",
       ]),
     );
 

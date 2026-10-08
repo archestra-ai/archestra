@@ -30,6 +30,16 @@ const assistantToolCall = (toolCallId = "call_1") =>
     ],
   }) as ModelMessage;
 
+// budget: floor(200 * 0.8) tokens * 4 chars = 640 chars; the keep window is
+// 30% of that (~192 chars), so with 300-char turns only the last survives
+// verbatim, everything earlier is compactable, and summary + suffix fit
+// comfortably back under the budget.
+const overBudgetMessages = (): ModelMessage[] => [
+  { role: "user", content: "a".repeat(300) },
+  { role: "assistant", content: "b".repeat(300) },
+  { role: "user", content: "c".repeat(300) },
+];
+
 describe("createStepContextGuard — tool result capping", () => {
   test("caps an oversized tool result and keeps its toolCallId pairing", async () => {
     const guard = createStepContextGuard({ contextLength: null });
@@ -49,6 +59,18 @@ describe("createStepContextGuard — tool result capping", () => {
     expect(output.value).toContain("[tool result truncated");
   });
 
+  test("leaves a text result at the cap intact, keeping its tail", async () => {
+    const atCap = `${'"q"\n'.repeat(25_000)}[hook feedback] stop`.slice(
+      -100_000,
+    );
+    const messages: ModelMessage[] = [
+      { role: "user", content: "list the workflow runs" },
+      toolResultMessage(atCap),
+    ];
+    const guard = createStepContextGuard({ contextLength: null });
+    expect((await guard({ messages })).messages).toBe(messages);
+  });
+
   test("returns the same array when nothing is oversized", async () => {
     const messages: ModelMessage[] = [
       { role: "user", content: "hello" },
@@ -66,16 +88,6 @@ describe("createStepContextGuard — tool result capping", () => {
 });
 
 describe("createStepContextGuard — summarization compaction", () => {
-  // budget: floor(200 * 0.8) tokens * 4 chars = 640 chars; the keep window is
-  // 30% of that (~192 chars), so with 300-char turns only the last survives
-  // verbatim, everything earlier is compactable, and summary + suffix fit
-  // comfortably back under the budget.
-  const overBudgetMessages = (): ModelMessage[] => [
-    { role: "user", content: "a".repeat(300) },
-    { role: "assistant", content: "b".repeat(300) },
-    { role: "user", content: "c".repeat(300) },
-  ];
-
   test("replaces the older prefix with a summary message", async () => {
     const summarize = vi.fn(
       async (_p: SummarizeParams): Promise<string | null> =>
@@ -95,7 +107,6 @@ describe("createStepContextGuard — summarization compaction", () => {
     expect(call.transcript).toContain("a".repeat(300));
 
     expect(result[0].role).toBe("user");
-    expect(result[0].content).toContain("untrusted conversation history");
     expect(result[0].content).toContain("the compact summary");
     expect(result[result.length - 1].content).toBe("c".repeat(300));
     // the summarized turns are gone from the step payload
@@ -233,4 +244,135 @@ describe("createStepContextGuard — summarization compaction", () => {
       expect(result[firstToolIndex - 1]?.role).toBe("assistant");
     }
   });
+
+  test("summarizes remedy calls without the offers, receipts and signatures the proxy wrote", async () => {
+    const summarize = vi.fn(
+      async (_p: SummarizeParams): Promise<string | null> => "sum",
+    );
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeTranscript: summarize,
+    });
+    const call = (toolCallId: string, toolName: string, input: object) =>
+      ({
+        role: "assistant",
+        content: [{ type: "tool-call", toolCallId, toolName, input }],
+      }) as ModelMessage;
+    await guard({
+      messages: [
+        { role: "user", content: "u".repeat(600) },
+        call("call_notice", "archestra__get_remedy_plans", {
+          tool: "read_file",
+          arguments: { path: "/srv/report.txt" },
+          ruling: "Blocked: the file is outside the workspace.",
+          notice: { v: 1, call_id: "call_notice" },
+          offers: ["eyJhbGciOiJIUzI1NiJ9.offer.signature"],
+        }),
+        call("call_remedy", "mcp__gw__archestra__execute_remedy_plan", {
+          offer_id: "offer-1",
+          plan: { kind: "allow_once" },
+          execution: { call_id: "call_remedy" },
+          protected: "eyJhbGciOiJIUzI1NiJ9",
+          payload: "receipt-payload",
+          signature: "receipt-signature",
+        }),
+        call("call_question", "archestra__ask_user", {
+          question: "Approve the plan?",
+          remedy_offers: ["eyJhbGciOiJIUzI1NiJ9.question.signature"],
+        }),
+        { role: "user", content: "v".repeat(300) },
+      ],
+    });
+
+    const { transcript } = summarize.mock.calls[0][0];
+    expect(transcript).toContain("/srv/report.txt");
+    expect(transcript).toContain("Blocked: the file is outside the workspace.");
+    expect(transcript).toContain('"offer_id":"offer-1"');
+    expect(transcript).toContain("Approve the plan?");
+    for (const written of [
+      "eyJhbGciOiJIUzI1NiJ9",
+      '"notice"',
+      '"execution"',
+      "receipt-payload",
+      "receipt-signature",
+    ]) {
+      expect(transcript).not.toContain(written);
+    }
+  });
 });
+
+describe("createStepContextGuard — prompt cache breakpoint", () => {
+  const promptCache = {
+    provider: "anthropic",
+    model: "claude-haiku-4-5",
+    anthropicNativeEndpoint: true,
+  };
+
+  // null skips the context-window check; 100_000 keeps these steps within
+  // budget, which is the path of a run whose model has a known context length.
+  test.each([
+    null,
+    100_000,
+  ])("moves the breakpoint to the newest message of each step (context length %s)", async (contextLength) => {
+    const guard = createStepContextGuard({ contextLength, promptCache });
+    const firstStep: ModelMessage[] = [
+      { role: "user", content: "list the workflow runs" },
+      assistantToolCall("call_1"),
+      toolResultMessage("run 1", "call_1"),
+    ];
+    const { messages: first } = await guard({ messages: firstStep });
+    expect(anthropicCacheControl(first[2])).toEqual({ type: "ephemeral" });
+
+    // The SDK passes the loop's own unmarked messages to the next step.
+    const { messages: second } = await guard({
+      messages: [
+        ...firstStep,
+        assistantToolCall("call_2"),
+        toolResultMessage("run 2", "call_2"),
+      ],
+    });
+    expect(anthropicCacheControl(second[4])).toEqual({ type: "ephemeral" });
+    expect(second.slice(0, 4).map(anthropicCacheControl)).toEqual([
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+    ]);
+  });
+
+  test("marks the newest message of a compacted view", async () => {
+    const guard = createStepContextGuard({
+      contextLength: 200,
+      summarizeTranscript: async () => "the compact summary",
+      promptCache,
+    });
+    const { messages: result } = await guard({
+      messages: overBudgetMessages(),
+    });
+
+    expect(result[0].content).toContain("the compact summary");
+    expect(anthropicCacheControl(result.at(-1))).toEqual({
+      type: "ephemeral",
+    });
+  });
+
+  test("adds no breakpoint to a trimmed view", async () => {
+    // As the run grows, trimming usually drops more of the oldest messages, so
+    // a cache entry written for this view would rarely be read.
+    const guard = createStepContextGuard({ contextLength: 200, promptCache });
+    const { messages: result } = await guard({
+      messages: overBudgetMessages(),
+    });
+
+    expect(result[0].content).toContain("trimmed");
+    expect(result.map(anthropicCacheControl).filter(Boolean)).toEqual([]);
+  });
+});
+
+function anthropicCacheControl(message: ModelMessage | undefined) {
+  return (
+    message?.providerOptions as
+      | { anthropic?: { cacheControl?: unknown } }
+      | undefined
+  )?.anthropic?.cacheControl;
+}

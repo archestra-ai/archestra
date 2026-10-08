@@ -1,9 +1,126 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
-import type { PermissionSubject } from "@archestra/shared";
+import {
+  type PermissionSubject,
+  PredefinedRoleNameSchema,
+  type ResourceAccessRelation,
+} from "@archestra/shared";
 import { and, eq, ilike, inArray, or } from "drizzle-orm";
+import { SERVICE_ACCOUNT_USER_ID_PREFIX } from "@/auth/service-account-user-id";
 import db, { schema } from "@/database";
+import MemberModel from "./member";
+import RoleCompositionModel from "./role-composition";
+import TeamModel from "./team";
+
+/** A caller's grant subjects within one organization. */
+export type GrantPrincipal = {
+  organizationId: string;
+  subjects: PermissionSubject[];
+};
+
+/**
+ * A list's "Show" filter with the caller's subjects resolved, in the shape
+ * `ResourcePermissionPolicyModel.accessRelationCondition` takes.
+ */
+export type ResourceAccessFilter = {
+  userId: string;
+  subjects: PermissionSubject[];
+  relations: ResourceAccessRelation[];
+};
+
+/** Resolves principals; a request passes one that resolves each caller once. */
+export type PrincipalSource = {
+  principal(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<GrantPrincipal>;
+};
 
 export default class ResourcePermissionSubjectModel {
+  /** {@link resolvePrincipal} through the request's source when it has one. */
+  static resolvePrincipalFrom(
+    source: PrincipalSource | undefined,
+    params: { userId: string; organizationId: string },
+  ): Promise<GrantPrincipal> {
+    return source
+      ? source.principal(params)
+      : ResourcePermissionSubjectModel.resolvePrincipal(params);
+  }
+
+  /**
+   * Every subject a grant can name to reach this caller: the organization,
+   * the user or service account, its teams with their ancestors, and its roles
+   * including those inherited through teams. Empty for a non-member or a
+   * disabled service account, so no grant reaches them.
+   */
+  static async resolvePrincipal(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<GrantPrincipal> {
+    return {
+      organizationId: params.organizationId,
+      subjects: await ResourcePermissionSubjectModel.resolveSubjects(params),
+    };
+  }
+
+  /**
+   * {@link resolvePrincipal} in the given organization, or in every
+   * organization the caller belongs to for a query that is not fenced to one.
+   */
+  static async resolvePrincipals(params: {
+    userId: string;
+    organizationId?: string;
+    lookups?: PrincipalSource;
+  }): Promise<GrantPrincipal[]> {
+    const { userId } = params;
+    const organizationIds = params.organizationId
+      ? [{ id: params.organizationId }]
+      : userId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)
+        ? await db
+            .select({ id: schema.serviceAccountsTable.organizationId })
+            .from(schema.serviceAccountsTable)
+            .where(
+              eq(
+                schema.serviceAccountsTable.id,
+                userId.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length),
+              ),
+            )
+        : await db
+            .selectDistinct({ id: schema.membersTable.organizationId })
+            .from(schema.membersTable)
+            .where(eq(schema.membersTable.userId, userId));
+    const principals = await Promise.all(
+      organizationIds.map(({ id }) =>
+        ResourcePermissionSubjectModel.resolvePrincipalFrom(params.lookups, {
+          userId,
+          organizationId: id,
+        }),
+      ),
+    );
+    return principals.filter((principal) => principal.subjects.length > 0);
+  }
+
+  /**
+   * The caller's subjects for a list's `access` filter, resolved once so a
+   * page query and its count share them. Undefined when the list is not
+   * filtered.
+   */
+  static async resolveAccessFilter(params: {
+    userId: string;
+    organizationId: string;
+    relations: ResourceAccessRelation[] | undefined;
+  }): Promise<ResourceAccessFilter | undefined> {
+    if (!params.relations) return undefined;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    return {
+      userId: params.userId,
+      subjects: principal.subjects,
+      relations: params.relations,
+    };
+  }
+
   static async search(params: { organizationId: string; query: string }) {
     const pattern = `%${params.query.replace(/[\\%_]/g, "\\$&")}%`;
     const [users, teams, accounts, roles] = await Promise.all([
@@ -175,7 +292,63 @@ export default class ResourcePermissionSubjectModel {
     ];
   }
 
-  static async getRoleIds(params: {
+  private static async resolveSubjects(params: {
+    userId: string;
+    organizationId: string;
+  }): Promise<PermissionSubject[]> {
+    const subjects: PermissionSubject[] = [{ type: "organization", id: "*" }];
+    let identifiers: string[];
+    if (params.userId.startsWith(SERVICE_ACCOUNT_USER_ID_PREFIX)) {
+      const id = params.userId.slice(SERVICE_ACCOUNT_USER_ID_PREFIX.length);
+      const [account] = await db
+        .select({
+          role: schema.serviceAccountsTable.role,
+          disabled: schema.serviceAccountsTable.disabled,
+        })
+        .from(schema.serviceAccountsTable)
+        .where(
+          and(
+            eq(schema.serviceAccountsTable.id, id),
+            eq(
+              schema.serviceAccountsTable.organizationId,
+              params.organizationId,
+            ),
+          ),
+        )
+        .limit(1);
+      if (!account || account.disabled) return [];
+      subjects.push({ type: "serviceAccount", id });
+      identifiers = account.role.split(",");
+    } else {
+      const member = await MemberModel.getByUserId(
+        params.userId,
+        params.organizationId,
+      );
+      if (!member) return [];
+      const [teamIds, sources] = await Promise.all([
+        TeamModel.getUserTeamIds(params.userId),
+        RoleCompositionModel.getUserSources(params),
+      ]);
+      subjects.push(
+        { type: "user", id: params.userId },
+        ...teamIds.map((id) => ({ type: "team" as const, id })),
+      );
+      identifiers = sources.map((source) => source.role);
+    }
+    const roles = await ResourcePermissionSubjectModel.getRoleIds({
+      organizationId: params.organizationId,
+      identifiers,
+    });
+    subjects.push(
+      ...roles.map(({ id }) => ({ type: "role" as const, id })),
+      ...identifiers
+        .filter((id) => PredefinedRoleNameSchema.safeParse(id).success)
+        .map((id) => ({ type: "role" as const, id })),
+    );
+    return subjects;
+  }
+
+  private static async getRoleIds(params: {
     organizationId: string;
     identifiers: string[];
   }) {

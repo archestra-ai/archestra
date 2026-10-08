@@ -11,6 +11,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -90,29 +91,32 @@ export function SecretCopyButton({
     }
   };
 
+  // On a code surface the shared terminal action sizes the icon, so it matches
+  // the reveal toggle beside it.
+  const iconSize = variant === "terminal" ? undefined : "size-4";
   const icon = isCopying ? (
-    <Loader2 className="size-4 animate-spin" />
+    <Loader2 className={cn(iconSize, "animate-spin")} />
   ) : copied ? (
     <Check
       className={cn(
-        "size-4",
+        iconSize,
         variant === "terminal" ? "text-terminal-success" : "text-green-500",
       )}
     />
   ) : (
-    <Copy className="size-4" />
+    <Copy className={iconSize} />
   );
 
   const trigger =
     variant === "terminal" ? (
-      <button
+      <UnstyledButton
         type="button"
         disabled={isCopying || disabled}
         aria-label="Copy"
         className={cn(terminalActionClass, "size-7")}
       >
         {icon}
-      </button>
+      </UnstyledButton>
     ) : (
       <Button
         variant="ghost"
@@ -127,7 +131,7 @@ export function SecretCopyButton({
   if (!getSecretText) {
     // No secret to offer — a plain copy of the placeholder needs no menu.
     return variant === "terminal" ? (
-      <button
+      <UnstyledButton
         type="button"
         onClick={handleCopyPlaceholder}
         disabled={disabled}
@@ -135,7 +139,7 @@ export function SecretCopyButton({
         className={cn(terminalActionClass, "size-7")}
       >
         {icon}
-      </button>
+      </UnstyledButton>
     ) : (
       <Button
         variant="ghost"

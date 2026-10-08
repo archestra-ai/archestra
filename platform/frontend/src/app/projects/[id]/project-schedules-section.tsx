@@ -160,7 +160,6 @@ function ProjectSchedulesSectionContent({
             <Button
               variant="outline"
               size="sm"
-              className="h-7 gap-1 text-xs has-[>svg]:px-2"
               onClick={() => setCreateOpen(true)}
             >
               <Plus className="size-3.5" />
@@ -295,8 +294,7 @@ function ScheduleRow({
       <div className="mt-2 flex items-center gap-1 border-t pt-2">
         <Button
           variant="ghost"
-          size="sm"
-          className="h-7 px-2 text-xs"
+          size="xs"
           aria-label={`View runs for ${schedule.name}`}
           onClick={openRuns}
           disabled={loadingRuns || isResolving}
@@ -306,8 +304,7 @@ function ScheduleRow({
         {canEdit && (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
+            size="xs"
             onClick={() => onEdit(schedule)}
             aria-label={`Edit ${schedule.name}`}
           >
@@ -317,8 +314,7 @@ function ScheduleRow({
         {canEdit && (
           <Button
             variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
+            size="xs"
             disabled={enableSchedule.isPending || disableSchedule.isPending}
             onClick={() =>
               (schedule.enabled ? disableSchedule : enableSchedule).mutate(
@@ -340,8 +336,8 @@ function ScheduleRow({
           <DropdownMenuTrigger asChild>
             <Button
               variant="ghost"
-              size="icon"
-              className="h-7 w-7 shrink-0"
+              size="icon-xs"
+              className="shrink-0"
               aria-label={`Actions for ${schedule.name}`}
             >
               <MoreHorizontal className="h-4 w-4" />

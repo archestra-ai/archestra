@@ -59,7 +59,7 @@ export function AppRecordingControls() {
   // The toggle is admin-only, so a member offered a link to it would land on a
   // control they cannot move. Same permission the setting itself is gated on.
   const { data: canDisableRecorder } = useHasPermissions({
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
 
   const isRecording = recorder.status === "recording";
@@ -161,8 +161,8 @@ export function AppRecordingControls() {
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="size-7 rounded-full hover:bg-destructive/20 focus-visible:bg-destructive/20"
+                size="icon-xs"
+                className="rounded-full hover:bg-destructive/20 focus-visible:bg-destructive/20"
                 aria-label={
                   isSaving
                     ? "Saving recording"
@@ -219,8 +219,8 @@ export function AppRecordingControls() {
               <Button
                 type="button"
                 variant="ghost"
-                size="icon"
-                className="size-7 rounded-full text-muted-foreground hover:bg-foreground/15 hover:text-foreground focus-visible:bg-foreground/15 focus-visible:text-foreground"
+                size="icon-xs"
+                className="rounded-full text-muted-foreground hover:bg-foreground/15 hover:text-foreground focus-visible:bg-foreground/15 focus-visible:text-foreground"
                 aria-label="Replay session"
                 disabled={!canPlay}
                 onClick={() => setPlayerOpen(true)}

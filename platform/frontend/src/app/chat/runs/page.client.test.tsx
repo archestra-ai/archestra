@@ -37,6 +37,21 @@ vi.mock("@/lib/agent-runtime.query", () => ({
   useDeleteAgentWorkspace: () => ({ isPending: false, mutate: vi.fn() }),
   useContinueAgentRun: () => ({ isPending: false, mutate: vi.fn() }),
   useMyAgentRun: () => queryState.value,
+  useAgentRunOpenappaReview: () => ({
+    data: {
+      status: "none",
+      canDecide: false,
+      offerId: null,
+      text: null,
+      tool: null,
+      arguments: null,
+    },
+    isPending: false,
+  }),
+  useDecideAgentRunOpenappaReview: () => ({
+    isPending: false,
+    mutate: vi.fn(),
+  }),
 }));
 
 vi.mock("@/components/agent-run-terminal", () => ({

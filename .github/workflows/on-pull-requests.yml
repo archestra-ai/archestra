@@ -157,36 +157,6 @@ jobs:
           base-sha: ${{ github.event.pull_request.base.sha || github.event.merge_group.base_sha }}
           lockfiles: ai-labs/Cargo.lock
 
-  docs-image-policy:
-    name: Docs Image Policy
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Enforce docs asset format and size policy
-        run: python3 .github/scripts/check-docs-image-policy.py
-
-  docs-links:
-    name: Docs Link Check
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-          fetch-depth: 1
-
-      - name: Check internal doc links and asset embeds resolve
-        run: python3 .github/scripts/check-docs-links.py
-
   migration-kit-checks:
     name: Migration Kit Checks
     if: github.event_name == 'merge_group'
@@ -600,7 +570,8 @@ jobs:
   # quietly passing again.
   openappa-native-tests:
     name: OpenAPPA Native Tests
-    if: github.event_name == 'merge_group'
+    # Release bumps need the real runtime/ledger checks before human review.
+    if: github.event_name == 'merge_group' || (github.event_name == 'pull_request' && github.event.pull_request.user.login == 'openappa-archestra-updater[bot]' && github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.event.pull_request.head.ref, 'chore/openappa-v'))
     runs-on: blacksmith-8vcpu-ubuntu-2404
     # The napi build dominates: ~3 min cold, an incremental no-op against the
     # warm cargo cache the backend shards maintain.
@@ -823,12 +794,17 @@ jobs:
         with:
           working-directory: ./platform
 
-      - name: Ensure Zsh for shell startup tests
+      - name: Ensure Zsh and PowerShell for shell runtime tests
         run: |
           if ! command -v zsh >/dev/null 2>&1; then
             sudo apt-get update
             sudo apt-get install -y zsh
           fi
+          if ! command -v pwsh >/dev/null 2>&1; then
+            echo "::error::PowerShell is required so shell runtime tests cannot skip."
+            exit 1
+          fi
+          pwsh -NoProfile -Command 'Write-Output $PSVersionTable.PSVersion'
 
       # The native addons are small compared with the Cargo target cache.
       # Load-verify an exact-source binary cache first; fall back to the warm
@@ -1041,7 +1017,12 @@ jobs:
             # port and racing another process to bind it after the probe closes.
             port=$((20000 + ((GITHUB_RUN_ID + GITHUB_RUN_ATTEMPT * 97) % 7000) * shard_count + shard))
             echo "Starting frontend integration shard ${shard}/${shard_count} on port ${port}"
-            ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
+            # Playwright writes its config transform cache with plain,
+            # non-atomic writes. Shards that start together and share one cache
+            # can load a half-written file and die with "SyntaxError: Unexpected
+            # end of input" before running a test, so each shard gets its own.
+            PWTEST_CACHE_DIR="${RUNNER_TEMP}/playwright-transform-cache-${shard}" \
+              ARCHESTRA_FRONTEND_INT_TESTS_PORT="$port" \
               ARCHESTRA_FRONTEND_INT_TESTS_SHARD="$shard" \
               pnpm --filter @frontend exec playwright test --shard="${shard}/${shard_count}" &
             pids+=("$!")

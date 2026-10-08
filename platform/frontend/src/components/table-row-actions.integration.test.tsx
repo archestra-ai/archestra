@@ -47,7 +47,7 @@ describe("TableRowActions with the real PermissionButton", () => {
     expect(button).not.toHaveAttribute("href");
     expect(button).toHaveAttribute("aria-disabled", "true");
     expect(button).toHaveAccessibleDescription(
-      "Available to roles with the Agents (update) permission",
+      "Missing permissions: Agents (update)",
     );
   });
 });

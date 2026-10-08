@@ -1,10 +1,10 @@
 import type { UIMessageChunk } from "ai";
 import { and, asc, desc, eq, gt, inArray, lt, sql } from "drizzle-orm";
 import {
-  decryptLockedChatValue,
-  encryptLockedChatValue,
-  type LockedChatAuditContext,
-} from "@/content-encryption/locked-chat";
+  decryptEncryptedChatValue,
+  type EncryptedChatAuditContext,
+  encryptEncryptedChatValue,
+} from "@/content-encryption/encrypted-chat";
 import db, { schema, withDbTransaction } from "@/database";
 import logger from "@/logging";
 import type {
@@ -38,7 +38,7 @@ class ActiveChatRunModel {
   }
 
   /**
-   * `lockedChatAudit` encrypts the batch under the conversation's browser-held
+   * `encryptedChatAudit` encrypts the batch under the conversation's browser-held
    * key. Replay payloads are raw stream chunks, so without a key they cannot
    * be stored at all — and a run whose batches are dropped loses its
    * reconnect-after-reload replay entirely.
@@ -48,20 +48,20 @@ class ActiveChatRunModel {
     seq: number;
     payloads: UIMessageChunk[];
     touchRun?: boolean;
-    lockedChatAudit?: LockedChatAuditContext | null;
+    encryptedChatAudit?: EncryptedChatAuditContext | null;
   }): Promise<AppendEventsResult> {
-    const payloads = params.lockedChatAudit
-      ? (encryptLockedChatValue(params.payloads, {
-          ...params.lockedChatAudit,
+    const payloads = params.encryptedChatAudit
+      ? (encryptEncryptedChatValue(params.payloads, {
+          ...params.encryptedChatAudit,
           context: RUN_EVENT_PAYLOADS_CONTEXT,
           // The column holds an array; the envelope replaces it wholesale, so
-          // the cast is the same one every locked-chat column write makes.
+          // the cast is the same one every encrypted-chat column write makes.
         }) as unknown as UIMessageChunk[])
       : params.payloads;
 
     if (params.payloads.length === 0) {
       // A due liveness touch must still land even with nothing to append —
-      // a locked-chat run with no escrow record still flushes empty batches
+      // an encrypted-chat run with no escrow record still flushes empty batches
       // (its payloads cannot be encrypted, so they are dropped), and without
       // the touch a long silent stream would be reaped as stale.
       if (params.touchRun) {
@@ -178,7 +178,7 @@ class ActiveChatRunModel {
   static async readEventsAfter(params: {
     runId: string;
     seq: number;
-    lockedChatAudit?: LockedChatAuditContext | null;
+    encryptedChatAudit?: EncryptedChatAuditContext | null;
   }): Promise<ChatActiveRunEvent[]> {
     const events = await db
       .select()
@@ -192,7 +192,7 @@ class ActiveChatRunModel {
       .orderBy(asc(schema.chatActiveRunEventsTable.seq));
 
     return events.map((event) =>
-      decryptEventPayloads(event, params.lockedChatAudit ?? null),
+      decryptEventPayloads(event, params.encryptedChatAudit ?? null),
     );
   }
 
@@ -211,7 +211,7 @@ class ActiveChatRunModel {
   static async readStatusAndEventsAfter(params: {
     runId: string;
     seq: number;
-    lockedChatAudit?: LockedChatAuditContext | null;
+    encryptedChatAudit?: EncryptedChatAuditContext | null;
   }): Promise<{
     status: ChatActiveRunStatus;
     events: ChatActiveRunEvent[];
@@ -246,18 +246,26 @@ class ActiveChatRunModel {
         .map((row) => row.event)
         .filter((event): event is ChatActiveRunEvent => event !== null)
         .map((event) =>
-          decryptEventPayloads(event, params.lockedChatAudit ?? null),
+          decryptEventPayloads(event, params.encryptedChatAudit ?? null),
         ),
     };
   }
 
+  // Sets only the stop marker. `updatedAt` is the producer's liveness signal
+  // (the stale reaper keys on it), so a Stop must not refresh it: if it did,
+  // every Stop click on a run whose owner died would restart the stale clock
+  // and keep the conversation blocked indefinitely. The explicit self-assign
+  // overrides the column's `$onUpdate` default.
   static async requestStop(params: {
     conversationId: string;
     organizationId: string;
   }): Promise<ChatActiveRun | null> {
     const [run] = await db
       .update(schema.chatActiveRunsTable)
-      .set({ stopRequestedAt: new Date(), updatedAt: new Date() })
+      .set({
+        stopRequestedAt: new Date(),
+        updatedAt: sql`${schema.chatActiveRunsTable.updatedAt}`,
+      })
       .where(
         and(
           eq(schema.chatActiveRunsTable.conversationId, params.conversationId),
@@ -328,7 +336,7 @@ class ActiveChatRunModel {
       .update(schema.chatActiveRunsTable)
       .set({
         status: "failed",
-        error: "Chat stream became stale before completing.",
+        error: STALE_RUN_ERROR,
         updatedAt: new Date(),
       })
       .where(
@@ -340,6 +348,33 @@ class ActiveChatRunModel {
       .returning({ id: schema.chatActiveRunsTable.id });
 
     return runs.length;
+  }
+
+  // Single-run variant of markStaleRunningAsFailed. The staleness check is part
+  // of the UPDATE, so a liveness touch that lands first wins and a live run is
+  // never failed on a stale read.
+  static async markRunAsFailedIfStale(params: {
+    runId: string;
+    staleMs: number;
+  }): Promise<ChatActiveRun | null> {
+    const cutoff = new Date(Date.now() - params.staleMs);
+    const [run] = await db
+      .update(schema.chatActiveRunsTable)
+      .set({
+        status: "failed",
+        error: STALE_RUN_ERROR,
+        updatedAt: new Date(),
+      })
+      .where(
+        and(
+          eq(schema.chatActiveRunsTable.id, params.runId),
+          eq(schema.chatActiveRunsTable.status, "running"),
+          lt(schema.chatActiveRunsTable.updatedAt, cutoff),
+        ),
+      )
+      .returning();
+
+    return run ?? null;
   }
 
   static async deleteTerminalOlderThan(retentionMs: number): Promise<number> {
@@ -364,6 +399,8 @@ export default ActiveChatRunModel;
 
 const RUN_EVENT_PAYLOADS_CONTEXT = "chat_active_run_events.payloads" as const;
 
+const STALE_RUN_ERROR = "Chat stream became stale before completing.";
+
 /**
  * A batch this reader cannot open replays as nothing rather than throwing:
  * losing a reconnect's tail is a degraded stream, an exception is a broken
@@ -371,15 +408,15 @@ const RUN_EVENT_PAYLOADS_CONTEXT = "chat_active_run_events.payloads" as const;
  */
 function decryptEventPayloads(
   event: ChatActiveRunEvent,
-  lockedChatAudit: LockedChatAuditContext | null,
+  encryptedChatAudit: EncryptedChatAuditContext | null,
 ): ChatActiveRunEvent {
   if (!isContentEnvelope(event.payloads)) return event;
-  if (lockedChatAudit) {
+  if (encryptedChatAudit) {
     try {
       return {
         ...event,
-        payloads: decryptLockedChatValue(event.payloads, {
-          ...lockedChatAudit,
+        payloads: decryptEncryptedChatValue(event.payloads, {
+          ...encryptedChatAudit,
           context: RUN_EVENT_PAYLOADS_CONTEXT,
         }) as UIMessageChunk[],
       };

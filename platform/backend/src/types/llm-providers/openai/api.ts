@@ -89,8 +89,10 @@ export const ChatCompletionRequestSchema = z
     // bound or disable reasoning — the dual LLM guardrail calls depend on
     // both surviving this schema.
     max_completion_tokens: z.number().int().positive().nullable().optional(),
+    // Some OpenAI-compatible providers accept "max" reasoning effort.
+    // Forward it unchanged; the upstream model decides which efforts it supports.
     reasoning_effort: z
-      .enum(["none", "minimal", "low", "medium", "high", "xhigh"])
+      .enum(["none", "minimal", "low", "medium", "high", "xhigh", "max"])
       .nullable()
       .optional(),
     stream: z.boolean().nullable().optional(),
@@ -263,7 +265,7 @@ export const ResponsesResponseSchema = z
     model: z.string(),
     output: z.array(ResponsesOutputItemSchema),
     status: z.string(),
-    usage: ResponsesUsageSchema.optional(),
+    usage: ResponsesUsageSchema.nullable().optional(),
   })
   .passthrough()
   .describe(

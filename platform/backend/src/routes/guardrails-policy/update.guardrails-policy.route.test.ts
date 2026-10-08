@@ -1,5 +1,6 @@
 import { createHash } from "node:crypto";
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
+import { eq } from "drizzle-orm";
 import { vi } from "vitest";
 import {
   executeArchestraTool,
@@ -8,6 +9,7 @@ import {
 import { betterAuth } from "@/auth";
 import { authPlugin } from "@/auth/fastify-plugin/plugin";
 import config from "@/config";
+import db, { schema } from "@/database";
 import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
@@ -16,10 +18,14 @@ import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import AuditLogModel from "@/models/audit-log";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
+import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import ToolModel from "@/models/tool";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { initialPolicy } from "@/services/guardrails-policy";
+import { runAutomaticOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./guardrails-policy.routes";
 
 const content =
@@ -48,6 +54,7 @@ describe("guardrails policy authoring", () => {
       app = createFastifyInstance();
       await app.register(authPlugin);
       registerAuditLogHook(app);
+      registerRoutePermissions(app);
       await app.register(routes);
     },
   );
@@ -118,6 +125,57 @@ describe("guardrails policy authoring", () => {
       content: winner.content,
       revision: 1,
     });
+  });
+
+  test("local policy changes queue validation, while identical saves and rejected edits do not", async () => {
+    const localPolicy = content.replace('"read"', '"files__read"');
+    await OpenAppaPolicyTestsModel.saveLocal({
+      organizationId: orgId,
+      files: [
+        { path: "read.appa", content: "mcp/files/read {}\nexpect allow\n" },
+      ],
+      expectedVersion: "empty",
+    });
+    const jobs = () =>
+      db
+        .select()
+        .from(schema.tasksTable)
+        .where(eq(schema.tasksTable.taskType, "openappa_policy_validation"));
+    const save = (content: string, expectedRevision: number) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/guardrails-policy",
+        payload: { content, expectedRevision },
+      });
+    expect((await save(localPolicy, 0)).statusCode).toBe(200);
+    expect(await jobs()).toHaveLength(1);
+    const [first] = await jobs();
+    expect((await save(localPolicy, 1)).statusCode).toBe(200);
+    expect(await jobs()).toHaveLength(1);
+    await runAutomaticOpenAppaPolicyTests(first.payload);
+    expect(
+      (await OpenAppaPolicyTestsModel.listRuns(orgId))[0].result,
+    ).toMatchObject({
+      trigger: "policy_change",
+      source: "local",
+      policyRevision: 2,
+      policyHash: first.payload.policyHash,
+      files: [{ status: "passed" }],
+    });
+    expect((await save("[invalid", 2)).statusCode).toBe(400);
+    expect(await jobs()).toHaveLength(1);
+    const changed = localPolicy.replace(
+      "delta = {}",
+      'delta = { trust = "suspicious" }',
+    );
+    const updated = await save(changed, 2);
+    expect(updated.statusCode).toBe(200);
+    expect(await jobs()).toHaveLength(2);
+    expect(
+      (await jobs()).some(
+        (job) => job.payload.policyHash === updated.json().contentHash,
+      ),
+    ).toBe(true);
   });
 
   test("organization policies are stored separately", async ({
@@ -266,7 +324,15 @@ describe("guardrails policy authoring", () => {
         { ...draft, expectedRevision: 1 },
         context,
       ),
-    ).rejects.toThrow("The proposed policy has no changes");
+    ).resolves.toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: "text",
+          text: expect.stringContaining("The proposed policy has no changes"),
+        },
+      ],
+    });
     expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
   });
 
@@ -357,7 +423,7 @@ describe("guardrails policy authoring", () => {
   }) => {
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
-      permission: { toolPolicy: ["read", "update"] },
+      permission: { openappaPolicy: ["read", "update"] },
     });
     await makeMember(author.id, orgId, { role: role.role });
     await GuardrailsDeploymentModel.setEnabled(false);
@@ -374,6 +440,32 @@ describe("guardrails policy authoring", () => {
     expect(await GuardrailsDeploymentModel.isEnabled()).toBe(false);
   });
 
+  test("a custom role that can flip the enforcement switch turns it on with its first saved policy", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+  }) => {
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: {
+        openappaPolicy: ["read", "update"],
+        organizationSettings: ["read", "update"],
+      },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const saved = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content, expectedRevision: 0 },
+      { organizationId: orgId, userId: author.id, agent },
+    );
+    expect(saved.structuredContent?.enforcement).toMatchObject({
+      enabled: true,
+      turnedOn: true,
+    });
+    expect(await GuardrailsDeploymentModel.isEnabled()).toBe(true);
+  });
+
   test("granting a battery a credential needs credential update, removing it does not", async ({
     makeUser,
     makeCustomRole,
@@ -382,7 +474,7 @@ describe("guardrails policy authoring", () => {
   }) => {
     const author = await makeUser();
     const role = await makeCustomRole(orgId, {
-      permission: { toolPolicy: ["read", "update"] },
+      permission: { openappaPolicy: ["read", "update"] },
     });
     await makeMember(author.id, orgId, { role: role.role });
     const session = await makeSession(author.id, {
@@ -412,14 +504,16 @@ describe("guardrails policy authoring", () => {
       payload: { content: granted, expectedRevision: 1 },
     });
     expect(refused.statusCode).toBe(403);
-    // The agent path is the same authorization, not a way around it.
-    await expect(
-      executeArchestraTool(
-        "archestra__update_guardrails_policy",
-        { content: granted, expectedRevision: 1 },
-        context,
-      ),
-    ).rejects.toMatchObject({ statusCode: 403 });
+    // The agent path is no way around it: agents bind with the bind tool.
+    const viaAgent = await executeArchestraTool(
+      "archestra__update_guardrails_policy",
+      { content: granted, expectedRevision: 1 },
+      context,
+    );
+    expect(viaAgent.isError).toBe(true);
+    expect(JSON.stringify(viaAgent.content)).toContain(
+      "with bind_guardrails_credential instead of a [credentials] line",
+    );
     expect((await GuardrailsPolicyModel.findLatest(orgId))?.revision).toBe(1);
 
     const binder = await makeUser();
@@ -449,6 +543,61 @@ describe("guardrails policy authoring", () => {
       payload: { content: declared, expectedRevision: 2 },
     });
     expect(removed.statusCode, removed.body).toBe(200);
+  });
+
+  test("including a battery that reads a stored binding grants it and needs credential update", async ({
+    makeUser,
+    makeCustomRole,
+    makeMember,
+    makeSession,
+  }) => {
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId: orgId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      credentialKey: "github-token",
+      updatedBy: userId,
+    });
+    const author = await makeUser();
+    const role = await makeCustomRole(orgId, {
+      permission: { openappaPolicy: ["read", "update"] },
+    });
+    await makeMember(author.id, orgId, { role: role.role });
+    const authorSession = await makeSession(author.id, {
+      activeOrganizationId: orgId,
+    });
+    const actAs = (user: typeof author, session: typeof authorSession) =>
+      vi.mocked(betterAuth.api.getSession).mockResolvedValue({
+        response: { user, session },
+        headers: new Headers(),
+      } as never);
+    const declared = `include = ["batteries/github/appa.toml"]\n\n${content}`;
+    const put = (body: string, expectedRevision: number) =>
+      app.inject({
+        method: "PUT",
+        url: "/api/guardrails-policy",
+        payload: { content: body, expectedRevision },
+      });
+
+    actAs(author, authorSession);
+    expect((await put(declared, 0)).statusCode).toBe(403);
+    expect(await GuardrailsPolicyModel.findLatest(orgId)).toBeNull();
+
+    const binder = await makeUser();
+    await makeMember(binder.id, orgId, { role: "admin" });
+    actAs(
+      binder,
+      await makeSession(binder.id, { activeOrganizationId: orgId }),
+    );
+    const included = await put(declared, 0);
+    expect(included.statusCode, included.body).toBe(200);
+
+    // Spelling the key the binding already hands over grants nothing new.
+    actAs(author, authorSession);
+    const spelled = await put(
+      `${declared}\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n`,
+      1,
+    );
+    expect(spelled.statusCode, spelled.body).toBe(200);
   });
 
   test("an entry spelling bytes nobody stored is refused when it is added and unavailable when it stays", async () => {
@@ -524,7 +673,7 @@ describe("guardrails policy authoring", () => {
     ).rejects.toMatchObject({ code: -32601 });
   });
 
-  test("a member can read but cannot save or validate policies through either API", async ({
+  test("a member can read and validate but cannot save policies through either API", async ({
     makeUser,
     makeMember,
     makeSession,
@@ -557,7 +706,7 @@ describe("guardrails policy authoring", () => {
           payload: { content },
         })
       ).statusCode,
-    ).toBe(403);
+    ).toBe(200);
     const denied = await executeArchestraTool(
       "archestra__update_guardrails_policy",
       { content, expectedRevision: 0 },

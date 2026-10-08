@@ -46,6 +46,7 @@ import {
 import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, ModelModel } from "@/models";
+import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
   formatUnavailableToolErrorDetails,
   getUnavailableToolErrorDetails,
@@ -126,6 +127,13 @@ export interface A2AExecuteParams {
    * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
+  /**
+   * The caller forks itself: a fresh-context copy of the calling agent. It may
+   * repeat its direct parent in the chain once, and never forks again.
+   */
+  selfFork?: boolean;
+  /** The child trajectory an OpenAPPA-governed spawn bound this run to. */
+  appaSubagent?: SubagentBinding;
   /**
    * Id of a persisted `conversations` row, when the execution belongs to one
    * (chat delegation). Tools may persist it as a foreign key — never pass a
@@ -262,7 +270,11 @@ export async function executeA2AMessage(
   // I/O; `handleDelegation` turns the throw into a tool error the model can
   // recover from. Agent ids are uuids, so ":" cannot appear inside one.
   const ancestors = parentDelegationChain?.split(":") ?? [];
-  if (ancestors.includes(agentId)) {
+  const forksItsParent =
+    params.selfFork === true &&
+    ancestors.at(-1) === agentId &&
+    ancestors.filter((ancestor) => ancestor === agentId).length === 1;
+  if (ancestors.includes(agentId) && !forksItsParent) {
     throw new DelegationLoopError(
       "That agent is already in the current delegation chain. Answer directly instead of delegating back to it.",
     );
@@ -361,6 +373,7 @@ export async function executeA2AMessage(
       // attributed to the nested delegation call (recursion through the chain).
       subagentToolStream,
       repeatTracker,
+      appaSubagent: params.appaSubagent,
     });
 
     const systemPrompt = await buildAgentSystemPrompt({
@@ -402,6 +415,7 @@ export async function executeA2AMessage(
         agentLlmApiKeyId: agent.llmApiKeyId,
         contextIsTrusted: parentContextIsTrusted,
         delegationBillingEnvironmentId,
+        appaSubagentToken: params.appaSubagent?.token,
       });
 
     // Which attachment mime types this model can read. A missing model row
@@ -419,7 +433,7 @@ export async function executeA2AMessage(
     // one is usable for this caller. Resolved only when there are attachments, so
     // text-only turns (the common case) skip the permission/DB chain. Skip the
     // lookup for the synthetic "system" actor (external A2A v2) — it can never
-    // hold `sandbox:execute`.
+    // hold `agent:read`.
     const sandboxAvailable =
       (attachments?.length ?? 0) > 0 && userId && userId !== "system"
         ? await isSkillSandboxAvailableForAgent({
@@ -560,6 +574,7 @@ export async function executeA2AMessage(
               agentLlmApiKeyId: agent.llmApiKeyId,
               contextIsTrusted: parentContextIsTrusted,
               delegationBillingEnvironmentId,
+              appaSubagentToken: params.appaSubagent?.token,
             })
           ).model,
       }),
@@ -618,6 +633,18 @@ export async function executeA2AMessage(
         systemPrompt,
         abortSignal,
         logContext: { agentId: agent.id, sessionId },
+        // runAgentStream marks only the initial messages. Without a breakpoint
+        // that moves with the tool loop, every later step pays the full input
+        // price for all earlier tool calls and results. Native Anthropic only,
+        // as in the chat route.
+        ...(provider === "anthropic" &&
+          anthropicNativeEndpoint && {
+            promptCache: {
+              provider,
+              model: selectedModel,
+              anthropicNativeEndpoint,
+            },
+          }),
       }),
     };
     const currentTurn: { role: "user"; content: UserContent } | null =
@@ -667,6 +694,13 @@ export async function executeA2AMessage(
       });
       const stream = runStream.result;
       getCapturedStreamError = runStream.getCapturedStreamError;
+      const emitLiveSubagentToolCall =
+        subagentToolStream && delegationToolCallId
+          ? createLiveSubagentToolCallEmitter({
+              bridge: subagentToolStream,
+              parentToolCallId: delegationToolCallId,
+            })
+          : undefined;
 
       const uiMessageStreamConsumption = consumeReadableStream({
         stream: stream
@@ -699,6 +733,7 @@ export async function executeA2AMessage(
           .pipeThrough(
             new TransformStream<UIMessageChunk, UIMessageChunk>({
               async transform(chunk, controller) {
+                emitLiveSubagentToolCall?.(chunk);
                 await params.onUiMessageChunk?.(chunk);
                 controller.enqueue(chunk);
               },
@@ -890,6 +925,49 @@ type StageAttachmentsFn = (
 ) => Promise<StageResult[]>;
 
 /**
+ * Surface a child run's tool calls while it runs: each call when its input is
+ * ready, again when it settles. The final-message pass in
+ * {@link emitSubagentToolCalls} re-emits the terminal states afterwards.
+ * @public — exported for testability
+ */
+export function createLiveSubagentToolCallEmitter(params: {
+  bridge: SubagentToolStreamBridge;
+  parentToolCallId: string;
+}): (chunk: UIMessageChunk) => void {
+  const { bridge, parentToolCallId } = params;
+  const calls = new Map<string, { toolName: string; input: unknown }>();
+  return (chunk) => {
+    switch (chunk.type) {
+      case "tool-input-available": {
+        const call = { toolName: chunk.toolName, input: chunk.input };
+        calls.set(chunk.toolCallId, call);
+        bridge.emit({
+          parentToolCallId,
+          toolCallId: chunk.toolCallId,
+          ...call,
+          state: "input-available",
+        });
+        return;
+      }
+      case "tool-output-available":
+      case "tool-output-error": {
+        const call = calls.get(chunk.toolCallId);
+        if (!call) return;
+        bridge.emit({
+          parentToolCallId,
+          toolCallId: chunk.toolCallId,
+          ...call,
+          ...(chunk.type === "tool-output-available"
+            ? { state: "output-available", output: chunk.output }
+            : { state: "output-error", errorText: chunk.errorText }),
+        });
+        return;
+      }
+    }
+  };
+}
+
+/**
  * Emit one `data-subagent-tool-call` per tool part in a child run's final
  * message, attributed to the delegation call that invoked the child. The bridge
  * caps payloads and streams/collects each call. Skips non-tool parts (text,
@@ -954,7 +1032,9 @@ export function emitSubagentToolCalls(params: {
  * Build the current user turn's AI SDK content from a text message and optional
  * attachments, mirroring the chat-side attachment policy
  * (`chatUploadRejectionReason`):
- *   - images: kept inline, minus the tiny-broken-image filter;
+ *   - images: kept inline, minus the tiny-broken-image filter, and — when a
+ *     sandbox is available and the image fits the artifact limit — also staged
+ *     into the sandbox so tools can use the bytes;
  *   - inlineable text ≤ {@link INLINE_TEXT_MAX_BYTES}: kept inline (decoded per
  *     provider by `prepareMessagesForProvider`);
  *   - other model-ingestible types (PDF, audio, video): kept inline at any size;
@@ -997,7 +1077,7 @@ export async function buildUserContent(
   // Images are matched broadly by `image/*` and always kept (subject to the
   // tiny-broken-image filter), deliberately bypassing the mime classifier: a
   // model's readable set may omit a non-standard subtype (e.g. `image/jpg`) that
-  // the provider still renders, so images are never staged or rejected here.
+  // the provider still renders, so images are never rejected here.
   const imageAttachments = allAttachments.filter((a) =>
     a.contentType.startsWith("image/"),
   );
@@ -1038,22 +1118,33 @@ export async function buildUserContent(
     }
   }
 
-  // Stage the sandbox-bound attachments. A creation/upload failure surfaces as a
-  // note (no silent drop) and the turn continues with whatever else survived.
+  // Images stay inline (the model sees them) but are also copied into the
+  // sandbox when one is usable, mirroring chat-UI auto-staging: an inline image
+  // gives the model no bytes to act on, so without a sandbox copy it cannot hand
+  // the picture to a tool (attach it to a post, upload it elsewhere, edit it).
+  const imagesToStage = sandboxAvailable
+    ? validImageAttachments.filter(
+        (a) => estimateAttachmentBytes(a) <= sandboxByteLimit,
+      )
+    : [];
+
+  // Stage the sandbox-bound attachments in one call (one sandbox resolution). A
+  // creation/upload failure of a sandbox-only file surfaces as a note (no silent
+  // drop) and the turn continues with whatever else survived; a failed image
+  // copy needs no note because the image itself is still inline.
   const stagedPointers: Array<{ name: string; path: string }> = [];
   const stageFailed: A2AAttachment[] = [];
-  if (toStage.length > 0) {
+  const stageBatch = [...toStage, ...imagesToStage];
+  if (stageBatch.length > 0) {
     const results = opts.stageAttachments
-      ? await opts.stageAttachments(toStage)
-      : toStage.map(() => ({ error: true as const }));
+      ? await opts.stageAttachments(stageBatch)
+      : stageBatch.map(() => ({ error: true as const }));
     results.forEach((result, i) => {
+      const att = stageBatch[i];
       if ("path" in result) {
-        stagedPointers.push({
-          name: toStage[i].name ?? "unnamed",
-          path: result.path,
-        });
-      } else {
-        stageFailed.push(toStage[i]);
+        stagedPointers.push({ name: att.name ?? "unnamed", path: result.path });
+      } else if (i < toStage.length) {
+        stageFailed.push(att);
       }
     });
   }

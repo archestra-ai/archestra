@@ -1,4 +1,4 @@
-import { generateKeyPairSync, randomUUID } from "node:crypto";
+import { createHash, generateKeyPairSync, randomUUID } from "node:crypto";
 import { ADMIN_ROLE_NAME } from "@archestra/shared";
 import { and, eq } from "drizzle-orm";
 import { HttpResponse, http } from "msw";
@@ -12,7 +12,9 @@ import {
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import { GithubAppConfigModel } from "@/models";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { secretManager } from "@/secrets-manager";
 import {
   guardrailsPolicyService,
@@ -24,6 +26,7 @@ import {
 } from "@/services/openappa-github-sync";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import { useMswServer } from "@/test/msw";
+import { registerRoutePermissions } from "@/test/route-permissions";
 import routes from "./openappa-github-sync.routes";
 
 // biome-ignore lint/correctness/useHookAtTopLevel: Vitest lifecycle fixture, not a React hook
@@ -55,6 +58,7 @@ describe("APPA GitHub sync", () => {
       Object.assign(request, { user, organizationId });
     });
     registerAuditLogHook(app);
+    registerRoutePermissions(app);
     await app.register(routes);
     server.use(
       http.get(
@@ -88,6 +92,82 @@ describe("APPA GitHub sync", () => {
       url: "/api/openappa/github-sync",
       payload: body,
     });
+  test("checks the validation folder at the proposed ref before atomically saving both settings", async () => {
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/policies/contents/checks",
+        ({ request }) => {
+          expect(new URL(request.url).searchParams.get("ref")).toBe(commit);
+          return HttpResponse.json([
+            { type: "file", path: "checks/.gitkeep", size: 0 },
+          ]);
+        },
+      ),
+    );
+    const response = await configure({
+      ...source,
+      validationDirectory: "checks",
+    });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json().validationDirectory).toBe("checks");
+    expect(await OpenAppaPolicyTestsModel.find(organizationId)).toMatchObject({
+      directory: "checks",
+      files: [],
+    });
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/policies/contents/missing",
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+    const previous = await OpenAppaGithubSyncModel.find(organizationId);
+    expect(
+      (
+        await configure({
+          ...source,
+          path: "new/appa.toml",
+          validationDirectory: "missing",
+        })
+      ).statusCode,
+    ).toBe(404);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toEqual(
+      previous,
+    );
+    expect(await OpenAppaPolicyTestsModel.find(organizationId)).toMatchObject({
+      directory: "checks",
+    });
+  });
+  test("an empty validation folder disables Git tests without fetching a folder or disabling policy sync", async () => {
+    const response = await configure({ ...source, validationDirectory: "" });
+    expect(response.statusCode, response.body).toBe(200);
+    expect(response.json()).toMatchObject({
+      validationDirectory: "",
+      source: { interval: "1h" },
+    });
+    expect(await OpenAppaPolicyTestsModel.find(organizationId)).toMatchObject({
+      directory: "",
+      files: [],
+    });
+  });
+  test("source edits from older clients preserve the configured directory", async () => {
+    await configure({ ...source, validationDirectory: "" });
+    const response = await configure();
+    expect(response.json().validationDirectory).toBe("");
+  });
+  test("a file is rejected as a validation directory without changing the source", async () => {
+    server.use(
+      http.get(
+        "https://api.github.com/repos/example/policies/contents/checks",
+        () => HttpResponse.json({ type: "file", path: "checks" }),
+      ),
+    );
+    const response = await configure({
+      ...source,
+      validationDirectory: "checks",
+    });
+    expect(response.statusCode, response.body).toBe(400);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toBeNull();
+  });
   /** The state the declaration migration leaves: declarations the repository never learned. */
   const flagDeclarationsPendingPublish = () =>
     db
@@ -692,10 +772,23 @@ describe("APPA GitHub sync", () => {
     await configure();
     await syncAppaGithubPolicy(organizationId);
     const granted = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
+    const grantedHash = createHash("sha256").update(granted).digest("hex");
     const second = "b".repeat(40);
     upstream(granted, second);
     await syncAppaGithubPolicy(organizationId);
 
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tasksTable)
+          .where(eq(schema.tasksTable.taskType, "openappa_policy_validation"))
+      ).some(
+        (job) =>
+          job.payload.policyHash === grantedHash &&
+          job.payload.policyRevision === 2,
+      ),
+    ).toBe(false);
     // The bytes are kept, not published: the repository cannot grant this.
     expect(
       await GuardrailsPolicyModel.findLatest(organizationId),
@@ -714,13 +807,17 @@ describe("APPA GitHub sync", () => {
 
     const manager = await makeUser();
     const role = await makeCustomRole(organizationId, {
-      permission: { organization: ["update"], toolPolicy: ["read", "update"] },
+      permission: {
+        organizationSettings: ["update"],
+        openappaPolicy: ["read", "update"],
+      },
     });
     await makeMember(manager.id, organizationId, { role: role.role });
     const managerApp = createFastifyInstance();
     managerApp.addHook("onRequest", async (request) => {
       Object.assign(request, { user: manager, organizationId });
     });
+    registerRoutePermissions(managerApp);
     await managerApp.register(routes);
     try {
       expect(
@@ -743,6 +840,18 @@ describe("APPA GitHub sync", () => {
       url: "/api/openappa/github-sync/accept-held",
     });
     expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(
+      (
+        await db
+          .select()
+          .from(schema.tasksTable)
+          .where(eq(schema.tasksTable.taskType, "openappa_policy_validation"))
+      ).some(
+        (job) =>
+          job.payload.policyHash === grantedHash &&
+          job.payload.policyRevision === 2,
+      ),
+    ).toBe(true);
     expect(accepted.json()).toMatchObject({
       sourceCommit: second,
       reasons: ["changes_credentials"],
@@ -765,6 +874,45 @@ describe("APPA GitHub sync", () => {
         })
       ).statusCode,
     ).toBe(409);
+  });
+
+  test("a pull is measured against the stored bindings: including a reader of one is held, spelling its own key is not", async () => {
+    await configure();
+    await syncAppaGithubPolicy(organizationId);
+    await OpenAppaCredentialBindingModel.upsert({
+      organizationId,
+      variable: "APPA_PROVIDER_GITHUB_TOKEN",
+      credentialKey: "github-token",
+      updatedBy: adminId,
+    });
+    const included = `include = ["batteries/github/appa.toml"]\n\n${policy}`;
+    upstream(included, "b".repeat(40));
+    await syncAppaGithubPolicy(organizationId);
+    // The text names no credential, but the battery it includes reads a bound one.
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: included,
+      heldReasons: ["changes_credentials"],
+    });
+    expect(
+      (
+        await app.inject({
+          method: "POST",
+          url: "/api/openappa/github-sync/accept-held",
+        })
+      ).statusCode,
+    ).toBe(200);
+
+    const spelled = `include = ["batteries/github/appa.toml"]\n\n[credentials]\nAPPA_PROVIDER_GITHUB_TOKEN = "github-token"\n\n${policy}`;
+    upstream(spelled, "c".repeat(40));
+    await syncAppaGithubPolicy(organizationId);
+    expect(await OpenAppaGithubSyncModel.find(organizationId)).toMatchObject({
+      heldContent: null,
+      heldReasons: [],
+      content: spelled,
+    });
+    expect(
+      await GuardrailsPolicyModel.findLatest(organizationId),
+    ).toMatchObject({ content: spelled, revision: 3 });
   });
 
   test("a pull dropping a battery this deployment has not published yet is held", async () => {

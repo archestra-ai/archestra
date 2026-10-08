@@ -6,7 +6,7 @@ import { PermissionButton } from "./permission-button";
 
 vi.mock("@/lib/auth/auth.query");
 
-const CONSTRAINT = "Available to roles with the Skills (update) permission";
+const CONSTRAINT = "Missing permissions: Skills (update)";
 
 function setPermission(granted: boolean) {
   vi.mocked(useHasPermissions).mockReturnValue({
@@ -72,7 +72,7 @@ describe("PermissionButton", () => {
   it("keeps the caller's own reason when it disabled the control itself", () => {
     // Granting the permission would not make this control usable, so the state
     // the caller is describing is the reason that still applies.
-    setPermission(false);
+    setPermission(true);
 
     render(
       <PermissionButton

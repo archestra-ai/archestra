@@ -1,10 +1,14 @@
-import type { ResourcePermissionGrant } from "@archestra/shared";
+import type {
+  ResourceAccessRelation,
+  ResourcePermissionGrant,
+} from "@archestra/shared";
 import { and, eq, inArray, isNotNull } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import type { Project, ProjectLifecycle, ProjectVisibility } from "@/types";
 import ResourcePermissionAccessModel from "./resource-permission-access";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /** Who a project reaches besides its owner, read from its permission policy. */
 type ProjectAudience = {
@@ -56,6 +60,8 @@ class ProjectAccessModel {
     // SPDX-SnippetBegin
     // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
     // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const principal =
+      await ResourcePermissionSubjectModel.resolvePrincipal(params);
     const projects = await db
       .select()
       .from(schema.projectsTable)
@@ -64,7 +70,7 @@ class ProjectAccessModel {
           eq(schema.projectsTable.organizationId, params.organizationId),
           notDeleted(schema.projectsTable),
           ResourcePermissionPolicyModel.grantCondition({
-            ...params,
+            ...principal,
             resource: "project",
             scopeColumn: schema.projectsTable.id,
             action: "read",
@@ -80,6 +86,45 @@ class ProjectAccessModel {
         return b.createdAt.getTime() - a.createdAt.getTime();
       },
     );
+  }
+
+  /**
+   * Ids of the org's active projects in any of `relations` for the caller,
+   * the list's "Show" filter; see
+   * {@link ResourcePermissionPolicyModel.accessRelationCondition}.
+   */
+  static async getIdsInAccessRelations(params: {
+    userId: string;
+    organizationId: string;
+    relations: ResourceAccessRelation[];
+  }): Promise<string[]> {
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      userId: params.userId,
+      organizationId: params.organizationId,
+    });
+    const rows = await db
+      .select({ id: schema.projectsTable.id })
+      .from(schema.projectsTable)
+      .where(
+        and(
+          eq(schema.projectsTable.organizationId, params.organizationId),
+          notDeleted(schema.projectsTable),
+          ResourcePermissionPolicyModel.accessRelationCondition({
+            organizationId: params.organizationId,
+            resource: "project",
+            scopeColumn: schema.projectsTable.id,
+            ownerColumn: schema.projectsTable.userId,
+            userId: params.userId,
+            subjects: principal.subjects,
+            relations: params.relations,
+          }),
+        ),
+      );
+    // SPDX-SnippetEnd
+    return rows.map((row) => row.id);
   }
 
   /**

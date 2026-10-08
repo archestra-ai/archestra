@@ -1,8 +1,10 @@
 // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+import type { ResourceAccessRelation } from "@archestra/shared";
 import { and, eq, inArray, or } from "drizzle-orm";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 /**
  * Read-side accessibility for apps, decided by grants on the app, plus the
@@ -20,9 +22,15 @@ class AppAccessModel {
   static async getUserAccessibleAppIds(params: {
     organizationId: string;
     userId?: string;
+    /** Keep only apps in these relations to the caller (the "Show" filter). */
+    access?: ResourceAccessRelation[];
   }): Promise<string[]> {
     const { organizationId, userId } = params;
     if (userId === undefined) return [];
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId,
+      userId,
+    });
     const rows = await db
       .selectDistinct({ id: schema.appsTable.id })
       .from(schema.appsTable)
@@ -44,12 +52,22 @@ class AppAccessModel {
             eq(schema.appsTable.authorId, userId),
           ),
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId,
-            userId,
+            ...principal,
             resource: "app",
             scopeColumn: schema.appsTable.id,
             action: "read",
           }),
+          params.access
+            ? ResourcePermissionPolicyModel.accessRelationCondition({
+                organizationId,
+                resource: "app",
+                scopeColumn: schema.appsTable.id,
+                ownerColumn: schema.appsTable.authorId,
+                userId,
+                subjects: principal.subjects,
+                relations: params.access,
+              })
+            : undefined,
         ),
       );
     return rows.map((row) => row.id);
@@ -74,6 +92,10 @@ class AppAccessModel {
     if (app.organizationId !== organizationId) return false;
     if (!app.enabled && app.authorId !== userId) return false;
     if (!userId) return false;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipal({
+      organizationId,
+      userId,
+    });
     const [grant] = await db
       .select({ id: schema.appsTable.id })
       .from(schema.appsTable)
@@ -81,8 +103,7 @@ class AppAccessModel {
         and(
           eq(schema.appsTable.id, app.id),
           ResourcePermissionPolicyModel.grantCondition({
-            organizationId,
-            userId,
+            ...principal,
             resource: "app",
             scopeColumn: schema.appsTable.id,
             action: params.action ?? "read",

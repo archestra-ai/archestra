@@ -1,5 +1,5 @@
+import { isEncryptedChatUnavailableContent } from "../encrypted-chat-content";
 import type { SupportedProvider } from "../index";
-import { isLockedChatUnavailableContent } from "../locked-chat-content";
 import AnthropicMessagesInteraction from "./llmProviders/anthropic";
 import AzureChatCompletionInteraction from "./llmProviders/azure";
 import AzureResponsesInteraction from "./llmProviders/azure-responses";
@@ -16,6 +16,7 @@ import GeminiGenerateContentInteraction from "./llmProviders/gemini";
 import GithubCopilotChatCompletionInteraction from "./llmProviders/github-copilot";
 import GithubCopilotResponsesInteraction from "./llmProviders/github-copilot-responses";
 import GroqChatCompletionInteraction from "./llmProviders/groq";
+import JevDecisionsInteraction from "./llmProviders/jev";
 import KimiChatCompletionInteraction from "./llmProviders/kimi";
 import Microsoft365CopilotChatCompletionInteraction from "./llmProviders/microsoft-365-copilot";
 import MinimaxChatCompletionInteraction from "./llmProviders/minimax";
@@ -74,6 +75,7 @@ const interactionFactories: Record<Interaction["type"], InteractionFactory> = {
   "minimax:chatCompletions": (i) => new MinimaxChatCompletionInteraction(i),
   "azure:chatCompletions": (i) => new AzureChatCompletionInteraction(i),
   "azure:responses": (i) => new AzureResponsesInteraction(i),
+  "jev:decisions": (i) => new JevDecisionsInteraction(i),
 };
 
 export interface CostSavingsInput {
@@ -148,7 +150,7 @@ export class DynamicInteraction implements InteractionUtils {
   private interactionClass: InteractionUtils;
   private interaction: Interaction;
   /**
-   * A locked-chat interaction stores a sentinel where the provider payload
+   * An encrypted-chat interaction stores a sentinel where the provider payload
    * would be. Every accessor below dereferences that payload unguarded
    * (`request.messages`, `response.choices`), so the check lives here once
    * rather than in each provider mapper, which would have to learn a shape it
@@ -173,8 +175,8 @@ export class DynamicInteraction implements InteractionUtils {
 
     this.interaction = interaction;
     this.contentUnavailable =
-      isLockedChatUnavailableContent(interaction.request) ||
-      isLockedChatUnavailableContent(interaction.response);
+      isEncryptedChatUnavailableContent(interaction.request) ||
+      isEncryptedChatUnavailableContent(interaction.response);
     this.id = interaction.id;
     this.profileId = interaction.profileId;
     this.externalAgentId = interaction.externalAgentId;
@@ -282,7 +284,7 @@ export class DynamicInteraction implements InteractionUtils {
    * Map request messages, combining tool calls with their results and dual LLM analysis
    */
   mapToUiMessages(dualLlmAnalyses?: DualLlmAnalysis[]): PartialUIMessage[] {
-    // A locked-chat interaction stores a sentinel where the provider payload
+    // An encrypted-chat interaction stores a sentinel where the provider payload
     // would be, so there is no conversation to render. Provider mappers read
     // fields off it unguarded (`request.messages.length`), so this has to stop
     // before delegating rather than relying on a mapper tolerating it. The

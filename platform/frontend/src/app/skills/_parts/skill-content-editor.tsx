@@ -24,6 +24,7 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { getFrontendDocsUrl } from "@/lib/docs/docs";
 import { parseManifestFields } from "@/lib/skills/manifest-compose";
 import { formatBytes } from "@/lib/skills-sandbox/sandbox-file-preview";
@@ -320,7 +321,7 @@ export function SkillContentEditor({
 
         {!readOnly && trash.length > 0 && (
           <div className="border-t">
-            <button
+            <UnstyledButton
               type="button"
               className="flex w-full items-center gap-1.5 px-3 py-2 text-xs text-muted-foreground hover:text-foreground"
               onClick={() => setTrashExpanded((v) => !v)}
@@ -332,7 +333,7 @@ export function SkillContentEditor({
               )}
               <Trash2 className="h-3.5 w-3.5 shrink-0" />
               <span>Trash ({trash.length})</span>
-            </button>
+            </UnstyledButton>
             {trashExpanded && (
               <ul className="space-y-0.5 px-2 pb-2">
                 {trash.map(({ id, file }) => (
@@ -361,7 +362,7 @@ export function SkillContentEditor({
 
         {!readOnly && addingIn === null && !addingNewFolder && (
           <div className="flex items-center gap-3 border-t p-2">
-            <button
+            <UnstyledButton
               type="button"
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
               onClick={() => {
@@ -371,8 +372,8 @@ export function SkillContentEditor({
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               <span>New file</span>
-            </button>
-            <button
+            </UnstyledButton>
+            <UnstyledButton
               type="button"
               className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground"
               onClick={() => {
@@ -382,7 +383,7 @@ export function SkillContentEditor({
             >
               <Plus className="h-3.5 w-3.5 shrink-0" />
               <span>New folder</span>
-            </button>
+            </UnstyledButton>
           </div>
         )}
       </div>
@@ -517,13 +518,13 @@ function ManifestRow({
       )}
     >
       <FileText className="h-4 w-4 shrink-0 text-foreground" />
-      <button
+      <UnstyledButton
         type="button"
         className="flex-1 truncate text-left font-mono text-xs font-medium"
         onClick={onOpen}
       >
         SKILL.md
-      </button>
+      </UnstyledButton>
       <span className="text-xs text-muted-foreground">manifest</span>
     </li>
   );
@@ -548,7 +549,7 @@ function FolderRow({
 }) {
   return (
     <div className="group flex items-center gap-1 rounded px-1 py-1 hover:bg-muted/50">
-      <button
+      <UnstyledButton
         type="button"
         className="flex flex-1 items-center gap-1.5 text-left"
         onClick={onToggle}
@@ -567,14 +568,14 @@ function FolderRow({
         {isCollapsed && (
           <span className="text-xs text-muted-foreground">({fileCount})</span>
         )}
-      </button>
+      </UnstyledButton>
       {!readOnly && (
         <>
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+            size="icon-xs"
+            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
             onClick={onAddFile}
             title={`Add file in ${folder}/`}
           >
@@ -583,8 +584,8 @@ function FolderRow({
           <Button
             type="button"
             variant="ghost"
-            size="icon"
-            className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+            size="icon-xs"
+            className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
             onClick={onRemoveFolder}
             title={`Move folder ${folder}/ to trash`}
           >
@@ -617,19 +618,19 @@ function FileRow({
       )}
     >
       <FileText className="h-4 w-4 shrink-0 text-muted-foreground" />
-      <button
+      <UnstyledButton
         type="button"
         className="flex-1 truncate text-left font-mono text-xs"
         onClick={onOpen}
       >
         {label}
-      </button>
+      </UnstyledButton>
       {!readOnly && (
         <Button
           type="button"
           variant="ghost"
-          size="icon"
-          className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+          size="icon-xs"
+          className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
           onClick={onRemove}
           title="Move to trash"
         >
@@ -675,8 +676,7 @@ function NewFileRow({
       <Button
         type="button"
         variant="ghost"
-        size="sm"
-        className="h-7 px-2 text-xs"
+        size="xs"
         onClick={onCommit}
         disabled={!value.trim()}
       >
@@ -685,8 +685,7 @@ function NewFileRow({
       <Button
         type="button"
         variant="ghost"
-        size="icon"
-        className="h-7 w-7"
+        size="icon-xs"
         onClick={onCancel}
         aria-label="Cancel"
       >
@@ -714,8 +713,8 @@ function TrashRow({
       <Button
         type="button"
         variant="ghost"
-        size="icon"
-        className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+        size="icon-xs"
+        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
         onClick={onRestore}
         title="Restore"
       >
@@ -724,8 +723,8 @@ function TrashRow({
       <Button
         type="button"
         variant="ghost"
-        size="icon"
-        className="h-6 w-6 opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
+        size="icon-xs"
+        className="opacity-100 md:opacity-0 md:group-hover:opacity-100 md:focus-visible:opacity-100"
         onClick={onPurge}
         title="Delete permanently"
       >
@@ -768,8 +767,7 @@ function NewFolderRow({
       <Button
         type="button"
         variant="ghost"
-        size="sm"
-        className="h-7 px-2 text-xs"
+        size="xs"
         onClick={onCommit}
         disabled={!value.trim() || value.includes("/")}
       >
@@ -778,8 +776,7 @@ function NewFolderRow({
       <Button
         type="button"
         variant="ghost"
-        size="icon"
-        className="h-7 w-7"
+        size="icon-xs"
         onClick={onCancel}
         aria-label="Cancel"
       >
@@ -833,7 +830,7 @@ function buildTree(
 function TemplatedManifestHint() {
   const docsUrl = getFrontendDocsUrl(
     DocsPage.PlatformAgents,
-    "system-prompt-templating",
+    "prompt-templates",
   );
   return (
     <p className="text-xs text-muted-foreground">

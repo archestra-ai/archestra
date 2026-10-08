@@ -1,7 +1,6 @@
 import { RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
-import { userHasPermission } from "@/auth";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import { openappaEnabled } from "@/openappa/service";
 import { ApiError, constructResponseSchema } from "@/types";
@@ -10,9 +9,11 @@ import {
   BatteryPolicySourceSchema,
   BatterySummarySchema,
   CreateBatteryInstallSchema,
+  CredentialBindingParamsSchema,
   EffectivePolicySchema,
   PolicyBatteryViewSchema,
   PolicyDeclarationsViewSchema,
+  SetCredentialBindingSchema,
   UpdateBatteryInstallSchema,
   UploadBatteryPackageSchema,
   UploadedBatteryPackageSchema,
@@ -34,25 +35,9 @@ const PolicySourceQuerySchema = z.object({ entry: z.string().min(1).max(512) });
 const DeletedSchema = z.object({ success: z.literal(true) });
 
 const routes: FastifyPluginAsyncZod = async (app) => {
-  // Every write here edits the organization's policy text, so writes require
-  // organization management as well as the endpoint permission. The policy
-  // service gates the credential grants an edit would create on top of that.
-  app.addHook("preHandler", async (request) => {
+  app.addHook("preHandler", async () => {
     if (!openappaEnabled())
       throw new ApiError(404, "Guardrails v2 is disabled");
-    if (
-      request.method !== "GET" &&
-      !(await userHasPermission(
-        request.user.id,
-        request.organizationId,
-        "organization",
-        "update",
-      ))
-    )
-      throw new ApiError(
-        403,
-        "Organization update permission is required to manage guardrails batteries",
-      );
   });
   app.get(
     "/api/openappa/batteries",
@@ -207,6 +192,25 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       });
       return { success: true as const };
     },
+  );
+  app.put(
+    "/api/openappa/credential-bindings/:variable",
+    {
+      schema: {
+        operationId: RouteId.SetOpenappaCredentialBinding,
+        tags: ["OpenAPPA"],
+        params: CredentialBindingParamsSchema,
+        body: SetCredentialBindingSchema,
+        response: constructResponseSchema(PolicyDeclarationsViewSchema),
+      },
+    },
+    async (request) =>
+      openappaBatteriesService.setCredentialBinding({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        variable: request.params.variable,
+        key: request.body.key,
+      }),
   );
   app.put(
     "/api/openappa/battery-packages/:name",

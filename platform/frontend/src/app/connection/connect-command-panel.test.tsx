@@ -10,7 +10,7 @@ import {
 import userEvent from "@testing-library/user-event";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
-import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { useSearchParams } from "next/navigation";
 
 vi.mock("next/navigation");
 
@@ -22,7 +22,6 @@ import { useAppName } from "@/lib/hooks/use-app-name";
 import { useOrganization } from "@/lib/organization.query";
 import { CONNECT_CLIENTS } from "./clients";
 import { ConnectCommandPanel } from "./connect-command-panel";
-import { ConnectionFlow } from "./connection-flow";
 
 const {
   createSetupMock,
@@ -48,16 +47,22 @@ vi.mock("@/lib/connection-setup.query", () => ({
   }),
 }));
 
-vi.mock("./skills-marketplace-step", () => ({
+vi.mock("@/lib/skills/skill.query", () => ({
   useAllSkills: (params?: { enabled?: boolean; forAgentId?: string | null }) =>
     allSkillsMock(params),
+}));
+
+vi.mock("./skills-marketplace-step", () => ({
   // The marketplace step has its own test file; here it only matters whether
   // the panel renders it as a step.
   useSkillsMarketplaceVisible: () => skillsMarketplaceVisibleMock(),
   SkillsMarketplaceStep: () => <div data-testid="skills-marketplace-step" />,
 }));
 
-vi.mock("@/lib/plugins/plugin.query", () => ({
+vi.mock("@/lib/plugins/plugin.query", async (importOriginal) => ({
+  isDeliverablePlugin: (
+    await importOriginal<typeof import("@/lib/plugins/plugin.query")>()
+  ).isDeliverablePlugin,
   usePlugins: (enabled?: boolean) => pluginsMock(enabled),
 }));
 
@@ -84,6 +89,7 @@ const { availableKeysMock, createKeyMock, modelsByProviderMock } = vi.hoisted(
 );
 
 vi.mock("@/lib/llm-models.query", () => ({
+  useLlmModels: () => ({ data: [] }),
   useLlmModelsByProvider: () => ({
     modelsByProvider: modelsByProviderMock(),
   }),
@@ -157,9 +163,6 @@ function renderPanelProps(
     urlProvider: null,
     onProviderSelect: vi.fn(),
     baseUrl: "http://localhost:9000/v1",
-    candidateBaseUrls: ["http://localhost:9000/v1"],
-    baseUrlMetadata: null,
-    onBaseUrlChange: vi.fn(),
     ...overrides,
   };
 }
@@ -167,7 +170,19 @@ function renderPanelProps(
 function renderPanel(
   overrides: Partial<Parameters<typeof ConnectCommandPanel>[0]> = {},
 ) {
-  return render(<ConnectCommandPanel {...renderPanelProps(overrides)} />);
+  return render(<ConnectCommandPanel {...renderPanelProps(overrides)} />, {
+    wrapper: queryWrapper(),
+  });
+}
+
+/** The panel reads the approval request through React Query; rerenders keep the wrapper. */
+function queryWrapper() {
+  const queryClient = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return ({ children }: { children: React.ReactNode }) => (
+    <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+  );
 }
 
 // Radix Select scrolls the focused option; jsdom has no layout engine.
@@ -275,82 +290,6 @@ describe("ConnectCommandPanel", () => {
     );
   });
 
-  it("switches between coding prompts and Desktop setup without preparing coding-client scripts", async () => {
-    vi.mocked(useRouter).mockReturnValue({
-      replace: vi.fn(),
-    } as unknown as ReturnType<typeof useRouter>);
-    vi.mocked(usePathname).mockReturnValue("/connection");
-    const server = setupServer(
-      http.get("http://localhost:9000/api/agents/all", () =>
-        HttpResponse.json([]),
-      ),
-    );
-    server.listen({ onUnhandledRequest: "error" });
-    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
-    const queryClient = new QueryClient({
-      defaultOptions: { queries: { retry: false } },
-    });
-    const user = userEvent.setup();
-    const view = render(
-      <QueryClientProvider client={queryClient}>
-        <ConnectionFlow llmProxyId="p1" />
-      </QueryClientProvider>,
-    );
-    try {
-      expect(
-        screen.getByRole("heading", { name: "Connect Claude Code" }),
-      ).toBeVisible();
-      for (const label of ["Cursor", "Codex", "OpenCode", "Copilot CLI"]) {
-        const selectedClient = CONNECT_CLIENTS.find(
-          (entry) => entry.label === label,
-        );
-        if (!selectedClient) throw new Error(`Missing client: ${label}`);
-        await user.click(
-          screen.getByRole("button", {
-            name: new RegExp(`${label} logo ${label}`),
-          }),
-        );
-        expect(
-          screen.getByRole("heading", { name: `Connect ${label}` }),
-        ).toBeVisible();
-        const prompt = `Read ${window.location.origin}/connect.md?client=${selectedClient.id} and connect ${label}.`;
-        expect(
-          screen.getByText(
-            (_content, node) =>
-              node?.tagName === "CODE" && node.textContent === prompt,
-          ),
-        ).toBeVisible();
-      }
-      expect(createSetupMock).not.toHaveBeenCalled();
-      await user.click(
-        screen.getByRole("button", {
-          name: /Claude Desktop logo Claude Desktop/,
-        }),
-      );
-      expect(screen.queryByRole("button", { name: "Copy prompt" })).toBeNull();
-      expect(
-        screen.getByRole("heading", { name: "Install the connection" }),
-      ).toBeVisible();
-      await waitFor(() =>
-        expect(createSetupMock).toHaveBeenCalledWith(
-          expect.objectContaining({ clientId: "claude-desktop" }),
-        ),
-      );
-      expect(screen.queryByText(/requires the Claude Code CLI/)).toBeNull();
-      await user.click(
-        screen.getByRole("button", { name: /Claude Code logo Claude Code/ }),
-      );
-      expect(screen.getByRole("button", { name: "Copy prompt" })).toBeVisible();
-      expect(
-        screen.queryByRole("heading", { name: "Review the setup" }),
-      ).toBeNull();
-    } finally {
-      view.unmount();
-      queryClient.clear();
-      server.close();
-    }
-  });
-
   it("offers Desktop subscription installation without a configured API key", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({
@@ -379,25 +318,24 @@ describe("ConnectCommandPanel", () => {
     expect(
       screen.queryByRole("link", { name: "the LLM Proxy" }),
     ).not.toBeInTheDocument();
-    const proxySummary = screen
-      .getByText("your Claude subscription")
-      .closest("li");
-    expect(proxySummary).toHaveTextContent(
-      "Passthrough to Anthropic through the LLM Proxy using your Claude subscription",
-    );
     expect(
-      screen.queryByText("Good for reusing a subscription"),
-    ).not.toBeInTheDocument();
-    await userEvent.click(screen.getByTestId("connect-change-proxy"));
+      screen.queryByRole("heading", { name: "Review the setup" }),
+    ).toBeNull();
+    expect(screen.queryByText("your Claude subscription")).toBeNull();
+    await userEvent.click(
+      screen.getByRole("button", { name: "Customize setup" }),
+    );
     expect(
       screen.getByRole("tab", { name: "Claude subscription" }),
     ).toHaveAttribute("aria-selected", "true");
-    await userEvent.click(screen.getByRole("button", { name: "Done" }));
+    await userEvent.click(
+      screen.getByRole("button", { name: "Done customizing" }),
+    );
     expect(
       screen.queryByRole("tab", { name: "Claude subscription" }),
-    ).not.toBeInTheDocument();
+    ).toBeNull();
     expect(screen.getByText(COMMAND)).not.toBeVisible();
-    await userEvent.click(screen.getByText("Advanced: terminal setup"));
+    await userEvent.click(screen.getByText(/Advanced: terminal setup/));
     expect(screen.getByText(COMMAND)).toBeVisible();
     // The Desktop panel sits on a card, so the command must bring its own
     // terminal surface; without one it inherited the card and was unreadable.
@@ -405,11 +343,44 @@ describe("ConnectCommandPanel", () => {
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 
+  it("gives the Connect page one Desktop installer download that keeps left-out parts out", async () => {
+    availableKeysMock.mockReturnValue({ data: [] });
+    createSetupMock.mockResolvedValue({
+      id: "desktop-setup",
+      command: COMMAND,
+      installerUrl: "https://proxy.example/desktop-installer",
+      expiresAt: new Date().toISOString(),
+      tokenStart: "tok",
+      plugins: [],
+    });
+    renderPanel({
+      client: findClient("claude-desktop"),
+      variant: "download",
+      exclude: ["tools"],
+    });
+    const link = await screen.findByRole("link", {
+      name: "Download installer",
+    });
+    expect(link).toHaveAttribute(
+      "href",
+      "https://proxy.example/desktop-installer",
+    );
+    expect(createSetupMock).toHaveBeenCalledWith(
+      expect.objectContaining({ clientId: "claude-desktop" }),
+    );
+    expect(createSetupMock).toHaveBeenLastCalledWith(
+      expect.not.objectContaining({ mcpGatewayId: "g1" }),
+    );
+    expect(
+      screen.queryByRole("button", { name: "Customize setup" }),
+    ).toBeNull();
+  });
+
   it("regenerates Desktop setup when the platform or API-key authentication changes", async () => {
     const user = userEvent.setup();
     renderPanel({ client: findClient("claude-desktop") });
     await screen.findByText(COMMAND);
-    await user.click(screen.getByTestId("connect-change-platform"));
+    await user.click(screen.getByRole("button", { name: "Customize setup" }));
     await user.click(screen.getByRole("tab", { name: "Windows" }));
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -419,7 +390,6 @@ describe("ConnectCommandPanel", () => {
         }),
       ),
     );
-    await user.click(screen.getByTestId("connect-change-proxy"));
     await user.click(screen.getByRole("tab", { name: "API key" }));
     await waitFor(() =>
       expect(createSetupMock).toHaveBeenLastCalledWith(
@@ -503,7 +473,7 @@ describe("ConnectCommandPanel", () => {
       expect(revertLink).toBeVisible();
       expect(revertLink).toHaveAttribute(
         "href",
-        expect.stringContaining("platform-claude-desktop-example#revert"),
+        expect.stringContaining("integrations/claude-desktop#revert"),
       );
     } else {
       expect(revertLink).not.toBeInTheDocument();
@@ -572,6 +542,10 @@ describe("ConnectCommandPanel", () => {
           screen.queryByRole("button", { name: "Retry setup" }),
         ).toBeNull(),
       );
+      expect(
+        screen.queryByRole("heading", { name: "Connect Claude Code" }),
+      ).toBeNull();
+      expect(screen.queryByText("for tools")).toBeNull();
       expect(screen.queryByText(COMMAND)).toBeNull();
       expect(screen.queryByTestId("connect-regenerate-command")).toBeNull();
       expect(screen.queryByTestId("connect-change-skills")).toBeNull();
@@ -579,7 +553,6 @@ describe("ConnectCommandPanel", () => {
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
       await user.click(screen.getByRole("button", { name: "Customize setup" }));
-      await user.click(screen.getByTestId("connect-change-skills"));
       await user.click(
         screen.getByRole("checkbox", { name: "Install shared skills" }),
       );
@@ -616,7 +589,9 @@ describe("ConnectCommandPanel", () => {
 
   it("regenerates the setup as proxy and skills availability changes without losing the gateway", async () => {
     const props = renderPanelProps();
-    const { rerender } = render(<ConnectCommandPanel {...props} />);
+    const { rerender } = render(<ConnectCommandPanel {...props} />, {
+      wrapper: queryWrapper(),
+    });
     await screen.findByText(COMMAND);
 
     for (const [proxyEnabled, skillsEnabled] of [
@@ -1091,21 +1066,6 @@ describe("ConnectCommandPanel", () => {
     if (detailCopy) {
       expect(screen.getByText(new RegExp(detailCopy, "i"))).toBeInTheDocument();
     }
-  });
-
-  it("shows a separate endpoint line when more than one endpoint is configured", async () => {
-    renderPanel({
-      baseUrl: "https://eu.example.com/v1",
-      candidateBaseUrls: [
-        "https://eu.example.com/v1",
-        "https://us.example.com/v1",
-      ],
-    });
-    await screen.findByText(COMMAND);
-    expect(
-      screen.getByText(/Reach the gateway and proxy at/),
-    ).toBeInTheDocument();
-    expect(screen.getByText("https://eu.example.com/v1")).toBeInTheDocument();
   });
 
   it("shows the auto-detected platform in the review step", async () => {

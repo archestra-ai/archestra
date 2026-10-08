@@ -2422,6 +2422,7 @@ export default class K8sDeployment {
       serverName: this.mcpServer.name,
       labels,
       selectorLabels: this.getPodSelectorLabels(),
+      serviceAccountName: localConfig.serviceAccount,
     });
 
     if (!deployment) {

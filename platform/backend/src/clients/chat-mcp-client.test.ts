@@ -1456,8 +1456,8 @@ describe("AgentModel.update evicts cached chat MCP clients", () => {
     makeUser,
   }) => {
     const user = await makeUser();
-    // makeAgent defaults to full mode + accessAllTools=false.
-    const agent = await makeAgent();
+    // Exercise an actual change from an explicit Manual-mode opt-out.
+    const agent = await makeAgent({ toolExposureMode: "full" });
 
     const cacheKey = chatClient.__test.getCacheKey(agent.id, user.id);
     const mockClient = { ping: vi.fn(), listTools: vi.fn(), close: vi.fn() };
@@ -2013,6 +2013,39 @@ describe("buildArchestraToolOutput", () => {
     expect(extractMcpExecutedAs(result)).toEqual({
       kind: "platform",
       callerUserId: null,
+    });
+  });
+
+  test("keeps the battery credential card's batteries for the card, not the model", async ({
+    makeAgent,
+  }) => {
+    const agent = await makeAgent();
+    const batteries = [
+      {
+        name: "slack",
+        title: "Slack",
+        benefit: null,
+        setup: [],
+        credentials: ["APPA_PROVIDER_SLACK_TOKEN"],
+      },
+    ];
+    const result = await buildArchestraToolOutput({
+      response: {
+        content: [{ type: "text" as const, text: "Opened the card." }],
+        structuredContent: { batteries },
+      },
+      toolName: "archestra__request_battery_credentials",
+      toolArguments: { batteries: ["slack"] },
+      agentId: agent.id,
+    });
+
+    expect(result).toMatchObject({
+      content: "Opened the card.",
+      structuredContent: { batteries },
+    });
+    expect(mcpToolToModelOutput({ output: result })).toEqual({
+      type: "text",
+      value: "Opened the card.",
     });
   });
 

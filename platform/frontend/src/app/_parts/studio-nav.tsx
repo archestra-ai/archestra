@@ -164,6 +164,7 @@ export const contentNavGroups: NavGroup[] = [
         // Named for what the reader does there, not for the engine behind it.
         title: "Guardrails",
         url: "/openappa",
+        permissionUrls: ["/openappa", "/openappa/yells"],
         icon: OpenAppaIcon,
         customIsActive: (pathname: string) => pathname.startsWith("/openappa"),
         beta: true,
@@ -311,7 +312,9 @@ export const contentNavGroups: NavGroup[] = [
         customIsActive: (pathname: string) =>
           pathname.startsWith("/llm/logs") ||
           pathname.startsWith("/mcp/logs") ||
-          pathname.startsWith("/audit/logs"),
+          pathname.startsWith("/audit/logs") ||
+          pathname.startsWith("/connections/logs") ||
+          pathname.startsWith("/consults/logs"),
       },
       {
         title: "Settings",

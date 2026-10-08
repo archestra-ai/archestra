@@ -4,6 +4,7 @@ import {
   LLM_PROXY_OAUTH_SCOPE,
   MODEL_ROUTER_SUPPORTED_PROVIDERS,
   perUserCredentialLabel,
+  providerHasEndpointLocalModels,
   type ResourceVisibilityScope,
   RouteId,
   requiresOpenAiResponsesApi,
@@ -37,6 +38,7 @@ import {
   OpenAi,
   UuidIdSchema,
 } from "@/types";
+import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import {
   azureAdapterFactory,
   cerebrasAdapterFactory,
@@ -124,20 +126,16 @@ type ModelRouterVirtualKeyAuth = {
   virtualKeyId: string;
   virtualKeyIsPersonal: boolean;
   virtualKeyAuthorId: string | null;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
+  /** In preference order; see `selectMappedProviderKey`. */
+  providerApiKeys: ModelRouterMappedProviderKey[];
   oauthClient?: never;
 };
 
 type ModelRouterOAuthClientAuth = {
   authMethod: "oauth_client_credentials";
   organizationId: string;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
+  /** In preference order; see `selectMappedProviderKey`. */
+  providerApiKeys: ModelRouterMappedProviderKey[];
   oauthClient: {
     id: string;
     name: string;
@@ -149,10 +147,8 @@ type ModelRouterUserOAuthAuth = {
   authMethod: "oauth_user";
   organizationId: string;
   userId: string;
-  providerApiKeysByProvider: Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >;
+  /** In preference order; see `selectMappedProviderKey`. */
+  providerApiKeys: ModelRouterMappedProviderKey[];
   oauthClient: {
     id: string;
     name: string;
@@ -491,7 +487,7 @@ async function routeChatCompletion(
   await applyModelRouterAuthOverride({
     request,
     auth,
-    provider: resolution.provider,
+    resolution,
   });
 
   return handleModelRouterProvider(provider, request, reply);
@@ -499,7 +495,6 @@ async function routeChatCompletion(
 
 async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   const body = request.body as OpenAi.Types.ResponsesRequest;
-  const { chatBody, responsesContext } = responsesToOpenaiChat(body);
   const params = request.params as { agentId?: string };
   const auth = await getModelRouterAuth(request);
   const agent = params.agentId
@@ -507,7 +502,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     : await getDefaultModelRouterAgent();
   await ensureModelRouterAgentAccess({ agent, auth });
   const resolution = await resolveModelRoute({
-    requestedModel: chatBody.model,
+    requestedModel: body.model,
     allowedProviders: getMappedProviders(auth),
     allowedApiKeyIds: getMappedApiKeyIds(auth),
   });
@@ -520,7 +515,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     await applyModelRouterAuthOverride({
       request,
       auth,
-      provider: resolution.provider,
+      resolution,
     });
     return handleLLMProxy(
       { ...body, model: resolution.modelId },
@@ -530,6 +525,9 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
     );
   }
 
+  const { chatBody, responsesContext } = responsesToOpenaiChat(body, {
+    preserveContentParts: resolution.provider === "bedrock",
+  });
   const routedChatBody = {
     ...chatBody,
     model: resolution.modelId,
@@ -542,7 +540,7 @@ async function routeResponse(request: FastifyRequest, reply: FastifyReply) {
   await applyModelRouterAuthOverride({
     request,
     auth,
-    provider: resolution.provider,
+    resolution,
   });
 
   return handleModelRouterResponsesProvider(
@@ -580,7 +578,7 @@ async function routeEmbedding(request: FastifyRequest, reply: FastifyReply) {
   await applyModelRouterAuthOverride({
     request,
     auth,
-    provider: resolution.provider,
+    resolution,
   });
 
   return handleLLMProxy(routedBody, request, reply, embeddingsProvider);
@@ -801,7 +799,7 @@ function handleModelRouterResponsesProvider(
 }
 
 async function listModels(params: { auth: ModelRouterAuth }) {
-  const apiKeyIds = [...params.auth.providerApiKeysByProvider.values()]
+  const apiKeyIds = params.auth.providerApiKeys
     .filter((mapping) => modelRouterSupportedProviders.has(mapping.provider))
     .map((mapping) => mapping.providerApiKeyId);
   const linkedModels =
@@ -920,9 +918,7 @@ async function getModelRouterAuth(
         resolved.virtualKey,
       ),
       virtualKeyAuthorId: resolved.virtualKey.authorId,
-      providerApiKeysByProvider: new Map(
-        mappings.map((mapping) => [mapping.provider, mapping]),
-      ),
+      providerApiKeys: mappings,
     };
   } catch (error) {
     if (error instanceof ApiError && error.statusCode === 401) {
@@ -948,13 +944,11 @@ async function getModelRouterAuth(
 }
 
 function getMappedProviders(auth: ModelRouterAuth): Set<SupportedProvider> {
-  return new Set(auth.providerApiKeysByProvider.keys());
+  return new Set(auth.providerApiKeys.map((mapping) => mapping.provider));
 }
 
 function getMappedApiKeyIds(auth: ModelRouterAuth): string[] {
-  return [...auth.providerApiKeysByProvider.values()].map(
-    (mapping) => mapping.providerApiKeyId,
-  );
+  return auth.providerApiKeys.map((mapping) => mapping.providerApiKeyId);
 }
 
 function isTranslatedModelRouterProvider(
@@ -972,15 +966,18 @@ function assertNever(value: never): never {
 async function applyModelRouterAuthOverride(params: {
   request: FastifyRequest;
   auth: ModelRouterAuth;
-  provider: SupportedProvider;
+  resolution: ModelRouterResolution;
 }): Promise<void> {
-  const mappedApiKey = params.auth.providerApiKeysByProvider.get(
-    params.provider,
-  );
+  const { provider, modelId } = params.resolution;
+  const mappedApiKey = await selectMappedProviderKey({
+    mappings: params.auth.providerApiKeys,
+    provider,
+    modelId,
+  });
   if (!mappedApiKey) {
     throw new ApiError(
       400,
-      `Model Router credential is not mapped to provider "${params.provider}".`,
+      `Model Router credential is not mapped to provider "${provider}".`,
     );
   }
 
@@ -989,12 +986,12 @@ async function applyModelRouterAuthOverride(params: {
     : undefined;
   assertSubscriptionCredentialForProvider({
     apiKey,
-    provider: params.provider,
+    provider: provider,
   });
 
   if (
     credentialRequiresPerUserScope({
-      provider: params.provider,
+      provider: provider,
       apiKey,
     })
   ) {
@@ -1009,7 +1006,7 @@ async function applyModelRouterAuthOverride(params: {
     if (!isOwnedPersonalCredential) {
       throw new ApiError(
         403,
-        `${perUserCredentialLabel({ provider: params.provider, apiKey })} is per-user: it can only be used through the same user's own personal credential.`,
+        `${perUserCredentialLabel({ provider: provider, apiKey })} is per-user: it can only be used through the same user's own personal credential.`,
       );
     }
   }
@@ -1090,29 +1087,24 @@ async function getModelRouterOAuthClientAuth(
       name: oauthClient.name,
       clientId: oauthClient.clientId,
     },
-    providerApiKeysByProvider: new Map(
-      oauthClient.providerApiKeys.map((mapping) => {
-        const apiKey = providerApiKeysById.get(mapping.providerApiKeyId);
-        if (!apiKey) {
-          throw new ApiError(
-            500,
-            "LLM OAuth client references a missing provider API key.",
-          );
-        }
-        return [
-          mapping.provider,
-          {
-            provider: mapping.provider,
-            providerApiKeyId: apiKey.id,
-            providerApiKeyName: apiKey.name,
-            secretId: apiKey.secretId,
-            baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
-            scope: apiKey.scope,
-            userId: apiKey.userId,
-          },
-        ];
-      }),
-    ),
+    providerApiKeys: oauthClient.providerApiKeys.map((mapping) => {
+      const apiKey = providerApiKeysById.get(mapping.providerApiKeyId);
+      if (!apiKey) {
+        throw new ApiError(
+          500,
+          "LLM OAuth client references a missing provider API key.",
+        );
+      }
+      return {
+        provider: mapping.provider,
+        providerApiKeyId: apiKey.id,
+        providerApiKeyName: apiKey.name,
+        secretId: apiKey.secretId,
+        baseUrl: apiKey.inferenceBaseUrl ?? apiKey.baseUrl,
+        scope: apiKey.scope,
+        userId: apiKey.userId,
+      };
+    }),
   };
 }
 
@@ -1133,12 +1125,12 @@ async function getModelRouterUserOAuthAuth(params: {
   }
 
   const userTeamIds = await TeamModel.getUserTeamIds(params.accessToken.userId);
-  const providerApiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+  const availableKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
     member.organizationId,
     params.accessToken.userId,
     userTeamIds,
   );
-  if (providerApiKeys.length === 0) {
+  if (availableKeys.length === 0) {
     throw new ApiError(
       401,
       "OAuth user has no provider API keys available for Model Router usage.",
@@ -1148,17 +1140,19 @@ async function getModelRouterUserOAuthAuth(params: {
   const oauthClient = await OAuthClientModel.findByClientId(
     params.accessToken.clientId,
   );
-  const providerApiKeysByProvider = new Map<
-    SupportedProvider,
-    ModelRouterMappedProviderKey
-  >();
-  for (const apiKey of [...providerApiKeys].sort(
+  // A user reaches every endpoint of a self-hosted provider they can use; for
+  // a credential-style provider only their best-ranked key, as everywhere else.
+  const providerApiKeys: ModelRouterMappedProviderKey[] = [];
+  for (const apiKey of [...availableKeys].sort(
     compareModelRouterUserProviderKeys,
   )) {
-    if (providerApiKeysByProvider.has(apiKey.provider)) {
+    if (
+      !providerHasEndpointLocalModels(apiKey.provider) &&
+      providerApiKeys.some((mapping) => mapping.provider === apiKey.provider)
+    ) {
       continue;
     }
-    providerApiKeysByProvider.set(apiKey.provider, {
+    providerApiKeys.push({
       provider: apiKey.provider,
       providerApiKeyId: apiKey.id,
       providerApiKeyName: apiKey.name,
@@ -1173,7 +1167,7 @@ async function getModelRouterUserOAuthAuth(params: {
     authMethod: "oauth_user",
     organizationId: member.organizationId,
     userId: params.accessToken.userId,
-    providerApiKeysByProvider,
+    providerApiKeys,
     oauthClient: oauthClient
       ? {
           id: oauthClient.id,

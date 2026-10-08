@@ -1,5 +1,6 @@
 import { createHash, randomBytes } from "node:crypto";
-import { CacheKey, cacheManager } from "@/cache-manager";
+import type { ConnectSetupPart } from "@archestra/shared/connection-setup";
+import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import ConnectionSetupModel from "@/models/connection-setup";
 import { ApiError } from "@/types";
 import type {
@@ -11,6 +12,8 @@ class ClientConnectionService {
   async start(params: {
     clientId: ConnectionSetupClientId;
     platform: ConnectionSetupPlatform;
+    exclude?: ConnectSetupPart[];
+    deviceName?: string;
   }) {
     const id = randomBytes(24).toString("hex");
     const deviceCode = randomBytes(32).toString("base64url");
@@ -44,7 +47,7 @@ class ClientConnectionService {
   }
 
   async get(id: string) {
-    const pending = await cacheManager.get<Pending>(
+    const pending = await readConnectionState<Pending>(
       `${CacheKey.ClientConnection}-pending-${id}`,
     );
     if (!pending || pending.expiresAt <= Date.now())
@@ -55,6 +58,8 @@ class ClientConnectionService {
     return {
       clientId: pending.clientId,
       platform: pending.platform,
+      exclude: pending.exclude ?? [],
+      deviceName: pending.deviceName ?? null,
       userCode: userCode(id),
       expiresAt: new Date(pending.expiresAt).toISOString(),
     };
@@ -67,7 +72,7 @@ class ClientConnectionService {
     organizationId: string;
   }) {
     // Consuming the browser request serializes competing approvals and denials across replicas.
-    const pending = await cacheManager.getAndDelete<Pending>(
+    const pending = await takeConnectionState<Pending>(
       `${CacheKey.ClientConnection}-pending-${params.id}`,
     );
     if (!pending || pending.expiresAt <= Date.now())
@@ -77,29 +82,42 @@ class ClientConnectionService {
       );
     let approved = false;
     if (params.setupId) {
-      approved = await ConnectionSetupModel.bindClientConnection({
-        setupId: params.setupId,
-        userId: params.userId,
-        organizationId: params.organizationId,
-        clientId: pending.clientId,
-        platform: pending.platform,
-        tokenHash: pending.tokenHash,
-        tokenStart: pending.tokenStart,
-        expiresAt: new Date(pending.expiresAt),
-      });
+      try {
+        approved = await ConnectionSetupModel.bindClientConnection({
+          setupId: params.setupId,
+          userId: params.userId,
+          organizationId: params.organizationId,
+          clientId: pending.clientId,
+          platform: pending.platform,
+          tokenHash: pending.tokenHash,
+          tokenStart: pending.tokenStart,
+          expiresAt: new Date(pending.expiresAt),
+          exclude: pending.exclude,
+          deviceName: pending.deviceName,
+        });
+      } catch (error) {
+        await restorePending(pending);
+        throw unavailable(error);
+      }
     }
-    await cacheManager.set(
-      `${CacheKey.ClientConnection}-poll-${pending.pollHash}`,
-      {
-        status: approved ? "approved" : "denied",
-        expiresAt: pending.expiresAt,
-      },
-      Math.max(1, pending.expiresAt - Date.now()),
-    );
+    try {
+      await publishPoll(pending, approved ? "approved" : "denied");
+    } catch (error) {
+      if (approved) {
+        // The bound ticket is durable; polling can recover without a new approval.
+        return {
+          status: "approved" as const,
+          clientId: pending.clientId,
+          platform: pending.platform,
+        };
+      }
+      await restorePending(pending);
+      throw unavailable(error);
+    }
     if (params.setupId && !approved)
       throw new ApiError(
         400,
-        "The setup must be unused, belong to you, and match the requested client and operating system. Start the installer again.",
+        "The setup must be unused, belong to you, match the requested client and operating system, and leave out what the prompt excluded. Start the installer again.",
       );
     return {
       status: approved ? ("approved" as const) : ("denied" as const),
@@ -111,13 +129,22 @@ class ClientConnectionService {
   async poll(
     deviceCode: string,
   ): Promise<{ status: "pending" | "approved" | "denied" | "expired" }> {
-    const state = await cacheManager.get<{
-      status: "pending" | "approved" | "denied";
-      expiresAt: number;
-    }>(`${CacheKey.ClientConnection}-poll-${hash(deviceCode)}`);
-    return {
-      status: state && state.expiresAt > Date.now() ? state.status : "expired",
-    };
+    const key =
+      `${CacheKey.ClientConnection}-poll-${hash(deviceCode)}` as const;
+    const state = await readConnectionState<PollState>(key);
+    if (!state || state.expiresAt <= Date.now()) return { status: "expired" };
+    if (state.status !== "pending") return { status: state.status };
+    if (!(await durableApproval(deviceCode))) return { status: "pending" };
+    try {
+      await cacheManager.set(
+        key,
+        { status: "approved", expiresAt: state.expiresAt },
+        Math.max(1, state.expiresAt - Date.now()),
+      );
+    } catch (error) {
+      if (error instanceof ApiError) throw error;
+    }
+    return { status: "approved" };
   }
 }
 
@@ -129,11 +156,84 @@ interface Pending {
   id: string;
   clientId: ConnectionSetupClientId;
   platform: ConnectionSetupPlatform;
+  exclude?: ConnectSetupPart[];
+  deviceName?: string;
   expiresAt: number;
   pollHash: string;
   tokenHash: string;
   tokenStart: string;
 }
+interface PollState {
+  status: "pending" | "approved" | "denied";
+  expiresAt: number;
+}
+const CACHE_UNAVAILABLE =
+  "Connection status is temporarily unavailable. Retry this request. Do not start a new installer.";
+
+async function readConnectionState<T>(
+  key: AllowedCacheKey,
+): Promise<T | undefined> {
+  try {
+    return await cacheManager.get<T>(key, { throwOnError: true });
+  } catch (error) {
+    throw unavailable(error);
+  }
+}
+
+async function takeConnectionState<T>(
+  key: AllowedCacheKey,
+): Promise<T | undefined> {
+  try {
+    return await cacheManager.getAndDelete<T>(key, { throwOnError: true });
+  } catch (error) {
+    throw unavailable(error);
+  }
+}
+
+function unavailable(error: unknown): ApiError {
+  if (error instanceof ApiError) return error;
+  return new ApiError(503, CACHE_UNAVAILABLE);
+}
+
+async function publishPoll(
+  pending: Pending,
+  status: "approved" | "denied",
+): Promise<void> {
+  await cacheManager.set(
+    `${CacheKey.ClientConnection}-poll-${pending.pollHash}`,
+    { status, expiresAt: pending.expiresAt },
+    Math.max(1, pending.expiresAt - Date.now()),
+  );
+}
+
+async function restorePending(pending: Pending): Promise<void> {
+  const ttl = pending.expiresAt - Date.now();
+  if (ttl <= 0) return;
+  try {
+    await cacheManager.set(
+      `${CacheKey.ClientConnection}-pending-${pending.id}`,
+      pending,
+      ttl,
+    );
+  } catch {
+    throw new ApiError(
+      503,
+      "Connection request could not be restored. Stop the installer and start again.",
+    );
+  }
+}
+
+async function durableApproval(deviceCode: string): Promise<boolean> {
+  try {
+    const bound = await ConnectionSetupModel.findByToken(
+      `archestra_con_${deviceCode}`,
+    );
+    return Boolean(bound && new Date(bound.expiresAt).getTime() > Date.now());
+  } catch (error) {
+    throw unavailable(error);
+  }
+}
+
 function hash(value: string) {
   return createHash("sha256").update(value).digest("hex");
 }

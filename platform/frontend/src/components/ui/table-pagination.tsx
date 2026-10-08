@@ -73,7 +73,8 @@ function RowsPerPageSelect({
       >
         <SelectTrigger
           aria-label="Rows per page"
-          className={compact ? "h-7 w-[68px] text-xs" : "h-8 w-[90px]"}
+          size="sm"
+          className={compact ? "w-[68px] text-xs" : "w-[90px]"}
         >
           <SelectValue placeholder={pageSize} />
         </SelectTrigger>
@@ -96,29 +97,32 @@ function PaginationNavButtons({
   onPrevious,
   onNext,
   className,
+  children,
 }: {
   canGoPrevious: boolean;
   canGoNext: boolean;
   onPrevious: () => void;
   onNext: () => void;
   className?: string;
+  children?: React.ReactNode;
 }) {
   return (
     <>
       <Button
         variant="outline"
-        size="icon"
-        className={className ?? "size-8"}
+        size="icon-sm"
+        className={className}
         onClick={onPrevious}
         disabled={!canGoPrevious}
       >
         <span className="sr-only">Go to previous page</span>
         <ChevronLeft className="h-4 w-4" />
       </Button>
+      {children}
       <Button
         variant="outline"
-        size="icon"
-        className={className ?? "size-8"}
+        size="icon-sm"
+        className={className}
         onClick={onNext}
         disabled={!canGoNext}
       >
@@ -181,8 +185,8 @@ export function TablePagination({
             )}
             <Button
               variant="outline"
-              size="icon"
-              className="hidden size-8 lg:flex"
+              size="icon-sm"
+              className="hidden lg:flex"
               onClick={goFirst}
               disabled={!canGoPrevious}
             >
@@ -197,8 +201,8 @@ export function TablePagination({
             />
             <Button
               variant="outline"
-              size="icon"
-              className="hidden size-8 lg:flex"
+              size="icon-sm"
+              className="hidden lg:flex"
               onClick={goLast}
               disabled={!canGoNext}
             >
@@ -228,29 +232,17 @@ export function TablePagination({
 
           {/* Pagination controls */}
           <div className="flex items-center gap-3">
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-8 disabled:opacity-25"
-              onClick={goPrevious}
-              disabled={!canGoPrevious}
+            <PaginationNavButtons
+              className="disabled:opacity-25"
+              canGoPrevious={canGoPrevious}
+              canGoNext={canGoNext}
+              onPrevious={goPrevious}
+              onNext={goNext}
             >
-              <span className="sr-only">Go to previous page</span>
-              <ChevronLeft className="h-4 w-4" />
-            </Button>
-            <span className="text-sm font-semibold tabular-nums min-w-[44px] text-center">
-              {currentPage} / {totalPages}
-            </span>
-            <Button
-              variant="outline"
-              size="icon"
-              className="size-8 disabled:opacity-25"
-              onClick={goNext}
-              disabled={!canGoNext}
-            >
-              <span className="sr-only">Go to next page</span>
-              <ChevronRight className="h-4 w-4" />
-            </Button>
+              <span className="text-sm font-semibold tabular-nums min-w-[44px] text-center">
+                {currentPage} / {totalPages}
+              </span>
+            </PaginationNavButtons>
           </div>
         </div>
       </div>

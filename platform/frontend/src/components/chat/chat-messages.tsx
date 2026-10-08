@@ -12,11 +12,13 @@ import {
   HOOK_RUN_PART_TYPE,
   MCP_TASK_PART_TYPE,
   type McpTaskPartData,
+  OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES,
   parseArchestraAppResourceUri,
   parseFullToolName,
   type ResourceVisibilityScope,
   TOOL_ASK_USER_FULL_NAME,
   TOOL_ASK_USER_SHORT_NAME,
+  TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME,
   TOOL_RUN_TOOL_SHORT_NAME,
   TOOL_TODO_WRITE_FULL_NAME,
   TOOL_TODO_WRITE_SHORT_NAME,
@@ -58,6 +60,10 @@ import {
   ToolOutput,
 } from "@/components/ai-elements/tool";
 import {
+  BatteryCredentialsTool,
+  parseBatteryCredentialRequest,
+} from "@/components/chat/battery-credentials-tool";
+import {
   HookRunChip,
   type HookRunChipData,
 } from "@/components/chat/hook-run-chip";
@@ -89,8 +95,8 @@ import {
   getMessageFeedback,
   PERSISTED_MESSAGE_ID_METADATA_KEY,
 } from "@/lib/chat/chat-utils";
+import { isActionAvailableForConversation } from "@/lib/chat/encrypted-chat";
 import { useGlobalChat } from "@/lib/chat/global-chat.context";
-import { isActionAvailableForConversation } from "@/lib/chat/locked-chat";
 import {
   hasToolPartsWithAuthErrors,
   isAuthInstructionText,
@@ -104,6 +110,7 @@ import { hasThinkingTags, parseThinkingTags } from "@/lib/chat/parse-thinking";
 import { UPSTREAM_IDLE_THRESHOLD_SECONDS } from "@/lib/chat/stream-stall.hook";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useAppIconLogo } from "@/lib/hooks/use-app-name";
+import { useStableCallback } from "@/lib/hooks/use-stable-callback";
 import { useArchestraMcpIdentity } from "@/lib/mcp/archestra-mcp-server";
 import { useInternalMcpCatalog } from "@/lib/mcp/internal-mcp-catalog.query";
 import { useMcpInstallOrchestrator } from "@/lib/mcp/mcp-install-orchestrator.hook";
@@ -121,6 +128,7 @@ import {
   collectSubagentToolCalls,
   extractFileAttachments,
   filterOptimisticToolCalls,
+  getToolCardTitle,
   hasTextPart,
   identifyCompactToolGroups,
   identifyReasoningRuns,
@@ -155,6 +163,11 @@ import { ToolStatusRow } from "./tool-status-row";
 
 interface ChatMessagesProps {
   conversationId: string | undefined;
+  /**
+   * The viewer does not own the conversation (e.g. another member's scheduled
+   * run): render the transcript the same way, without edit or regenerate.
+   */
+  readOnly?: boolean;
   agentId?: string;
   messages: UIMessage[];
   status: ChatStatus;
@@ -247,6 +260,7 @@ function isToolPart(part: any): part is {
 
 export function ChatMessages({
   conversationId,
+  readOnly = false,
   agentId,
   messages,
   status,
@@ -274,7 +288,7 @@ export function ChatMessages({
   const [editingPartKey, setEditingPartKey] = useState<string | null>(null);
   const [editingMessageId, setEditingMessageId] = useState<string | null>(null);
   const { data: canExpandToolCalls } = useHasPermissions({
-    chatExpandToolCalls: ["enable"],
+    chat: ["full-view"],
   });
   const { data: canReadToolPolicy } = useHasPermissions({
     toolPolicy: ["read"],
@@ -294,6 +308,11 @@ export function ChatMessages({
         // A question renders as its own answer summary, not a circle.
         TOOL_ASK_USER_FULL_NAME,
         getToolName(TOOL_ASK_USER_SHORT_NAME),
+        // A policy change shows its diff before the user is asked to approve.
+        ...OPENAPPA_POLICY_CHANGE_TOOL_SHORT_NAMES.flatMap((shortName) => [
+          getArchestraToolFullName(shortName),
+          getToolName(shortName),
+        ]),
         // Owned-app management tools render the app inline; compact grouping
         // would swallow their parts before MessageTool sees them.
         ...APP_RENDERING_ARCHESTRA_TOOL_SHORT_NAMES.flatMap((shortName) => [
@@ -328,7 +347,7 @@ export function ChatMessages({
   }, [agentTools, catalogItems]);
 
   const updateChatMessageMutation = useUpdateChatMessage(conversationId);
-  // Resolved once for the whole transcript: a locked chat's attachments cannot
+  // Resolved once for the whole transcript: an encrypted chat's attachments cannot
   // be copied into a knowledge base, so their chips do not offer it.
   const { data: messagesConversation } = useConversation(conversationId);
   const canSaveToKnowledge = isActionAvailableForConversation(
@@ -495,42 +514,47 @@ export function ChatMessages({
     }
   }, [isEditing]);
 
-  const handleStartEdit = (partKey: string, messageId?: string) => {
+  // Every per-message handler keeps one identity across renders: a streamed
+  // chunk re-renders this list, and a fresh handler would defeat the memoized
+  // message rows below, re-rendering the whole transcript on every token and
+  // starving the composer of main-thread time.
+  const handleStartEdit = useCallback((partKey: string, messageId?: string) => {
     setEditingPartKey(partKey);
     // Always reset editingMessageId to prevent stale state when switching
     // between editing user messages (which pass messageId) and assistant messages (which don't)
     setEditingMessageId(messageId ?? null);
-  };
+  }, []);
 
-  const handleCancelEdit = () => {
+  const handleCancelEdit = useCallback(() => {
     setEditingPartKey(null);
     setEditingMessageId(null);
-  };
+  }, []);
 
-  const handleSaveAssistantMessage = async (
-    messageId: string,
-    partIndex: number,
-    newText: string,
-  ) => {
-    const data = await updateChatMessageMutation.mutateAsync({
-      messageId,
-      partIndex,
-      text: newText,
-    });
+  const handleSaveAssistantMessage = useStableCallback(
+    async (messageId: string, partIndex: number, newText: string) => {
+      const data = await updateChatMessageMutation.mutateAsync({
+        messageId,
+        partIndex,
+        text: newText,
+      });
 
-    // Update local state to reflect the change immediately
-    if (onMessagesUpdate && data?.messages) {
-      onMessagesUpdate(data.messages as UIMessage[]);
-    }
-  };
+      // Update local state to reflect the change immediately
+      if (onMessagesUpdate && data?.messages) {
+        onMessagesUpdate(data.messages as UIMessage[]);
+      }
+    },
+  );
 
-  const handleSaveUserMessage = async (
-    messageId: string,
-    partIndex: number,
-    newText: string,
-  ) => {
-    await onRegenerateUserMessage?.({ messageId, partIndex, text: newText });
-  };
+  const handleSaveUserMessage = useStableCallback(
+    async (messageId: string, partIndex: number, newText: string) => {
+      await onRegenerateUserMessage?.({ messageId, partIndex, text: newText });
+    },
+  );
+
+  const handleMessageFeedback = useStableCallback(
+    (messageId: string, feedback: ChatMessageFeedback | null) =>
+      onMessageFeedback?.(messageId, feedback),
+  );
 
   const pendingToolCalls = useMemo(
     () => filterOptimisticToolCalls(messages, optimisticToolCalls),
@@ -1140,17 +1164,16 @@ export function ChatMessages({
                                           isLastParsedTextPart
                                         }
                                         editDisabled={isResponseInProgress}
-                                        onStartEdit={handleStartEdit}
+                                        onStartEdit={
+                                          readOnly ? undefined : handleStartEdit
+                                        }
                                         onCancelEdit={handleCancelEdit}
                                         onSave={handleSaveAssistantMessage}
                                         feedback={getMessageFeedback(message)}
                                         onFeedbackChange={
-                                          onMessageFeedback &&
-                                          ((feedback) =>
-                                            onMessageFeedback(
-                                              message.id,
-                                              feedback,
-                                            ))
+                                          onMessageFeedback
+                                            ? handleMessageFeedback
+                                            : undefined
                                         }
                                         feedbackDisabled={feedbackDisabled}
                                       />
@@ -1177,14 +1200,16 @@ export function ChatMessages({
                                   citationParts={citationParts}
                                   isStreaming={isStreamingThisPart}
                                   editDisabled={isResponseInProgress}
-                                  onStartEdit={handleStartEdit}
+                                  onStartEdit={
+                                    readOnly ? undefined : handleStartEdit
+                                  }
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveAssistantMessage}
                                   feedback={getMessageFeedback(message)}
                                   onFeedbackChange={
-                                    onMessageFeedback &&
-                                    ((feedback) =>
-                                      onMessageFeedback(message.id, feedback))
+                                    onMessageFeedback
+                                      ? handleMessageFeedback
+                                      : undefined
                                   }
                                   feedbackDisabled={feedbackDisabled}
                                 />
@@ -1203,13 +1228,15 @@ export function ChatMessages({
                                   text={part.text}
                                   isEditing={editingPartKey === partKey}
                                   editDisabled={isResponseInProgress}
-                                  attachments={extractFileAttachments(
+                                  attachments={getFileAttachments(
                                     message.parts,
                                   )}
                                   conversationId={conversationId}
                                   canSaveToKnowledge={canSaveToKnowledge}
                                   skill={getSkillAttribution(message.metadata)}
-                                  onStartEdit={handleStartEdit}
+                                  onStartEdit={
+                                    readOnly ? undefined : handleStartEdit
+                                  }
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveUserMessage}
                                 />
@@ -1315,13 +1342,15 @@ export function ChatMessages({
                                   text=""
                                   isEditing={editingPartKey === partKey}
                                   editDisabled={isResponseInProgress}
-                                  attachments={extractFileAttachments(
+                                  attachments={getFileAttachments(
                                     message.parts,
                                   )}
                                   conversationId={conversationId}
                                   canSaveToKnowledge={canSaveToKnowledge}
                                   skill={getSkillAttribution(message.metadata)}
-                                  onStartEdit={handleStartEdit}
+                                  onStartEdit={
+                                    readOnly ? undefined : handleStartEdit
+                                  }
                                   onCancelEdit={handleCancelEdit}
                                   onSave={handleSaveUserMessage}
                                 />
@@ -1983,12 +2012,19 @@ const MessageTool = memo(
     // Use the text content string when available; fall back to the raw output for non-MCP tools.
     const output = mcpOutput?.content ?? rawOutput;
     const errorText = getToolErrorText({ part, toolResultPart });
+    const policyToolName = parseFullToolName(mcpAppToolName).toolName;
+    const validationChange = [
+      "preview_openappa_validation_change",
+      "publish_openappa_validation_change",
+    ].includes(getToolShortName(mcpAppToolName) ?? "");
     const policyChange =
-      ["preview_guardrails_policy_change", "update_guardrails_policy"].includes(
-        parseFullToolName(mcpAppToolName).toolName,
-      ) &&
+      (validationChange ||
+        [
+          "preview_guardrails_policy_change",
+          "update_guardrails_policy",
+        ].includes(policyToolName)) &&
       !errorText &&
-      isOpenAppaPolicyChange(rawOutput);
+      isOpenAppaPolicyChange(rawOutput, validationChange);
 
     const isApprovalRequested = part.state === "approval-requested";
     const isToolDenied = part.state === "output-denied";
@@ -2000,6 +2036,7 @@ const MessageTool = memo(
     });
     const displayToolName = approvalDisplay.toolName;
     const displayInput = withoutProxyTransportArguments({
+      toolName: displayToolName,
       shortName: getToolShortName(displayToolName),
       input: approvalDisplay.input,
     });
@@ -2017,8 +2054,16 @@ const MessageTool = memo(
       getToolShortName(toolName) === "request_runtime_credential_setup" &&
       !errorText &&
       (part.state === "output-available" || Boolean(toolResultPart));
+    const batteryCredentials =
+      getToolShortName(toolName) ===
+        TOOL_REQUEST_BATTERY_CREDENTIALS_SHORT_NAME && !errorText
+        ? parseBatteryCredentialRequest(rawOutput)
+        : null;
     const shouldDefaultOpen =
-      isApprovalRequested || policyChange || credentialSetup;
+      isApprovalRequested ||
+      policyChange ||
+      credentialSetup ||
+      batteryCredentials !== null;
 
     // Hooks must be called before any early returns
     const { data: session } = useSession();
@@ -2149,6 +2194,7 @@ const MessageTool = memo(
       >
         <ToolHeader
           type={`tool-${displayToolName}`}
+          title={getToolCardTitle(displayToolName)}
           state={getHeaderState({
             state: part.state || "input-available",
             toolResultPart,
@@ -2157,13 +2203,15 @@ const MessageTool = memo(
           isCollapsible={isExpandable}
           actionButton={logsButton}
           identityBadge={
-            <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
-              Called as
-              <ExecutedAsBadge
-                executedAs={executedAs}
-                meUserId={viewerUserId}
-              />
-            </span>
+            executedAs ? (
+              <span className="flex items-center gap-1.5 text-[10px] text-muted-foreground">
+                Called as
+                <ExecutedAsBadge
+                  executedAs={executedAs}
+                  meUserId={viewerUserId}
+                />
+              </span>
+            ) : undefined
           }
         />
         <ToolContent forceMount={uiResourceUri ? true : undefined}>
@@ -2216,6 +2264,13 @@ const MessageTool = memo(
               onSendMessage={onSendMessage}
             />
           )}
+          {batteryCredentials && (
+            <BatteryCredentialsTool
+              request={batteryCredentials}
+              toolCallId={part.toolCallId}
+              onSendMessage={onSendMessage}
+            />
+          )}
 
           {/* Standard MCP Apps flow: tool definition has _meta.ui.resourceUri → AppBridge + AppFrame */}
           {!isApprovalRequested &&
@@ -2250,7 +2305,10 @@ const MessageTool = memo(
             <ToolOutput label="Error" output={output} errorText={errorText} />
           )}
           {!authToolBody && policyChange && (
-            <OpenAppaPolicyChange output={rawOutput} />
+            <OpenAppaPolicyChange
+              output={rawOutput}
+              validationChange={validationChange}
+            />
           )}
           {/* Show text output when NOT rendering a UI resource */}
           {!authToolBody &&
@@ -3258,9 +3316,36 @@ function ContextCompactionTimelineEvent({
   );
 }
 
-function getSkillAttribution(
-  metadata: unknown,
-): { name: string; href?: string } | undefined {
+// Derived per-message props are cached by the message's own (immutable) parts
+// and metadata objects, so an untouched message hands its memoized row the
+// same references on every streamed chunk instead of fresh, equal copies.
+const fileAttachmentsByParts = new WeakMap<
+  UIMessage["parts"],
+  ReturnType<typeof extractFileAttachments>
+>();
+
+function getFileAttachments(parts: UIMessage["parts"] | undefined) {
+  if (!parts) return undefined;
+  if (!fileAttachmentsByParts.has(parts)) {
+    fileAttachmentsByParts.set(parts, extractFileAttachments(parts));
+  }
+  return fileAttachmentsByParts.get(parts);
+}
+
+type SkillAttribution = { name: string; href?: string } | undefined;
+const skillAttributionByMetadata = new WeakMap<object, SkillAttribution>();
+
+function getSkillAttribution(metadata: unknown): SkillAttribution {
+  if (typeof metadata !== "object" || metadata === null) {
+    return parseSkillAttribution(metadata);
+  }
+  if (!skillAttributionByMetadata.has(metadata)) {
+    skillAttributionByMetadata.set(metadata, parseSkillAttribution(metadata));
+  }
+  return skillAttributionByMetadata.get(metadata);
+}
+
+function parseSkillAttribution(metadata: unknown): SkillAttribution {
   const parsed = ChatMessageMetadataSchema.safeParse(metadata).data;
   if (parsed?.skill) return parsed.skill;
   return parsed?.externalMcpSkill

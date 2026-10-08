@@ -614,6 +614,60 @@ describe("agent routes", () => {
       expect(response.statusCode).toBe(400);
     });
 
+    test.for([
+      "agent",
+      "mcp_gateway",
+    ] as const)("defaults new Manual %s to progressive loading and preserves explicit choices", async (agentType) => {
+      for (const toolExposureMode of [
+        undefined,
+        "full",
+        "search_and_run_only",
+      ] as const) {
+        const response = await app.inject({
+          method: "POST",
+          url: "/api/agents",
+          payload: {
+            name: `Manual ${agentType} ${crypto.randomUUID().slice(0, 8)}`,
+            agentType,
+            accessAllTools: false,
+            ...(toolExposureMode ? { toolExposureMode } : {}),
+          },
+        });
+        expect(response.statusCode).toBe(200);
+        const agent = response.json();
+        expect(agent.accessAllTools).toBe(false);
+        expect(agent.toolExposureMode).toBe(
+          toolExposureMode ?? "search_and_run_only",
+        );
+
+        // Unrelated edits must not reset a deliberate Manual-mode opt-out.
+        const updated = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { description: "Updated description" },
+        });
+        expect(updated.statusCode).toBe(200);
+        expect(updated.json().toolExposureMode).toBe(agent.toolExposureMode);
+
+        const disabled = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { toolExposureMode: "full" },
+        });
+        expect(disabled.statusCode).toBe(200);
+        expect(disabled.json().toolExposureMode).toBe("full");
+
+        // All mode still requires the search/run surface, even with an opt-out.
+        const all = await app.inject({
+          method: "PUT",
+          url: `/api/agents/${agent.id}`,
+          payload: { accessAllTools: true, toolExposureMode: "full" },
+        });
+        expect(all.statusCode).toBe(200);
+        expect(all.json().toolExposureMode).toBe("search_and_run_only");
+      }
+    });
+
     test("should create an agent with load-tools-when-needed exposure", async () => {
       const response = await app.inject({
         method: "POST",
@@ -1658,6 +1712,91 @@ describe("agent routes", () => {
       expect(names).toContain(`Own Personal ${suffix}`);
       expect(names).toContain(`Org Agent ${suffix}`);
       expect(names).toContain(`Other Personal ${suffix}`);
+    });
+
+    test("access filter splits rows by how the caller reaches them, ignoring wildcard grants", async ({
+      makeAgent,
+      makeUser,
+      makeMember,
+      makeTeam,
+      makeTeamMember,
+    }) => {
+      const suffix = crypto.randomUUID().slice(0, 8);
+      const otherUser = await makeUser();
+      await makeMember(otherUser.id, organizationId, { role: "member" });
+      const myTeam = await makeTeam(organizationId, user.id);
+      await makeTeamMember(myTeam.id, user.id);
+      const otherTeam = await makeTeam(organizationId, otherUser.id);
+
+      await makeAgent({
+        name: `Mine ${suffix}`,
+        organizationId,
+        access: "personal",
+        authorId: user.id,
+      });
+      await makeAgent({
+        name: `Other Personal ${suffix}`,
+        organizationId,
+        access: "personal",
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Org ${suffix}`,
+        organizationId,
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `My Team ${suffix}`,
+        organizationId,
+        access: { teams: [myTeam.id] },
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Other Team ${suffix}`,
+        organizationId,
+        access: { teams: [otherTeam.id] },
+        authorId: otherUser.id,
+      });
+      await makeAgent({
+        name: `Shared With Me ${suffix}`,
+        organizationId,
+        access: { users: [user.id] },
+        authorId: otherUser.id,
+      });
+
+      const list = async (access?: string) => {
+        const response = await app.inject({
+          method: "GET",
+          url: `/api/agents?limit=50&offset=0&sortBy=name&sortDirection=asc&name=${suffix}${access ? `&access=${access}` : ""}`,
+        });
+        expect(response.statusCode, response.body).toBe(200);
+        return response
+          .json()
+          .data.map((agent: { name: string }) =>
+            agent.name.replace(` ${suffix}`, ""),
+          );
+      };
+
+      // The admin reads every agent through a `*` grant, which the filter
+      // must not count as "shared".
+      expect(await list()).toEqual([
+        "Mine",
+        "My Team",
+        "Org",
+        "Other Personal",
+        "Other Team",
+        "Shared With Me",
+      ]);
+      expect(await list("mine,shared,org")).toEqual([
+        "Mine",
+        "My Team",
+        "Org",
+        "Shared With Me",
+      ]);
+      expect(await list("others")).toEqual(["Other Personal", "Other Team"]);
+      expect(await list("mine")).toEqual(["Mine"]);
+      expect(await list("shared")).toEqual(["My Team", "Shared With Me"]);
+      expect(await list("org")).toEqual(["Org"]);
     });
 
     test("hides the default knowledge query tool when an agent has no knowledge sources", async ({

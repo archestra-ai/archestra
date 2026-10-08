@@ -62,7 +62,7 @@ function DateTimePicker({
         <Button
           variant="outline"
           className={cn(
-            "justify-start text-left font-normal",
+            "justify-start border-input text-left font-normal",
             !value && "text-muted-foreground",
             className,
           )}

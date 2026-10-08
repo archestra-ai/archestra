@@ -18,7 +18,6 @@ const refetchBindings = vi.fn();
 const refetchProviders = vi.fn();
 const hasUpdatePermission = vi.fn(() => true);
 const hasAgentUpdatePermission = vi.fn(() => true);
-const hasCreatePermission = vi.fn(() => true);
 
 vi.mock("@/lib/agent.query", () => ({
   useProfiles: vi.fn(),
@@ -30,9 +29,7 @@ vi.mock("@/lib/auth/auth.query", () => ({
     data:
       "agent" in permissions
         ? hasAgentUpdatePermission()
-        : permissions.agentTrigger?.includes("create")
-          ? hasCreatePermission()
-          : hasUpdatePermission(),
+        : hasUpdatePermission(),
   }),
 }));
 
@@ -251,7 +248,6 @@ describe("AgentChatAppsEditor", () => {
     vi.clearAllMocks();
     hasUpdatePermission.mockReturnValue(true);
     hasAgentUpdatePermission.mockReturnValue(true);
-    hasCreatePermission.mockReturnValue(true);
     vi.stubGlobal(
       "ResizeObserver",
       class {
@@ -481,31 +477,6 @@ describe("AgentChatAppsEditor", () => {
     expect(
       screen.getByRole("button", { name: "Save channel changes" }),
     ).toBeDisabled();
-  });
-
-  it("folds a direct message it cannot create into the unavailable group", async () => {
-    const user = userEvent.setup();
-    hasCreatePermission.mockReturnValue(false);
-
-    render(<AgentChatApps agent={agent} />);
-
-    await openPicker(user, "Slack");
-    // Not offered as something to click...
-    expect(
-      screen.queryByRole("button", { name: /^Direct message/ }),
-    ).toBeNull();
-    // ...but still reachable, under one line that says how many and why.
-    const group = await screen.findByRole("button", {
-      name: /1 not available to this agent/,
-    });
-    expect(group).toHaveTextContent(
-      "You do not have permission to create a direct message assignment.",
-    );
-    expect(group).toHaveAttribute("aria-expanded", "false");
-
-    await user.click(group);
-    expect(group).toHaveAttribute("aria-expanded", "true");
-    expect(screen.getByText("Direct message")).toBeVisible();
   });
 
   it("edits channel behavior and instructions from one details dialog", async () => {

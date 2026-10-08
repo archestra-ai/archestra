@@ -14,9 +14,13 @@ export type AppaChildTrajectoryReceipt = {
   callerId?: string;
   parentId: string;
   childId: string;
+  /** Identity known at minting; absent for children awaiting native assignment. */
   childNativeId?: string;
   spawnerNativeId: string;
   spawnCallId?: string;
+  nativeConversationId?: string;
+  /** Scoped workspace session verified when this child was bound. Absent on v2. */
+  runtimeSessionId?: string;
 };
 
 const MARK_TOP = "▄█▄▄▄█▄";
@@ -37,7 +41,7 @@ const CARRIER = new RegExp(
   "g",
 );
 
-type ReceiptClaims = readonly [
+type ReceiptClaimsV2 = readonly [
   2,
   string,
   string | null,
@@ -46,7 +50,32 @@ type ReceiptClaims = readonly [
   string | null,
   string,
   string | null,
+  (string | null)?,
 ];
+type ReceiptClaimsV3 = readonly [
+  3,
+  string,
+  string | null,
+  string,
+  string,
+  string | null,
+  string,
+  string | null,
+  string,
+];
+type ReceiptClaimsV4 = readonly [
+  4,
+  string,
+  string | null,
+  string,
+  string,
+  string | null,
+  string,
+  string | null,
+  string,
+  string,
+];
+type ReceiptClaims = ReceiptClaimsV2 | ReceiptClaimsV3 | ReceiptClaimsV4;
 
 export function mintChildTrajectoryReceipt(params: {
   organizationId: string;
@@ -56,7 +85,10 @@ export function mintChildTrajectoryReceipt(params: {
   childNativeId?: string;
   spawnerNativeId: string;
   spawnCallId?: string;
+  /** Scoped workspace session. Omit outside a runtime; never copy a client header. */
+  runtimeSessionId?: string;
   format?: "full" | "inline";
+  nativeConversationId?: string;
 }): string | undefined {
   const { childId, childNativeId } = params;
   if (
@@ -66,22 +98,56 @@ export function mintChildTrajectoryReceipt(params: {
     !nonEmptyString(params.spawnerNativeId) ||
     (childNativeId !== undefined && !nonEmptyString(childNativeId)) ||
     (params.callerId !== undefined && !nonEmptyString(params.callerId)) ||
-    (params.spawnCallId !== undefined && !nonEmptyString(params.spawnCallId))
+    (params.spawnCallId !== undefined && !nonEmptyString(params.spawnCallId)) ||
+    (params.nativeConversationId !== undefined &&
+      !nonEmptyString(params.nativeConversationId)) ||
+    (params.runtimeSessionId !== undefined &&
+      !nonEmptyString(params.runtimeSessionId))
   ) {
     return undefined;
   }
   const key = receiptKey();
   if (!key) return undefined;
-  const claims: ReceiptClaims = [
-    2,
-    params.organizationId,
-    params.callerId ?? null,
-    params.parentId,
-    childId,
-    childNativeId ?? null,
-    params.spawnerNativeId,
-    params.spawnCallId ?? null,
-  ];
+  // v2's optional ninth claim is a native conversation, not v3's workspace.
+  const claims: ReceiptClaims =
+    params.runtimeSessionId && params.nativeConversationId
+      ? [
+          4,
+          params.organizationId,
+          params.callerId ?? null,
+          params.parentId,
+          childId,
+          childNativeId ?? null,
+          params.spawnerNativeId,
+          params.spawnCallId ?? null,
+          params.runtimeSessionId,
+          params.nativeConversationId,
+        ]
+      : params.runtimeSessionId
+        ? [
+            3,
+            params.organizationId,
+            params.callerId ?? null,
+            params.parentId,
+            childId,
+            childNativeId ?? null,
+            params.spawnerNativeId,
+            params.spawnCallId ?? null,
+            params.runtimeSessionId,
+          ]
+        : [
+            2,
+            params.organizationId,
+            params.callerId ?? null,
+            params.parentId,
+            childId,
+            childNativeId ?? null,
+            params.spawnerNativeId,
+            params.spawnCallId ?? null,
+            ...(params.nativeConversationId === undefined
+              ? ([] as const)
+              : ([params.nativeConversationId] as const)),
+          ];
   const canonicalClaims = JSON.stringify(claims);
   if (Buffer.byteLength(canonicalClaims, "utf8") > MAX_CLAIMS_BYTES) {
     return undefined;
@@ -96,12 +162,15 @@ export function mintChildTrajectoryReceipt(params: {
   return `${display}\n[appa] child trajectory ${token}.`;
 }
 
+/** Each supplied optional identity is an expectation of a sealed claim. */
 export function verifyChildTrajectoryReceipt(params: {
   receipt: AppaChildTrajectoryReceipt;
   organizationId: string;
   callerId: string | undefined;
   spawnerNativeId: string;
+  /** Expected sealed native identity, not metadata assigned after receipt minting. */
   childNativeId?: string;
+  nativeConversationId?: string;
 }): boolean {
   const key = receiptKey();
   if (!key) return false;
@@ -111,9 +180,10 @@ export function verifyChildTrajectoryReceipt(params: {
     parsed.receipt.organizationId !== params.organizationId ||
     parsed.receipt.callerId !== params.callerId ||
     parsed.receipt.spawnerNativeId !== params.spawnerNativeId ||
-    (parsed.receipt.childNativeId !== undefined &&
-      params.childNativeId !== undefined &&
-      parsed.receipt.childNativeId !== params.childNativeId)
+    (params.childNativeId !== undefined &&
+      parsed.receipt.childNativeId !== params.childNativeId) ||
+    (params.nativeConversationId !== undefined &&
+      parsed.receipt.nativeConversationId !== params.nativeConversationId)
   ) {
     return false;
   }
@@ -195,6 +265,9 @@ function parseToken(token: string):
       spawnerNativeId,
       spawnCallId,
     ] = claims;
+    const runtimeSessionId = claims[0] === 2 ? undefined : claims[8];
+    const nativeConversationId =
+      claims[0] === 2 ? claims[8] : claims[0] === 4 ? claims[9] : undefined;
     return {
       receipt: {
         token: canonicalToken,
@@ -205,6 +278,10 @@ function parseToken(token: string):
         ...(childNativeId === null ? {} : { childNativeId }),
         spawnerNativeId,
         ...(spawnCallId === null ? {} : { spawnCallId }),
+        ...(nativeConversationId === undefined || nativeConversationId === null
+          ? {}
+          : { nativeConversationId }),
+        ...(runtimeSessionId ? { runtimeSessionId } : {}),
       },
       payload,
       tag,
@@ -215,7 +292,13 @@ function parseToken(token: string):
 }
 
 function isReceiptClaims(value: unknown): value is ReceiptClaims {
-  if (!Array.isArray(value) || value.length !== 8 || value[0] !== 2) {
+  if (!Array.isArray(value)) return false;
+  const version = value[0];
+  if (
+    (version !== 2 || (value.length !== 8 && value.length !== 9)) &&
+    (version !== 3 || value.length !== 9) &&
+    (version !== 4 || value.length !== 10)
+  ) {
     return false;
   }
   const [
@@ -227,6 +310,8 @@ function isReceiptClaims(value: unknown): value is ReceiptClaims {
     childNativeId,
     spawnerNativeId,
     spawnCallId,
+    anchor,
+    conversation,
   ] = value;
   return (
     nonEmptyString(organizationId) &&
@@ -235,7 +320,11 @@ function isReceiptClaims(value: unknown): value is ReceiptClaims {
     nonEmptyString(childId) &&
     (childNativeId === null || nonEmptyString(childNativeId)) &&
     nonEmptyString(spawnerNativeId) &&
-    (spawnCallId === null || nonEmptyString(spawnCallId))
+    (spawnCallId === null || nonEmptyString(spawnCallId)) &&
+    (version === 2
+      ? anchor === undefined || anchor === null || nonEmptyString(anchor)
+      : nonEmptyString(anchor)) &&
+    (version !== 4 || nonEmptyString(conversation))
   );
 }
 
@@ -255,13 +344,15 @@ function sameReceipt(
     left.childId === right.childId &&
     left.childNativeId === right.childNativeId &&
     left.spawnerNativeId === right.spawnerNativeId &&
-    left.spawnCallId === right.spawnCallId
+    left.spawnCallId === right.spawnCallId &&
+    left.nativeConversationId === right.nativeConversationId &&
+    left.runtimeSessionId === right.runtimeSessionId
   );
 }
 
 function receiptKey(): Buffer | undefined {
   const secret = config.openappa.offerSigningSecret;
-  if (secret.length === 0) return undefined;
+  if (secret.trim().length === 0) return undefined;
   return createHmac("sha256", secret).update(PROOF_LABEL).digest();
 }
 

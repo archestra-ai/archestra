@@ -72,7 +72,7 @@ import {
   type ToolCallRepeatTracker,
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { withDbTransaction } from "@/database";
 import { browserStreamFeature } from "@/features/browser-stream/services/browser-stream.feature";
 import { dualLlmProgressBus } from "@/guardrails/dual-llm-progress-bus";
@@ -94,6 +94,7 @@ import {
   AgentTeamModel,
   ConversationAttachmentModel,
   ConversationChatErrorModel,
+  ConversationCompactionModel,
   ConversationEnabledToolModel,
   ConversationModel,
   LlmProviderApiKeyModel,
@@ -136,6 +137,8 @@ import type { ConversationContentKey } from "@/types";
 import {
   ApiError,
   type ChatMessage,
+  ContextCompactionReasonSchema,
+  ContextCompactionStatusSchema,
   constructResponseSchema,
   DeleteObjectResponseSchema,
   ErrorResponsesSchema,
@@ -155,6 +158,7 @@ import {
   resolveConversationModel,
 } from "@/utils/llm-resolution";
 import { estimateMessagesSize } from "@/utils/message-size";
+import { projectCappedToolOutputs } from "@/utils/tool-result-cap";
 import { broadcastConversationUpdated } from "@/websocket";
 import { createAbortiveTurnTracker } from "./abortive-turn";
 import { buildAnthropicProviderOptions } from "./anthropic-provider-options";
@@ -163,15 +167,19 @@ import {
   sanitizeAttachmentContentType,
 } from "./attachment-content-type";
 import { buildChatContext } from "./build-chat-context";
-import {
-  compactMessagesForChat,
-  invalidateConversationCompactions,
-} from "./context-compaction";
+import { compactMessagesForChat } from "./compaction/compact-messages";
 import {
   buildContextWindowBreakdown,
+  estimateEachToolTokens,
   refreshBreakdownUsedTokens,
   resolveInputPricePerToken,
 } from "./context-window-breakdown";
+import {
+  ENCRYPTED_CHAT_STATIC_TITLE,
+  requireEncryptedChatKey,
+  resolveEncryptedChatAccess,
+  resolveEncryptedChatCreation,
+} from "./encrypted-chat";
 import {
   buildAbortiveTurnError,
   formatUnavailableToolErrorDetails,
@@ -188,13 +196,7 @@ import {
   injectPluginSkillActivation,
   injectSkillActivation,
 } from "./inject-skill-activation";
-import {
-  LOCKED_CHAT_STATIC_TITLE,
-  requireLockedChatKey,
-  resolveLockedChatAccess,
-  resolveLockedChatCreation,
-} from "./locked-chat";
-import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
+import { applyStepPromptCacheBreakpoint } from "./normalization/apply-prompt-cache";
 import { cloneAttachmentsForFork } from "./normalization/clone-attachments-for-fork";
 import { assertWithinContextWindow } from "./normalization/enforce-context-window-limit";
 import {
@@ -262,14 +264,14 @@ function buildStreamErrorPayload(params: {
   conversationId: string;
   slimChatErrorUi: boolean;
   /**
-   * Locked chat: provider error text routinely echoes prompt/model
+   * Encrypted chat: provider error text routinely echoes prompt/model
    * content, so the persisted row must not hold it in the clear. With an
-   * `lockedChatAudit` it is encrypted under the conversation key; without one
+   * `encryptedChatAudit` it is encrypted under the conversation key; without one
    * the row keeps only the code and retryability with a generic message. The
    * payload streamed to the client is unaffected (it is not persisted).
    */
   redactPersistedError: boolean;
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
   /** Log label distinguishing the pre-stream and mid-stream error paths. */
   stage: "before stream starts" | "via stream";
 }): string {
@@ -279,7 +281,7 @@ function buildStreamErrorPayload(params: {
     conversationId,
     slimChatErrorUi,
     redactPersistedError,
-    lockedChatAudit,
+    encryptedChatAudit,
     stage,
   } = params;
   const traceContext = getActiveTraceContext();
@@ -307,10 +309,10 @@ function buildStreamErrorPayload(params: {
   persistConversationChatError({
     conversationId,
     error:
-      redactPersistedError && !lockedChatAudit
-        ? redactChatErrorForLockedChat(errorForFrontend)
+      redactPersistedError && !encryptedChatAudit
+        ? redactChatErrorForEncryptedChat(errorForFrontend)
         : errorForFrontend,
-    lockedChatAudit,
+    encryptedChatAudit,
   });
 
   logger.info(
@@ -420,10 +422,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      if ((await isGuardrailsV2Active()) && conversation.lockedChat) {
+      if ((await isGuardrailsV2Active()) && conversation.encryptedChat) {
         throw new ApiError(
           409,
-          "OpenAPPA does not yet support encrypted policy storage for locked chats",
+          "OpenAPPA does not yet support encrypted policy storage for encrypted chats",
         );
       }
 
@@ -463,28 +465,36 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
       });
 
-      // LockedChat: the browser-held key is required up front (fingerprint
+      // EncryptedChat: the browser-held key is required up front (fingerprint
       // checked, wrong key 409s before any side effect) and captured ONCE
       // into this request's closure — every persistence call below receives
       // it explicitly, including the detached onFinish/onError callbacks that
       // outlive the client connection.
-      const lockedChatKeyInfo = conversation.lockedChat
-        ? ((await ConversationModel.getLockedChatKeyInfo(conversationId)) ?? {
+      const encryptedChatKeyInfo = conversation.encryptedChat
+        ? ((await ConversationModel.getEncryptedChatKeyInfo(
+            conversationId,
+          )) ?? {
             id: conversationId,
-            lockedChat: true,
-            lockedChatDekFingerprint: null,
+            encryptedChat: true,
+            encryptedChatDekFingerprint: null,
             hasEscrow: false,
           })
         : null;
-      const lockedChatKey: ConversationContentKey | null = lockedChatKeyInfo
-        ? requireLockedChatKey({ request, conversation: lockedChatKeyInfo })
-        : null;
+      const encryptedChatKey: ConversationContentKey | null =
+        encryptedChatKeyInfo
+          ? requireEncryptedChatKey({
+              request,
+              conversation: encryptedChatKeyInfo,
+            })
+          : null;
       // Encrypting the audit trail is only worth doing when an escrow record
       // exists to open it later — otherwise the rows would be readable by
       // nobody, which is strictly worse than an honest, uniform gap. Without
       // one these surfaces deliberately fall back to redaction.
-      const lockedChatAudit: LockedChatAuditContext | null =
-        lockedChatKey && lockedChatKeyInfo?.hasEscrow ? lockedChatKey : null;
+      const encryptedChatAudit: EncryptedChatAuditContext | null =
+        encryptedChatKey && encryptedChatKeyInfo?.hasEscrow
+          ? encryptedChatKey
+          : null;
       // Gate uploaded attachments before any bytes are persisted: anything
       // within the attachment storage cap is accepted — a file the model can't
       // ingest, or one too big for the sandbox, still lands in the
@@ -636,11 +646,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           conversationId,
           organizationId,
           uploadedByUserId: user.id,
-          // Seals the bytes, filename and extracted text of a locked chat's
-          // uploads. `requireLockedChatKey` above already failed the turn if
+          // Seals the bytes, filename and extracted text of an encrypted chat's
+          // uploads. `requireEncryptedChatKey` above already failed the turn if
           // this chat is locked and the request carried no key, so a locked
           // conversation never reaches here with null.
-          conversationKey: lockedChatKey,
+          conversationKey: encryptedChatKey,
         });
       } catch (error) {
         await activeChatRunService.markTerminal({
@@ -651,13 +661,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw error;
       }
 
-      // A locked chat's uploads are never staged into the sandbox: staging
+      // An encrypted chat's uploads are never staged into the sandbox: staging
       // writes the opened bytes into the sandbox replay log
       // (`skill_sandbox_files`), which is stored in plaintext and outside the
       // conversation key — the one copy of the file that a database dump could
       // read. They stay in the (sealed) attachment row and travel to the model
-      // inline, which is exactly the path the locked-chat guarantee covers.
-      if (turnHasNewAttachments && !conversation.lockedChat) {
+      // inline, which is exactly the path the encrypted-chat guarantee covers.
+      if (turnHasNewAttachments && !conversation.encryptedChat) {
         // Upload-time staging: a file the model can't take must already be on
         // the sandbox filesystem when the pointer notice reaches the model,
         // not parked until the first sandbox op. Fire-and-forget — op-time
@@ -728,12 +738,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         // transcript that ends at a stored `!` message re-executes it — the
         // same "sending a turn runs it" semantics regenerate relies on.
         const sandboxCommand = detectSandboxCommand(messages as ChatMessage[]);
-        if (sandboxCommand && conversation.lockedChat) {
+        if (sandboxCommand && conversation.encryptedChat) {
           // Sandbox command turns persist command I/O into the sandbox replay
-          // log in plaintext — not offered in locked chats.
+          // log in plaintext — not offered in encrypted chats.
           throw new ApiError(
             400,
-            "Sandbox commands are not available in locked chats",
+            "Sandbox commands are not available in encrypted chats",
           );
         }
         if (sandboxCommand) {
@@ -774,14 +784,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   conversationId,
                   requestMessages: messages,
                   finalMessages: messagesToPersist,
-                  conversationKey: lockedChatKey,
+                  conversationKey: encryptedChatKey,
                 });
               } else {
                 await persistNewMessages(
                   conversationId,
                   messagesToPersist,
                   "onFinish",
-                  lockedChatKey,
+                  encryptedChatKey,
                 );
               }
             },
@@ -796,8 +806,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 mappedError,
                 conversationId,
                 slimChatErrorUi: sandboxSlimChatErrorUi,
-                redactPersistedError: conversation.lockedChat,
-                lockedChatAudit,
+                redactPersistedError: conversation.encryptedChat,
+                encryptedChatAudit,
                 stage: "via stream",
               }),
           });
@@ -952,12 +962,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 subagentToolStream,
                 taskBridge: chatTaskBridge,
                 abortSignal: chatAbortController.signal,
-                // LockedChat: span content is suppressed and long calls never
+                // EncryptedChat: span content is suppressed and long calls never
                 // detach into durable tasks; tool-call logs and claim results
                 // are encrypted under the conversation key when it can be
                 // recovered from escrow, redacted otherwise.
-                suppressContentLogging: conversation.lockedChat,
-                lockedChatAudit,
+                suppressContentLogging: conversation.encryptedChat,
+                encryptedChatAudit,
               }),
           ),
           OrganizationModel.getSlimChatErrorUi(organizationId),
@@ -1075,7 +1085,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                 conversationId,
                 messages,
                 "earlyUserMsg",
-                lockedChatKey,
+                encryptedChatKey,
               );
             } catch (error) {
               logger.warn(
@@ -1106,7 +1116,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                         conversationId,
                         messages,
                         "onStreamError",
-                        lockedChatKey,
+                        encryptedChatKey,
                       );
                     } catch (persistError) {
                       logger.error(
@@ -1127,8 +1137,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   mappedError: mapProviderError(error, provider),
                   conversationId,
                   slimChatErrorUi,
-                  redactPersistedError: conversation.lockedChat,
-                  lockedChatAudit,
+                  redactPersistedError: conversation.encryptedChat,
+                  encryptedChatAudit,
                   stage: "before stream starts",
                 });
               },
@@ -1161,7 +1171,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // Lets the proxy store this turn's interaction encrypted
                     // rather than redacted. Only sent when an escrow record
                     // exists, since without one the row could never be reopened.
-                    lockedChatKey: lockedChatAudit?.dek ?? null,
+                    encryptedChatKey: encryptedChatAudit?.dek ?? null,
                   });
 
                 // Prefetch all UI resources eagerly before streaming starts so
@@ -1260,12 +1270,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     tools: supportsToolCalling ? mcpTools : undefined,
                     abortSignal: chatAbortController.signal,
                     emit: (event) => writer.write(event),
-                    // LockedChat: never generate/persist a compaction summary.
-                    disableCompaction: conversation.lockedChat,
+                    // EncryptedChat: never generate/persist a compaction summary.
+                    disableCompaction: conversation.encryptedChat,
                     anthropicNativeEndpoint,
                     // Opens this chat's sealed attachment rows so their bytes
                     // can be inlined for the provider.
-                    conversationKey: lockedChatKey,
+                    conversationKey: encryptedChatKey,
                   });
 
                 // Per-category breakdown of the assembled request, powering
@@ -1340,25 +1350,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   messages: modelMessages,
                   ...(provider === "anthropic" &&
                     anthropicNativeEndpoint && {
-                      prepareStep: ({ messages }) => {
-                        const cachePreparedMessages =
-                          applyPromptCacheBreakpoints({
-                            provider,
-                            model: selectedModel,
-                            anthropicNativeEndpoint,
-                            messages,
-                          });
-                        return {
-                          // Only advance the tail: context-trim retries can prepend
-                          // a system note that must not get a 5m marker before a
-                          // retained 1h marker.
-                          messages: messages.map((message, index) =>
-                            index === messages.length - 1
-                              ? cachePreparedMessages[index]
-                              : message,
-                          ),
-                        };
-                      },
+                      prepareStep: ({ messages }) => ({
+                        messages: applyStepPromptCacheBreakpoint({
+                          provider,
+                          model: selectedModel,
+                          anthropicNativeEndpoint,
+                          messages,
+                        }),
+                      }),
                     }),
                   ...(supportsToolCalling && { tools: mcpTools }),
                   stopWhen: buildChatStopConditions(repeatTracker),
@@ -1387,7 +1386,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           agentLlmApiKeyId: agent.llmApiKeyId,
                           // A repair prompt carries the same conversation
                           // content as the turn it repairs.
-                          lockedChatKey: lockedChatAudit?.dek ?? null,
+                          encryptedChatKey: encryptedChatAudit?.dek ?? null,
                         })
                       ).model,
                   }),
@@ -1752,7 +1751,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               conversationId,
                               messages,
                               "onExecuteError",
-                              lockedChatKey,
+                              encryptedChatKey,
                             );
                           } catch (persistError) {
                             logger.error(
@@ -1836,8 +1835,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                           : mapProviderError(error, provider),
                       conversationId,
                       slimChatErrorUi,
-                      redactPersistedError: conversation.lockedChat,
-                      lockedChatAudit,
+                      redactPersistedError: conversation.encryptedChat,
+                      encryptedChatAudit,
                       stage: "via stream",
                     });
                     returnedChatErrorPayloads.add(serializedChatError);
@@ -1851,10 +1850,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     (async () => {
                       logger.error(
                         {
-                          // LockedChat: errors routinely echo prompt/tool
+                          // EncryptedChat: errors routinely echo prompt/tool
                           // content — keep the app log content-free.
-                          error: conversation.lockedChat
-                            ? "[redacted: locked chat]"
+                          error: conversation.encryptedChat
+                            ? "[redacted: encrypted chat]"
                             : error,
                           conversationId,
                           agentId,
@@ -1870,7 +1869,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             conversationId,
                             messages,
                             "onError",
-                            lockedChatKey,
+                            encryptedChatKey,
                           );
                         } catch (persistError) {
                           // Log persistence error but don't prevent the error response
@@ -1923,14 +1922,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                             conversationId,
                             requestMessages: messages,
                             finalMessages: messagesToPersist,
-                            conversationKey: lockedChatKey,
+                            conversationKey: encryptedChatKey,
                           });
                         } else {
                           await persistNewMessages(
                             conversationId,
                             messagesToPersist,
                             "onFinish",
-                            lockedChatKey,
+                            encryptedChatKey,
                           );
                         }
                         messagesPersisted = true;
@@ -2036,8 +2035,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                               mappedError,
                               conversationId,
                               slimChatErrorUi,
-                              redactPersistedError: conversation.lockedChat,
-                              lockedChatAudit,
+                              redactPersistedError: conversation.encryptedChat,
+                              encryptedChatAudit,
                               stage: "via stream",
                             }),
                           };
@@ -2081,16 +2080,16 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             });
 
             return await sendGatedUiMessageStreamResponse({
-              // LockedChat: replay events carry raw stream chunks in
+              // EncryptedChat: replay events carry raw stream chunks in
               // plaintext, so payload persistence is suppressed (reconnect
               // replay is lost; the run still completes server-side with the
               // key held in this request's closure).
-              lockedChatAudit,
+              encryptedChatAudit,
               // Suppress only when there is nothing to encrypt under: an
-              // locked-chat run WITH a key now persists its replay payloads
+              // encrypted-chat run WITH a key now persists its replay payloads
               // encrypted, so reconnect-after-reload works for it.
               suppressEventPayloads:
-                conversation.lockedChat && !lockedChatAudit,
+                conversation.encryptedChat && !encryptedChatAudit,
               reply,
               stream: uiMessageStream as ReadableStream<UIMessageChunk>,
               runId: activeRun.id,
@@ -2294,15 +2293,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Replay payloads of a locked-chat run are encrypted under the browser
+      // Replay payloads of an encrypted-chat run are encrypted under the browser
       // key, so reconnecting needs it presented again. Without it the reader
       // yields nothing rather than failing the reconnect.
-      const replayKeyInfo = conversation.lockedChat
-        ? await ConversationModel.getLockedChatKeyInfo(id)
+      const replayKeyInfo = conversation.encryptedChat
+        ? await ConversationModel.getEncryptedChatKeyInfo(id)
         : null;
-      const replayLockedChatAudit =
+      const replayEncryptedChatAudit =
         replayKeyInfo?.hasEscrow === true
-          ? requireLockedChatKey({
+          ? requireEncryptedChatKey({
               request,
               conversation: replayKeyInfo,
             })
@@ -2324,7 +2323,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         },
         stream: activeChatRunService.createReplayStream(
           activeRun.id,
-          replayLockedChatAudit,
+          replayEncryptedChatAudit,
         ),
       });
 
@@ -2445,17 +2444,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // LockedChat: the model returned no message content (it cannot — the key
+      // EncryptedChat: the model returned no message content (it cannot — the key
       // only exists on this request). Decrypt here with the presented key, or
       // return the locked shape for the tombstone. A wrong key is a 409.
-      if (conversation.lockedChat) {
-        const keyInfo = await ConversationModel.getLockedChatKeyInfo(id);
-        const access = resolveLockedChatAccess({
+      if (conversation.encryptedChat) {
+        const keyInfo = await ConversationModel.getEncryptedChatKeyInfo(id);
+        const access = resolveEncryptedChatAccess({
           request,
           conversation: keyInfo ?? {
             id,
-            lockedChat: true,
-            lockedChatDekFingerprint: null,
+            encryptedChat: true,
+            encryptedChatDekFingerprint: null,
             hasEscrow: false,
           },
         });
@@ -2520,7 +2519,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       });
       if (!conversation) throw new ApiError(404, "Conversation not found");
-      if (conversation.lockedChat) return reply.send(null);
+      if (conversation.encryptedChat) return reply.send(null);
       if (!(await isGuardrailsV2Active())) return reply.send(null);
       return reply.send(
         await getOpenappaStatus({ organizationId, sessionId: id }),
@@ -2622,15 +2621,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      // Listing a locked chat's files works with or without the key: without
+      // Listing an encrypted chat's files works with or without the key: without
       // it the panel still shows that files exist (and their type and date),
       // which is the same tombstone posture the transcript takes.
-      const access = resolveLockedChatAccess({
+      const access = resolveEncryptedChatAccess({
         request,
-        conversation: (await ConversationModel.getLockedChatKeyInfo(id)) ?? {
+        conversation: (await ConversationModel.getEncryptedChatKeyInfo(id)) ?? {
           id,
-          lockedChat: conversation.lockedChat,
-          lockedChatDekFingerprint: null,
+          encryptedChat: conversation.encryptedChat,
+          encryptedChatDekFingerprint: null,
         },
       });
 
@@ -2686,19 +2685,19 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(403, "No access to the owning conversation");
       }
 
-      // In a locked chat the bytes and the filename are sealed under the key
+      // In an encrypted chat the bytes and the filename are sealed under the key
       // this browser holds, so serving them needs it on the request. A reader
       // without it (another member reaching the chat through the project) gets
       // a 400 naming the header rather than a body of ciphertext.
-      const attachmentKey = meta.lockedChat
-        ? requireLockedChatKey({
+      const attachmentKey = meta.encryptedChat
+        ? requireEncryptedChatKey({
             request,
-            conversation: (await ConversationModel.getLockedChatKeyInfo(
+            conversation: (await ConversationModel.getEncryptedChatKeyInfo(
               meta.conversationId,
             )) ?? {
               id: meta.conversationId,
-              lockedChat: true,
-              lockedChatDekFingerprint: null,
+              encryptedChat: true,
+              encryptedChatDekFingerprint: null,
             },
           })
         : null;
@@ -2733,12 +2732,14 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           safeMime === "application/pdf"
             ? "frame-ancestors 'self'"
             : "default-src 'none'; sandbox",
-        // A locked chat's bytes are opened only for this response, so they must
+        // An encrypted chat's bytes are opened only for this response, so they must
         // not be written to the browser's on-disk HTTP cache: that copy is
         // plaintext, outlives the tab, and is not reachable by the key —
         // precisely the at-rest copy the chat exists to avoid. Everything else
         // keeps the shared cache window.
-        "Cache-Control": meta.lockedChat ? "no-store" : "private, max-age=3600",
+        "Cache-Control": meta.encryptedChat
+          ? "no-store"
+          : "private, max-age=3600",
         "Content-Length": String(attachment.fileSize),
       });
       reply.raw.end(attachment.fileData);
@@ -2794,8 +2795,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (!sourceConversation) {
         throw new ApiError(404, "Conversation not found");
       }
-      if (sourceConversation.lockedChat) {
-        throw new ApiError(400, "Locked chats cannot be forked");
+      if (sourceConversation.encryptedChat) {
+        throw new ApiError(400, "Encrypted chats cannot be forked");
       }
 
       const forked = await forkConversation({
@@ -2827,6 +2828,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
               name: z.string(),
               description: z.string(),
               parameters: z.record(z.string(), z.any()).nullable(),
+              /**
+               * Estimated context cost of this tool's definition, on the same
+               * yardstick as the chat Context Window Visualizer. No model is
+               * in hand here, so the cl100k encoder stands in.
+               */
+              tokens: z.number().int(),
             }),
           ),
         ),
@@ -2858,12 +2865,17 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
       // Convert AI SDK Tool format to simple array for frontend. Chat keeps the
       // gateway's attestation markers on its model path, where the LLM proxy
       // verifies and strips them; only this UI view drops them.
+      const tokensByTool = estimateEachToolTokens({
+        provider: "openai",
+        tools: mcpTools,
+      });
       const tools = Object.entries(mcpTools).map(([name, tool]) => ({
         name,
         description: removeAttestationTokens(tool.description ?? ""),
         parameters:
           (tool.inputSchema as { jsonSchema?: Record<string, unknown> })
             ?.jsonSchema || null,
+        tokens: tokensByTool[name] ?? 0,
       }));
 
       return reply.send(tools);
@@ -2883,7 +2895,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId: true,
           chatApiKeyId: true,
           projectId: true,
-          lockedChat: true,
+          encryptedChat: true,
           thinkingEffort: true,
         })
           .required({ agentId: true })
@@ -2892,7 +2904,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
             modelId: true,
             chatApiKeyId: true,
             projectId: true,
-            lockedChat: true,
+            encryptedChat: true,
             thinkingEffort: true,
           }),
         response: constructResponseSchema(SelectConversationSchema),
@@ -2906,17 +2918,20 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           modelId,
           chatApiKeyId,
           projectId,
-          lockedChat,
+          encryptedChat,
           thinkingEffort,
         },
         user,
         organizationId,
       } = request;
-      // Locked chats stay out of projects: a project lists its chats to
+      // Encrypted chats stay out of projects: a project lists its chats to
       // everyone it is shared with, so a locked one would sit in a shared
       // space advertising a conversation none of them can open.
-      if (lockedChat && projectId) {
-        throw new ApiError(400, "Locked chats cannot be created in a project");
+      if (encryptedChat && projectId) {
+        throw new ApiError(
+          400,
+          "Encrypted chats cannot be created in a project",
+        );
       }
 
       // A chat born in a project belongs to it; the caller must be able to
@@ -2983,29 +2998,29 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         "Creating conversation with model",
       );
 
-      // LockedChat: the id is generated up front because the key fingerprint
+      // EncryptedChat: the id is generated up front because the key fingerprint
       // (and any enterprise escrow record, including the Vault-sink write)
       // is bound to it; the browser's key is fingerprinted, never stored
       // raw. The title is static — generation would send content to an LLM
       // and store a derived plaintext title.
-      const lockedChatConversationId = lockedChat ? randomUUID() : null;
-      const lockedChatFields = lockedChatConversationId
-        ? resolveLockedChatCreation({
+      const encryptedChatConversationId = encryptedChat ? randomUUID() : null;
+      const encryptedChatFields = encryptedChatConversationId
+        ? resolveEncryptedChatCreation({
             request,
-            conversationId: lockedChatConversationId,
+            conversationId: encryptedChatConversationId,
           })
         : null;
 
       // Create conversation with agent
       return reply.send(
         await ConversationModel.create({
-          ...(lockedChatFields && lockedChatConversationId
+          ...(encryptedChatFields && encryptedChatConversationId
             ? {
-                id: lockedChatConversationId,
-                ...lockedChatFields,
+                id: encryptedChatConversationId,
+                ...encryptedChatFields,
                 // Always static: clients derive draft titles from the first
                 // message text, which must never land in the plaintext title.
-                title: LOCKED_CHAT_STATIC_TITLE,
+                title: ENCRYPTED_CHAT_STATIC_TITLE,
               }
             : { title }),
           userId: user.id,
@@ -3055,8 +3070,11 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           throw new ApiError(404, "Project not found");
         }
 
-        if (currentConversation.lockedChat) {
-          throw new ApiError(400, "Locked chats cannot be moved to a project");
+        if (currentConversation.encryptedChat) {
+          throw new ApiError(
+            400,
+            "Encrypted chats cannot be moved to a project",
+          );
         }
       }
 
@@ -3128,11 +3146,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         }
       }
 
-      // LockedChat: the artifact column stores conversation-derived content in
+      // EncryptedChat: the artifact column stores conversation-derived content in
       // plaintext, so the write is silently dropped (the feature no-ops).
       if (body.artifact !== undefined) {
-        const lockedChatInfo = await ConversationModel.getLockedChatKeyInfo(id);
-        if (lockedChatInfo?.lockedChat) {
+        const encryptedChatInfo =
+          await ConversationModel.getEncryptedChatKeyInfo(id);
+        if (encryptedChatInfo?.encryptedChat) {
           body.artifact = undefined;
         }
       }
@@ -3145,7 +3164,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         pinnedAt: pinnedAtDate,
       };
 
-      // A no-op update (e.g. an artifact write dropped for a locked-chat
+      // A no-op update (e.g. an artifact write dropped for an encrypted-chat
       // conversation) must not reach drizzle's `.set()` with zero defined
       // values; answer with the current conversation instead.
       const hasFieldsToSet = Object.values(updateData).some(
@@ -3349,8 +3368,8 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         params: z.object({ id: UuidIdSchema }),
         response: constructResponseSchema(
           z.object({
-            status: z.enum(["created", "existing", "skipped", "failed"]),
-            reason: z.string().optional(),
+            status: ContextCompactionStatusSchema,
+            reason: ContextCompactionReasonSchema.optional(),
             compaction: SelectConversationCompactionSchema.nullable(),
             conversation: SelectConversationSchema,
           }),
@@ -3368,10 +3387,13 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      if (conversation.lockedChat) {
+      if (conversation.encryptedChat) {
         // Compaction would persist an LLM-derived summary of the content in
         // plaintext (conversation_compactions carries no per-conversation key).
-        throw new ApiError(400, "Compaction is not available for locked chats");
+        throw new ApiError(
+          400,
+          "Compaction is not available for encrypted chats",
+        );
       }
 
       if (!conversation.agentId || !conversation.agent) {
@@ -3399,7 +3421,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         selectedModel,
         modelId: conversation.modelId,
         agentLlmApiKeyId: conversation.agent.llmApiKeyId,
-        messages: normalizedMessages,
+        messages: projectCappedToolOutputs(normalizedMessages),
         systemPrompt: conversation.agent.systemPrompt ?? undefined,
         trigger: "manual",
       });
@@ -3458,9 +3480,9 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Conversation not found");
       }
 
-      if (conversation.lockedChat) {
+      if (conversation.encryptedChat) {
         // Title generation sends message content to an LLM and stores a
-        // plaintext derived title; locked chats keep their static title.
+        // plaintext derived title; encrypted chats keep their static title.
         return reply.send(conversation);
       }
       // Skip if title is already set (unless regenerating). A placeholder title
@@ -3690,15 +3712,15 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
-      const editKey = conversation.lockedChat
-        ? requireLockedChatKey({
+      const editKey = conversation.encryptedChat
+        ? requireEncryptedChatKey({
             request,
-            conversation: (await ConversationModel.getLockedChatKeyInfo(
+            conversation: (await ConversationModel.getEncryptedChatKeyInfo(
               conversationId,
             )) ?? {
               id: conversationId,
-              lockedChat: true,
-              lockedChatDekFingerprint: null,
+              encryptedChat: true,
+              encryptedChatDekFingerprint: null,
             },
           })
         : null;
@@ -3725,7 +3747,10 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
           tx,
           editKey,
         );
-        await invalidateConversationCompactions(message.conversationId, tx);
+        await ConversationCompactionModel.deleteByConversation(
+          message.conversationId,
+          tx,
+        );
       });
 
       // Return updated conversation with all messages
@@ -3787,12 +3812,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Message not found or access denied");
       }
 
-      // LockedChat rows can only be resolved-by-content-id (and returned)
+      // EncryptedChat rows can only be resolved-by-content-id (and returned)
       // after decryption with the browser-held key.
       const feedbackKeyInfo =
-        await ConversationModel.getLockedChatKeyInfo(conversationId);
-      const feedbackKey = feedbackKeyInfo?.lockedChat
-        ? requireLockedChatKey({ request, conversation: feedbackKeyInfo })
+        await ConversationModel.getEncryptedChatKeyInfo(conversationId);
+      const feedbackKey = feedbackKeyInfo?.encryptedChat
+        ? requireEncryptedChatKey({ request, conversation: feedbackKeyInfo })
         : null;
 
       // Resolve by DB UUID or AI SDK nanoid content ID, scoped to the
@@ -4097,7 +4122,7 @@ async function persistRegeneratedTurn(params: {
   conversationId: string;
   requestMessages: unknown[];
   finalMessages: unknown[];
-  /** Locked chats: the request-scoped browser-held key. */
+  /** Encrypted chats: the request-scoped browser-held key. */
   conversationKey?: ConversationContentKey | null;
 }): Promise<void> {
   const { conversationId, requestMessages, finalMessages, conversationKey } =
@@ -4365,7 +4390,7 @@ async function persistNewMessages(
 function persistConversationChatError(params: {
   conversationId: string;
   error: ChatErrorResponse;
-  lockedChatAudit?: LockedChatAuditContext | null;
+  encryptedChatAudit?: EncryptedChatAuditContext | null;
 }) {
   const chatError = getSerializableChatError(params.error);
 
@@ -4374,7 +4399,7 @@ function persistConversationChatError(params: {
       conversationId: params.conversationId,
       error: chatError,
     },
-    params.lockedChatAudit,
+    params.encryptedChatAudit,
   ).catch((error) => {
     logger.error(
       { error, conversationId: params.conversationId },
@@ -4392,17 +4417,17 @@ function getSerializableChatError(error: ChatErrorResponse): ChatErrorResponse {
 }
 
 /**
- * The persisted form of a chat error for a locked chat: keep the
+ * The persisted form of a chat error for an encrypted chat: keep the
  * structured code, retryability, and trace correlation ids, but drop the
  * free-text `message` and the provider's `originalError` — both routinely echo
  * prompt/model content (provider 4xx bodies quote the request).
  */
-function redactChatErrorForLockedChat(
+function redactChatErrorForEncryptedChat(
   error: ChatErrorResponse,
 ): ChatErrorResponse {
   return {
     code: error.code,
-    message: "Error details are redacted for locked chats.",
+    message: "Error details are redacted for encrypted chats.",
     isRetryable: error.isRetryable,
     ...(error.sessionId ? { sessionId: error.sessionId } : {}),
     ...(error.traceId ? { traceId: error.traceId } : {}),

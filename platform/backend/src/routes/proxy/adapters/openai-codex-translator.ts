@@ -15,12 +15,12 @@
  */
 import { randomUUID } from "node:crypto";
 import type {
+  Response,
   ResponseCreateParamsStreaming,
   ResponseInput,
   ResponseStreamEvent,
 } from "openai/resources/responses/responses";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
-import logger from "@/logging";
 import { OPENAI_CODEX_INSTRUCTIONS } from "@/services/openai-codex-credentials";
 import type { OpenAi } from "@/types";
 import { ApiError } from "@/types/api";
@@ -32,13 +32,46 @@ type Usage = OpenAi.Types.Usage;
 
 type LooseItem = Record<string, unknown>;
 
+/** Retains a partial translated response without completing a governed turn. */
+export class CodexResponsesGenerationError extends ApiError {
+  readonly completion: ChatCompletionsResponse;
+  readonly isIncompleteTerminal: boolean;
+
+  constructor(params: {
+    completion: ChatCompletionsResponse;
+    response?: Response;
+    observedResponse?: Response;
+  }) {
+    const response = params.response;
+    const message = response
+      ? response.status === "failed"
+        ? `Codex request failed${response.error?.message ? `: ${response.error.message}` : response.error?.code ? `: ${response.error.code}` : ""}`
+        : `Codex response incomplete${response.incomplete_details?.reason ? `: ${response.incomplete_details.reason}` : ""}`
+      : "Codex Responses stream ended without a terminal event";
+    super(502, message);
+    this.isIncompleteTerminal = response?.status === "incomplete";
+    this.completion = {
+      ...params.completion,
+      provider_response_id: (response ?? params.observedResponse)?.id,
+      status: response?.status ?? "incomplete",
+      incomplete_details: response?.incomplete_details ?? null,
+      error: response
+        ? response.error
+        : { code: "proxy_stream_incomplete", message },
+    } as ChatCompletionsResponse;
+  }
+}
+
 /**
  * Builds the Codex Responses request from an inbound chat-completions request,
  * applying the mandatory Codex-backend transforms. Always streaming upstream —
- * the client accumulates for non-streaming callers.
+ * the client accumulates for non-streaming callers. The chat-completions route
+ * schema drops a caller's `prompt_cache_key`, so `promptCacheKey` is the only
+ * cache key.
  */
 export function buildCodexResponsesRequest(
   params: ChatCompletionsRequest,
+  promptCacheKey?: string,
 ): ResponseCreateParamsStreaming {
   const request: LooseItem = {
     model: params.model,
@@ -56,6 +89,9 @@ export function buildCodexResponsesRequest(
     parallel_tool_calls:
       (params as { parallel_tool_calls?: boolean }).parallel_tool_calls ?? true,
   };
+  if (promptCacheKey) {
+    request.prompt_cache_key = promptCacheKey;
+  }
 
   const tools = chatToolsToResponsesTools(params.tools);
   if (tools.length > 0) {
@@ -68,7 +104,7 @@ export function buildCodexResponsesRequest(
 
 /**
  * Maps a Codex Responses event stream to OpenAI chat-completion chunks. Emits an
- * opening role chunk, text deltas, incremental tool-call deltas, and a closing
+ * opening role chunk, text deltas, completed tool calls, and a closing
  * chunk carrying finish_reason + usage.
  */
 export async function* codexResponsesStreamToChatChunks(params: {
@@ -82,91 +118,176 @@ export async function* codexResponsesStreamToChatChunks(params: {
 
   yield makeChunk({ ...base, delta: { role: "assistant", content: "" } });
 
-  const toolIndexByItemId = new Map<string, number>();
-  let sawToolCall = false;
+  const toolCallsByItemId = new Map<
+    string,
+    { callId: string; name: string; arguments: string }
+  >();
   let usage: Usage | undefined;
   let finishReason: ChatFinishReason = "stop";
+  let sawTerminal = false;
+  let content = "";
+  let observedResponse: Response | undefined;
+  const failGeneration = (response?: Response): never => {
+    const incomplete = response?.status === "incomplete";
+    throw new CodexResponsesGenerationError({
+      response,
+      observedResponse,
+      completion: {
+        id: completionId,
+        object: "chat.completion",
+        created: createdUnixSeconds,
+        model,
+        choices: [
+          {
+            index: 0,
+            message: { role: "assistant", content: content || null },
+            logprobs: null,
+            finish_reason: incomplete
+              ? response.incomplete_details?.reason === "content_filter"
+                ? "content_filter"
+                : "length"
+              : "error",
+          },
+        ],
+        ...(usage ? { usage } : {}),
+      } as unknown as ChatCompletionsResponse,
+    });
+  };
+
+  // Chat deltas are append-only. Hold calls until completion so native full
+  // snapshots can fill missing deltas without duplicating or replacing bytes.
+  const captureToolCall = (item: {
+    id?: string;
+    call_id: string;
+    name: string;
+    arguments?: string;
+  }) => {
+    if (
+      typeof item.call_id !== "string" ||
+      !item.call_id ||
+      typeof item.name !== "string" ||
+      !item.name ||
+      (item.id !== undefined && (typeof item.id !== "string" || !item.id))
+    ) {
+      throw new ApiError(502, "Codex returned a tool call without an identity");
+    }
+    const itemId = item.id ?? item.call_id;
+    const existing = toolCallsByItemId.get(itemId);
+    if (
+      (existing &&
+        (existing.callId !== item.call_id || existing.name !== item.name)) ||
+      (!existing &&
+        [...toolCallsByItemId.values()].some(
+          (call) => call.callId === item.call_id,
+        ))
+    ) {
+      throw new ApiError(
+        502,
+        "Codex returned inconsistent tool-call identities",
+      );
+    }
+    const call = existing ?? {
+      callId: item.call_id,
+      name: item.name,
+      arguments: "",
+    };
+    if (item.arguments !== undefined) {
+      if (
+        typeof item.arguments !== "string" ||
+        !item.arguments.startsWith(call.arguments)
+      ) {
+        throw new ApiError(
+          502,
+          "Codex returned inconsistent tool-call arguments",
+        );
+      }
+      call.arguments = item.arguments;
+    }
+    toolCallsByItemId.set(itemId, call);
+  };
 
   for await (const event of stream) {
+    if ("response" in event) {
+      observedResponse = event.response;
+      usage = mapResponsesUsage(event.response.usage) ?? usage;
+    }
     if (event.type === "response.output_text.delta") {
+      content += event.delta;
       yield makeChunk({ ...base, delta: { content: event.delta } });
       continue;
     }
 
     if (
-      event.type === "response.output_item.added" &&
+      (event.type === "response.output_item.added" ||
+        event.type === "response.output_item.done") &&
       isFunctionCallItem(event.item)
     ) {
-      const index = toolIndexByItemId.size;
-      const itemId = event.item.id ?? event.item.call_id;
-      toolIndexByItemId.set(itemId, index);
-      sawToolCall = true;
-      yield makeChunk({
-        ...base,
-        delta: {
-          tool_calls: [
-            {
-              index,
-              id: event.item.call_id,
-              type: "function",
-              function: { name: event.item.name, arguments: "" },
-            },
-          ],
-        },
-      });
+      captureToolCall(event.item);
       continue;
     }
 
-    if (event.type === "response.function_call_arguments.delta") {
-      const knownIndex = toolIndexByItemId.get(event.item_id);
-      if (knownIndex === undefined) {
-        // A delta for an item we never saw added would otherwise silently
-        // corrupt the first tool call's arguments. Surface it and fall back.
-        logger.warn(
-          { itemId: event.item_id },
-          "[OpenAiCodexTranslator] arguments delta for unknown tool-call item; defaulting to index 0",
+    if (
+      event.type === "response.function_call_arguments.delta" ||
+      event.type === "response.function_call_arguments.done"
+    ) {
+      const call = toolCallsByItemId.get(event.item_id);
+      if (!call) {
+        throw new ApiError(
+          502,
+          "Codex returned arguments for an unknown tool-call item",
         );
       }
-      const index = knownIndex ?? 0;
-      yield makeChunk({
-        ...base,
-        delta: {
-          tool_calls: [{ index, function: { arguments: event.delta } }],
-        },
-      });
+      if (event.type === "response.function_call_arguments.delta") {
+        if (typeof event.delta !== "string") {
+          throw new ApiError(502, "Codex returned malformed tool-call deltas");
+        }
+        call.arguments += event.delta;
+      } else {
+        captureToolCall({
+          id: event.item_id,
+          call_id: call.callId,
+          name: call.name,
+          arguments: event.arguments,
+        });
+      }
       continue;
     }
 
     if (event.type === "response.completed") {
+      for (const item of event.response.output ?? []) {
+        if (isFunctionCallItem(item)) captureToolCall(item);
+      }
       usage = mapResponsesUsage(event.response.usage);
-      finishReason = sawToolCall ? "tool_calls" : "stop";
+      finishReason = toolCallsByItemId.size > 0 ? "tool_calls" : "stop";
+      sawTerminal = true;
+      if (toolCallsByItemId.size > 0) {
+        yield makeChunk({
+          ...base,
+          delta: {
+            tool_calls: [...toolCallsByItemId.values()].map((call, index) => ({
+              index,
+              id: call.callId,
+              type: "function",
+              function: { name: call.name, arguments: call.arguments },
+            })),
+          },
+        });
+      }
       break;
     }
 
     if (event.type === "response.failed") {
-      // A real upstream failure. Throw so the proxy's error path surfaces it and
-      // persists an error interaction — otherwise a masked "success" chunk would
-      // report finish_reason "length" and skip all logging/metrics.
-      const err = (
-        event.response as { error?: { message?: string; code?: string } }
-      ).error;
-      throw new ApiError(
-        502,
-        `Codex request failed${err?.message ? `: ${err.message}` : err?.code ? `: ${err.code}` : ""}`,
-      );
+      usage = mapResponsesUsage(event.response.usage) ?? usage;
+      failGeneration(event.response);
     }
 
     if (event.type === "response.incomplete") {
-      // Not an error (e.g. hit max output tokens): keep the partial output, but
-      // carry usage so the turn is still metered/persisted, and map the reason.
-      usage = mapResponsesUsage(event.response.usage);
-      const reason = (
-        event.response as { incomplete_details?: { reason?: string } }
-      ).incomplete_details?.reason;
-      finishReason = reason === "content_filter" ? "content_filter" : "length";
-      break;
+      usage = mapResponsesUsage(event.response.usage) ?? usage;
+      failGeneration(event.response);
     }
   }
+
+  if (!sawTerminal) failGeneration();
 
   yield makeChunk({
     ...base,
@@ -395,11 +516,15 @@ function reasoningEffort(
   return "medium";
 }
 
+// Responses usage counts cached and reasoning tokens inside the input and
+// output totals, as chat-completions usage does, so the details carry over.
 function mapResponsesUsage(
   usage:
     | {
         input_tokens?: number;
+        input_tokens_details?: { cached_tokens?: number } | null;
         output_tokens?: number;
+        output_tokens_details?: { reasoning_tokens?: number } | null;
         total_tokens?: number;
       }
     | null
@@ -410,10 +535,18 @@ function mapResponsesUsage(
   }
   const promptTokens = usage.input_tokens ?? 0;
   const completionTokens = usage.output_tokens ?? 0;
+  const cachedTokens = usage.input_tokens_details?.cached_tokens;
+  const reasoningTokens = usage.output_tokens_details?.reasoning_tokens;
   return {
     prompt_tokens: promptTokens,
     completion_tokens: completionTokens,
     total_tokens: usage.total_tokens ?? promptTokens + completionTokens,
+    ...(cachedTokens !== undefined
+      ? { prompt_tokens_details: { cached_tokens: cachedTokens } }
+      : {}),
+    ...(reasoningTokens !== undefined
+      ? { completion_tokens_details: { reasoning_tokens: reasoningTokens } }
+      : {}),
   } as Usage;
 }
 
@@ -485,6 +618,7 @@ function isFunctionCallItem(item: unknown): item is {
   id?: string;
   call_id: string;
   name: string;
+  arguments?: string;
 } {
   return (
     !!item &&

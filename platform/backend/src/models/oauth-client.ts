@@ -1,6 +1,6 @@
 import { OFFLINE_ACCESS_OAUTH_SCOPE } from "@archestra/shared";
-import { and, eq, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, eq, gt, sql } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
 import type { CimdUpsertData } from "@/types";
 
 class OAuthClientModel {
@@ -14,6 +14,100 @@ class OAuthClientModel {
       .where(eq(schema.oauthClientsTable.clientId, clientId))
       .limit(1);
     return client ?? null;
+  }
+
+  /**
+   * OAuth clients the user holds an access or refresh token for, with when
+   * the first and latest of those tokens were issued. Listing and revoking a
+   * connected client both read these rows.
+   */
+  static async listWithUserTokens(params: {
+    userId: string;
+    /** Only tokens that have not expired, for listing; revoking reads all. */
+    activeOnly?: boolean;
+    tx?: Transaction;
+  }) {
+    const conn = params.tx ?? db;
+    const access = schema.oauthAccessTokensTable;
+    const refresh = schema.oauthRefreshTokensTable;
+    const clients = schema.oauthClientsTable;
+    const consents = schema.oauthConsentsTable;
+    const issued = conn
+      .select({ clientId: access.clientId, createdAt: access.createdAt })
+      .from(access)
+      .where(
+        and(
+          eq(access.userId, params.userId),
+          params.activeOnly ? gt(access.expiresAt, new Date()) : undefined,
+        ),
+      )
+      .unionAll(
+        conn
+          .select({ clientId: refresh.clientId, createdAt: refresh.createdAt })
+          .from(refresh)
+          .where(
+            and(
+              eq(refresh.userId, params.userId),
+              params.activeOnly ? gt(refresh.expiresAt, new Date()) : undefined,
+            ),
+          ),
+      )
+      .as("issued");
+    return conn
+      .select({
+        clientId: clients.clientId,
+        name: clients.name,
+        redirectUris: clients.redirectUris,
+        // Grouped over at least one token row, so never null.
+        firstIssuedAt: sql<Date>`min(${issued.createdAt})`.mapWith(
+          access.createdAt,
+        ),
+        lastIssuedAt: sql<Date>`max(${issued.createdAt})`.mapWith(
+          access.createdAt,
+        ),
+        /** When the user consented to this client: its first sign-in. */
+        consentedAt: sql<Date | null>`(
+          SELECT min(${consents.createdAt}) FROM ${consents}
+          WHERE ${consents.clientId} = ${clients.clientId}
+            AND ${consents.userId} = ${params.userId}
+        )`.mapWith(access.createdAt),
+      })
+      .from(issued)
+      .innerJoin(clients, eq(issued.clientId, clients.clientId))
+      .groupBy(clients.clientId, clients.name, clients.redirectUris);
+  }
+
+  /**
+   * Revoke a user's whole grant for one client: access tokens, refresh tokens
+   * and consent. Without the consent row the client cannot sign the user back
+   * in silently; the next authorization asks again.
+   */
+  static async revokeUserGrant(params: {
+    clientId: string;
+    userId: string;
+    tx: Transaction;
+  }): Promise<{ tokens: number; consents: number }> {
+    const { clientId, userId, tx } = params;
+    const access = schema.oauthAccessTokensTable;
+    const refresh = schema.oauthRefreshTokensTable;
+    const consent = schema.oauthConsentsTable;
+    // Access rows first: their refresh_id FK is ON DELETE SET NULL.
+    const accessRows = await tx
+      .delete(access)
+      .where(and(eq(access.clientId, clientId), eq(access.userId, userId)))
+      .returning({ id: access.id });
+    const refreshRows = await tx
+      .delete(refresh)
+      .where(and(eq(refresh.clientId, clientId), eq(refresh.userId, userId)))
+      .returning({ id: refresh.id });
+    const consentRows = await tx
+      .delete(consent)
+      .where(and(eq(consent.clientId, clientId), eq(consent.userId, userId)))
+      .returning({ id: consent.id });
+    return {
+      tokens: accessRows.length + refreshRows.length,
+      consents: consentRows.length,
+    };
   }
 
   /**

@@ -9,7 +9,7 @@ import {
   contentNavGroups,
   isNavItemPermitted,
 } from "@/app/_parts/studio-nav";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { RunStateIcon } from "@/components/chat/run-state-icon";
 import { ProjectBadgeButton } from "@/components/project-badge-button";
 import { Badge } from "@/components/ui/badge";
@@ -29,10 +29,10 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import {
-  NEW_LOCKED_CHAT_HREF,
+  NEW_ENCRYPTED_CHAT_HREF,
   SHORTCUT_DELETE,
   SHORTCUT_NEW_CHAT,
-  SHORTCUT_NEW_LOCKED_CHAT,
+  SHORTCUT_NEW_ENCRYPTED_CHAT,
   SHORTCUT_PIN,
   SHORTCUT_SEARCH,
   SHORTCUT_SIDEBAR,
@@ -183,7 +183,7 @@ export function ConversationSearchPalette({
     chat: ["read"],
   });
   const { modKey, altKey } = usePlatform();
-  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
+  const encryptedChatEnabled = useFeature("encryptedChatEnabled") ?? false;
 
   const deleteMutation = useDeleteConversation();
   const pinMutation = usePinConversation();
@@ -318,8 +318,8 @@ export function ConversationSearchPalette({
     onOpenChange(false);
   }, [router, onOpenChange]);
 
-  const handleNewLockedChat = useCallback(() => {
-    router.push(NEW_LOCKED_CHAT_HREF);
+  const handleNewEncryptedChat = useCallback(() => {
+    router.push(NEW_ENCRYPTED_CHAT_HREF);
     onOpenChange(false);
   }, [router, onOpenChange]);
 
@@ -402,12 +402,12 @@ export function ConversationSearchPalette({
         handlePinConversation(conversationId);
       }
 
-      // Alt+I starts a new locked chat (mirrors the global shortcut, so it
+      // Alt+I starts a new encrypted chat (mirrors the global shortcut, so it
       // also works with the palette open).
-      if (lockedChatEnabled && e.code === SHORTCUT_NEW_LOCKED_CHAT.code) {
+      if (encryptedChatEnabled && e.code === SHORTCUT_NEW_ENCRYPTED_CHAT.code) {
         e.preventDefault();
         e.stopPropagation();
-        handleNewLockedChat();
+        handleNewEncryptedChat();
       }
     };
 
@@ -420,8 +420,8 @@ export function ConversationSearchPalette({
     isPendingDeletion,
     handleDeleteConversation,
     handlePinConversation,
-    lockedChatEnabled,
-    handleNewLockedChat,
+    encryptedChatEnabled,
+    handleNewEncryptedChat,
   ]);
 
   /** Generates a contextual preview snippet with search term context */
@@ -521,15 +521,15 @@ export function ConversationSearchPalette({
       >
         <div className="flex items-center gap-2 w-full min-w-0">
           {/* One leading icon per row: the lock replaces the chat/pin glyph
-              for locked chats, at the same size and color, so the icon
+              for encrypted chats, at the same size and color, so the icon
               column stays aligned. */}
-          {conv.lockedChat ? (
+          {conv.encryptedChat ? (
             <TooltipProvider>
               <Tooltip>
                 <TooltipTrigger asChild>
-                  <LockedChatIcon className="h-4 w-4 text-muted-foreground" />
+                  <EncryptedChatIcon className="h-4 w-4 text-muted-foreground" />
                 </TooltipTrigger>
-                <TooltipContent side="top">Locked chat</TooltipContent>
+                <TooltipContent side="top">Encrypted chat</TooltipContent>
               </Tooltip>
             </TooltipProvider>
           ) : (
@@ -715,14 +715,14 @@ export function ConversationSearchPalette({
                 <Pencil className="h-4 w-4 shrink-0 text-muted-foreground" />
                 <span className="font-medium">New chat</span>
               </CommandItem>
-              {lockedChatEnabled && (
+              {encryptedChatEnabled && (
                 <CommandItem
-                  value="new-locked-chat private locked"
-                  onSelect={handleNewLockedChat}
+                  value="new-encrypted-chat private locked"
+                  onSelect={handleNewEncryptedChat}
                   className="flex items-center gap-2 px-3 py-2.5 cursor-pointer aria-selected:bg-accent"
                 >
-                  <LockedChatIcon className="h-4 w-4 shrink-0" />
-                  <span className="font-medium">New locked chat</span>
+                  <EncryptedChatIcon className="h-4 w-4 shrink-0" />
+                  <span className="font-medium">New encrypted chat</span>
                 </CommandItem>
               )}
             </CommandGroup>
@@ -814,10 +814,10 @@ export function ConversationSearchPalette({
             keys={[altKey, SHORTCUT_NEW_CHAT.label]}
             label="New Chat"
           />
-          {lockedChatEnabled && (
+          {encryptedChatEnabled && (
             <FooterShortcut
-              keys={[altKey, SHORTCUT_NEW_LOCKED_CHAT.label]}
-              label="New Locked Chat"
+              keys={[altKey, SHORTCUT_NEW_ENCRYPTED_CHAT.label]}
+              label="New Encrypted Chat"
             />
           )}
           <FooterShortcut

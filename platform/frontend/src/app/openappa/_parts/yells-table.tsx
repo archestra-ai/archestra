@@ -3,7 +3,6 @@
 import type { ColumnDef } from "@tanstack/react-table";
 import {
   Check,
-  Clock3,
   Download,
   Megaphone,
   MessageCircle,
@@ -11,6 +10,7 @@ import {
 } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
+import { CreatedByCell } from "@/components/created-by-cell";
 import {
   CollectionFilters,
   FilterBar,
@@ -19,15 +19,12 @@ import {
 } from "@/components/filter-bar";
 import { QueryLoadError } from "@/components/query-load-error";
 import { SearchInput } from "@/components/search-input";
-import { StandardDialog } from "@/components/standard-dialog";
 import { TableRowActions } from "@/components/table-row-actions";
-import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
-import { DialogDescription } from "@/components/ui/dialog";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { setPendingChatHandoffFiles } from "@/lib/chat/pending-chat-handoff-files";
 import { useCursorPagination } from "@/lib/hooks/use-cursor-pagination";
+import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useIsMobile } from "@/lib/hooks/use-mobile";
 import {
   type OpenAppaYell,
@@ -40,18 +37,16 @@ import { useOpenAppaChatLaunch } from "./openappa-chat-button";
 
 export function YellsTable() {
   const [search, setSearch] = useState("");
-  const [status, setStatus] = useState<"unresolved" | "resolved" | "all">(
-    "unresolved",
-  );
-  const [selected, setSelected] = useState<OpenAppaYell | null>(null);
+  const { searchParams, updateQueryParams } = useDataTableQueryParams();
+  const status =
+    searchParams.get("status") === "resolved" ? "resolved" : "unresolved";
   const pagination = useCursorPagination();
   const isMobile = useIsMobile();
   const { data: canRead, isPending: permissionsLoading } = useHasPermissions({
-    log: ["read"],
+    openappaDiagnostics: ["read"],
   });
   const { data: canResolve } = useHasPermissions({
-    log: ["read"],
-    toolPolicy: ["update"],
+    openappaDiagnostics: ["read", "update"],
   });
   const yells = useOpenAppaYells(
     {
@@ -63,10 +58,9 @@ export function YellsTable() {
     !!canRead,
   );
   const resolve = useResolveOpenAppaYell();
-  const archive = useOpenAppaYellArchive();
   const clearFilters = () => {
     setSearch("");
-    setStatus("unresolved");
+    updateQueryParams({ status: null });
     pagination.goNewest();
   };
   const columns: ColumnDef<OpenAppaYell>[] = [
@@ -75,40 +69,31 @@ export function YellsTable() {
       header: "Report",
       size: isMobile ? 120 : 240,
       cell: ({ row }) => (
-        <Button
-          variant="ghost"
-          size="sm"
-          className="-ml-1.5 h-auto w-full min-w-0 justify-start whitespace-normal px-1.5 text-left"
-          onClick={() => setSelected(row.original)}
-        >
-          <span className="min-w-0 space-y-1">
-            <span className="line-clamp-2 break-words">
-              {row.original.message}
-            </span>
-            {isMobile && (
-              <span className="block text-xs font-normal text-muted-foreground">
-                {row.original.resolvedAt ? "Resolved" : "Unresolved"} ·{" "}
+        <div className="min-w-0 space-y-1">
+          <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
+            {row.original.message}
+          </p>
+          {isMobile && (
+            <span className="block space-y-1 text-xs font-normal text-muted-foreground">
+              <YellCaller yell={row.original} />
+              <span className="block">
                 {formatRelativeTimeFromNow(row.original.createdAt)}
               </span>
-            )}
-          </span>
-        </Button>
+            </span>
+          )}
+        </div>
       ),
     },
     {
-      id: "status",
-      header: "Status",
-      size: 120,
-      cell: ({ row }) => (
-        <Badge variant="outline">
-          {row.original.resolvedAt ? "Resolved" : "Unresolved"}
-        </Badge>
-      ),
+      accessorKey: "caller",
+      header: "Reported by",
+      size: 280,
+      cell: ({ row }) => <YellCaller yell={row.original} />,
     },
     {
       accessorKey: "createdAt",
       header: "Reported",
-      size: 170,
+      size: 150,
       cell: ({ row }) => (
         <span
           className="whitespace-nowrap text-muted-foreground"
@@ -121,7 +106,7 @@ export function YellsTable() {
     {
       id: "actions",
       header: "Actions",
-      size: canResolve ? 112 : 72,
+      size: canResolve ? 128 : 96,
       cell: ({ row }) => (
         <YellRowActions
           yell={row.original}
@@ -161,28 +146,24 @@ export function YellsTable() {
             />
           }
           onClearFilters={
-            search || status !== "unresolved" ? clearFilters : undefined
+            search || status === "resolved" ? clearFilters : undefined
           }
         >
           <FilterSelect
             value={status}
+            inactiveValue="unresolved"
             ariaLabel="Yell status"
             placeholder="Status"
             showSearch={false}
             items={[
               { value: "unresolved", label: "Unresolved" },
               { value: "resolved", label: "Resolved" },
-              { value: "all", label: "All statuses" },
             ]}
             onValueChange={(value) => {
-              if (
-                value === "unresolved" ||
-                value === "resolved" ||
-                value === "all"
-              ) {
-                setStatus(value);
-                pagination.goNewest();
-              }
+              updateQueryParams({
+                status: value === "resolved" ? value : null,
+              });
+              pagination.goNewest();
             }}
           />
         </FilterBar>
@@ -198,15 +179,15 @@ export function YellsTable() {
             isMobile
               ? columns.filter(
                   (column) =>
-                    column.id !== "status" &&
                     !(
                       "accessorKey" in column &&
-                      column.accessorKey === "createdAt"
+                      (column.accessorKey === "createdAt" ||
+                        column.accessorKey === "caller")
                     ),
                 )
               : columns
           }
-          fixedWidthColumnIds={["status", "createdAt"]}
+          fixedWidthColumnIds={["caller", "createdAt"]}
           flexibleColumnIds={["message"]}
           data={yells.data?.data ?? []}
           getRowId={(row) => row.id}
@@ -223,74 +204,12 @@ export function YellsTable() {
               pagination.goOlder(yells.data?.pagination.nextCursor ?? null),
           }}
           emptyIcon={Megaphone}
-          emptyMessage={
-            status === "unresolved"
-              ? "No unresolved yells"
-              : status === "resolved"
-                ? "No resolved yells"
-                : "No yells yet"
-          }
+          emptyMessage="No unresolved yells"
           emptyDescription="Reports appear here when an agent uses the yell tool."
-          hasActiveFilters={!!search}
+          hasActiveFilters={!!search || status === "resolved"}
           filteredEmptyMessage="No reports match these filters."
-          onClearFilters={() => {
-            setSearch("");
-            setStatus("all");
-            pagination.goNewest();
-          }}
+          onClearFilters={clearFilters}
         />
-      )}
-      {selected && (
-        <StandardDialog
-          open
-          onOpenChange={(open) => {
-            if (!open) setSelected(null);
-          }}
-          title={
-            <span className="flex flex-wrap items-center gap-2 pr-6">
-              <span>OpenAPPA yell</span>
-              <Badge variant="outline">
-                {selected.resolvedAt ? "Resolved" : "Unresolved"}
-              </Badge>
-              <span
-                className="ml-auto flex items-center gap-1.5 text-xs font-normal text-muted-foreground"
-                title={formatDate({ date: selected.createdAt })}
-              >
-                <Clock3 className="size-3.5" />
-                <span>{formatRelativeTimeFromNow(selected.createdAt)}</span>
-              </span>
-            </span>
-          }
-          bodyClassName="space-y-4"
-          footer={
-            <>
-              {selected.hasArchive && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  disabled={archive.isPending}
-                  onClick={() =>
-                    archive.mutate({ id: selected.id, download: true })
-                  }
-                >
-                  <Download />
-                  <span>Download report</span>
-                </Button>
-              )}
-              <YellChatAction yell={selected} primary />
-            </>
-          }
-        >
-          <DialogDescription className="sr-only">
-            Review the reported issue, investigate it in chat, or download its
-            diagnostic report.
-          </DialogDescription>
-          <div className="rounded-md border bg-muted/30 p-3">
-            <p className="whitespace-pre-wrap break-words text-sm leading-relaxed">
-              {selected.message}
-            </p>
-          </div>
-        </StandardDialog>
       )}
     </div>
   );
@@ -298,14 +217,21 @@ export function YellsTable() {
 
 function useYellInvestigation(yell: OpenAppaYell) {
   const router = useRouter();
-  const { href, agents } = useOpenAppaChatLaunch({
-    promptKey: "explainPolicy",
-    yellId: yell.id,
+  const { href, agents, permissions } = useOpenAppaChatLaunch({
+    subject: { kind: "yell", yellId: yell.id },
   });
   const archive = useOpenAppaYellArchive();
+  const { conversation } = yell;
   return {
-    disabled: archive.isPending || (!href && !agents.isError),
+    permissions,
+    label: conversation ? "Open investigation" : "Investigate in chat",
+    disabled:
+      !conversation && (archive.isPending || (!href && !agents.isError)),
     launch: () => {
+      if (conversation) {
+        router.push(`/chat/${conversation.id}`);
+        return;
+      }
       if (!href) {
         void agents.refetch();
         return;
@@ -328,27 +254,6 @@ function useYellInvestigation(yell: OpenAppaYell) {
   };
 }
 
-function YellChatAction({
-  yell,
-  primary = false,
-}: {
-  yell: OpenAppaYell;
-  primary?: boolean;
-}) {
-  const investigation = useYellInvestigation(yell);
-  return (
-    <Button
-      variant={primary ? "default" : "outline"}
-      size="sm"
-      disabled={investigation.disabled}
-      onClick={investigation.launch}
-    >
-      <MessageCircle />
-      <span>Investigate in chat</span>
-    </Button>
-  );
-}
-
 function YellRowActions({
   yell,
   canResolve,
@@ -367,7 +272,8 @@ function YellRowActions({
       actions={[
         {
           icon: <MessageCircle className="size-4" />,
-          label: "Investigate in chat",
+          label: investigation.label,
+          permissions: investigation.permissions,
           disabled: investigation.disabled,
           onClick: investigation.launch,
         },
@@ -398,4 +304,21 @@ function YellRowActions({
       ]}
     />
   );
+}
+
+function YellCaller({ yell }: { yell: OpenAppaYell }) {
+  if (yell.caller)
+    return (
+      <CreatedByCell createdBy={yell.caller} showServiceAccountBadge={false} />
+    );
+  const label = yell.callerId.startsWith("user:service-account:")
+    ? "Unknown service account"
+    : yell.callerId.startsWith("user:")
+      ? "Unknown user"
+      : yell.callerId.startsWith("app:")
+        ? "App"
+        : yell.callerId.startsWith("virtual-key:")
+          ? "Virtual key"
+          : "Unattributed caller";
+  return <span className="text-xs text-muted-foreground">{label}</span>;
 }

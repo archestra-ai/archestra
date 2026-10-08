@@ -6,6 +6,7 @@ import {
 import { describe, expect, it } from "vitest";
 import {
   attentionCatalogIds,
+  attentionKindCounts,
   attentionSortRank,
   bucketOf,
   type CatalogItemForIssues,
@@ -448,6 +449,16 @@ describe("facets", () => {
     ]);
     expect(attentionCatalogIds(mixedFleet(), { audience: "others" })).toEqual([
       "theirs",
+    ]);
+  });
+
+  it("breaks a facet's items down by issue kind, counting only that facet", () => {
+    expect(attentionKindCounts(mixedFleet(), { audience: "you" })).toEqual([
+      { kind: "failed-to-start", count: 1 },
+      { kind: "needs-reauth", count: 1 },
+    ]);
+    expect(attentionKindCounts(mixedFleet(), { audience: "others" })).toEqual([
+      { kind: "needs-reauth", count: 1 },
     ]);
   });
 

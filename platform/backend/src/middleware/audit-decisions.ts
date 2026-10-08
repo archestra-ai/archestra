@@ -25,6 +25,7 @@ import MemberModel from "@/models/member";
 import ModelModel from "@/models/model";
 import OpenAppaBatteryInstallModel from "@/models/openappa-battery-install";
 import OpenAppaBatteryPackageModel from "@/models/openappa-battery-package";
+import OpenAppaCredentialBindingModel from "@/models/openappa-credential-binding";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaYellModel from "@/models/openappa-yell";
 import OrganizationModel from "@/models/organization";
@@ -105,11 +106,13 @@ export const AUDIT_DECISIONS = {
   a2aRemoteAgentsTable: { audited: true, model: A2aRemoteAgentModel },
   a2aRemoteAgentTeamsTable: {
     audited: false,
-    reason: "Association changes are captured on the parent outbound A2A agent",
+    reason:
+      "Retired sharing rows, read once by the permission conversion and never written",
   },
   a2aRemoteAgentUsersTable: {
     audited: false,
-    reason: "Association changes are captured on the parent outbound A2A agent",
+    reason:
+      "Retired sharing rows, read once by the permission conversion and never written",
   },
   a2aConnectionsTable: {
     audited: false,
@@ -652,7 +655,7 @@ export const AUDIT_DECISIONS = {
   connectionSetupsTable: {
     audited: false,
     reason:
-      "ephemeral 15-minute render tickets for /connection setup scripts; durable artifacts (virtual key, skill share link) carry the audit signal",
+      "15-minute render tickets for /connection setup scripts, kept as the connected-client history; the approval (clientConnection.updated), disconnecting (connectedClient.disconnected) and the durable artifacts (virtual key, skill share link) carry the audit signal",
   },
   connectionSetupSkillsTable: {
     audited: false,
@@ -970,6 +973,10 @@ export const AUDIT_DECISIONS = {
     audited: true,
     model: OpenAppaBatteryPackageModel,
   },
+  openappaCredentialBindingsTable: {
+    audited: true,
+    model: OpenAppaCredentialBindingModel,
+  },
   openappaEffectivePoliciesTable: {
     audited: false,
     reason:
@@ -995,9 +1002,36 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "approved tool outputs and processing receipts",
   },
+  openappaEmbeddedPeerMessagesTable: {
+    audited: false,
+    reason: "runtime-owned peer inbox; admissions belong to OpenAPPA history",
+  },
+  openappaHeldPeerMessagesTable: {
+    audited: false,
+    reason:
+      "runtime-owned held values; bodies are excluded from platform audits",
+  },
   openappaSessionsTable: {
     audited: false,
     reason: "authenticated adapter identity mapping",
+  },
+  openappaUnenforcedSessionsTable: {
+    audited: false,
+    reason: "proxy record of sessions that started while enforcement was off",
+  },
+  openappaUnenforcedCallsTable: {
+    audited: false,
+    reason: "proxy record of tool calls made while enforcement was off",
+  },
+  openappaPolicyTestSuitesTable: {
+    audited: false,
+    reason:
+      "test scenario definitions do not change enforced policy or authorization; exact inputs are retained with run evidence",
+  },
+  openappaPolicyTestRunsTable: {
+    audited: false,
+    reason:
+      "bounded replay result history; evaluation does not mutate enforced policy or authorization",
   },
   openappaYellsTable: { audited: true, model: OpenAppaYellModel },
   openappaExternalConsultsTable: {

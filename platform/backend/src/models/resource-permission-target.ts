@@ -10,6 +10,9 @@ import { z } from "zod";
 import db, { schema } from "@/database";
 import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import ResourcePermissionSubjectModel, {
+  type PrincipalSource,
+} from "./resource-permission-subject";
 
 export default class ResourcePermissionTargetModel {
   /** Discovery only. Execution must still check the specific target. */
@@ -17,8 +20,13 @@ export default class ResourcePermissionTargetModel {
     organizationId: string;
     userId: string;
     action: ResourcePermissionAction;
+    lookups?: PrincipalSource;
   }): Promise<boolean> {
     const table = schema.internalMcpCatalogTable;
+    const principal = await ResourcePermissionSubjectModel.resolvePrincipalFrom(
+      params.lookups,
+      { userId: params.userId, organizationId: params.organizationId },
+    );
     const [row] = await db
       .select({ id: table.id })
       .from(table)
@@ -31,7 +39,8 @@ export default class ResourcePermissionTargetModel {
           isNull(table.deletedAt),
           isNull(table.parentCatalogItemId),
           ResourcePermissionPolicyModel.grantCondition({
-            ...params,
+            ...principal,
+            action: params.action,
             resource: "mcpRegistry",
             scopeColumn: table.id,
           }),
@@ -57,6 +66,7 @@ export default class ResourcePermissionTargetModel {
     organizationId: string;
     resource: ScopedResource;
     id: string;
+    includeDeleted?: boolean;
   }): Promise<Target | null> {
     if (params.resource === "agent" || params.resource === "mcpGateway") {
       const table = schema.agentsTable;
@@ -127,7 +137,7 @@ export default class ResourcePermissionTargetModel {
             ? schema.conversationsTable.userId
             : schema.agentRunsTable.actorUserId,
           enabled: conversation
-            ? sql<boolean>`NOT ${schema.conversationsTable.lockedChat}`
+            ? sql<boolean>`NOT ${schema.conversationsTable.encryptedChat}`
             : sql<boolean>`true`,
         })
         .from(table)
@@ -211,6 +221,23 @@ export default class ResourcePermissionTargetModel {
     }
     if (params.resource === "llmVirtualKey") {
       const table = schema.virtualApiKeysTable;
+      const [target] = await db
+        .select({
+          id: table.id,
+          name: table.name,
+          authorId: table.authorId,
+        })
+        .from(table)
+        .where(
+          and(
+            eq(table.id, params.id),
+            eq(table.organizationId, params.organizationId),
+          ),
+        );
+      return target ?? null;
+    }
+    if (params.resource === "externalAgent") {
+      const table = schema.a2aRemoteAgentsTable;
       const [target] = await db
         .select({
           id: table.id,
@@ -379,7 +406,9 @@ export default class ResourcePermissionTargetModel {
             eq(catalog.organizationId, params.organizationId),
             isNull(catalog.organizationId),
           ),
-          isNull(catalog.deletedAt),
+          params.resource === "mcpRegistry" && params.includeDeleted
+            ? undefined
+            : isNull(catalog.deletedAt),
         ),
       );
     if (!target) return null;

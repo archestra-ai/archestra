@@ -38,6 +38,7 @@ import {
 } from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
 import { clientConnectionService } from "@/services/client-connection";
+import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
 import {
   type ConnectionCreditWarning,
   ensureConnectionPassthroughKey,
@@ -900,6 +901,7 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
               await SkillMarketplaceCredentialModel.create({
                 organizationId: setup.organizationId,
                 userId: setup.userId,
+                connectionSetupId: setup.id,
                 tx,
               });
             const origin = proxyBaseUrlToOrigin(setup.baseUrl);
@@ -1042,6 +1044,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
     };
     mcp = {
       serverName: resolveMcpClientServerName(gatewayNaming),
+      toolPrefix: archestraMcpBranding.toolPrefix,
       // Clients connected by an earlier run still hold the gateway's own name
       // (e.g. `my_gateway`); the script moves those entries onto the name
       // above instead of leaving one gateway registered twice.
@@ -1084,12 +1087,32 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       passthroughVirtualKey = await readVirtualKeyValue(setup.virtualApiKeyId);
     }
 
+    // The approved installer can change settings in a running conversation.
+    // Carry server-authorized setup scope on the URL, independent of client
+    // headers, prompt history, session IDs, or declared tools.
+    const setupProxyContext =
+      setup.virtualApiKeyId && (virtualKeyValue || passthroughVirtualKey)
+        ? issueConnectionProxySetupContext({
+            organizationId: setup.organizationId,
+            virtualApiKeyId: setup.virtualApiKeyId,
+            proxyAgentId: proxyAgent.id,
+            setupId: setup.id,
+            secret: config.auth.secret,
+          })
+        : null;
+    const proxyApiBaseUrl = setup.baseUrl.replace(/\/+$/, "");
+    const proxyApiPrefix = proxyApiBaseUrl.endsWith("/v1")
+      ? proxyApiBaseUrl
+      : `${proxyApiBaseUrl}/v1`;
+    const proxyBaseUrl = setupProxyContext
+      ? `${proxyApiPrefix}/connection-setup/${setupProxyContext}`
+      : proxyApiPrefix;
     proxy = {
       authMode: setup.proxyAuth,
       provider: setup.provider,
       providerLabel: providerDisplayNames[setup.provider] ?? setup.provider,
-      baseUrl: setup.baseUrl,
-      url: `${setup.baseUrl}/${setup.provider}`,
+      baseUrl: proxyBaseUrl,
+      url: `${proxyBaseUrl}/${setup.provider}`,
       proxyName: toProxyName(proxyAgent.name),
       virtualKey: virtualKeyValue,
       virtualKeyName,
@@ -1203,6 +1226,7 @@ async function buildScriptContext(setup: ConnectionSetup): Promise<{
       clientId: setup.clientId,
       platform: setup.platform,
       appName,
+      toolPrefix: archestraMcpBranding.toolPrefix,
       mcp,
       proxy,
       runtimeHandoffInstructions:

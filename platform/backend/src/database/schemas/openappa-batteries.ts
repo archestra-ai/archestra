@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  primaryKey,
   text,
   timestamp,
   unique,
@@ -17,6 +18,7 @@ import type {
 } from "@/types/openappa-batteries";
 import internalMcpCatalogTable from "./internal-mcp-catalog";
 import organizationsTable from "./organization";
+import usersTable from "./user";
 
 // A battery package an organization uploaded, content-addressed: a name may have several versions.
 export const openappaBatteryPackagesTable = pgTable(
@@ -107,4 +109,27 @@ export const openappaEffectivePoliciesTable = pgTable(
     lastError: text("last_error"),
     lastErrorAt: timestamp("last_error_at", { withTimezone: true }),
   },
+);
+
+// Which runtime credential key fills a helper variable, organization-wide. A
+// `[credentials]` line in the root policy text wins over a row for the same variable.
+export const openappaCredentialBindingsTable = pgTable(
+  "openappa_credential_bindings",
+  {
+    organizationId: text("organization_id")
+      .notNull()
+      .references(() => organizationsTable.id, { onDelete: "cascade" }),
+    variable: text().notNull(),
+    credentialKey: text("credential_key").notNull(),
+    updatedBy: text("updated_by").references(() => usersTable.id, {
+      onDelete: "set null",
+    }),
+    createdAt: timestamp("created_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+    updatedAt: timestamp("updated_at", { withTimezone: true })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => [primaryKey({ columns: [table.organizationId, table.variable] })],
 );

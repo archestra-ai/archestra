@@ -12,7 +12,7 @@ import { isAzureOpenAiEntraIdEnabled } from "@/clients/azure-openai-credentials"
 import { isBedrockIamAuthEnabled } from "@/clients/bedrock-credentials";
 import { isVertexAiEnabled } from "@/clients/gemini-client";
 import config from "@/config";
-import { isLockedChatEnabled } from "@/content-encryption/locked-chat";
+import { isEncryptedChatEnabled } from "@/content-encryption/encrypted-chat";
 import { enterpriseTier } from "@/enterprise-tier";
 import { McpServerRuntimeManager } from "@/k8s/mcp-server-runtime";
 // SPDX-SnippetBegin
@@ -88,7 +88,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               // organization toggle sit behind it.
               mcpIdleHibernationBetaEnabled: z.boolean(),
               /** BETA: MCP registry attention and alert dismissal surfaces. */
-              mcpServerAlertingEnabled: z.boolean(),
               // SPDX-SnippetEnd
               sandbox: z.boolean(),
               /**
@@ -150,7 +149,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
               mcpSandboxDomain: z.string().nullable(),
               maintenanceMode: z.string().nullable(),
               chatSecretScanEnabled: z.boolean(),
-              lockedChatEnabled: z.boolean(),
+              encryptedChatEnabled: z.boolean(),
               openappaEnabled: z.boolean(),
               agentHooksEnabled: z.boolean(),
               chatopsTelegramEnabled: z.boolean(),
@@ -244,7 +243,6 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // per-server control with it, or the UI renders an operational
           // feature nothing behind it will ever run.
           mcpIdleHibernationBetaEnabled: isIdleHibernationOffered(),
-          mcpServerAlertingEnabled: config.mcpServer.alertingEnabled,
           // SPDX-SnippetEnd
           sandbox: skillSandboxRuntimeService.isEnabled,
           agentRuntime: isAnyAgentRuntimeBackendDriverEnabled(),
@@ -285,7 +283,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           mcpSandboxDomain: config.mcpSandbox.domain,
           maintenanceMode: config.maintenanceMode,
           chatSecretScanEnabled: config.chat.secretScanEnabled,
-          lockedChatEnabled: isLockedChatEnabled(),
+          encryptedChatEnabled: isEncryptedChatEnabled(),
           openappaEnabled: config.openappa.enabled,
           agentHooksEnabled: config.hooks.enabled,
           chatopsTelegramEnabled: config.chatops.telegramEnabled,
@@ -318,6 +316,7 @@ const configRoutes: FastifyPluginAsyncZod = async (fastify) => {
           bedrock: config.llm.bedrock.baseUrl || null,
           cohere: config.llm.cohere.baseUrl || null,
           voyage: config.llm.voyage.baseUrl || null,
+          jev: config.llm.jev.baseUrl || null,
           cerebras: config.llm.cerebras.baseUrl || null,
           mistral: config.llm.mistral.baseUrl || null,
           perplexity: config.llm.perplexity.baseUrl || null,

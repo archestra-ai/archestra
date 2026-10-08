@@ -1,9 +1,11 @@
 import {
+  SupportedProvidersSchema,
   TOOL_CREATE_AGENT_SHORT_NAME,
   TOOL_EDIT_AGENT_SHORT_NAME,
   TOOL_GET_AGENT_SHORT_NAME,
   TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
   TOOL_LIST_AGENTS_SHORT_NAME,
+  TOOL_LIST_LLM_MODELS_SHORT_NAME,
   TOOL_QUERY_KNOWLEDGE_SOURCES_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
@@ -18,6 +20,9 @@ import {
   AgentModel,
   KnowledgeBaseConnectorModel,
   KnowledgeBaseModel,
+  LlmProviderApiKeyModel,
+  LlmProviderApiKeyModelLinkModel,
+  TeamModel,
 } from "@/models";
 import {
   AgentScopeSchema,
@@ -29,6 +34,8 @@ import {
 import {
   AgentDetailOutputSchema,
   AgentLabelOutputSchema,
+  AgentModelToolInputSchemas,
+  AgentRuntimeToolInputSchema,
   AgentTeamOutputSchema,
   ConnectorIdsToolInputSchema,
   CreateBaseToolArgsSchema,
@@ -47,8 +54,10 @@ import {
   catchError,
   defineArchestraTool,
   defineArchestraTools,
+  errorResult,
   structuredSuccessResult,
 } from "./helpers";
+import { resourceAccessToolArg } from "./resource-access-tool-arg";
 
 // === Constants ===
 
@@ -78,6 +87,9 @@ const AgentCreateToolArgsSchema = CreateBaseToolArgsSchema.extend({
     .describe(
       "Explicit tool assignments to create immediately after the agent is created.",
     ),
+  runtime: AgentRuntimeToolInputSchema.optional(),
+  llmApiKeyId: AgentModelToolInputSchemas.llmApiKeyId.optional(),
+  modelId: AgentModelToolInputSchemas.modelId.optional(),
 }).strict();
 
 const GetAgentToolArgsSchema = GetResourceToolArgsSchema.extend({
@@ -114,6 +126,7 @@ const ListAgentsToolArgsSchema = z
       .describe(
         "Optional agent name filter. Use this when the user names an agent but you still need to look up the ID.",
       ),
+    access: resourceAccessToolArg({ examplePlural: "agents" }),
   })
   .strict();
 
@@ -179,6 +192,23 @@ const EditAgentToolArgsSchema = z
         systemPrompt: UpdateAgentSchemaBase.shape.systemPrompt
           .optional()
           .describe("New system prompt for the agent."),
+        runtime: AgentRuntimeToolInputSchema.nullable()
+          .optional()
+          .describe(
+            `${AgentRuntimeToolInputSchema.description} Replaces the whole runtime: pass every field to keep. Pass null to return the agent to the built-in chat harness.`,
+          ),
+        llmApiKeyId: AgentModelToolInputSchemas.llmApiKeyId
+          .nullable()
+          .optional()
+          .describe(
+            `${AgentModelToolInputSchemas.llmApiKeyId.description} Pass null for both to use the default model.`,
+          ),
+        modelId: AgentModelToolInputSchemas.modelId
+          .nullable()
+          .optional()
+          .describe(
+            `${AgentModelToolInputSchemas.modelId.description} Pass null for both to use the default model.`,
+          ),
       })
       .strict(),
   )
@@ -228,11 +258,48 @@ const ListAgentsOutputSchema = z.object({
   ),
 });
 
+const MAX_MODELS_PER_KEY = 100;
+
+const ListLlmModelsToolArgsSchema = z
+  .object({
+    provider: SupportedProvidersSchema.optional().describe(
+      "Only list keys for this provider.",
+    ),
+    query: z
+      .string()
+      .trim()
+      .min(1)
+      .optional()
+      .describe("Only list models whose name contains this text."),
+  })
+  .strict();
+
+const ListLlmModelsOutputSchema = z.object({
+  apiKeys: z.array(
+    z.object({
+      id: z.string().describe("Pass as llmApiKeyId."),
+      name: z.string().describe("The key's display name."),
+      provider: z.string().describe("The key's LLM provider."),
+      models: z.array(
+        z.object({
+          id: z.string().describe("Pass as modelId."),
+          name: z.string().describe("The provider's model name."),
+        }),
+      ),
+      omittedModelCount: z
+        .number()
+        .describe(
+          `Linked models left out after the first ${MAX_MODELS_PER_KEY}. Narrow with query to see them.`,
+        ),
+    }),
+  ),
+});
+
 const registry = defineArchestraTools([
   defineArchestraTool({
     shortName: TOOL_CREATE_AGENT_SHORT_NAME,
     title: "Create Agent",
-    description: `Create a new agent with the specified name, optional description, labels, prompts, icon emoji, explicit tool assignments, and sub-agent delegations. Defaults to personal scope. toolAssignments and subAgentIds take resource UUIDs — resolve names first with ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}.`,
+    description: `Create a new agent with the specified name, optional description, labels, prompts, icon emoji, model, explicit tool assignments, and sub-agent delegations. Set runtime to run it in its own container (Agent Runtime), for example { "template": "claude-code" } for a Claude Code agent. Defaults to personal scope. toolAssignments and subAgentIds take resource UUIDs — resolve names first with ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} / ${TOOL_LIST_AGENTS_SHORT_NAME} / ${TOOL_GET_AGENT_SHORT_NAME}.`,
     schema: AgentCreateToolArgsSchema,
     async handler({ args, context }) {
       return handleCreateResource({
@@ -261,7 +328,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_AGENTS_SHORT_NAME,
     title: "List Agents",
     description:
-      "List agents with optional filtering by name or provider key. Returns configured provider-key and model names, assigned tools, and knowledge sources.",
+      "List agents with optional filtering by name, provider key, or how the caller reaches them (access). Returns configured provider-key and model names, assigned tools, and knowledge sources.",
     schema: ListAgentsToolArgsSchema,
     outputSchema: ListAgentsOutputSchema,
     async handler({ args, context }) {
@@ -309,10 +376,13 @@ const registry = defineArchestraTools([
               : {}),
             ...(args.name ? { name: args.name } : {}),
             providerApiKeyId: args.providerApiKeyId,
-            // Hide other users' personal agents. MCP tools only need the
-            // caller's own personal agents to be visible, even though admins
-            // can see all personal agents in the UI.
-            excludeOtherPersonalAgents: true,
+            // Without `access`, hide other users' personal agents: MCP tools
+            // only need the caller's own personal agents, even though admins
+            // see all of them in the UI. An explicit `access` decides on its
+            // own, so `others` can reach those agents for an admin.
+            ...(args.access
+              ? { access: args.access }
+              : { excludeOtherPersonalAgents: true }),
           },
           context.userId,
           isAdmin,
@@ -467,6 +537,62 @@ const registry = defineArchestraTools([
         context,
         expectedType: "agent",
       });
+    },
+  }),
+  defineArchestraTool({
+    shortName: TOOL_LIST_LLM_MODELS_SHORT_NAME,
+    title: "List LLM Models",
+    description: `List the provider API keys the caller can use and the models linked to each. Pass a key's id as llmApiKeyId and one of its models' id as modelId to ${TOOL_CREATE_AGENT_SHORT_NAME} or ${TOOL_EDIT_AGENT_SHORT_NAME}.`,
+    schema: ListLlmModelsToolArgsSchema,
+    outputSchema: ListLlmModelsOutputSchema,
+    async handler({ args, context }) {
+      try {
+        if (!context.userId || !context.organizationId) {
+          return errorResult("user/organization context not available.");
+        }
+        const apiKeys = await LlmProviderApiKeyModel.getAvailableKeysForUser(
+          context.organizationId,
+          context.userId,
+          await TeamModel.getUserTeamIds(context.userId),
+          args.provider,
+        );
+        const apiKeyIds = apiKeys.map((key) => key.id);
+        const [modelIdsByKey, models] = await Promise.all([
+          LlmProviderApiKeyModelLinkModel.getModelsForApiKeys(apiKeyIds),
+          LlmProviderApiKeyModelLinkModel.getModelsForApiKeyIds(apiKeyIds),
+        ]);
+        const modelsById = new Map(
+          models.map(({ model }) => [model.id, model]),
+        );
+        const query = args.query?.toLowerCase();
+        const result = {
+          apiKeys: apiKeys.map((key) => {
+            const linked = (modelIdsByKey.get(key.id) ?? [])
+              .map((id) => modelsById.get(id))
+              .filter((model) => model !== undefined)
+              .filter(
+                (model) =>
+                  !query || model.modelId.toLowerCase().includes(query),
+              )
+              .sort((a, b) => a.modelId.localeCompare(b.modelId));
+            return {
+              id: key.id,
+              name: key.name,
+              provider: key.provider,
+              models: linked
+                .slice(0, MAX_MODELS_PER_KEY)
+                .map((model) => ({ id: model.id, name: model.modelId })),
+              omittedModelCount: Math.max(
+                0,
+                linked.length - MAX_MODELS_PER_KEY,
+              ),
+            };
+          }),
+        };
+        return structuredSuccessResult(result, JSON.stringify(result, null, 2));
+      } catch (error) {
+        return catchError(error, "listing LLM models");
+      }
     },
   }),
 ] as const);

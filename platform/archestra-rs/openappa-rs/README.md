@@ -107,7 +107,7 @@ Caller identity provides audit attribution. For external clients, it scopes the 
 
 The native actor ID hashes the session ID, and a new root ID hashes the organization and session IDs. A session keeps the root its row records. Authorized users share guardrail state within one organization. An organization change is refused.
 
-Chat reads the current trust and audience through an authenticated status endpoint. The native binding resolves the root recorded for the conversation and reads its persisted trajectory without dispatching a hook. The endpoint returns no status for a locked chat, even when the browser has its key; it does not read OpenAPPA for that chat.
+Chat reads the current trust and audience through an authenticated status endpoint. The native binding resolves the root recorded for the conversation and reads its persisted trajectory without dispatching a hook. The endpoint returns no status for an encrypted chat, even when the browser has its key; it does not read OpenAPPA for that chat.
 
 The proxy scopes external session IDs to the authenticated credential. Another credential cannot join a personal session by repeating its ID. The remedy gateway resolves the recorded owner and ignores caller-supplied session headers. A changed parent is refused.
 
@@ -145,7 +145,7 @@ the proxy filters model input, not data already stored or displayed by Chat.
 
 ## Storage and interrupted processing
 
-Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Migration `0483_openappa_batteries.sql` adds the composed batteries. Migration `0484_openappa_session_fork_receipts.sql` adds fork lineage. Offer routing is a host-signed claim. Session receipts are stored on `openappa_sessions` and verified by lookup.
+Migration `0471_openappa_native.sql` creates the event and receipt tables. Migration `0479_perpetual_malcolm_colcord.sql` adds host-key indexes. Migration `0483_openappa_batteries.sql` adds the composed batteries. Migration `0484_openappa_session_fork_receipts.sql` adds fork lineage. The trusted proxy supplies the current trajectory for remedy execution. Session receipt codes are random stored identifiers resolved by lookup.
 
 | Table | Owner / purpose |
 | --- | --- |
@@ -199,9 +199,9 @@ behavior, not exactly-once execution of arbitrary external services.
 
 ## Remedies and current limits
 
-`archestra__execute_remedy_plan` executes remedies through the native gate. Offer routing is a signed plaintext claim on the notice and control call. Any replica verifies the HMAC and reconstructs the session. The runtime event log validates the offer before execution.
+`archestra__execute_remedy_plan` executes remedies through the native gate. The proxy overwrites routing arguments with the adapter's current session and optional parent. The gateway supplies this expected actor to the runtime. The event log validates that the offer belongs to that run and remains executable.
 
-Personal offers require their original user. Organization offers allow any caller in that organization. Unknown, unauthorized, or spent offers return terminal feedback without executing.
+The proxy, client, and user are trusted. Model output and external tool text are not. There is no separate original-account comparison or signed offer envelope. Normal host authentication and permissions remain required. Unknown, wrong-run, and spent offers return terminal feedback without executing.
 
 The embedded API returns typed remedy outcomes, refusal reasons, and offer descriptions.
 
@@ -213,7 +213,7 @@ The proxy replaces a denied call with `archestra__get_remedy_plans`. The notice 
 
 The runtime withholds results for unreleased call IDs. Unrecognized or expired remedy calls return a terminal message telling the model that nothing was applied.
 
-Locked chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Known provider-hosted tools are accepted, but their calls execute inside the provider and cannot be gated by the proxy. Unknown typed declarations and client-executed types that the adapter cannot gate are refused instead of being assumed hosted. The exception below governs the result of OpenAI Responses hosted web search; Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted results are not governed as client tool calls. Deferred `tool_search` declarations, including versioned Anthropic tool-search types and `defer_loading` tools, are refused with HTTP 400 because their client-callable tools are not declared on the wire. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates client calls and results, but notices stay in history as notice calls.
+Encrypted chats are refused while OpenAPPA is enabled. Agent and skill delegation are governed as ordinary tool calls. Known provider-hosted tools are accepted, but their calls execute inside the provider and cannot be gated by the proxy. Unknown typed declarations and client-executed types that the adapter cannot gate are refused instead of being assumed hosted. The exception below governs the result of OpenAI Responses hosted web search; Azure Responses hosted web search is refused because its result cannot be withheld. Other hosted results are not governed as client tool calls. Deferred `tool_search` declarations, including versioned Anthropic tool-search types and `defer_loading` tools, are refused with HTTP 400 because their client-callable tools are not declared on the wire. Notice restoration runs on Anthropic Messages (including Bedrock InvokeModel), OpenAI Responses, and OpenAI Chat Completions. On other protocols, OpenAPPA evaluates client calls and results, but notices stay in history as notice calls.
 
 The provider runs a hosted `web_search` inside the inference call, so the proxy cannot stop the call; it rules on what the call brought in. It withholds the response from the first `web_search_call` item on — the search record, the text the model wrote with the results in view, and any calls after it — and submits that as the result of a `web_search` tool call. An admitted result passes through unchanged. A held one reaches the client as a notice in place of the withheld part, so the model never sees it in a later request unless a remedy releases it. List `web_search` under `confined_results` to have the runtime stage the result: accepting the offer returns it. Any other denial drops it, and the model searches again once the remedy allows the call. The query itself has already reached the provider, which holds the session's context anyway. A search-backed turn loses token streaming after the search starts, since the verdict needs the whole turn.
 

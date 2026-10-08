@@ -37,6 +37,7 @@ import { assertSubscriptionCredentialForProvider } from "@/services/subscription
 import { ApiError, type GatewayAgent } from "@/types";
 import { resolveProviderApiKey } from "@/utils/llm-api-key-resolution";
 import { isLoopbackRequest } from "@/utils/network";
+import { selectMappedProviderKey } from "@/utils/provider-key-mappings";
 import { getPassthroughVirtualKeyToken } from "./utils/headers/virtual-key";
 
 export function isJwtLike(token: string): boolean {
@@ -156,6 +157,12 @@ export async function validateVirtualApiKey(params: {
    * limit-checked — against a different organization's proxy.
    */
   expectedOrganizationId: string | null;
+  /**
+   * The model the request names, when it names one. A virtual key may map
+   * several endpoints of a self-hosted provider; this picks the one that
+   * serves the model. Without it the key's preferred endpoint answers.
+   */
+  requestedModel?: string | null;
 }): Promise<VirtualKeyValidationResult> {
   const { tokenValue, expectedProvider, expectedOrganizationId } = params;
   const resolved = await validateVirtualApiKeyToken(tokenValue);
@@ -174,11 +181,15 @@ export async function validateVirtualApiKey(params: {
       "Passthrough virtual keys carry no provider credential — send them in the X-Archestra-Virtual-Key header, not Authorization.",
     );
   }
-  const mappedProviderKey = (
-    await VirtualApiKeyModel.getProviderApiKeysForRouting(
-      resolved.virtualKey.id,
-    )
-  ).find((mapping) => mapping.provider === expectedProvider);
+  const mappedProviderKey = isSupportedProvider(expectedProvider)
+    ? await selectMappedProviderKey({
+        mappings: await VirtualApiKeyModel.getProviderApiKeysForRouting(
+          resolved.virtualKey.id,
+        ),
+        provider: expectedProvider,
+        modelId: params.requestedModel,
+      })
+    : undefined;
   if (!mappedProviderKey) {
     throw new ApiError(
       400,
@@ -420,6 +431,7 @@ export async function validateLlmOAuthAccessToken(params: {
     clientId: accessToken.clientId,
     expectedProvider: params.expectedProvider,
     agent: params.agent,
+    requestedModel: params.requestedModel,
   });
 }
 
@@ -769,57 +781,58 @@ interface RateLimitEntry {
  * shared across all application pods. Entries expire automatically via TTL.
  */
 export class VirtualKeyRateLimiter {
-  private cacheManager: {
-    get: <T>(key: AllowedCacheKey) => Promise<T | undefined>;
-    set: <T>(
-      key: AllowedCacheKey,
-      value: T,
-      ttl?: number,
-    ) => Promise<T | undefined>;
-  };
+  private cache: RateLimitCache;
 
-  constructor(cacheManager: {
-    get: <T>(key: AllowedCacheKey) => Promise<T | undefined>;
-    set: <T>(
-      key: AllowedCacheKey,
-      value: T,
-      ttl?: number,
-    ) => Promise<T | undefined>;
-  }) {
-    this.cacheManager = cacheManager;
+  constructor(cache: RateLimitCache) {
+    this.cache = cache;
   }
 
+  /**
+   * Reads both buckets and the credential's validation mark in one statement.
+   */
   async check(params: { ip: string; credential?: string }): Promise<void> {
     const { ip, credential } = params;
     const now = Date.now();
-    const [credentialEntry, ipEntry] = await Promise.all([
-      this.cacheManager.get<RateLimitEntry>(this.credentialKey(ip, credential)),
-      this.cacheManager.get<RateLimitEntry>(this.ipKey(ip)),
-    ]);
+    const credentialKey = this.credentialKey(ip, credential);
+    const ipKey = this.ipKey(ip);
+    const validatedKey = credential ? this.validatedKey(credential) : null;
+    const entries = await this.cache.getMany<RateLimitEntry | boolean>(
+      validatedKey
+        ? [credentialKey, ipKey, validatedKey]
+        : [credentialKey, ipKey],
+    );
 
-    const credentialWindow = activeWindow(credentialEntry, now);
+    const credentialWindow = activeWindow(
+      asRateLimitEntry(entries.get(credentialKey)),
+      now,
+    );
     if (credentialWindow.count >= RATE_LIMIT_MAX_FAILURES) {
       throw this.rejection({ ip, bucket: "credential", ...credentialWindow });
     }
 
-    const ipWindow = activeWindow(ipEntry, now);
+    const ipWindow = activeWindow(asRateLimitEntry(entries.get(ipKey)), now);
     if (
       ipWindow.count >= RATE_LIMIT_MAX_FAILURES_PER_IP &&
-      !(await this.recentlyValidated(credential))
+      !(validatedKey !== null && entries.get(validatedKey) === true)
     ) {
       throw this.rejection({ ip, bucket: "ip", ...ipWindow });
     }
   }
 
+  /**
+   * Counts a failure in both buckets with one atomic upsert, so concurrent
+   * failures are never lost. An open window keeps its end, so a burst cannot
+   * push the reset out; the entry expires when its window ends.
+   */
   async recordFailure(params: {
     ip: string;
     credential?: string;
   }): Promise<void> {
     const { ip, credential } = params;
-    await Promise.all([
-      this.increment(this.credentialKey(ip, credential)),
-      this.increment(this.ipKey(ip)),
-    ]);
+    await this.cache.incrementFixedWindows({
+      keys: [this.credentialKey(ip, credential), this.ipKey(ip)],
+      windowMs: RATE_LIMIT_WINDOW_MS,
+    });
   }
 
   /**
@@ -834,7 +847,7 @@ export class VirtualKeyRateLimiter {
     const { credential } = params;
     if (!credential) return;
     try {
-      await this.cacheManager.set(
+      await this.cache.set(
         this.validatedKey(credential),
         true,
         RECENTLY_VALIDATED_TTL_MS,
@@ -848,29 +861,6 @@ export class VirtualKeyRateLimiter {
         "[LLMProxy] could not record a validated credential for the rate limiter",
       );
     }
-  }
-
-  private async increment(key: AllowedCacheKey): Promise<void> {
-    const now = Date.now();
-    const entry = await this.cacheManager.get<RateLimitEntry>(key);
-    const window = activeWindow(entry, now);
-    // Keep the existing window's end when one is open, so a burst of failures
-    // cannot push the reset out indefinitely. The TTL tracks the window so the
-    // entry disappears exactly when the count stops counting.
-    const windowEndsAt = window.windowEndsAt ?? now + RATE_LIMIT_WINDOW_MS;
-    await this.cacheManager.set<RateLimitEntry>(
-      key,
-      { count: window.count + 1, windowEndsAt },
-      Math.max(windowEndsAt - now, 1),
-    );
-  }
-
-  private async recentlyValidated(credential?: string): Promise<boolean> {
-    if (!credential) return false;
-    return (
-      (await this.cacheManager.get<boolean>(this.validatedKey(credential))) ===
-      true
-    );
   }
 
   private rejection(params: {
@@ -914,6 +904,17 @@ export class VirtualKeyRateLimiter {
 
 export const virtualKeyRateLimiter = new VirtualKeyRateLimiter(cacheManager);
 
+type RateLimitCache = Pick<
+  typeof cacheManager,
+  "getMany" | "incrementFixedWindows" | "set"
+>;
+
+function asRateLimitEntry(
+  value: RateLimitEntry | boolean | undefined,
+): RateLimitEntry | undefined {
+  return typeof value === "object" ? value : undefined;
+}
+
 /**
  * The still-open window an entry describes, or an empty one when the entry is
  * absent, already past its end, or was written by a build that did not record
@@ -932,6 +933,7 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   clientId: string;
   expectedProvider: string;
   agent: GatewayAgent;
+  requestedModel?: string | null;
 }): Promise<LlmOAuthAccessTokenValidationResult> {
   const oauthClient = await LlmOauthClientModel.findByClientId(params.clientId);
   if (!oauthClient) {
@@ -943,9 +945,13 @@ async function validateClientCredentialsLlmOAuthAccessToken(params: {
   if (oauthClient.organizationId !== params.agent.organizationId) {
     throw new ApiError(403, "LLM OAuth client cannot access this LLM Proxy.");
   }
-  const mappedProviderKey = oauthClient.providerApiKeys.find(
-    (mapping) => mapping.provider === params.expectedProvider,
-  );
+  const mappedProviderKey = isSupportedProvider(params.expectedProvider)
+    ? await selectMappedProviderKey({
+        mappings: oauthClient.providerApiKeys,
+        provider: params.expectedProvider,
+        modelId: params.requestedModel,
+      })
+    : undefined;
   if (!mappedProviderKey) {
     throw new ApiError(
       400,

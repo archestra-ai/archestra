@@ -189,3 +189,28 @@ it("updates every Agent after connecting and disconnecting the shared account", 
   );
   expect(screen.queryByText("Signed in for you")).not.toBeInTheDocument();
 });
+
+it("leaves the disconnected notice to the page banner while retaining connected account controls", async () => {
+  server.use(
+    http.get(accountUrl, () => HttpResponse.json({ state: "disconnected" })),
+  );
+  const view = render(
+    <QueryClientProvider client={queryClient}>
+      <ClaudeCodeAccount
+        agentId="agent-1"
+        variant="compact"
+        showDisconnectedNotice={false}
+      />
+    </QueryClientProvider>,
+  );
+  await queryClient.refetchQueries();
+  expect(
+    screen.queryByRole("button", { name: "Sign in" }),
+  ).not.toBeInTheDocument();
+  server.use(
+    http.get(accountUrl, () => HttpResponse.json({ state: "connected" })),
+  );
+  await queryClient.invalidateQueries();
+  expect(await screen.findByRole("button", { name: "Manage" })).toBeVisible();
+  view.unmount();
+});

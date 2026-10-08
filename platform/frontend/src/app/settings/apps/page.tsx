@@ -79,7 +79,7 @@ export default function AppsSettingsPage() {
         }
         control={
           <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -111,7 +111,7 @@ export default function AppsSettingsPage() {
         }
         control={
           <WithPermissions
-            permissions={{ agentSettings: ["update"] }}
+            permissions={{ organizationSettings: ["update"] }}
             noPermissionHandle="tooltip"
           >
             {({ hasPermission }) => (
@@ -127,7 +127,7 @@ export default function AppsSettingsPage() {
       <SettingsSaveBar
         hasChanges={hasChanges}
         isSaving={updateMutation.isPending}
-        permissions={{ agentSettings: ["update"] }}
+        permissions={{ organizationSettings: ["update"] }}
         onSave={handleSave}
         onCancel={handleCancel}
       />

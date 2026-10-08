@@ -2,7 +2,9 @@
 
 import {
   type ContextWindowBreakdown,
+  DocsPage,
   E2eTestId,
+  getDocsUrl,
   SUBSCRIPTION_CREDENTIALS,
   type SupportedProvider,
   subscriptionKindForProvider,
@@ -21,13 +23,13 @@ import { NotRecommendedForAgentsNoticeBadge } from "@/components/chat/agent-reco
 import { ComposerBadge } from "@/components/chat/composer-badge";
 import { ContextIndicator } from "@/components/chat/context-indicator";
 import { ContextWindowDialog } from "@/components/chat/context-window-panel";
+import { EncryptedChatIcon } from "@/components/chat/encrypted-chat-icon";
 import { InitialAgentSelector } from "@/components/chat/initial-agent-selector";
 import { LlmProviderApiKeySelector } from "@/components/chat/llm-provider-api-key-selector";
-import { LockedChatIcon } from "@/components/chat/locked-chat-icon";
 import { ModelSelector } from "@/components/chat/model-selector";
 import { NoToolsModelBadge } from "@/components/chat/no-tools-model-notice";
 import { ThinkingEffortSelector } from "@/components/chat/thinking-effort-selector";
-import { OpenAppaIcon } from "@/components/openappa-icon";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { Button } from "@/components/ui/button";
 import { Kbd } from "@/components/ui/kbd";
 import {
@@ -40,16 +42,16 @@ import {
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
-  LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
-  SHORTCUT_NEW_LOCKED_CHAT,
+  ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
+  SHORTCUT_NEW_ENCRYPTED_CHAT,
 } from "@/consts";
 import { useHasPermissions } from "@/lib/auth/auth.query";
-import { useOpenappaStatus } from "@/lib/chat/chat.query";
 import type { ModelSource } from "@/lib/chat/use-chat-preferences";
 import { useModelSelectorDisplay } from "@/lib/chat/use-model-selector-display.hook";
 import { useFeature } from "@/lib/config/config.query";
-import { useGuardrailsDeployment } from "@/lib/guardrails-deployment.query";
+import { useAppName } from "@/lib/hooks/use-app-name";
 import { usePlatform } from "@/lib/hooks/use-platform";
 import { useModelProviderCatalog } from "@/lib/integration-overrides";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
@@ -72,15 +74,15 @@ export interface ChatPromptInputToolsProps {
   /** Whether file uploads are allowed (controlled by organization setting) */
   allowFileUploads?: boolean;
   /**
-   * Whether the next chat will be created locked-chat. New-chat composer only —
+   * Whether the next chat will be created encrypted-chat. New-chat composer only —
    * the toggle renders only while there is no conversation yet.
    */
-  lockedChat?: boolean;
+  encryptedChat?: boolean;
   /**
    * Provided only by the new-chat composer; together with the
-   * `lockedChatEnabled` feature flag it enables the locked-chat toggle.
+   * `encryptedChatEnabled` feature flag it enables the encrypted-chat toggle.
    */
-  onLockedChatChange?: (lockedChat: boolean) => void;
+  onEncryptedChatChange?: (encryptedChat: boolean) => void;
   /** The composer launches an isolated Agent run, not a chat turn. */
   runtimeMode?: boolean;
   /** Whether the agent has a code sandbox available (allows any file type) */
@@ -109,7 +111,6 @@ export interface ChatPromptInputToolsProps {
   agentLlmApiKeyId?: string | null;
   /** Current agent ID for agent selector */
   selectorAgentId?: string | null;
-  agentSelectorReadOnly?: boolean;
   /** Callback when agent changes */
   onAgentChange?: (agentId: string) => void;
   /** Source of the currently selected model (agent, organization, user, or null) */
@@ -174,8 +175,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   onApiKeyChange,
   onProviderChange,
   allowFileUploads = false,
-  lockedChat = false,
-  onLockedChatChange,
+  encryptedChat = false,
+  onEncryptedChatChange,
   runtimeMode = false,
   sandboxAvailable = false,
   isModelsLoading = false,
@@ -188,7 +189,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   isContextCompacting = false,
   agentLlmApiKeyId,
   selectorAgentId,
-  agentSelectorReadOnly = false,
   onAgentChange,
   modelSource,
   toolsUnavailable = false,
@@ -208,15 +208,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 }: ChatPromptInputToolsProps) {
   const attachments = usePromptInputAttachments();
   const providerCatalog = useModelProviderCatalog();
-  const { data: statusData, isError: statusReadFailed } = useOpenappaStatus(
-    runtimeMode ? undefined : conversationId,
-  );
-  const openappaStatus = statusReadFailed ? null : statusData;
-  const { data: guardrailsDeployment } = useGuardrailsDeployment();
-  const openappaEnabled = useFeature("openappaEnabled") === true;
-  const showOpenappaStatus =
-    openappaEnabled && guardrailsDeployment?.active === true;
-
   // Collapsed/expanded state for the model selector (defaults to collapsed = provider icon only)
   const { isCollapsed: showDefaultLogo, expand: expandModelSelector } =
     useModelSelectorDisplay({ conversationId });
@@ -270,54 +261,60 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 
   // Check if user can update agent settings (to show settings link in tooltip)
   const { data: canUpdateAgentSettings } = useHasPermissions({
-    agentSettings: ["update"],
+    organizationSettings: ["update"],
   });
 
-  // LockedChat toggle: only on the new-chat composer (no conversation yet —
+  // EncryptedChat toggle: only on the new-chat composer (no conversation yet —
   // the same gate InitialAgentSelector uses via its callback prop) and only
-  // when the instance has locked chats enabled.
-  const lockedChatEnabled = useFeature("lockedChatEnabled") ?? false;
+  // when the instance has encrypted chats enabled.
+  const encryptedChatFeature = useFeature("encryptedChatEnabled");
+  const encryptedChatEnabled = encryptedChatFeature ?? false;
   const { altKey } = usePlatform();
-  const showLockedChatToggle =
-    !runtimeMode &&
-    lockedChatEnabled &&
-    !conversationId &&
-    !!onLockedChatChange;
+  const appName = useAppName();
+  const encryptedChatComposer =
+    !runtimeMode && !conversationId && !!onEncryptedChatChange;
+  const showEncryptedChatToggle = encryptedChatComposer && encryptedChatEnabled;
+  // When the instance has not enabled encrypted chats, the lock stays in the
+  // same spot as a pointer to the feature: it explains what it does and how an
+  // administrator turns it on. Only on an explicit `false`, so it does not
+  // flash in place of the real toggle while the config is still loading.
+  const showEncryptedChatSetupHint =
+    encryptedChatComposer && encryptedChatFeature === false;
 
-  // Files staged before the toggle survive it: a locked chat stores its
+  // Files staged before the toggle survive it: an encrypted chat stores its
   // attachments sealed under the conversation key, so the first message can
-  // carry them just as an unlocked one would.
-  const toggleLockedChat = useCallback(() => {
-    onLockedChatChange?.(!lockedChat);
-  }, [lockedChat, onLockedChatChange]);
+  // carry them just as an unencrypted one would.
+  const toggleEncryptedChat = useCallback(() => {
+    onEncryptedChatChange?.(!encryptedChat);
+  }, [encryptedChat, onEncryptedChatChange]);
 
   // While the toggle is on screen, Alt+I toggles the draft in place: the
   // global shortcut dispatches this cancelable event before navigating and
   // claiming it (preventDefault) suppresses the navigation — see
   // useConversationSearch.
   useEffect(() => {
-    if (!showLockedChatToggle) return;
+    if (!showEncryptedChatToggle) return;
     const handleShortcut = (event: Event) => {
       event.preventDefault();
-      toggleLockedChat();
+      toggleEncryptedChat();
     };
-    window.addEventListener(LOCKED_CHAT_DRAFT_SHORTCUT_EVENT, handleShortcut);
+    window.addEventListener(
+      ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
+      handleShortcut,
+    );
     return () =>
       window.removeEventListener(
-        LOCKED_CHAT_DRAFT_SHORTCUT_EVENT,
+        ENCRYPTED_CHAT_DRAFT_SHORTCUT_EVENT,
         handleShortcut,
       );
-  }, [showLockedChatToggle, toggleLockedChat]);
+  }, [showEncryptedChatToggle, toggleEncryptedChat]);
 
-  // RBAC: check if user can see agent picker and provider settings in chat
-  const { data: canSeeAgentPicker } = useHasPermissions({
-    chatAgentPicker: ["enable"],
+  // RBAC: the full chat view shows the agent picker and provider settings;
+  // without it, chat is the simpler view.
+  const { data: canSeeFullView } = useHasPermissions({
+    chat: ["full-view"],
   });
-  const { data: canSeeProviderSettings } = useHasPermissions({
-    chatProviderSettings: ["enable"],
-  });
-  const canShowProviderSettings =
-    !runtimeMode && canSeeProviderSettings === true;
+  const canShowProviderSettings = !runtimeMode && canSeeFullView === true;
 
   const focusTextarea = useCallback(() => {
     // Popover restores focus to its trigger as it closes. Wait until that
@@ -347,7 +344,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
   return (
     <PromptInputTools ref={toolbarRef} className="gap-0.5">
       {!runtimeMode &&
-        canSeeProviderSettings === false &&
+        canSeeFullView === false &&
         subscriptionConnectRequired &&
         (conversationId || onApiKeyChange) && (
           <div className="hidden">
@@ -370,16 +367,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         )}
       {/* Narrow: vertical three-dots menu for collapsed toolbar items */}
       {isNarrow &&
-        (!showOpenappaStatus &&
-        showDefaultLogo &&
+        (showDefaultLogo &&
         logoProvider &&
         !subscriptionConnectRequired &&
         (modelSource === "agent" || modelSource === "organization") ? (
           <Button
             type="button"
             variant="ghost"
-            size="sm"
-            className="h-8 px-2"
+            size="icon-sm"
             aria-label="Change model or provider"
             onClick={expandModelSelector}
           >
@@ -388,19 +383,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         ) : (
           <Popover>
             <PopoverTrigger asChild>
-              <Button
-                type="button"
-                variant="ghost"
-                size="sm"
-                className="h-8 px-2"
-              >
+              <Button type="button" variant="ghost" size="icon-sm">
                 <MoreVerticalIcon className="size-4" />
                 <span className="sr-only">More options</span>
               </Button>
             </PopoverTrigger>
             <PopoverContent side="top" align="start" className="w-auto p-3">
               <div className="flex flex-col gap-3">
-                {canSeeAgentPicker &&
+                {canSeeFullView &&
                   selectorAgentId !== undefined &&
                   onAgentChange && (
                     <div>
@@ -410,7 +400,6 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       <InitialAgentSelector
                         currentAgentId={selectorAgentId}
                         onAgentChange={handleAgentChange}
-                        readOnly={agentSelectorReadOnly}
                       />
                     </div>
                   )}
@@ -421,14 +410,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                         <ComposerBadge>
                           {modelSourceLabel}
                           {modelSource === "user" && onResetModelOverride && (
-                            <button
+                            <UnstyledButton
                               type="button"
                               onClick={onResetModelOverride}
                               className="text-muted-foreground hover:text-foreground transition-colors"
                               title="Reset to default"
                             >
                               <XIcon className="size-3" />
-                            </button>
+                            </UnstyledButton>
                           )}
                         </ComposerBadge>
                       </div>
@@ -463,8 +452,8 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                             <Button
                               type="button"
                               variant="outline"
-                              size="sm"
-                              className="mt-2 h-7 gap-1.5 px-2 text-xs"
+                              size="xs"
+                              className="mt-2 gap-1.5"
                               onClick={onSubscriptionConnect}
                             >
                               {subscriptionSignInTitle}
@@ -506,14 +495,13 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   </>
                 )}
                 {!runtimeMode &&
-                  canSeeProviderSettings === false &&
+                  canSeeFullView === false &&
                   subscriptionConnectRequired &&
                   onSubscriptionConnect && (
                     <Button
                       type="button"
                       variant="outline"
-                      size="sm"
-                      className="h-7 px-2 text-xs"
+                      size="xs"
                       onClick={onSubscriptionConnect}
                     >
                       {subscriptionSignInTitle}
@@ -533,7 +521,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                       onCompact={onCompactConversation}
                       isCompacting={isContextCompacting}
                     >
-                      <button
+                      <UnstyledButton
                         type="button"
                         aria-label="Context usage"
                         data-testid={E2eTestId.ChatContextUsageTrigger}
@@ -544,12 +532,9 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                           maxTokens={maxContextLength}
                           size="sm"
                         />
-                      </button>
+                      </UnstyledButton>
                     </ContextWindowDialog>
                   </div>
-                )}
-                {showOpenappaStatus && (
-                  <OpenappaStatusDisplay status={openappaStatus} inPopover />
                 )}
               </div>
             </PopoverContent>
@@ -573,8 +558,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-8 px-2"
+              size="icon-sm"
               onClick={() => attachments.openFileDialog()}
               data-testid={E2eTestId.ChatFileUploadButton}
             >
@@ -619,59 +603,106 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
         </Tooltip>
       )}
 
-      {/* LockedChat toggle — placed with the always-visible controls (next to
+      {/* EncryptedChat toggle — placed with the always-visible controls (next to
           the attachment button) so it renders in both the wide and the
           collapsed (narrow) toolbar without duplication. */}
-      {showLockedChatToggle && (
+      {showEncryptedChatToggle && (
         <Tooltip>
           <TooltipTrigger asChild>
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              aria-pressed={lockedChat}
-              aria-label="Locked chat"
-              data-testid={E2eTestId.LockedChatToggle}
+              size="icon-sm"
+              aria-pressed={encryptedChat}
+              aria-label="Encrypted chat"
+              data-testid={E2eTestId.EncryptedChatToggle}
               className={cn(
-                "h-8 px-2",
-                lockedChat &&
+                encryptedChat &&
                   "bg-accent text-accent-foreground hover:bg-accent/80",
               )}
-              onClick={toggleLockedChat}
+              onClick={toggleEncryptedChat}
             >
-              <LockedChatIcon className="size-4" />
+              <EncryptedChatIcon className="size-4" />
             </Button>
           </TooltipTrigger>
           <TooltipContent side="top" sideOffset={4}>
             <span className="flex items-center gap-1.5">
-              Locked chat <Kbd>{altKey}</Kbd>
-              <Kbd>{SHORTCUT_NEW_LOCKED_CHAT.label}</Kbd>
+              Encrypted chat <Kbd>{altKey}</Kbd>
+              <Kbd>{SHORTCUT_NEW_ENCRYPTED_CHAT.label}</Kbd>
             </span>
           </TooltipContent>
         </Tooltip>
       )}
 
+      {showEncryptedChatSetupHint && (
+        <Popover>
+          <PopoverTrigger asChild>
+            <Button
+              type="button"
+              variant="ghost"
+              size="icon-sm"
+              aria-label="Encrypted chat (not set up)"
+              data-testid={E2eTestId.EncryptedChatSetupHint}
+              className="text-muted-foreground"
+            >
+              <EncryptedChatIcon className="size-4" />
+            </Button>
+          </PopoverTrigger>
+          <PopoverContent
+            side="top"
+            align="start"
+            className="w-96 space-y-2 text-sm"
+          >
+            <p className="font-medium">Encrypted chats</p>
+            <p className="text-muted-foreground">
+              Some conversations shouldn&apos;t be visible to the team that runs{" "}
+              {appName} — for example, sensitive discussions among senior
+              management. Yet the company still needs a way to audit them in an
+              emergency.
+            </p>
+            <p className="text-muted-foreground">
+              Encrypted chats solve this. Each chat is encrypted with a key kept
+              in the user&apos;s browser, and a backup of that key is locked
+              with an escrow key held by a trusted group, such as the
+              CISO&apos;s office. People can then work with sensitive data with
+              more peace of mind.
+            </p>
+            <p className="text-muted-foreground">
+              To turn it on, generate an escrow key pair, hand the private key
+              to that group, and set{" "}
+              <code className="break-all rounded bg-muted px-1 py-0.5 font-mono text-xs text-foreground">
+                ARCHESTRA_ENCRYPTED_CHAT_ESCROW_PUBLIC_KEY
+              </code>{" "}
+              on the deployment.
+            </p>
+            <ExternalDocsLink
+              href={getDocsUrl(DocsPage.PlatformChat, "key-escrow")}
+              className="underline decoration-dotted underline-offset-4 hover:decoration-solid"
+            >
+              Learn how to enable it
+            </ExternalDocsLink>
+          </PopoverContent>
+        </Popover>
+      )}
+
       {/* Wide: inline toolbar items */}
       {!isNarrow && (
         <>
-          {canSeeAgentPicker &&
-            selectorAgentId !== undefined &&
-            onAgentChange && (
-              <InitialAgentSelector
-                currentAgentId={selectorAgentId}
-                onAgentChange={handleAgentChange}
-                readOnly={agentSelectorReadOnly}
-              />
-            )}
+          {canSeeFullView && selectorAgentId !== undefined && onAgentChange && (
+            <InitialAgentSelector
+              currentAgentId={selectorAgentId}
+              onAgentChange={handleAgentChange}
+            />
+          )}
           {!runtimeMode &&
-            canSeeProviderSettings === false &&
+            canSeeFullView === false &&
             subscriptionConnectRequired &&
             onSubscriptionConnect && (
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
-                className="h-8 px-2 text-xs text-primary hover:text-primary"
+                className="text-primary hover:text-primary"
                 onClick={onSubscriptionConnect}
               >
                 {subscriptionSignInTitle}
@@ -684,8 +715,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
             <Button
               type="button"
               variant="ghost"
-              size="sm"
-              className="h-8 px-2"
+              size="icon-sm"
               aria-label="Change model or provider"
               onClick={expandModelSelector}
             >
@@ -722,7 +752,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   type="button"
                   variant="ghost"
                   size="sm"
-                  className="h-8 gap-1 px-2 text-xs text-primary hover:text-primary"
+                  className="gap-1 text-primary hover:text-primary"
                   onClick={onSubscriptionConnect}
                 >
                   {subscriptionSignInTitle}
@@ -759,14 +789,14 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                 <ComposerBadge className="ml-1 mr-2">
                   {modelSourceLabel}
                   {modelSource === "user" && onResetModelOverride && (
-                    <button
+                    <UnstyledButton
                       type="button"
                       onClick={onResetModelOverride}
                       className="text-muted-foreground hover:text-foreground transition-colors"
                       title="Reset to default"
                     >
                       <XIcon className="size-3" />
-                    </button>
+                    </UnstyledButton>
                   )}
                 </ComposerBadge>
               )}
@@ -786,7 +816,7 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
               onCompact={onCompactConversation}
               isCompacting={isContextCompacting}
             >
-              <button
+              <UnstyledButton
                 type="button"
                 aria-label="Context usage"
                 data-testid={E2eTestId.ChatContextUsageTrigger}
@@ -797,14 +827,10 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
                   maxTokens={maxContextLength}
                   size="sm"
                 />
-              </button>
+              </UnstyledButton>
             </ContextWindowDialog>
           )}
         </>
-      )}
-
-      {!isNarrow && showOpenappaStatus && (
-        <OpenappaStatusDisplay status={openappaStatus} />
       )}
 
       {/* Apps Hackathon session recorder — a distinct cluster in the composer.
@@ -816,48 +842,3 @@ const ChatPromptInputTools = memo(function ChatPromptInputTools({
 });
 
 export { ChatPromptInputTools };
-
-function OpenappaStatusDisplay({
-  status,
-  inPopover = false,
-}: {
-  status: { trust: string; audience: string } | null | undefined;
-  inPopover?: boolean;
-}) {
-  const statusLabel = status
-    ? `Trust: ${status.trust}; audience: ${status.audience}`
-    : "Trust and audience status unavailable";
-
-  const content = (
-    <output
-      aria-label={statusLabel}
-      className="flex max-w-64 items-start gap-2 text-sm text-muted-foreground [overflow-wrap:anywhere]"
-    >
-      <OpenAppaIcon aria-hidden="true" className="mt-0.5 size-4 shrink-0" />
-      <span className="flex min-w-0 flex-col gap-1">
-        <span>{`Trust: ${status?.trust ?? "unavailable"}`}</span>
-        <span>{`Audience: ${status?.audience ?? "unavailable"}`}</span>
-      </span>
-    </output>
-  );
-
-  if (inPopover) return content;
-
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-sm"
-          aria-label="OpenAPPA status"
-        >
-          <OpenAppaIcon aria-hidden="true" className="size-4" />
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent side="top" align="start" className="w-auto p-3">
-        {content}
-      </PopoverContent>
-    </Popover>
-  );
-}

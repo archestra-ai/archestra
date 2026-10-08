@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { OpenAiCodexCredential } from "@/services/openai-codex-credentials";
 import type { OpenAiCodexPassthrough } from "@/types";
+import { openaiAdapterFactory } from "./openai";
 import {
   createOpenAiCodexPassthroughResponsesClient,
   createOpenAiCodexResponsesClient,
@@ -174,6 +175,141 @@ describe("createOpenAiCodexResponsesClient", () => {
     })) as { id: string };
 
     expect(response.id).toBe("resp_2");
+  });
+
+  describe("upstream errors", () => {
+    async function createRejection(upstream: Response) {
+      const client = createOpenAiCodexResponsesClient({
+        credential: CREDENTIAL,
+        options: { source: "api" },
+        innerFetch: vi.fn(async () => upstream),
+      }) as unknown as CodexResponsesClient;
+      return client.responses
+        .create({ model: "gpt-5.4", input: "hi", stream: true })
+        .then(
+          () => {
+            throw new Error("expected the request to fail");
+          },
+          (error: unknown) => error,
+        );
+    }
+
+    it("keeps a top-level detail as the error message", async () => {
+      const detail =
+        "The 'gpt-5.4' model is not supported when using Codex with a ChatGPT account.";
+      const error = await createRejection(
+        Response.json({ detail }, { status: 400 }),
+      );
+
+      expect(error).toMatchObject({ status: 400 });
+      expect(openaiAdapterFactory.extractErrorMessage(error)).toBe(detail);
+    });
+
+    it("falls back to the generic message for an empty error body", async () => {
+      const error = await createRejection(new Response(null, { status: 400 }));
+
+      expect(error).toMatchObject({ status: 400 });
+      expect(openaiAdapterFactory.extractErrorMessage(error)).toBe(
+        "400 status code (no body)",
+      );
+    });
+  });
+
+  describe("prompt cache session", () => {
+    // The proxy builds a new client for every request, so each call here
+    // stands for one request of a run.
+    async function sendRequest(params: {
+      sessionId?: string;
+      promptCacheKey?: string;
+    }) {
+      let sent: { sessionHeader: string | null; promptCacheKey: unknown } = {
+        sessionHeader: null,
+        promptCacheKey: undefined,
+      };
+      const innerFetch = vi.fn(
+        async (_input: string | URL | Request, init?: RequestInit) => {
+          sent = {
+            sessionHeader: new Headers(init?.headers).get("session-id"),
+            promptCacheKey: JSON.parse(init?.body as string).prompt_cache_key,
+          };
+          return sseResponse([
+            {
+              type: "response.completed",
+              response: { id: "resp_cache", status: "completed", output: [] },
+            },
+          ]);
+        },
+      );
+      const client = createOpenAiCodexResponsesClient({
+        credential: CREDENTIAL,
+        options: { source: "api", sessionId: params.sessionId },
+        innerFetch,
+      }) as unknown as CodexResponsesClient;
+      await client.responses.create({
+        model: "gpt-5.6-luna",
+        input: "hi",
+        stream: false,
+        ...(params.promptCacheKey
+          ? { prompt_cache_key: params.promptCacheKey }
+          : {}),
+      });
+      return sent;
+    }
+
+    it("keeps the caller's own prompt_cache_key", async () => {
+      const sent = await sendRequest({
+        sessionId: "run-1",
+        promptCacheKey: "caller-key",
+      });
+
+      expect(sent.promptCacheKey).toBe("caller-key");
+    });
+
+    it("uses a new session for each request when the caller names none", async () => {
+      const first = await sendRequest({});
+      const second = await sendRequest({});
+
+      expect(first.sessionHeader).not.toBe(second.sessionHeader);
+      expect(first.promptCacheKey).toBeUndefined();
+    });
+
+    it("gives a compact request the session's cache key unless the caller sent one", async () => {
+      const sendCompact = async (promptCacheKey?: string) => {
+        let sent: { sessionHeader: string | null; promptCacheKey: unknown } = {
+          sessionHeader: null,
+          promptCacheKey: undefined,
+        };
+        const innerFetch = vi.fn(
+          async (_input: string | URL | Request, init?: RequestInit) => {
+            sent = {
+              sessionHeader: new Headers(init?.headers).get("session-id"),
+              promptCacheKey: JSON.parse(init?.body as string).prompt_cache_key,
+            };
+            return new Response(JSON.stringify(COMPACTED_RESPONSE), {
+              status: 200,
+              headers: { "content-type": "application/json" },
+            });
+          },
+        );
+        const client = createOpenAiCodexResponsesClient({
+          credential: CREDENTIAL,
+          options: { source: "api", sessionId: "run-1" },
+          innerFetch,
+        }) as unknown as CodexResponsesClient;
+        await client.responses.compact({
+          model: "gpt-5.6-sol",
+          input: [{ type: "compaction", encrypted_content: "previous-cipher" }],
+          ...(promptCacheKey ? { prompt_cache_key: promptCacheKey } : {}),
+        });
+        return sent;
+      };
+
+      const fromSession = await sendCompact();
+      const fromCaller = await sendCompact("caller-key");
+
+      expect(fromSession.promptCacheKey).toBe(fromSession.sessionHeader);
+      expect(fromCaller.promptCacheKey).toBe("caller-key");
+    });
   });
 
   it("forwards native compact requests through stored subscription auth", async () => {
@@ -352,6 +488,22 @@ describe("createOpenAiCodexResponsesClient", () => {
     expect(capturedHeaders?.get("user-agent")).toBe("opencode/test");
     expect(capturedHeaders?.get("openai-beta")).toBe("responses=experimental");
     expect(globalThis.fetch).not.toHaveBeenCalled();
+  });
+
+  it("keeps a top-level detail as the error message", async () => {
+    const detail = "The 'gpt-5.4' model is not supported.";
+    const client = createOpenAiCodexPassthroughResponsesClient({
+      credential: PASSTHROUGH_CREDENTIAL,
+      options: { source: "api" },
+      innerFetch: vi.fn(async () => Response.json({ detail }, { status: 400 })),
+    }) as unknown as CodexResponsesClient;
+
+    const error = await client.responses
+      .create({ model: "gpt-5.4", input: "hi", stream: true })
+      .catch((e: unknown) => e);
+
+    expect(error).toMatchObject({ status: 400 });
+    expect(openaiAdapterFactory.extractErrorMessage(error)).toBe(detail);
   });
 
   it("relays an upstream 401 without retrying the request", async () => {

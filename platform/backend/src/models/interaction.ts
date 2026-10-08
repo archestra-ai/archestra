@@ -34,7 +34,7 @@ import {
   encryptInteractionContent,
   readInteractionRow,
 } from "@/content-encryption/audit-rows";
-import type { LockedChatAuditContext } from "@/content-encryption/locked-chat";
+import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
 import db, { schema } from "@/database";
 import { notDeleted } from "@/database/schemas/soft-deletable-table";
 import {
@@ -51,6 +51,7 @@ import type {
   InteractionAuthMethod,
   InteractionSummary,
   InteractionVirtualKey,
+  LimitEntityType,
   SessionSummary,
   SessionUnattributedReason,
   SortingQuery,
@@ -440,14 +441,14 @@ class InteractionModel {
   }
 
   /**
-   * @param auditContext when present, this interaction belongs to a locked-chat
+   * @param auditContext when present, this interaction belongs to an encrypted-chat
    * conversation: its content columns are encrypted under that conversation's
    * browser-held key and the row is stamped with the discriminator, instead of
    * being encrypted under the server key (or left plaintext).
    */
   static async create(
     data: InsertInteraction,
-    auditContext?: LockedChatAuditContext | null,
+    auditContext?: EncryptedChatAuditContext | null,
     opts?: {
       /**
        * Environment to stamp instead of the executing agent's own. The proxy
@@ -486,7 +487,7 @@ class InteractionModel {
     // plaintext before encryptInteractionContent runs below, and parent
     // resolution matches on the always-plaintext hash columns.
     //
-    // LockedChat rows are excluded outright. Today they could not qualify anyway
+    // EncryptedChat rows are excluded outright. Today they could not qualify anyway
     // (isEligible demands a Claude session source, and these are chat sources),
     // but relying on that coincidence would be fragile: a delta chain mixes rows
     // across requests and only the request that created a row carries its key,
@@ -502,7 +503,7 @@ class InteractionModel {
       .values({ id: uuidv7(), ...encryptInteractionContent(values, audit) })
       .returning();
     // The RETURNING row is this method's public return value — decrypt it so
-    // callers never see envelopes. Safe for locked-chat rows too: this caller
+    // callers never see envelopes. Safe for encrypted-chat rows too: this caller
     // supplied the very key that just encrypted them.
     decryptInteractionContent(interaction, audit);
 
@@ -1109,32 +1110,32 @@ class InteractionModel {
       conditions.push(eq(schema.interactionsTable.userId, ownUserId));
     }
 
-    if (requestingUserId && !isAgentAdmin) {
-      const accessibleAgentIds = await AgentTeamModel.getUserAccessibleAgentIds(
-        requestingUserId,
-        false,
-      );
-
+    const accessibleAgentIds =
+      requestingUserId && !isAgentAdmin
+        ? await AgentTeamModel.getUserAccessibleAgentIds(
+            requestingUserId,
+            false,
+          )
+        : null;
+    if (accessibleAgentIds) {
       if (accessibleAgentIds.length === 0) {
         return [];
       }
-
       conditions.push(
         inArray(schema.interactionsTable.profileId, accessibleAgentIds),
       );
     }
 
-    const result = await db
-      .selectDistinct({
-        externalAgentId: schema.interactionsTable.externalAgentId,
-      })
-      .from(schema.interactionsTable)
-      .where(and(...conditions))
-      .orderBy(asc(schema.interactionsTable.externalAgentId));
-
-    const externalAgentIds = result
-      .map((r) => r.externalAgentId)
-      .filter((id): id is string => id !== null);
+    // A caller narrowed to their own rows or accessible agents reaches them
+    // through the user_id / profile_id indexes, so a plain DISTINCT is cheap;
+    // a skip scan there would walk the whole external_agent_id index. The
+    // org-wide view walks that index one distinct value at a time instead of
+    // reading every row.
+    const where = and(...conditions) ?? sql`true`;
+    const externalAgentIds =
+      ownUserId || accessibleAgentIds
+        ? await InteractionModel.distinctExternalAgentIds(where)
+        : await InteractionModel.skipScanExternalAgentIds(where);
 
     // Get all unique agent IDs from the external agent IDs (including from chains)
     const allAgentIds =
@@ -1245,7 +1246,6 @@ class InteractionModel {
         return;
       }
 
-      // Get agent's teams to update team and organization limits
       // If profileId is null (agent was deleted), we can't update usage - skip silently
       if (!interaction.profileId) {
         logger.info(
@@ -1253,139 +1253,41 @@ class InteractionModel {
         );
         return;
       }
-      const agentTeamIds = await AgentTeamModel.getTeamsForAgent(
+      const teamIds = await AgentTeamModel.getTeamsForAgent(
         interaction.profileId,
       );
-
-      const updatePromises: Promise<void>[] = [];
-
-      if (agentTeamIds.length === 0) {
+      if (teamIds.length === 0) {
         logger.warn(
           `Profile ${interaction.profileId} has no team assignments for interaction ${interaction.id}`,
-        );
-
-        // Even if agent has no teams, update organization limits for its own org.
-        try {
-          const organizationId = await AgentModel.findOrganizationId(
-            interaction.profileId,
-          );
-
-          if (organizationId) {
-            updatePromises.push(
-              LimitModel.updateTokenLimitUsage(
-                "organization",
-                organizationId,
-                model,
-                inputTokens,
-                outputTokens,
-              ),
-            );
-          }
-        } catch (error) {
-          logger.error(
-            { error },
-            "Failed to find organization for agent with no teams",
-          );
-        }
-      } else {
-        // Get team details to access organizationId
-        const teams = await db
-          .select()
-          .from(schema.teamsTable)
-          .where(inArray(schema.teamsTable.id, agentTeamIds));
-
-        // Update organization-level token cost limits (from first team's organization)
-        if (teams.length > 0 && teams[0].organizationId) {
-          updatePromises.push(
-            LimitModel.updateTokenLimitUsage(
-              "organization",
-              teams[0].organizationId,
-              model,
-              inputTokens,
-              outputTokens,
-            ),
-          );
-        }
-
-        // Update team-level token cost limits
-        for (const team of teams) {
-          updatePromises.push(
-            LimitModel.updateTokenLimitUsage(
-              "team",
-              team.id,
-              model,
-              inputTokens,
-              outputTokens,
-            ),
-          );
-        }
-      }
-
-      // Update profile-level token cost limits (if any exist)
-      updatePromises.push(
-        LimitModel.updateTokenLimitUsage(
-          "agent",
-          interaction.profileId,
-          model,
-          inputTokens,
-          outputTokens,
-        ),
-      );
-
-      if (interaction.userId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "user",
-            interaction.userId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
-
-      if (interaction.virtualKeyId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "virtual_key",
-            interaction.virtualKeyId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
         );
       }
 
       // A passthrough virtual key accrues usage independently from the standard
       // virtual key (distinct limit entities), so record against both when present.
-      if (interaction.passthroughVirtualKeyId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "virtual_key",
-            interaction.passthroughVirtualKeyId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
+      const entityRefs: Array<{
+        entityType: LimitEntityType;
+        entityId: string | null | undefined;
+      }> = [
+        { entityType: "user", entityId: interaction.userId },
+        { entityType: "virtual_key", entityId: interaction.virtualKeyId },
+        {
+          entityType: "virtual_key",
+          entityId: interaction.passthroughVirtualKeyId,
+        },
+        { entityType: "environment", entityId: interaction.environmentId },
+      ];
+      const entities = entityRefs.flatMap(({ entityType, entityId }) =>
+        entityId ? [{ entityType, entityId }] : [],
+      );
 
-      // Update environment-level token cost limits using the environment
-      // snapshotted on the interaction at creation time.
-      if (interaction.environmentId) {
-        updatePromises.push(
-          LimitModel.updateTokenLimitUsage(
-            "environment",
-            interaction.environmentId,
-            model,
-            inputTokens,
-            outputTokens,
-          ),
-        );
-      }
-
-      // Execute all updates in parallel
-      await Promise.all(updatePromises);
+      await LimitModel.recordInteractionTokenUsage({
+        agentId: interaction.profileId,
+        teamIds,
+        entities,
+        model,
+        inputTokens,
+        outputTokens,
+      });
     } catch (error) {
       logger.error({ error }, "Error updating usage limits after interaction");
       // Don't throw - usage tracking should not break interaction creation
@@ -2385,7 +2287,7 @@ class InteractionModel {
         ? sql`
         UNION ALL
         (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
-                locked_chat_conversation_id
+                encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
          ORDER BY created_at ASC, id ASC
@@ -2396,7 +2298,7 @@ class InteractionModel {
         ? sql`
       UNION ALL
       SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
-             locked_chat_conversation_id
+             encrypted_chat_conversation_id
       FROM interactions
       WHERE id IN (${sql.join(
         uuidKeys.map((k) => sql`${k}::uuid`),
@@ -2418,10 +2320,10 @@ class InteractionModel {
       // Raw SQL bypasses Drizzle's column mapping, so timestamps arrive as
       // whatever the driver hands back — a Date on one, a string on another.
       created_at: Date | string;
-      // Selected so readInteractionRow can tell a locked-chat row from an
+      // Selected so readInteractionRow can tell an encrypted-chat row from an
       // ordinary one; without it the guard cannot fire and a DEK envelope
       // would be handed to the server-key decryptor.
-      locked_chat_conversation_id: string | null;
+      encrypted_chat_conversation_id: string | null;
     }>(sql`
       -- id tiebreak: turns within one session commonly land on the same
       -- millisecond, and created_at alone leaves their order undefined — which
@@ -2431,11 +2333,11 @@ class InteractionModel {
       -- resolve a delta parent). Final ordering is applied in JS, since the
       -- per-key UNION below has no single ordering to inherit.
       SELECT t.id, t.session_id, t.session_source, t.source, t.thread_id, t.request, t.response, t.type,
-             t.created_at, t.locked_chat_conversation_id
+             t.created_at, t.encrypted_chat_conversation_id
       FROM (SELECT DISTINCT k.key FROM unnest(ARRAY[${sessionKeyList}]::text[]) AS k(key)) keys
       CROSS JOIN LATERAL (
         (SELECT id, session_id, session_source, source, thread_id, request, response, type, created_at,
-                locked_chat_conversation_id
+                encrypted_chat_conversation_id
          FROM interactions
          WHERE session_id = keys.key
          ORDER BY created_at DESC, id DESC
@@ -2500,6 +2402,44 @@ class InteractionModel {
       );
 
     return Number(row?.activeUsers) || 0;
+  }
+
+  private static async distinctExternalAgentIds(where: SQL): Promise<string[]> {
+    const rows = await db
+      .selectDistinct({
+        externalAgentId: schema.interactionsTable.externalAgentId,
+      })
+      .from(schema.interactionsTable)
+      .where(where)
+      .orderBy(asc(schema.interactionsTable.externalAgentId));
+    return rows
+      .map((row) => row.externalAgentId)
+      .filter((id): id is string => id !== null);
+  }
+
+  /**
+   * Distinct external agent ids in ascending order, found by a loose index
+   * scan: each step jumps the external_agent_id index to the next value with
+   * a row matching `where`, so the cost follows the number of distinct ids
+   * rather than the number of interactions.
+   */
+  private static async skipScanExternalAgentIds(where: SQL): Promise<string[]> {
+    const column = schema.interactionsTable.externalAgentId;
+    const result = await db.execute<{ value: string }>(sql`
+      WITH RECURSIVE external_agent_ids AS (
+        (SELECT ${column} AS value FROM ${schema.interactionsTable}
+         WHERE ${where} AND ${column} IS NOT NULL
+         ORDER BY ${column} LIMIT 1)
+        UNION ALL
+        SELECT (SELECT ${column} FROM ${schema.interactionsTable}
+                WHERE ${where} AND ${column} > previous.value
+                ORDER BY ${column} LIMIT 1)
+        FROM external_agent_ids previous
+        WHERE previous.value IS NOT NULL
+      )
+      SELECT value FROM external_agent_ids WHERE value IS NOT NULL
+    `);
+    return result.rows.map((row) => row.value);
   }
 }
 

@@ -14,7 +14,6 @@ import {
   TOOL_EXECUTE_REMEDY_PLAN_SHORT_NAME,
 } from "@archestra/shared";
 import { z } from "zod";
-import { type OfferJws, OfferJwsSchema, withoutOfferJws } from "./offer-claims";
 
 /** Incremented when the notice payload structure changes. */
 const NOTICE_VERSION = 1;
@@ -55,7 +54,8 @@ export const RemedyExecutionSchema = z.object({
 
 /**
  * Schema for notice arguments. Standard function calls accept JSON objects;
- * custom tool calls accept an object with an input string.
+ * custom tool calls accept an object with an input string. Historical `offers`
+ * are not part of the schema and are ignored on read.
  */
 export const NoticeArguments = z
   .object({
@@ -63,7 +63,6 @@ export const NoticeArguments = z
     arguments: FunctionArguments,
     ruling: z.string().min(1),
     notice: NoticeMetadata.extend({ custom: z.literal(true).optional() }),
-    offers: z.array(OfferJwsSchema).optional(),
   })
   .superRefine((value, context) => {
     if (!value.notice.custom) return;
@@ -118,15 +117,12 @@ type AppaNotice = {
   custom?: boolean;
   /** The namespace of the original tool declaration (e.g. in Codex). */
   namespace?: string;
-  /** Signed offer routing claims. Not used for restoration. */
-  offers?: OfferJws[];
 };
 
 export function buildNoticeArguments(
   notice: Omit<AppaNotice, "original"> & {
     /** Original call arguments as an object or JSON string. */
     arguments: Record<string, unknown> | string;
-    offers?: OfferJws[];
   },
 ): z.infer<typeof NoticeArguments> {
   const original = normalizeOriginalCall({
@@ -149,9 +145,6 @@ export function buildNoticeArguments(
       ...(notice.custom ? { custom: true } : {}),
       ...(notice.namespace ? { namespace: notice.namespace } : {}),
     },
-    ...(notice.offers && notice.offers.length > 0
-      ? { offers: notice.offers }
-      : {}),
   };
 }
 
@@ -166,7 +159,7 @@ export function readNotice(params: {
       : params.arguments,
   );
   if (!parsed.success) return null;
-  const { tool, arguments: args, ruling, notice, offers } = parsed.data;
+  const { tool, arguments: args, ruling, notice } = parsed.data;
   if (notice.call_id !== params.callId) return null;
   const original = normalizeOriginalCall({
     custom: notice.custom,
@@ -180,7 +173,6 @@ export function readNotice(params: {
     result: ruling,
     ...(notice.custom ? { custom: true } : {}),
     ...(notice.namespace ? { namespace: notice.namespace } : {}),
-    ...(offers && offers.length > 0 ? { offers } : {}),
   };
 }
 
@@ -206,20 +198,21 @@ export function readRemedyExecution(params: {
     return null;
   const parsedOriginalArguments = parseJson(parsed.data.original_arguments);
   if (!isRecord(parsedOriginalArguments)) return null;
-  // The stamp attaches the receipt, proxy metadata, and offer JWS members
+  const modelArguments = withoutProxyMembers(parsedOriginalArguments);
+  // The stamp attaches the receipt and current trajectory
   // to the arguments, replacing any values echoed by the model.
   // The remaining arguments represent the model's original tool call.
-  // Restoration returns the original payload bytes.
-  if (
-    !isDeepStrictEqual(
-      withoutOfferJws(withoutProxyMembers(argumentsValue)),
-      withoutOfferJws(withoutProxyMembers(parsedOriginalArguments)),
-    )
-  )
+  // Keep exact model bytes unless old history echoes private transport fields.
+  if (!isDeepStrictEqual(withoutProxyMembers(argumentsValue), modelArguments))
     return null;
   return {
     ...parsed.data,
-    parsedOriginalArguments,
+    original_arguments:
+      Object.keys(modelArguments).length ===
+      Object.keys(parsedOriginalArguments).length
+        ? parsed.data.original_arguments
+        : JSON.stringify(modelArguments),
+    parsedOriginalArguments: modelArguments,
   };
 }
 
@@ -230,7 +223,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 }
 
 /**
- * Returns remedy call arguments without proxy-stamped receipt and JWS fields.
+ * Returns remedy arguments without current or legacy proxy-owned fields.
  */
 function withoutProxyMembers(
   args: Record<string, unknown>,

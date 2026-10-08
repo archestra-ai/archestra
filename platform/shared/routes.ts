@@ -1,5 +1,11 @@
 export const RouteId = {
   AnnotateGuardrailsTool: "annotateGuardrailsTool",
+  GetOpenAppaPolicyTests: "getOpenAppaPolicyTests",
+  InspectOpenAppaPolicyTests: "inspectOpenAppaPolicyTests",
+  UpdateOpenAppaPolicyTests: "updateOpenAppaPolicyTests",
+  RunOpenAppaPolicyTests: "runOpenAppaPolicyTests",
+  PreviewOpenAppaPolicyTest: "previewOpenAppaPolicyTest",
+  GetOpenAppaPolicyTestRuns: "getOpenAppaPolicyTestRuns",
   GetGuardrailsPolicy: "getGuardrailsPolicy",
   ValidateGuardrailsPolicy: "validateGuardrailsPolicy",
   UpdateGuardrailsPolicy: "updateGuardrailsPolicy",
@@ -308,6 +314,10 @@ export const RouteId = {
     "openrouterChatCompletionsWithDefaultAgent",
   OpenrouterChatCompletionsWithAgent: "openrouterChatCompletionsWithAgent",
 
+  // Proxy Routes - Jev
+  JevDecisionsWithDefaultAgent: "jevDecisionsWithDefaultAgent",
+  JevDecisionsWithAgent: "jevDecisionsWithAgent",
+
   // Proxy Routes - vLLM
   VllmChatCompletionsWithDefaultAgent: "vllmChatCompletionsWithDefaultAgent",
   VllmChatCompletionsWithAgent: "vllmChatCompletionsWithAgent",
@@ -532,6 +542,8 @@ export const RouteId = {
   DownloadAgentWorkspaceTransfer: "downloadAgentWorkspaceTransfer",
   UploadAgentWorkspaceTransfer: "uploadAgentWorkspaceTransfer",
   DeleteAgentRun: "deleteAgentRun",
+  GetAgentRunOpenappaReview: "getAgentRunOpenappaReview",
+  DecideAgentRunOpenappaReview: "decideAgentRunOpenappaReview",
 
   // Virtual API Key Routes
   GetAllVirtualApiKeys: "getAllVirtualApiKeys",
@@ -729,6 +741,7 @@ export const RouteId = {
   UpdateSlackChatOpsConfig: "updateSlackChatOpsConfig",
   UpdateTelegramChatOpsConfig: "updateTelegramChatOpsConfig",
   LinkTelegramChatOpsAccount: "linkTelegramChatOpsAccount",
+  UnlinkTelegramChatOpsAccount: "unlinkTelegramChatOpsAccount",
   GenerateTelegramLinkCode: "generateTelegramLinkCode",
   ConnectNgrok: "connectNgrok",
   DisconnectNgrok: "disconnectNgrok",
@@ -844,9 +857,12 @@ export const RouteId = {
   DeleteOpenappaBatteryInclude: "deleteOpenappaBatteryInclude",
   UploadOpenappaBatteryPackage: "uploadOpenappaBatteryPackage",
   DeleteOpenappaBatteryPackage: "deleteOpenappaBatteryPackage",
+  SetOpenappaCredentialBinding: "setOpenappaCredentialBinding",
   GetOpenappaPolicyDeclarations: "getOpenappaPolicyDeclarations",
   AcceptHeldAppaGithubPull: "acceptHeldAppaGithubPull",
   ConsultOpenappaBatteryHelper: "consultOpenappaBatteryHelper",
+  // white-label-ok: operation id for the builtin = "archestra" annotator route, a wire identifier
+  AnnotateOpenappaToolWithArchestra: "annotateOpenappaToolWithArchestra",
   GetOpenAppaYells: "getOpenAppaYells",
   GetOpenAppaYellsSummary: "getOpenAppaYellsSummary",
   DownloadOpenAppaYell: "downloadOpenAppaYell",
@@ -856,6 +872,7 @@ export const RouteId = {
   GetOpenappaCoverageEntities: "getOpenappaCoverageEntities",
   GetOpenappaCoverageTools: "getOpenappaCoverageTools",
   GetOpenappaCoverageSummary: "getOpenappaCoverageSummary",
+  GetOpenappaTrustAudience: "getOpenappaTrustAudience",
   UpdateSkillGithubSync: "updateSkillGithubSync",
   DiscoverGithubSkills: "discoverGithubSkills",
   SearchSkillCatalog: "searchSkillCatalog",
@@ -948,6 +965,11 @@ export const RouteId = {
   CreateConnectionVirtualKey: "createConnectionVirtualKey",
   CreateConnectionPassthroughKey: "createConnectionPassthroughKey",
   GetConnectionHealth: "getConnectionHealth",
+  GetConnectedClients: "getConnectedClients",
+  DisconnectConnectedClient: "disconnectConnectedClient",
+  GetConnectedClientLog: "getConnectedClientLog",
+  GetAgentAdoption: "getAgentAdoption",
+  GetAgentAdoptionUsage: "getAgentAdoptionUsage",
 
   // MCP App Routes
   GetApps: "getApps",

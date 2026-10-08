@@ -5,6 +5,7 @@ import {
   MAX_BULK_IDS,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
   ResourcePermissionGrantSchema,
   ResourceVisibilityScopeSchema,
   RouteId,
@@ -41,6 +42,7 @@ import {
   ToolModel,
   UserModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { agentSkillAssignmentService } from "@/services/agent-skill-assignment";
 import { publishesSkills } from "@/services/agent-skill-resolution";
 import { assertCanAssignEnvironment } from "@/services/environments/environment";
@@ -404,6 +406,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
         }).merge(createSortingQuerySchema(SkillSortBy)),
         response: constructResponseSchema(
           createPaginatedResponseSchema(SkillListItemSchema),
@@ -427,6 +430,7 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           excludeOtherPersonalSkills,
           status,
           labels,
+          access,
           ...sorting
         },
         organizationId,
@@ -505,7 +509,10 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
           if (agentSkillView === "eligible") {
             publishedToOrganization = true;
             if (mcpGatewayEnvironment !== undefined) {
-              agentChecker.require(agent.agentType, "update");
+              agentChecker.require(agent.agentType, {
+                action: "update",
+                scope: agent.id,
+              });
               environmentId =
                 mcpGatewayEnvironment === "default"
                   ? null
@@ -582,6 +589,11 @@ const skillRoutes: FastifyPluginAsyncZod = async (fastify) => {
         excludeOtherPersonalForUserId:
           checker.isAdmin && excludeOtherPersonalSkills ? user.id : undefined,
         status,
+        access: await ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: user.id,
+          organizationId,
+          relations: access,
+        }),
       };
 
       // Resolved once so the page query and the count agree, and so a filter

@@ -9,6 +9,7 @@ import {
   useState,
 } from "react";
 import { toast } from "sonner";
+import { FileDropZone } from "@/components/files/file-drop-zone";
 import { Button } from "@/components/ui/button";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import {
@@ -17,6 +18,7 @@ import {
   TooltipTrigger,
 } from "@/components/ui/tooltip";
 import { copyToClipboard } from "@/lib/clipboard";
+import { cn } from "@/lib/utils/tailwind";
 import styles from "./exec-terminal.module.css";
 import { isUsableTerminalDimensions } from "./exec-terminal.utils";
 import {
@@ -99,6 +101,11 @@ interface ExecTerminalProps {
   initialProgress?: ExecSessionProgress | null;
   /** Stable start time for the elapsed counter, such as the run's start. */
   progressStartedAt?: number;
+  /**
+   * Accept files dropped on a live terminal. Resolves with the path of each
+   * stored file; the paths are then typed at the prompt for the user to send.
+   */
+  onDropFiles?: (files: File[]) => Promise<string[]>;
   onCommandChange?: (command: string | null) => void;
   onError?: () => void;
   onClosed?: () => void;
@@ -116,6 +123,7 @@ export function ExecTerminal({
   showDisconnectedStatus = true,
   initialProgress = null,
   progressStartedAt,
+  onDropFiles,
   onCommandChange,
   onError,
   onClosed,
@@ -405,6 +413,25 @@ export function ExecTerminal({
   }, [initialProgress, status]);
 
   const [commandCopied, setCommandCopied] = useState(false);
+  const [uploadingFiles, setUploadingFiles] = useState(false);
+
+  const handleDropFiles = useCallback(
+    async (files: File[]) => {
+      if (!onDropFiles || status !== "connected") return;
+      setUploadingFiles(true);
+      try {
+        const paths = await onDropFiles(files);
+        if (paths.length === 0) return;
+        // Typed rather than bracketed-pasted: Claude Code drops all but the
+        // first of back-to-back pastes, and plain paths work in every CLI.
+        transportRef.current.sendInput(`${paths.join(" ")} `);
+        terminalInstanceRef.current?.focus();
+      } finally {
+        setUploadingFiles(false);
+      }
+    },
+    [onDropFiles, status],
+  );
 
   const handleCopyCommand = useCallback(async () => {
     if (!command) return;
@@ -417,6 +444,47 @@ export function ExecTerminal({
       toast.error("Failed to copy command");
     }
   }, [command]);
+
+  const terminalAreaClassName = cn(
+    "flex-1 min-h-0 p-4 pb-2",
+    status === "connecting" ||
+      status === "error" ||
+      (status === "disconnected" && showDisconnectedStatus)
+      ? "hidden"
+      : "block",
+  );
+  const terminalArea = (
+    <>
+      {/* biome-ignore lint/a11y/noStaticElementInteractions: xterm owns the interactive textarea; this wrapper gates its events. */}
+      <div
+        ref={terminalRef}
+        className={`h-full ${focusTerminal ? "" : styles.browserMode}`}
+        onMouseDownCapture={handleBrowserEvent}
+        onMouseUpCapture={handleBrowserEvent}
+        onMouseMoveCapture={handleBrowserEvent}
+        onClickCapture={handleBrowserEvent}
+        onDoubleClickCapture={handleBrowserEvent}
+        onWheelCapture={handleBrowserEvent}
+        onCopyCapture={handleBrowserEvent}
+        onPasteCapture={handleBrowserEvent}
+        onKeyDownCapture={handleBrowserEvent}
+        onKeyUpCapture={handleBrowserEvent}
+        onKeyDown={(event) => {
+          if (focusTerminalRef.current) event.stopPropagation();
+        }}
+        onKeyUp={(event) => {
+          if (focusTerminalRef.current) event.stopPropagation();
+        }}
+        onContextMenuCapture={(event) => {
+          // Let xterm handle the right click in terminal mode; suppress
+          // only the browser menu that would otherwise cover tmux's.
+          // Browser mode keeps native defaults without reaching xterm.
+          handleBrowserEvent(event);
+          if (focusTerminalRef.current) event.preventDefault();
+        }}
+      />
+    </>
+  );
 
   return (
     <div className="flex flex-col gap-4 flex-1 min-h-0">
@@ -474,46 +542,17 @@ export function ExecTerminal({
               tone="warning"
             />
           ) : null}
-          <div
-            className="flex-1 min-h-0 p-4 pb-2"
-            style={{
-              display:
-                status === "connecting" ||
-                status === "error" ||
-                (status === "disconnected" && showDisconnectedStatus)
-                  ? "none"
-                  : "block",
-            }}
-          >
-            {/* biome-ignore lint/a11y/noStaticElementInteractions: xterm owns the interactive textarea; this wrapper gates its events. */}
-            <div
-              ref={terminalRef}
-              className={`h-full ${focusTerminal ? "" : styles.browserMode}`}
-              onMouseDownCapture={handleBrowserEvent}
-              onMouseUpCapture={handleBrowserEvent}
-              onMouseMoveCapture={handleBrowserEvent}
-              onClickCapture={handleBrowserEvent}
-              onDoubleClickCapture={handleBrowserEvent}
-              onWheelCapture={handleBrowserEvent}
-              onCopyCapture={handleBrowserEvent}
-              onPasteCapture={handleBrowserEvent}
-              onKeyDownCapture={handleBrowserEvent}
-              onKeyUpCapture={handleBrowserEvent}
-              onKeyDown={(event) => {
-                if (focusTerminalRef.current) event.stopPropagation();
-              }}
-              onKeyUp={(event) => {
-                if (focusTerminalRef.current) event.stopPropagation();
-              }}
-              onContextMenuCapture={(event) => {
-                // Let xterm handle the right click in terminal mode; suppress
-                // only the browser menu that would otherwise cover tmux's.
-                // Browser mode keeps native defaults without reaching xterm.
-                handleBrowserEvent(event);
-                if (focusTerminalRef.current) event.preventDefault();
-              }}
-            />
-          </div>
+          {onDropFiles ? (
+            <FileDropZone
+              onDropFiles={handleDropFiles}
+              uploading={uploadingFiles}
+              className={terminalAreaClassName}
+            >
+              {terminalArea}
+            </FileDropZone>
+          ) : (
+            <div className={terminalAreaClassName}>{terminalArea}</div>
+          )}
           {status === "connected" && (
             <div className="flex items-center justify-between px-3 py-2 border-t border-slate-800">
               <div className="flex items-center gap-1.5 text-emerald-400 text-xs font-mono">

@@ -41,6 +41,7 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import { catalogVisibleInEnvironment } from "@/services/environments/environment-isolation";
+import { assertCanWriteMcpDeploymentYaml } from "@/services/mcp-advanced-settings";
 import {
   extractLocalConfigSecrets,
   upsertCatalogClientSecretValue,
@@ -63,6 +64,7 @@ import {
 import { trackBackgroundWork } from "@/utils/background-work";
 import { broadcastMcpInstallationStatus } from "@/websocket";
 import { archestraMcpBranding } from "./branding";
+import { resolveCallerScope } from "./caller-scope";
 import { EmptyToolArgsSchema } from "./empty-tool-args-schema";
 import {
   catchError,
@@ -73,6 +75,7 @@ import {
   structuredSuccessResult,
   successResult,
 } from "./helpers";
+import { resourceAccessToolArg } from "./resource-access-tool-arg";
 import type { ArchestraContext } from "./types";
 
 // === Constants ===
@@ -340,6 +343,13 @@ const SearchPrivateMcpRegistryToolArgsSchema = z
       .describe(
         "Optional search query to filter MCP servers by name or description.",
       ),
+    access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
+  })
+  .strict();
+
+const GetMcpServersToolArgsSchema = z
+  .object({
+    access: resourceAccessToolArg({ examplePlural: "MCP servers" }),
   })
   .strict();
 
@@ -419,6 +429,7 @@ const ReloadMcpServerToolsToolArgsSchema = z
   })
   .strict();
 
+type GetMcpServersArgs = z.infer<typeof GetMcpServersToolArgsSchema>;
 type SearchPrivateMcpRegistryArgs = z.infer<
   typeof SearchPrivateMcpRegistryToolArgsSchema
 >;
@@ -447,9 +458,9 @@ const registry = defineArchestraTools([
     shortName: TOOL_GET_MCP_SERVERS_SHORT_NAME,
     title: "Get MCP Servers",
     description: `List all MCP servers from the catalog. Use this to identify candidate MCP servers, then call ${TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME} to fetch exact tool IDs for ${TOOL_CREATE_AGENT_SHORT_NAME}/${TOOL_EDIT_AGENT_SHORT_NAME} toolAssignments.`,
-    schema: EmptyToolArgsSchema,
+    schema: GetMcpServersToolArgsSchema,
     outputSchema: GetMcpServersOutputSchema,
-    handler: ({ context }) => handleGetMcpServers(context),
+    handler: ({ args, context }) => handleGetMcpServers(args, context),
   }),
   defineArchestraTool({
     shortName: TOOL_GET_MCP_SERVER_TOOLS_SHORT_NAME,
@@ -492,7 +503,7 @@ const registry = defineArchestraTools([
     shortName: TOOL_LIST_MCP_SERVER_DEPLOYMENTS_SHORT_NAME,
     title: "List MCP Server Deployments",
     description:
-      "List all deployed (installed) MCP server instances accessible to the current user. Shows deployment status, server type, catalog info, team, and owner.",
+      "List deployed (installed) MCP server instances the current user can read. The built-in OpenAPPA configuration agent lists them across environments (scope: organization); other agents list only their own environment (scope: agent). Shows deployment status, server type, catalog info, team, and owner.",
     schema: EmptyToolArgsSchema,
     handler: ({ context }) => handleListMcpServerDeployments(context),
   }),
@@ -545,7 +556,9 @@ async function handleSearchPrivateMcpRegistry(
 
     let catalogItems: InternalMcpCatalog[];
 
-    if (query && query.trim() !== "") {
+    // `searchByQuery` has no `access` filter, so a filtered search narrows
+    // the filtered list by the same name/description substring instead.
+    if (query && query.trim() !== "" && !args.access) {
       catalogItems = await InternalMcpCatalogModel.searchByQuery(query, {
         expandSecrets: false,
         userId: context.userId,
@@ -568,6 +581,7 @@ async function handleSearchPrivateMcpRegistry(
         isAdmin,
         organizationId,
         environmentId,
+        access: args.access,
         readGrantContext: (await userHasPermission(
           context.userId,
           organizationId,
@@ -577,6 +591,14 @@ async function handleSearchPrivateMcpRegistry(
           ? undefined
           : { userId: context.userId, organizationId },
       });
+      const needle = query?.trim().toLowerCase();
+      if (needle) {
+        catalogItems = catalogItems.filter((item) =>
+          [item.name, item.description].some((text) =>
+            text?.toLowerCase().includes(needle),
+          ),
+        );
+      }
     }
 
     if (catalogItems.length === 0) {
@@ -623,6 +645,7 @@ async function handleSearchPrivateMcpRegistry(
 }
 
 async function handleGetMcpServers(
+  args: GetMcpServersArgs,
   context: ArchestraContext,
 ): Promise<CallToolResult> {
   const { agent: contextAgent, organizationId } = context;
@@ -646,6 +669,7 @@ async function handleGetMcpServers(
       isAdmin,
       organizationId,
       environmentId,
+      access: args.access,
       readGrantContext: (await userHasPermission(
         context.userId,
         organizationId,
@@ -926,6 +950,24 @@ async function handleEditMcpConfig(
       );
     }
 
+    try {
+      await assertCanWriteMcpDeploymentYaml({
+        userId: context.userId,
+        organizationId,
+        catalogId: existing.id,
+        requested: args.deploymentSpecYaml,
+        requestedLocalConfig: {
+          envFrom: args.envFrom ?? existing.localConfig?.envFrom,
+          serviceAccount:
+            args.serviceAccount ?? existing.localConfig?.serviceAccount,
+        },
+        current: existing.deploymentSpecYaml,
+        currentLocalConfig: existing.localConfig,
+      });
+    } catch (error) {
+      return errorResult((error as Error).message);
+    }
+
     const updateData: Record<string, unknown> = {};
     if (args.serverType !== undefined) updateData.serverType = args.serverType;
     if (args.serverUrl !== undefined) updateData.serverUrl = args.serverUrl;
@@ -1042,6 +1084,20 @@ async function handleCreateMcpServer(
 
     if (!context.userId || !organizationId) {
       return errorResult("user/organization context not available.");
+    }
+
+    try {
+      await assertCanWriteMcpDeploymentYaml({
+        userId: context.userId,
+        organizationId,
+        requested: args.deploymentSpecYaml,
+        requestedLocalConfig: {
+          envFrom: args.envFrom,
+          serviceAccount: args.serviceAccount,
+        },
+      });
+    } catch (error) {
+      return errorResult((error as Error).message);
     }
 
     // A server created by an agent lands in that agent's environment unless the
@@ -1446,9 +1502,13 @@ async function handleListMcpServerDeployments(
       }),
       isPredefinedAdmin({ userId: context.userId, organizationId }),
     ]);
-    // Environment isolation: a deployment inherits its environment from its
-    // catalog item, so only the agent's own environment is listed.
-    const environmentId = await AgentModel.findEnvironmentId(contextAgent.id);
+    // A deployment inherits its environment from its catalog item; only the
+    // built-in configuration agent lists past its own environment.
+    const scope = (await resolveCallerScope(context))?.scope ?? "agent";
+    const environmentId =
+      scope === "organization"
+        ? undefined
+        : await AgentModel.findEnvironmentId(contextAgent.id);
     const servers = await McpServerModel.findAll(
       context.userId,
       isAdmin,
@@ -1457,11 +1517,13 @@ async function handleListMcpServerDeployments(
       userIsPredefinedAdmin,
     );
 
-    if (servers.length === 0) {
-      return successResult("No MCP server deployments found.");
-    }
-
-    const lines = [`Found ${servers.length} MCP server deployment(s):`, ""];
+    const lines = [
+      `Scope: ${scope}`,
+      servers.length === 0
+        ? "No MCP server deployments found."
+        : `Found ${servers.length} MCP server deployment(s):`,
+      "",
+    ];
     for (const server of servers) {
       lines.push(`- ${server.name}`);
       lines.push(`  ID: ${server.id}`);
@@ -1478,7 +1540,17 @@ async function handleListMcpServerDeployments(
       lines.push("");
     }
 
-    return successResult(lines.join("\n"));
+    return structuredSuccessResult(
+      {
+        scope,
+        deployments: servers.map(({ id, name, catalogId }) => ({
+          id,
+          name,
+          catalogId,
+        })),
+      },
+      lines.join("\n"),
+    );
   } catch (error) {
     return catchError(error, "listing MCP server deployments");
   }

@@ -4,6 +4,9 @@ import {
   createPaginatedResponseSchema,
   PaginationQuerySchema,
   parseLabelsParam,
+  ResourceAccessQuerySchema,
+  type ResourceAccessRelation,
+  type ResourceVisibilityScope,
   RouteId,
 } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
@@ -32,7 +35,7 @@ import {
   UserModel,
 } from "@/models";
 import type { VersionPayload } from "@/models/app-version";
-import { resolveLockedChatCreationIfRequested } from "@/routes/chat/locked-chat";
+import { resolveEncryptedChatCreationIfRequested } from "@/routes/chat/encrypted-chat";
 import {
   assignToolToApp,
   type ToolAssignmentError,
@@ -208,6 +211,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(AppListItemSchema),
@@ -229,6 +233,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
       const accessibleAppIds = await AppAccessModel.getUserAccessibleAppIds({
         organizationId,
         userId: user.id,
+        access: query.access,
       });
       // Grants are the only way to reach an app, so there is no longer a set
       // an administrator sees only through oversight.
@@ -421,6 +426,14 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
           // have no comparable author and none are oversight-only, so drop them
           // whenever an author filter is active rather than mis-attributing them.
           if (authorFilterActive) return false;
+          // An install the caller reaches is their own personal one, one
+          // shared with a team of theirs, or the organization's; never
+          // oversight-only, so `others` holds no external app.
+          if (
+            query.access &&
+            !query.access.includes(EXTERNAL_APP_ACCESS_RELATION[item.scope])
+          )
+            return false;
           return true;
         });
 
@@ -694,10 +707,10 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: user.id,
         organizationId,
         // Present only when the client generated a conversation key and sent
-        // it — the same header the composer's locked-chat toggle uses. Opening
+        // it — the same header the composer's encrypted-chat toggle uses. Opening
         // an app is a browser POST, so the key reaches the server on exactly
         // the flow that creates the conversation.
-        lockedChat: resolveLockedChatCreationIfRequested(request),
+        encryptedChat: resolveEncryptedChatCreationIfRequested(request),
       });
       return reply.send({ conversationId });
     },
@@ -730,7 +743,7 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
         resourceUri,
         userId: user.id,
         organizationId,
-        lockedChat: resolveLockedChatCreationIfRequested(request),
+        encryptedChat: resolveEncryptedChatCreationIfRequested(request),
       });
       return reply.send(result);
     },
@@ -1564,6 +1577,16 @@ const appRoutes: FastifyPluginAsyncZod = async (fastify) => {
 // =============================================================================
 // Internal helpers
 // =============================================================================
+
+/** Which "Show" relation an external app's install reaches the caller in. */
+const EXTERNAL_APP_ACCESS_RELATION: Record<
+  ResourceVisibilityScope,
+  ResourceAccessRelation
+> = {
+  personal: "mine",
+  team: "shared",
+  org: "org",
+};
 
 /**
  * Map a write that tripped one of the `apps` unique indexes to the 409 naming

@@ -4,9 +4,16 @@ import { render, screen } from "@testing-library/react";
 import { HttpResponse, http } from "msw";
 import { setupServer } from "msw/node";
 import { usePathname, useSearchParams } from "next/navigation";
-import { afterAll, beforeAll, expect, test, vi } from "vitest";
+import { afterAll, beforeAll, beforeEach, expect, test, vi } from "vitest";
+import { useHasPermissions } from "@/lib/auth/auth.query";
 import { OpenAppaPageLayout } from "./openappa-page-layout";
 
+vi.mock("@/lib/auth/auth.query");
+beforeEach(() => {
+  vi.mocked(useHasPermissions).mockReturnValue({ data: true } as ReturnType<
+    typeof useHasPermissions
+  >);
+});
 const server = setupServer(
   http.get("http://localhost:9000/api/agents/all", () =>
     HttpResponse.json([
@@ -56,10 +63,13 @@ vi.mock("./use-openappa-setup-state", () => ({
 }));
 
 test.each([
-  ["/openappa", "Overview"],
-  ["/openappa/batteries", "Batteries"],
-  ["/openappa/policy", "Policy"],
-])("selects %s as the %s tab", async (pathname, tabName) => {
+  ["/openappa", "Overview", "Guardrails"],
+  ["/openappa/batteries", "Batteries", "Batteries"],
+  ["/openappa/policy", "Policy", "Policy"],
+  ["/openappa/validation", "Validations", "Validations"],
+  ["/openappa/validation/new", "Validations", "Add validation"],
+  ["/openappa/validation/history", "Validations", "Validation run history"],
+])("selects %s as the %s tab", async (pathname, tabName, title) => {
   setupState.isFresh = false;
   vi.mocked(usePathname).mockReturnValue(pathname);
   vi.mocked(useSearchParams).mockReturnValue(
@@ -72,14 +82,13 @@ test.each([
     </OpenAppaPageLayout>,
   );
 
-  expect(screen.getAllByRole("link", { name: tabName })[0]).toHaveAttribute(
-    "aria-current",
-    "page",
-  );
+  expect(
+    (await screen.findAllByRole("link", { name: tabName }))[0],
+  ).toHaveAttribute("aria-current", "page");
   expect(
     screen.getByRole("heading", {
       level: 1,
-      name: `${pathname === "/openappa" ? "Guardrails" : tabName} Alpha`,
+      name: `${title} Alpha`,
     }),
   ).toBeVisible();
   expect(

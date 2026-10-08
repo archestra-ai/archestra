@@ -16,7 +16,9 @@ type BadgeVariant = NonNullable<ComponentProps<typeof Badge>["variant"]>;
  * the `Record<AuditEventName, string>` type enforces completeness at
  * compile time.
  */
-export const ACTION_LABEL: Record<AuditEventName, string> = {
+export const ACTION_LABEL: Record<AuditEventName, string> & {
+  "agentRun.reviewDecided": string;
+} = {
   "hook.created": "Hook created",
   "hook.updated": "Hook updated",
   "hook.deleted": "Hook deleted",
@@ -35,6 +37,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "agentRun.canceled": "Agent run canceled",
   "agentRun.updated": "Agent run renamed",
   "agentRun.deleted": "Agent run deleted",
+  "agentRun.reviewDecided": "OpenAPPA review decided",
   "agentRun.shared": "Agent run shared",
   "agentRun.unshared": "Agent run unshared",
   // Runtime credential
@@ -74,6 +77,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "plugin.syncTriggered": "Plugin sync check triggered",
   // Connector
   "clientConnection.updated": "Client Connection Reviewed",
+  "connectedClient.disconnected": "Connected client disconnected",
   "connectionPromptSession.created": "Connection prompt session created",
   "connector.created": "Connector created",
   "connector.updated": "Connector updated",
@@ -224,6 +228,7 @@ export const ACTION_LABEL: Record<AuditEventName, string> = {
   "openappaBatteryInstall.deleted": "Guardrails battery uninstalled",
   "openappaBatteryPackage.updated": "Guardrails battery package uploaded",
   "openappaBatteryPackage.deleted": "Guardrails battery package deleted",
+  "openappaCredentialBinding.updated": "Guardrails battery credential bound",
   "toolInvocationPolicy.created": "Tool policy created",
   "toolInvocationPolicy.updated": "Tool policy updated",
   "toolInvocationPolicy.deleted": "Tool policy deleted",
@@ -365,6 +370,7 @@ export const KNOWN_RESOURCE_TYPES: readonly string[] = [
   "chatOpsBinding",
   "chatOpsConfig",
   "clientConnection",
+  "connectedClient",
   "connectionPromptSession",
   "plugin",
   "connector",

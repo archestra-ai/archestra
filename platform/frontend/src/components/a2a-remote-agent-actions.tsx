@@ -6,22 +6,24 @@ import type { A2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
 
 export function A2aRemoteAgentActions({
   agent,
-  canManage,
+  canEdit,
+  canDelete,
   onOpen,
   onDelete,
 }: {
   agent: A2aRemoteAgent;
-  canManage: boolean;
+  canEdit: boolean;
+  canDelete: boolean;
   onOpen: () => void;
   onDelete: () => void;
 }) {
   return (
     <ResourceTableRowActions
       kind="remoteAgent"
-      resource={canManage ? agent : null}
+      resource={canEdit ? agent : null}
       itemName={agent.name}
       actions={[
-        canManage
+        canEdit
           ? {
               icon: <Pencil className="h-4 w-4" />,
               label: "Edit",
@@ -34,7 +36,7 @@ export function A2aRemoteAgentActions({
             },
       ]}
       dropdownActions={
-        canManage
+        canDelete
           ? [
               {
                 icon: <Trash2 className="h-4 w-4" />,

@@ -73,7 +73,7 @@ export function SelectableFileList<T extends FileListItem>({
   onEdit?: (id: string) => void;
   /**
    * The conversation these files belong to, when there is one. Downloads need
-   * it: a locked chat's attachment serves its bytes only to a request bearing
+   * it: an encrypted chat's attachment serves its bytes only to a request bearing
    * that conversation's key. Omitted on surfaces with no conversation (the
    * project page), where every file is served plainly.
    */
@@ -222,12 +222,7 @@ export function SelectableFileList<T extends FileListItem>({
             />
             Select all
           </label>
-          <Button
-            variant="ghost"
-            size="sm"
-            className="h-7 px-2 text-xs"
-            onClick={exitSelection}
-          >
+          <Button variant="ghost" size="xs" onClick={exitSelection}>
             Cancel
           </Button>
         </div>
@@ -264,8 +259,7 @@ export function SelectableFileList<T extends FileListItem>({
           <div className="flex gap-1">
             <Button
               variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs"
+              size="xs"
               disabled={selectedItems.length === 0}
               onClick={() => void downloadFiles(selectedItems, conversationId)}
             >
@@ -275,8 +269,7 @@ export function SelectableFileList<T extends FileListItem>({
             {onRequestSaveToKnowledge && (
               <Button
                 variant="ghost"
-                size="sm"
-                className="h-7 gap-1 px-2 text-xs"
+                size="xs"
                 disabled={savableSelection.length === 0}
                 title={
                   savableSelection.length === 0
@@ -291,8 +284,8 @@ export function SelectableFileList<T extends FileListItem>({
             )}
             <Button
               variant="ghost"
-              size="sm"
-              className="h-7 gap-1 px-2 text-xs text-destructive hover:text-destructive"
+              size="xs"
+              className="text-destructive hover:text-destructive"
               disabled={selectedItems.length === 0}
               onClick={handleBulkDelete}
             >
@@ -341,14 +334,16 @@ function FileRowMenu({
   return (
     <DropdownMenu>
       <DropdownMenuTrigger asChild>
-        <button
+        <Button
           type="button"
+          variant="ghost"
+          size="icon-sm"
           title="More actions"
-          className="mr-1 flex h-8 w-8 shrink-0 items-center justify-center rounded text-muted-foreground hover:bg-muted hover:text-foreground"
+          className="mr-1 shrink-0 text-muted-foreground"
         >
           <MoreHorizontal className="h-4 w-4" />
           <span className="sr-only">Actions for {item.name}</span>
-        </button>
+        </Button>
       </DropdownMenuTrigger>
       <DropdownMenuContent align="end">
         {onEdit && (
@@ -358,7 +353,7 @@ function FileRowMenu({
           </DropdownMenuItem>
         )}
         {item.contentUrl && (
-          // Not a bare <a href>: in a locked chat the bytes only come back to a
+          // Not a bare <a href>: in an encrypted chat the bytes only come back to a
           // request carrying the conversation key, which an anchor cannot send.
           <DropdownMenuItem
             onSelect={(e) => {

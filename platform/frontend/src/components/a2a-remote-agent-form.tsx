@@ -1,15 +1,20 @@
 "use client";
 
-import type {
-  archestraApiTypes,
-  ResourceVisibilityScope,
-} from "@archestra/shared";
+import type { archestraApiTypes } from "@archestra/shared";
 import { CheckCircle2, Loader2 } from "lucide-react";
-import { useCallback, useEffect, useId, useRef, useState } from "react";
+import {
+  type ReactNode,
+  useCallback,
+  useEffect,
+  useId,
+  useRef,
+  useState,
+} from "react";
 import { useForm } from "react-hook-form";
-import { A2aRemoteAgentScopeSelector } from "@/components/a2a-remote-agent-scope-selector";
-import { createdByFact } from "@/components/created-by-cell";
-import { DetailFacts } from "@/components/detail-facts";
+import {
+  type InitialPermissionGrant,
+  InitialResourcePermissions,
+} from "@/components/initial-resource-permissions";
 import { FloatingActionBar } from "@/components/settings/settings-block";
 import {
   SettingsSection,
@@ -20,19 +25,24 @@ import { Button } from "@/components/ui/button";
 import { FieldDescription } from "@/components/ui/field-description";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import {
+  RadioGroup,
+  RadioGroupItem,
+  radioCardClass,
+} from "@/components/ui/radio-group";
 import { SecretInput } from "@/components/ui/secret-input";
 import { Textarea } from "@/components/ui/textarea";
 import type {
   A2aRemoteAgent,
+  CreateA2aRemoteAgentBody,
   UpdateA2aRemoteAgentBody,
 } from "@/lib/a2a-remote-agents.query";
 import { useInspectA2aRemoteAgent } from "@/lib/a2a-remote-agents.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { getApiErrorMessage } from "@/lib/utils/api";
+import { cn } from "@/lib/utils/tailwind";
 
 type AuthType = "none" | "bearer" | "api_key";
-type AccessChoice = ResourceVisibilityScope | "user";
 type Source = NonNullable<UpdateA2aRemoteAgentBody["source"]>;
 type Auth = NonNullable<UpdateA2aRemoteAgentBody["auth"]>;
 type Inspection = archestraApiTypes.InspectA2aRemoteAgentResponses["200"];
@@ -43,13 +53,11 @@ type FormValues = {
   authType: AuthType;
   headerName: string;
   credential: string;
-  scope: ResourceVisibilityScope;
-  accessChoice: AccessChoice;
-  teamIds: string[];
-  userIds: string[];
 };
+type CardPrefill = Pick<FormValues, "name" | "description">;
 
-export type A2aRemoteAgentFormSubmission = UpdateA2aRemoteAgentBody;
+export type A2aRemoteAgentFormSubmission = UpdateA2aRemoteAgentBody &
+  Pick<CreateA2aRemoteAgentBody, "initialGrants">;
 
 const AUTH_LABELS: Record<AuthType, string> = {
   none: "None",
@@ -57,6 +65,9 @@ const AUTH_LABELS: Record<AuthType, string> = {
   api_key: "API key header",
 };
 const ALL_AUTH_TYPES: AuthType[] = ["none", "bearer", "api_key"];
+const MAX_PREVIEW_SKILLS = 5;
+const DOTTED_VERSION = /^v?\d+(\.\d+)+([-+][0-9a-z.-]+)?$/i;
+const EMPTY_CARD_PREFILL: CardPrefill = { name: "", description: "" };
 
 export function A2aRemoteAgentForm({
   agent,
@@ -64,16 +75,31 @@ export function A2aRemoteAgentForm({
   isSaving,
   onSubmit,
   onDirtyChange,
+  permissions,
 }: {
   agent?: A2aRemoteAgent;
   readOnly?: boolean;
   isSaving: boolean;
   onSubmit: (submission: A2aRemoteAgentFormSubmission) => void;
   onDirtyChange?: (isDirty: boolean) => void;
+  /**
+   * An existing agent's Permissions section. It keeps its own edits, and this
+   * form's Save commits them, so the page shows one Save.
+   */
+  permissions?: {
+    section: ReactNode;
+    dirty: boolean;
+    save: () => Promise<void>;
+  };
 }) {
   const formId = useId();
   const initial = valuesFromAgent(agent);
   const form = useForm<FormValues>({ defaultValues: initial });
+  // Who else can use the agent once it exists. An existing agent's access is
+  // edited in its own Permissions section, which saves on its own.
+  const [initialGrants, setInitialGrants] = useState<InitialPermissionGrant[]>(
+    [],
+  );
   const { mutate: inspectRemoteAgent, reset: resetRemoteAgentInspection } =
     useInspectA2aRemoteAgent();
   const appName = useAppName();
@@ -88,6 +114,7 @@ export function A2aRemoteAgentForm({
   const [inspectionPending, setInspectionPending] = useState(false);
   const requestRef = useRef(0);
   const refreshedAgentIdRef = useRef<string | null>(null);
+  const cardPrefillRef = useRef<CardPrefill>({ ...EMPTY_CARD_PREFILL });
   const values = form.watch();
   const keepsLegacySource = !!agent && !storedWellKnownBaseUrl(agent);
   const urlRequiredMessage = keepsLegacySource
@@ -97,9 +124,13 @@ export function A2aRemoteAgentForm({
     connectionStamp(values, agent) !== compatibleStamp;
   const inspectionNeedsPersistence =
     !!agent && !!inspection && inspection.cardHash !== agent.cardHash;
-  const isDirty = form.formState.isDirty || inspectionNeedsPersistence;
+  const formDirty =
+    form.formState.isDirty ||
+    inspectionNeedsPersistence ||
+    initialGrants.length > 0;
+  const isDirty = formDirty || !!permissions?.dirty;
 
-  useEffect(() => onDirtyChange?.(isDirty), [isDirty, onDirtyChange]);
+  useEffect(() => onDirtyChange?.(formDirty), [formDirty, onDirtyChange]);
   useEffect(
     () => () => {
       requestRef.current += 1;
@@ -125,6 +156,22 @@ export function A2aRemoteAgentForm({
     setInspectionError(null);
     setInspectionPending(false);
   };
+
+  const prefillDetailsFromCard = useCallback(
+    (result: Inspection) => {
+      const current = form.getValues();
+      const next = nextCardPrefill({
+        current: { name: current.name, description: current.description },
+        previousPrefill: cardPrefillRef.current,
+        card: { name: result.name, description: result.description ?? "" },
+      });
+      cardPrefillRef.current = next.prefill;
+      for (const field of next.updatedFields) {
+        form.setValue(field, next.prefill[field], { shouldDirty: true });
+      }
+    },
+    [form],
+  );
 
   const inspectConnection = useCallback(
     async ({
@@ -190,6 +237,7 @@ export function A2aRemoteAgentForm({
             setCapabilitiesInspected(true);
             setCompatibleStamp(connectionStamp(draft, agent));
             setInspectionPending(false);
+            if (!agent) prefillDetailsFromCard(result);
             onSuccess?.(result, draft);
           },
           onError: (error) => {
@@ -201,7 +249,7 @@ export function A2aRemoteAgentForm({
         },
       );
     },
-    [agent, form, inspectRemoteAgent],
+    [agent, form, inspectRemoteAgent, prefillDetailsFromCard],
   );
 
   useEffect(() => {
@@ -233,20 +281,6 @@ export function A2aRemoteAgentForm({
     });
     return false;
   };
-  const validateAccess = () => {
-    form.clearErrors(["teamIds", "userIds"]);
-    const current = form.getValues();
-    if (current.accessChoice === "team" && current.teamIds.length === 0) {
-      form.setError("teamIds", { message: "Select at least one team." });
-      return false;
-    }
-    if (current.accessChoice === "user" && current.userIds.length === 0) {
-      form.setError("userIds", { message: "Select at least one user." });
-      return false;
-    }
-    return true;
-  };
-
   const buildSubmission = ({
     verifiedInspection = inspection,
     verifiedStamp = compatibleStamp,
@@ -258,10 +292,7 @@ export function A2aRemoteAgentForm({
     if (connectionStamp(current, agent) !== verifiedStamp) return null;
     const source = parseSource({ values: current, agent, form });
     const auth = parseAuth({ values: current, agent, form });
-    if (source === null || auth === null || !validateAccess()) return null;
-    const scope = current.accessChoice === "user" ? "personal" : current.scope;
-    const teams = current.accessChoice === "team" ? current.teamIds : [];
-    const users = current.accessChoice === "user" ? current.userIds : [];
+    if (source === null || auth === null) return null;
     if (!agent) {
       if (!source) return null;
       return {
@@ -269,9 +300,10 @@ export function A2aRemoteAgentForm({
         ...(auth ? { auth } : {}),
         name: current.name.trim() || undefined,
         description: current.description.trim() || undefined,
-        scope,
-        teams,
-        users,
+        initialGrants: initialGrants.map(({ subject, actions }) => ({
+          subject,
+          actions,
+        })),
       };
     }
     const submission: A2aRemoteAgentFormSubmission = {};
@@ -289,28 +321,15 @@ export function A2aRemoteAgentForm({
     if (name && name !== agent.name) submission.name = name;
     const description = current.description.trim() || null;
     if (description !== agent.description) submission.description = description;
-    if (
-      scope !== agent.scope ||
-      !sameIds(
-        teams,
-        agent.teams.map((team) => team.id),
-      ) ||
-      !sameIds(
-        users,
-        agent.users.map((user) => user.id),
-      )
-    ) {
-      submission.scope = scope;
-      submission.teams = teams;
-      submission.users = users;
-    }
     return submission;
   };
 
   const discardChanges = () => {
     const resetValues = valuesFromAgent(agent);
     requestRef.current += 1;
+    cardPrefillRef.current = { ...EMPTY_CARD_PREFILL };
     form.reset(resetValues);
+    setInitialGrants([]);
     setInspection(agent ? inspectionFromAgent(agent) : null);
     setCapabilitiesInspected(false);
     setCompatibleStamp(agent ? connectionStamp(resetValues, agent) : null);
@@ -330,14 +349,26 @@ export function A2aRemoteAgentForm({
       verifiedStamp,
     });
     if (!submission) return;
-    if (agent && Object.keys(submission).length === 0) {
+    const hasFieldChanges = !agent || Object.keys(submission).length > 0;
+    if (!hasFieldChanges && !permissions?.dirty) {
       discardChanges();
       return;
     }
-    onSubmit(submission);
+    void (async () => {
+      if (permissions?.dirty) {
+        try {
+          await permissions.save();
+        } catch {
+          // The Permissions section reports its own error.
+          return;
+        }
+      }
+      if (hasFieldChanges) onSubmit(submission);
+      else discardChanges();
+    })();
   };
   const submit = form.handleSubmit(() => {
-    if (!validateCredential() || !validateAccess()) return;
+    if (!validateCredential()) return;
     const draft = form.getValues();
     const draftStamp = connectionStamp(draft, agent);
     if (draftStamp === compatibleStamp && inspection) {
@@ -371,9 +402,6 @@ export function A2aRemoteAgentForm({
 
   return (
     <>
-      {agent?.createdBy && (
-        <DetailFacts facts={[createdByFact(agent.createdBy)]} />
-      )}
       <form id={formId} className="flex flex-col" onSubmit={submit}>
         <SettingsSectionGroup>
           <SettingsSection
@@ -441,7 +469,10 @@ export function A2aRemoteAgentForm({
                   <Label
                     key={authType}
                     htmlFor={`a2a-auth-${authType}`}
-                    className="flex cursor-pointer items-start gap-2 rounded-md border p-3 has-[[data-state=checked]]:border-primary has-[[data-state=checked]]:bg-primary/5 has-[[data-disabled]]:cursor-not-allowed has-[[data-disabled]]:opacity-50"
+                    className={cn(
+                      "flex cursor-pointer items-start gap-2 rounded-md p-3",
+                      radioCardClass(),
+                    )}
                   >
                     <RadioGroupItem
                       id={`a2a-auth-${authType}`}
@@ -551,19 +582,7 @@ export function A2aRemoteAgentForm({
               </p>
             ) : null}
             {inspection && !inspectionError ? (
-              <output
-                aria-label="Agent Card found"
-                className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
-              >
-                <CheckCircle2 className="mt-0.5 h-4 w-4 text-green-600" />
-                <div>
-                  <p className="font-medium">{inspection.name}</p>
-                  <p className="text-muted-foreground">
-                    {inspection.selectedInterface.protocolBinding},{" "}
-                    {inspection.selectedInterface.protocolVersion}
-                  </p>
-                </div>
-              </output>
+              <AgentCardPreview inspection={inspection} />
             ) : null}
             {inspection && !inspectionPending && !connectionNeedsInspection ? (
               <output
@@ -582,7 +601,7 @@ export function A2aRemoteAgentForm({
             description={
               agent
                 ? `Customize how this external agent appears in ${appName}.`
-                : "Optional local details. Empty fields use the Agent Card values."
+                : "Checking the Agent Card fills these in. Edit them to customize; empty fields use the Agent Card values."
             }
           >
             <div className="space-y-2">
@@ -605,60 +624,21 @@ export function A2aRemoteAgentForm({
               />
             </div>
           </SettingsSection>
-          <SettingsSection
-            title="Access"
-            description="Choose who can discover and assign this external agent."
-          >
-            <div
-              aria-invalid={
-                !!form.formState.errors.teamIds ||
-                !!form.formState.errors.userIds
-              }
-              aria-describedby="a2a-access-error"
-            >
-              <A2aRemoteAgentScopeSelector
-                initialScope={agent?.scope}
-                onChoiceChange={(choice) => {
-                  form.clearErrors(["teamIds", "userIds"]);
-                  form.setValue("accessChoice", choice, {
-                    shouldDirty: true,
-                  });
-                }}
-                scope={values.scope}
-                onScopeChange={(scope) =>
-                  form.setValue("scope", scope, { shouldDirty: true })
-                }
-                teamIds={values.teamIds}
-                onTeamIdsChange={(ids) =>
-                  form.setValue("teamIds", ids, { shouldDirty: true })
-                }
-                userIds={values.userIds}
-                onUserIdsChange={(ids) =>
-                  form.setValue("userIds", ids, { shouldDirty: true })
-                }
-              />
-            </div>
-            {form.formState.errors.teamIds ? (
-              <p
-                id="a2a-access-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {form.formState.errors.teamIds.message}
-              </p>
-            ) : null}
-            {form.formState.errors.userIds ? (
-              <p
-                id="a2a-access-error"
-                role="alert"
-                className="text-sm text-destructive"
-              >
-                {form.formState.errors.userIds.message}
-              </p>
-            ) : null}
-          </SettingsSection>
+          {!agent && (
+            <InitialResourcePermissions
+              layout="settings"
+              resource="externalAgent"
+              grants={initialGrants}
+              onChange={setInitialGrants}
+            />
+          )}
         </SettingsSectionGroup>
       </form>
+      {/* Outside the form: the Permissions editor is a form of its own, and
+        forms cannot nest. The rule and padding match the group's sections. */}
+      {agent && permissions && (
+        <div className="border-t pt-8">{permissions.section}</div>
+      )}
       <FloatingActionBar>
         <Button
           type="submit"
@@ -681,14 +661,70 @@ export function A2aRemoteAgentForm({
   );
 }
 
+function AgentCardPreview({ inspection }: { inspection: Inspection }) {
+  const card = agentCardPreviewFields(inspection);
+  const shownSkills = card.skills.slice(0, MAX_PREVIEW_SKILLS);
+  const hiddenSkillCount = card.skills.length - shownSkills.length;
+  // The card description is not repeated here: it fills the Description field.
+  return (
+    <output
+      aria-label="Agent Card found"
+      className="flex items-start gap-2 rounded-md border bg-muted/40 p-3 text-sm"
+    >
+      <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0 text-green-600" />
+      <div className="min-w-0 flex-1 space-y-2">
+        <div className="space-y-0.5">
+          <p className="break-words font-medium">{inspection.name}</p>
+          <p className="text-muted-foreground">
+            {[
+              card.provider ? `by ${card.provider}` : null,
+              card.version ? `v${card.version}` : null,
+              `A2A ${inspection.selectedInterface.protocolVersion} over ${inspection.selectedInterface.protocolBinding}`,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
+          </p>
+        </div>
+        {shownSkills.length > 0 ? (
+          <div className="space-y-1">
+            <p className="text-xs font-medium text-muted-foreground">
+              What this agent can do
+            </p>
+            <ul aria-label="What this agent can do" className="space-y-1">
+              {shownSkills.map((skill, index) => (
+                <li
+                  // biome-ignore lint/suspicious/noArrayIndexKey: card skills may repeat names
+                  key={index}
+                  className="min-w-0"
+                >
+                  <span className="font-medium">{skill.name}</span>
+                  {skill.description ? (
+                    <span className="line-clamp-1 break-words text-muted-foreground">
+                      {skill.description}
+                    </span>
+                  ) : null}
+                </li>
+              ))}
+            </ul>
+            {hiddenSkillCount > 0 ? (
+              <p className="text-xs text-muted-foreground">
+                +{hiddenSkillCount} more
+              </p>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+    </output>
+  );
+}
+
 function ReadOnlySummary({ agent }: { agent: A2aRemoteAgent }) {
   return (
     <div className="space-y-6">
-      <DetailFacts facts={[createdByFact(agent.createdBy)]} />
       <Alert>
         <AlertDescription>
           You can view this external agent, but you do not have permission to
-          change its connection or access settings.
+          change its connection settings.
         </AlertDescription>
       </Alert>
       <SettingsSectionGroup>
@@ -752,8 +788,6 @@ function SummaryItem({ label, value }: { label: string; value: string }) {
 }
 
 function valuesFromAgent(agent?: A2aRemoteAgent): FormValues {
-  const scope = agent?.scope ?? "personal";
-  const userIds = agent?.users.map((user) => user.id) ?? [];
   return {
     url: storedWellKnownBaseUrl(agent) ?? "",
     name: agent?.name ?? "",
@@ -761,10 +795,6 @@ function valuesFromAgent(agent?: A2aRemoteAgent): FormValues {
     authType: agent?.connection.authType ?? "none",
     headerName: agent?.connection.authConfig.headerName ?? "X-API-Key",
     credential: "",
-    scope,
-    accessChoice: scope === "personal" && userIds.length > 0 ? "user" : scope,
-    teamIds: agent?.teams.map((team) => team.id) ?? [],
-    userIds,
   };
 }
 function inspectionFromAgent(agent: A2aRemoteAgent): Inspection {
@@ -894,8 +924,70 @@ function normalizeAgentBaseUrl(value: string) {
     return null;
   }
 }
-function sameIds(left: string[], right: string[]) {
-  if (left.length !== right.length) return false;
-  const ids = new Set(right);
-  return left.every((id) => ids.has(id));
+function nextCardPrefill({
+  current,
+  previousPrefill,
+  card,
+}: {
+  current: CardPrefill;
+  previousPrefill: CardPrefill;
+  card: CardPrefill;
+}): { prefill: CardPrefill; updatedFields: (keyof CardPrefill)[] } {
+  const prefill = { ...previousPrefill };
+  const updatedFields: (keyof CardPrefill)[] = [];
+  for (const field of ["name", "description"] as const) {
+    // Only replace values the user has not typed or edited: an empty field,
+    // or the exact value a previous Agent Card check filled in.
+    const untouched =
+      !current[field].trim() || current[field] === previousPrefill[field];
+    if (!untouched) continue;
+    prefill[field] = card[field];
+    if (current[field] !== card[field]) updatedFields.push(field);
+  }
+  return { prefill, updatedFields };
+}
+function agentCardPreviewFields(inspection: Inspection) {
+  const { agentCard } = inspection;
+  const provider = asRecord(agentCard.provider);
+  const skills = Array.isArray(agentCard.skills) ? agentCard.skills : [];
+  const version = nonEmptyString(agentCard.version);
+  const agentName = comparable(inspection.name);
+  const agentDescription = comparable(inspection.description);
+  return {
+    // Cards may carry a build number or timestamp as `version`; only a dotted
+    // release version (1.2, 2.1.0, v3.0.0-beta) is worth showing.
+    version:
+      version && DOTTED_VERSION.test(version)
+        ? version.replace(/^v/i, "")
+        : null,
+    provider: nonEmptyString(provider?.organization),
+    skills: skills.flatMap((value) => {
+      const skill = asRecord(value);
+      const name = nonEmptyString(skill?.name) ?? nonEmptyString(skill?.id);
+      // Single-skill cards often name the skill after the agent; that repeats
+      // the header instead of saying what the agent can do.
+      if (!name || comparable(name) === agentName) return [];
+      const description = nonEmptyString(skill?.description);
+      return [
+        {
+          name,
+          description:
+            description && comparable(description) !== agentDescription
+              ? description
+              : null,
+        },
+      ];
+    }),
+  };
+}
+function comparable(value: string | null | undefined) {
+  return value?.trim().toLowerCase() ?? "";
+}
+function asRecord(value: unknown): Record<string, unknown> | null {
+  return value && typeof value === "object" && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : null;
+}
+function nonEmptyString(value: unknown) {
+  return typeof value === "string" && value.trim() ? value.trim() : null;
 }

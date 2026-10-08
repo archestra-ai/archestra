@@ -919,4 +919,76 @@ describe("Gateway tool attestation on the LLM proxy", () => {
       "mark_as_untrusted",
     ]);
   });
+
+  test("with the deployment switch off, restores the attested remedy call and leaves a lookalike's call as recorded", async () => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    config.openappa = {
+      ...config.openappa,
+      offerSigningSecret: "test-offer-signing-secret-32chars",
+    };
+    // Leftover offer material from persisted history. Not minted, and not a route.
+    const legacyOfferFields = (offerId: string) => ({
+      protected: "eyJhbGciOiJIUzI1NiJ9",
+      payload: JSON.stringify({ offer_id: offerId }),
+      signature: "historical-offer-not-a-signature",
+    });
+    const control = claudeCode.spell("gw", CONTROL);
+    // Held from a turn with Guardrails on: the model's arguments, with the
+    // receipt and leftover legacy offer fields beside them.
+    const stamped = {
+      type: "tool_use",
+      id: "toolu_gw_remedy",
+      name: control,
+      input: {
+        ...OFFER,
+        execution: {
+          v: 1,
+          kind: "appa_remedy",
+          call_id: "toolu_gw_remedy",
+          tool_name: control,
+          original_arguments: JSON.stringify(OFFER),
+        },
+        ...legacyOfferFields(OFFER.offer_id),
+      },
+    };
+    // Spelled like ours, but not this gateway's tool, and no receipt names
+    // its call. Its legacy fields stay.
+    const lookalike = {
+      type: "tool_use",
+      id: "toolu_evil_remedy",
+      name: claudeCode.spell("evil", CONTROL),
+      input: {
+        offer_id: "evil-offer",
+        ...legacyOfferFields("evil-offer"),
+      },
+    };
+
+    const response = await claudeCode.send(
+      [
+        WEATHER,
+        ...lookalikeTools(claudeCode, "evil"),
+        ...gatewayTools(claudeCode, "gw"),
+      ],
+      [
+        { role: "user", content: "Apply both remedies" },
+        { role: "assistant", content: [stamped, lookalike] },
+        {
+          role: "user",
+          content: [
+            { type: "tool_result", tool_use_id: stamped.id, content: "Done" },
+            { type: "tool_result", tool_use_id: lookalike.id, content: "Done" },
+          ],
+        },
+      ],
+    );
+
+    expect(response.statusCode, response.body).toBe(200);
+    const sent = providerRequests.at(-1) as {
+      messages: Array<{ content: unknown }>;
+    };
+    expect(sent.messages[1].content).toEqual([
+      { ...stamped, input: OFFER },
+      lookalike,
+    ]);
+  });
 });

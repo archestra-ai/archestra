@@ -1,64 +1,83 @@
 "use client";
 
-import { usePathname, useSearchParams } from "next/navigation";
-import { Suspense, useEffect, useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { Suspense, useState } from "react";
 import { ErrorBoundary } from "@/app/_parts/error-boundary";
 import { AccountPageActionSlotContext } from "@/app/account/_components/account-page-action";
-import { AccountSectionNav } from "@/app/account/_components/account-section-nav";
-import { ChangePasswordDialog } from "@/app/account/_components/change-password-dialog";
+import { accountSections } from "@/app/account/_components/account-sections";
+import { ExternalDocsLink } from "@/components/external-docs-link";
 import { PageLayout } from "@/components/page-layout";
-import { Button } from "@/components/ui/button";
-import { usePublicConfig } from "@/lib/config/config.query";
+import { WithPermissions } from "@/components/roles/with-permissions";
+import { getFrontendDocsUrl } from "@/lib/docs/docs";
+
+// The title stays put across tabs — the tab bar says which one is open — and
+// the description says what the open tab is for.
+const PAGE_DESCRIPTIONS: Record<string, React.ReactNode> = {
+  "/account": "Settings that apply only to you, not your organization.",
+  "/account/api-keys": <ApiKeysDescription />,
+  "/account/sessions":
+    "The browsers and devices you're signed in on. Sign out of any you don't recognize.",
+};
+
+function ApiKeysDescription() {
+  const apiDocsUrl = getFrontendDocsUrl("reference/api");
+  return (
+    <>
+      Personal keys that let your scripts and integrations call the{" "}
+      {apiDocsUrl ? (
+        <ExternalDocsLink
+          href={apiDocsUrl}
+          className="text-inherit underline underline-offset-4"
+          showIcon={false}
+        >
+          platform API
+        </ExternalDocsLink>
+      ) : (
+        <span>platform API</span>
+      )}{" "}
+      as you.
+      <WithPermissions
+        permissions={{ serviceAccount: ["read"] }}
+        noPermissionHandle="hide"
+      >
+        <span>
+          {" "}
+          For automation not tied to your user, use{" "}
+          <Link
+            href="/settings/service-accounts"
+            className="underline underline-offset-4"
+          >
+            Service Accounts
+          </Link>
+          .
+        </span>
+      </WithPermissions>
+    </>
+  );
+}
 
 function AccountShell({ children }: { children: React.ReactNode }) {
-  const searchParams = useSearchParams();
   const pathname = usePathname();
-  const highlight = searchParams.get("highlight");
-  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
   const [pageActionSlot, setPageActionSlot] = useState<HTMLDivElement | null>(
     null,
   );
-  const { data: publicConfig, isLoading: isLoadingPublicConfig } =
-    usePublicConfig();
-  const isBasicAuthDisabled = publicConfig?.disableBasicAuth ?? false;
-  const showChangePasswordButton =
-    !isLoadingPublicConfig && !isBasicAuthDisabled;
-
-  useEffect(() => {
-    if (highlight === "change-password" && showChangePasswordButton) {
-      setIsChangePasswordOpen(true);
-    }
-  }, [highlight, showChangePasswordButton]);
 
   return (
     <PageLayout
       title="Personal Settings"
-      // Most account sections keep password management one click away. A page
-      // with a primary action of its own can replace it in the same header
-      // slot; API Keys uses that for Create API Key. The dialog stays mounted
-      // here so the `?highlight=change-password` deep link still works.
+      description={PAGE_DESCRIPTIONS[pathname] ?? PAGE_DESCRIPTIONS["/account"]}
+      tabs={accountSections}
+      // API Keys puts Create API Key in the header through this slot.
       actionButton={
         pathname === "/account/api-keys" ? (
           <div ref={setPageActionSlot} />
-        ) : showChangePasswordButton ? (
-          <Button type="button" onClick={() => setIsChangePasswordOpen(true)}>
-            Change Password
-          </Button>
         ) : null
       }
     >
       <AccountPageActionSlotContext.Provider value={pageActionSlot}>
-        <div className="grid items-start gap-6 lg:grid-cols-[220px_minmax(0,1fr)]">
-          <AccountSectionNav />
-          <div className="min-w-0">{children}</div>
-        </div>
+        {children}
       </AccountPageActionSlotContext.Provider>
-      {showChangePasswordButton && (
-        <ChangePasswordDialog
-          open={isChangePasswordOpen}
-          onOpenChange={setIsChangePasswordOpen}
-        />
-      )}
     </PageLayout>
   );
 }

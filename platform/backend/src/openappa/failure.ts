@@ -71,7 +71,10 @@ const POLICY_REFUSALS = [
   /^battery \S+: /,
 ];
 
-function classify(error: unknown): { statusCode: 500 | 503; detail: string } {
+function classify(error: unknown): {
+  statusCode: 409 | 500 | 503;
+  detail: string;
+} {
   if (error instanceof OpenappaCredentialError)
     return {
       statusCode: 500,
@@ -88,8 +91,20 @@ function classify(error: unknown): { statusCode: 500 | 503; detail: string } {
       statusCode: 503,
       detail: "the policy runtime has no free database connection.",
     };
+  // Every later request of the subagent fails the same way: no fork exists
+  // for it to open, whatever the retry.
+  if (message.includes(UNFORKED_CHILD) || message === UNSTARTED_PARENT)
+    return {
+      statusCode: 409,
+      detail:
+        "this subagent did not start through a checked spawn. This can happen when it started while Guardrails enforcement was off. OpenAPPA refuses its requests. To continue its work, start a new subagent.",
+    };
   return { statusCode: 503, detail: "the policy runtime is unavailable." };
 }
+
+/** The runtime's refusal of a child that no approved spawn prepared. */
+const UNFORKED_CHILD = "no prepared fork to open this child";
+const UNSTARTED_PARENT = "parent session has not started";
 
 /** One line, bounded, with any URL credentials removed. */
 function summarize(message: string): string {

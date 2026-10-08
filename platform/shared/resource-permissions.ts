@@ -18,6 +18,9 @@ export const ScopedResourceSchema = z.enum([
   "knowledgeFile",
   "llmVirtualKey",
   "llmProviderApiKey",
+  // An agent hosted elsewhere and reached over A2A. Using one means assigning
+  // it as a subagent or delegating to it.
+  "externalAgent",
   // An OAuth client registration. Its tokens never consult these grants: they
   // decide who can see and manage the registration, not what it reaches.
   "mcpOauthClient",
@@ -34,22 +37,20 @@ export const ScopedResourceSchema = z.enum([
   // create. They are granted at `*` and nowhere else, so they appear on the
   // organization Permissions screen and never on an object's own tab.
   "scheduledTask",
+  // Retained only to decode historical stored policies during migration.
   "log",
   "auditLog",
 ]);
 
-/**
- * Resources whose only legal scope is `*`.
- *
- * An action like `log:admin` was never about one object; it lifted a list from
- * "rows you created" to "every row". Converting it to a grant keeps that
- * meaning and makes it something a custom role can receive, which a role
- * action never could — role permission snapshots are frozen at creation.
- */
-export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>([
-  "scheduledTask",
+/** Resource types whose policies can be managed through the current API. */
+export const ManagedResourceSchema = ScopedResourceSchema.exclude([
   "log",
   "auditLog",
+]);
+
+/** Resources with no individual object policy. Logs use role actions instead. */
+export const ORGANIZATION_WIDE_RESOURCES = new Set<ScopedResource>([
+  "scheduledTask",
 ]);
 
 export const ResourcePermissionActionSchema = z.enum([
@@ -58,6 +59,11 @@ export const ResourcePermissionActionSchema = z.enum([
   "update",
   "delete",
   "manage-permissions",
+  // MCP registry only: view and change how a self-hosted server is deployed
+  // (deployment spec, service account, secret sources). It reaches past the
+  // server into the cluster it runs on, so it sits above Full access rather
+  // than inside it, and a creator's automatic Full access never carries it.
+  "configure-deployment-spec",
 ]);
 
 /** Every selector is local to one resource type and one organization. */
@@ -76,7 +82,7 @@ export const PermissionSubjectSchema = z.discriminatedUnion("type", [
 
 export const ResourcePermissionGrantSchema = z.object({
   subject: PermissionSubjectSchema,
-  actions: z.array(ResourcePermissionActionSchema).min(1).max(5),
+  actions: z.array(ResourcePermissionActionSchema).min(1).max(6),
 });
 
 export type ScopedResource = z.infer<typeof ScopedResourceSchema>;
@@ -182,7 +188,27 @@ export function resourcePermissionPresetsFor(
       },
     };
   }
+  if (resource === "mcpRegistry") {
+    return {
+      ...resourcePermissionPresets,
+      deploy: {
+        label: "Full access + deploy",
+        actions: [
+          ...resourcePermissionPresets.manage.actions,
+          "configure-deployment-spec",
+        ],
+      },
+    };
+  }
   return resourcePermissionPresets;
+}
+
+/** The widest preset a resource offers: what its administrators hold. */
+export function topResourcePermissionPreset(
+  resource?: ScopedResource,
+): ResourcePermissionPreset {
+  const presets = Object.values(resourcePermissionPresetsFor(resource));
+  return presets[presets.length - 1];
 }
 
 /**

@@ -9,6 +9,7 @@ import {
 import { z } from "zod";
 import logger from "@/logging";
 import { projectService } from "@/services/project";
+import { ResourcePermissions } from "@/services/resource-permissions";
 import type { ProjectListItem } from "@/types";
 import { ApiError, LabelWithDetailsSchema } from "@/types";
 import {
@@ -18,6 +19,7 @@ import {
   errorResult,
   structuredSuccessResult,
 } from "./helpers";
+import { resourceAccessToolArg } from "./resource-access-tool-arg";
 
 const USER_CONTEXT_REQUIRED =
   "This tool requires an authenticated user context. Call it with a user token.";
@@ -222,6 +224,7 @@ const registry = defineArchestraTools([
             "Case-insensitive substring matched against the project name and " +
               "description. Omit to list everything the caller can reach.",
           ),
+        access: resourceAccessToolArg({ examplePlural: "projects" }),
       })
       .strict(),
     outputSchema: ListProjectsOutputSchema,
@@ -234,14 +237,26 @@ const registry = defineArchestraTools([
       const { userId, organizationId } = context;
 
       try {
-        // `isProjectAdmin` is deliberately not passed: without a scope filter
-        // the service drops admin-oversight rows anyway, so a project admin
-        // sees exactly what they can access — same as everyone else. Oversight
-        // of other members' private projects stays a UI concern.
+        // Without `access`, `isProjectAdmin` is deliberately not passed: the
+        // service drops admin-oversight rows anyway, so a project admin sees
+        // exactly what they can access — same as everyone else. An explicit
+        // `access` replaces that rule, so `others` reaches the oversight rows
+        // of a project admin, as the REST list does.
+        const isProjectAdmin = args.access
+          ? await ResourcePermissions.allows({
+              userId,
+              organizationId,
+              resource: "project",
+              scope: "*",
+              action: "update",
+            })
+          : undefined;
         const projects = await projectService.list({
           organizationId,
           userId,
+          isProjectAdmin,
           search: args.query,
+          access: args.access,
         });
         const shown = projects.slice(0, MAX_LISTED_PROJECTS);
         const summary =

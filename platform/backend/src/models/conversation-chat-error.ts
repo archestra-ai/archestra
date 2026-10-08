@@ -2,14 +2,14 @@ import {
   ChatErrorCode,
   type ChatErrorResponse,
   ChatErrorResponseSchema,
-  lockedChatSealedContent,
+  encryptedChatSealedContent,
 } from "@archestra/shared";
 import { eq } from "drizzle-orm";
 import {
-  decryptLockedChatValue,
-  encryptLockedChatValue,
-  type LockedChatAuditContext,
-} from "@/content-encryption/locked-chat";
+  decryptEncryptedChatValue,
+  type EncryptedChatAuditContext,
+  encryptEncryptedChatValue,
+} from "@/content-encryption/encrypted-chat";
 import db, { schema } from "@/database";
 import logger from "@/logging";
 import type {
@@ -21,7 +21,7 @@ import { isContentEnvelope } from "@/utils/crypto";
 class ConversationChatErrorModel {
   static async create(
     data: InsertConversationChatError,
-    auditContext?: LockedChatAuditContext | null,
+    auditContext?: EncryptedChatAuditContext | null,
   ): Promise<ConversationChatError> {
     const [chatError] = await db
       .insert(schema.conversationChatErrorsTable)
@@ -29,7 +29,7 @@ class ConversationChatErrorModel {
         auditContext
           ? {
               ...data,
-              error: encryptLockedChatValue(data.error, {
+              error: encryptEncryptedChatValue(data.error, {
                 ...auditContext,
                 context: CHAT_ERROR_CONTEXT,
               }) as ChatErrorResponse,
@@ -44,12 +44,12 @@ class ConversationChatErrorModel {
   /**
    * `auditContext` is only for callers holding the conversation key. Every
    * other reader (the conversation load, share views, scheduled-run summaries)
-   * omits it and gets the locked sentinel for locked-chat rows rather than an
+   * omits it and gets the locked sentinel for encrypted-chat rows rather than an
    * exception — one unopenable error row must not fail the whole read.
    */
   static async findByConversation(
     conversationId: string,
-    auditContext?: LockedChatAuditContext | null,
+    auditContext?: EncryptedChatAuditContext | null,
   ): Promise<ConversationChatError[]> {
     const chatErrors = await db
       .select()
@@ -81,11 +81,11 @@ class ConversationChatErrorModel {
 const CHAT_ERROR_CONTEXT = "conversation_chat_errors.error" as const;
 
 /**
- * Decrypt a locked-chat error row, or degrade it to something serializable.
+ * Decrypt an encrypted-chat error row, or degrade it to something serializable.
  *
  * The response schema is a strict `ChatErrorResponse`, so the locked sentinel
  * cannot be the column value itself — it rides in `originalError.raw`, where
- * the UI matches it with `isLockedChatSealedContent`. A DEK that cannot open
+ * the UI matches it with `isEncryptedChatSealedContent`. A DEK that cannot open
  * the row lands here too: the content is stored and escrow-recoverable, so
  * "locked" is the honest answer, and throwing would take the whole
  * conversation load down with it.
@@ -93,7 +93,7 @@ const CHAT_ERROR_CONTEXT = "conversation_chat_errors.error" as const;
 function readChatError(params: {
   stored: ChatErrorResponse;
   conversationId: string;
-  auditContext: LockedChatAuditContext | null;
+  auditContext: EncryptedChatAuditContext | null;
 }): ChatErrorResponse {
   const { stored, conversationId, auditContext } = params;
   if (!isContentEnvelope(stored)) {
@@ -102,7 +102,7 @@ function readChatError(params: {
   if (auditContext) {
     try {
       return normalizeChatErrorResponse(
-        decryptLockedChatValue(stored, {
+        decryptEncryptedChatValue(stored, {
           ...auditContext,
           context: CHAT_ERROR_CONTEXT,
         }) as ChatErrorResponse,
@@ -110,15 +110,15 @@ function readChatError(params: {
     } catch (error) {
       logger.warn(
         { error, conversationId },
-        "[ConversationChatError] locked-chat error row could not be decrypted with the presented key",
+        "[ConversationChatError] encrypted-chat error row could not be decrypted with the presented key",
       );
     }
   }
   return {
     code: ChatErrorCode.Unknown,
-    message: "Error details are encrypted for this locked chat.",
+    message: "Error details are encrypted for this encrypted chat.",
     isRetryable: false,
-    originalError: { raw: lockedChatSealedContent(conversationId) },
+    originalError: { raw: encryptedChatSealedContent(conversationId) },
   };
 }
 

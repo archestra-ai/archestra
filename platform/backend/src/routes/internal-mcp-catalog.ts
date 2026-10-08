@@ -4,6 +4,7 @@ import {
   isBuiltInCatalogId,
   isMetadataOnlyEdit,
   mcpRuntimeAlertSource,
+  ResourceAccessQuerySchema,
   ResourcePermissionActionSchema,
   ResourcePermissionGrantSchema,
   RouteId,
@@ -58,6 +59,10 @@ import {
   resolveDefaultEnvironmentForNewResource,
 } from "@/services/environments/environment";
 import {
+  assertCanManageMcpDeployment,
+  assertCanWriteMcpDeploymentYaml,
+} from "@/services/mcp-advanced-settings";
+import {
   extractLocalConfigSecrets,
   getCatalogClientSecretValues,
   upsertCatalogClientSecretValue,
@@ -86,7 +91,6 @@ import {
   ListInternalMcpCatalogSchema,
   type LocalConfig,
   type McpServer,
-  type McpServerAlertMute,
   McpServerAlertMuteSchema,
   type McpServerDismissibleAlertKind,
   McpServerDismissibleAlertKindSchema,
@@ -173,8 +177,9 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .enum(["active", "deleted"])
             .default("active")
             .describe(
-              "Filter by lifecycle status. `deleted` lists soft-deleted catalog items and requires the manage-deleted permission (granted to admins by default).",
+              "Filter by lifecycle status. `deleted` lists only soft-deleted catalog items you can delete.",
             ),
+          access: ResourceAccessQuerySchema,
         }),
         response: constructResponseSchema(
           z.array(
@@ -188,34 +193,31 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      // Soft-deleted catalog items are visible only to holders of the dedicated
-      // manage-deleted capability (admins by default) — the ordinary delete
-      // permission must not unlock the org-wide tombstone view. This lists
-      // org-scoped deleted roots (a backend affordance for discovering
-      // restorable ids — no UI toggle this change).
       if (request.query.status === "deleted") {
-        const { success: canManageDeleted } = await hasPermission(
-          { mcpRegistry: ["manage-deleted"] },
-          request.headers,
-        );
-        if (!canManageDeleted) {
-          throw new ApiError(
-            403,
-            "You do not have permission to list deleted catalog items.",
-          );
-        }
         const deleted =
           await InternalMcpCatalogModel.findDeletedForOrganization(
             request.organizationId,
           );
+        // SPDX-SnippetBegin
+        // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+        // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+        // Trash uses the same per-entry delete grants as the live registry.
+        const actions = await ResourcePermissions.getCatalogActions({
+          organizationId: request.organizationId,
+          userId: request.user.id,
+          targets: deleted,
+        });
         return reply.send(
-          deleted.map((item) => ({
-            ...item,
-            alertMutes: [],
-            imageApprovalRequired: false,
-            effectiveActions: [],
-          })),
+          deleted
+            .filter((item) => actions.get(item.id)?.includes("delete"))
+            .map((item) => ({
+              ...item,
+              alertMutes: [],
+              imageApprovalRequired: false,
+              effectiveActions: actions.get(item.id) ?? [],
+            })),
         );
+        // SPDX-SnippetEnd
       }
 
       const isAdmin = await isMcpInstallationAdmin({
@@ -228,6 +230,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         userId: request.user.id,
         isAdmin,
         organizationId: request.organizationId,
+        access: request.query.access,
         readGrantContext: (await userHasPermission(
           request.user.id,
           request.organizationId,
@@ -255,12 +258,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
               targets: list,
             }),
             flagImageApprovalRequired(list, request.organizationId),
-            config.mcpServer.alertingEnabled
-              ? McpServerAlertMuteModel.findForViewer({
-                  userId: request.user.id,
-                  catalogIds: list.map((item) => item.id),
-                })
-              : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
+            McpServerAlertMuteModel.findForViewer({
+              userId: request.user.id,
+              catalogIds: list.map((item) => item.id),
+            }),
           ]);
         // SPDX-SnippetEnd
         return reply.send(
@@ -292,12 +293,10 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       ] = await Promise.all([
         AppModel.getAppIdsByCatalogIds(appCatalogIds),
         AppModel.getAppEnabledByCatalogIds(appCatalogIds),
-        config.mcpServer.alertingEnabled
-          ? McpServerAlertMuteModel.findForViewer({
-              userId: request.user.id,
-              catalogIds: items.map((item) => item.id),
-            })
-          : Promise.resolve(new Map<string, McpServerAlertMute[]>()),
+        McpServerAlertMuteModel.findForViewer({
+          userId: request.user.id,
+          catalogIds: items.map((item) => item.id),
+        }),
         ResourcePermissions.getCatalogActions({
           organizationId: request.organizationId,
           userId: request.user.id,
@@ -345,7 +344,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      assertMcpServerAlertingEnabled();
       const {
         params: { id: catalogId, kind },
         body: { issueFingerprint, reason },
@@ -388,7 +386,6 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       },
     },
     async (request, reply) => {
-      assertMcpServerAlertingEnabled();
       const {
         params: { id: catalogId, kind },
         query: { issueFingerprint },
@@ -462,6 +459,12 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           "App catalog entities are managed via the Apps API.",
         );
       }
+      await assertCanWriteMcpDeploymentYaml({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        requested: restBody.deploymentSpecYaml,
+        requestedLocalConfig: restBody.localConfig,
+      });
 
       // Secret FK columns are server-managed: clients submit secret values, never
       // ids. Trusting an inbound id would let a caller point the row at another
@@ -1015,6 +1018,17 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
           );
         }
       }
+
+      // Checked before any write, the rename cascade below included.
+      await assertCanWriteMcpDeploymentYaml({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId: id,
+        requested: restBody.deploymentSpecYaml,
+        requestedLocalConfig: restBody.localConfig,
+        current: originalCatalogItem.deploymentSpecYaml,
+        currentLocalConfig: originalCatalogItem.localConfig,
+      });
 
       // ── Rename ─────────────────────────────────────────────────────────
       // A name change never flows into the generic update below: it is
@@ -1846,9 +1860,18 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
         );
       }
 
-      // Authorization is the route-level manage-deleted permission (admin-only
-      // by default): deleted-resource lifecycle is one org-scoped capability,
-      // not derived from authorship of the live resource.
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      await ResourcePermissions.require({
+        organizationId: request.organizationId,
+        userId: request.user.id,
+        resource: "mcpRegistry",
+        scope: id,
+        action: "delete",
+        includeDeleted: true,
+      });
+      // SPDX-SnippetEnd
 
       const conflict =
         await InternalMcpCatalogModel.getRestoreConflictMessage(catalogItem);
@@ -1884,7 +1907,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.GetDeploymentYamlPreview,
         description:
-          "Generate a deployment YAML template preview for a catalog item",
+          "Generate a deployment YAML template preview. Requires configure-deployment-spec on this MCP registry entry.",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
@@ -1894,6 +1917,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
+      await assertCanManageMcpDeployment({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId: id,
+      });
       const isAdmin = await isMcpInstallationAdmin({
         userId: request.user.id,
         organizationId: request.organizationId,
@@ -1954,15 +1982,23 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     {
       schema: {
         operationId: RouteId.ValidateDeploymentYaml,
-        description: "Validate a deployment YAML template",
+        description:
+          "Validate a deployment YAML template. Requires configure-deployment-spec on the supplied catalogId, or on all MCP registry entries when catalogId is omitted.",
         tags: ["MCP Catalog"],
         body: z.object({
+          catalogId: UuidIdSchema.optional(),
           yaml: z.string().min(1, "YAML content is required"),
         }),
         response: constructResponseSchema(DeploymentYamlValidationSchema),
       },
     },
-    async ({ body: { yaml } }, reply) => {
+    async (request, reply) => {
+      const { yaml, catalogId } = request.body;
+      await assertCanManageMcpDeployment({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId,
+      });
       const result = validateDeploymentYaml(yaml);
       return reply.send(result);
     },
@@ -1974,7 +2010,7 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
       schema: {
         operationId: RouteId.ResetDeploymentYaml,
         description:
-          "Reset the deployment YAML to default by clearing the custom YAML",
+          "Reset the deployment YAML to default by clearing the custom YAML. Requires configure-deployment-spec on this MCP registry entry.",
         tags: ["MCP Catalog"],
         params: z.object({
           id: UuidIdSchema,
@@ -1984,6 +2020,11 @@ const internalMcpCatalogRoutes: FastifyPluginAsyncZod = async (fastify) => {
     },
     async (request, reply) => {
       const { id } = request.params;
+      await assertCanManageMcpDeployment({
+        userId: request.user.id,
+        organizationId: request.organizationId,
+        catalogId: id,
+      });
       const isAdmin = await isMcpInstallationAdmin({
         userId: request.user.id,
         organizationId: request.organizationId,
@@ -2672,12 +2713,6 @@ function currentCatalogRuntimeAlert(params: {
       restartCount: runtime.restartCount,
     }),
   };
-}
-
-function assertMcpServerAlertingEnabled(): void {
-  if (!config.mcpServer.alertingEnabled) {
-    throw new ApiError(404, "Not found");
-  }
 }
 
 export default internalMcpCatalogRoutes;

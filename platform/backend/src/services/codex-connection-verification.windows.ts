@@ -134,6 +134,12 @@ try {
     $value = $options.$name
     if ($null -ne $value -and ($value -isnot [string] -or -not $value -or $value.Length -gt 512)) { throw 'Invalid Codex verification options.' }
   }
+  $prefix = 'archestra__'
+  if ($null -ne $options.PSObject.Properties['toolPrefix']) {
+    $toolPrefix = $options.toolPrefix
+    if ($toolPrefix -isnot [string] -or -not $toolPrefix -or $toolPrefix.Length -gt 512 -or -not [regex]::IsMatch($toolPrefix, '^[a-z0-9]+(?:_[a-z0-9]+)*__$')) { throw 'Invalid Codex verification options.' }
+    $prefix = $toolPrefix
+  }
   $executable = $CodexPath
   $nativeArgs = @('app-server')
   if ($CodexPath -match '\.cmd$') {
@@ -189,7 +195,8 @@ try {
     } while (-not $server -and $cursor)
     if (-not $server) { throw 'Codex did not discover the selected MCP gateway.' }
     $probe = $null
-    foreach ($name in @('archestra__whoami', 'archestra__get_guardrails_policy', 'archestra__list_skills')) {
+    foreach ($shortName in @('whoami', 'get_guardrails_policy', 'list_skills')) {
+      $name = $prefix + $shortName
       $probe = $server.tools.PSObject.Properties.Value | Where-Object { $_.name -ceq $name -and -not $_.inputSchema.required } | Select-Object -First 1
       if ($probe) { break }
     }

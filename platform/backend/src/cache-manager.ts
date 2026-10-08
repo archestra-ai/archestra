@@ -5,6 +5,7 @@ import Keyv, { type KeyvStoreAdapter } from "keyv";
 import config from "@/config";
 import db from "@/database";
 import logger from "@/logging";
+import CacheEntryModel from "@/models/cache-entry";
 
 export { LRUCacheManager } from "@/in-memory-lru-cache";
 
@@ -51,6 +52,12 @@ export const CacheKey = {
   OpenAppaHitlReview: "openappa-hitl-review",
   /** One-use rulings returned by a native client question */
   OpenAppaHitlRuling: "openappa-hitl-ruling",
+  /** Per-call server-issued review status, for history only; never a ruling. */
+  OpenAppaHitlReviewHistory: "openappa-hitl-review-history",
+  /** Pending OpenAPPA review indexed by a verified runtime workspace */
+  OpenAppaRuntimeHitlReview: "openappa-runtime-hitl-review",
+  /** Sessions already told once to resend a request that lacked the gateway remedy tools */
+  OpenAppaRemedyToolsMissing: "openappa-remedy-tools-missing",
   /** OpenAI credentials that cannot generate reasoning summaries (unverified org) */
   OpenaiReasoningSummaryUnsupported: "openai-reasoning-summary-unsupported",
   /** Channel discovery TTL per workspace */
@@ -121,14 +128,14 @@ export const CacheKey = {
   TelegramApprovalCallback: "chatops-telegram-approval",
   /** One-shot codes linking a Telegram chat to a signed-in user */
   TelegramLinkCode: "chatops-telegram-link",
-  /** Positive "this chat session is a locked chat" lookups for LLM proxy redaction */
+  /** Positive "this chat session is an encrypted chat" lookups for LLM proxy redaction */
   /**
    * v2: entries changed from a bare `true` to a facts object (fingerprint +
    * escrow presence). The suffix is load-bearing — the cache is Postgres-backed
    * and shared across replicas, so during a rolling deploy new code must not
-   * read an old boolean and mistake it for "not a locked chat".
+   * read an old boolean and mistake it for "not an encrypted chat".
    */
-  LockedChatSession: "locked-chat-session-v2",
+  EncryptedChatSession: "encrypted-chat-session-v2",
 } as const;
 
 export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
@@ -144,6 +151,11 @@ export type CacheKeyPrefix = (typeof CacheKey)[keyof typeof CacheKey];
 export type AllowedCacheKey =
   | `${CacheKeyPrefix}`
   | `${CacheKeyPrefix}-${string}`;
+
+type TransactionalCache = Pick<
+  CacheManager,
+  "get" | "set" | "delete" | "getAndDelete" | "getAndDeleteMany"
+>;
 
 /**
  * PostgreSQL-based cache manager for distributed caching using Keyv.
@@ -390,6 +402,142 @@ class CacheManager {
       }
     }
     return entries;
+  }
+
+  /** All participants must use the same scope and this transaction's cache methods. */
+  async withLock<T>(
+    scope: AllowedCacheKey,
+    callback: (cache: TransactionalCache) => Promise<T>,
+  ): Promise<T> {
+    const keyv = this.keyv;
+    if (!keyv) throw new Error("CacheManager: Not started");
+    // KeyvPostgres creates its table asynchronously; await that before direct SQL.
+    if (keyv.opts.store instanceof KeyvPostgres) {
+      await keyv.opts.store.query("SELECT 1");
+    }
+    return CacheEntryModel.withLock(scope, async (entries) => {
+      const decode = async <V>(
+        raw: string | undefined,
+      ): Promise<V | undefined> => {
+        if (raw === undefined) return undefined;
+        const data = await keyv.deserializeData<V>(raw);
+        return data && (!data.expires || data.expires > Date.now())
+          ? data.value
+          : undefined;
+      };
+      const take = async <V>(keys: AllowedCacheKey[]) => {
+        const rows = await entries.take(keys.map((key) => `keyv:${key}`));
+        const values: Array<{ key: AllowedCacheKey; value: V }> = [];
+        for (const row of rows) {
+          const value = await decode<V>(row.value);
+          if (value !== undefined)
+            values.push({ key: row.key.slice(5) as AllowedCacheKey, value });
+        }
+        return values;
+      };
+      return callback({
+        get: async <V>(key: AllowedCacheKey) =>
+          decode<V>(await entries.get(`keyv:${key}`)),
+        set: async <V>(key: AllowedCacheKey, value: V, ttl?: number) => {
+          const lifetime = ttl ?? this.defaultTtl;
+          const payload = await keyv.serializeData({
+            value,
+            expires: lifetime === 0 ? undefined : Date.now() + lifetime,
+          });
+          await entries.set(
+            `keyv:${key}`,
+            typeof payload === "string" ? payload : JSON.stringify(payload),
+          );
+          return value;
+        },
+        delete: async (key: AllowedCacheKey) =>
+          (await entries.take([`keyv:${key}`])).length > 0,
+        getAndDelete: async <V>(key: AllowedCacheKey) =>
+          (await take<V>([key]))[0]?.value,
+        getAndDeleteMany: take,
+      });
+    });
+  }
+
+  /**
+   * Read several keys in one statement. Absent and expired entries are left
+   * out. Like {@link get}, a failed read is reported as misses.
+   */
+  async getMany<T>(keys: AllowedCacheKey[]): Promise<Map<AllowedCacheKey, T>> {
+    const entries = new Map<AllowedCacheKey, T>();
+    if (!this.keyv) {
+      logger.warn("CacheManager: Not started, returning no entries");
+      return entries;
+    }
+    if (keys.length === 0) return entries;
+    try {
+      const prefixed = keys.map((key) => sql`${`keyv:${key}`}`);
+      const result = await db.execute<{ key: string; value: string }>(sql`
+        SELECT key, value FROM keyv_cache
+        WHERE key IN (${sql.join(prefixed, sql`, `)})
+      `);
+      const now = Date.now();
+      for (const row of result.rows) {
+        const data = await this.keyv.deserializeData<T>(row.value);
+        if (data?.value === undefined) continue;
+        if (typeof data.expires === "number" && now > data.expires) continue;
+        entries.set(
+          row.key.slice("keyv:".length) as AllowedCacheKey,
+          data.value,
+        );
+      }
+    } catch (error) {
+      logger.error(
+        { error, keys },
+        "CacheManager: Error getting cache entries",
+      );
+      entries.clear();
+    }
+    return entries;
+  }
+
+  /**
+   * Count one event in each key's fixed window with a single atomic upsert,
+   * so concurrent writers never lose an increment. An entry whose window is
+   * still open keeps its end; an absent, ended or end-less entry starts a new
+   * window of `windowMs`. Entries are stored as
+   * `{ count, windowEndsAt }` and expire when their window ends.
+   */
+  async incrementFixedWindows(params: {
+    keys: AllowedCacheKey[];
+    windowMs: number;
+  }): Promise<void> {
+    if (!this.keyv) throw new Error("CacheManager: Not started");
+    if (params.keys.length === 0) return;
+    const now = Date.now();
+    const freshEnd = now + params.windowMs;
+    // Sorted so concurrent statements lock shared rows in the same order.
+    const rows = [...new Set(params.keys)]
+      .sort()
+      .map(
+        (key) =>
+          sql`(${`keyv:${key}`}, jsonb_build_object('value', jsonb_build_object('count', 1, 'windowEndsAt', ${freshEnd}::bigint), 'expires', ${freshEnd}::bigint)::text)`,
+      );
+    await db.execute(sql`
+      INSERT INTO keyv_cache (key, value)
+      VALUES ${sql.join(rows, sql`, `)}
+      ON CONFLICT (key) DO UPDATE SET value = CASE
+        WHEN jsonb_typeof(keyv_cache.value::jsonb #> '{value,windowEndsAt}') = 'number'
+          AND (keyv_cache.value::jsonb #>> '{value,windowEndsAt}')::numeric > ${now}
+          AND (
+            jsonb_typeof(keyv_cache.value::jsonb -> 'expires') IS DISTINCT FROM 'number'
+            OR (keyv_cache.value::jsonb ->> 'expires')::numeric >= ${now}
+          )
+        THEN jsonb_build_object(
+          'value', jsonb_build_object(
+            'count', COALESCE((keyv_cache.value::jsonb #>> '{value,count}')::numeric, 0) + 1,
+            'windowEndsAt', keyv_cache.value::jsonb #> '{value,windowEndsAt}'
+          ),
+          'expires', keyv_cache.value::jsonb #> '{value,windowEndsAt}'
+        )::text
+        ELSE EXCLUDED.value
+      END
+    `);
   }
 
   /** Keyv expires entries on reads; sweep abandoned entries in this namespace too. */

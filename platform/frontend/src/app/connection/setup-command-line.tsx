@@ -8,6 +8,7 @@ import {
   terminalCodeClass,
 } from "@/components/terminal-surface";
 import { Button } from "@/components/ui/button";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { copyToClipboard } from "@/lib/clipboard";
 import { cn } from "@/lib/utils/tailwind";
 
@@ -33,13 +34,13 @@ export function SetupCommandLine({
 
   if (failed) {
     return (
-      <div className="flex items-center gap-3 px-5 py-4 font-mono text-[13px] text-terminal-destructive">
+      <div className="flex items-center gap-3 px-5 py-4 font-mono text-xs text-terminal-destructive">
         <span>Couldn&apos;t generate the command.</span>
         <Button
           type="button"
           variant="outline"
-          size="sm"
-          className="h-7 border-terminal-edge bg-transparent text-xs text-terminal-foreground hover:bg-terminal-elevated hover:text-terminal-emphasis"
+          size="xs"
+          className="border-terminal-edge bg-transparent text-terminal-foreground hover:bg-terminal-elevated hover:text-terminal-emphasis"
           onClick={onRetry}
         >
           Retry
@@ -50,7 +51,7 @@ export function SetupCommandLine({
 
   if (pending || !command) {
     return (
-      <div className="flex items-center gap-2.5 px-5 py-4 font-mono text-[13px] text-terminal-muted">
+      <div className="flex items-center gap-2.5 px-5 py-4 font-mono text-xs text-terminal-muted">
         <Loader2 className="size-3.5 animate-spin" />
         <span>Generating command…</span>
       </div>
@@ -59,7 +60,7 @@ export function SetupCommandLine({
 
   return (
     <div className="relative">
-      <button
+      <UnstyledButton
         type="button"
         onClick={onCopy}
         aria-label="Copy to clipboard"
@@ -73,7 +74,7 @@ export function SetupCommandLine({
         ) : (
           <Copy className="size-3.5" strokeWidth={2} />
         )}
-      </button>
+      </UnstyledButton>
       <pre
         className={cn("m-0 overflow-x-auto px-5 py-4 pr-12", terminalCodeClass)}
       >

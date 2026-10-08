@@ -19,7 +19,18 @@ export function normalizeMcpAppExternalUrl(url: string): string | null {
       return null;
     }
 
-    return `slack://channel?team=${encodeURIComponent(team)}&id=${encodeURIComponent(channel)}`;
+    let normalized = `slack://channel?team=${encodeURIComponent(team)}&id=${encodeURIComponent(channel)}`;
+    // Optional message/thread anchors let apps open a thread pane directly.
+    // Both are Slack timestamps; anything else drops the anchors entirely.
+    const message = parsed.searchParams.get("message");
+    const threadTs = parsed.searchParams.get("thread_ts");
+    if (message && SLACK_TS.test(message)) {
+      normalized += `&message=${message}`;
+      if (threadTs && SLACK_TS.test(threadTs)) {
+        normalized += `&thread_ts=${threadTs}`;
+      }
+    }
+    return normalized;
   } catch {
     return null;
   }
@@ -27,3 +38,4 @@ export function normalizeMcpAppExternalUrl(url: string): string | null {
 
 const WEB_PROTOCOLS = new Set(["http:", "https:"]);
 const SLACK_ID = /^[A-Z][A-Z0-9]+$/;
+const SLACK_TS = /^\d+\.\d+$/;

@@ -155,9 +155,11 @@ export function GithubCopilotSignIn({
             <Github className="mr-2 h-4 w-4" />
             Copy code &amp; open GitHub
           </Button>
-          <button
+          <Button
             type="button"
-            className="flex items-center gap-1 rounded bg-muted px-2 py-1 font-mono text-sm tracking-widest hover:bg-muted/70"
+            variant="secondary"
+            size="sm"
+            className="font-mono tracking-widest"
             aria-label="Copy code"
             onClick={async () => {
               try {
@@ -174,7 +176,7 @@ export function GithubCopilotSignIn({
             ) : (
               <Copy className="h-4 w-4 text-muted-foreground" />
             )}
-          </button>
+          </Button>
           <span className="flex items-center gap-1 text-xs text-muted-foreground">
             <Loader2 className="h-3 w-3 animate-spin" />
             Waiting for authorization…

@@ -1,5 +1,6 @@
 import type { TextSearchLanguage } from "@archestra/shared";
 import type { Bm25Tuning, VectorSearchResult } from "@/models/kb-chunk";
+import type { GrantPrincipal } from "@/models/resource-permission-subject";
 import type {
   AclEntry,
   InsertKbChunk,
@@ -96,6 +97,8 @@ export interface ParentSiblingChunk extends NeighborChunk {
 
 interface AccessScope {
   userAcl: AclEntry[];
+  /** The caller's grant subjects, resolved once for the whole retrieval. */
+  grantPrincipals?: GrantPrincipal[] | null;
   bypassAcl?: boolean;
   environmentId?: string | null;
 }

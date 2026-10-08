@@ -1,4 +1,8 @@
 /** The OpenAPPA session a gateway caller names is the caller's own. */
+import { spawnSync } from "node:child_process";
+import { chmod, mkdir, mkdtemp, readFile, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { TOOL_RUN_TOOL_FULL_NAME } from "@archestra/shared";
 import Fastify, { type FastifyInstance } from "fastify";
 import {
@@ -9,14 +13,32 @@ import {
 import { vi } from "vitest";
 import config, { parseOpenAppaConfig } from "@/config";
 import * as database from "@/database";
-import { TeamTokenModel, UserTokenModel } from "@/models";
+import {
+  A2AContextModel,
+  A2ATaskModel,
+  AgentRunModel,
+  AgentWorkspaceModel,
+  TeamTokenModel,
+  UserTokenModel,
+} from "@/models";
 import GuardrailsDeploymentModel from "@/models/guardrails-deployment";
-import { signOfferClaims, unsignedOfferClaims } from "@/openappa/offer-claims";
+import { scopedSessionId } from "@/openappa/actor";
+import { currentTrajectory } from "@/openappa/current-trajectory";
+import {
+  issueRuntimeBinding,
+  RUNTIME_BINDING_HEADER,
+  resolveGatewayRuntimeSession,
+  stampRuntimeBinding,
+  workloadPrincipal,
+} from "@/services/agent-runtime/runtime-identity";
 import {
   CONNECTION_SETUP_CONTEXT_PARAM,
   issueConnectionSetupContext,
 } from "@/services/connection-setup-context";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
+
+const RUNTIME_BINDING_ENV = "ARCHESTRA_AGENT_RUNTIME_BINDING";
+
 import mcpGatewayRoutes from "./index";
 
 const native = vi.hoisted(() => ({
@@ -345,7 +367,7 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
 
-  test("hands the runtime the dispatch tool a signed offer names", async ({
+  test("hands the runtime the stamped child trajectory despite the gateway header", async ({
     makeAgent,
     makeMember,
     makeUser,
@@ -357,20 +379,8 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       user.id,
       agent.organizationId,
     );
-    const secret = "test-offer-signing-secret-32chars";
-    config.openappa = { ...config.openappa, offerSigningSecret: secret };
-    const jws = signOfferClaims(
-      unsignedOfferClaims({
-        organizationId: agent.organizationId,
-        sessionId: "conversation",
-        callerId: `user:${user.id}`,
-        offerId: "offer-1",
-        tool: "archestra__whoami",
-        spelling: "archestra__whoami",
-        dispatch: "my_gateway_archestra__run_tool",
-      }),
-      secret,
-    );
+    const childId = "virtual-key:vk-1|parent-session:child-agent";
+    const parentId = "virtual-key:vk-1|parent-session";
     native.executeRemedyByOffer.mockResolvedValue(
       JSON.stringify({
         decision: "mcp_result",
@@ -379,33 +389,54 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
       }),
     );
 
-    const response = await app.inject({
-      method: "POST",
-      url: `/v1/mcp/${agent.id}`,
-      headers: {
-        "content-type": "application/json",
-        accept: "application/json, text/event-stream",
-        authorization: `Bearer ${token}`,
-      },
-      payload: {
-        jsonrpc: "2.0",
-        method: "tools/call",
-        params: {
-          name: "archestra__execute_remedy_plan",
-          arguments: { offer_id: "offer-1", ...jws },
-          _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },
+    for (const gatewayHeader of ["absent", "parent"] as const) {
+      native.executeRemedyByOffer.mockClear();
+      const response = await app.inject({
+        method: "POST",
+        url: `/v1/mcp/${agent.id}`,
+        headers: {
+          "content-type": "application/json",
+          accept: "application/json, text/event-stream",
+          authorization: `Bearer ${token}`,
+          ...(gatewayHeader === "parent"
+            ? { "x-appa-session-id": "parent-session" }
+            : {}),
         },
-        id: "remedy-1",
-      },
-    });
+        payload: {
+          jsonrpc: "2.0",
+          method: "tools/call",
+          params: {
+            name: "archestra__execute_remedy_plan",
+            arguments: {
+              offer_id: "offer-1",
+              protected: "e30",
+              payload: "{}",
+              signature: "sig",
+              trajectory: currentTrajectory({
+                session_id: childId,
+                parent_id: parentId,
+              }),
+            },
+            _meta: { "com.archestra/logicalToolCallId": "logical-remedy-1" },
+          },
+          id: "remedy-1",
+        },
+      });
 
-    expect(response.statusCode, response.body).toBe(200);
-    expect(
-      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
-    ).toMatchObject({
-      tool: "archestra__whoami",
-      dispatch: "my_gateway_archestra__run_tool",
-    });
+      expect(response.statusCode, response.body).toBe(200);
+      const sent = JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]);
+      expect(sent.trajectory?.session_id ?? sent.session_id).toBe(childId);
+      expect(sent.trajectory?.parent_id ?? sent.parent_id).toBe(parentId);
+      expect(sent.caller_id).toBe(`user:${user.id}`);
+      expect(sent.organization_id).toBe(agent.organizationId);
+      expect(sent).not.toHaveProperty("tool");
+      expect(sent).not.toHaveProperty("dispatch");
+      expect(sent).not.toHaveProperty("owner_caller_id");
+      expect(sent).not.toHaveProperty("spelling");
+      expect(sent.session_id ?? sent.trajectory?.session_id).not.toBe(
+        `user:${user.id}|parent-session`,
+      );
+    }
   });
 
   test("uses untracked mode when an anonymous-token remedy has no logical id", async ({
@@ -526,4 +557,501 @@ describe("OpenAPPA sessions on the MCP gateway", () => {
     });
     expect(native.dispatchHook).not.toHaveBeenCalled();
   });
+
+  test("a signed runtime binding spends as the workspace, and a sibling header does not", async ({
+    makeAgent,
+    makeOrganization,
+  }) => {
+    const org = await makeOrganization();
+    const agent = await makeAgent({ organizationId: org.id });
+    const task = await A2ATaskModel.create({
+      contextId: (
+        await A2AContextModel.create({
+          actorKind: "organization",
+          actorId: org.id,
+        })
+      ).id,
+      agentId: agent.id,
+      state: "TASK_STATE_WORKING",
+    });
+    const workloadName = `workspace-${task.id}`;
+    const workspace = await AgentWorkspaceModel.create({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: org.id,
+      backend: "kubernetes",
+      runtimeScope: "test",
+      workloadName,
+      state: "active",
+      activeTaskId: task.id,
+      lastTaskId: task.id,
+      expiresAt: new Date(Date.now() + 3600_000),
+    });
+    await AgentRunModel.create({
+      organizationId: org.id,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: org.id,
+      actorUserId: null,
+      workloadName,
+      backend: "kubernetes",
+      runtimeScope: "test",
+    });
+    const principal = workloadPrincipal(workspace.id);
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa = { ...config.openappa, offerSigningSecret: secret };
+    const binding = issueRuntimeBinding({
+      secret,
+      organizationId: org.id,
+      workspaceId: workspace.id,
+      workloadName,
+      taskId: task.id,
+      agentId: agent.id,
+      actorKind: "organization",
+      actorId: org.id,
+      expiresAt: Date.now() + 60_000,
+    });
+    const token = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const trajectory = currentTrajectory({
+      session_id: scopedSessionId(principal, workloadName),
+    });
+    native.executeRemedyByOffer.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        offer: { status: "known" },
+        result: { content: [{ type: "text", text: "[appa] Authorized." }] },
+      }),
+    );
+    const headers = {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: `Bearer ${token.value}`,
+      [RUNTIME_BINDING_HEADER]: binding,
+      "x-appa-session-id": workloadName,
+      "x-archestra-run-id": task.id,
+    };
+    const payload = {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "archestra__execute_remedy_plan",
+        arguments: { offer_id: "offer-runtime", plan: "keep", trajectory },
+      },
+      id: "runtime-remedy",
+    };
+
+    const accepted = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers,
+      payload,
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).toMatchObject({ caller_id: principal, trajectory });
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).not.toHaveProperty("owner_caller_id");
+
+    native.executeRemedyByOffer.mockClear();
+    const sibling = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: { ...headers, "x-appa-session-id": "workspace-sibling" },
+      payload,
+    });
+    expect(sibling.statusCode).toBe(400);
+    expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
+  });
+
+  test("a stamped launch binding reaches the gateway through the Claude wrapper", async ({
+    makeAgent,
+    makeOrganization,
+    makeTeam,
+    makeUser,
+  }) => {
+    const org = await makeOrganization();
+    const user = await makeUser();
+    const team = await makeTeam(org.id, user.id);
+    const agent = await makeAgent({ organizationId: org.id });
+    const secret = "test-offer-signing-secret-32chars";
+    config.openappa = { ...config.openappa, offerSigningSecret: secret };
+    const first = await persistBoundRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "team",
+      actorId: team.id,
+    });
+    const sibling = await persistBoundRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "team",
+      actorId: team.id,
+    });
+    const spec = {
+      env: {} as Record<string, string>,
+      secretEnv: {} as Record<string, string>,
+      activeDeadlineSeconds: 120,
+    };
+    await stampRuntimeBinding({
+      spec,
+      organizationId: org.id,
+      workspaceId: first.workspace.id,
+      taskId: first.task.id,
+    });
+    expect(spec.env).not.toHaveProperty(RUNTIME_BINDING_ENV);
+    const expiring = {
+      env: {} as Record<string, string>,
+      secretEnv: {} as Record<string, string>,
+      activeDeadlineSeconds: 1,
+    };
+    await stampRuntimeBinding({
+      spec: expiring,
+      organizationId: org.id,
+      workspaceId: first.workspace.id,
+      taskId: first.task.id,
+    });
+    expect(
+      await resolveGatewayRuntimeSession({
+        organizationId: org.id,
+        agentId: agent.id,
+        token: { teamId: team.id, isOrganizationToken: false },
+        bindingToken: expiring.secretEnv[RUNTIME_BINDING_ENV],
+        secret,
+        sessionName: first.workspace.workloadName,
+        runTaskId: first.task.id,
+        now: Date.now() + 5_000,
+      }),
+    ).toMatchObject({ kind: "reject" });
+    expect(
+      await resolveGatewayRuntimeSession({
+        organizationId: org.id,
+        agentId: agent.id,
+        token: { teamId: team.id, isOrganizationToken: false },
+        bindingToken: spec.secretEnv[RUNTIME_BINDING_ENV],
+        secret,
+        sessionName: first.workspace.workloadName,
+      }),
+    ).toMatchObject({ kind: "reject" });
+    const binding = spec.secretEnv[RUNTIME_BINDING_ENV];
+    expect(binding).toBeTruthy();
+    const wrapped = await claudeWrapperHeaders({
+      binding,
+      session: first.workspace.workloadName,
+      taskId: first.task.id,
+      gatewayUrl: `http://gateway/v1/mcp/${agent.id}`,
+    });
+    expect(wrapped.llm).toContain(`${RUNTIME_BINDING_HEADER}: ${binding}`);
+    expect(wrapped.mcp).toBe(binding);
+    const teamToken = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Matching Team",
+      teamId: team.id,
+      isOrganizationToken: false,
+    });
+    native.executeRemedyByOffer.mockResolvedValue(
+      JSON.stringify({
+        decision: "mcp_result",
+        offer: { status: "known" },
+        result: { content: [{ type: "text", text: "[appa] Authorized." }] },
+      }),
+    );
+    const principal = workloadPrincipal(first.workspace.id);
+    const trajectory = currentTrajectory({
+      session_id: scopedSessionId(principal, first.workspace.workloadName),
+    });
+    const headers = {
+      "content-type": "application/json",
+      accept: "application/json, text/event-stream",
+      authorization: `Bearer ${teamToken.value}`,
+      [RUNTIME_BINDING_HEADER]: wrapped.mcp,
+      "x-appa-session-id": first.workspace.workloadName,
+      "x-archestra-run-id": first.task.id,
+    };
+    const payload = {
+      jsonrpc: "2.0",
+      method: "tools/call",
+      params: {
+        name: "archestra__execute_remedy_plan",
+        arguments: { offer_id: "offer-stamped", plan: "keep", trajectory },
+      },
+      id: "stamped-remedy",
+    };
+    const accepted = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers,
+      payload,
+    });
+    expect(accepted.statusCode, accepted.body).toBe(200);
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).toMatchObject({ caller_id: principal });
+
+    native.executeRemedyByOffer.mockClear();
+    const wrongKey = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        ...headers,
+        [RUNTIME_BINDING_HEADER]: await stampSibling(spec, org.id, sibling),
+        "x-appa-session-id": first.workspace.workloadName,
+        "x-archestra-run-id": first.task.id,
+      },
+      payload,
+    });
+    expect(wrongKey.statusCode).toBe(400);
+    expect(native.executeRemedyByOffer).not.toHaveBeenCalled();
+
+    const rotated = await persistContinuation(first);
+    const rotatedSpec = {
+      env: {} as Record<string, string>,
+      secretEnv: {} as Record<string, string>,
+      activeDeadlineSeconds: 90,
+    };
+    await stampRuntimeBinding({
+      spec: rotatedSpec,
+      organizationId: org.id,
+      workspaceId: first.workspace.id,
+      taskId: rotated.taskId,
+    });
+    expect(rotatedSpec.secretEnv[RUNTIME_BINDING_ENV]).not.toBe(binding);
+    const rotatedHeaders = await claudeWrapperHeaders({
+      binding: rotatedSpec.secretEnv[RUNTIME_BINDING_ENV],
+      session: first.workspace.workloadName,
+      taskId: rotated.taskId,
+      gatewayUrl: `http://gateway/v1/mcp/${agent.id}`,
+    });
+    const continued = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        ...headers,
+        [RUNTIME_BINDING_HEADER]: rotatedHeaders.mcp,
+        "x-archestra-run-id": rotated.taskId,
+      },
+      payload,
+    });
+    expect(continued.statusCode, continued.body).toBe(200);
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).toMatchObject({ caller_id: principal });
+
+    const systemRun = await persistBoundRun({
+      organizationId: org.id,
+      agentId: agent.id,
+      actorKind: "system",
+      actorId: "system",
+    });
+    const systemSpec = {
+      env: {} as Record<string, string>,
+      secretEnv: {} as Record<string, string>,
+      activeDeadlineSeconds: 60,
+    };
+    await stampRuntimeBinding({
+      spec: systemSpec,
+      organizationId: org.id,
+      workspaceId: systemRun.workspace.id,
+      taskId: systemRun.task.id,
+    });
+    const orgToken = await TeamTokenModel.create({
+      organizationId: org.id,
+      name: "Org Token",
+      teamId: null,
+      isOrganizationToken: true,
+    });
+    const systemPrincipal = workloadPrincipal(systemRun.workspace.id);
+    native.executeRemedyByOffer.mockClear();
+    const systemCall = await app.inject({
+      method: "POST",
+      url: `/v1/mcp/${agent.id}`,
+      headers: {
+        ...headers,
+        authorization: `Bearer ${orgToken.value}`,
+        [RUNTIME_BINDING_HEADER]: systemSpec.secretEnv[RUNTIME_BINDING_ENV],
+        "x-appa-session-id": systemRun.workspace.workloadName,
+        "x-archestra-run-id": systemRun.task.id,
+      },
+      payload: {
+        ...payload,
+        params: {
+          ...payload.params,
+          arguments: {
+            offer_id: "offer-system",
+            plan: "keep",
+            trajectory: currentTrajectory({
+              session_id: scopedSessionId(
+                systemPrincipal,
+                systemRun.workspace.workloadName,
+              ),
+            }),
+          },
+        },
+      },
+    });
+    expect(systemCall.statusCode, systemCall.body).toBe(200);
+    expect(
+      JSON.parse(native.executeRemedyByOffer.mock.calls[0][0]),
+    ).toMatchObject({ caller_id: systemPrincipal });
+  });
 });
+
+async function stampSibling(
+  _spec: { env: Record<string, string>; secretEnv: Record<string, string> },
+  organizationId: string,
+  sibling: { workspace: { id: string }; task: { id: string } },
+) {
+  const spec = {
+    env: {},
+    secretEnv: {} as Record<string, string>,
+    activeDeadlineSeconds: 60,
+  };
+  await stampRuntimeBinding({
+    spec,
+    organizationId,
+    workspaceId: sibling.workspace.id,
+    taskId: sibling.task.id,
+  });
+  return spec.secretEnv[RUNTIME_BINDING_ENV];
+}
+
+async function persistBoundRun(params: {
+  organizationId: string;
+  agentId: string;
+  actorKind: "team" | "system";
+  actorId: string;
+}) {
+  const task = await A2ATaskModel.create({
+    contextId: (
+      await A2AContextModel.create({
+        actorKind: params.actorKind,
+        actorId: params.actorId,
+      })
+    ).id,
+    agentId: params.agentId,
+    state: "TASK_STATE_WORKING",
+  });
+  const workloadName = `workspace-${task.id}`;
+  const workspace = await AgentWorkspaceModel.create({
+    organizationId: params.organizationId,
+    agentId: params.agentId,
+    actorKind: params.actorKind,
+    actorId: params.actorId,
+    backend: "kubernetes",
+    runtimeScope: "test",
+    workloadName,
+    state: "active",
+    activeTaskId: task.id,
+    lastTaskId: task.id,
+    expiresAt: new Date(Date.now() + 3600_000),
+  });
+  await AgentRunModel.create({
+    organizationId: params.organizationId,
+    taskId: task.id,
+    agentId: params.agentId,
+    actorKind: params.actorKind,
+    actorId: params.actorId,
+    actorUserId: null,
+    workloadName,
+    backend: "kubernetes",
+    runtimeScope: "test",
+  });
+  return { task, workspace };
+}
+
+async function persistContinuation(current: {
+  workspace: {
+    id: string;
+    organizationId: string;
+    agentId: string;
+    actorKind: "team" | "system" | "organization" | "user";
+    actorId: string;
+    workloadName: string;
+  };
+}) {
+  const task = await A2ATaskModel.create({
+    contextId: (
+      await A2AContextModel.create({
+        actorKind: current.workspace.actorKind,
+        actorId: current.workspace.actorId,
+      })
+    ).id,
+    agentId: current.workspace.agentId,
+    state: "TASK_STATE_WORKING",
+  });
+  await AgentRunModel.create({
+    organizationId: current.workspace.organizationId,
+    taskId: task.id,
+    agentId: current.workspace.agentId,
+    actorKind: current.workspace.actorKind,
+    actorId: current.workspace.actorId,
+    actorUserId: null,
+    workloadName: current.workspace.workloadName,
+    backend: "kubernetes",
+    runtimeScope: "test",
+  });
+  return { taskId: task.id };
+}
+
+async function claudeWrapperHeaders(params: {
+  binding: string;
+  session: string;
+  taskId: string;
+  gatewayUrl: string;
+}) {
+  const dir = await mkdtemp(join(tmpdir(), "runtime-binding-"));
+  const bin = join(dir, "bin");
+  await mkdir(bin);
+  const stub = join(bin, "claude");
+  await writeFile(
+    stub,
+    '#!/bin/sh\nprintf \'%s\' "$ANTHROPIC_CUSTOM_HEADERS" > "$ARCHESTRA_AGENT_RUNTIME_DIR/llm-headers"\nexit 0\n',
+  );
+  await chmod(stub, 0o755);
+  const script = join(
+    process.cwd(),
+    "../agent_images/bin/archestra-claude-code",
+  );
+  const result = spawnSync(script, [], {
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PATH: `${bin}:${process.env.PATH ?? ""}`,
+      HOME: dir,
+      ARCHESTRA_AGENT_RUNTIME_DIR: dir,
+      ARCHESTRA_LLM_PROXY_PROTOCOL: "anthropic",
+      ARCHESTRA_AGENT_RUNTIME_MODE: "one_shot",
+      ARCHESTRA_AGENT_RUNTIME_PLAIN: "1",
+      ARCHESTRA_AGENT_RUNTIME_TASK: "continue the workspace",
+      ARCHESTRA_AGENT_RUNTIME_OPENAPPA: "1",
+      ARCHESTRA_AGENT_RUNTIME_BINDING: params.binding,
+      ARCHESTRA_AGENT_RUNTIME_WORKSPACE_ID: params.session,
+      ARCHESTRA_AGENT_RUNTIME_TASK_ID: params.taskId,
+      ARCHESTRA_MCP_GATEWAY_URL: params.gatewayUrl,
+      ARCHESTRA_MCP_GATEWAY_TOKEN: "gateway-token",
+      ARCHESTRA_AGENT_RUNTIME_NATIVE_MODEL: "test-model",
+    },
+  });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || result.stdout || "wrapper failed");
+  }
+  const mcp = JSON.parse(
+    await readFile(join(dir, "claude-mcp.json"), "utf8"),
+  ) as {
+    mcpServers: {
+      archestra: { headers: Record<string, string> };
+    };
+  };
+  return {
+    llm: await readFile(join(dir, "llm-headers"), "utf8"),
+    mcp: mcp.mcpServers.archestra.headers[RUNTIME_BINDING_HEADER],
+  };
+}

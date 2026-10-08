@@ -7,9 +7,27 @@ import type * as React from "react";
 import { cn } from "@/lib/utils/tailwind";
 
 function Select({
+  onValueChange,
   ...props
 }: React.ComponentProps<typeof SelectPrimitive.Root>) {
-  return <SelectPrimitive.Root data-slot="select" {...props} />;
+  return (
+    <SelectPrimitive.Root
+      data-slot="select"
+      // Inside a <form>, Radix mirrors the value into a hidden native <select>.
+      // When a controlled value changes before that element has its options
+      // (e.g. a saved value loaded after mount), the browser resets it to ""
+      // and Radix reports that as a change, clearing the field and marking the
+      // form dirty. Radix forbids "" as an item value, so it is never a real
+      // selection and is safe to drop.
+      onValueChange={
+        onValueChange &&
+        ((value) => {
+          if (value !== "") onValueChange(value);
+        })
+      }
+      {...props}
+    />
+  );
 }
 
 function SelectGroup({

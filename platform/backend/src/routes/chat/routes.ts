@@ -9,6 +9,7 @@ import {
   type ContextWindowBreakdown,
   collapseWhitespace,
   getModelReadableMimeTypes,
+  hasPersistableAssistantContent,
   isModelSelectionComplete,
   isThinkingEffortSelfHostedProvider,
   PROJECT_INSTRUCTIONS_MAX_LENGTH,
@@ -159,7 +160,6 @@ import { estimateMessagesSize } from "@/utils/message-size";
 import { broadcastConversationUpdated } from "@/websocket";
 import {
   createAbortiveTurnTracker,
-  hasRenderableContent,
   hasUnfinishedToolInput,
 } from "./abortive-turn";
 import { buildAnthropicProviderOptions } from "./anthropic-provider-options";
@@ -190,6 +190,7 @@ import {
   formatUnavailableToolErrorDetails,
   getActiveTraceContext,
   getUnavailableToolErrorDetails,
+  ModelStreamStalledError,
   mapProviderError,
   ProviderError,
   sanitizeChatErrorForFrontend,
@@ -1885,6 +1886,12 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     // Persistence is left to onFinish, which still fires after
                     // this error with whatever the assistant streamed so far.
                     activeRunError = incomingErrorMessage;
+                    // The SDK keeps running a tool call completed before the
+                    // stall and would start the next step afterwards; end the
+                    // run so the client's error is the turn's last word.
+                    if (error instanceof ModelStreamStalledError) {
+                      chatAbortController.abort();
+                    }
                     logger.error(
                       {
                         // EncryptedChat: errors routinely echo prompt/tool
@@ -1913,7 +1920,7 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                     const lastMessage = finalMessages.at(-1);
                     const reply =
                       lastMessage?.role === "assistant" &&
-                      hasRenderableContent(lastMessage)
+                      hasPersistableAssistantContent(lastMessage)
                         ? lastMessage
                         : null;
 

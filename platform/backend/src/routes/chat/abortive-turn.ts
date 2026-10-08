@@ -84,21 +84,6 @@ function recordToolCallLifecycle(
   }
 }
 
-/** True when the message holds anything the chat renders beyond step boundaries and blank text. */
-export function hasRenderableContent(message: UIMessage): boolean {
-  return message.parts.some((part) => {
-    switch (part.type) {
-      case "step-start":
-        return false;
-      case "text":
-      case "reasoning":
-        return part.text.trim().length > 0;
-      default:
-        return true;
-    }
-  });
-}
-
 /** True when a tool call never finished streaming its input — the tracker's unresolved case. */
 export function hasUnfinishedToolInput(message: UIMessage): boolean {
   return message.parts.some(

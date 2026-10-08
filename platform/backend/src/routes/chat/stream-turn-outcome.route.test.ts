@@ -11,7 +11,7 @@ import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { ChatErrorCode, TURN_NOTICE_PART_TYPE } from "@archestra/shared";
 import { jsonSchema, simulateReadableStream, tool, type UIMessage } from "ai";
 import { MockLanguageModelV3 } from "ai/test";
-import { eq } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { vi } from "vitest";
 import config from "@/config";
 import db, { schema } from "@/database";
@@ -215,7 +215,9 @@ describe("POST /api/chat turn outcome", () => {
     const [run] = await db
       .select({ status: schema.chatActiveRunsTable.status })
       .from(schema.chatActiveRunsTable)
-      .where(eq(schema.chatActiveRunsTable.conversationId, conversationId));
+      .where(eq(schema.chatActiveRunsTable.conversationId, conversationId))
+      .orderBy(desc(schema.chatActiveRunsTable.createdAt))
+      .limit(1);
     return run?.status;
   }
 
@@ -392,6 +394,121 @@ describe("POST /api/chat turn outcome", () => {
       );
       await expect.poll(runStatus).toBe("failed");
     });
+  });
+
+  test("ends the run when the stream stalls after a completed tool call", async () => {
+    const originalIdleTimeoutMs = config.chat.modelStreamIdleTimeoutMs;
+    config.chat.modelStreamIdleTimeoutMs = 300;
+    let toolSignalAborted = false;
+    mockGetChatMcpTools.mockResolvedValue({
+      read_file: tool({
+        description: "Read a file from disk",
+        inputSchema: jsonSchema<{ path: string }>({
+          type: "object",
+          properties: { path: { type: "string" } },
+          required: ["path"],
+        }),
+        execute: (_input, { abortSignal }) =>
+          new Promise<string>((resolve) => {
+            const timer = setTimeout(() => resolve("hello"), 600);
+            abortSignal?.addEventListener("abort", () => {
+              toolSignalAborted = true;
+              clearTimeout(timer);
+              resolve("aborted");
+            });
+          }),
+      }),
+    });
+    let calls = 0;
+    useModel(
+      new MockLanguageModelV3({
+        doStream: async () => {
+          calls++;
+          return {
+            // A completed tool call, then the provider goes silent.
+            stream: new ReadableStream<ModelStreamPart>({
+              start(controller) {
+                controller.enqueue({ type: "stream-start", warnings: [] });
+                controller.enqueue({
+                  type: "tool-call",
+                  toolCallId: "call_1",
+                  toolName: "read_file",
+                  input: JSON.stringify({ path: "/tmp/a.txt" }),
+                });
+              },
+            }),
+          };
+        },
+      }),
+    );
+
+    try {
+      const chunks = await sendTurn("Read /tmp/a.txt");
+
+      expect(
+        chunks
+          .filter((chunk) => chunk.type === "error")
+          .map((chunk) => JSON.parse(String(chunk.errorText)).code),
+      ).toEqual([ChatErrorCode.UpstreamStalled]);
+      expect(toolSignalAborted).toBe(true);
+      await expect.poll(runStatus).toBe("failed");
+      // Past the tool's own completion time: no follow-up step was started.
+      await new Promise((resolve) => setTimeout(resolve, 700));
+      expect(calls).toBe(1);
+    } finally {
+      config.chat.modelStreamIdleTimeoutMs = originalIdleTimeoutMs;
+    }
+  });
+
+  test("keeps the previous answer when a regeneration fails before any reply", async () => {
+    useModel(
+      new MockLanguageModelV3({
+        doStream: async () => textReply("Old answer", "stop"),
+      }),
+    );
+    await sendTurn("Question");
+    await persistedAssistantParts();
+    const [userRow] = (
+      await MessageModel.findByConversation(conversationId)
+    ).filter((row) => row.role === "user");
+
+    useModel(
+      new MockLanguageModelV3({
+        doStream: async () => ({
+          stream: simulateReadableStream<ModelStreamPart>({
+            chunks: [
+              { type: "stream-start", warnings: [] },
+              { type: "tool-input-start", id: "call_9", toolName: "read_file" },
+              { type: "tool-input-delta", id: "call_9", delta: '{"pa' },
+              { type: "error", error: new Error("provider exploded") },
+            ],
+          }),
+        }),
+      }),
+    );
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        trigger: "regenerate-message",
+        messages: [userRow?.content],
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    await expect.poll(runStatus).toBe("failed");
+
+    const assistantTexts = (
+      await MessageModel.findByConversation(conversationId)
+    )
+      .map((row) => row.content as UIMessage)
+      .filter((message) => message.role === "assistant")
+      .flatMap((message) =>
+        message.parts.flatMap((part) =>
+          part.type === "text" ? [part.text] : [],
+        ),
+      );
+    expect(assistantTexts).toEqual(["Old answer"]);
   });
 });
 

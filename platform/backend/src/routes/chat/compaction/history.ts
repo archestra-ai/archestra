@@ -4,9 +4,9 @@ import type { ChatMessage } from "@/types";
 import type { ConversationCompaction } from "@/types/conversation-compaction";
 
 /**
- * Split the messages after the previous compaction boundary into the prefix
- * the summary replaces and the suffix kept verbatim: the latest real user
- * message stays live only while it is still unanswered.
+ * Manual compaction's split of the messages after the previous boundary into
+ * the prefix the summary replaces and the suffix kept verbatim: the latest
+ * real user message stays live only while it is still unanswered.
  */
 export function splitMessagesForCompaction(messages: ChatMessage[]): {
   compactable: ChatMessage[];

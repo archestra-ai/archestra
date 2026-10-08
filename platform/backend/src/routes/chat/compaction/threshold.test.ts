@@ -57,8 +57,6 @@ test("auto-compaction includes chat-override tool schemas in its context thresho
   const belowThreshold = await compactMessagesForChat(baseParams);
   expect(belowThreshold.reason).toBe("below_threshold");
 
-  const abortController = new AbortController();
-  abortController.abort();
   const overThreshold = await compactMessagesForChat({
     ...baseParams,
     tools: {
@@ -77,11 +75,10 @@ test("auto-compaction includes chat-override tool schemas in its context thresho
         },
       },
     },
-    abortSignal: abortController.signal,
   });
 
-  // The aborted result proves the threshold was crossed without invoking a
-  // summarization model. Before tool schemas were counted this stayed below
-  // the threshold and returned `below_threshold`.
-  expect(overThreshold.reason).toBe("aborted");
+  // Crossing the threshold without invoking a summarization model: the short
+  // history fits the verbatim tail, so nothing is compactable. Before tool
+  // schemas were counted this stayed below the threshold.
+  expect(overThreshold.reason).toBe("nothing_to_compact");
 });

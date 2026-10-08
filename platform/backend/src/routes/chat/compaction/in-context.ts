@@ -135,16 +135,25 @@ export async function summarizeInContext(params: {
     let summary = extractTaggedText(first.text, CONTEXT_COMPACTION_SUMMARY_TAG);
 
     if (!summary) {
-      // the retry resends the entire prior prompt plus the assistant reply
-      // and a correction turn, so it roughly doubles the token count.
-      // skip it if the model is already near its context limit — the outer
-      // fallback path will produce a summary instead.
-      const canRetry = await hasContextHeadroomForRetry({
-        provider: params.provider,
-        selectedModel: params.selectedModel,
-        compactionMessages,
-        systemPrompt: params.systemPrompt,
-      });
+      const retryTurns: ChatMessage[] = [
+        { role: "assistant", parts: [{ type: "text", text: first.text }] },
+        { role: "user", parts: [{ type: "text", text: CORRECTION_PROMPT }] },
+      ];
+      // the retry resends the prompt plus the reply and a correction turn;
+      // when that no longer fits, the transcript fallback summarizes instead
+      const contextLength = compactionModelRow
+        ? ModelModel.resolveEffectiveContextLength(compactionModelRow)
+        : null;
+      const canRetry =
+        contextLength === null ||
+        estimateChatMessagesTokens({
+          provider: params.provider,
+          model: params.selectedModel,
+          systemPrompt: params.systemPrompt,
+          messages: [...compactionMessages, ...retryTurns],
+        }) +
+          CONTEXT_COMPACTION_MAX_OUTPUT_TOKENS <=
+          contextLength;
       const logFields = {
         conversationId: params.conversationId,
         provider: params.provider,
@@ -163,8 +172,7 @@ export async function summarizeInContext(params: {
       );
       const corrected = await generate([
         ...providerPrepared,
-        { role: "assistant", parts: [{ type: "text", text: first.text }] },
-        { role: "user", parts: [{ type: "text", text: CORRECTION_PROMPT }] },
+        ...(retryTurns as Omit<UIMessage, "id">[]),
       ]);
       summary = extractTaggedText(
         corrected.text,
@@ -204,10 +212,6 @@ export async function summarizeInContext(params: {
 // Internal Helpers
 // =============================================================================
 
-// retry sends ~2× the first attempt's tokens; only retry while the doubled
-// request still fits comfortably in the model's context window
-const RETRY_MAX_CONTEXT_FRACTION = 0.7;
-
 const CORRECTION_PROMPT =
   "Your previous response did not follow the required format. Reply with EXACTLY ONE <summary>...</summary> block and no text outside the tags.";
 
@@ -221,30 +225,3 @@ Use these canonical compaction instructions:
 ${CONTEXT_COMPACTION_SYSTEM_PROMPT}
 
 Output contract: return EXACTLY ONE tagged block starting with <summary> and ending with </summary>. Put the structured summary inside the tags. Do not include text outside the tags.`;
-
-async function hasContextHeadroomForRetry(params: {
-  provider: SupportedProvider;
-  selectedModel: string;
-  compactionMessages: ChatMessage[];
-  systemPrompt?: string;
-}): Promise<boolean> {
-  const model = await ModelModel.findByProviderAndModelId(
-    params.provider,
-    params.selectedModel,
-  );
-  const contextLength = model
-    ? ModelModel.resolveEffectiveContextLength(model)
-    : null;
-  if (!contextLength) {
-    // unknown limit; assume retry is safe rather than always skipping
-    return true;
-  }
-
-  const estimate = estimateChatMessagesTokens({
-    provider: params.provider,
-    model: params.selectedModel,
-    systemPrompt: params.systemPrompt,
-    messages: params.compactionMessages,
-  });
-  return estimate * 2 < contextLength * RETRY_MAX_CONTEXT_FRACTION;
-}

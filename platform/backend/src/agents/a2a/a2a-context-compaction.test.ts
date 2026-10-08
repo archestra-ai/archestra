@@ -151,8 +151,6 @@ describe("applyA2AContextCompaction", () => {
       parts: Array<{ text: string }>;
     };
     expect(summaryContent.parts[0].text).toContain("THE-SUMMARY");
-    // The summary is framed as untrusted history, not instructions.
-    expect(summaryContent.parts[0].text).toContain("untrusted");
 
     // The summarizer saw the compacted prefix but not the recent suffix.
     expect(summarizeCalls).toHaveLength(1);

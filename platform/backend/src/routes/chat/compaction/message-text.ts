@@ -2,8 +2,10 @@ import type { SupportedProvider } from "@archestra/shared";
 import logger from "@/logging";
 import { ConversationAttachmentModel } from "@/models";
 import {
-  CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
   composeCompactionPrompt,
+  renderCompactionTranscript,
+  type TranscriptEntry,
+  uiMessageTranscriptEntries,
 } from "@/services/context-compaction";
 import { getTokenizer } from "@/tokenizers";
 import type { ChatMessage, ChatMessagePart } from "@/types";
@@ -72,13 +74,14 @@ export async function buildCompactionPrompt(params: {
   messages: ChatMessage[];
   conversationId: string;
 }): Promise<string> {
-  const transcript = await serializeMessagesForSummary(
-    params.messages,
-    params.conversationId,
+  const entries = await Promise.all(
+    params.messages.map((message) =>
+      transcriptEntries(message, params.conversationId),
+    ),
   );
   return composeCompactionPrompt({
     previousSummary: params.previousSummary,
-    transcript,
+    transcript: renderCompactionTranscript(entries.flat()),
     preamble: buildRecentUserMessagesReference(params.messages),
   });
 }
@@ -165,25 +168,29 @@ function getUserMessageTextForReference(message: ChatMessage): string {
   return `${text.slice(0, RECENT_USER_REFERENCE_MAX_CHARS)}\n[truncated ${text.length - RECENT_USER_REFERENCE_MAX_CHARS} characters from recent user message]`;
 }
 
-async function serializeMessagesForSummary(
-  messages: ChatMessage[],
+/**
+ * Shared transcript entries, except that file parts carry the text extracted
+ * for the summarizer (the shared projection only notes an attachment).
+ */
+async function transcriptEntries(
+  message: ChatMessage,
   conversationId: string,
-): Promise<string> {
-  const serializedParts = await Promise.all(
-    messages.map(async (message, index) => {
-      const content = await getMessageTextForSummary(message, conversationId);
-      return `${index + 1}. ${message.role.toUpperCase()}: ${content}`;
-    }),
+): Promise<TranscriptEntry[]> {
+  const perPart = await Promise.all(
+    (message.parts ?? []).map(
+      async (part): Promise<TranscriptEntry[]> =>
+        part.type === "file"
+          ? [
+              {
+                kind: "text",
+                role: message.role,
+                text: await getFilePartTextForSummary(part, conversationId),
+              },
+            ]
+          : uiMessageTranscriptEntries({ role: message.role, parts: [part] }),
+    ),
   );
-  const serialized = serializedParts.join("\n\n");
-
-  if (serialized.length <= CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS) {
-    return serialized;
-  }
-
-  return serialized.slice(
-    serialized.length - CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
-  );
+  return perPart.flat();
 }
 
 function getMessageTextForTokenEstimate(message: ChatMessage): {
@@ -203,21 +210,6 @@ function getMessageTextForTokenEstimate(message: ChatMessage): {
     .join("\n");
 
   return { text, extraTokens };
-}
-
-async function getMessageTextForSummary(
-  message: ChatMessage,
-  conversationId: string,
-): Promise<string> {
-  const partTexts = await Promise.all(
-    (message.parts ?? []).map((part) =>
-      part.type === "file"
-        ? getFilePartTextForSummary(part, conversationId)
-        : getNonFilePartText(part),
-    ),
-  );
-
-  return partTexts.join("\n");
 }
 
 function getNonFilePartText(part: ChatMessagePart): string {

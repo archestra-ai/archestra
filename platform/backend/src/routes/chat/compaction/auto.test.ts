@@ -5,6 +5,7 @@ import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
 import { compactMessagesForChat } from "./compact-messages";
+import { estimateChatMessagesTokens } from "./message-text";
 
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -149,6 +150,73 @@ describe("compactMessagesForChat auto trigger", () => {
     expect(result.compaction?.summary).toBe("S2");
     expect(mockGenerateText).toHaveBeenCalledTimes(2);
     expect(typeof mockGenerateText.mock.calls[1][0].prompt).toBe("string");
+  });
+
+  test("retries in context with a correction turn when the retry fits the window", async () => {
+    const task: ChatMessage = {
+      id: "big-u1",
+      role: "user",
+      parts: [{ type: "text", text: `Task. ${LONG_TURN.repeat(100)}` }],
+    };
+    const pending: ChatMessage = {
+      id: "big-u2",
+      role: "user",
+      parts: [{ type: "text", text: `Follow-up. ${LONG_TURN.repeat(25)}` }],
+    };
+    const total = estimateChatMessagesTokens({
+      provider: "vllm",
+      model: "qwen3-32b-wide",
+      messages: [task, pending],
+    });
+    // just past the threshold, so the pending turn fits the recent tail
+    const wideModel = await ModelModel.create({
+      externalId: "vllm/qwen3-32b-wide",
+      provider: "vllm",
+      modelId: "qwen3-32b-wide",
+      description: "qwen3-32b-wide",
+      contextLength: Math.floor(total / 0.8),
+      inputModalities: ["text"],
+      outputModalities: ["text"],
+      supportsToolCalling: false,
+      ignored: false,
+      lastSyncedAt: new Date(),
+    });
+    mockGenerateText
+      .mockResolvedValueOnce(generated("no tags here"))
+      .mockResolvedValueOnce(generated("<summary>S-RETRY</summary>"));
+
+    const result = await compactMessagesForChat({
+      ...params,
+      selectedModel: "qwen3-32b-wide",
+      modelId: wideModel.id,
+      messages: [task, pending],
+    });
+
+    expect(result.status).toBe("created");
+    expect(result.compaction?.summary).toBe("S-RETRY");
+    expect(result.messages[1]).toEqual(pending);
+    expect(mockGenerateText).toHaveBeenCalledTimes(2);
+    expect(mockGenerateText.mock.calls[1][0].messages).toBeDefined();
+  });
+
+  test("keeps the recent exchange verbatim when it fits the tail budget", async () => {
+    mockGenerateText.mockResolvedValue(generated("<summary>S-TAIL</summary>"));
+    const recentExchange: ChatMessage[] = [
+      { id: "a2", role: "assistant", parts: [{ type: "text", text: "Done." }] },
+      { id: "u3", role: "user", parts: [{ type: "text", text: "Thanks." }] },
+    ];
+
+    const result = await compactMessagesForChat({
+      ...params,
+      messages: [...MESSAGES, ...recentExchange],
+    });
+
+    expect(result.status).toBe("created");
+    expect(result.messages.slice(1)).toEqual([MESSAGES[2], ...recentExchange]);
+    const stored = await ConversationCompactionModel.findLatestByConversation(
+      params.conversationId,
+    );
+    expect(stored?.compactedThroughMessageId).toBe("a1");
   });
 
   test("falls back to the transcript summarizer when the in-context call fails", async () => {

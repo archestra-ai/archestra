@@ -5,7 +5,10 @@ import {
 import logger from "@/logging";
 import { ConversationCompactionModel, ModelModel } from "@/models";
 import { resolveCompactionLlm } from "@/services/compaction-llm";
-import { summarizeCompactionTranscript } from "@/services/context-compaction";
+import {
+  chooseRecentSuffixStart,
+  summarizeCompactionTranscript,
+} from "@/services/context-compaction";
 import type { ChatMessage } from "@/types";
 import type {
   ContextCompactionReason,
@@ -162,8 +165,11 @@ async function runCompaction(
     }
     current = usable;
 
+    // auto keeps a token-budgeted recent tail verbatim; manual compacts
+    // everything except a still-unanswered user turn
+    let recentTailBudget: number | null = null;
     if (params.trigger === "auto") {
-      const decision = await shouldAutoCompact({
+      const decision = await checkAutoThreshold({
         provider: params.provider,
         selectedModel: params.selectedModel,
         systemPrompt: params.systemPrompt,
@@ -178,10 +184,22 @@ async function runCompaction(
           inputTokenEstimate: decision.estimatedTokens,
         };
       }
+      recentTailBudget = Math.min(
+        decision.budgetTokens * RECENT_TAIL_BUDGET_RATIO,
+        RECENT_TAIL_MAX_TOKENS,
+      );
     }
 
     const sourceMessages = params.messages.slice(usable.boundaryIndex + 1);
-    const split = splitMessagesForCompaction(sourceMessages);
+    const split =
+      recentTailBudget === null
+        ? splitMessagesForCompaction(sourceMessages)
+        : splitRecentTail({
+            messages: sourceMessages,
+            keepBudget: recentTailBudget,
+            provider: params.provider,
+            selectedModel: params.selectedModel,
+          });
     const boundaryMessage = split.compactable.at(-1);
     if (!boundaryMessage) {
       return keepCurrent("nothing_to_compact");
@@ -238,13 +256,16 @@ async function runCompaction(
   }
 }
 
-async function shouldAutoCompact(params: {
+async function checkAutoThreshold(params: {
   provider: SupportedProvider;
   selectedModel: string;
   systemPrompt?: string;
   tools?: Record<string, unknown>;
   messages: ChatMessage[];
-}): Promise<{ shouldCompact: boolean; estimatedTokens: number }> {
+}): Promise<
+  | { shouldCompact: false; estimatedTokens: number }
+  | { shouldCompact: true; estimatedTokens: number; budgetTokens: number }
+> {
   const estimatedTokens = estimateChatMessagesTokens({
     ...params,
     model: params.selectedModel,
@@ -260,12 +281,38 @@ async function shouldAutoCompact(params: {
   const contextLength = model
     ? ModelModel.resolveEffectiveContextLength(model)
     : null;
+  const budgetTokens = contextLength
+    ? contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD
+    : null;
 
+  return budgetTokens !== null && estimatedTokens >= budgetTokens
+    ? { shouldCompact: true, estimatedTokens, budgetTokens }
+    : { shouldCompact: false, estimatedTokens };
+}
+
+/**
+ * Keep the newest messages that fit `keepBudget` tokens verbatim (always at
+ * least the newest, so a pending user turn is never summarized away).
+ */
+function splitRecentTail(params: {
+  messages: ChatMessage[];
+  keepBudget: number;
+  provider: SupportedProvider;
+  selectedModel: string;
+}): { compactable: ChatMessage[]; recent: ChatMessage[] } {
+  const start = chooseRecentSuffixStart({
+    sizes: params.messages.map((message) =>
+      estimateChatMessagesTokens({
+        provider: params.provider,
+        model: params.selectedModel,
+        messages: [message],
+      }),
+    ),
+    keepBudget: params.keepBudget,
+  });
   return {
-    shouldCompact:
-      contextLength !== null &&
-      estimatedTokens >= contextLength * CONTEXT_COMPACTION_AUTO_THRESHOLD,
-    estimatedTokens,
+    compactable: params.messages.slice(0, start),
+    recent: params.messages.slice(start),
   };
 }
 
@@ -399,3 +446,8 @@ async function createCompactionRecord(params: {
     compactedTokenEstimate,
   });
 }
+
+// Verbatim recent tail kept by auto compaction: a share of the threshold
+// budget, capped so large windows still compact most of the history.
+const RECENT_TAIL_BUDGET_RATIO = 0.25;
+const RECENT_TAIL_MAX_TOKENS = 20_000;

@@ -25,6 +25,12 @@ describe("uiMessageTranscriptEntries", () => {
           state: "input-available",
           input: { q: "x" },
         },
+        {
+          type: "tool-write_file",
+          state: "output-error",
+          input: { path: "/b" },
+          errorText: "permission denied",
+        },
         null,
       ],
     });
@@ -35,6 +41,12 @@ describe("uiMessageTranscriptEntries", () => {
       { kind: "tool_call", toolName: "read_file", input: { path: "/a" } },
       { kind: "tool_result", toolName: "read_file", output: "contents" },
       { kind: "tool_call", toolName: "search", input: { q: "x" } },
+      { kind: "tool_call", toolName: "write_file", input: { path: "/b" } },
+      {
+        kind: "tool_result",
+        toolName: "write_file",
+        output: { error: "permission denied" },
+      },
     ]);
   });
 });
@@ -58,15 +70,38 @@ describe("renderCompactionTranscript", () => {
     expect(transcript).not.toContain("receipt-signature");
   });
 
-  test("keeps the most recent content when over the transcript ceiling", () => {
+  test("over the ceiling, keeps the task and the newest entries and drops the middle", () => {
     const transcript = renderCompactionTranscript([
-      { kind: "text", role: "user", text: `OLDEST ${"a".repeat(130_000)}` },
+      { kind: "text", role: "user", text: "TASK: migrate the database" },
+      ...Array.from({ length: 40 }, (_, index) => ({
+        kind: "text" as const,
+        role: "assistant",
+        text: `MIDDLE-${index} ${"a".repeat(5_000)}`,
+      })),
       { kind: "text", role: "user", text: "NEWEST" },
     ]);
 
     expect(transcript.length).toBeLessThanOrEqual(120_000);
-    expect(transcript).not.toContain("OLDEST");
-    expect(transcript.endsWith("NEWEST")).toBe(true);
+    expect(transcript.startsWith("[user]: TASK: migrate the database")).toBe(
+      true,
+    );
+    expect(transcript.endsWith("[user]: NEWEST")).toBe(true);
+    expect(transcript).not.toContain("MIDDLE-0 ");
+    expect(transcript).toContain("MIDDLE-39 ");
+  });
+
+  test("caps a tool result keeping its start and end", () => {
+    const transcript = renderCompactionTranscript([
+      {
+        kind: "tool_result",
+        toolName: "run",
+        output: `START${"x".repeat(20_000)}FINAL-ERROR`,
+      },
+    ]);
+
+    expect(transcript.length).toBeLessThan(8_100);
+    expect(transcript).toContain("START");
+    expect(transcript).toContain("FINAL-ERROR");
   });
 });
 

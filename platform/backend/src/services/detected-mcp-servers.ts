@@ -57,7 +57,6 @@ function groupDetectedServers(
         id: observation.toolId,
         name: observation.toolName,
         toolName: parsed.toolName,
-        description: observation.toolDescription,
       });
     }
     server.observers.add(observation.userId);

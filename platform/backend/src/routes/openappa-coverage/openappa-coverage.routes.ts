@@ -40,31 +40,35 @@ const routes: FastifyPluginAsyncZod = async (app) => {
     },
     async (request) => {
       const { type, includeDetected, ...query } = request.query;
+      // `entityId` and `toolId` name registry targets; no detected server is one.
       const detectedWanted =
-        type === "detected_mcp_server" ||
-        (type === "mcp_server" &&
-          includeDetected === true &&
-          !query.entityId &&
-          !query.toolId);
-      const detected = detectedWanted
-        ? detectedEntities(
-            await listDetectedMcpServers(request.organizationId),
-            query,
+        (type === "detected_mcp_server" ||
+          (type === "mcp_server" && includeDetected === true)) &&
+        !query.entityId &&
+        !query.toolId;
+      const detectedRows = detectedWanted
+        ? listDetectedMcpServers(request.organizationId).then((servers) =>
+            detectedEntities(servers, query),
           )
-        : [];
+        : Promise.resolve([]);
       if (type === "detected_mcp_server") {
-        return pageOf(detected, query);
+        return pageOf(await detectedRows, query);
       }
-      const visibility = await coverageVisibility(
+      const registryRows = coverageVisibility(
         request.user.id,
         request.organizationId,
+      ).then((visibility) =>
+        openappaCoverageService.entities({
+          organizationId: request.organizationId,
+          ...visibility,
+          ...query,
+          type,
+        }),
       );
-      const registry = await openappaCoverageService.entities({
-        organizationId: request.organizationId,
-        ...visibility,
-        ...query,
-        type,
-      });
+      const [registry, detected] = await Promise.all([
+        registryRows,
+        detectedRows,
+      ]);
       return appendDetected(registry, detected, query);
     },
   );
@@ -139,7 +143,13 @@ function detectedEntities(
         typeof left === "number" && typeof right === "number"
           ? left - right
           : String(left).localeCompare(String(right));
-      return direction * order || a.id.localeCompare(b.id);
+      // Ties by name, as coverage sorts, then by id so equal labels on two
+      // clients keep one order.
+      return (
+        direction * order ||
+        a.name.localeCompare(b.name) ||
+        a.id.localeCompare(b.id)
+      );
     });
 }
 

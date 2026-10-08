@@ -18,7 +18,6 @@ export const DetectedMcpServerSchema = z.object({
       name: z.string(),
       /** The tool's own name on its server, without the client's label. */
       toolName: z.string(),
-      description: z.string().nullable(),
     }),
   ),
   observerCount: z.number().int().nonnegative(),

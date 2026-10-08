@@ -164,6 +164,25 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     ]);
   });
 
+  test("a target filter names a registry server, so a detected-only list under one is empty", async () => {
+    await ToolModel.bulkCreateProxyToolsIfNotExists(
+      [proxyTool("mcp__slack__send")],
+      "",
+    );
+    await observe(["mcp__slack__send"], ctx.user.id, CLAUDE_CODE_CLIENT_ID);
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: `/api/openappa/coverage/entities?type=detected_mcp_server&toolId=${crypto.randomUUID()}`,
+    });
+
+    expect(response.statusCode).toBe(200);
+    expect(response.json()).toMatchObject({
+      data: [],
+      pagination: { total: 0 },
+    });
+  });
+
   test("leaves out other organizations, catalog tools, unreadable names and unknown clients", async ({
     makeUser,
     makeMember,

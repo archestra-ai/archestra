@@ -12,7 +12,6 @@ import logger from "@/logging";
 export type ProxyToolObservation = {
   toolId: string;
   toolName: string;
-  toolDescription: string | null;
   userId: string;
   externalAgentId: string;
   observedAt: Date;
@@ -98,7 +97,6 @@ class ToolObservationModel {
       .select({
         toolId: schema.toolsTable.id,
         toolName: schema.toolsTable.name,
-        toolDescription: schema.toolsTable.description,
         userId: schema.toolObservationsTable.userId,
         externalAgentId: schema.toolObservationsTable.externalAgentId,
         observedAt: schema.toolObservationsTable.createdAt,

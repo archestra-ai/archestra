@@ -11,6 +11,7 @@ import {
   ArchestraInternalErrorCode,
   type BillingMode,
   BUILT_IN_AGENT_IDS,
+  buildFullToolName,
   CHAT_API_KEY_ID_HEADER,
   DELEGATION_BILLING_ENVIRONMENT_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
@@ -19,7 +20,6 @@ import {
   InteractionSourceSchema,
   isCodexOriginator,
   isProviderApiKeyOptional,
-  MCP_SERVER_TOOL_NAME_SEPARATOR,
   OPENCODE_AGENT_HEADER,
   OPENCODE_CLIENT_ID,
   PROVIDER_BASE_URL_HEADER,
@@ -1406,7 +1406,7 @@ export async function handleLLMProxy<
             // A namespaced tool is persisted under its one-string spelling,
             // `<namespace>__<name>`, the way the client's call is evaluated.
             toolName: t.namespace
-              ? `${t.namespace}${MCP_SERVER_TOOL_NAME_SEPARATOR}${t.name}`
+              ? buildFullToolName(t.namespace, t.name)
               : t.name,
             toolParameters: t.inputSchema,
             toolDescription: t.description,

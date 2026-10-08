@@ -49,17 +49,27 @@ export async function findDetectedMcpServer(
   const parsed = parseDetectedServerId(id);
   if (!parsed) return null;
   const label = escapeLike(parsed.label);
+  // The policy's labels, not the asked-for one: a label nobody declared
+  // splits no `<label>_<tool>` name, and a longer declared label still wins.
+  const openCodeLabels =
+    parsed.family === "opencode"
+      ? await declaredOpenCodeLabels(organizationId)
+      : [];
   const observations = await ToolObservationModel.listProxyToolObservations(
     organizationId,
     {
       externalAgentIds: clientFilterToAgentIds(clientFilterOf(parsed.family)),
       toolNameLike:
         parsed.family === "opencode"
-          ? [`${OPENCODE_MCP_TOOL_NAME_PREFIX}${label}:%`, `${label}\\_%`]
+          ? [
+              `${OPENCODE_MCP_TOOL_NAME_PREFIX}${label}:%`,
+              ...(openCodeLabels.includes(parsed.label)
+                ? [`${label}\\_%`]
+                : []),
+            ]
           : [`mcp\\_\\_${label}\\_\\_%`],
     },
   );
-  const openCodeLabels = parsed.family === "opencode" ? [parsed.label] : [];
   return (
     groupDetectedServers(observations, openCodeLabels).find(
       (server) => server.id === id,

@@ -102,9 +102,12 @@ class ToolObservationModel {
   ): Promise<ProxyToolObservation[]> {
     const narrowed = only
       ? [
-          inArray(schema.toolObservationsTable.externalAgentId, [
-            ...only.externalAgentIds,
-          ]),
+          // Recorded as the client sent it; recognised the way the client
+          // families are, trimmed and case-insensitively.
+          inArray(
+            sql`lower(trim(${schema.toolObservationsTable.externalAgentId}))`,
+            only.externalAgentIds.map((id) => id.trim().toLowerCase()),
+          ),
           or(
             ...only.toolNameLike.map(
               (pattern) =>

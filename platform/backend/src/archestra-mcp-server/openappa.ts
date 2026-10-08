@@ -96,6 +96,7 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { ApiError, UuidIdSchema } from "@/types";
 import { ValidateGuardrailsPolicySchema } from "@/types/guardrails-policy";
 import { ProposedGuardrailsPolicySchema } from "@/types/guardrails-policy-proposal";
+import { DetectedServerIdSchema } from "@/types/openappa-batteries";
 import {
   type ExternalConsult,
   ExternalConsultOutcomeSchema,
@@ -581,31 +582,31 @@ const registry = defineArchestraTools([
     title: "List detected MCP servers",
     annotations: { readOnlyHint: true },
     description:
-      "List the MCP servers people connected directly to their coding clients (Claude Code, Codex, OpenCode), as the LLM proxy saw them declare tools: one per client and server label, with its tool names (the first 200, and `toolCount`), or only the one whose `serverId` is given; pass null for all. Each server's `id`, `<client>.<label>` such as `claude-code.slack`, is the `[server_aliases]` target a policy names to govern it, the way a catalog server's tool prefix is. `batteryMatches` lists the batteries whose rules name its tools, by name overlap only, each with the `include` entry that declares it, the `namespaces` to point at the server's id in `[server_aliases]`, and the credential variables `[credentials]` must bind; propose them, never attach without the operator. A battery already attached to the server is marked `declared`. This changes nothing.",
+      "List the MCP servers people connected directly to their coding clients (Claude Code, Codex, OpenCode), as the LLM proxy saw them declare tools: one per client and server label (the first 100 by id, and `serverCount`), with its tool names (the first 200, and `toolCount`); or only the one whose `serverId` is given. Each server's `id`, `<client>.<label>` such as `claude-code.slack`, is the `[server_aliases]` target a policy names to govern it, the way a catalog server's tool prefix is. `batteryMatches` lists the batteries whose rules name its tools, by name overlap only, each with the `include` entry that declares it, the `namespaces` to point at the server's id in `[server_aliases]`, and the credential variables `[credentials]` must bind; propose them, never attach without the operator. A battery already attached to the server is marked `declared`. This changes nothing.",
     schema: z.strictObject({
-      serverId: z
-        .string()
-        .nullable()
-        .describe(
-          "A detected server's id, `<client>.<label>`, to list only it; null for every server",
-        ),
+      serverId: DetectedServerIdSchema.nullish().describe(
+        "A detected server's id, `<client>.<label>`, to list only it; omit or null for every server",
+      ),
     }),
     async handler({ args, context }) {
       if (!context.organizationId)
         throw new ApiError(401, "Organization context is required");
       const organizationId = context.organizationId;
-      const servers =
-        args.serverId === null
+      const serverId = args.serverId ?? null;
+      const found =
+        serverId === null
           ? await listDetectedMcpServers(organizationId)
-          : await findDetectedMcpServer(organizationId, args.serverId).then(
+          : await findDetectedMcpServer(organizationId, serverId).then(
               (server) => (server ? [server] : []),
             );
+      const servers = found.slice(0, LISTED_SERVERS);
       const { byServer, batteries } =
         await openappaBatteriesService.matchesForDetectedServers({
           organizationId,
           servers,
         });
       return result({
+        serverCount: found.length,
         servers: servers.map((server) => ({
           id: server.id,
           label: server.label,
@@ -1301,8 +1302,9 @@ async function inspectableToolIds(
   return new Set(byName.values());
 }
 
-/** Tool names listed per detected server; the count says how many there are. */
+/** Tool names listed per detected server, and servers listed per call; the counts say how many there are. */
 const LISTED_TOOL_NAMES = 200;
+const LISTED_SERVERS = 100;
 
 export function isOpenappaTool(shortName: string | null | undefined): boolean {
   return (

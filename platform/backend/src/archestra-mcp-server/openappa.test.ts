@@ -1772,12 +1772,9 @@ describe("list_detected_mcp_servers", () => {
       organizationId: org.id,
     };
 
-    const result = await executeArchestraTool(
-      toolFullName,
-      { serverId: null },
-      context,
-    );
+    const result = await executeArchestraTool(toolFullName, {}, context);
     expect(result.isError).toBeFalsy();
+    expect((result.structuredContent as any).serverCount).toBe(2);
     expect((result.structuredContent as any).servers).toEqual([
       {
         id: "claude-code.github",
@@ -1821,7 +1818,17 @@ describe("list_detected_mcp_servers", () => {
           context,
         )
       ).structuredContent,
-    ).toEqual({ servers: [] });
+    ).toEqual({ serverCount: 0, servers: [] });
+    // An id that is not a detected server's is refused, not reported empty.
+    expect(
+      (
+        await executeArchestraTool(
+          toolFullName,
+          { serverId: "claude-code.bad__label" },
+          context,
+        )
+      ).isError,
+    ).toBe(true);
 
     await openappaBatteriesService.createInstall({
       userId: user.id,

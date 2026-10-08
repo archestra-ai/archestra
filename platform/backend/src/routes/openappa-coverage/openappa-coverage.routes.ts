@@ -1,17 +1,22 @@
-import { RouteId } from "@archestra/shared";
+import { calculatePaginationMeta, RouteId } from "@archestra/shared";
 import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import {
   coverageVisibility,
   openappaCoverageService,
 } from "@/openappa/coverage";
 import { openappaEnabled } from "@/openappa/service";
+import { listDetectedMcpServers } from "@/services/detected-mcp-servers";
 import { ApiError, constructResponseSchema } from "@/types";
+import type { DetectedMcpServer } from "@/types/detected-mcp-server";
 import {
-  CoverageEntitiesPageSchema,
-  CoverageEntitiesQuerySchema,
+  type CoverageEntitiesPage,
+  CoverageEntitiesRoutePageSchema,
+  type CoverageEntitiesRouteQuery,
+  CoverageEntitiesRouteQuerySchema,
   CoverageSummarySchema,
   CoverageToolsPageSchema,
   CoverageToolsQuerySchema,
+  type DetectedCoverageEntity,
 } from "@/types/openappa-coverage";
 
 /**
@@ -29,20 +34,38 @@ const routes: FastifyPluginAsyncZod = async (app) => {
       schema: {
         operationId: RouteId.GetOpenappaCoverageEntities,
         tags: ["OpenAPPA"],
-        querystring: CoverageEntitiesQuerySchema,
-        response: constructResponseSchema(CoverageEntitiesPageSchema),
+        querystring: CoverageEntitiesRouteQuerySchema,
+        response: constructResponseSchema(CoverageEntitiesRoutePageSchema),
       },
     },
     async (request) => {
+      const { type, includeDetected, ...query } = request.query;
+      const detectedWanted =
+        type === "detected_mcp_server" ||
+        (type === "mcp_server" &&
+          includeDetected === true &&
+          !query.entityId &&
+          !query.toolId);
+      const detected = detectedWanted
+        ? detectedEntities(
+            await listDetectedMcpServers(request.organizationId),
+            query,
+          )
+        : [];
+      if (type === "detected_mcp_server") {
+        return pageOf(detected, query);
+      }
       const visibility = await coverageVisibility(
         request.user.id,
         request.organizationId,
       );
-      return openappaCoverageService.entities({
+      const registry = await openappaCoverageService.entities({
         organizationId: request.organizationId,
         ...visibility,
-        ...request.query,
+        ...query,
+        type,
       });
+      return appendDetected(registry, detected, query);
     },
   );
   app.get(
@@ -80,3 +103,77 @@ const routes: FastifyPluginAsyncZod = async (app) => {
 };
 
 export default routes;
+
+// === Internal helpers ===
+
+type EntitiesPaging = Pick<
+  CoverageEntitiesRouteQuery,
+  "search" | "sortBy" | "sortDirection" | "limit" | "offset"
+>;
+
+/** Detected servers as list rows: the search and sort the registry rows get. */
+function detectedEntities(
+  servers: DetectedMcpServer[],
+  query: EntitiesPaging,
+): DetectedCoverageEntity[] {
+  const search = query.search?.toLowerCase();
+  const direction = query.sortDirection === "desc" ? -1 : 1;
+  const key = (entity: DetectedCoverageEntity) =>
+    query.sortBy === "tools" ? entity.toolCount : entity.name;
+  return servers
+    .filter((server) => !search || server.label.toLowerCase().includes(search))
+    .map((server) => ({
+      type: "detected_mcp_server" as const,
+      id: server.id,
+      name: server.label,
+      label: server.label,
+      clientFamily: server.clientFamily,
+      toolCount: server.tools.length,
+      observerCount: server.observerCount,
+      firstObservedAt: server.firstObservedAt,
+    }))
+    .sort((a, b) => {
+      const left = key(a);
+      const right = key(b);
+      const order =
+        typeof left === "number" && typeof right === "number"
+          ? left - right
+          : String(left).localeCompare(String(right));
+      return direction * order || a.id.localeCompare(b.id);
+    });
+}
+
+function pageOf(
+  rows: DetectedCoverageEntity[],
+  paging: Pick<EntitiesPaging, "limit" | "offset">,
+) {
+  return {
+    data: rows.slice(paging.offset, paging.offset + paging.limit),
+    pagination: calculatePaginationMeta(rows.length, paging),
+  };
+}
+
+/**
+ * One paged list over registry rows then detected rows: the registry page is
+ * what coverage returned for this offset, and detected rows fill the rest of
+ * the page from where the registry's total left off.
+ */
+function appendDetected(
+  registry: CoverageEntitiesPage,
+  detected: DetectedCoverageEntity[],
+  paging: Pick<EntitiesPaging, "limit" | "offset">,
+) {
+  if (detected.length === 0) return registry;
+  const room = paging.limit - registry.data.length;
+  const start = Math.max(0, paging.offset - registry.pagination.total);
+  return {
+    data: [
+      ...registry.data,
+      ...(room > 0 ? detected.slice(start, start + room) : []),
+    ],
+    pagination: calculatePaginationMeta(
+      registry.pagination.total + detected.length,
+      paging,
+    ),
+  };
+}

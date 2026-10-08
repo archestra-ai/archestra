@@ -833,9 +833,6 @@ export const requiredEndpointPermissionsMap: Partial<
   [RouteId.GetMcpServers]: {
     mcpServerInstallation: ["read"],
   },
-  [RouteId.GetDetectedMcpServers]: {
-    mcpServerInstallation: ["read"],
-  },
   [RouteId.GetMcpServerAutoModeAgents]: {
     mcpServerInstallation: ["read"],
   },

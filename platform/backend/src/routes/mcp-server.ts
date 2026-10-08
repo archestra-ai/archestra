@@ -50,7 +50,6 @@ import {
   isPredefinedAdmin,
 } from "@/services/agent-tool-assignment";
 import { resolveMcpCredentialValues } from "@/services/credentials";
-import { listDetectedMcpServers } from "@/services/detected-mcp-servers";
 import { assertValuesMatchEnvironmentRegex } from "@/services/environments/environment";
 import { refreshLinkedIdentityProviderAccessToken } from "@/services/identity-providers/access-token-refresh";
 import {
@@ -99,7 +98,6 @@ import {
   UnmuteMcpServerAlertQuerySchema,
   UuidIdSchema,
 } from "@/types";
-import { DetectedMcpServerSchema } from "@/types/detected-mcp-server";
 import { trackBackgroundWork } from "@/utils/background-work";
 import {
   broadcastMcpInstallationStatus,
@@ -126,25 +124,6 @@ const mcpServerRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId,
       ]);
       return reply.send(byOrg.get(organizationId) ?? []);
-    },
-  );
-
-  fastify.get(
-    "/api/mcp_server/detected",
-    {
-      schema: {
-        operationId: RouteId.GetDetectedMcpServers,
-        description:
-          "List the MCP servers that clients connected on their own, as seen through " +
-          "the tools the LLM proxy observed them declaring. One entry per client family " +
-          "and server label in the organization; its id is the alias target a guardrails " +
-          "policy names to govern it.",
-        tags: ["MCP Server"],
-        response: constructResponseSchema(z.array(DetectedMcpServerSchema)),
-      },
-    },
-    async ({ organizationId }, reply) => {
-      return reply.send(await listDetectedMcpServers(organizationId));
     },
   );
 

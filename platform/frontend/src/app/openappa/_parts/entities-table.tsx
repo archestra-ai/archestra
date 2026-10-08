@@ -1,12 +1,21 @@
 "use client";
 
+import { CLIENT_FILTER_OPTIONS } from "@archestra/shared";
 import type { Column, ColumnDef, SortingState } from "@tanstack/react-table";
-import { Bot, ChevronDown, ChevronUp, MessageCircle } from "lucide-react";
+import {
+  Bot,
+  ChevronDown,
+  ChevronUp,
+  MessageCircle,
+  Radar,
+} from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
+import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
   CollectionFilters,
   FilterBar,
+  FilterSelect,
   filterSearchClass,
 } from "@/components/filter-bar";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
@@ -16,10 +25,13 @@ import { StandardDialog } from "@/components/standard-dialog";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { DataTable } from "@/components/ui/data-table";
+import { DEFAULT_FILTER_ALL } from "@/consts";
 import { useDataTableQueryParams } from "@/lib/hooks/use-data-table-query-params";
 import { useQueryParamsAdapter } from "@/lib/hooks/use-query-params-adapter";
 import {
   type CoverageEntity,
+  type DetectedCoverageEntity,
+  type RegistryCoverageEntity,
   useCoverageEntities,
 } from "@/lib/openappa-coverage.query";
 import { OpenAppaChatButton } from "./openappa-chat-button";
@@ -30,6 +42,7 @@ const PARAM_NAMES = {
   page: "entitiesPage",
   pageSize: "entitiesPageSize",
   search: "entitiesSearch",
+  type: "entitiesType",
   sortBy: "entitiesSortBy",
   sortDirection: "entitiesSortDirection",
 } as const;
@@ -45,7 +58,7 @@ const DEFAULT_SORT: { id: SortColumn; desc: boolean } = {
 
 /** Every visible MCP server, with a chat that reviews its rules. */
 export function EntitiesTable() {
-  const [selected, setSelected] = useState<CoverageEntity | null>(null);
+  const [selected, setSelected] = useState<RegistryCoverageEntity | null>(null);
   const queryParamsAdapter = useQueryParamsAdapter({ paramNames: PARAM_NAMES });
   const {
     searchParams,
@@ -56,6 +69,8 @@ export function EntitiesTable() {
   } = useDataTableQueryParams({ queryParamsAdapter });
   const limit = Math.min(pageSize, 100);
   const search = searchParams.get("search") || undefined;
+  const rawType = searchParams.get("type");
+  const typeFilter: TypeFilter = isTypeFilter(rawType) ? rawType : "all";
   const rawSortBy = searchParams.get("sortBy");
   const sort = SORTABLE.some((column) => column === rawSortBy)
     ? {
@@ -81,15 +96,17 @@ export function EntitiesTable() {
   );
   const entities = useCoverageEntities({
     search,
-    type: "mcp_server",
+    ...(typeFilter === "detected"
+      ? { type: "detected_mcp_server" }
+      : { type: "mcp_server", includeDetected: typeFilter === "all" }),
     sortBy: sort.id,
     sortDirection: sort.desc ? "desc" : "asc",
     limit,
     offset: pageIndex * limit,
   });
-  const hasActiveFilters = !!search;
+  const hasActiveFilters = !!search || typeFilter !== "all";
   const clearFilters = useCallback(
-    () => updateQueryParams({ search: null, page: "1" }),
+    () => updateQueryParams({ search: null, type: null, page: "1" }),
     [updateQueryParams],
   );
 
@@ -100,35 +117,53 @@ export function EntitiesTable() {
         accessorFn: (row) => row.name,
         header: ({ column }) => <SortHeader column={column} label="Name" />,
         size: 260,
-        cell: ({ row }) => (
-          <Button
-            variant="ghost"
-            size="sm"
-            className="-ml-1.5 h-7 max-w-full justify-start gap-2 px-1.5"
-            onClick={() => setSelected(row.original)}
-          >
-            <EntityIcon entity={row.original} size={16} />
-            <span className="truncate" title={row.original.name}>
-              {row.original.name}
+        cell: ({ row }) => {
+          const entity = row.original;
+          return isDetected(entity) ? (
+            <span className="flex min-w-0 flex-col">
+              <span className="truncate" title={entity.name}>
+                {entity.name}
+              </span>
+              <span className="truncate text-xs text-muted-foreground">
+                {entity.id}
+              </span>
             </span>
-          </Button>
-        ),
+          ) : (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="-ml-1.5 h-7 max-w-full justify-start gap-2 px-1.5"
+              onClick={() => setSelected(entity)}
+            >
+              <EntityIcon entity={entity} size={16} />
+              <span className="truncate" title={entity.name}>
+                {entity.name}
+              </span>
+            </Button>
+          );
+        },
       },
       {
         id: "type",
         accessorFn: (row) => row.type,
         header: ({ column }) => <SortHeader column={column} label="Type" />,
         size: 210,
-        cell: ({ row }) => (
-          <span className="flex items-center gap-2">
-            <span>{entityTypeLabel(row.original.type)}</span>
-            {row.original.autoMode && (
-              <Badge variant="outline" className="font-normal">
-                Auto mode
-              </Badge>
-            )}
-          </span>
-        ),
+        cell: ({ row }) =>
+          isDetected(row.original) ? (
+            <span className="flex items-center gap-2">
+              <DetectedClientBadge entity={row.original} />
+              <span>Detected</span>
+            </span>
+          ) : (
+            <span className="flex items-center gap-2">
+              <span>{entityTypeLabel(row.original.type)}</span>
+              {row.original.autoMode && (
+                <Badge variant="outline" className="font-normal">
+                  Auto mode
+                </Badge>
+              )}
+            </span>
+          ),
       },
       {
         id: "tools",
@@ -136,48 +171,54 @@ export function EntitiesTable() {
         header: ({ column }) => (
           <SortHeader column={column} label="Tool coverage" />
         ),
-        cell: ({ row }) => (
-          <div className="flex items-center gap-3">
-            {/* Capped, so a wide screen leaves room after it, not a longer bar. */}
-            <RuleCoverageBar
-              counts={row.original.rules}
-              total={row.original.toolCount}
-              className="h-1.5 min-w-0 max-w-48 flex-1"
-            />
-            <span className="text-muted-foreground w-28 shrink-0 whitespace-nowrap text-right text-xs tabular-nums">
-              {`${(row.original.rules.root + row.original.rules.battery + row.original.rules.catchAll).toLocaleString()} of ${row.original.toolCount.toLocaleString()} covered`}
+        cell: ({ row }) =>
+          isDetected(row.original) ? (
+            <span className="text-muted-foreground text-xs tabular-nums">
+              {`${row.original.toolCount.toLocaleString()} ${row.original.toolCount === 1 ? "tool" : "tools"}`}
             </span>
-          </div>
-        ),
+          ) : (
+            <div className="flex items-center gap-3">
+              {/* Capped, so a wide screen leaves room after it, not a longer bar. */}
+              <RuleCoverageBar
+                counts={row.original.rules}
+                total={row.original.toolCount}
+                className="h-1.5 min-w-0 max-w-48 flex-1"
+              />
+              <span className="text-muted-foreground w-28 shrink-0 whitespace-nowrap text-right text-xs tabular-nums">
+                {`${(row.original.rules.root + row.original.rules.battery + row.original.rules.catchAll).toLocaleString()} of ${row.original.toolCount.toLocaleString()} covered`}
+              </span>
+            </div>
+          ),
       },
       {
         id: "actions",
         header: "Actions",
         size: 100,
-        cell: ({ row }) => (
-          <OpenAppaChatButton
-            permissions={
-              row.original.type === "mcp_server"
-                ? { mcpRegistry: ["read"] }
-                : {}
-            }
-            variant="outline"
-            size="sm"
-            className="h-7"
-            // On the button, so a refused one, which drops the link, keeps it.
-            aria-label={`Ask in chat: ${row.original.name}`}
-            promptKey="reviewCoverage"
-            target={{
-              kind: row.original.type,
-              id: row.original.id,
-              name: row.original.name,
-            }}
-            onClick={(event) => event.stopPropagation()}
-          >
-            <MessageCircle />
-            <span>Ask</span>
-          </OpenAppaChatButton>
-        ),
+        cell: ({ row }) =>
+          isDetected(row.original) ? null : (
+            <OpenAppaChatButton
+              permissions={
+                row.original.type === "mcp_server"
+                  ? { mcpRegistry: ["read"] }
+                  : {}
+              }
+              variant="outline"
+              size="sm"
+              className="h-7"
+              // On the button, so a refused one, which drops the link, keeps it.
+              aria-label={`Ask in chat: ${row.original.name}`}
+              promptKey="reviewCoverage"
+              target={{
+                kind: row.original.type,
+                id: row.original.id,
+                name: row.original.name,
+              }}
+              onClick={(event) => event.stopPropagation()}
+            >
+              <MessageCircle />
+              <span>Ask</span>
+            </OpenAppaChatButton>
+          ),
       },
     ],
     [],
@@ -203,7 +244,25 @@ export function EntitiesTable() {
               </span>
             ) : null
           }
-        />
+        >
+          <FilterSelect
+            value={typeFilter === "all" ? DEFAULT_FILTER_ALL : typeFilter}
+            onValueChange={(value) =>
+              updateQueryParams({
+                type: value === DEFAULT_FILTER_ALL ? null : value,
+                page: "1",
+              })
+            }
+            placeholder="Type"
+            ariaLabel="Type"
+            showSearch={false}
+            items={[
+              { value: DEFAULT_FILTER_ALL, label: "All types" },
+              { value: "mcp_server", label: "MCP server" },
+              { value: "detected", label: "Detected" },
+            ]}
+          />
+        </FilterBar>
       </CollectionFilters>
       {entities.isLoadingError ? (
         <QueryLoadError
@@ -216,7 +275,9 @@ export function EntitiesTable() {
           columns={columns}
           data={entities.data?.data ?? []}
           getRowId={(row) => `${row.type}:${row.id}`}
-          onRowClick={(row) => setSelected(row)}
+          onRowClick={(row) => {
+            if (!isDetected(row)) setSelected(row);
+          }}
           manualPagination
           pagination={{
             pageIndex,
@@ -234,7 +295,7 @@ export function EntitiesTable() {
           isLoading={entities.isFetching}
           emptyIcon={Bot}
           emptyMessage="No MCP servers"
-          emptyDescription="MCP servers appear here when available."
+          emptyDescription="MCP servers appear here when available. Servers people connect directly to their coding clients show up once the LLM proxy sees them declare tools."
           hasActiveFilters={hasActiveFilters}
           filteredEmptyMessage="No MCP server matches these filters."
           onClearFilters={clearFilters}
@@ -280,7 +341,7 @@ function PolicyTargetDialog({
   target: selected,
   onClose,
 }: {
-  target: CoverageEntity | null;
+  target: RegistryCoverageEntity | null;
   onClose: () => void;
 }) {
   return (
@@ -312,7 +373,29 @@ function PolicyTargetDialog({
   );
 }
 
-function entityTypeLabel(type: CoverageEntity["type"]): string {
+const TYPE_FILTERS = ["all", "mcp_server", "detected"] as const;
+type TypeFilter = (typeof TYPE_FILTERS)[number];
+
+function isTypeFilter(value: string | null): value is TypeFilter {
+  return TYPE_FILTERS.some((filter) => filter === value);
+}
+
+function isDetected(entity: CoverageEntity): entity is DetectedCoverageEntity {
+  return entity.type === "detected_mcp_server";
+}
+
+function DetectedClientBadge({ entity }: { entity: DetectedCoverageEntity }) {
+  const client = CLIENT_FILTER_OPTIONS.find(
+    (option) => option.value === entity.clientFamily,
+  );
+  return client ? (
+    <ClientSourceBadge client={client} />
+  ) : (
+    <Radar className="size-4 text-muted-foreground" />
+  );
+}
+
+function entityTypeLabel(type: RegistryCoverageEntity["type"]): string {
   switch (type) {
     case "agent":
       return "Agent";
@@ -327,7 +410,7 @@ function EntityIcon({
   entity,
   size,
 }: {
-  entity: CoverageEntity;
+  entity: RegistryCoverageEntity;
   size: number;
 }) {
   return entity.type === "mcp_server" ? (
@@ -339,7 +422,7 @@ function EntityIcon({
 
 // Rendered inside the dialog's description paragraph, so it sticks to inline
 // elements.
-function EntitySummary({ entity }: { entity: CoverageEntity }) {
+function EntitySummary({ entity }: { entity: RegistryCoverageEntity }) {
   const toolLabel =
     entity.type === "mcp_server"
       ? "synced tools"

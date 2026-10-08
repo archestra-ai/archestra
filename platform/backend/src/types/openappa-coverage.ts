@@ -9,6 +9,7 @@ import {
   BatteryInstallStatusSchema,
   BatteryMatchEvidenceSchema,
 } from "@/types/openappa-batteries";
+import { DetectedMcpServerSchema } from "./detected-mcp-server";
 
 /**
  * What kind of rule governs a tool, from its delta and requirements: a rule
@@ -185,6 +186,48 @@ export type CoverageToolsPage = z.infer<typeof CoverageToolsPageSchema>;
 export const CoverageEntitiesPageSchema =
   createPaginatedResponseSchema(CoverageEntitySchema);
 export type CoverageEntitiesPage = z.infer<typeof CoverageEntitiesPageSchema>;
+
+/**
+ * An MCP server a client connected on its own, listed beside the registry's
+ * servers. Coverage counts registry inventory only, so a detected server
+ * carries its observed tool count and no rule buckets.
+ */
+export const DetectedCoverageEntitySchema = DetectedMcpServerSchema.pick({
+  id: true,
+  label: true,
+  clientFamily: true,
+  observerCount: true,
+  firstObservedAt: true,
+}).extend({
+  type: z.literal("detected_mcp_server"),
+  name: z.string(),
+  toolCount: z.number().int(),
+});
+export type DetectedCoverageEntity = z.infer<
+  typeof DetectedCoverageEntitySchema
+>;
+
+/**
+ * The entities route's query: coverage's, plus the detected servers as a type
+ * of their own, or appended after the registry's servers in one paged list.
+ */
+export const CoverageEntitiesRouteQuerySchema =
+  CoverageEntitiesQuerySchema.extend({
+    type: z
+      .enum([...CoverageEntitySchema.shape.type.options, "detected_mcp_server"])
+      .optional(),
+    /** With `type=mcp_server`, list detected servers after the registry's. */
+    includeDetected: z
+      .union([z.boolean(), z.enum(["true", "false"])])
+      .transform((value) => value === true || value === "true")
+      .optional(),
+  });
+export type CoverageEntitiesRouteQuery = z.infer<
+  typeof CoverageEntitiesRouteQuerySchema
+>;
+export const CoverageEntitiesRoutePageSchema = createPaginatedResponseSchema(
+  z.union([CoverageEntitySchema, DetectedCoverageEntitySchema]),
+);
 
 /** The whole visible inventory in aggregate, one count per tool. */
 export const CoverageSummarySchema = z.object({

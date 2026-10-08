@@ -3,6 +3,7 @@
 import { type archestraApiTypes, DocsPage } from "@archestra/shared";
 import type { ColumnDef } from "@tanstack/react-table";
 import {
+  Bot,
   Boxes,
   Building2,
   CircleDollarSign,
@@ -10,6 +11,7 @@ import {
   Info,
   Key,
   KeyRound,
+  type LucideIcon,
   Network,
   Plus,
   Trash2,
@@ -22,6 +24,7 @@ import { useSetCostsAction } from "@/app/llm/(costs)/layout";
 import { AdvancedLabelsSection } from "@/components/advanced-labels-section";
 import { AgentIcon } from "@/components/agent-icon";
 import type { ProfileLabel, ProfileLabelsRef } from "@/components/agent-labels";
+import { ModelSelectorLogo } from "@/components/ai-elements/model-selector";
 import { DeleteConfirmDialog } from "@/components/delete-confirm-dialog";
 import { EntityLabelFilter } from "@/components/entity-label-filter";
 import { EnvironmentSelector } from "@/components/environment-selector";
@@ -42,7 +45,6 @@ import {
   LimitCleanupIntervalSelect,
 } from "@/components/limit-cleanup-interval-select";
 import { LlmModelPicker } from "@/components/llm-model-picker";
-import { LlmModelSearchableSelect } from "@/components/llm-model-select";
 import { QueryLoadError } from "@/components/query-load-error";
 import { WithPermissions } from "@/components/roles/with-permissions";
 import { TableRowActions } from "@/components/table-row-actions";
@@ -61,7 +63,6 @@ import {
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { PermissionButton } from "@/components/ui/permission-button";
-import { Progress } from "@/components/ui/progress";
 import { SearchableSelect } from "@/components/ui/searchable-select";
 import {
   Tooltip,
@@ -96,12 +97,20 @@ import {
   useOrganization,
   useOrganizationMembers,
 } from "@/lib/organization.query";
+import { logoNameForProvider } from "@/lib/provider-logos";
 import { useTeams } from "@/lib/teams/team.query";
+import { cn } from "@/lib/utils/tailwind";
 import { useAllVirtualApiKeys } from "@/lib/virtual-api-keys.query";
 
 type LimitData = archestraApiTypes.GetLimitsResponses["200"][number];
 type LimitEntityType = archestraApiTypes.CreateLimitData["body"]["entityType"];
 type UsageStatus = "safe" | "warning" | "danger";
+type UsageSummary = {
+  percentage: number;
+  status: UsageStatus;
+  actualUsage: number;
+  actualLimit: number;
+};
 
 const canBulkDeleteLimit = (limit: LimitData) => limit.entityType !== "user";
 
@@ -212,6 +221,12 @@ function formatNumericInput(value: string) {
   return Number(value).toLocaleString("en-US");
 }
 
+import {
+  type LimitFilterModel,
+  LimitModelFilter,
+} from "./_parts/limit-model-filter";
+import { type NestedLimit, nestLimits } from "./_parts/nest-limits";
+
 export default function LimitsPage() {
   const setActionButton = useSetCostsAction();
   const {
@@ -288,6 +303,36 @@ export default function LimitsPage() {
       })),
     [modelsWithApiKeys],
   );
+  const filterModels = useMemo(
+    () =>
+      modelsWithApiKeys.map((model) => ({
+        modelId: model.modelId,
+        provider: model.provider,
+        // The same display name the chat model picker shows.
+        displayName: model.description || model.modelId,
+        isBest: model.isBest,
+      })),
+    [modelsWithApiKeys],
+  );
+  const modelByModelId = useMemo(
+    () => new Map(filterModels.map((model) => [model.modelId, model])),
+    [filterModels],
+  );
+  const limitCountByModel = useMemo(() => {
+    // The filter keeps all-models limits for every model, so count them too.
+    const allModelsCount = llmLimits.filter(
+      (limit) => getLimitModels(limit).length === 0,
+    ).length;
+    const counts = new Map<string, number>(
+      filterModels.map((model) => [model.modelId, allModelsCount]),
+    );
+    for (const limit of llmLimits) {
+      for (const model of getLimitModels(limit)) {
+        counts.set(model, (counts.get(model) ?? allModelsCount) + 1);
+      }
+    }
+    return counts;
+  }, [llmLimits, filterModels]);
 
   const handleCreateOpen = useCallback(() => {
     closeEditDialog();
@@ -444,32 +489,31 @@ export default function LimitsPage() {
     [llmProxyId],
   );
 
-  const getUsageStatus = useCallback(
-    (
-      limit: LimitData,
-    ): {
-      percentage: number;
-      status: UsageStatus;
-      actualUsage: number;
-      actualLimit: number;
-    } => {
-      const actualUsage = (limit.modelUsage ?? []).reduce(
-        (sum, usage) => sum + usage.cost,
-        0,
-      );
-      const actualLimit = limit.limitValue;
-      const percentage =
-        actualLimit > 0 ? (actualUsage / actualLimit) * 100 : 0;
-      if (percentage >= 90) {
-        return { percentage, status: "danger", actualUsage, actualLimit };
+  const getEntityScopeLabel = useCallback(
+    (limit: LimitData) => {
+      if (limit.entityType === "agent") {
+        return limit.entityId === llmProxyId ? "LLM Proxy" : "Agent";
       }
-      if (percentage >= 75) {
-        return { percentage, status: "warning", actualUsage, actualLimit };
-      }
-      return { percentage, status: "safe", actualUsage, actualLimit };
+      return ENTITY_SCOPE_LABELS[limit.entityType] ?? "Limit";
     },
-    [],
+    [llmProxyId],
   );
+
+  const getUsageStatus = useCallback((limit: LimitData): UsageSummary => {
+    const actualUsage = (limit.modelUsage ?? []).reduce(
+      (sum, usage) => sum + usage.cost,
+      0,
+    );
+    const actualLimit = limit.limitValue;
+    const percentage = actualLimit > 0 ? (actualUsage / actualLimit) * 100 : 0;
+    if (percentage >= 90) {
+      return { percentage, status: "danger", actualUsage, actualLimit };
+    }
+    if (percentage >= 75) {
+      return { percentage, status: "warning", actualUsage, actualLimit };
+    }
+    return { percentage, status: "safe", actualUsage, actualLimit };
+  }, []);
 
   const filteredLimits = useMemo(() => {
     return llmLimits.filter((limit) => {
@@ -518,6 +562,34 @@ export default function LimitsPage() {
     selectedLabels,
   ]);
 
+  const nestedLimits = useMemo(
+    () =>
+      nestLimits({
+        limits: filteredLimits,
+        entityKeyOf: (limit) =>
+          limit.entityType === "organization"
+            ? "organization"
+            : `${limit.entityType}:${limit.entityId}`,
+        parentKeysOf: (limit) => {
+          if (limit.entityType === "organization") return [];
+          // A key or client nests under the team that pays for it.
+          const billingTeamId =
+            limit.entityType === "virtual_key"
+              ? virtualKeys.find((key) => key.id === limit.entityId)
+                  ?.billingTeam?.id
+              : limit.entityType === "llm_oauth_client"
+                ? oauthClients.find((client) => client.id === limit.entityId)
+                    ?.billingTeam?.id
+                : undefined;
+          return billingTeamId
+            ? [`team:${billingTeamId}`, "organization"]
+            : ["organization"];
+        },
+        prefersAsParent: (limit) => getLimitModels(limit).length === 0,
+      }),
+    [filteredLimits, virtualKeys, oauthClients],
+  );
+
   const {
     rowSelection,
     setRowSelection,
@@ -538,127 +610,45 @@ export default function LimitsPage() {
     matchDescription: "match the current filters",
   });
 
-  const columns = useMemo<ColumnDef<LimitData>[]>(
+  const columns = useMemo<ColumnDef<NestedLimit<LimitData>>[]>(
     () => [
-      createSelectColumn<LimitData>({
-        rowLabel: (limit) => `Select ${getEntityLabel(limit)} limit`,
+      createSelectColumn<NestedLimit<LimitData>>({
+        rowLabel: ({ limit }) => `Select ${getEntityLabel(limit)} limit`,
         allLabel: "Select all limits on this page",
-        canSelect: canBulkDeleteLimit,
+        canSelect: ({ limit }) => canBulkDeleteLimit(limit),
         disabledReason: () =>
           "User limits must be deleted individually because they can span organizations",
       }),
       {
-        accessorKey: "status",
-        header: "Status",
-        size: 100,
-        minSize: 80,
-        cell: ({ row }) => {
-          const status = getUsageStatus(row.original).status;
-          return (
-            <Badge
-              variant={
-                status === "danger"
-                  ? "destructive"
-                  : status === "warning"
-                    ? "secondary"
-                    : "outline"
-              }
-            >
-              {status === "danger"
-                ? "Exceeded"
-                : status === "warning"
-                  ? "Near limit"
-                  : "Safe"}
-            </Badge>
-          );
-        },
-      },
-      {
-        accessorKey: "entityId",
+        id: "entityId",
         header: "Applied to",
-        size: 150,
-        minSize: 120,
-        cell: ({ row }) => (
-          <div className="flex min-w-0 items-center gap-2">
-            {getEntityIcon(row.original)}
-            <span className="truncate">{getEntityLabel(row.original)}</span>
-            <LabelTags labels={row.original.labels} />
-          </div>
-        ),
-      },
-      {
-        accessorKey: "model",
-        header: "Models",
-        size: 250,
-        minSize: 180,
+        size: 220,
+        minSize: 160,
         cell: ({ row }) => {
-          const models = getLimitModels(row.original);
-          const isAllModels =
-            models.length === 0 && row.original.limitType === "token_cost";
-          const visibleModels = models.slice(0, MAX_VISIBLE_MODEL_BADGES);
-          const remainingModels = models.slice(MAX_VISIBLE_MODEL_BADGES);
+          const { limit, depth } = row.original;
           return (
-            <div className="flex flex-wrap gap-1">
-              {isAllModels && (
-                <Badge
-                  variant="outline"
-                  className="text-xs"
-                  data-testid="limits-table-models-badge"
-                >
-                  All models
-                </Badge>
+            <div
+              className="flex min-w-0 items-center gap-2"
+              style={{ paddingLeft: `${Math.max(depth - 1, 0) * 20}px` }}
+            >
+              {depth > 0 && (
+                <span
+                  aria-hidden
+                  className="mb-2 size-2.5 shrink-0 rounded-bl-sm border-b border-l border-muted-foreground/40"
+                />
               )}
-              {!isAllModels &&
-                visibleModels.map((model) => (
-                  <Badge
-                    key={model}
-                    variant="outline"
-                    className="text-xs"
-                    data-testid="limits-table-models-badge"
-                  >
-                    {model}
-                  </Badge>
-                ))}
-              {remainingModels.length > 0 && (
-                <Tooltip>
-                  <TooltipTrigger asChild>
-                    <Badge
-                      variant="outline"
-                      className="cursor-default text-xs"
-                      data-testid="limits-table-models-more-badge"
-                    >
-                      +{remainingModels.length} more
-                    </Badge>
-                  </TooltipTrigger>
-                  <TooltipContent className="max-w-80">
-                    <div className="space-y-1">
-                      {remainingModels.map((model) => (
-                        <div key={model}>{model}</div>
-                      ))}
-                    </div>
-                  </TooltipContent>
-                </Tooltip>
-              )}
-            </div>
-          );
-        },
-      },
-      {
-        accessorKey: "cleanupInterval",
-        header: "Cleanup",
-        size: 140,
-        minSize: 120,
-        cell: ({ row }) => {
-          const cleanupInterval =
-            (row.original.cleanupInterval as LimitCleanupInterval | null) ??
-            DEFAULT_LIMIT_CLEANUP_INTERVAL;
-          return (
-            <div className="space-y-0.5">
-              <div>{CLEANUP_INTERVAL_LABELS[cleanupInterval]}</div>
-              <div className="text-xs text-muted-foreground">
-                {formatNextLimitReset(
-                  row.original.lastCleanup,
-                  cleanupInterval,
+              <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted">
+                {getEntityIcon(limit)}
+              </span>
+              <div className="min-w-0">
+                <div className="flex min-w-0 items-center gap-2">
+                  <span className="truncate">{getEntityLabel(limit)}</span>
+                  <LabelTags labels={limit.labels} />
+                </div>
+                {limit.entityType !== "organization" && (
+                  <div className="truncate text-xs text-muted-foreground">
+                    {getEntityScopeLabel(limit)}
+                  </div>
                 )}
               </div>
             </div>
@@ -666,30 +656,28 @@ export default function LimitsPage() {
         },
       },
       {
-        accessorKey: "usage",
-        header: "Usage",
-        size: 200,
+        id: "model",
+        header: "Models",
+        size: 170,
         minSize: 160,
-        cell: ({ row }) => {
-          const usage = getUsageStatus(row.original);
-          return (
-            <div className="min-w-0 w-full overflow-hidden">
-              <Progress
-                value={Math.min(usage.percentage, 100)}
-                className={
-                  usage.status === "danger"
-                    ? "bg-red-100"
-                    : usage.status === "warning"
-                      ? "bg-orange-100"
-                      : undefined
-                }
-              />
-              <p className="mt-1 truncate text-left text-xs text-muted-foreground">
-                {`${formatCurrency(usage.actualUsage, 2)} / ${formatCurrency(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
-              </p>
-            </div>
-          );
-        },
+        cell: ({ row }) => (
+          <LimitModels
+            models={getLimitModels(row.original.limit)}
+            modelByModelId={modelByModelId}
+          />
+        ),
+      },
+      {
+        id: "usage",
+        header: "Usage",
+        size: 320,
+        minSize: 240,
+        cell: ({ row }) => (
+          <LimitUsage
+            nested={row.original}
+            usage={getUsageStatus(row.original.limit)}
+          />
+        ),
       },
       {
         id: "actions",
@@ -702,20 +690,56 @@ export default function LimitsPage() {
               {
                 icon: <Edit className="h-4 w-4" />,
                 label: "Edit limit",
-                onClick: () => openEditDialog(row.original),
+                onClick: () => openEditDialog(row.original.limit),
               },
               {
                 icon: <Trash2 className="h-4 w-4" />,
                 label: "Delete limit",
                 variant: "destructive",
-                onClick: () => setLimitToDelete(row.original),
+                onClick: () => setLimitToDelete(row.original.limit),
               },
             ]}
           />
         ),
       },
     ],
-    [getEntityIcon, getEntityLabel, getUsageStatus, openEditDialog],
+    [
+      getEntityIcon,
+      getEntityLabel,
+      getEntityScopeLabel,
+      getUsageStatus,
+      modelByModelId,
+      openEditDialog,
+    ],
+  );
+
+  const statusCounts = useMemo(() => {
+    const counts: Record<UsageStatus, number> = {
+      safe: 0,
+      warning: 0,
+      danger: 0,
+    };
+    for (const limit of llmLimits) counts[getUsageStatus(limit).status] += 1;
+    return counts;
+  }, [llmLimits, getUsageStatus]);
+  const appliedToCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const limit of llmLimits) {
+      const key =
+        limit.entityType === "agent" && limit.entityId === llmProxyId
+          ? "llm_proxy"
+          : limit.entityType;
+      counts[key] = (counts[key] ?? 0) + 1;
+    }
+    return counts;
+  }, [llmLimits, llmProxyId]);
+  const attentionLimits = useMemo(
+    () =>
+      llmLimits
+        .map((limit) => ({ limit, usage: getUsageStatus(limit) }))
+        .filter(({ usage }) => usage.status !== "safe")
+        .sort((a, b) => b.usage.percentage - a.usage.percentage),
+    [llmLimits, getUsageStatus],
   );
 
   const hasActiveFilters =
@@ -835,6 +859,22 @@ export default function LimitsPage() {
         </Alert>
       </WithPermissions>
 
+      {attentionLimits.length > 0 && (
+        <NeedsAttention
+          items={attentionLimits.map(({ limit, usage }) => ({
+            limit,
+            usage,
+            label: getEntityLabel(limit),
+            scopeLabel: getEntityScopeLabel(limit),
+            icon: getEntityIcon(limit),
+            models: getLimitModels(limit).map(
+              (model) => modelByModelId.get(model)?.displayName ?? model,
+            ),
+          }))}
+          onEdit={openEditDialog}
+        />
+      )}
+
       <BulkActionsScope>
         <CollectionFilters>
           <FilterBar
@@ -849,9 +889,24 @@ export default function LimitsPage() {
               showSearch={false}
               items={[
                 { value: "all", label: "All statuses" },
-                { value: "safe", label: "Safe" },
-                { value: "warning", label: "Near limit" },
-                { value: "danger", label: "Exceeded" },
+                ...USAGE_STATUSES.map((status) => ({
+                  value: status,
+                  label: USAGE_STATUS_META[status].label,
+                  content: (
+                    <FilterOptionLabel
+                      icon={<UsageStatusDot status={status} />}
+                      label={USAGE_STATUS_META[status].label}
+                      hint={USAGE_STATUS_META[status].hint}
+                      count={statusCounts[status]}
+                    />
+                  ),
+                  selectedContent: (
+                    <span className="flex items-center gap-2">
+                      <UsageStatusDot status={status} />
+                      {USAGE_STATUS_META[status].label}
+                    </span>
+                  ),
+                })),
               ]}
             />
             <FilterSelect
@@ -863,29 +918,34 @@ export default function LimitsPage() {
               showSearch={false}
               items={[
                 { value: "all", label: "All applied to" },
-                { value: "organization", label: "Organization" },
-                { value: "team", label: "Team" },
-                { value: "agent", label: "Agent" },
-                { value: "llm_proxy", label: "LLM Proxy" },
-                { value: "user", label: "User" },
-                { value: "virtual_key", label: "Virtual Key" },
-                { value: "llm_oauth_client", label: "LLM OAuth Client" },
-                { value: "environment", label: "Environment" },
+                ...APPLIED_TO_OPTIONS.map((option) => ({
+                  value: option.value,
+                  label: option.label,
+                  content: (
+                    <FilterOptionLabel
+                      icon={
+                        <option.icon className="size-4 text-muted-foreground" />
+                      }
+                      label={option.label}
+                      count={appliedToCounts[option.value] ?? 0}
+                    />
+                  ),
+                  selectedContent: (
+                    <span className="flex items-center gap-2">
+                      <option.icon className="size-4" />
+                      {option.label}
+                    </span>
+                  ),
+                })),
               ]}
             />
-            <LlmModelSearchableSelect
+            <LimitModelFilter
               value={modelFilter}
               onValueChange={(value) =>
                 updateQueryParams({ model: value === "all" ? null : value })
               }
-              options={modelOptions}
-              placeholder="All models"
-              className={filterControlClass({
-                active: modelFilter !== "all",
-              })}
-              showPricing={false}
-              includeAllOption
-              allLabel="All models"
+              models={filterModels}
+              limitCountByModel={limitCountByModel}
             />
             <EntityLabelFilter
               useLabelKeys={useLimitLabelKeys}
@@ -922,8 +982,8 @@ export default function LimitsPage() {
         </BulkActions>
         <DataTable
           columns={columns}
-          data={filteredLimits}
-          getRowId={(limit) => limit.id}
+          data={nestedLimits}
+          getRowId={({ limit }) => limit.id}
           rowSelection={rowSelection}
           onRowSelectionChange={setRowSelection}
           onPageRowIdsChange={onPageRowIdsChange}
@@ -1370,4 +1430,329 @@ function getNextCalendarResetDate(
       next.setMonth(next.getMonth() + 1, 1);
       return next;
   }
+}
+
+const USAGE_STATUSES: UsageStatus[] = ["safe", "warning", "danger"];
+
+// The labels keep this page's existing thresholds (see getUsageStatus).
+const USAGE_STATUS_META: Record<
+  UsageStatus,
+  { label: string; hint: string; barClassName: string; dotClassName: string }
+> = {
+  safe: {
+    label: "Safe",
+    hint: "Under 75% used",
+    barClassName: "bg-emerald-500",
+    dotClassName: "bg-emerald-500",
+  },
+  warning: {
+    label: "Near limit",
+    hint: "75% or more used",
+    barClassName: "bg-amber-500",
+    dotClassName: "bg-amber-500",
+  },
+  danger: {
+    label: "Exceeded",
+    hint: "90% or more used",
+    barClassName: "bg-destructive",
+    dotClassName: "bg-destructive",
+  },
+};
+
+const ENTITY_SCOPE_LABELS: Partial<Record<LimitEntityType, string>> = {
+  organization: "Organization",
+  team: "Team",
+  user: "User",
+  virtual_key: "Virtual key",
+  llm_oauth_client: "LLM OAuth client",
+  environment: "Environment",
+};
+
+const APPLIED_TO_OPTIONS: Array<{
+  value: string;
+  label: string;
+  icon: LucideIcon;
+}> = [
+  { value: "organization", label: "Organization", icon: Building2 },
+  { value: "team", label: "Team", icon: Users },
+  { value: "agent", label: "Agent", icon: Bot },
+  { value: "llm_proxy", label: "LLM Proxy", icon: Network },
+  { value: "user", label: "User", icon: User },
+  { value: "virtual_key", label: "Virtual key", icon: Key },
+  { value: "llm_oauth_client", label: "LLM OAuth client", icon: KeyRound },
+  { value: "environment", label: "Environment", icon: Boxes },
+];
+
+function UsageStatusDot({ status }: { status: UsageStatus }) {
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        "size-2 shrink-0 rounded-full",
+        USAGE_STATUS_META[status].dotClassName,
+      )}
+    />
+  );
+}
+
+/** A filter option with its icon, an optional hint, and how many limits match. */
+function FilterOptionLabel({
+  icon,
+  label,
+  hint,
+  count,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  hint?: string;
+  count: number;
+}) {
+  return (
+    <span
+      className={cn(
+        "flex items-center gap-2",
+        count === 0 && "text-muted-foreground",
+      )}
+    >
+      {icon}
+      <span className="min-w-0 flex-1">
+        <span className="block">{label}</span>
+        {hint && (
+          <span className="block text-xs text-muted-foreground">{hint}</span>
+        )}
+      </span>
+      <span className="text-xs tabular-nums text-muted-foreground">
+        {count}
+      </span>
+    </span>
+  );
+}
+
+function LimitModels({
+  models,
+  modelByModelId,
+}: {
+  models: string[];
+  modelByModelId: Map<string, LimitFilterModel>;
+}) {
+  if (models.length === 0) {
+    return (
+      <span
+        className="text-sm text-muted-foreground"
+        data-testid="limits-table-models-badge"
+      >
+        All models
+      </span>
+    );
+  }
+  const visible = models.slice(0, MAX_VISIBLE_MODEL_BADGES);
+  const remaining = models.slice(MAX_VISIBLE_MODEL_BADGES);
+  return (
+    <div className="flex flex-wrap gap-1">
+      {visible.map((model) => {
+        const known = modelByModelId.get(model);
+        return (
+          <Badge
+            key={model}
+            variant="secondary"
+            className="gap-1 text-xs font-normal"
+            data-testid="limits-table-models-badge"
+            title={model}
+          >
+            {known && (
+              <ModelSelectorLogo
+                provider={logoNameForProvider(known.provider)}
+                className="size-3"
+              />
+            )}
+            {known?.displayName ?? model}
+          </Badge>
+        );
+      })}
+      {remaining.length > 0 && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Badge
+              variant="outline"
+              className="cursor-default text-xs font-normal"
+              data-testid="limits-table-models-more-badge"
+            >
+              +{remaining.length} more
+            </Badge>
+          </TooltipTrigger>
+          <TooltipContent className="max-w-80">
+            <div className="space-y-1">
+              {remaining.map((model) => (
+                <div key={model}>
+                  {modelByModelId.get(model)?.displayName ?? model}
+                </div>
+              ))}
+            </div>
+          </TooltipContent>
+        </Tooltip>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The usage bar, colored by status, with the spend and when it resets. A
+ * parent row adds how much of its limit the limits nested under it take.
+ */
+function LimitUsage({
+  nested,
+  usage,
+}: {
+  nested: NestedLimit<LimitData>;
+  usage: UsageSummary;
+}) {
+  const { limit, allocation } = nested;
+  const cleanupInterval =
+    (limit.cleanupInterval as LimitCleanupInterval | null) ??
+    DEFAULT_LIMIT_CLEANUP_INTERVAL;
+  const overAllocated = allocation
+    ? allocation.total > limit.limitValue
+    : false;
+  return (
+    <div className="min-w-0 w-full space-y-1 overflow-hidden">
+      <UsageBar percentage={usage.percentage} status={usage.status} />
+      <p className="truncate text-xs">
+        <span>{formatCurrency(usage.actualUsage, 2)}</span>
+        <span className="text-muted-foreground">
+          {` of ${formatCurrency(usage.actualLimit)} (${usage.percentage.toFixed(1)}%)`}
+        </span>
+      </p>
+      <p className="truncate text-xs text-muted-foreground">
+        {`${CLEANUP_INTERVAL_LABELS[cleanupInterval]} · ${formatNextLimitReset(limit.lastCleanup, cleanupInterval)}`}
+      </p>
+      {allocation && allocation.count > 0 && (
+        <p
+          className={cn(
+            "text-xs",
+            overAllocated
+              ? "text-amber-600 dark:text-amber-400"
+              : "text-muted-foreground",
+          )}
+        >
+          {overAllocated
+            ? `Nested caps: ${formatCurrency(allocation.total)}, more than this limit`
+            : `Nested caps: ${formatCurrency(allocation.total)} of ${formatCurrency(limit.limitValue)}`}
+          {` (${allocation.count} ${allocation.count === 1 ? "limit" : "limits"})`}
+          {allocation.otherPeriodCount > 0 &&
+            ` · ${allocation.otherPeriodCount} more on another period`}
+        </p>
+      )}
+      {allocation &&
+        allocation.count === 0 &&
+        allocation.otherPeriodCount > 0 && (
+          <p className="text-xs text-muted-foreground">
+            {`${allocation.otherPeriodCount} nested ${allocation.otherPeriodCount === 1 ? "limit resets" : "limits reset"} on another period`}
+          </p>
+        )}
+    </div>
+  );
+}
+
+function UsageBar({
+  percentage,
+  status,
+}: {
+  percentage: number;
+  status: UsageStatus;
+}) {
+  return (
+    <div className="h-1.5 w-full overflow-hidden rounded-full bg-muted">
+      <div
+        className={cn(
+          "h-full rounded-full",
+          USAGE_STATUS_META[status].barClassName,
+        )}
+        style={{ width: `${Math.max(Math.min(percentage, 100), 1.5)}%` }}
+      />
+    </div>
+  );
+}
+
+/** Limits at 75% or more, as cards that say what happens next. */
+function NeedsAttention({
+  items,
+  onEdit,
+}: {
+  items: Array<{
+    limit: LimitData;
+    usage: UsageSummary;
+    label: string;
+    scopeLabel: string;
+    icon: React.ReactNode;
+    models: string[];
+  }>;
+  onEdit: (limit: LimitData) => void;
+}) {
+  return (
+    <section
+      aria-labelledby="limits-needs-attention"
+      className="mb-6 space-y-3"
+    >
+      <h2
+        id="limits-needs-attention"
+        className="flex items-center gap-2 text-sm font-medium"
+      >
+        Needs attention
+        <span className="text-muted-foreground tabular-nums">
+          {items.length}
+        </span>
+      </h2>
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+        {items.map(({ limit, usage, label, scopeLabel, icon, models }) => {
+          const cleanupInterval =
+            (limit.cleanupInterval as LimitCleanupInterval | null) ??
+            DEFAULT_LIMIT_CLEANUP_INTERVAL;
+          const reset = formatNextLimitReset(
+            limit.lastCleanup,
+            cleanupInterval,
+          );
+          const over = usage.actualUsage >= usage.actualLimit;
+          return (
+            <article
+              key={limit.id}
+              className="space-y-3 rounded-lg border p-4"
+              data-testid={`limits-attention-${limit.id}`}
+            >
+              <div className="flex items-start gap-3">
+                <span className="flex size-6 shrink-0 items-center justify-center rounded bg-muted">
+                  {icon}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium">{label}</div>
+                  <div className="truncate text-xs text-muted-foreground">
+                    {scopeLabel} ·{" "}
+                    {models.length > 0 ? models.join(", ") : "All models"}
+                  </div>
+                </div>
+                <span className="flex shrink-0 items-center gap-1.5 text-xs">
+                  <UsageStatusDot status={usage.status} />
+                  {USAGE_STATUS_META[usage.status].label}
+                </span>
+              </div>
+              <UsageBar percentage={usage.percentage} status={usage.status} />
+              <p className="text-sm text-muted-foreground">
+                {over
+                  ? `Over by ${formatCurrency(usage.actualUsage - usage.actualLimit, 2)}. Requests are blocked. ${reset}.`
+                  : `${formatCurrency(usage.actualLimit - usage.actualUsage, 2)} of ${formatCurrency(usage.actualLimit)} left. ${reset}.`}
+              </p>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                onClick={() => onEdit(limit)}
+              >
+                <Edit className="h-4 w-4" />
+                Edit limit
+              </Button>
+            </article>
+          );
+        })}
+      </div>
+    </section>
+  );
 }

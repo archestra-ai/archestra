@@ -133,8 +133,10 @@ vi.mock("@/components/ui/data-table", () => ({
   DataTable: ({
     data,
     columns,
+    getRowId = (row: Record<string, unknown>) => String(row.id),
   }: {
     data: Array<Record<string, unknown>>;
+    getRowId?: (row: Record<string, unknown>) => string;
     columns: Array<{
       id?: string;
       accessorKey?: string;
@@ -150,8 +152,8 @@ vi.mock("@/components/ui/data-table", () => ({
     <div>
       {data.map((row: Record<string, unknown>) => (
         <div
-          key={String(row.id)}
-          data-testid={`data-table-row-${String(row.id)}`}
+          key={getRowId(row)}
+          data-testid={`data-table-row-${getRowId(row)}`}
         >
           {columns.map(
             (col: {
@@ -481,7 +483,7 @@ describe("LimitsPage", () => {
     render(<LimitsPage />);
 
     expect(screen.getByTestId("data-table-row-limit-1")).toHaveTextContent(
-      "$0.45 / $1 (45.0%)",
+      "$0.45 of $1 (45.0%)",
     );
   });
 
@@ -561,6 +563,75 @@ describe("LimitsPage", () => {
     const row = screen.getByTestId("data-table-row-limit-1");
     expect(row).toHaveTextContent("Calendar month");
     expect(row).toHaveTextContent("Resets Feb 1");
+  });
+
+  it("lists a limit over its cap under Needs attention and says requests are blocked", () => {
+    mockUseLimits.mockReturnValue({
+      data: [
+        limitRow({ id: "limit-over", limitValue: 25, cost: 26.1 }),
+        limitRow({ id: "limit-safe", limitValue: 1000, cost: 10 }),
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    const card = screen.getByTestId("limits-attention-limit-over");
+    expect(card).toHaveTextContent("Over by $1.10. Requests are blocked.");
+    expect(
+      screen.queryByTestId("limits-attention-limit-safe"),
+    ).not.toBeInTheDocument();
+  });
+
+  it("nests a virtual key's limit under the limit of the team that pays for it", () => {
+    vi.mocked(useTeams).mockReturnValue({
+      data: [{ id: "team-1", name: "Platform" }],
+    } as unknown as ReturnType<typeof useTeams>);
+    mockUseAllVirtualApiKeys.mockReturnValue({
+      data: {
+        data: [
+          {
+            id: "key-1",
+            name: "Deploy key",
+            billingTeam: { id: "team-1", name: "Platform" },
+          },
+        ],
+        pagination: { total: 1 },
+      },
+    });
+    mockUseLimits.mockReturnValue({
+      data: [
+        limitRow({
+          id: "limit-key",
+          entityType: "virtual_key",
+          entityId: "key-1",
+          limitValue: 250,
+        }),
+        limitRow({ id: "limit-org", limitValue: 2500 }),
+        limitRow({
+          id: "limit-team",
+          entityType: "team",
+          entityId: "team-1",
+          limitValue: 800,
+        }),
+      ],
+      isPending: false,
+    });
+
+    render(<LimitsPage />);
+
+    expect(
+      screen
+        .getAllByTestId(/^data-table-row-/)
+        .map((row) => row.getAttribute("data-testid")),
+    ).toEqual([
+      "data-table-row-limit-org",
+      "data-table-row-limit-team",
+      "data-table-row-limit-key",
+    ]);
+    expect(screen.getByTestId("data-table-row-limit-team")).toHaveTextContent(
+      "Nested caps: $250 of $800 (1 limit)",
+    );
   });
 
   it("shows multiple model badges for limits with multiple models", () => {
@@ -779,3 +850,34 @@ describe("LimitsPage", () => {
     expect(screen.getByLabelText("Limit value")).toHaveValue("1,000");
   });
 });
+
+function limitRow({
+  id,
+  entityType = "organization",
+  entityId = "org-1",
+  limitValue,
+  cost = 0,
+}: {
+  id: string;
+  entityType?: string;
+  entityId?: string;
+  limitValue: number;
+  cost?: number;
+}) {
+  return {
+    id,
+    entityType,
+    entityId,
+    limitType: "token_cost",
+    limitValue,
+    model: null,
+    mcpServerName: null,
+    toolName: null,
+    cleanupInterval: "calendar_month",
+    lastCleanup: null,
+    createdAt: "2026-01-01",
+    updatedAt: "2026-01-01",
+    labels: [],
+    modelUsage: [{ model: "gpt-4o", tokensIn: 0, tokensOut: 0, cost }],
+  };
+}

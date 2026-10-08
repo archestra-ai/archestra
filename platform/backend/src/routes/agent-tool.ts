@@ -31,6 +31,7 @@ import {
   type ToolAssignmentError,
   validateAssignment,
 } from "@/services/agent-tool-assignment";
+import { filterToolsByCallerCatalogAccess } from "@/services/caller-catalog-access";
 import type { InternalMcpCatalog, Tool, ToolOwnerContext } from "@/types";
 import {
   AgentToolAssignmentBodySchema,
@@ -633,7 +634,8 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(404, "Agent not found");
       }
 
-      if (!checker.isAdmin(agent.agentType)) {
+      const isAgentTypeAdmin = checker.isAdmin(agent.agentType);
+      if (!isAgentTypeAdmin) {
         const filteredAgent = await AgentModel.findById(
           agentId,
           user.id,
@@ -646,7 +648,17 @@ const agentToolRoutes: FastifyPluginAsyncZod = async (fastify) => {
 
       const tools = await ToolModel.getToolsByAgent(agentId);
 
-      return reply.send(tools);
+      // A user who can only use the agent sees the tools the gateway would
+      // serve them: an assigned tool whose MCP server they cannot access is
+      // left out, as it is from their tools/list.
+      return reply.send(
+        isAgentTypeAdmin
+          ? tools
+          : await filterToolsByCallerCatalogAccess(tools, {
+              userId: user.id,
+              organizationId,
+            }),
+      );
     },
   );
 

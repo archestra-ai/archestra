@@ -2,7 +2,7 @@
 title: Access Control
 description: Assign roles and share resources with users, teams, and service accounts
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 Roles control which sections a person can open and which kinds of resources they can create. Resource grants control which individual agents, gateways, skills, apps, models, and credentials they can reach. Configure both when giving someone access.
@@ -137,9 +137,12 @@ Team grants reach direct members and descendant-team members. An empty direct-gr
 
 ### Agent Access vs MCP Server Access
 
-In **Custom** tool mode, sharing an agent shares its assigned tools even if the server is not shared with the caller. [Credential resolution](/docs/mcp/authentication/servers#credential-resolution) determines which connection serves the call.
+Sharing an agent does not share its MCP servers. A person who can use an agent gets only the tools from servers they can access, in both [tool modes](/docs/agents#tool-access-modes). A tool assigned from any other server is hidden from them, and a call to it is refused.
 
-In **Auto** mode, callers discover tools from servers they can access, plus tools explicitly assigned to the agent. See [Tool Access Modes](/docs/agents#tool-access-modes).
+What to know:
+
+- Team tokens, organization tokens, and service accounts keep every tool assigned to the agent.
+- [Credential resolution](/docs/mcp/authentication/servers#credential-resolution) picks the connection for a tool the person can use, including a connection pinned to the tool.
 
 ## Log Visibility
 

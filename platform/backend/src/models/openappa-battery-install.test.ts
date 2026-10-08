@@ -100,6 +100,45 @@ describe("OpenAppaBatteryInstallModel.replaceAll", () => {
     ).toEqual([...before].sort(byName));
   });
 
+  test("detectedIdsPresent answers only the detected rows asked about", async ({
+    makeOrganization,
+  }) => {
+    const organizationId = (await makeOrganization()).id;
+    const other = (await makeOrganization()).id;
+    await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId,
+      rows: [
+        {
+          ...row({ catalogId: null }),
+          attachment: { kind: "detected", detectedId: "claude-code.slack" },
+        },
+        row({ catalogId: null, batteryName: "linear" }),
+      ],
+    });
+    await OpenAppaBatteryInstallModel.replaceAll({
+      organizationId: other,
+      rows: [
+        {
+          ...row({ catalogId: null }),
+          attachment: { kind: "detected", detectedId: "codex.slack" },
+        },
+      ],
+    });
+
+    expect(
+      await OpenAppaBatteryInstallModel.detectedIdsPresent({
+        organizationId,
+        detectedIds: ["claude-code.slack", "codex.slack", "opencode.slack"],
+      }),
+    ).toEqual(new Set(["claude-code.slack"]));
+    expect(
+      await OpenAppaBatteryInstallModel.detectedIdsPresent({
+        organizationId,
+        detectedIds: [],
+      }),
+    ).toEqual(new Set());
+  });
+
   test("an organization-wide row is upserted in place rather than duplicated", async ({
     makeOrganization,
     makeInternalMcpCatalog,

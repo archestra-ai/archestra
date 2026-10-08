@@ -997,6 +997,47 @@ url = "http://127.0.0.1:9000/api/guardrails-policy/annotators/noop"
     ).toBe("opencode.trail___send");
   });
 
+  test("compat mode: a target for one client holds back only that client's decoration", async ({
+    makeOrganization,
+    makeUser,
+  }) => {
+    config.openappa.enabled = true;
+    const organizationId = (await makeOrganization()).id;
+    const user = await makeUser();
+    const policy = POLICY.replace(
+      /^slack = .*$/m,
+      'slack = ["opencode.slack"]',
+    );
+    await GuardrailsPolicyModel.save({
+      organizationId,
+      content: policy,
+      contentHash: createHash("sha256").update(policy).digest("hex"),
+      updatedBy: user.id,
+      expectedRevision: 0,
+    });
+    // Only OpenCode's `slack_` is a declared server's decoration here; Claude
+    // Code's `mcp__slack__` is the gateway's own label, learned as before.
+    const identity = await resolve(
+      [
+        { name: "mcp__slack__archestra__run_tool" },
+        { name: "mcp__slack__send" },
+      ],
+      { organizationId },
+    );
+    expect(identity.mode).toBe("compat");
+    expect(identity.canonicalize("mcp__slack__send")).toBe("send");
+    const opencode = await resolve(
+      [{ name: "slack_archestra__run_tool" }, { name: "slack_send" }],
+      { organizationId },
+    );
+    expect(
+      opencode.canonicalizeDetected(
+        opencode.canonicalize("slack_send"),
+        "opencode",
+      ),
+    ).toBe("opencode.slack__send");
+  });
+
   test("a detected tool named like a control tool stays an ordinary tool", async ({
     makeOrganization,
     makeUser,

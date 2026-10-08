@@ -12,13 +12,10 @@ import {
   verifyToolAttestation,
 } from "@/archestra-mcp-server/tool-attestation";
 import { LRUCacheManager } from "@/cache-manager";
-import config from "@/config";
 import logger from "@/logging";
 import { AgentModel, OrganizationModel, ToolModel } from "@/models";
-import { openappaDeclarations } from "@/openappa/declarations";
 import { declaredDetectedTargets } from "@/openappa/detected-targets";
 import type { DeclaredToolSpelling } from "@/openappa/wire";
-import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import {
   type DetectedClientFamily,
   detectedServerId,
@@ -369,13 +366,15 @@ async function compatIdentity(params: {
   const spelledDeclarations = params.declarations.map(({ name, namespace }) =>
     spelledName(name, namespace),
   );
-  // A local server the policy names is ruled under its own target; a prefix
-  // of its label must not be learned as the gateway's decoration, or a
-  // branded lookalike behind it would strip that identity off its siblings.
+  // A local server the policy names is ruled under its own target; the
+  // decoration its client puts on its label must not be learned as the
+  // gateway's, or a branded lookalike behind it would strip that identity
+  // off its siblings. Only that client's spelling is held back: a target for
+  // OpenCode says nothing about what Claude Code spells `mcp__<label>__`.
   const declaredDecorations = new Set(
     [...params.detectedTargets].flatMap((target) => {
       const parsed = parseDetectedServerId(target);
-      return parsed ? clientDecorations(parsed.label) : [];
+      return parsed ? [clientDecoration(parsed.family, parsed.label)] : [];
     }),
   );
   const learnedPrefixes = learnGatewayDecorationPrefixes(
@@ -650,11 +649,11 @@ function canonicalizeDetected(params: {
 }
 
 /** The prefixes a client puts in front of a server's tools: Claude Code's and Codex's `mcp__<label>__`, OpenCode's `<label>_`. */
-function clientDecorations(label: string): string[] {
-  return [
-    `mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}${label}${MCP_SERVER_TOOL_NAME_SEPARATOR}`,
-    `${label}${OPENCODE_LABEL_SEPARATOR}`,
-  ];
+/** The prefix a client family puts on a local server's tools. */
+function clientDecoration(family: DetectedClientFamily, label: string): string {
+  return family === "opencode"
+    ? `${label}${OPENCODE_LABEL_SEPARATOR}`
+    : `mcp${MCP_SERVER_TOOL_NAME_SEPARATOR}${label}${MCP_SERVER_TOOL_NAME_SEPARATOR}`;
 }
 
 function declaredLabels(

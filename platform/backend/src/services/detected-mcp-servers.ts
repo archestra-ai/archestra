@@ -54,14 +54,25 @@ function groupDetectedServers(
     string,
     DetectedMcpServer & { toolNames: Set<string> }
   >();
+  // Observations repeat one (client, tool name) once per member and per
+  // sighting; the name is parsed once per such pair.
+  const parsedByName = new Map<
+    string,
+    ReturnType<typeof parseDetectedToolName>
+  >();
   for (const observation of observations) {
     const family = clientFamilyOf(observation.externalAgentId);
     if (!family) continue;
-    const parsed = parseDetectedToolName(
-      family,
-      observation.toolName,
-      openCodeLabels,
-    );
+    const nameKey = `${family}\u0000${observation.toolName}`;
+    let parsed = parsedByName.get(nameKey);
+    if (!parsedByName.has(nameKey)) {
+      parsed = parseDetectedToolName(
+        family,
+        observation.toolName,
+        openCodeLabels,
+      );
+      parsedByName.set(nameKey, parsed);
+    }
     if (!parsed) continue;
     const id = detectedServerId(family, parsed.label);
     let server = servers.get(id);

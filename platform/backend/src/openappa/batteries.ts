@@ -4,11 +4,7 @@ import type {
   BatteryPackage as NativeBatteryPackage,
   PolicyEditInput,
 } from "@archestra/openappa-rs";
-import {
-  clientForExternalAgentIds,
-  matchBatteries,
-  parseFullToolName,
-} from "@archestra/shared";
+import { matchBatteries, parseFullToolName } from "@archestra/shared";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
@@ -55,8 +51,6 @@ import {
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
 import {
-  detectedServerId,
-  isDetectedClientFamily,
   isDetectedServerId,
   parseDetectedServerId,
   parseDetectedToolName,
@@ -289,12 +283,10 @@ class OpenAppaBatteriesService {
         targetNamedBy(target, toolNames, declared),
       );
       if (named.length === 0) return;
-      const present = new Set(
-        (await OpenAppaBatteryInstallModel.list(organizationId)).flatMap(
-          (install) =>
-            install.kind === "detected" ? [install.detectedId] : [],
-        ),
-      );
+      const present = await OpenAppaBatteryInstallModel.detectedIdsPresent({
+        organizationId,
+        detectedIds: named,
+      });
       if (named.every((target) => present.has(target))) return;
       await this.recompile(organizationId);
     } catch (error) {
@@ -1136,7 +1128,7 @@ class OpenAppaBatteriesService {
     const batteries: PlannedBattery[] = [];
     const rows = new Map<string, BatteryInstallRow>();
     for (const draft of drafts) {
-      const { entry, scope, servers, credentials, catalogIds } = draft;
+      const { entry, scope, servers, credentials } = draft;
       const organizationWide = scope === "organization";
       // Nothing consults an organization-wide battery no rule routes to.
       const status =

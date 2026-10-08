@@ -82,8 +82,10 @@ import {
   getAppaGithubSync,
 } from "@/services/openappa-github-sync";
 import {
+  credentialLineWarnings,
   getOpenAppaPolicyChangeStatus,
   publishOpenAppaPolicyChange,
+  refuseCredentialLines,
 } from "@/services/openappa-policy-change";
 import { getOpenAppaPolicyTests } from "@/services/openappa-policy-tests";
 import {
@@ -661,11 +663,16 @@ const registry = defineArchestraTools([
     async handler({ args, context }) {
       if (!context.organizationId)
         throw new ApiError(401, "Organization context is required");
-      return result(
-        await guardrailsPolicyService.validate(args.content, {
+      const [validation, credentialWarnings] = await Promise.all([
+        guardrailsPolicyService.validate(args.content, {
           organizationId: context.organizationId,
         }),
-      );
+        credentialLineWarnings(context.organizationId, args.content),
+      ]);
+      return result({
+        ...validation,
+        warnings: [...validation.warnings, ...credentialWarnings],
+      });
     },
   }),
   defineArchestraTool({
@@ -690,6 +697,11 @@ const registry = defineArchestraTools([
         const after = resolveProposedPolicy({
           current: before,
           proposal: args,
+        });
+        await refuseCredentialLines({
+          organizationId: context.organizationId,
+          before: before.content,
+          after,
         });
         const validation = await guardrailsPolicyService.validate(after, {
           organizationId: context.organizationId,

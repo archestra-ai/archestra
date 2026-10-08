@@ -71,6 +71,14 @@ function errorText(result: CallToolResult): string {
   return block?.type === "text" ? block.text : "";
 }
 
+function call(tool: string, args: Record<string, unknown>) {
+  return executeArchestraTool(`archestra__${tool}`, args, {
+    agent,
+    organizationId,
+    userId: adminId,
+  });
+}
+
 /** The starter policy with the bundled github battery included. */
 function withGithub(): string {
   const archestra = bundledEntry(ARCHESTRA_BATTERY);
@@ -191,5 +199,104 @@ describe("bind_guardrails_credential", () => {
       "Error: no-such-key is not a credential with an organization value",
     );
     expect(await storedKey()).toBeNull();
+  });
+});
+
+describe("[credentials] lines on the agent path", () => {
+  const REFUSAL = `Bind ${GITHUB_TOKEN} with bind_guardrails_credential instead of a [credentials] line`;
+
+  function proposeBoth(content: string, expectedRevision: number) {
+    return Promise.all([
+      call("preview_guardrails_policy_change", { content, expectedRevision }),
+      call("update_guardrails_policy", { content, expectedRevision }),
+    ]);
+  }
+
+  test("preview and publish refuse a line the agent adds or rekeys", async () => {
+    await saveFromPolicyTab(withGithub());
+    for (const result of await proposeBoth(
+      `${withGithub()}${credentialLine("github-token")}`,
+      1,
+    ))
+      expect(errorText(result)).toContain(REFUSAL);
+    expect((await guardrailsPolicyService.get(organizationId)).revision).toBe(
+      1,
+    );
+
+    await saveFromPolicyTab(`${withGithub()}${credentialLine("github-token")}`);
+    for (const result of await proposeBoth(
+      `${withGithub()}${credentialLine("other-token")}`,
+      2,
+    ))
+      expect(errorText(result)).toContain(REFUSAL);
+    expect((await guardrailsPolicyService.get(organizationId)).revision).toBe(
+      2,
+    );
+  });
+
+  test("an edit that keeps a line, or removes it, publishes", async () => {
+    await saveFromPolicyTab(`${withGithub()}${credentialLine("github-token")}`);
+    const kept = `${withGithub()}# reviewed\n${credentialLine("github-token")}`;
+    const previewed = await call("preview_guardrails_policy_change", {
+      content: kept,
+      expectedRevision: 1,
+    });
+    expect(previewed.isError).toBeFalsy();
+    expect(
+      (
+        await call("update_guardrails_policy", {
+          content: kept,
+          expectedRevision: 1,
+        })
+      ).isError,
+    ).toBeFalsy();
+
+    expect(
+      (
+        await call("update_guardrails_policy", {
+          content: withGithub(),
+          expectedRevision: 2,
+        })
+      ).isError,
+    ).toBeFalsy();
+    expect((await guardrailsPolicyService.get(organizationId)).content).toBe(
+      withGithub(),
+    );
+  });
+
+  test("a line only a root external reads stays the agent's to write", async () => {
+    // No battery reads this variable, so no stored binding can fill it.
+    const external = `${initialPolicy()}\n[credentials]\nAPPA_PROVIDER_JEV_API_KEY = "github-token"\n[externals.jev]\ntoken_env = "APPA_PROVIDER_JEV_API_KEY"\n`;
+    const previewed = await call("preview_guardrails_policy_change", {
+      content: external,
+      expectedRevision: 0,
+    });
+    expect(previewed.isError).toBeFalsy();
+    expect(previewed.structuredContent).toMatchObject({ valid: true });
+  });
+
+  test("a validation change cannot carry the line either", async () => {
+    await saveFromPolicyTab(withGithub());
+    await expect(
+      call("preview_openappa_validation_change", {
+        expectedRevision: 1,
+        expectedVersion: "empty",
+        policyContent: `${withGithub()}${credentialLine("github-token")}`,
+      }),
+    ).rejects.toThrow(REFUSAL);
+  });
+
+  test("validation warns about a line that overrides a binding, and only then", async () => {
+    const warnings = async (content: string) => {
+      const result = await call("validate_guardrails_policy", { content });
+      expect(result.structuredContent).toMatchObject({ valid: true });
+      return (result.structuredContent as { warnings: string[] }).warnings;
+    };
+    expect(await warnings(withGithub())).toEqual([]);
+    expect(
+      await warnings(`${withGithub()}${credentialLine("github-token")}`),
+    ).toEqual([
+      `[credentials] in the policy text overrides the stored binding for ${GITHUB_TOKEN}. Prefer bind_guardrails_credential; a text line locks the key in the Batteries dialog.`,
+    ]);
   });
 });

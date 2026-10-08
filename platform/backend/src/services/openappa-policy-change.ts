@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { userHasPermission } from "@/auth";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
+import { openappaDeclarations } from "@/openappa/declarations";
 import { readResponseBodyWithLimit } from "@/plugins/bounded-response";
 import { guardrailsPolicyService } from "@/services/guardrails-policy";
 import { resolveProposedPolicy } from "@/services/guardrails-policy-proposal";
@@ -58,6 +59,11 @@ export async function publishOpenAppaPolicyChange(params: ChangeRequest) {
     (before.revision > 0 || source?.interval)
   )
     throw new ApiError(400, "The proposed policy has no changes");
+  await refuseCredentialLines({
+    organizationId: params.organizationId,
+    before: before.content,
+    after: content,
+  });
 
   if (!source?.interval) {
     if (params.validationChanges || !includePolicy)
@@ -308,6 +314,47 @@ export async function getOpenAppaPolicyChangeStatus(params: {
   };
 }
 
+/**
+ * The agent path binds battery credentials with bind_guardrails_credential. A
+ * `[credentials]` line wins over that binding and locks it in the Batteries
+ * dialog, so an agent may not add a line, or change its key, for a variable an
+ * included battery reads. Removing a line is allowed. A variable only a root
+ * external's `token_env` names has no stored binding, so its line stays writable.
+ */
+export async function refuseCredentialLines(params: {
+  organizationId: string;
+  before: string;
+  after: string;
+}): Promise<void> {
+  const [previous, submitted] = await Promise.all([
+    openappaDeclarations.resolve({
+      organizationId: params.organizationId,
+      content: params.before,
+    }),
+    batteryCredentialLines(params.organizationId, params.after),
+  ]);
+  const written = [...submitted]
+    .filter(([variable, key]) => previous.credentials[variable] !== key)
+    .map(([variable]) => variable);
+  if (written.length > 0)
+    throw new ApiError(
+      400,
+      `Bind ${written.join(", ")} with bind_guardrails_credential instead of a [credentials] line; the policy text is for rules and includes.`,
+    );
+}
+
+/** The validation warning for `[credentials]` lines that override a stored binding. */
+export async function credentialLineWarnings(
+  organizationId: string,
+  content: string,
+): Promise<string[]> {
+  const lines = await batteryCredentialLines(organizationId, content);
+  if (lines.size === 0) return [];
+  return [
+    `[credentials] in the policy text overrides the stored binding for ${[...lines.keys()].join(", ")}. Prefer bind_guardrails_credential; a text line locks the key in the Batteries dialog.`,
+  ];
+}
+
 async function githubJson<T = unknown>(params: {
   path: string;
   token: string;
@@ -549,4 +596,21 @@ async function assertRegularGitPaths(params: {
       }
     }
   }
+}
+
+/** The text's `[credentials]` lines for variables an included battery reads. */
+async function batteryCredentialLines(
+  organizationId: string,
+  content: string,
+): Promise<Map<string, string>> {
+  const { entries, credentials } = await openappaDeclarations.resolve({
+    organizationId,
+    content,
+  });
+  const read = new Set(
+    entries.flatMap((entry) => entry.battery?.credentials ?? []),
+  );
+  return new Map(
+    Object.entries(credentials).filter(([variable]) => read.has(variable)),
+  );
 }

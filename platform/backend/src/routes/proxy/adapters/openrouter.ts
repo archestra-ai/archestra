@@ -39,6 +39,11 @@ import { PROXY_SDK_MAX_RETRIES } from "./sdk-retry-policy";
 type OpenrouterRequest = Openrouter.Types.ChatCompletionsRequest;
 type OpenrouterResponse = Openrouter.Types.ChatCompletionsResponse;
 type OpenrouterMessages = Openrouter.Types.ChatCompletionsRequest["messages"];
+type OpenrouterMessage = Openrouter.Types.Message;
+type OpenrouterContentPart = Exclude<
+  Exclude<OpenrouterMessage["content"], string | null | undefined>,
+  string
+>[number];
 type OpenrouterHeaders = Openrouter.Types.ChatCompletionsHeaders;
 type OpenrouterStreamChunk = Openrouter.Types.ChatCompletionChunk;
 
@@ -92,9 +97,49 @@ class OpenrouterRequestAdapter
   convertToolResultContent(messages: OpenrouterMessages) {
     return this.delegate.convertToolResultContent(messages);
   }
-  toProviderRequest() {
-    return this.delegate.toProviderRequest();
+  toProviderRequest(): OpenrouterRequest {
+    const request = this.delegate.toProviderRequest();
+    const messages: OpenrouterMessages = request.messages;
+    return {
+      ...request,
+      messages: messages.map(withCacheControlOnTextPart),
+    };
   }
+}
+
+// OpenRouter places Anthropic cache breakpoints on content parts, so a marker
+// sent on the message (as @ai-sdk/openai-compatible does for string content)
+// moves to the message's last text part; with no text to carry it, it drops.
+// @see https://openrouter.ai/docs/guides/best-practices/prompt-caching
+function withCacheControlOnTextPart(
+  message: OpenrouterMessage,
+): OpenrouterMessage {
+  if (message.role === "function" || !message.cache_control) {
+    return message;
+  }
+  const { cache_control, ...rest } = message;
+  const { content } = rest;
+  if (typeof content === "string") {
+    return content.length > 0
+      ? { ...rest, content: [{ type: "text", text: content, cache_control }] }
+      : rest;
+  }
+  if (!content) {
+    return rest;
+  }
+  const parts: OpenrouterContentPart[] = content;
+  const index = parts.findLastIndex((part) => part.type === "text");
+  if (index < 0) {
+    return rest;
+  }
+  return {
+    ...rest,
+    content: parts.map((part, i) =>
+      i === index && part.type === "text"
+        ? { ...part, cache_control: part.cache_control ?? cache_control }
+        : part,
+    ),
+  } as OpenrouterMessage;
 }
 
 class OpenrouterResponseAdapter

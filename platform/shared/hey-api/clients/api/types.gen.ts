@@ -3288,27 +3288,44 @@ export type GroqChatCompletionResponseInput = {
 
 export type OpenrouterChatCompletionRequestInput = {
     model: string;
-    /**
-     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
-     */
     messages: Array<{
         content: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         }>;
         role: 'developer';
         name?: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         content: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         }>;
         role: 'system';
         name?: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         content: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         } | {
             type: 'image_url';
             /**
@@ -3340,6 +3357,10 @@ export type OpenrouterChatCompletionRequestInput = {
         }>;
         role: 'user';
         name?: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         role: 'assistant';
         audio?: {
@@ -3348,6 +3369,10 @@ export type OpenrouterChatCompletionRequestInput = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -3386,11 +3411,19 @@ export type OpenrouterChatCompletionRequestInput = {
                 name: string;
             };
         }>;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         role: 'tool';
         content: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         } | {
             type: 'image_url';
             /**
@@ -3402,6 +3435,10 @@ export type OpenrouterChatCompletionRequestInput = {
             };
         }>;
         tool_call_id: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         role: 'function';
         content: string | null;
@@ -9651,27 +9688,44 @@ export type GroqChatCompletionResponse = {
 
 export type OpenrouterChatCompletionRequest = {
     model: string;
-    /**
-     * https://github.com/openai/openai-node/blob/v6.0.0/src/resources/chat/completions/completions.ts#L1186
-     */
     messages: Array<{
         content: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         }>;
         role: 'developer';
         name?: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         content: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         }>;
         role: 'system';
         name?: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         content: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         } | {
             type: 'image_url';
             /**
@@ -9703,6 +9757,10 @@ export type OpenrouterChatCompletionRequest = {
         }>;
         role: 'user';
         name?: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         role: 'assistant';
         audio?: {
@@ -9711,6 +9769,10 @@ export type OpenrouterChatCompletionRequest = {
         content?: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         }> | Array<{
             type: 'refusal';
             refusal: string;
@@ -9749,11 +9811,19 @@ export type OpenrouterChatCompletionRequest = {
                 name: string;
             };
         }>;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         role: 'tool';
         content: string | Array<{
             type: 'text';
             text: string;
+            cache_control?: {
+                type: 'ephemeral';
+                ttl?: '5m' | '1h';
+            };
         } | {
             type: 'image_url';
             /**
@@ -9765,6 +9835,10 @@ export type OpenrouterChatCompletionRequest = {
             };
         }>;
         tool_call_id: string;
+        cache_control?: {
+            type: 'ephemeral';
+            ttl?: '5m' | '1h';
+        };
     } | {
         role: 'function';
         content: string | null;

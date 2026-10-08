@@ -4,7 +4,7 @@ import { ConversationCompactionModel, ModelModel } from "@/models";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { beforeEach, describe, expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
-import { compactMessagesForChat } from "./context-compaction";
+import { compactMessagesForChat } from "./compact-messages";
 
 vi.mock("ai", async (importOriginal) => {
   const actual = await importOriginal<typeof import("ai")>();
@@ -174,6 +174,25 @@ describe("compactMessagesForChat auto trigger", () => {
       status: "failed",
       reason: "summary_generation_failed",
       compaction: null,
+      messages: MESSAGES,
+    });
+    expect(
+      await ConversationCompactionModel.findLatestByConversation(
+        params.conversationId,
+      ),
+    ).toBeNull();
+  });
+
+  test("stores nothing when the summary would not shrink the history", async () => {
+    mockGenerateText.mockResolvedValue(
+      generated(`<summary>${LONG_TURN.repeat(3)}</summary>`),
+    );
+
+    const result = await compactMessagesForChat(params);
+
+    expect(result).toMatchObject({
+      status: "skipped",
+      reason: "not_beneficial",
       messages: MESSAGES,
     });
     expect(

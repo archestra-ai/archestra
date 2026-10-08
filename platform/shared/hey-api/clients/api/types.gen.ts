@@ -37447,7 +37447,7 @@ export type CompactChatConversationResponses = {
      */
     200: {
         status: 'created' | 'existing' | 'skipped' | 'failed';
-        reason?: string;
+        reason?: 'below_threshold' | 'using_existing_summary' | 'nothing_to_compact' | 'missing_boundary_message_id' | 'not_beneficial' | 'aborted' | 'summary_generation_failed';
         compaction: {
             id: string;
             conversationId: string;

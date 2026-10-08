@@ -135829,7 +135829,16 @@
                       ]
                     },
                     "reason": {
-                      "type": "string"
+                      "type": "string",
+                      "enum": [
+                        "below_threshold",
+                        "using_existing_summary",
+                        "nothing_to_compact",
+                        "missing_boundary_message_id",
+                        "not_beneficial",
+                        "aborted",
+                        "summary_generation_failed"
+                      ]
                     },
                     "compaction": {
                       "nullable": true,

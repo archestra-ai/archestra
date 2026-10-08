@@ -21,7 +21,7 @@ import {
   type ContextCompactionResult,
   type ContextCompactionStreamData,
   compactMessagesForChat,
-} from "./context-compaction";
+} from "./compaction/compact-messages";
 import { applyPromptCacheBreakpoints } from "./normalization/apply-prompt-cache";
 import {
   assertRequestWithinProviderPayloadLimit,
@@ -88,7 +88,7 @@ export async function buildModelMessages(params: {
   /**
    * The conversation's `models` FK, forwarded to compaction so the summary is
    * written by the model the conversation runs on. See
-   * `ContextCompactionParams` in `./context-compaction`.
+   * `ContextCompactionParams` in `./compaction/compact-messages`.
    */
   modelId?: string | null;
   inputModalities?: ModelInputModality[] | null;

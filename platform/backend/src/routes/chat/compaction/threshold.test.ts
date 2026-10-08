@@ -1,7 +1,7 @@
 import { ModelModel } from "@/models";
 import { expect, test } from "@/test";
 import type { ChatMessage } from "@/types";
-import { compactMessagesForChat } from "./context-compaction";
+import { compactMessagesForChat } from "./compact-messages";
 
 test("auto-compaction includes chat-override tool schemas in its context threshold", async ({
   makeAgent,

@@ -76,12 +76,8 @@ describe("seedDocsMcpServers", () => {
       ]);
     }
     expect(discover).toHaveBeenCalledTimes(2);
-
-    const prompts = await AgentSuggestedPromptModel.getForAgent(agentId);
-    expect(prompts.map((prompt) => prompt.summaryTitle)).toEqual([
-      "What can Archestra do?",
-      "How does OpenAPPA protect agents?",
-    ]);
+    // The prompts are shown at read time, never stored on the assistant.
+    expect(await AgentSuggestedPromptModel.getForAgent(agentId)).toEqual([]);
   });
 
   test("lets every member reach the docs tools, not only the admin", async ({
@@ -217,29 +213,6 @@ describe("seedDocsMcpServers", () => {
     await seedDocsMcpServers();
     await drainBackgroundWork();
     expect(discover).toHaveBeenCalledTimes(4);
-  });
-
-  test("keeps suggested prompts the admin already set", async ({
-    makeOrganization,
-    makeUser,
-    makeMember,
-  }) => {
-    const { agentId } = await seedAdmin({
-      makeOrganization,
-      makeUser,
-      makeMember,
-    });
-    await AgentSuggestedPromptModel.syncForAgent({
-      agentId,
-      prompts: [{ summaryTitle: "Mine", prompt: "My own prompt" }],
-    });
-    vi.spyOn(mcpClient, "connectAndGetTools").mockResolvedValue(DOCS_TOOLS);
-
-    await seedDocsMcpServers();
-    await drainBackgroundWork();
-
-    const prompts = await AgentSuggestedPromptModel.getForAgent(agentId);
-    expect(prompts.map((prompt) => prompt.summaryTitle)).toEqual(["Mine"]);
   });
 });
 

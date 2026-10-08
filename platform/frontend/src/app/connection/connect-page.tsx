@@ -37,6 +37,7 @@ import {
   Settings,
   ShieldCheck,
   ShieldOff,
+  SlidersHorizontal,
   SquareTerminal,
   TriangleAlert,
   Wrench,
@@ -57,6 +58,11 @@ import {
 import { toast } from "sonner";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
+import {
+  Popover,
+  PopoverContent,
+  PopoverTrigger,
+} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -1107,6 +1113,98 @@ function guardrailsStatus(
 
 // === Profile card ===
 
+/** The card's one place to leave parts out; the prompt carries the result. */
+function IncludeMenu({
+  skills,
+  plugins,
+  routing,
+  choices,
+  onChoice,
+}: {
+  skills: boolean;
+  plugins: boolean;
+  routing: boolean;
+  choices: ConnectChoices;
+  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
+}) {
+  const rows: {
+    id: string;
+    title: string;
+    sub: string;
+    part?: keyof ConnectChoices;
+  }[] = [
+    { id: "tools", title: "Tools", sub: "Always included" },
+    ...(skills
+      ? [
+          {
+            id: "skills",
+            title: "Skills",
+            sub: "Loaded when a task needs one",
+            part: "skills" as const,
+          },
+        ]
+      : []),
+    ...(plugins
+      ? [
+          {
+            id: "plugins",
+            title: "Plugins",
+            sub: "The plugins your org approved for this agent",
+            part: "plugins" as const,
+          },
+        ]
+      : []),
+    ...(routing
+      ? [
+          {
+            id: "proxy",
+            title: "LLM proxy",
+            sub: "Model requests go through the LLM proxy",
+            part: "proxy" as const,
+          },
+        ]
+      : []),
+  ];
+  return (
+    <Popover>
+      <PopoverTrigger asChild>
+        <Button
+          variant="ghost"
+          size="xs"
+          className="-mr-1.5 shrink-0 text-muted-foreground"
+        >
+          <SlidersHorizontal />
+          Choose what to include
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent align="end" className="w-80 p-1.5">
+        {rows.map((r) => (
+          <div
+            key={r.id}
+            className="flex items-center gap-3 rounded-md px-2.5 py-2"
+          >
+            <label
+              htmlFor={`include-${r.id}`}
+              className={cn("min-w-0 flex-1", r.part && "cursor-pointer")}
+            >
+              <span className="block text-sm font-semibold">{r.title}</span>
+              <span className="block text-xs text-muted-foreground">
+                {r.sub}
+              </span>
+            </label>
+            <Switch
+              id={`include-${r.id}`}
+              checked={r.part ? choices[r.part] : true}
+              disabled={!r.part}
+              onCheckedChange={(v) => r.part && onChoice(r.part, v)}
+            />
+          </div>
+        ))}
+      </PopoverContent>
+    </Popover>
+  );
+}
+
 /** "See all 5 skills", or "See the skill" when there's one. */
 function seeAllLabel(count: number, noun: string) {
   return count === 1
@@ -1188,7 +1286,7 @@ function ProfileCard({
     : client.proxy.kind === "unsupported"
       ? `${client.label} can't send its model requests to ${data.appName}'s LLM proxy, so it calls its model provider directly.`
       : !routed
-        ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly.`
+        ? `You turned the LLM proxy off, so ${client.label} calls its model provider directly. Turn it back on in Choose what to include.`
         : `${client.label}'s model requests go through ${data.appName}'s LLM proxy. Same models, plus your org's limits, logging and cost tracking.`;
   status.push({
     id: "routing",
@@ -1201,18 +1299,13 @@ function ProfileCard({
         <TipBody reason={proxyReason} />
       </InfoTip>
     ),
-    // A switch only where the agent can use the proxy; otherwise why not.
-    state: proxyOn ? (
-      <Switch
-        aria-label="LLM proxy"
-        checked={choices.proxy}
-        onCheckedChange={(v) => onChoice("proxy", v)}
-      />
-    ) : !data.llmProxyEnabled ? (
-      "Not active"
-    ) : (
-      "Not supported"
-    ),
+    state: !data.llmProxyEnabled
+      ? "Not active"
+      : !proxyOn
+        ? "Not supported"
+        : choices.proxy
+          ? "On"
+          : "Off",
   });
   const guard = guardrailsStatus(data, client, routed);
   if (guard)
@@ -1259,10 +1352,22 @@ function ProfileCard({
       </StepPill>
 
       <div className="px-5 pt-6 pb-5">
-        {/* One short line; the lists below speak for themselves. */}
-        <p className="text-sm leading-snug text-pretty text-foreground">
-          {cardIntro(data, servers, included)}
-        </p>
+        {/* One short line; the lists below speak for themselves. The card's
+            one place to leave parts out sits across from it. */}
+        <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1">
+          <p className="text-sm leading-snug text-pretty text-foreground">
+            {cardIntro(data, servers, included)}
+          </p>
+          {(skillsOn || pluginsOn || proxyOn) && (
+            <IncludeMenu
+              skills={skillsOn && skills.length > 0}
+              plugins={pluginsOn}
+              routing={proxyOn}
+              choices={choices}
+              onChoice={onChoice}
+            />
+          )}
+        </div>
 
         {/* Lists keep their height whatever is picked or left out: each
             holds its rows plus See all, and headers stay on one line, so the
@@ -1347,16 +1452,11 @@ function ProfileCard({
                 }
                 sub={
                   skillsOff
-                    ? "left out of the setup"
+                    ? "turn them on in Choose what to include"
                     : "loaded when a task needs one"
                 }
                 muted={skillsOff}
                 onTitle={() => onOpen("skills")}
-                toggle={{
-                  label: "Skills",
-                  checked: !skillsOff,
-                  onChange: (v) => onChoice("skills", v),
-                }}
                 seeAll={seeAllLabel(skills.length, "skill")}
               >
                 {skills.slice(0, SKILL_ROWS).map((s) => (
@@ -1385,16 +1485,11 @@ function ProfileCard({
                 }
                 sub={
                   pluginsOff
-                    ? "left out of the setup"
+                    ? "turn them on in Choose what to include"
                     : pluginInstallNote(client)
                 }
                 muted={pluginsOff}
                 onTitle={() => onOpen("plugins")}
-                toggle={{
-                  label: "Plugins",
-                  checked: !pluginsOff,
-                  onChange: (v) => onChoice("plugins", v),
-                }}
                 seeAll={seeAllLabel(plugins.length, "plugin")}
               >
                 {plugins.slice(0, PLUGIN_ROWS).map((p) => (
@@ -1453,7 +1548,6 @@ function ListBlock({
   sub,
   muted,
   onTitle,
-  toggle,
   aside,
   seeAll,
   empty,
@@ -1465,9 +1559,7 @@ function ListBlock({
   muted?: boolean;
   /** The title opens the full list. */
   onTitle?: () => void;
-  /** Takes the header's right side: include or leave out this part. */
-  toggle?: { label: string; checked: boolean; onChange: (v: boolean) => void };
-  /** The header's right side when there is no toggle, e.g. context cost. */
+  /** The title line's right side, e.g. context cost. */
   aside?: ReactNode;
   /** A last row, styled apart, that opens the full list. */
   seeAll?: string;
@@ -1520,13 +1612,6 @@ function ListBlock({
             {sub}
           </span>
         </span>
-        {toggle && (
-          <Switch
-            aria-label={toggle.label}
-            checked={toggle.checked}
-            onCheckedChange={toggle.onChange}
-          />
-        )}
       </div>
       {(children || seeAll || empty) && (
         // Room for every row plus See all, filled or not.

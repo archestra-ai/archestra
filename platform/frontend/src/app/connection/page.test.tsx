@@ -326,7 +326,7 @@ describe("ConnectPage (no connect request)", () => {
     ).toBeVisible();
   });
 
-  it("switches the LLM proxy on for supported agents, not active when the admin turned it off", () => {
+  it("shows the LLM proxy as on for supported agents, not active when the admin turned it off", () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -341,7 +341,7 @@ describe("ConnectPage (no connect request)", () => {
       },
     });
     const { unmount } = render(<ConnectionPage />);
-    expect(screen.getByRole("switch", { name: "LLM proxy" })).toBeChecked();
+    expect(screen.getByText("On")).toBeVisible();
     unmount();
 
     vi.mocked(useSearchParams).mockReturnValue(
@@ -350,7 +350,7 @@ describe("ConnectPage (no connect request)", () => {
       >,
     );
     const other = render(<ConnectionPage />);
-    expect(screen.getByRole("switch", { name: "LLM proxy" })).toBeChecked();
+    expect(screen.getByText("On")).toBeVisible();
     other.unmount();
 
     mockOrganization({
@@ -384,9 +384,11 @@ describe("ConnectPage (no connect request)", () => {
         >,
       );
       const { unmount } = render(<ConnectionPage />);
-      const proxy = screen.getByRole("switch", { name: /LLM proxy/ });
-      await userEvent.click(proxy);
-      expect(proxy).not.toBeChecked();
+      await userEvent.click(
+        screen.getByRole("button", { name: /Choose what to include/ }),
+      );
+      await userEvent.click(screen.getByRole("switch", { name: /LLM proxy/ }));
+      expect(screen.getByText("Off")).toBeVisible();
       // Other agents' prompt is covered by the generic prompt tests.
       if (id === "claude-code")
         expect(
@@ -729,6 +731,9 @@ describe("ConnectPage plugins", () => {
 
   it("leaves plugins out of the prompt when switched off", async () => {
     setup("claude-code");
+    await userEvent.click(
+      screen.getByRole("button", { name: "Choose what to include" }),
+    );
     await userEvent.click(screen.getByRole("switch", { name: /Plugins/ }));
     expect(screen.getByText("Plugins off")).toBeVisible();
     expect(

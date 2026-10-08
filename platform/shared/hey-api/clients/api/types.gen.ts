@@ -87447,11 +87447,12 @@ export type GetOpenappaCoverageEntitiesData = {
         limit?: number;
         offset?: number;
         search?: string;
-        type?: 'agent' | 'mcp_gateway' | 'mcp_server';
+        type?: 'agent' | 'mcp_gateway' | 'mcp_server' | 'detected_mcp_server';
         entityId?: string;
         toolId?: string;
         sortBy?: 'name' | 'type' | 'tools';
         sortDirection?: 'asc' | 'desc';
+        includeDetected?: boolean | 'true' | 'false';
     };
     url: '/api/openappa/coverage/entities';
 };
@@ -87544,6 +87545,14 @@ export type GetOpenappaCoverageEntitiesResponses = {
                 notCovered: number;
             };
             autoMode: boolean;
+        } | {
+            id: string;
+            label: string;
+            clientFamily: 'claude-code' | 'codex' | 'opencode';
+            firstObservedAt: string;
+            type: 'detected_mcp_server';
+            name: string;
+            toolCount: number;
         }>;
         pagination: {
             currentPage: number;

@@ -839,6 +839,60 @@ describe("Gateway tool attestation on the LLM proxy", () => {
     expect(JSON.stringify(events)).not.toContain(MARKER);
   });
 
+  // Codex declares each MCP server as a namespace and calls a member by its
+  // bare name inside it. Discovery reads the members under their namespace:
+  // a member the gateway attests is the gateway's (its attestation is keyed
+  // by name and namespace, not by the one-string spelling), and a local
+  // server's member is persisted as `<namespace>__<name>`, the spelling its
+  // call is evaluated under.
+  test("Codex: discovers a local namespace's members under their namespace and never an attested one", async ({
+    makeAgent,
+  }) => {
+    await GuardrailsDeploymentModel.setEnabled(false);
+    const proxy = await makeAgent({
+      organizationId: agent.organizationId,
+      agentType: "llm_proxy",
+      name: "Codex proxy",
+    });
+    codex.modelCalls({ name: "get_weather", input: { location: "SF" } });
+
+    const response = await post({
+      url: `/v1/openai/${proxy.id}/responses`,
+      headers: { originator: "codex_exec" },
+      payload: {
+        model: "gpt-4o",
+        input: [{ role: "user", content: "Check the weather" }],
+        tools: [
+          codex.function(WEATHER),
+          codex.namespace("mcp__gw", [
+            {
+              name: "github__create_issue",
+              description: served("github__create_issue"),
+            },
+          ]),
+          codex.namespace("mcp__slack", [
+            { name: "slack_send_message", description: "Send a message" },
+          ]),
+          codex.namespace("functions", [
+            { name: "shell", description: "Shell" },
+          ]),
+        ],
+      },
+    });
+
+    expect(response.statusCode, response.body).toBe(200);
+    expect(
+      await ToolModel.findByName("mcp__gw__github__create_issue"),
+    ).toBeNull();
+    expect(await ToolModel.findByName("github__create_issue")).toBeNull();
+    const local = await ToolModel.findByName("mcp__slack__slack_send_message");
+    expect(local?.description).toBe("Send a message");
+    expect(local?.catalogId).toBeNull();
+    expect(await ToolModel.findByName("slack_send_message")).toBeNull();
+    expect(await ToolModel.findByName("functions__shell")).toBeNull();
+    expect(await ToolModel.findByName("shell")).toBeNull();
+  });
+
   test("without OpenAPPA, discovers an unattested lookalike under the org's defaults and never the gateway's own tools", async ({
     makeOrganization,
     makeAgent,

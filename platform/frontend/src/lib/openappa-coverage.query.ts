@@ -8,8 +8,17 @@ type CoverageToolsPage =
 export type CoverageTool = CoverageToolsPage["data"][number];
 type CoverageEntitiesPage =
   archestraApiTypes.GetOpenappaCoverageEntitiesResponses["200"];
+/** A row of the entities list: a registry server with coverage, or a detected server. */
 export type CoverageEntity = CoverageEntitiesPage["data"][number];
-export type CoverageRuleCounts = CoverageEntity["rules"];
+export type DetectedCoverageEntity = Extract<
+  CoverageEntity,
+  { type: "detected_mcp_server" }
+>;
+export type RegistryCoverageEntity = Exclude<
+  CoverageEntity,
+  DetectedCoverageEntity
+>;
+export type CoverageRuleCounts = RegistryCoverageEntity["rules"];
 export type CoverageSummary =
   archestraApiTypes.GetOpenappaCoverageSummaryResponses["200"];
 export type CoverageToolsParams = NonNullable<

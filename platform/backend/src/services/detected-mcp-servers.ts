@@ -1,0 +1,81 @@
+import { clientForExternalAgentIds } from "@archestra/shared";
+import { ToolObservationModel } from "@/models";
+import type { ProxyToolObservation } from "@/models/tool-observation";
+import type { DetectedMcpServer } from "@/types";
+import {
+  type DetectedClientFamily,
+  detectedServerId,
+  isDetectedClientFamily,
+  parseDetectedToolName,
+} from "@/utils/detected-mcp-server-names";
+
+/**
+ * The organization's detected MCP servers, derived from the proxy's tool
+ * observations: an observation ties a proxy-discovered tool to the member
+ * who declared it and to their client. Two members whose local servers
+ * share a label share one detected server: an attachment made to it governs
+ * that label for everyone.
+ */
+export async function listDetectedMcpServers(
+  organizationId: string,
+): Promise<DetectedMcpServer[]> {
+  const observations =
+    await ToolObservationModel.listProxyToolObservations(organizationId);
+  return groupDetectedServers(observations);
+}
+
+// === Internal helpers ===
+
+function groupDetectedServers(
+  observations: ProxyToolObservation[],
+): DetectedMcpServer[] {
+  const servers = new Map<
+    string,
+    DetectedMcpServer & { toolNames: Set<string> }
+  >();
+  for (const observation of observations) {
+    const family = clientFamilyOf(observation.externalAgentId);
+    if (!family) continue;
+    const parsed = parseDetectedToolName(family, observation.toolName);
+    if (!parsed) continue;
+    const id = detectedServerId(family, parsed.label);
+    let server = servers.get(id);
+    if (!server) {
+      server = {
+        id,
+        label: parsed.label,
+        clientFamily: family,
+        tools: [],
+        firstObservedAt: observation.observedAt,
+        toolNames: new Set(),
+      };
+      servers.set(id, server);
+    }
+    // Two proxy requests can discover one name at once and leave two rows;
+    // the server has one tool of that name.
+    if (!server.toolNames.has(observation.toolName)) {
+      server.toolNames.add(observation.toolName);
+      server.tools.push({
+        id: observation.toolId,
+        name: observation.toolName,
+        toolName: parsed.toolName,
+      });
+    }
+    if (observation.observedAt < server.firstObservedAt) {
+      server.firstObservedAt = observation.observedAt;
+    }
+  }
+  return [...servers.values()]
+    .map(({ toolNames: _toolNames, ...server }) => ({
+      ...server,
+      tools: server.tools.sort((a, b) => a.name.localeCompare(b.name)),
+    }))
+    .sort((a, b) => a.id.localeCompare(b.id));
+}
+
+function clientFamilyOf(
+  externalAgentId: string,
+): DetectedClientFamily | undefined {
+  const family = clientForExternalAgentIds([externalAgentId])?.filter;
+  return family && isDetectedClientFamily(family) ? family : undefined;
+}

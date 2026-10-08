@@ -11,6 +11,7 @@ import {
   ArchestraInternalErrorCode,
   type BillingMode,
   BUILT_IN_AGENT_IDS,
+  buildFullToolName,
   CHAT_API_KEY_ID_HEADER,
   DELEGATION_BILLING_ENVIRONMENT_HEADER,
   DUAL_LLM_PROGRESS_CHANNEL_HEADER,
@@ -1406,7 +1407,11 @@ export async function handleLLMProxy<
         // discovered tool persisted below.
         await utils.tools.persistTools(
           tools.map((t) => ({
-            toolName: t.name,
+            // A namespaced tool is persisted under its one-string spelling,
+            // `<namespace>__<name>`, the way the client's call is evaluated.
+            toolName: t.namespace
+              ? buildFullToolName(t.namespace, t.name)
+              : t.name,
             toolParameters: t.inputSchema,
             toolDescription: t.description,
             // With attestations, tools served by the gateway are identified
@@ -1415,7 +1420,8 @@ export async function handleLLMProxy<
             ...(toolIdentity.mode === "attested" && !isInternalChat
               ? {
                   servedByGateway:
-                    toolIdentity.attestationOf(t.name) !== undefined,
+                    toolIdentity.attestationOf(t.name, t.namespace) !==
+                    undefined,
                 }
               : {}),
           })),

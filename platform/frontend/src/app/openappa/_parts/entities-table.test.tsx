@@ -217,7 +217,11 @@ test("lists MCP servers including Archestra, each with a chat and scoped details
   expect(targets.getByText("2 MCP servers")).toBeVisible();
   expect(entityRequests[0]?.get("sortBy")).toBe("name");
   expect(entityRequests[0]?.get("type")).toBe("mcp_server");
-  expect(screen.queryByRole("combobox", { name: "Type" })).toBeNull();
+  // The default lists the registry's servers and the detected ones together.
+  expect(entityRequests[0]?.get("includeDetected")).toBe("true");
+  expect(screen.getByRole("combobox", { name: "Type" })).toHaveTextContent(
+    "All types",
+  );
   expect(entityRequests[0]?.get("sortDirection")).toBe("asc");
   // One chat for every target, whatever its coverage.
   const archestraLink = await targets.findByRole("link", {

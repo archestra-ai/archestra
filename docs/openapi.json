@@ -337140,7 +337140,8 @@
               "enum": [
                 "agent",
                 "mcp_gateway",
-                "mcp_server"
+                "mcp_server",
+                "detected_mcp_server"
               ]
             },
             "in": "query",
@@ -337191,6 +337192,25 @@
             "in": "query",
             "name": "sortDirection",
             "required": false
+          },
+          {
+            "schema": {
+              "anyOf": [
+                {
+                  "type": "boolean"
+                },
+                {
+                  "type": "string",
+                  "enum": [
+                    "true",
+                    "false"
+                  ]
+                }
+              ]
+            },
+            "in": "query",
+            "name": "includeDetected",
+            "required": false
           }
         ],
         "responses": {
@@ -337204,112 +337224,163 @@
                     "data": {
                       "type": "array",
                       "items": {
-                        "type": "object",
-                        "properties": {
-                          "id": {
-                            "type": "string",
-                            "format": "uuid",
-                            "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
-                          },
-                          "name": {
-                            "type": "string"
-                          },
-                          "type": {
-                            "type": "string",
-                            "enum": [
-                              "agent",
-                              "mcp_gateway",
-                              "mcp_server"
-                            ]
-                          },
-                          "scope": {
-                            "type": "string",
-                            "enum": [
-                              "personal",
-                              "team",
-                              "org"
-                            ]
-                          },
-                          "icon": {
-                            "nullable": true,
-                            "type": "string"
-                          },
-                          "toolCount": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "governedCount": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "fallbackCount": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "builtInCount": {
-                            "type": "integer",
-                            "minimum": -9007199254740991,
-                            "maximum": 9007199254740991
-                          },
-                          "rules": {
+                        "anyOf": [
+                          {
                             "type": "object",
                             "properties": {
-                              "root": {
+                              "id": {
+                                "type": "string",
+                                "format": "uuid",
+                                "pattern": "^([0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[1-8][0-9a-fA-F]{3}-[89abAB][0-9a-fA-F]{3}-[0-9a-fA-F]{12}|00000000-0000-0000-0000-000000000000|ffffffff-ffff-ffff-ffff-ffffffffffff)$"
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "agent",
+                                  "mcp_gateway",
+                                  "mcp_server"
+                                ]
+                              },
+                              "scope": {
+                                "type": "string",
+                                "enum": [
+                                  "personal",
+                                  "team",
+                                  "org"
+                                ]
+                              },
+                              "icon": {
+                                "nullable": true,
+                                "type": "string"
+                              },
+                              "toolCount": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
                               },
-                              "battery": {
+                              "governedCount": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
                               },
-                              "notEnforced": {
+                              "fallbackCount": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
                               },
-                              "catchAll": {
+                              "builtInCount": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
                               },
-                              "notCovered": {
+                              "rules": {
+                                "type": "object",
+                                "properties": {
+                                  "root": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "battery": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "notEnforced": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "catchAll": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  },
+                                  "notCovered": {
+                                    "type": "integer",
+                                    "minimum": -9007199254740991,
+                                    "maximum": 9007199254740991
+                                  }
+                                },
+                                "required": [
+                                  "root",
+                                  "battery",
+                                  "notEnforced",
+                                  "catchAll",
+                                  "notCovered"
+                                ],
+                                "additionalProperties": false
+                              },
+                              "autoMode": {
+                                "type": "boolean"
+                              }
+                            },
+                            "required": [
+                              "id",
+                              "name",
+                              "type",
+                              "scope",
+                              "icon",
+                              "toolCount",
+                              "governedCount",
+                              "fallbackCount",
+                              "builtInCount",
+                              "rules",
+                              "autoMode"
+                            ],
+                            "additionalProperties": false
+                          },
+                          {
+                            "type": "object",
+                            "properties": {
+                              "id": {
+                                "type": "string"
+                              },
+                              "label": {
+                                "type": "string"
+                              },
+                              "clientFamily": {
+                                "type": "string",
+                                "enum": [
+                                  "claude-code",
+                                  "codex",
+                                  "opencode"
+                                ]
+                              },
+                              "firstObservedAt": {
+                                "type": "string",
+                                "format": "date-time"
+                              },
+                              "type": {
+                                "type": "string",
+                                "enum": [
+                                  "detected_mcp_server"
+                                ]
+                              },
+                              "name": {
+                                "type": "string"
+                              },
+                              "toolCount": {
                                 "type": "integer",
                                 "minimum": -9007199254740991,
                                 "maximum": 9007199254740991
                               }
                             },
                             "required": [
-                              "root",
-                              "battery",
-                              "notEnforced",
-                              "catchAll",
-                              "notCovered"
+                              "id",
+                              "label",
+                              "clientFamily",
+                              "firstObservedAt",
+                              "type",
+                              "name",
+                              "toolCount"
                             ],
                             "additionalProperties": false
-                          },
-                          "autoMode": {
-                            "type": "boolean"
                           }
-                        },
-                        "required": [
-                          "id",
-                          "name",
-                          "type",
-                          "scope",
-                          "icon",
-                          "toolCount",
-                          "governedCount",
-                          "fallbackCount",
-                          "builtInCount",
-                          "rules",
-                          "autoMode"
-                        ],
-                        "additionalProperties": false
+                        ]
                       }
                     },
                     "pagination": {

@@ -1,5 +1,8 @@
 import { randomUUID } from "node:crypto";
-import { ArchestraInternalErrorCode } from "@archestra/shared";
+import {
+  ArchestraInternalErrorCode,
+  CLIENT_MCP_TOOL_NAME_PREFIX,
+} from "@archestra/shared";
 import { get } from "lodash-es";
 import OpenAIProvider from "openai";
 import type {
@@ -378,24 +381,30 @@ class OpenAiResponsesRequestAdapter
     });
   }
 
+  /**
+   * Every function tool the request declares, in every container, plus the
+   * members of each MCP namespace (`mcp__<label>`) under their namespace.
+   * Codex calls a member by its own name in the namespace it was declared in,
+   * so the member alone would not identify the tool. Native namespaces hold
+   * client tools and are left out, as they always were.
+   */
   getTools(): CommonMcpToolDefinition[] {
-    if (!Array.isArray(this.request.tools)) {
-      return [];
-    }
-
-    return this.request.tools.flatMap((tool) => {
-      if (!isFunctionToolDefinition(tool)) {
-        return [];
-      }
-
-      return [
-        {
-          name: tool.name,
-          description: tool.description ?? undefined,
-          inputSchema: tool.parameters ?? {},
-        },
-      ];
-    });
+    return toolDeclarationLists(this.request).flatMap((tools) =>
+      tools.flatMap((tool) => {
+        if (isFunctionToolDefinition(tool)) {
+          return [functionToolDefinition(tool)];
+        }
+        const namespace = mcpNamespaceDeclaration(tool);
+        if (!namespace) {
+          return [];
+        }
+        return namespace.tools.flatMap((member) =>
+          isFunctionToolDefinition(member)
+            ? [{ ...functionToolDefinition(member), namespace: namespace.name }]
+            : [],
+        );
+      }),
+    );
   }
 
   hasTools(): boolean {
@@ -2119,6 +2128,32 @@ function isFunctionToolDefinition(
     "type" in tool &&
     tool.type === "function"
   );
+}
+
+function functionToolDefinition(
+  tool: OpenAiFunctionToolDefinition,
+): CommonMcpToolDefinition {
+  return {
+    name: tool.name,
+    description: tool.description ?? undefined,
+    inputSchema: tool.parameters ?? {},
+  };
+}
+
+/** A Codex namespace declaration holding an MCP server's tools, by its prefix. */
+function mcpNamespaceDeclaration(
+  tool: unknown,
+): { name: string; tools: unknown[] } | undefined {
+  if (
+    !isRecord(tool) ||
+    tool.type !== "namespace" ||
+    typeof tool.name !== "string" ||
+    !tool.name.startsWith(CLIENT_MCP_TOOL_NAME_PREFIX) ||
+    !Array.isArray(tool.tools)
+  ) {
+    return undefined;
+  }
+  return { name: tool.name, tools: tool.tools };
 }
 
 /**

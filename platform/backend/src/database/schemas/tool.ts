@@ -1,5 +1,5 @@
 import { ARCHESTRA_MCP_CATALOG_ID } from "@archestra/shared";
-import { sql } from "drizzle-orm";
+import { and, isNull, type SQL, sql } from "drizzle-orm";
 import {
   boolean,
   index,
@@ -131,3 +131,17 @@ const toolsTable = softDeletablePgTable(
 );
 
 export default toolsTable;
+
+/**
+ * A tool the LLM proxy discovered from a client's own declarations: no
+ * catalog, no (deprecated) agent owner, no delegation target, not deleted.
+ */
+export function isProxyDiscoveredTool(table: typeof toolsTable): SQL {
+  return and(
+    isNull(table.catalogId),
+    isNull(table.agentId),
+    isNull(table.delegateToAgentId),
+    isNull(table.delegateToA2aConnectionId),
+    isNull(table.deletedAt),
+  ) as SQL;
+}

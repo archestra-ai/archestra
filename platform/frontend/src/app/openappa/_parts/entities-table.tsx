@@ -120,12 +120,16 @@ export function EntitiesTable() {
         cell: ({ row }) => {
           const entity = row.original;
           return isDetected(entity) ? (
-            <span className="flex min-w-0 flex-col">
-              <span className="truncate" title={entity.name}>
-                {entity.name}
-              </span>
-              <span className="truncate text-xs text-muted-foreground">
-                {entity.id}
+            // Laid out like the registry rows' button: icon, then name.
+            <span className="flex min-w-0 items-center gap-2">
+              <Radar className="size-4 shrink-0 text-muted-foreground" />
+              <span className="flex min-w-0 flex-col">
+                <span className="truncate" title={entity.name}>
+                  {entity.name}
+                </span>
+                <span className="truncate text-xs text-muted-foreground">
+                  {entity.id}
+                </span>
               </span>
             </span>
           ) : (
@@ -388,11 +392,7 @@ function DetectedClientBadge({ entity }: { entity: DetectedCoverageEntity }) {
   const client = CLIENT_FILTER_OPTIONS.find(
     (option) => option.value === entity.clientFamily,
   );
-  return client ? (
-    <ClientSourceBadge client={client} />
-  ) : (
-    <Radar className="size-4 text-muted-foreground" />
-  );
+  return client ? <ClientSourceBadge client={client} /> : null;
 }
 
 function entityTypeLabel(type: RegistryCoverageEntity["type"]): string {

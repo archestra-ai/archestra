@@ -3,33 +3,51 @@ import { describe, expect, test } from "vitest";
 import {
   CAPPED_TOOL_RESULT_META_KEY,
   capToolResultText,
-  MAX_TOOL_RESULT_CONTEXT_CHARS,
+  MAX_TOOL_RESULT_CONTEXT_BYTES,
   projectCappedToolOutputs,
 } from "./tool-result-cap";
 
 describe("capToolResultText", () => {
   test("keeps the notice first and the suffix last within the cap", () => {
-    const text = "x".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 3);
+    const text = "x".repeat(MAX_TOOL_RESULT_CONTEXT_BYTES * 3);
     const capped = capToolResultText({
       text,
       path: "/home/sandbox/tool-results/a.txt",
       suffix: "\n\n[hook feedback] stop",
     });
 
-    expect(capped.length).toBe(MAX_TOOL_RESULT_CONTEXT_CHARS);
+    expect(Buffer.byteLength(capped, "utf8")).toBe(
+      MAX_TOOL_RESULT_CONTEXT_BYTES,
+    );
     expect(capped.startsWith("[Tool result too large")).toBe(true);
     expect(capped.slice(0, 300)).toContain("/home/sandbox/tool-results/a.txt");
     expect(capped.endsWith("\n\n[hook feedback] stop")).toBe(true);
   });
 
-  test("stays within the cap when the suffix alone exceeds it", () => {
+  test("caps by UTF-8 bytes without splitting a character", () => {
     const capped = capToolResultText({
-      text: "x".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 2),
+      text: "é".repeat(MAX_TOOL_RESULT_CONTEXT_BYTES),
       path: null,
-      suffix: "f".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 2),
+      suffix: "",
     });
 
-    expect(capped.length).toBe(MAX_TOOL_RESULT_CONTEXT_CHARS);
+    expect(Buffer.byteLength(capped, "utf8")).toBeLessThanOrEqual(
+      MAX_TOOL_RESULT_CONTEXT_BYTES,
+    );
+    expect(capped).not.toContain("\uFFFD");
+    expect(capped.endsWith("é")).toBe(true);
+  });
+
+  test("stays within the cap when the suffix alone exceeds it", () => {
+    const capped = capToolResultText({
+      text: "x".repeat(MAX_TOOL_RESULT_CONTEXT_BYTES * 2),
+      path: null,
+      suffix: "f".repeat(MAX_TOOL_RESULT_CONTEXT_BYTES * 2),
+    });
+
+    expect(Buffer.byteLength(capped, "utf8")).toBe(
+      MAX_TOOL_RESULT_CONTEXT_BYTES,
+    );
     expect(capped.startsWith("[Tool result too large")).toBe(true);
   });
 });

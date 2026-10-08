@@ -23,7 +23,7 @@ import { metrics } from "@/observability";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
 import { beforeEach, describe, expect, test } from "@/test";
 import {
-  MAX_TOOL_RESULT_CONTEXT_CHARS,
+  MAX_TOOL_RESULT_CONTEXT_BYTES,
   readCappedToolResult,
 } from "@/utils/tool-result-cap";
 import * as chatClient from "./chat-mcp-client";
@@ -375,7 +375,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
           ? { decision: "block", reason: "trim it", runs: [] }
           : { decision: "proceed", runs: [] },
     );
-    const huge = "x".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 2);
+    const huge = "x".repeat(MAX_TOOL_RESULT_CONTEXT_BYTES * 2);
     vi.mocked(mcpClient.executeToolCallForOwner).mockResolvedValue({
       content: [{ type: "text", text: huge }],
       structuredContent: { rows: ["for the UI"] },
@@ -389,7 +389,7 @@ describe("getChatMcpTools MCP tool execute pipeline", () => {
     )) as { content: string; structuredContent?: unknown };
 
     expect(result.content.length).toBeLessThanOrEqual(
-      MAX_TOOL_RESULT_CONTEXT_CHARS,
+      MAX_TOOL_RESULT_CONTEXT_BYTES,
     );
     expect(result.content.endsWith("[hook feedback] trim it")).toBe(true);
     expect(result.structuredContent).toEqual({ rows: ["for the UI"] });
@@ -755,7 +755,7 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
     });
     mockExecuteA2AMessage.mockResolvedValue({
       messageId: "child-msg-huge",
-      text: "y".repeat(MAX_TOOL_RESULT_CONTEXT_CHARS * 2),
+      text: "y".repeat(MAX_TOOL_RESULT_CONTEXT_BYTES * 2),
       finishReason: "stop",
     });
 
@@ -770,7 +770,7 @@ describe("getChatMcpTools agent delegation execute pipeline", () => {
 
     expect(typeof result).toBe("string");
     expect((result as string).length).toBeLessThanOrEqual(
-      MAX_TOOL_RESULT_CONTEXT_CHARS,
+      MAX_TOOL_RESULT_CONTEXT_BYTES,
     );
     expect((result as string).startsWith("[Tool result too large")).toBe(true);
   });

@@ -18,6 +18,7 @@ import {
   useOAuthClientInfo,
   useSubmitOAuthConsent,
 } from "@/lib/auth/oauth.query";
+import { postConnected } from "@/lib/connect-signal";
 
 export function ConsentForm() {
   const searchParams = useSearchParams();
@@ -56,6 +57,8 @@ export function ConsentForm() {
       });
 
       if (data?.redirectTo) {
+        // Tell the Connect page in another tab to show what's next.
+        if (accept) postConnected();
         if (isExternalProtocolRedirect(data.redirectTo)) {
           setExternalRedirectTarget(data.redirectTo);
           window.location.assign(data.redirectTo);

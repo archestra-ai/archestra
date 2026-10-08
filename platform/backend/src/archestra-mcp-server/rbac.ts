@@ -44,6 +44,7 @@ export const TOOL_PERMISSIONS: Record<
     resource: "openappaDiagnostics",
     action: "update",
   },
+  list_openappa_yells: { resource: "openappaDiagnostics", action: "read" },
   list_openappa_consults: { resource: "openappaDiagnostics", action: "read" },
   get_guardrails_policy: { resource: "openappaPolicy", action: "read" },
   get_openappa_policy_tests: { resource: "openappaPolicy", action: "read" },

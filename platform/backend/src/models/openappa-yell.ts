@@ -132,7 +132,9 @@ export default class OpenAppaYellModel {
     return { unresolved: row?.unresolved ?? 0 };
   }
 
-  static async list(params: OpenAppaYellQuery & { organizationId: string }) {
+  static async list(
+    params: OpenAppaYellQuery & { organizationId: string; sessionId?: string },
+  ) {
     const position = decodeCursor(params.cursor);
     const validCursor =
       position &&
@@ -149,6 +151,7 @@ export default class OpenAppaYellModel {
             : params.status === "resolved"
               ? isNotNull(table.resolvedAt)
               : undefined,
+          params.sessionId ? eq(table.sessionId, params.sessionId) : undefined,
           params.search
             ? ilike(
                 table.message,

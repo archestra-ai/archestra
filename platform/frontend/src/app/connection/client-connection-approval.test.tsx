@@ -18,9 +18,11 @@ import {
   test,
   vi,
 } from "vitest";
+import { postConnected } from "@/lib/connect-signal";
 import { ClientConnectionApproval } from "./client-connection-approval";
 
 vi.mock("sonner");
+vi.mock("@/lib/connect-signal");
 const origin = "http://localhost:9000";
 const server = setupServer();
 const requests: unknown[] = [];
@@ -35,6 +37,7 @@ afterEach(() => {
 });
 beforeEach(() => {
   requests.length = 0;
+  vi.mocked(postConnected).mockClear();
   archestraApiClient.setConfig({ baseUrl: origin });
   server.use(
     http.get(`${origin}/api/client-connections/request`, () =>
@@ -206,6 +209,8 @@ test("approval requires matching the terminal code, then submits the reviewed se
   expect(
     screen.queryByRole("button", { name: "Approve connection" }),
   ).not.toBeInTheDocument();
+  // The Connect page, open in another tab, hears it once.
+  expect(postConnected).toHaveBeenCalledTimes(1);
 });
 
 test("approval only shows steps for selected Cursor resources", async () => {
@@ -277,6 +282,7 @@ test("a mismatched client cannot be approved but can be denied", async () => {
     "Connection denied. The installer cannot apply this setup.",
   );
   expect(requests).toEqual([{ decision: "deny" }]);
+  expect(postConnected).not.toHaveBeenCalled();
 });
 
 test("expired requests show recovery guidance and cannot release a setup", async () => {

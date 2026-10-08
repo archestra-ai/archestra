@@ -91,7 +91,9 @@ const declaredGithub = (
   scope: "catalogs",
   composed: false,
   line: 4,
-  servers: [{ target: "code", attachment: { kind: "catalog", catalogId } }],
+  servers: [
+    { target: "code", attachment: { kind: "catalog", catalogId }, catalogId },
+  ],
   credentials: [
     {
       variable: "APPA_PROVIDER_GITHUB_TOKEN",
@@ -860,10 +862,15 @@ test("detaching a server deletes that server's install alone", async () => {
     batteries: [
       declaredGithub({
         servers: [
-          { target: "code", attachment: { kind: "catalog", catalogId } },
+          {
+            target: "code",
+            attachment: { kind: "catalog", catalogId },
+            catalogId,
+          },
           {
             target: "docs",
             attachment: { kind: "catalog", catalogId: otherCatalogId },
+            catalogId: otherCatalogId,
           },
         ],
       }),
@@ -934,10 +941,15 @@ test("removing an entry takes its include out in one write", async () => {
     batteries: [
       declaredGithub({
         servers: [
-          { target: "code", attachment: { kind: "catalog", catalogId } },
+          {
+            target: "code",
+            attachment: { kind: "catalog", catalogId },
+            catalogId,
+          },
           {
             target: "docs",
             attachment: { kind: "catalog", catalogId: otherCatalogId },
+            catalogId: otherCatalogId,
           },
         ],
       }),
@@ -970,7 +982,7 @@ test("an entry bound to no server this deployment carries is removed the same wa
     batteries: [
       declaredGithub({
         status: "server_missing",
-        servers: [{ target: "gone", attachment: null }],
+        servers: [{ target: "gone", attachment: null, catalogId: null }],
       }),
     ],
   });

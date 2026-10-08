@@ -215,10 +215,15 @@ export const BatterySummarySchema = z.object({
 });
 export type BatterySummary = z.infer<typeof BatterySummarySchema>;
 
-/** One `[server_aliases]` target beside the server it resolves to, if one does. */
+/**
+ * One `[server_aliases]` target beside the server it resolves to, if one does.
+ * `catalogId` repeats a catalog attachment's id for a client that reads the
+ * older shape.
+ */
 const BatteryServerViewSchema = z.object({
   target: z.string(),
   attachment: BatteryServerAttachmentSchema.nullable(),
+  catalogId: z.string().nullable(),
 });
 
 /** One credential variable a battery reads, with its key and every other reader. */

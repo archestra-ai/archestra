@@ -86328,6 +86328,7 @@ export type GetOpenappaPolicyDeclarationsResponses = {
                     kind: 'detected';
                     detectedId: string;
                 } | null;
+                catalogId: string | null;
             }>;
             credentials: Array<{
                 variable: string;
@@ -86735,6 +86736,7 @@ export type CreateOpenappaBatteryInstallResponses = {
                 kind: 'detected';
                 detectedId: string;
             } | null;
+            catalogId: string | null;
         }>;
         credentials: Array<{
             variable: string;
@@ -86933,6 +86935,7 @@ export type UpdateOpenappaBatteryInstallResponses = {
                 kind: 'detected';
                 detectedId: string;
             } | null;
+            catalogId: string | null;
         }>;
         credentials: Array<{
             variable: string;

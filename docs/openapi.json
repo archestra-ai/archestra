@@ -333121,11 +333121,16 @@
                                       "additionalProperties": false
                                     }
                                   ]
+                                },
+                                "catalogId": {
+                                  "nullable": true,
+                                  "type": "string"
                                 }
                               },
                               "required": [
                                 "target",
-                                "attachment"
+                                "attachment",
+                                "catalogId"
                               ],
                               "additionalProperties": false
                             }
@@ -334617,11 +334622,16 @@
                                 "additionalProperties": false
                               }
                             ]
+                          },
+                          "catalogId": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "target",
-                          "attachment"
+                          "attachment",
+                          "catalogId"
                         ],
                         "additionalProperties": false
                       }
@@ -335061,11 +335071,16 @@
                                 "additionalProperties": false
                               }
                             ]
+                          },
+                          "catalogId": {
+                            "nullable": true,
+                            "type": "string"
                           }
                         },
                         "required": [
                           "target",
-                          "attachment"
+                          "attachment",
+                          "catalogId"
                         ],
                         "additionalProperties": false
                       }

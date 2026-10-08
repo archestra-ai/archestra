@@ -716,12 +716,13 @@ function BatteryDialog({
                     (candidate) =>
                       catalogId !== null && candidate.catalogId === catalogId,
                   ) ?? null;
+                const attachment = serverAttachment(server);
                 const name =
-                  server.attachment === null
+                  attachment === null
                     ? "Removed server"
-                    : server.attachment.kind === "catalog"
-                      ? catalogName(server.attachment.catalogId)
-                      : server.attachment.detectedId;
+                    : attachment.kind === "catalog"
+                      ? catalogName(attachment.catalogId)
+                      : attachment.detectedId;
                 return (
                   <ServerRow
                     key={server.target}
@@ -1573,14 +1574,29 @@ async function readPackage(files: File[]) {
   );
 }
 
-/** The catalog an alias target resolved to, when it resolved to one. */
-function attachedCatalogId(server: {
-  attachment:
+type ServerView = {
+  attachment?:
     | { kind: "catalog"; catalogId: string }
-    | { kind: "detected" }
+    | { kind: "detected"; detectedId: string }
     | null;
-}): string | null {
-  return server.attachment?.kind === "catalog"
-    ? server.attachment.catalogId
-    : null;
+  catalogId: string | null;
+};
+
+/**
+ * What an alias target resolved to. A backend from before `attachment`
+ * answers with `catalogId` alone, so that still reads as a catalog.
+ */
+function serverAttachment(
+  server: ServerView,
+): Exclude<ServerView["attachment"], undefined> {
+  if (server.attachment !== undefined) return server.attachment;
+  return server.catalogId === null
+    ? null
+    : { kind: "catalog", catalogId: server.catalogId };
+}
+
+/** The catalog an alias target resolved to, when it resolved to one. */
+function attachedCatalogId(server: ServerView): string | null {
+  const attachment = serverAttachment(server);
+  return attachment?.kind === "catalog" ? attachment.catalogId : null;
 }

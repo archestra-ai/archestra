@@ -1,5 +1,5 @@
-import { and, asc, eq, inArray, sql } from "drizzle-orm";
-import db, { schema } from "@/database";
+import { and, asc, eq, inArray, isNull, sql } from "drizzle-orm";
+import db, { schema, type Transaction } from "@/database";
 import {
   attachmentKey,
   attachmentOf,
@@ -7,6 +7,7 @@ import {
   type BatteryInstall,
   type BatteryInstallRow,
 } from "@/types/openappa-batteries";
+import { isUniqueConstraintError } from "@/utils/db";
 
 const table = schema.openappaBatteryInstallsTable;
 
@@ -159,6 +160,53 @@ export default OpenAppaBatteryInstallModel;
 
 /** Keys the per-organization advisory lock apart from any other use of `hashtext`. */
 const LOCK_SCOPE = "openappa_battery_installs";
+
+/**
+ * Insert a row, or, when a writer that does not take the organization's lock
+ * (one from before the lock existed) put the same identity in first, take
+ * that row over: the insert runs under a savepoint so the conflict leaves the
+ * transaction usable, and the row is then updated like any surviving one.
+ */
+async function insertOrAdopt(
+  tx: Transaction,
+  values: typeof table.$inferInsert & {
+    kind: BatteryAttachment["kind"];
+    catalogId: string | null;
+    detectedId: string | null;
+  },
+): Promise<BatteryInstall> {
+  try {
+    const [inserted] = await tx.transaction((savepoint) =>
+      savepoint.insert(table).values(values).returning(),
+    );
+    return inserted;
+  } catch (error) {
+    if (!isUniqueConstraintError(error)) throw error;
+    const [existing] = await tx
+      .select()
+      .from(table)
+      .where(
+        and(
+          eq(table.organizationId, values.organizationId),
+          eq(table.batteryName, values.batteryName),
+          values.catalogId === null
+            ? isNull(table.catalogId)
+            : eq(table.catalogId, values.catalogId),
+          values.detectedId === null
+            ? isNull(table.detectedId)
+            : eq(table.detectedId, values.detectedId),
+        ),
+      )
+      .for("update");
+    if (!existing) throw error;
+    const [updated] = await tx
+      .update(table)
+      .set(values)
+      .where(eq(table.id, existing.id))
+      .returning();
+    return updated;
+  }
+}
 
 function attachmentColumns(attachment: BatteryAttachment): {
   kind: BatteryAttachment["kind"];

@@ -38,6 +38,7 @@ import {
   type BatteryMatches,
   type BatteryPackageFile,
   type BatteryScope,
+  type BatteryServerAttachment,
   type BatterySummary,
   type CreateBatteryInstall,
   type EffectivePolicy,
@@ -48,7 +49,6 @@ import {
   type UploadedBatteryPackage,
 } from "@/types/openappa-batteries";
 import { mapWithConcurrency } from "@/utils/concurrency";
-import { isDetectedServerId } from "@/utils/detected-mcp-server-names";
 import {
   addedGrants,
   bundledEntry,
@@ -1102,13 +1102,18 @@ class OpenAppaBatteriesService {
         scope,
         composed: composes({ status, scope }),
         helpers: entry.battery?.helpers ?? [],
-        servers: servers.map(({ target, catalogs }) => ({
-          target,
-          attachment:
+        servers: servers.map(({ target, catalogs }) => {
+          const attachment: BatteryServerAttachment | null =
             catalogs.size === 1
               ? { kind: "catalog", catalogId: [...catalogs][0] as string }
-              : null,
-        })),
+              : null;
+          return {
+            target,
+            attachment,
+            catalogId:
+              attachment?.kind === "catalog" ? attachment.catalogId : null,
+          };
+        }),
         credentials,
       });
       const attachments: BatteryAttachment[] = organizationWide
@@ -1278,10 +1283,7 @@ class OpenAppaBatteriesService {
       organizationId,
       content: latest.content,
     });
-    // A detected server's target is its own id, never a catalog's prefix, so a
-    // rename of a catalog leaves it alone even when the strings coincide.
-    const renamed = (target: string) =>
-      renames.has(target) && !isDetectedServerId(target);
+    const renamed = (target: string) => renames.has(target);
     const stale = resolution.aliases.filter((alias) =>
       alias.servers.some(renamed),
     );

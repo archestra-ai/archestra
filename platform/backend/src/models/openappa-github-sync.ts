@@ -259,6 +259,9 @@ class OpenAppaGithubSyncModel {
     });
   }
 
+  // The interval paces policy downloads. A pending setup pull request is
+  // checked every minute instead: an operator is waiting on that merge, and
+  // the check reads one pull request rather than the policy.
   static async findDue() {
     return db
       .select()
@@ -266,7 +269,7 @@ class OpenAppaGithubSyncModel {
       .where(
         and(
           isNotNull(table.interval),
-          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE ${table.interval} WHEN '15m' THEN INTERVAL '15 minutes' WHEN '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
+          sql`(${table.lastSyncedAt} IS NULL OR ${table.lastSyncedAt} <= NOW() - CASE WHEN ${table.setupPullRequestNumber} IS NOT NULL THEN INTERVAL '1 minute' WHEN ${table.interval} = '15m' THEN INTERVAL '15 minutes' WHEN ${table.interval} = '1h' THEN INTERVAL '1 hour' ELSE INTERVAL '1 day' END)`,
         ),
       );
   }

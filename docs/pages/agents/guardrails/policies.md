@@ -64,7 +64,7 @@ With GitHub sync, the policy lives in a repository. The agent opens a pull reque
 1. On **Overview**, click **Create repository** on the **GitHub sync** card.
 2. Choose a GitHub App, and enter the owner and repository name.
 3. Archestra creates a private repository from the [configuration template](https://github.com/archestra-ai/openappa-config) and commits your current policy. If repository rules block the commit, it opens a pull request instead.
-4. If a pull request is needed, click **Review and merge PR**, wait for the repository checks to pass, and merge it. Sync checks for the merge automatically; your current policy stays active until then.
+4. If a pull request is needed, click **Review and merge PR**, wait for the repository checks to pass, and merge it. The dialog stays open and checks for the merge every minute; click **Check if merged** to check right away. Your current policy stays active until then.
 
 To use a repository you already have, click **Connect existing repository** in the same dialog, or ask the setup chat. The policy file in that repository replaces the current policy.
 

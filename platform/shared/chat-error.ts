@@ -376,6 +376,18 @@ export enum ChatErrorCode {
    */
   ToolCallOutputTruncated = "tool_call_output_truncated",
   /**
+   * The model stream went silent mid-turn (no parsed chunk within the idle
+   * deadline — SSE comments and keep-alives do not count), so the turn was
+   * ended. Retryable: a stalled upstream is a transient condition.
+   */
+  UpstreamStalled = "upstream_stalled",
+  /**
+   * Non-fatal notice: the turn produced a reply, but the model finished for a
+   * reason other than a clean stop (e.g. output limit reached), so the reply
+   * may be cut short. Rendered alongside the reply, not instead of it.
+   */
+  IncompleteResponse = "incomplete_response",
+  /**
    * The provider needs a per-user credential the acting user hasn't linked yet
    * (e.g. GitHub Copilot). Carries an `authAction` so the UI can prompt the user
    * to link their account rather than showing a generic key error.
@@ -440,6 +452,10 @@ export const ChatErrorMessages: Record<ChatErrorCode, string> = {
     "The model started a tool call but didn't finish it, so the turn ended without a reply. Retrying may help.",
   [ChatErrorCode.ToolCallOutputTruncated]:
     "The model ran out of output space while writing a tool call, so it couldn't finish — the tool input was too large for one turn. Break the change into smaller steps and try again.",
+  [ChatErrorCode.UpstreamStalled]:
+    "The model stopped sending its reply and timed out. Retrying may help.",
+  [ChatErrorCode.IncompleteResponse]:
+    "The model stopped before finishing this reply, so it may be incomplete.",
   [ChatErrorCode.ProviderAuthRequired]:
     "Connect your account to use this model.",
   [ChatErrorCode.ToolsUnsupported]:
@@ -457,6 +473,7 @@ export const RetryableErrorCodes: Set<ChatErrorCode> = new Set([
   ChatErrorCode.NetworkError,
   ChatErrorCode.EmptyResponse,
   ChatErrorCode.IncompleteToolCall,
+  ChatErrorCode.UpstreamStalled,
 ]);
 
 /**

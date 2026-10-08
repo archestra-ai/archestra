@@ -73,9 +73,11 @@ import {
 import { UnstyledButton } from "@/components/ui/unstyled-button";
 import { useHasPermissions } from "@/lib/auth/auth.query";
 import { copyToClipboard } from "@/lib/clipboard";
+import { useConnectedSignal } from "@/lib/connect-signal";
 import { useConnectionPromptSession } from "@/lib/connection-setup.query";
 import { usePageTitle } from "@/lib/hooks/use-page-title";
 import { cn } from "@/lib/utils/tailwind";
+import { AfterConnect, type AfterConnectPhase } from "./after-connect";
 import { ClientIcon } from "./client-icon";
 import type { ConnectClient } from "./clients";
 import {
@@ -90,6 +92,7 @@ import {
   type ConnectPlugin,
   type ConnectServer,
   useConnectPageData,
+  welcomePrompt,
 } from "./connect-page-data";
 import {
   AgentSearch,
@@ -651,6 +654,38 @@ function ConnectArea({
     : null;
   // What the box shows and the button copies.
   const text = script ? command : prompt;
+  // Other agents read the generic prompt, with or without a manual option.
+  const generic = setup === "prompt-or-manual" || setup === "generic-prompt";
+  const leftOutParts = (
+    Object.keys(choices) as (keyof ConnectChoices)[]
+  ).filter((part) => !choices[part]);
+
+  // After copying: the status card under the band. A changed pick or choice
+  // sends it back to idle, except once connected.
+  const setupKey = [
+    client.id,
+    script,
+    manual,
+    download,
+    ...leftOutParts,
+  ].join();
+  const [run, setRun] = useState<{
+    phase: AfterConnectPhase;
+    key: string;
+    client: ConnectClient;
+    script: boolean;
+  }>({ phase: "idle", key: setupKey, client, script });
+  const phase =
+    run.phase === "connected" || run.key === setupKey ? run.phase : "idle";
+  const setPhase = (next: AfterConnectPhase) =>
+    setRun({ phase: next, key: setupKey, client, script });
+  // Only a copied prompt or command starts it: Manual setup and Claude
+  // Desktop's download have nothing to copy.
+  const startWaiting = () => {
+    if (!manual && !download && text) setPhase("waiting");
+  };
+  useConnectedSignal(phase === "waiting", () => setPhase("connected"));
+
   const copy = async () => {
     if (!text) return;
     try {
@@ -669,18 +704,14 @@ function ConnectArea({
       await copyToClipboard(text);
       setCopied(true);
       window.setTimeout(() => setCopied(false), 1800);
+      startWaiting();
     } catch {
       toast.error("Could not copy. Select the prompt and copy it manually.");
     }
   };
-  // Other agents read the generic prompt, with or without a manual option.
-  const generic = setup === "prompt-or-manual" || setup === "generic-prompt";
-  const leftOutParts = (
-    Object.keys(choices) as (keyof ConnectChoices)[]
-  ).filter((part) => !choices[part]);
 
-  return (
-    <Band busy={data.revalidating}>
+  const band = (
+    <Band busy={data.revalidating} dim={phase === "connected"}>
       <div className="flex min-h-9 flex-wrap items-center justify-between gap-3">
         <StepHeading step={step} />
         <div className="flex min-w-0 flex-wrap items-center gap-2">
@@ -787,11 +818,14 @@ function ConnectArea({
               copied={copied}
               disabled={!origin || data.revalidating}
               onCopy={copy}
+              onSelectionCopy={startWaiting}
             />
           ) : (
             // The whole prompt shows, wrapped, so it can be read before copying.
             <div className="mt-2 flex min-h-16 items-center gap-3 rounded-2xl border bg-background py-2 pr-2 pl-5 shadow-sm">
               <code
+                // Copying the selected text counts like the button.
+                onCopy={startWaiting}
                 className={cn(
                   "min-w-0 flex-1 font-mono text-sm leading-relaxed [overflow-wrap:anywhere]",
                   !text && "font-sans text-muted-foreground",
@@ -842,6 +876,21 @@ function ConnectArea({
       )}
     </Band>
   );
+
+  return (
+    <>
+      {band}
+      <AfterConnect
+        phase={phase}
+        client={phase === "connected" ? run.client : client}
+        script={phase === "connected" ? run.script : script}
+        welcome={welcomePrompt(origin, data.appName)}
+        // n8n has no prompt to follow up on; neither does "everything left out".
+        showLink={setup !== "manual" && prompt !== null}
+        onPhase={setPhase}
+      />
+    </>
+  );
 }
 
 /**
@@ -853,11 +902,14 @@ function ScriptBlock({
   copied,
   disabled,
   onCopy,
+  onSelectionCopy,
 }: {
   command: string;
   copied: boolean;
   disabled: boolean;
   onCopy: () => void;
+  /** The command text was selected and copied by hand. */
+  onSelectionCopy: () => void;
 }) {
   return (
     <div className="relative mt-2 rounded-2xl border bg-background shadow-sm">
@@ -871,7 +923,10 @@ function ScriptBlock({
         {copied ? <Check /> : <Copy />}
         {copied ? "Copied" : "Copy"}
       </Button>
-      <pre className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-sm leading-relaxed">
+      <pre
+        onCopy={onSelectionCopy}
+        className="overflow-x-auto py-4 pr-24 pl-5 font-mono text-sm leading-relaxed"
+      >
         <span className="text-muted-foreground select-none">$ </span>
         {command}
       </pre>
@@ -936,10 +991,13 @@ function currentStep(
 
 function Band({
   busy,
+  dim,
   children,
 }: {
   /** Settings are being re-read: hold actions until they land. */
   busy?: boolean;
+  /** Connected: the next step is in the card below. */
+  dim?: boolean;
   children: ReactNode;
 }) {
   // Same accent as the heading's marker.
@@ -948,7 +1006,10 @@ function Band({
       aria-label="Connect"
       aria-busy={busy}
       inert={busy}
-      className="relative rounded-3xl border border-primary/40 bg-card p-5 shadow-sm ring-1 ring-primary/15 transition-colors duration-300"
+      className={cn(
+        "relative rounded-3xl border border-primary/40 bg-card p-5 shadow-sm ring-1 ring-primary/15 transition-[color,background-color,border-color,opacity] duration-300",
+        dim && "opacity-50",
+      )}
     >
       {children}
     </section>

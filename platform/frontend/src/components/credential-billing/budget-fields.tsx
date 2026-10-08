@@ -51,10 +51,13 @@ export function summarizeBudget({
   /** Who pays when no team does. */
   payer?: string;
 }): string {
-  const cap = spendCap
-    ? `${formatWholeDollars(spendCap.limitValue)}${PERIOD_SUFFIXES[spendCap.cleanupInterval]}`
-    : "no cap";
+  const cap = spendCap ? formatSpendCap(spendCap) : "no cap";
   return `${billingTeamName ?? payer} · ${cap}`;
+}
+
+/** "$500/month" for a credential's spend cap. */
+export function formatSpendCap(spendCap: NonNullable<SpendCapValue>): string {
+  return `${formatWholeDollars(spendCap.limitValue)}${PERIOD_SUFFIXES[spendCap.cleanupInterval]}`;
 }
 
 /**

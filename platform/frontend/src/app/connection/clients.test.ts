@@ -5,6 +5,10 @@ import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
 } from "@archestra/shared";
+import {
+  INSTALLER_CLIENT_IDS,
+  OAUTH_AGENTS,
+} from "@archestra/shared/connection-setup";
 import { describe, expect, it } from "vitest";
 import {
   type ClientStep,
@@ -339,6 +343,23 @@ describe("OpenCode connection client", () => {
 
       expect(prose).toContain("Acme AI");
       expect(prose).not.toContain("Archestra");
+    }
+  });
+});
+
+describe("Connect page apps and the shared agent list", () => {
+  // Agents are added once, in the shared list; this catches an app the page
+  // would have no logo or steps for.
+  it("has an app for every agent the installer sets up or the gateway recognises", () => {
+    const apps = new Set(CONNECT_CLIENTS.map((c) => c.id));
+    for (const id of [...INSTALLER_CLIENT_IDS, ...Object.keys(OAUTH_AGENTS)]) {
+      expect(apps.has(id), `${id} has no Connect page app`).toBe(true);
+    }
+  });
+
+  it("names each recognised agent as its Connect page app does", () => {
+    for (const [id, agent] of Object.entries(OAUTH_AGENTS)) {
+      expect(CONNECT_CLIENTS.find((c) => c.id === id)?.label).toBe(agent.label);
     }
   });
 });

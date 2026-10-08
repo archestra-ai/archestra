@@ -1,14 +1,15 @@
 "use client";
 
-// The user's own connected agents: which one they connected last, and the
-// Manage dialog to disconnect any of them.
+// The user's own connected agents: which one they connected last, the
+// Manage dialog to disconnect any of them, and how disconnecting works
+// before anything is connected.
 
 import {
   INSTALLER_CLIENT_FOOTPRINT,
-  isOAuthRecognisedClient,
+  revokeSignsOut,
   startupGuardStem,
 } from "@archestra/shared/connection-setup";
-import { HardDrive, History, Unplug } from "lucide-react";
+import { ChevronDown, History, Unplug } from "lucide-react";
 import { type ReactNode, useEffect, useState } from "react";
 import { CopyButton } from "@/components/copy-button";
 import { Button } from "@/components/ui/button";
@@ -22,10 +23,18 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Tooltip,
   TooltipContent,
   TooltipTrigger,
 } from "@/components/ui/tooltip";
+import { UnstyledButton } from "@/components/ui/unstyled-button";
 import {
   type ConnectedClient,
   useConnectedClients,
@@ -40,7 +49,7 @@ import {
   usesGenericInstructions,
 } from "./clients";
 import type { ConnectPageData } from "./connect-page-data";
-import { fmt, nameOf, plural } from "./connect-page-parts";
+import { agentsInPickerOrder, fmt, nameOf, plural } from "./connect-page-parts";
 import { setupModeFor } from "./manual-setup";
 import { detectPlatform } from "./platform.utils";
 
@@ -64,15 +73,41 @@ export function useConnectedAgents(): {
   lastConnected: ConnectedAgent | null;
 } {
   const { data } = useConnectedClients();
-  const agents = (data ?? []).flatMap((record) => {
-    const client = CONNECT_CLIENTS.find((c) => c.id === record.clientId);
-    return client ? [{ ...record, client }] : [];
-  });
+  const agents = (data ?? []).map((record) => ({
+    ...record,
+    client: connectClientOf(record),
+  }));
   return {
     agents,
     lastConnected: agents.find((a) => a.lastSeenAt !== null) ?? null,
   };
 }
+
+/**
+ * The Connect page app a connected agent is. One no app lists, known only
+ * from its gateway sign-in, shows under the name it registered, with the
+ * generic client's instructions and an initial for its logo.
+ */
+function connectClientOf(record: ConnectedClient): ConnectClient {
+  const listed = CONNECT_CLIENTS.find((c) => c.id === record.clientId);
+  if (listed) return listed;
+  return {
+    ...GENERIC_CLIENT,
+    id: record.clientId,
+    label: record.name,
+    sub: "Signed in to the gateway",
+    iconOverride: {
+      ...GENERIC_CLIENT.iconOverride,
+      glyph: record.name.trim().charAt(0).toUpperCase() || "?",
+    },
+  };
+}
+
+const GENERIC_CLIENT = (() => {
+  const generic = CONNECT_CLIENTS.find((c) => c.id === "generic");
+  if (!generic?.iconOverride) throw new Error("Generic client is missing");
+  return { ...generic, iconOverride: generic.iconOverride };
+})();
 
 /** The small mark on the last connected agent, with when it was. */
 export function LastConnectedMark({
@@ -110,9 +145,12 @@ export function LastConnectedMark({
 export function ManageAgents({
   data,
   agents,
+  onHowItWorks,
 }: {
   data: ConnectPageData;
   agents: ConnectedAgent[];
+  /** Opens How to disconnect, for an agent not connected yet. */
+  onHowItWorks?: () => void;
 }) {
   const [open, setOpen] = useState(false);
   const [disconnecting, setDisconnecting] = useState<ConnectedAgent | null>(
@@ -125,24 +163,26 @@ export function ManageAgents({
   if (agents.length === 0) return null;
   return (
     <>
-      <Button
-        variant="ghost"
-        size="xs"
-        className="text-muted-foreground"
+      <UnstyledButton
+        type="button"
         onClick={() => setOpen(true)}
+        className={LINK}
       >
-        {`${agents.length} connected · Manage`}
-      </Button>
+        Manage
+      </UnstyledButton>
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="max-w-lg">
           <DialogHeader className="px-4">
-            <DialogTitle>Connected agents</DialogTitle>
-            <DialogDescription>
-              Agents you connected from this page or signed in to the gateway.
-              Disconnecting one leaves the others as they are.
+            <DialogTitle>Manage connected agents</DialogTitle>
+            <DialogDescription className="sr-only">
+              Your connected agents, with a way to disconnect each.
             </DialogDescription>
           </DialogHeader>
           <DialogBody>
+            <p className="mb-3 text-sm text-muted-foreground">
+              Agents you connected from this page or signed in to the gateway.
+              Disconnecting one leaves the others as they are.
+            </p>
             <ul className="max-h-[60vh] divide-y overflow-y-auto rounded-lg border">
               {agents.map((agent) => (
                 <li
@@ -179,6 +219,21 @@ export function ManageAgents({
                 </li>
               ))}
             </ul>
+            {onHowItWorks && (
+              <p className="mt-3 text-xs text-muted-foreground">
+                Disconnecting an agent you haven't connected yet?{" "}
+                <UnstyledButton
+                  type="button"
+                  className={LINK}
+                  onClick={() => {
+                    setOpen(false);
+                    onHowItWorks();
+                  }}
+                >
+                  How it works
+                </UnstyledButton>
+              </p>
+            )}
           </DialogBody>
         </DialogContent>
       </Dialog>
@@ -287,11 +342,141 @@ function DisconnectDialog({
   );
 }
 
+// === Before connecting: how a connection comes off again ===
+
+const LINK =
+  "rounded-sm underline decoration-muted-foreground/40 underline-offset-4 hover:text-foreground hover:decoration-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none";
+
+/**
+ * Beside the picker: that a connection comes off again, then one link. With
+ * nothing connected it opens How to disconnect; once something is, Manage
+ * opens the connected agents, which link to How to disconnect themselves.
+ */
+export function DisconnectLine({
+  data,
+  picked,
+  agents,
+}: {
+  data: ConnectPageData;
+  /** The agent picked on the page; How to disconnect opens on it. */
+  picked: ConnectClient;
+  agents: ConnectedAgent[];
+}) {
+  const [howTo, setHowTo] = useState(false);
+  return (
+    <span className="text-xs text-muted-foreground">
+      You can disconnect at any time ·{" "}
+      {agents.length === 0 ? (
+        <UnstyledButton
+          type="button"
+          className={LINK}
+          onClick={() => setHowTo(true)}
+        >
+          How it works
+        </UnstyledButton>
+      ) : (
+        <>
+          {fmt(agents.length)} connected ·{" "}
+          <ManageAgents
+            data={data}
+            agents={agents}
+            onHowItWorks={() => setHowTo(true)}
+          />
+        </>
+      )}
+      <HowToDisconnect
+        data={data}
+        picked={picked}
+        open={howTo}
+        onOpenChange={setHowTo}
+      />
+    </span>
+  );
+}
+
+/**
+ * How disconnecting works, for any agent. It opens on the agent picked on the
+ * page and lists the same agents as the picker; its own selector switches it,
+ * so what it shows never changes behind the user's back.
+ */
+function HowToDisconnect({
+  data,
+  picked,
+  open,
+  onOpenChange,
+}: {
+  data: ConnectPageData;
+  picked: ConnectClient;
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+}) {
+  const [selectedId, setSelectedId] = useState(picked.id);
+  // Each opening starts again from the page's pick.
+  useEffect(() => {
+    if (open) setSelectedId(picked.id);
+  }, [open, picked.id]);
+  const options = agentsInPickerOrder(data);
+  const client = options.find((c) => c.id === selectedId) ?? picked;
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-w-2xl">
+        <DialogHeader className="px-4">
+          <DialogTitle>Disconnecting an agent</DialogTitle>
+          <DialogDescription className="sr-only">
+            How to remove an agent's connection to {data.appName}.
+          </DialogDescription>
+        </DialogHeader>
+        <div className="flex items-center gap-2.5 px-4 pt-4 text-sm">
+          <span className="text-muted-foreground">Show steps for</span>
+          <Select value={client.id} onValueChange={setSelectedId}>
+            {/* Wide enough for the longest agent name, and the list opens
+                below it rather than over the text. */}
+            <SelectTrigger
+              size="sm"
+              aria-label="Show steps for"
+              className="min-w-56"
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent position="popper" align="start" className="max-h-80">
+              {options.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  <span className="flex items-center gap-2 whitespace-nowrap">
+                    <ClientIcon client={c} size={16} />
+                    {c.label}
+                  </span>
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+        <DisconnectSteps
+          // The details fold resets per agent.
+          key={client.id}
+          data={data}
+          client={client}
+          revoke={
+            <p className="text-muted-foreground">
+              Once it's connected, open Manage on this page, press Disconnect,
+              then Revoke access.
+            </p>
+          }
+        />
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)}>
+            Close
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
 /** What Revoke access does. */
 function RevokeEffect({ client }: { client: ConnectClient }) {
-  // Only agents the gateway can tell apart by their OAuth client lose their
-  // sign-in; the rest keep it until it expires.
-  return isOAuthRecognisedClient(client.id) ? (
+  // Agents signed in to the gateway lose their sign-in; a setup-only agent
+  // keeps any it has until it expires.
+  return revokeSignsOut(client.id) ? (
     <span>
       Revoke access removes {nameOf(client)} from this list, signs it out of the
       gateway, and revokes the skill links it created. The cleanup prompt
@@ -314,8 +499,8 @@ function DisconnectSteps({
 }: {
   data: ConnectPageData;
   client: ConnectClient;
-  /** Step 2's body: the button that revokes access. */
-  revoke: ReactNode;
+  /** Step 2's body: how, or the button, to revoke access. */
+  revoke: ReactNode | null;
 }) {
   const manualOnly = setupModeFor(client) === "manual";
   const skills = data.footprintFor(client).skillsInstalled;
@@ -335,21 +520,6 @@ function DisconnectSteps({
   ];
   const cleanup = (
     <div className="space-y-3">
-      <div className="flex items-start gap-2.5 rounded-lg border px-3 py-2 text-xs [&_svg]:mt-0.5 [&_svg]:size-3.5 [&_svg]:shrink-0 [&_svg]:text-muted-foreground">
-        <HardDrive />
-        <div className="min-w-0">
-          <div className="font-medium text-foreground">
-            On your machine, in {nameOf(client)}
-          </div>
-          <ul className="mt-0.5 space-y-0.5 text-muted-foreground">
-            {local.map((l) => (
-              <li key={l} className="truncate">
-                {l}
-              </li>
-            ))}
-          </ul>
-        </div>
-      </div>
       <div className="space-y-2">
         <p className="text-muted-foreground">
           {manualOnly
@@ -379,10 +549,56 @@ function DisconnectSteps({
   );
   const steps = [
     { title: "Clean up this computer", body: cleanup },
-    { title: "Revoke access", body: revoke },
+    ...(revoke ? [{ title: "Revoke access", body: revoke }] : []),
   ];
+  // First what disconnecting does, then how.
+  // The list of what's removed stays folded until asked for.
+  const [details, setDetails] = useState(false);
+  const preamble = (
+    <div className="mb-5 space-y-2.5">
+      <p className="text-muted-foreground">
+        Disconnecting removes what the setup added to {nameOf(client)} on this
+        computer
+        {revoke ? `, then revokes its access to ${data.appName}` : ""}.
+      </p>
+      {/* The toggle and the list it opens are one block. */}
+      <div className="rounded-lg border bg-muted/30 text-xs">
+        <UnstyledButton
+          type="button"
+          aria-expanded={details}
+          onClick={() => setDetails(!details)}
+          className="flex w-full items-center justify-between gap-2 rounded-lg px-3 py-2 text-muted-foreground hover:text-foreground focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          {details ? "Hide details" : "Show details"}
+          <ChevronDown
+            className={cn(
+              "size-3.5 transition-transform",
+              details && "rotate-180",
+            )}
+          />
+        </UnstyledButton>
+        {details && (
+          <ul className="list-disc space-y-0.5 border-t px-3 py-2 pl-7 text-muted-foreground">
+            {local.map((l) => (
+              <li key={l}>{l}</li>
+            ))}
+          </ul>
+        )}
+      </div>
+    </div>
+  );
+  // One step needs no numbers.
+  if (steps.length === 1)
+    return (
+      <DialogBody className="text-sm">
+        {preamble}
+        <h3 className="font-medium">{steps[0].title}</h3>
+        <div className="mt-2 min-w-0">{steps[0].body}</div>
+      </DialogBody>
+    );
   return (
     <DialogBody className="text-sm">
+      {preamble}
       <ol className="flex flex-col">
         {steps.map((step, i) => (
           <li
@@ -419,11 +635,16 @@ function disconnectPrompt(
   client: ConnectClient,
   origin: string,
 ) {
-  const params = new URLSearchParams({
-    client: usesGenericInstructions(client) ? "generic" : client.id,
-  });
+  // Generic client: the prompt for whichever agent reads it.
+  const any = client.id === "generic";
+  const params = new URLSearchParams(
+    any
+      ? {}
+      : { client: usesGenericInstructions(client) ? "generic" : client.id },
+  );
   if (data.baseUrl !== `${origin}/v1`) params.set("base", data.baseUrl);
-  return `Read ${origin}/disconnect.md?${decodeURIComponent(params.toString())} and disconnect ${client.label} from ${data.appName}.`;
+  const query = params.size ? `?${decodeURIComponent(params.toString())}` : "";
+  return `Read ${origin}/disconnect.md${query} and disconnect ${any ? "this agent" : client.label} from ${data.appName}.`;
 }
 
 /** The text gets the width; the copy is one icon. */

@@ -332,6 +332,16 @@ describe("Connect agent instructions", () => {
     );
   });
 
+  it("never mentions the LLM proxy when it is left out", async () => {
+    const instructions = await GET(
+      new Request(
+        "http://localhost:3000/connect.md?client=generic&gateway=team&exclude=proxy",
+      ),
+    ).text();
+
+    expect(instructions).not.toMatch(/proxy/i);
+  });
+
   it("ignores a base that is not an http(s) URL", async () => {
     const response = GET(
       new Request(

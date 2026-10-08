@@ -309,8 +309,11 @@ ${parts.join("\n\n")}
 
 ## 3. Verify and report
 
-Reload or restart the app if it needs to. Confirm the gateway lists tools, and if the
-proxy was set up, send a short test prompt and confirm it still answers.
+Reload or restart the app if it needs to. Confirm the gateway lists tools.${
+        exclude.has("proxy")
+          ? ""
+          : " If the\nproxy was set up, send a short test prompt and confirm it still answers."
+      }
 Report what was set up, what was skipped and why, the config files you changed with
 their backups, and how to disconnect: read
 ${origin}/disconnect.md?${decodeURIComponent(disconnectParams.toString())} and follow it.

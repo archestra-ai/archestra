@@ -40,7 +40,10 @@ vi.mock("@/lib/agent.query");
 vi.mock("@/lib/auth/auth.query");
 vi.mock("@/lib/config/config.query");
 vi.mock("@/lib/guardrails-deployment.query");
-vi.mock("@/lib/plugins/plugin.query");
+vi.mock("@/lib/plugins/plugin.query", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/plugins/plugin.query")>()),
+  usePlugins: vi.fn(),
+}));
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/lib/llm-proxy.query");
 vi.mock("@/lib/mcp/internal-mcp-catalog.query");
@@ -153,11 +156,12 @@ beforeEach(() => {
 });
 
 describe("ConnectPage guardrails chip", () => {
-  function setup(
+  function renderPage(
     clientId: string,
     deployment: {
       active: boolean;
       unsupportedClientAction: "bypass" | "block";
+      featureEnabled?: boolean;
     },
   ) {
     window.localStorage.clear();
@@ -171,7 +175,11 @@ describe("ConnectPage guardrails chip", () => {
       data: { id: "proxy-1" },
     } as unknown as ReturnType<typeof useLlmProxy>);
     vi.mocked(useGuardrailsDeployment).mockReturnValue({
-      data: { ...deployment, enabled: deployment.active, featureEnabled: true },
+      data: {
+        featureEnabled: true,
+        ...deployment,
+        enabled: deployment.active,
+      },
     } as ReturnType<typeof useGuardrailsDeployment>);
     mockOrganization({
       data: {
@@ -180,16 +188,26 @@ describe("ConnectPage guardrails chip", () => {
       },
     });
     render(<ConnectionPage />);
+  }
+
+  function setup(
+    clientId: string,
+    deployment: {
+      active: boolean;
+      unsupportedClientAction: "bypass" | "block";
+    },
+  ) {
+    renderPage(clientId, deployment);
     // The chip is status only; its info button sits inside it.
     const chip = screen
       .getByRole("button", { name: "What the guardrails do" })
-      .closest(".rounded-xl");
+      .closest("[data-status-chip]");
     expect(chip).toHaveTextContent("Guardrails");
     expect(chip).not.toHaveTextContent("OpenAPPA");
     return chip as HTMLElement;
   }
 
-  it("says the guardrails are not enforced when enforcement is off", () => {
+  it("says guardrails are not enforced when enforcement is off", () => {
     expect(
       setup("claude-code", { active: false, unsupportedClientAction: "block" }),
     ).toHaveTextContent("Not enforced");
@@ -201,10 +219,21 @@ describe("ConnectPage guardrails chip", () => {
     ).toHaveTextContent("Enforced");
   });
 
-  it("says an unrecognized agent is allowed", () => {
+  it("says guardrails are not enforced for an allowed unrecognized agent", () => {
     expect(
       setup("cursor", { active: true, unsupportedClientAction: "bypass" }),
-    ).toHaveTextContent("Allowed");
+    ).toHaveTextContent("Not enforced");
+  });
+
+  it("hides the chip while the guardrails beta is off", () => {
+    renderPage("claude-code", {
+      active: false,
+      unsupportedClientAction: "block",
+      featureEnabled: false,
+    });
+    expect(
+      screen.queryByRole("button", { name: "What the guardrails do" }),
+    ).toBeNull();
   });
 
   it("says an unrecognized agent is blocked", () => {
@@ -236,7 +265,7 @@ describe("ConnectPage (no connect request)", () => {
     );
     mockOrganization({});
     render(<ConnectionPage />);
-    const link = screen.queryByRole("link", { name: "Connection settings" });
+    const link = screen.queryByRole("link", { name: "Settings" });
     if (allowed) {
       expect(link).toHaveAttribute("href", "/settings/connection");
     } else {
@@ -289,15 +318,15 @@ describe("ConnectPage (no connect request)", () => {
     });
     mockOrganization({ data: { connectionShownClientIds: ["cursor"] } });
     render(<ConnectionPage />);
-    // Tools and plugins are always included, whatever was saved.
+    // Tools are always included, whatever was saved.
     expect(
       screen.getByText(
-        /connect\.md\?client=cursor&exclude=skills and connect Cursor\./,
+        /connect\.md\?client=cursor&exclude=skills,plugins and connect Cursor\./,
       ),
     ).toBeVisible();
   });
 
-  it("shows the LLM proxy as on for supported agents, not active when the admin turned it off", () => {
+  it("switches the LLM proxy on for supported agents, not active when the admin turned it off", () => {
     window.localStorage.clear();
     vi.mocked(useHasPermissions).mockReturnValue({
       data: true,
@@ -312,7 +341,7 @@ describe("ConnectPage (no connect request)", () => {
       },
     });
     const { unmount } = render(<ConnectionPage />);
-    expect(screen.getByText("On")).toBeVisible();
+    expect(screen.getByRole("switch", { name: "LLM proxy" })).toBeChecked();
     unmount();
 
     vi.mocked(useSearchParams).mockReturnValue(
@@ -321,7 +350,7 @@ describe("ConnectPage (no connect request)", () => {
       >,
     );
     const other = render(<ConnectionPage />);
-    expect(screen.getByText("On")).toBeVisible();
+    expect(screen.getByRole("switch", { name: "LLM proxy" })).toBeChecked();
     other.unmount();
 
     mockOrganization({
@@ -355,11 +384,9 @@ describe("ConnectPage (no connect request)", () => {
         >,
       );
       const { unmount } = render(<ConnectionPage />);
-      await userEvent.click(
-        screen.getByRole("button", { name: /Choose what to include/ }),
-      );
-      await userEvent.click(screen.getByRole("switch", { name: /LLM proxy/ }));
-      expect(screen.getByText("Off")).toBeVisible();
+      const proxy = screen.getByRole("switch", { name: /LLM proxy/ });
+      await userEvent.click(proxy);
+      expect(proxy).not.toBeChecked();
       // Other agents' prompt is covered by the generic prompt tests.
       if (id === "claude-code")
         expect(
@@ -506,7 +533,7 @@ describe("ConnectionPage (connect request approval)", () => {
       }),
     ).toBeVisible();
     expect(
-      screen.queryByRole("link", { name: "Connection settings" }),
+      screen.queryByRole("link", { name: "Settings" }),
     ).not.toBeInTheDocument();
   });
 
@@ -636,5 +663,139 @@ describe("ConnectionPage (connect request approval)", () => {
     expect(connectionFlowMock).toHaveBeenLastCalledWith(
       expect.objectContaining({ pluginsEnabled: false }),
     );
+  });
+});
+
+describe("ConnectPage guardrails for members", () => {
+  it("reads the guardrails status without organization settings access", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    mockOrganization({ data: { connectionShownClientIds: ["claude-code"] } });
+    render(<ConnectionPage />);
+    expect(useGuardrailsDeployment).toHaveBeenCalledWith({ anyMember: true });
+  });
+});
+
+describe("ConnectPage plugins", () => {
+  const plugin = (
+    id: string,
+    clientType: string,
+    supportedPlatforms: string[],
+  ) => ({
+    id,
+    displayName: `Plugin ${id}`,
+    description: null,
+    clientType,
+    supportedPlatforms,
+    enabled: true,
+    contentHash: "h",
+    approvedContentHash: "h",
+  });
+
+  function setup(clientId: string) {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useConfig).mockReturnValue({
+      data: { features: { plugins: true } },
+    } as unknown as ReturnType<typeof useConfig>);
+    vi.mocked(usePlugins).mockReturnValue({
+      data: [
+        plugin("a", "claude-code", ["posix", "windows"]),
+        plugin("b", "claude-code", ["windows"]),
+        plugin("c", "codex", ["posix"]),
+      ],
+    } as unknown as ReturnType<typeof usePlugins>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: [clientId],
+        connectionPluginsEnabled: true,
+      },
+    });
+    render(<ConnectionPage />);
+  }
+
+  it("lists the agent's plugins for this computer's OS", () => {
+    setup("claude-code");
+    expect(screen.getByText("+1 plugin")).toBeVisible();
+    expect(screen.getByText("Plugin a")).toBeVisible();
+    expect(screen.queryByText("Plugin b")).toBeNull();
+  });
+
+  it("leaves plugins out of the prompt when switched off", async () => {
+    setup("claude-code");
+    await userEvent.click(screen.getByRole("switch", { name: /Plugins/ }));
+    expect(screen.getByText("Plugins off")).toBeVisible();
+    expect(
+      screen.getByText(
+        /connect\.md\?client=claude-code&exclude=plugins and connect Claude Code\./,
+      ),
+    ).toBeVisible();
+  });
+
+  it("shows no plugins for an agent without any", () => {
+    setup("cursor");
+    expect(screen.queryByText(/plugin/i)).toBeNull();
+  });
+});
+
+describe("ConnectPage Amp", () => {
+  it("offers Amp with the LLM proxy not supported", () => {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("clientId=amp") as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    vi.mocked(useLlmProxy).mockReturnValue({
+      data: { id: "proxy-1" },
+    } as unknown as ReturnType<typeof useLlmProxy>);
+    vi.mocked(useGuardrailsDeployment).mockReturnValue({
+      data: {
+        active: true,
+        enabled: true,
+        featureEnabled: true,
+        unsupportedClientAction: "block",
+      },
+    } as ReturnType<typeof useGuardrailsDeployment>);
+    mockOrganization({
+      data: {
+        connectionShownClientIds: ["amp"],
+        connectionLlmProxyEnabled: true,
+      },
+    });
+    render(<ConnectionPage />);
+    const chip = screen
+      .getByRole("button", { name: "What the LLM proxy does" })
+      .closest("[data-status-chip]");
+    expect(chip).toHaveTextContent("Not supported");
+    // The proxy never sees Amp, so the block setting can't apply to it.
+    const guard = screen
+      .getByRole("button", { name: "What the guardrails do" })
+      .closest("[data-status-chip]");
+    expect(guard).toHaveTextContent("Not enforced");
+  });
+});
+
+describe("ConnectPage loading", () => {
+  it("waits for the default gateway instead of rendering twice", () => {
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: undefined,
+      isLoading: true,
+    } as ReturnType<typeof useDefaultMcpGateway>);
+    mockOrganization({ data: { connectionShownClientIds: ["claude-code"] } });
+    render(<ConnectionPage />);
+    expect(
+      screen.queryByRole("heading", { name: /Connect your agent/ }),
+    ).toBeNull();
   });
 });

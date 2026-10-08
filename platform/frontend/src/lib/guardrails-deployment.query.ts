@@ -5,12 +5,21 @@ import { useHasPermissions } from "@/lib/auth/auth.query";
 import { handleApiError, throwOnApiError, toApiError } from "@/lib/utils/api";
 
 const queryKey = ["guardrails-deployment"];
-export function useGuardrailsDeployment() {
+/**
+ * `anyMember`: read it without organization settings access. Every member can
+ * read the status (the Connect page shows it); other callers keep it to the
+ * admins they show it to.
+ */
+export function useGuardrailsDeployment({
+  anyMember = false,
+}: {
+  anyMember?: boolean;
+} = {}) {
   const { data: canRead } = useHasPermissions({
     organizationSettings: ["read"],
   });
   return useQuery({
-    enabled: canRead === true,
+    enabled: anyMember || canRead === true,
     queryKey,
     queryFn: async () => {
       const { data, error } = await archestraApiSdk.getGuardrailsDeployment();

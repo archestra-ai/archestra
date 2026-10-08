@@ -1,5 +1,6 @@
 import {
   type ArchestraToolShortName,
+  isAgentTool,
   PROXY_STAMPED_TOOL_ARGUMENTS,
 } from "@archestra/shared";
 
@@ -9,13 +10,19 @@ import {
  * arguments exist.
  */
 export function withoutProxyTransportArguments<T>({
+  toolName,
   shortName,
   input,
 }: {
+  toolName: string;
   shortName: ArchestraToolShortName | null;
   input: T;
 }): T {
-  const hidden = shortName ? PROXY_TRANSPORT_ARGUMENTS[shortName] : undefined;
+  const hidden = isAgentTool(toolName)
+    ? AGENT_TOOL_STAMPED_ARGUMENTS
+    : shortName
+      ? PROXY_TRANSPORT_ARGUMENTS[shortName]
+      : undefined;
   if (
     !hidden ||
     typeof input !== "object" ||
@@ -35,3 +42,6 @@ export function withoutProxyTransportArguments<T>({
 const PROXY_TRANSPORT_ARGUMENTS: Partial<
   Record<ArchestraToolShortName, readonly string[]>
 > = PROXY_STAMPED_TOOL_ARGUMENTS;
+
+// OpenAPPA signs the delegation (`agent__*`) calls it releases.
+const AGENT_TOOL_STAMPED_ARGUMENTS: readonly string[] = ["runtime_proof"];

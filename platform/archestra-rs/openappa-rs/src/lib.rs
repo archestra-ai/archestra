@@ -9,6 +9,7 @@ mod deployments;
 #[allow(dead_code)]
 mod peer;
 mod policy;
+mod replay;
 
 use appa_eventlog::{
     Backend, LogStore, OperationClaim, OperationKey, OperationRequest, ProcessedResultClaim,
@@ -310,6 +311,45 @@ struct RecordedCall {
 
 fn error(message: impl ToString) -> napi::Error {
     napi::Error::from_reason(message.to_string())
+}
+
+/// The upstream pin and host replay boundary version stored with each run.
+#[napi(js_name = "getOpenappaReplayEngineVersion")]
+pub fn get_openappa_replay_engine_version() -> String {
+    replay::ENGINE_VERSION.to_string()
+}
+
+/// Parse scenario files into tools and assertion counts without loading a policy
+/// or evaluating any call.
+#[napi(js_name = "inspectOpenappaPolicyTests")]
+pub async fn inspect_openappa_policy_tests(input: String) -> napi::Result<String> {
+    AssertUnwindSafe(async move {
+        let response = replay::inspect(&input).map_err(error)?;
+        serde_json::to_string(&response).map_err(error)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| error("OpenAPPA scenario inspection failed unexpectedly"))?
+}
+
+/// Evaluate bounded `.appa` scenarios against the supplied effective policy. The
+/// replay core refuses live consults and keeps every trajectory in memory.
+#[napi(js_name = "replayOpenappaPolicy")]
+pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
+    static REPLAY_SLOT: Semaphore = Semaphore::const_new(1);
+    AssertUnwindSafe(async move {
+        let _permit = REPLAY_SLOT
+            .try_acquire()
+            .map_err(|_| error("An OpenAPPA replay is already running; retry later"))?;
+        let request = replay::Request::parse(&input).map_err(error)?;
+        let response = tokio::time::timeout(Duration::from_secs(15), replay::run(request))
+            .await
+            .map_err(|_| error("OpenAPPA replay exceeded its 15 second limit"))?;
+        serde_json::to_string(&response).map_err(error)
+    })
+    .catch_unwind()
+    .await
+    .map_err(|_| error("OpenAPPA replay failed unexpectedly"))?
 }
 fn required<'a>(value: &'a Option<String>, name: &str) -> napi::Result<&'a str> {
     value

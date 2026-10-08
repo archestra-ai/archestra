@@ -6,8 +6,10 @@ import {
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
 import { userHasPermission } from "@/auth";
 import config from "@/config";
+import logger from "@/logging";
 import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
 import {
   addedGrants,
@@ -18,6 +20,7 @@ import {
 import { GUARDRAILS_NOOP_ANNOTATOR_PATH } from "@/routes/route-paths";
 import { ApiError } from "@/types";
 import type { GuardrailsPolicy } from "@/types/guardrails-policy";
+import type { PolicyTestFile } from "@/types/openappa-policy-tests";
 
 /**
  * A document and the revision it would replace, resolved together with the
@@ -166,6 +169,7 @@ export const guardrailsPolicyService = {
     userId: string;
     content: string;
     expectedRevision: number;
+    validation?: { expectedVersion: string; files?: PolicyTestFile[] };
   }) {
     requireEnabled();
     const { organizationId, userId, content } = params;
@@ -207,6 +211,7 @@ export const guardrailsPolicyService = {
       content,
       contentHash: hash(content),
       expectedRevision: params.expectedRevision,
+      validation: params.validation,
     });
     if (!saved)
       throw new ApiError(
@@ -214,6 +219,19 @@ export const guardrailsPolicyService = {
         "This policy changed since you opened it. Reload the latest revision before saving.",
         GUARDRAILS_REVISION_CONFLICT,
       );
+    if (latest.revision === 0 || latest.contentHash !== saved.contentHash) {
+      try {
+        await OpenAppaPolicyTestsModel.enqueuePolicyValidation(
+          organizationId,
+          saved.contentHash,
+        );
+      } catch {
+        logger.warn(
+          { organizationId },
+          "Could not queue informational validation after a policy change",
+        );
+      }
+    }
     return saved;
   },
 };

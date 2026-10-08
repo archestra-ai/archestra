@@ -26,8 +26,9 @@ class OpenAppaGithubSyncModel {
     return row ?? null;
   }
   static async save(organizationId: string, source: AppaGithubSource) {
+    const { validationDirectory, ...policySource } = source;
     const values = {
-      ...source,
+      ...policySource,
       revision: randomUUID(),
       sourceCommit: null,
       lastSyncedAt: null,
@@ -37,6 +38,27 @@ class OpenAppaGithubSyncModel {
     };
     await db.transaction(async (tx) => {
       await lockGuardrailsPolicy(tx, organizationId);
+      const [suite] = await tx
+        .select()
+        .from(schema.openappaPolicyTestSuitesTable)
+        .where(
+          eq(
+            schema.openappaPolicyTestSuitesTable.organizationId,
+            organizationId,
+          ),
+        );
+      const directory = validationDirectory ?? suite?.directory ?? "traces";
+      await tx
+        .delete(schema.openappaPolicyTestSuitesTable)
+        .where(
+          eq(
+            schema.openappaPolicyTestSuitesTable.organizationId,
+            organizationId,
+          ),
+        );
+      await tx
+        .insert(schema.openappaPolicyTestSuitesTable)
+        .values({ organizationId, directory });
       await tx
         .insert(table)
         .values({ organizationId, ...values })

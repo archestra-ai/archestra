@@ -67,7 +67,11 @@ describe("APPA Guide feature availability", () => {
     expect(JSON.stringify(loaded)).toContain(
       "archestra__get_guardrails_policy",
     );
-    for (const path of ["references/contracts.md", "references/archestra.md"]) {
+    for (const path of [
+      "references/contracts.md",
+      "references/archestra.md",
+      "references/validation-writing.md",
+    ]) {
       const reference = await executeArchestraTool(
         "archestra__load_skill",
         { name: APPA_GUIDE_SKILL.name, path },

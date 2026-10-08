@@ -3,6 +3,7 @@ import { userHasPermission } from "@/auth";
 import config from "@/config";
 import logger from "@/logging";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
+import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   addedGrants,
@@ -22,9 +23,18 @@ import type {
 } from "@/types/openappa-github-sync";
 
 export async function getAppaGithubSync(organizationId: string) {
-  const row = await OpenAppaGithubSyncModel.find(organizationId);
+  const [row, suite] = await Promise.all([
+    OpenAppaGithubSyncModel.find(organizationId),
+    OpenAppaPolicyTestsModel.find(organizationId),
+  ]);
+  const validationDirectory = row?.repo ? (suite?.directory ?? "traces") : "";
   if (!row)
-    return { enabled: config.openappa.enabled, source: null, hasPolicy: false };
+    return {
+      enabled: config.openappa.enabled,
+      source: null,
+      hasPolicy: false,
+      validationDirectory,
+    };
   // Neither the accepted bytes nor the held ones leave the database: the panel
   // reads a held pull by its hash, its commit and its reasons.
   const { content, heldContent, ...source } = row;
@@ -32,6 +42,7 @@ export async function getAppaGithubSync(organizationId: string) {
     enabled: config.openappa.enabled,
     source,
     hasPolicy: content !== null,
+    validationDirectory,
   };
 }
 export async function configureAppaGithubSync(params: {
@@ -207,6 +218,7 @@ export async function createAppaGithubRepository(params: {
     interval: params.interval,
     githubPatId: null,
     githubAppConfigId: params.githubAppConfigId,
+    validationDirectory: "",
   });
   await syncAppaGithubPolicy(params.organizationId);
   return getAppaGithubSync(params.organizationId);
@@ -273,6 +285,8 @@ export async function acceptHeldAppaGithubPull(params: {
   });
   if (!published) throw new ApiError(409, "There is no held pull to accept");
   await openappaBatteriesService.recompileOrganizations([organizationId]);
+  if (local.revision === 0 || local.contentHash !== published.contentHash)
+    await queuePolicyValidation(organizationId, published.contentHash);
   return {
     accepted: {
       contentHash: published.contentHash,
@@ -382,6 +396,8 @@ export async function syncAppaGithubPolicy(organizationId: string) {
       return;
     }
     await openappaBatteriesService.recompileOrganizations([organizationId]);
+    if (local.revision === 0 || local.contentHash !== contentHash)
+      await queuePolicyValidation(organizationId, contentHash);
   } catch (error) {
     // Never persist raw transport/native diagnostics, which can contain credentials or policy bytes.
     await OpenAppaGithubSyncModel.finish({
@@ -394,6 +410,22 @@ export async function syncAppaGithubPolicy(organizationId: string) {
             : "Could not sync the APPA policy. Check the repository, file, and GitHub credential, then retry.",
       },
     });
+  }
+}
+async function queuePolicyValidation(
+  organizationId: string,
+  policyHash: string,
+) {
+  try {
+    await OpenAppaPolicyTestsModel.enqueuePolicyValidation(
+      organizationId,
+      policyHash,
+    );
+  } catch {
+    logger.warn(
+      { organizationId },
+      "Could not queue informational validation after a policy change",
+    );
   }
 }
 export async function checkDueAppaGithubSyncs() {
@@ -492,10 +524,33 @@ async function saveSource(params: {
     throw new ApiError(403, "You do not have access to GitHub credentials");
   }
   // Resolve now to reject a missing or cross-organization credential before saving it.
-  await resolveToken({
+  const token = await resolveToken({
     ...params.source,
     organizationId: params.organizationId,
   });
+  if (params.source.validationDirectory) {
+    const response = await githubFetch(
+      `https://api.github.com/repos/${params.source.repo}/commits/${encodeURIComponent(params.source.ref ?? "HEAD")}`,
+      {
+        Accept: "application/vnd.github+json",
+        ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      },
+    );
+    const bytes = await readResponseBodyWithLimit(response, 2 * 1024 * 1024);
+    if (!bytes) throw new ApiError(400, "GitHub commit response is too large");
+    const commit = JSON.parse(bytes.toString()) as { sha?: string };
+    if (!commit.sha || !/^[a-f0-9]{40}$/.test(commit.sha))
+      throw new ApiError(400, "GitHub returned an invalid commit");
+    await loadAppaGithubPolicyTests({
+      source: {
+        ...params.source,
+        organizationId: params.organizationId,
+        sourceCommit: commit.sha,
+      },
+      directory: params.source.validationDirectory,
+      allowEmpty: true,
+    });
+  }
   await OpenAppaGithubSyncModel.save(params.organizationId, params.source);
 }
 
@@ -631,3 +686,122 @@ async function recoverPristineTemplateRepository(params: {
 }
 
 const TEMPLATE_REPO = "archestra-ai/openappa-config";
+
+/** Read direct .appa files at the supplied pinned commit; no ref drift or writeback. */
+export async function loadAppaGithubPolicyTests(params: {
+  source: Pick<
+    NonNullable<Awaited<ReturnType<typeof OpenAppaGithubSyncModel.find>>>,
+    | "interval"
+    | "repo"
+    | "sourceCommit"
+    | "organizationId"
+    | "githubPatId"
+    | "githubAppConfigId"
+  >;
+  directory: string;
+  allowEmpty?: boolean;
+}): Promise<{ path: string; content: string }[]> {
+  const { source, directory } = params;
+  if (!source.interval || !source.repo)
+    throw new ApiError(
+      409,
+      "Connect a GitHub policy repository before loading tests",
+    );
+  if (!source.sourceCommit || !/^[a-f0-9]{40}$/.test(source.sourceCommit))
+    throw new ApiError(409, "GitHub policy sync has no accepted commit yet");
+  const token = await resolveToken(source).catch(() => {
+    throw new ApiError(400, "The configured GitHub credential is unavailable");
+  });
+  const signal = AbortSignal.timeout(20000);
+  const base = `https://api.github.com/repos/${source.repo}/contents/`;
+  const headers = {
+    Accept: "application/vnd.github+json",
+    ...(token ? { Authorization: `Bearer ${token}` } : {}),
+  };
+  const read = async (path: string, raw: boolean, limit: number) => {
+    const response = await fetch(
+      `${base}${path.split("/").map(encodeURIComponent).join("/")}?ref=${source.sourceCommit}`,
+      {
+        headers: {
+          ...headers,
+          ...(raw ? { Accept: "application/vnd.github.raw+json" } : {}),
+        },
+        redirect: "error",
+        signal,
+      },
+    );
+    if (response.status === 401 || response.status === 403)
+      throw new ApiError(
+        400,
+        "GitHub denied access to the policy tests; check the configured credential",
+      );
+    if (response.status === 404)
+      throw new ApiError(
+        404,
+        "Policy test directory or file was not found at the accepted commit; check repository access and path",
+      );
+    if (!response.ok)
+      throw new ApiError(
+        400,
+        `GitHub could not load policy tests (HTTP ${response.status})`,
+      );
+    const bytes = await readResponseBodyWithLimit(response, limit);
+    if (!bytes)
+      throw new ApiError(
+        400,
+        "GitHub policy test response exceeds the size limit",
+      );
+    return new TextDecoder("utf-8", { fatal: true }).decode(bytes);
+  };
+  const entries: unknown = JSON.parse(await read(directory, false, 262144));
+  if (!Array.isArray(entries))
+    throw new ApiError(400, "Select a directory containing .appa files");
+  if (entries.length >= 1000)
+    throw new ApiError(
+      400,
+      "GitHub directory listing may be truncated; choose a smaller test directory",
+    );
+  const paths = entries
+    .flatMap((entry) => {
+      if (!entry || typeof entry !== "object") return [];
+      const file = entry as { type?: unknown; path?: unknown; size?: unknown };
+      if (
+        file.type !== "file" ||
+        typeof file.path !== "string" ||
+        !file.path.endsWith(".appa")
+      )
+        return [];
+      if (
+        !file.path.startsWith(`${directory}/`) ||
+        file.path.slice(directory.length + 1).includes("/")
+      )
+        throw new ApiError(400, "GitHub returned an unexpected test path");
+      if (typeof file.size !== "number" || file.size > 65536)
+        throw new ApiError(400, "A policy test exceeds the 64 KiB file limit");
+      return [file.path];
+    })
+    .sort();
+  if (paths.length > 32)
+    throw new ApiError(
+      400,
+      "Choose a test directory with at most 32 .appa files",
+    );
+  if (paths.length === 0 && !params.allowEmpty)
+    throw new ApiError(
+      404,
+      "No .appa test files exist directly inside this directory at the accepted commit",
+    );
+  const files: { path: string; content: string }[] = [];
+  let bytes = 0;
+  for (const path of paths) {
+    const content = await read(path, true, 65536);
+    bytes += Buffer.byteLength(content);
+    if (bytes > 524288)
+      throw new ApiError(
+        400,
+        "Policy test collection exceeds the 512 KiB limit",
+      );
+    files.push({ path, content });
+  }
+  return files;
+}

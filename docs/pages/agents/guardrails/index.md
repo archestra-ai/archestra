@@ -3,7 +3,7 @@ title: Guardrails
 description: Stop agents from leaking data, with OpenAPPA policies on every tool call
 order: 1
 alpha: "Turn it on with [`ARCHESTRA_BETA=true`](/docs/reference/configuration#ARCHESTRA_BETA), then restart the backend."
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-07
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->
@@ -46,6 +46,10 @@ What to know:
 
 - The starting policy covers only Archestra's own tools. Every other tool runs without restrictions. The [code sandbox](/docs/agents#code-sandbox) tool [`run_command`](/docs/reference/archestra-mcp-server#run_command) is labeled by your organization's default model before each command, so reading a credentials file narrows who can see the result. A policy you already saved keeps its own rules. Next, [cover your other tools](/docs/agents/guardrails/policies#policy-coverage).
 - Enforcement applies to sessions that start while it is on. Start a new session after you turn it on.
+
+## Validations
+
+Check that a policy still allows and refuses the behavior you intended. The **Validations** card shows the latest saved result, execution time and file count. Click **View Validations** to [write checks or review runs](/docs/agents/guardrails/policies#validations).
 
 ## Blocked Calls
 

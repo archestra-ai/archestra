@@ -3208,6 +3208,9 @@ Required RBAC permission: [`toolPolicy:delete`](/docs/reference/permissions#tool
 | `validate_guardrails_policy` | Validate proposed organization.appa.toml without applying changes. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `preview_guardrails_policy_change` | Validate a proposed change to organization.appa.toml and return its unified `diff` and `changed` line counts. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `update_guardrails_policy` | Publish a change to organization.appa.toml. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
+| `get_openappa_policy_tests` | Read the authoritative .appa validation files, their version, configured directory and accepted Git commit. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `preview_openappa_validation_change` | Preview a patch of .appa specifications and optionally a complete proposed policy, then replay the full resulting suite offline. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
+| `publish_openappa_validation_change` | Publish the exact policy and specification patch explained after preview_openappa_validation_change, within the user's authorized scope. | [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update) |
 | `get_guardrails_policy_change_status` | Check the review state of an OpenAPPA policy pull request and whether GitHub sync has processed the merged policy. | [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read) |
 | `get_remedy_plans` | Read why the organization's guardrails policy blocked a tool call, and which remedy plans the policy offers. | None (no additional RBAC permission required) |
 | `execute_remedy_plan` | Apply a remedy plan that the organization's guardrails policy offers for a blocked call. | None (no additional RBAC permission required) |
@@ -3382,6 +3385,51 @@ Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#
 | `content` | `string \| null` | No | The complete policy text. Use it only for a first policy or a full rewrite. Leave it empty when you send edits. |
 | `edits` | `object[] \| null` | No | Exact-text replacements applied in order to the current policy, each to the result of the one before. Use them to change an existing policy. To insert rules, replace an anchor line with the new rules followed by that same anchor line. |
 | `expectedRevision` | `integer` | Yes | The revision get_guardrails_policy returned. |
+| `title` | `string` | No |  |
+| `summary` | `string` | No |  |
+
+
+#### get_openappa_policy_tests
+
+Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
+
+This tool takes no arguments.
+
+
+#### preview_openappa_validation_change
+
+Required RBAC permission: [`openappaPolicy:read`](/docs/reference/permissions#openappaPolicy:read)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `expectedRevision` | `integer` | Yes |  |
+| `expectedVersion` | `string` | Yes |  |
+| `changes` | `object` | No |  |
+| `changes.upsert` | `object[]` | No |  |
+| `changes.upsert[].path` | `string` | Yes |  |
+| `changes.upsert[].content` | `string` | Yes |  |
+| `changes.delete` | `string[]` | No |  |
+| `policyContent` | `string` | No |  |
+
+
+#### publish_openappa_validation_change
+
+Required RBAC permission: [`openappaPolicy:update`](/docs/reference/permissions#openappaPolicy:update)
+
+##### Input
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `expectedRevision` | `integer` | Yes |  |
+| `expectedVersion` | `string` | Yes |  |
+| `changes` | `object` | No |  |
+| `changes.upsert` | `object[]` | No |  |
+| `changes.upsert[].path` | `string` | Yes |  |
+| `changes.upsert[].content` | `string` | Yes |  |
+| `changes.delete` | `string[]` | No |  |
+| `policyContent` | `string` | No |  |
 | `title` | `string` | No |  |
 | `summary` | `string` | No |  |
 

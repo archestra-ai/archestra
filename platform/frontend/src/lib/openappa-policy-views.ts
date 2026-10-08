@@ -18,6 +18,8 @@ export const trustAudienceQueryKey = ["openappa-trust-audience"];
 
 export function invalidatePolicyViews(client: QueryClient) {
   return Promise.all([
+    client.invalidateQueries({ queryKey: ["openappa-policy-tests"] }),
+    client.invalidateQueries({ queryKey: ["openappa-policy-test-runs"] }),
     client.invalidateQueries({ queryKey: guardrailsPolicyQueryKey }),
     client.invalidateQueries({ queryKey: appaGithubSyncQueryKey }),
     client.invalidateQueries({ queryKey: batteriesQueryKey }),

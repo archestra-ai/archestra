@@ -1023,6 +1023,16 @@ export const AUDIT_DECISIONS = {
     audited: false,
     reason: "proxy record of tool calls made while enforcement was off",
   },
+  openappaPolicyTestSuitesTable: {
+    audited: false,
+    reason:
+      "test scenario definitions do not change enforced policy or authorization; exact inputs are retained with run evidence",
+  },
+  openappaPolicyTestRunsTable: {
+    audited: false,
+    reason:
+      "bounded replay result history; evaluation does not mutate enforced policy or authorization",
+  },
   openappaYellsTable: { audited: true, model: OpenAppaYellModel },
   openappaExternalConsultsTable: {
     audited: false,

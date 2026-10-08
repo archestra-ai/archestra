@@ -63,10 +63,14 @@ export function usePolicyDeclarations() {
 }
 
 /** The composed document the runtime enforces: the root text with its batteries. */
-export function useEffectivePolicy(enabled = true) {
+export function useEffectivePolicy(
+  enabled = true,
+  refetchInterval: number | false = false,
+) {
   return useQuery({
     queryKey: effectivePolicyQueryKey,
     enabled,
+    refetchInterval,
     queryFn: async () => {
       const { data, error } =
         await archestraApiSdk.getOpenappaEffectivePolicy();

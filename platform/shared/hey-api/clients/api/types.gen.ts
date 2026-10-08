@@ -87914,6 +87914,7 @@ export type GetAppaGithubSyncResponses = {
             heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
+        validationDirectory: string;
     };
 };
 
@@ -88022,6 +88023,7 @@ export type UpdateAppaGithubSyncResponses = {
             heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
+        validationDirectory: string;
     };
 };
 
@@ -88033,6 +88035,7 @@ export type ConfigureAppaGithubSyncData = {
         ref?: string | null;
         path: string;
         interval: '15m' | '1h' | '1d';
+        validationDirectory?: '' | string;
         githubPatId?: string | null;
         githubAppConfigId?: string | null;
     };
@@ -88130,6 +88133,7 @@ export type ConfigureAppaGithubSyncResponses = {
             heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
+        validationDirectory: string;
     };
 };
 
@@ -88236,6 +88240,7 @@ export type CreateAppaGithubRepositoryResponses = {
             heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
         } | null;
         hasPolicy: boolean;
+        validationDirectory: string;
     };
 };
 
@@ -88343,6 +88348,7 @@ export type AcceptHeldAppaGithubPullResponses = {
                 heldReasons: Array<'drops_batteries' | 'changes_credentials'>;
             } | null;
             hasPolicy: boolean;
+            validationDirectory: string;
         };
     };
 };
@@ -88436,6 +88442,651 @@ export type ConsultOpenappaBatteryHelperResponses = {
 };
 
 export type ConsultOpenappaBatteryHelperResponse = ConsultOpenappaBatteryHelperResponses[keyof ConsultOpenappaBatteryHelperResponses];
+
+export type InspectOpenAppaPolicyTestsData = {
+    body: {
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests/inspect';
+};
+
+export type InspectOpenAppaPolicyTestsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type InspectOpenAppaPolicyTestsError = InspectOpenAppaPolicyTestsErrors[keyof InspectOpenAppaPolicyTestsErrors];
+
+export type InspectOpenAppaPolicyTestsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        files: Array<{
+            path: string;
+            tools: Array<string>;
+            assertionCount: number | null;
+            error: string | null;
+        }>;
+    };
+};
+
+export type InspectOpenAppaPolicyTestsResponse = InspectOpenAppaPolicyTestsResponses[keyof InspectOpenAppaPolicyTestsResponses];
+
+export type GetOpenAppaPolicyTestsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests';
+};
+
+export type GetOpenAppaPolicyTestsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenAppaPolicyTestsError = GetOpenAppaPolicyTestsErrors[keyof GetOpenAppaPolicyTestsErrors];
+
+export type GetOpenAppaPolicyTestsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: 'local' | 'github';
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        version: string;
+        sourceCommit: string | null;
+        directory: string;
+        activeDirectory: string;
+        error: string | null;
+    };
+};
+
+export type GetOpenAppaPolicyTestsResponse = GetOpenAppaPolicyTestsResponses[keyof GetOpenAppaPolicyTestsResponses];
+
+export type UpdateOpenAppaPolicyTestsData = {
+    body: {
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        expectedVersion: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests';
+};
+
+export type UpdateOpenAppaPolicyTestsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type UpdateOpenAppaPolicyTestsError = UpdateOpenAppaPolicyTestsErrors[keyof UpdateOpenAppaPolicyTestsErrors];
+
+export type UpdateOpenAppaPolicyTestsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        source: 'local' | 'github';
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        version: string;
+        sourceCommit: string | null;
+        directory: string;
+        activeDirectory: string;
+        error: string | null;
+    };
+};
+
+export type UpdateOpenAppaPolicyTestsResponse = UpdateOpenAppaPolicyTestsResponses[keyof UpdateOpenAppaPolicyTestsResponses];
+
+export type RunOpenAppaPolicyTestsData = {
+    body: {
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        sourceVersion: string;
+        directory?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests/run';
+};
+
+export type RunOpenAppaPolicyTestsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type RunOpenAppaPolicyTestsError = RunOpenAppaPolicyTestsErrors[keyof RunOpenAppaPolicyTestsErrors];
+
+export type RunOpenAppaPolicyTestsResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        id: string;
+        createdBy: string | null;
+        createdAt: string;
+        trigger?: 'manual' | 'github_sync' | 'policy_change';
+        executionError?: string;
+        source: 'local' | 'github';
+        sourceVersion: string;
+        sourceCommit: string | null;
+        definitionHash: string;
+        policyRevision: number;
+        policyHash: string;
+        effectivePolicyHash: string;
+        engineVersion: string;
+        draft: boolean;
+        files: Array<{
+            path: string;
+            assertionCount: number;
+            status: 'passed' | 'failed' | 'cannot_run';
+            error?: string | null;
+            contentHash: string;
+            steps: Array<{
+                line: number;
+                tool: string;
+                expected: string;
+                actual: string | null;
+                status: 'passed' | 'failed' | 'cannot_run';
+                error?: string | null;
+            }>;
+        }>;
+        validation: {
+            valid: boolean;
+            errors: Array<string>;
+            warnings: Array<string>;
+        };
+        stale: boolean;
+    };
+};
+
+export type RunOpenAppaPolicyTestsResponse = RunOpenAppaPolicyTestsResponses[keyof RunOpenAppaPolicyTestsResponses];
+
+export type GetOpenAppaPolicyTestRunsData = {
+    body?: never;
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests/runs';
+};
+
+export type GetOpenAppaPolicyTestRunsErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type GetOpenAppaPolicyTestRunsError = GetOpenAppaPolicyTestRunsErrors[keyof GetOpenAppaPolicyTestRunsErrors];
+
+export type GetOpenAppaPolicyTestRunsResponses = {
+    /**
+     * Default Response
+     */
+    200: Array<{
+        id: string;
+        createdBy: string | null;
+        createdAt: string;
+        trigger?: 'manual' | 'github_sync' | 'policy_change';
+        executionError?: string;
+        source: 'local' | 'github';
+        sourceVersion: string;
+        sourceCommit: string | null;
+        definitionHash: string;
+        policyRevision: number;
+        policyHash: string;
+        effectivePolicyHash: string;
+        engineVersion: string;
+        draft: boolean;
+        files: Array<{
+            path: string;
+            assertionCount: number;
+            status: 'passed' | 'failed' | 'cannot_run';
+            error?: string | null;
+            contentHash: string;
+            steps: Array<{
+                line: number;
+                tool: string;
+                expected: string;
+                actual: string | null;
+                status: 'passed' | 'failed' | 'cannot_run';
+                error?: string | null;
+            }>;
+        }>;
+        validation: {
+            valid: boolean;
+            errors: Array<string>;
+            warnings: Array<string>;
+        };
+        stale: boolean;
+    }>;
+};
+
+export type GetOpenAppaPolicyTestRunsResponse = GetOpenAppaPolicyTestRunsResponses[keyof GetOpenAppaPolicyTestRunsResponses];
+
+export type PreviewOpenAppaPolicyTestData = {
+    body: {
+        files: Array<{
+            path: string;
+            content: string;
+        }>;
+        sourceVersion: string;
+        directory?: string;
+    };
+    path?: never;
+    query?: never;
+    url: '/api/openappa/policy-tests/preview';
+};
+
+export type PreviewOpenAppaPolicyTestErrors = {
+    /**
+     * Default Response
+     */
+    400: {
+        error: {
+            message: string;
+            type: 'api_validation_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    401: {
+        error: {
+            message: string;
+            type: 'api_authentication_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    403: {
+        error: {
+            message: string;
+            type: 'api_authorization_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    404: {
+        error: {
+            message: string;
+            type: 'api_not_found_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    409: {
+        error: {
+            message: string;
+            type: 'api_conflict_error';
+            internal_code?: string;
+        };
+    };
+    /**
+     * Default Response
+     */
+    500: {
+        error: {
+            message: string;
+            type: 'api_internal_server_error';
+            internal_code?: string;
+        };
+    };
+};
+
+export type PreviewOpenAppaPolicyTestError = PreviewOpenAppaPolicyTestErrors[keyof PreviewOpenAppaPolicyTestErrors];
+
+export type PreviewOpenAppaPolicyTestResponses = {
+    /**
+     * Default Response
+     */
+    200: {
+        trigger?: 'manual' | 'github_sync' | 'policy_change';
+        executionError?: string;
+        source: 'local' | 'github';
+        sourceVersion: string;
+        sourceCommit: string | null;
+        definitionHash: string;
+        policyRevision: number;
+        policyHash: string;
+        effectivePolicyHash: string;
+        engineVersion: string;
+        draft: boolean;
+        files: Array<{
+            path: string;
+            assertionCount: number;
+            status: 'passed' | 'failed' | 'cannot_run';
+            error?: string | null;
+            contentHash: string;
+            steps: Array<{
+                line: number;
+                tool: string;
+                expected: string;
+                actual: string | null;
+                status: 'passed' | 'failed' | 'cannot_run';
+                error?: string | null;
+            }>;
+        }>;
+        validation: {
+            valid: boolean;
+            errors: Array<string>;
+            warnings: Array<string>;
+        };
+        stale: boolean;
+    };
+};
+
+export type PreviewOpenAppaPolicyTestResponse = PreviewOpenAppaPolicyTestResponses[keyof PreviewOpenAppaPolicyTestResponses];
 
 export type GetOpenappaTrustAudienceData = {
     body?: never;

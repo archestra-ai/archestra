@@ -31,9 +31,18 @@ type PolicyChange = {
   effective?: { error: string | null; batteries: { status: string }[] };
 };
 
-export function OpenAppaPolicyChange({ output }: { output: unknown }) {
-  const change = parsePolicyChange(output);
+export function OpenAppaPolicyChange({
+  output,
+  validationChange = false,
+}: {
+  output: unknown;
+  validationChange?: boolean;
+}) {
+  const change = parsePolicyChange(output, validationChange);
   if (!change) return null;
+  const counts = validationChange
+    ? parseReplayCounts(parseOutput(output)?.counts)
+    : null;
   const path = change.path ?? "organization.appa.toml";
   const diff = policyDiff(change.before, change.after, path);
   const pullUrl =
@@ -70,6 +79,13 @@ export function OpenAppaPolicyChange({ output }: { output: unknown }) {
       <CodeBlock code={diff} language="diff" aria-label="Policy diff">
         <CodeBlockCopyButton />
       </CodeBlock>
+      {counts && (
+        <InlineNotice variant={replayPassed(counts) ? "success" : "warning"}>
+          {replayPassed(counts) ? <CheckCircle2 /> : <TriangleAlert />}
+          <span className="font-medium">Draft replay</span>
+          <InlineNoticeText>{replaySummary(counts)}</InlineNoticeText>
+        </InlineNotice>
+      )}
       {change.warnings?.map((warning) => (
         <InlineNotice key={warning} variant="warning">
           <TriangleAlert />
@@ -150,13 +166,100 @@ export function OpenAppaPolicyCompletion({ output }: { output: unknown }) {
   );
 }
 
-export function isOpenAppaPolicyChange(output: unknown): boolean {
-  return parsePolicyChange(output) !== null;
+export function OpenAppaValidationCompletion({ output }: { output: unknown }) {
+  const change = parseOutput(output);
+  if (!change || change.stage === "preview") return null;
+  const counts = parseReplayCounts(change.counts);
+  if (!counts) return null;
+  const pullUrl =
+    change.delivery === "pull_request" &&
+    typeof change.url === "string" &&
+    change.url.startsWith("https://github.com/") &&
+    Number.isSafeInteger(change.number) &&
+    (change.number as number) > 0
+      ? change.url
+      : null;
+  if (
+    !pullUrl &&
+    (change.delivery !== "revision" ||
+      typeof change.version !== "string" ||
+      !change.version)
+  )
+    return null;
+  const healthy = replayPassed(counts);
+  const replay = `Draft replay: ${replaySummary(counts)}`;
+  return (
+    <div className="mt-4 w-full max-w-2xl">
+      <InlineNotice variant={healthy ? "success" : "warning"}>
+        {pullUrl ? (
+          <GitPullRequest />
+        ) : healthy ? (
+          <CheckCircle2 />
+        ) : (
+          <TriangleAlert />
+        )}
+        <span className="font-medium">
+          {pullUrl
+            ? `Opened PR #${change.number}`
+            : change.policyChanged === true
+              ? "Saved policy and validations"
+              : "Saved validations"}
+        </span>
+        <InlineNoticeText>
+          {pullUrl
+            ? `Review and merge to apply these changes. ${replay}`
+            : replay}
+        </InlineNoticeText>
+        <Button variant="outline" size="xs" className="ml-auto" asChild>
+          {pullUrl ? (
+            <a href={pullUrl} target="_blank" rel="noreferrer">
+              <span>Review pull request</span>
+            </a>
+          ) : (
+            <Link href="/openappa/validation">
+              <span>View Validations</span>
+            </Link>
+          )}
+        </Button>
+      </InlineNotice>
+    </div>
+  );
 }
 
-function parsePolicyChange(output: unknown): PolicyChange | null {
+type ReplayCounts = { passed: number; failed: number; cannotRun: number };
+
+function parseReplayCounts(value: unknown): ReplayCounts | null {
+  if (!value || typeof value !== "object") return null;
+  const counts = value as Record<string, unknown>;
+  if (
+    ![counts.passed, counts.failed, counts.cannotRun].every(
+      (count) =>
+        typeof count === "number" && Number.isSafeInteger(count) && count >= 0,
+    )
+  )
+    return null;
+  return counts as ReplayCounts;
+}
+
+function replayPassed(counts: ReplayCounts) {
+  return counts.failed === 0 && counts.cannotRun === 0 && counts.passed > 0;
+}
+
+function replaySummary(counts: ReplayCounts) {
+  return `${counts.passed} passed, ${counts.failed} failed, ${counts.cannotRun} could not run.`;
+}
+
+export function isOpenAppaPolicyChange(
+  output: unknown,
+  validationChange = false,
+): boolean {
+  return parsePolicyChange(output, validationChange) !== null;
+}
+
+function parseOutput(output: unknown): Record<string, unknown> | null {
   let candidate = output;
   if (candidate && typeof candidate === "object") {
+    if ("isError" in candidate && candidate.isError === true) return null;
     if ("structuredContent" in candidate) {
       candidate = candidate.structuredContent;
     } else if ("content" in candidate) {
@@ -176,7 +279,30 @@ function parsePolicyChange(output: unknown): PolicyChange | null {
     }
   }
   if (!candidate || typeof candidate !== "object") return null;
-  const value = candidate as Record<string, unknown>;
+  return candidate as Record<string, unknown>;
+}
+
+function parsePolicyChange(
+  output: unknown,
+  validationChange = false,
+): PolicyChange | null {
+  let value = parseOutput(output);
+  if (!value) return null;
+  if (validationChange) {
+    if (value.stage === "preview") {
+      const policy = value.policy;
+      if (
+        !policy ||
+        typeof policy !== "object" ||
+        !("changed" in policy) ||
+        policy.changed !== true
+      )
+        return null;
+      value = { ...value, ...policy };
+    } else if (value.before === value.after) {
+      return null;
+    }
+  }
   if (
     (value.delivery !== "revision" && value.delivery !== "pull_request") ||
     typeof value.before !== "string" ||

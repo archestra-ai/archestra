@@ -4,6 +4,8 @@ import {
 } from "@archestra/shared";
 
 const POLICY_LAUNCH_PROMPTS = {
+  writeValidations:
+    "Help me with validations for my current OpenAPPA policy. Ground me briefly in what the policy protects and why a small validation helps. If no checks exist, suggest one useful starting check; otherwise, summarize their coverage and help me choose whether to review, edit or add one. Draft and replay the chosen change for review. Save only when I ask, and leave the policy unchanged unless I request a fix.",
   /** Overview setup step: no policy has been saved yet. */
   setUpPolicy:
     "Set up a starting OpenAPPA policy with what is already available.",

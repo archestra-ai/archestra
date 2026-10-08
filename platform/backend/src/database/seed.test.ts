@@ -123,7 +123,7 @@ describe("syncBuiltInAgents", () => {
     const originalToolIds = await AgentToolModel.findToolIdsByAgent(
       agent?.id ?? "",
     );
-    expect(originalToolIds).toHaveLength(27);
+    expect(originalToolIds).toHaveLength(30);
     const [resolveYellTool] = await ToolModel.findBuiltInToolIdsByNames([
       archestraMcpBranding.getToolName("resolve_openappa_yell"),
     ]);
@@ -355,7 +355,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     ).toHaveLength(1);
     expect(
       await AgentToolModel.findToolIdsByAgent(agent?.id ?? ""),
-    ).toHaveLength(27);
+    ).toHaveLength(30);
     await syncOpenAppaConfigAgentCapabilities();
     expect(
       (
@@ -369,6 +369,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
 
   test("assigns the OpenAPPA guide and policy tools to its dedicated agent", async ({
     makeOrganization,
+    makeAgent,
   }) => {
     const original = config.openappa.enabled;
     const organization = await makeOrganization();
@@ -411,6 +412,22 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
       expect(assignedIds).not.toEqual(
         expect.arrayContaining(environmentDiscoveryIds),
       );
+      const ordinaryAgent = await makeAgent({
+        organizationId: organization.id,
+      });
+      await syncOpenAppaConfigAgentCapabilities();
+      const ordinaryAssignments = await AgentToolModel.findToolIdsByAgent(
+        ordinaryAgent.id,
+      );
+      const validationIds = await ToolModel.findBuiltInToolIdsByNames([
+        archestraMcpBranding.getToolName("get_openappa_policy_tests"),
+        archestraMcpBranding.getToolName("preview_openappa_validation_change"),
+        archestraMcpBranding.getToolName("publish_openappa_validation_change"),
+      ]);
+      expect(validationIds).toHaveLength(3);
+      expect(assignedIds).toEqual(expect.arrayContaining(validationIds));
+      for (const toolId of validationIds)
+        expect(ordinaryAssignments).not.toContain(toolId);
       expect(
         await AgentActivationSkillRuleModel.findPolicySnapshot(agent?.id ?? ""),
       ).toMatchObject({
@@ -463,7 +480,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     const managedToolIds = (
       await AgentToolModel.findToolIdsByAgent(guidedAgentId)
     ).sort();
-    expect(managedToolIds).toHaveLength(27);
+    expect(managedToolIds).toHaveLength(30);
     expect((await AgentToolModel.findToolIdsByAgent(agentId)).sort()).toEqual(
       managedToolIds,
     );
@@ -509,7 +526,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
     expect(await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames)).toEqual(
       [],
     );
-    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(24);
+    expect(await AgentToolModel.findToolIdsByAgent(agentId)).toHaveLength(27);
 
     config.skillsSandbox.enabled = true;
     await ToolModel.seedArchestraTools(ARCHESTRA_MCP_CATALOG_ID);
@@ -519,7 +536,7 @@ The archive is a gzipped JSON file attached to the chat as openappa-yell-<id>.js
       await ToolModel.findBuiltInToolIdsByNames(sandboxToolNames);
     expect(sandboxToolIds).toHaveLength(3);
     const assigned = await AgentToolModel.findToolIdsByAgent(agentId);
-    expect(assigned).toHaveLength(27);
+    expect(assigned).toHaveLength(30);
     expect(assigned).toEqual(expect.arrayContaining(sandboxToolIds));
   });
 

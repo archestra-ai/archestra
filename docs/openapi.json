@@ -3139,7 +3139,8 @@
                             "required": [
                               "text",
                               "type"
-                            ]
+                            ],
+                            "additionalProperties": {}
                           },
                           {
                             "type": "object",
@@ -3325,7 +3326,8 @@
                                                   "required": [
                                                     "text",
                                                     "type"
-                                                  ]
+                                                  ],
+                                                  "additionalProperties": {}
                                                 },
                                                 {
                                                   "type": "object",
@@ -3547,7 +3549,8 @@
                                           "required": [
                                             "text",
                                             "type"
-                                          ]
+                                          ],
+                                          "additionalProperties": {}
                                         },
                                         {
                                           "type": "object",
@@ -3733,7 +3736,8 @@
                                                                 "required": [
                                                                   "text",
                                                                   "type"
-                                                                ]
+                                                                ],
+                                                                "additionalProperties": {}
                                                               },
                                                               {
                                                                 "type": "object",
@@ -3919,7 +3923,8 @@
           "context_management": {
             "nullable": true,
             "type": "object",
-            "properties": {}
+            "properties": {},
+            "additionalProperties": {}
           },
           "mcp_servers": {
             "type": "array",
@@ -3933,9 +3938,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "user_id"
-            ]
+            "additionalProperties": {}
           },
           "output_config": {
             "type": "object",
@@ -3964,7 +3967,8 @@
                   "schema"
                 ]
               }
-            }
+            },
+            "additionalProperties": {}
           },
           "service_tier": {},
           "speed": {
@@ -4012,7 +4016,8 @@
                 "required": [
                   "type",
                   "text"
-                ]
+                ],
+                "additionalProperties": {}
               },
               {
                 "type": "array",
@@ -4040,7 +4045,8 @@
                   "required": [
                     "type",
                     "text"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 }
               }
             ]
@@ -4439,7 +4445,8 @@
           "model",
           "messages",
           "max_tokens"
-        ]
+        ],
+        "additionalProperties": {}
       },
       "AnthropicMessagesResponseInput": {
         "type": "object",
@@ -4473,7 +4480,8 @@
                     "citations",
                     "text",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -4497,7 +4505,8 @@
                     "input",
                     "name",
                     "type"
-                  ]
+                  ],
+                  "additionalProperties": {}
                 }
               ]
             }
@@ -4559,7 +4568,8 @@
             "required": [
               "input_tokens",
               "output_tokens"
-            ]
+            ],
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -4569,7 +4579,8 @@
           "role",
           "type",
           "usage"
-        ]
+        ],
+        "additionalProperties": {}
       },
       "CerebrasChatCompletionRequestInput": {
         "type": "object",
@@ -23883,7 +23894,7 @@
                               "text",
                               "type"
                             ],
-                            "additionalProperties": false
+                            "additionalProperties": {}
                           },
                           {
                             "type": "object",
@@ -24076,7 +24087,7 @@
                                                     "text",
                                                     "type"
                                                   ],
-                                                  "additionalProperties": false
+                                                  "additionalProperties": {}
                                                 },
                                                 {
                                                   "type": "object",
@@ -24308,7 +24319,7 @@
                                             "text",
                                             "type"
                                           ],
-                                          "additionalProperties": false
+                                          "additionalProperties": {}
                                         },
                                         {
                                           "type": "object",
@@ -24501,7 +24512,7 @@
                                                                   "text",
                                                                   "type"
                                                                 ],
-                                                                "additionalProperties": false
+                                                                "additionalProperties": {}
                                                               },
                                                               {
                                                                 "type": "object",
@@ -24696,7 +24707,7 @@
             "nullable": true,
             "type": "object",
             "properties": {},
-            "additionalProperties": false
+            "additionalProperties": {}
           },
           "mcp_servers": {
             "type": "array",
@@ -24710,10 +24721,7 @@
                 "type": "string"
               }
             },
-            "required": [
-              "user_id"
-            ],
-            "additionalProperties": false
+            "additionalProperties": {}
           },
           "output_config": {
             "type": "object",
@@ -24744,7 +24752,7 @@
                 "additionalProperties": false
               }
             },
-            "additionalProperties": false
+            "additionalProperties": {}
           },
           "service_tier": {},
           "speed": {
@@ -24793,7 +24801,7 @@
                   "type",
                   "text"
                 ],
-                "additionalProperties": false
+                "additionalProperties": {}
               },
               {
                 "type": "array",
@@ -24822,7 +24830,7 @@
                     "type",
                     "text"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 }
               }
             ]
@@ -25226,7 +25234,7 @@
           "messages",
           "max_tokens"
         ],
-        "additionalProperties": false
+        "additionalProperties": {}
       },
       "AnthropicMessagesResponse": {
         "type": "object",
@@ -25261,7 +25269,7 @@
                     "text",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 },
                 {
                   "type": "object",
@@ -25286,7 +25294,7 @@
                     "name",
                     "type"
                   ],
-                  "additionalProperties": false
+                  "additionalProperties": {}
                 }
               ]
             }
@@ -25350,7 +25358,7 @@
               "input_tokens",
               "output_tokens"
             ],
-            "additionalProperties": false
+            "additionalProperties": {}
           }
         },
         "required": [
@@ -25361,7 +25369,7 @@
           "type",
           "usage"
         ],
-        "additionalProperties": false
+        "additionalProperties": {}
       },
       "CerebrasChatCompletionRequest": {
         "type": "object",
@@ -119492,7 +119500,8 @@
                                     "required": [
                                       "text",
                                       "type"
-                                    ]
+                                    ],
+                                    "additionalProperties": {}
                                   },
                                   {
                                     "type": "object",
@@ -119678,7 +119687,8 @@
                                                           "required": [
                                                             "text",
                                                             "type"
-                                                          ]
+                                                          ],
+                                                          "additionalProperties": {}
                                                         },
                                                         {
                                                           "type": "object",
@@ -119900,7 +119910,8 @@
                                                   "required": [
                                                     "text",
                                                     "type"
-                                                  ]
+                                                  ],
+                                                  "additionalProperties": {}
                                                 },
                                                 {
                                                   "type": "object",
@@ -120086,7 +120097,8 @@
                                                                         "required": [
                                                                           "text",
                                                                           "type"
-                                                                        ]
+                                                                        ],
+                                                                        "additionalProperties": {}
                                                                       },
                                                                       {
                                                                         "type": "object",
@@ -120272,7 +120284,8 @@
                   "context_management": {
                     "nullable": true,
                     "type": "object",
-                    "properties": {}
+                    "properties": {},
+                    "additionalProperties": {}
                   },
                   "mcp_servers": {
                     "type": "array",
@@ -120286,9 +120299,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "user_id"
-                    ]
+                    "additionalProperties": {}
                   },
                   "output_config": {
                     "type": "object",
@@ -120317,7 +120328,8 @@
                           "schema"
                         ]
                       }
-                    }
+                    },
+                    "additionalProperties": {}
                   },
                   "service_tier": {},
                   "speed": {
@@ -120365,7 +120377,8 @@
                         "required": [
                           "type",
                           "text"
-                        ]
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "array",
@@ -120393,7 +120406,8 @@
                           "required": [
                             "type",
                             "text"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         }
                       }
                     ]
@@ -120803,7 +120817,8 @@
                 "required": [
                   "messages",
                   "max_tokens"
-                ]
+                ],
+                "additionalProperties": {}
               }
             }
           }
@@ -121133,7 +121148,8 @@
                                     "required": [
                                       "text",
                                       "type"
-                                    ]
+                                    ],
+                                    "additionalProperties": {}
                                   },
                                   {
                                     "type": "object",
@@ -121319,7 +121335,8 @@
                                                           "required": [
                                                             "text",
                                                             "type"
-                                                          ]
+                                                          ],
+                                                          "additionalProperties": {}
                                                         },
                                                         {
                                                           "type": "object",
@@ -121541,7 +121558,8 @@
                                                   "required": [
                                                     "text",
                                                     "type"
-                                                  ]
+                                                  ],
+                                                  "additionalProperties": {}
                                                 },
                                                 {
                                                   "type": "object",
@@ -121727,7 +121745,8 @@
                                                                         "required": [
                                                                           "text",
                                                                           "type"
-                                                                        ]
+                                                                        ],
+                                                                        "additionalProperties": {}
                                                                       },
                                                                       {
                                                                         "type": "object",
@@ -121913,7 +121932,8 @@
                   "context_management": {
                     "nullable": true,
                     "type": "object",
-                    "properties": {}
+                    "properties": {},
+                    "additionalProperties": {}
                   },
                   "mcp_servers": {
                     "type": "array",
@@ -121927,9 +121947,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "user_id"
-                    ]
+                    "additionalProperties": {}
                   },
                   "output_config": {
                     "type": "object",
@@ -121958,7 +121976,8 @@
                           "schema"
                         ]
                       }
-                    }
+                    },
+                    "additionalProperties": {}
                   },
                   "service_tier": {},
                   "speed": {
@@ -122006,7 +122025,8 @@
                         "required": [
                           "type",
                           "text"
-                        ]
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "array",
@@ -122034,7 +122054,8 @@
                           "required": [
                             "type",
                             "text"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         }
                       }
                     ]
@@ -122444,7 +122465,8 @@
                 "required": [
                   "messages",
                   "max_tokens"
-                ]
+                ],
+                "additionalProperties": {}
               }
             }
           }
@@ -122784,7 +122806,8 @@
                                     "required": [
                                       "text",
                                       "type"
-                                    ]
+                                    ],
+                                    "additionalProperties": {}
                                   },
                                   {
                                     "type": "object",
@@ -122970,7 +122993,8 @@
                                                           "required": [
                                                             "text",
                                                             "type"
-                                                          ]
+                                                          ],
+                                                          "additionalProperties": {}
                                                         },
                                                         {
                                                           "type": "object",
@@ -123192,7 +123216,8 @@
                                                   "required": [
                                                     "text",
                                                     "type"
-                                                  ]
+                                                  ],
+                                                  "additionalProperties": {}
                                                 },
                                                 {
                                                   "type": "object",
@@ -123378,7 +123403,8 @@
                                                                         "required": [
                                                                           "text",
                                                                           "type"
-                                                                        ]
+                                                                        ],
+                                                                        "additionalProperties": {}
                                                                       },
                                                                       {
                                                                         "type": "object",
@@ -123564,7 +123590,8 @@
                   "context_management": {
                     "nullable": true,
                     "type": "object",
-                    "properties": {}
+                    "properties": {},
+                    "additionalProperties": {}
                   },
                   "mcp_servers": {
                     "type": "array",
@@ -123578,9 +123605,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "user_id"
-                    ]
+                    "additionalProperties": {}
                   },
                   "output_config": {
                     "type": "object",
@@ -123609,7 +123634,8 @@
                           "schema"
                         ]
                       }
-                    }
+                    },
+                    "additionalProperties": {}
                   },
                   "service_tier": {},
                   "speed": {
@@ -123657,7 +123683,8 @@
                         "required": [
                           "type",
                           "text"
-                        ]
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "array",
@@ -123685,7 +123712,8 @@
                           "required": [
                             "type",
                             "text"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         }
                       }
                     ]
@@ -124095,7 +124123,8 @@
                 "required": [
                   "messages",
                   "max_tokens"
-                ]
+                ],
+                "additionalProperties": {}
               }
             }
           }
@@ -124190,7 +124219,8 @@
                                     "required": [
                                       "text",
                                       "type"
-                                    ]
+                                    ],
+                                    "additionalProperties": {}
                                   },
                                   {
                                     "type": "object",
@@ -124376,7 +124406,8 @@
                                                           "required": [
                                                             "text",
                                                             "type"
-                                                          ]
+                                                          ],
+                                                          "additionalProperties": {}
                                                         },
                                                         {
                                                           "type": "object",
@@ -124598,7 +124629,8 @@
                                                   "required": [
                                                     "text",
                                                     "type"
-                                                  ]
+                                                  ],
+                                                  "additionalProperties": {}
                                                 },
                                                 {
                                                   "type": "object",
@@ -124784,7 +124816,8 @@
                                                                         "required": [
                                                                           "text",
                                                                           "type"
-                                                                        ]
+                                                                        ],
+                                                                        "additionalProperties": {}
                                                                       },
                                                                       {
                                                                         "type": "object",
@@ -124970,7 +125003,8 @@
                   "context_management": {
                     "nullable": true,
                     "type": "object",
-                    "properties": {}
+                    "properties": {},
+                    "additionalProperties": {}
                   },
                   "mcp_servers": {
                     "type": "array",
@@ -124984,9 +125018,7 @@
                         "type": "string"
                       }
                     },
-                    "required": [
-                      "user_id"
-                    ]
+                    "additionalProperties": {}
                   },
                   "output_config": {
                     "type": "object",
@@ -125015,7 +125047,8 @@
                           "schema"
                         ]
                       }
-                    }
+                    },
+                    "additionalProperties": {}
                   },
                   "service_tier": {},
                   "speed": {
@@ -125063,7 +125096,8 @@
                         "required": [
                           "type",
                           "text"
-                        ]
+                        ],
+                        "additionalProperties": {}
                       },
                       {
                         "type": "array",
@@ -125091,7 +125125,8 @@
                           "required": [
                             "type",
                             "text"
-                          ]
+                          ],
+                          "additionalProperties": {}
                         }
                       }
                     ]
@@ -125501,7 +125536,8 @@
                 "required": [
                   "messages",
                   "max_tokens"
-                ]
+                ],
+                "additionalProperties": {}
               }
             }
           }
@@ -182236,7 +182272,7 @@
                                                           "text",
                                                           "type"
                                                         ],
-                                                        "additionalProperties": false
+                                                        "additionalProperties": {}
                                                       },
                                                       {
                                                         "type": "object",
@@ -182429,7 +182465,7 @@
                                                                                 "text",
                                                                                 "type"
                                                                               ],
-                                                                              "additionalProperties": false
+                                                                              "additionalProperties": {}
                                                                             },
                                                                             {
                                                                               "type": "object",
@@ -182661,7 +182697,7 @@
                                                                         "text",
                                                                         "type"
                                                                       ],
-                                                                      "additionalProperties": false
+                                                                      "additionalProperties": {}
                                                                     },
                                                                     {
                                                                       "type": "object",
@@ -182854,7 +182890,7 @@
                                                                                               "text",
                                                                                               "type"
                                                                                             ],
-                                                                                            "additionalProperties": false
+                                                                                            "additionalProperties": {}
                                                                                           },
                                                                                           {
                                                                                             "type": "object",
@@ -183049,7 +183085,7 @@
                                         "nullable": true,
                                         "type": "object",
                                         "properties": {},
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       "mcp_servers": {
                                         "type": "array",
@@ -183063,10 +183099,7 @@
                                             "type": "string"
                                           }
                                         },
-                                        "required": [
-                                          "user_id"
-                                        ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       "output_config": {
                                         "type": "object",
@@ -183097,7 +183130,7 @@
                                             "additionalProperties": false
                                           }
                                         },
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       "service_tier": {},
                                       "speed": {
@@ -183146,7 +183179,7 @@
                                               "type",
                                               "text"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
                                           },
                                           {
                                             "type": "array",
@@ -183175,7 +183208,7 @@
                                                 "type",
                                                 "text"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             }
                                           }
                                         ]
@@ -183590,7 +183623,7 @@
                                       "messages",
                                       "max_tokens"
                                     ],
-                                    "additionalProperties": false
+                                    "additionalProperties": {}
                                   },
                                   {
                                     "type": "object",
@@ -183646,7 +183679,7 @@
                                                           "text",
                                                           "type"
                                                         ],
-                                                        "additionalProperties": false
+                                                        "additionalProperties": {}
                                                       },
                                                       {
                                                         "type": "object",
@@ -183839,7 +183872,7 @@
                                                                                 "text",
                                                                                 "type"
                                                                               ],
-                                                                              "additionalProperties": false
+                                                                              "additionalProperties": {}
                                                                             },
                                                                             {
                                                                               "type": "object",
@@ -184071,7 +184104,7 @@
                                                                         "text",
                                                                         "type"
                                                                       ],
-                                                                      "additionalProperties": false
+                                                                      "additionalProperties": {}
                                                                     },
                                                                     {
                                                                       "type": "object",
@@ -184264,7 +184297,7 @@
                                                                                               "text",
                                                                                               "type"
                                                                                             ],
-                                                                                            "additionalProperties": false
+                                                                                            "additionalProperties": {}
                                                                                           },
                                                                                           {
                                                                                             "type": "object",
@@ -184459,7 +184492,7 @@
                                         "nullable": true,
                                         "type": "object",
                                         "properties": {},
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       "mcp_servers": {
                                         "type": "array",
@@ -184473,10 +184506,7 @@
                                             "type": "string"
                                           }
                                         },
-                                        "required": [
-                                          "user_id"
-                                        ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       "output_config": {
                                         "type": "object",
@@ -184507,7 +184537,7 @@
                                             "additionalProperties": false
                                           }
                                         },
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       },
                                       "service_tier": {},
                                       "speed": {
@@ -184556,7 +184586,7 @@
                                               "type",
                                               "text"
                                             ],
-                                            "additionalProperties": false
+                                            "additionalProperties": {}
                                           },
                                           {
                                             "type": "array",
@@ -184585,7 +184615,7 @@
                                                 "type",
                                                 "text"
                                               ],
-                                              "additionalProperties": false
+                                              "additionalProperties": {}
                                             }
                                           }
                                         ]
@@ -185000,7 +185030,7 @@
                                       "messages",
                                       "max_tokens"
                                     ],
-                                    "additionalProperties": false
+                                    "additionalProperties": {}
                                   },
                                   {
                                     "type": "object",
@@ -218974,7 +219004,7 @@
                                                     "text",
                                                     "type"
                                                   ],
-                                                  "additionalProperties": false
+                                                  "additionalProperties": {}
                                                 },
                                                 {
                                                   "type": "object",
@@ -219167,7 +219197,7 @@
                                                                           "text",
                                                                           "type"
                                                                         ],
-                                                                        "additionalProperties": false
+                                                                        "additionalProperties": {}
                                                                       },
                                                                       {
                                                                         "type": "object",
@@ -219399,7 +219429,7 @@
                                                                   "text",
                                                                   "type"
                                                                 ],
-                                                                "additionalProperties": false
+                                                                "additionalProperties": {}
                                                               },
                                                               {
                                                                 "type": "object",
@@ -219592,7 +219622,7 @@
                                                                                         "text",
                                                                                         "type"
                                                                                       ],
-                                                                                      "additionalProperties": false
+                                                                                      "additionalProperties": {}
                                                                                     },
                                                                                     {
                                                                                       "type": "object",
@@ -219787,7 +219817,7 @@
                                   "nullable": true,
                                   "type": "object",
                                   "properties": {},
-                                  "additionalProperties": false
+                                  "additionalProperties": {}
                                 },
                                 "mcp_servers": {
                                   "type": "array",
@@ -219801,10 +219831,7 @@
                                       "type": "string"
                                     }
                                   },
-                                  "required": [
-                                    "user_id"
-                                  ],
-                                  "additionalProperties": false
+                                  "additionalProperties": {}
                                 },
                                 "output_config": {
                                   "type": "object",
@@ -219835,7 +219862,7 @@
                                       "additionalProperties": false
                                     }
                                   },
-                                  "additionalProperties": false
+                                  "additionalProperties": {}
                                 },
                                 "service_tier": {},
                                 "speed": {
@@ -219884,7 +219911,7 @@
                                         "type",
                                         "text"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
                                     },
                                     {
                                       "type": "array",
@@ -219913,7 +219940,7 @@
                                           "type",
                                           "text"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       }
                                     }
                                   ]
@@ -220328,7 +220355,7 @@
                                 "messages",
                                 "max_tokens"
                               ],
-                              "additionalProperties": false
+                              "additionalProperties": {}
                             },
                             {
                               "type": "object",
@@ -220384,7 +220411,7 @@
                                                     "text",
                                                     "type"
                                                   ],
-                                                  "additionalProperties": false
+                                                  "additionalProperties": {}
                                                 },
                                                 {
                                                   "type": "object",
@@ -220577,7 +220604,7 @@
                                                                           "text",
                                                                           "type"
                                                                         ],
-                                                                        "additionalProperties": false
+                                                                        "additionalProperties": {}
                                                                       },
                                                                       {
                                                                         "type": "object",
@@ -220809,7 +220836,7 @@
                                                                   "text",
                                                                   "type"
                                                                 ],
-                                                                "additionalProperties": false
+                                                                "additionalProperties": {}
                                                               },
                                                               {
                                                                 "type": "object",
@@ -221002,7 +221029,7 @@
                                                                                         "text",
                                                                                         "type"
                                                                                       ],
-                                                                                      "additionalProperties": false
+                                                                                      "additionalProperties": {}
                                                                                     },
                                                                                     {
                                                                                       "type": "object",
@@ -221197,7 +221224,7 @@
                                   "nullable": true,
                                   "type": "object",
                                   "properties": {},
-                                  "additionalProperties": false
+                                  "additionalProperties": {}
                                 },
                                 "mcp_servers": {
                                   "type": "array",
@@ -221211,10 +221238,7 @@
                                       "type": "string"
                                     }
                                   },
-                                  "required": [
-                                    "user_id"
-                                  ],
-                                  "additionalProperties": false
+                                  "additionalProperties": {}
                                 },
                                 "output_config": {
                                   "type": "object",
@@ -221245,7 +221269,7 @@
                                       "additionalProperties": false
                                     }
                                   },
-                                  "additionalProperties": false
+                                  "additionalProperties": {}
                                 },
                                 "service_tier": {},
                                 "speed": {
@@ -221294,7 +221318,7 @@
                                         "type",
                                         "text"
                                       ],
-                                      "additionalProperties": false
+                                      "additionalProperties": {}
                                     },
                                     {
                                       "type": "array",
@@ -221323,7 +221347,7 @@
                                           "type",
                                           "text"
                                         ],
-                                        "additionalProperties": false
+                                        "additionalProperties": {}
                                       }
                                     }
                                   ]
@@ -221738,7 +221762,7 @@
                                 "messages",
                                 "max_tokens"
                               ],
-                              "additionalProperties": false
+                              "additionalProperties": {}
                             },
                             {
                               "type": "object",

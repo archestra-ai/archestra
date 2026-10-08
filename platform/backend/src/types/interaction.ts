@@ -212,7 +212,7 @@ export const InteractionResponseSchema = z.union([
   OpenAi.API.ChatCompletionResponseSchema,
   EmbeddingInteractionResponseSchema,
   Gemini.API.GenerateContentResponseSchema,
-  Anthropic.API.MessagesResponseSchema,
+  Anthropic.API.MessagesResponseWireSchema,
   Bedrock.API.ConverseResponseSchema,
   Cerebras.API.ChatCompletionResponseSchema,
   Mistral.API.ChatCompletionResponseSchema,
@@ -477,7 +477,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(Anthropic.API.MessagesRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(Anthropic.API.MessagesResponseSchema),
+    response: withErrorResponse(Anthropic.API.MessagesResponseWireSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),
@@ -500,7 +500,7 @@ export const SelectInteractionSchema = z.discriminatedUnion("type", [
     processedRequest: withReadFallback(Bedrock.API.InvokeRequestSchema)
       .nullable()
       .optional(),
-    response: withErrorResponse(Bedrock.API.InvokeResponseSchema),
+    response: withErrorResponse(Bedrock.API.InvokeResponseWireSchema),
     requestType: RequestTypeSchema.optional(),
     /** Resolved prompt name if externalAgentId matches a prompt ID */
     externalAgentIdLabel: z.string().nullable().optional(),

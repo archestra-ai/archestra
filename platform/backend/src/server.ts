@@ -216,7 +216,7 @@ export function registerOpenApiSchemas() {
   z.globalRegistry.add(Anthropic.API.MessagesRequestSchema, {
     id: "AnthropicMessagesRequest",
   });
-  z.globalRegistry.add(Anthropic.API.MessagesResponseSchema, {
+  z.globalRegistry.add(Anthropic.API.MessagesResponseWireSchema, {
     id: "AnthropicMessagesResponse",
   });
   z.globalRegistry.add(Cerebras.API.ChatCompletionRequestSchema, {

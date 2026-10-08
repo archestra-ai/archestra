@@ -56,8 +56,10 @@ class OpenrouterRequestAdapter
 {
   readonly provider = "openrouter" as const;
   private delegate: OpenAIRequestAdapter;
+  private readonly request: OpenrouterRequest;
 
   constructor(request: OpenrouterRequest) {
+    this.request = request;
     this.delegate = new OpenAIRequestAdapter(request);
   }
 
@@ -100,11 +102,53 @@ class OpenrouterRequestAdapter
   toProviderRequest(): OpenrouterRequest {
     const request = this.delegate.toProviderRequest();
     const messages: OpenrouterMessages = request.messages;
+    // A tool-result update replaces the whole content, dropping a marker that
+    // sat on one of its parts; carry it over from the original message.
+    const toolMarkers = toolResultCacheControls(this.request.messages);
     return {
       ...request,
-      messages: messages.map(withCacheControlOnTextPart),
+      messages: messages.map((message) =>
+        withCacheControlOnTextPart(
+          message.role === "tool" && !hasCacheControl(message)
+            ? {
+                ...message,
+                cache_control: toolMarkers.get(message.tool_call_id),
+              }
+            : message,
+        ),
+      ),
     };
   }
+}
+
+type CacheControl = NonNullable<ToolMessage["cache_control"]>;
+type ToolMessage = Extract<OpenrouterMessage, { role: "tool" }>;
+
+function toolResultCacheControls(
+  messages: OpenrouterMessages,
+): Map<string, CacheControl> {
+  const markers = new Map<string, CacheControl>();
+  for (const message of messages) {
+    if (message.role !== "tool") continue;
+    const parts = Array.isArray(message.content) ? message.content : [];
+    const marker =
+      message.cache_control ??
+      parts
+        .map((part) => (part.type === "text" ? part.cache_control : undefined))
+        .findLast(Boolean);
+    if (marker) markers.set(message.tool_call_id, marker);
+  }
+  return markers;
+}
+
+function hasCacheControl(message: ToolMessage): boolean {
+  return (
+    !!message.cache_control ||
+    (Array.isArray(message.content) &&
+      message.content.some(
+        (part) => part.type === "text" && !!part.cache_control,
+      ))
+  );
 }
 
 // OpenRouter places Anthropic cache breakpoints on content parts, so a marker

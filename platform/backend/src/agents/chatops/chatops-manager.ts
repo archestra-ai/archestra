@@ -9,12 +9,14 @@ import {
 import { A2AManager, type A2ASystemParams } from "@/agents/a2a/a2a-manager";
 import type { A2AAttachment } from "@/agents/a2a-executor";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { agentCredentialSetupUrl } from "@/archestra-mcp-server/helpers";
 import { resolveRunToolTarget } from "@/archestra-mcp-server/run-tool-target";
 import { type AllowedCacheKey, CacheKey, cacheManager } from "@/cache-manager";
 import config from "@/config";
 import logger from "@/logging";
 import {
   AgentModel,
+  AgentRunModel,
   ChatOpsChannelBindingModel,
   ChatOpsConfigModel,
   ChatOpsProcessedMessageModel,
@@ -27,6 +29,8 @@ import {
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { RouteCategory } from "@/observability/tracing";
 import { ProviderError, SubagentProviderError } from "@/routes/chat/errors";
+import { resolveAgentRuntime } from "@/services/agent-runtime/pod-run";
+import { startDetachedAgentTask } from "@/services/agent-runtime/start-task";
 import { getHiddenMessagingChannels } from "@/services/integration-overrides";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import type {
@@ -38,6 +42,7 @@ import type {
   IncomingChatMessage,
   SkippedAttachment,
 } from "@/types";
+import { AgentRuntimeCredentialsRequiredError } from "@/types/agent-runtime";
 import { LlmProviderAuthRequiredError } from "@/utils/llm-provider-auth-error";
 import { resolveConversationLlmSelectionForAgent } from "@/utils/llm-resolution";
 import { stripThinkingBlocks } from "@/utils/strip-thinking-blocks";
@@ -62,6 +67,7 @@ import {
 import { claimThreadMuteHint, getThreadMuteMarker } from "./channel-activation";
 import { compactChatOpsResponse } from "./chatops-response";
 import { chatOpsRunRegistry } from "./chatops-run-registry";
+import { watchChatOpsTask } from "./chatops-task-watcher";
 import {
   CHATOPS_ATTACHMENT_LIMITS,
   CHATOPS_CHANNEL_DISCOVERY,
@@ -1784,6 +1790,13 @@ export class ChatOpsManager {
       userId,
     } = params;
 
+    // An Agent with its own runtime runs there, never as a foreground LLM
+    // call — the same rule every other invocation surface follows.
+    const fullAgent = await AgentModel.findById(agent.id);
+    if (fullAgent && resolveAgentRuntime(fullAgent)) {
+      return await this.startAgentRuntimeRun(params);
+    }
+
     // Stamp the start time so a deliberate no-reply can report how long the
     // agent thought before deciding (shown in the Teams channel placeholder).
     message.metadata = {
@@ -1951,6 +1964,138 @@ export class ChatOpsManager {
   }
 
   /**
+   * Start a durable run in the Agent's runtime. The run posts its result to
+   * this thread when it settles, so this turn only acknowledges the start. A
+   * follow-up from the same person continues their latest workspace for the
+   * thread, so the work carries over between messages.
+   */
+  private async startAgentRuntimeRun(params: {
+    agent: { id: string; name: string };
+    binding: { id: string; organizationId: string };
+    message: IncomingChatMessage;
+    provider: ChatOpsProvider;
+    fullMessage: string;
+    ephemeralExecutionPrefix?: string;
+    sendReply: boolean;
+    userId: string;
+  }): Promise<ChatOpsProcessingResult> {
+    const {
+      agent,
+      binding,
+      message,
+      provider,
+      fullMessage,
+      ephemeralExecutionPrefix,
+      sendReply,
+      userId,
+    } = params;
+    const threadId = message.threadId ?? message.channelId ?? message.messageId;
+    const actor = {
+      kind: "user" as const,
+      id: userId,
+      organizationId: binding.organizationId,
+    };
+    // The Teams replay path (sendReply: false) posts `agentResponse` itself.
+    const acknowledge = async (
+      text: string,
+    ): Promise<ChatOpsProcessingResult> => {
+      if (sendReply) {
+        await provider.sendReply({
+          originalMessage: message,
+          text,
+          footer: buildAgentFooter(agent.name),
+          conversationReference: message.metadata?.conversationReference,
+        });
+      }
+      return { success: true, agentResponse: text };
+    };
+
+    try {
+      const previous = await AgentRunModel.findLatestInChatOpsThread({
+        bindingId: binding.id,
+        threadId,
+        agentId: agent.id,
+        organizationId: binding.organizationId,
+        actorKind: actor.kind,
+        actorId: actor.id,
+      });
+      const workspace = previous?.workspace;
+      const workspaceRetained =
+        !!workspace &&
+        !["deleted", "deleting"].includes(workspace.state) &&
+        workspace.expiresAt.getTime() > Date.now();
+      // A workspace runs one turn at a time. Starting another now would fail
+      // its claim, so say so instead of posting a failed run.
+      if (
+        previous &&
+        workspaceRetained &&
+        (workspace.activeTaskId ||
+          !["idle", "suspended"].includes(workspace.state))
+      ) {
+        return await acknowledge(
+          `The previous run in this thread is still working. I will post its result here when it finishes, then you can send your follow-up: ${agentRunUrl(previous.run.taskId)}`,
+        );
+      }
+
+      const task = await startDetachedAgentTask({
+        actor,
+        agentId: agent.id,
+        message: fullMessage,
+        attachments: message.attachments,
+        systemParams: {
+          resumeFromTaskId:
+            previous && workspaceRetained ? previous.run.taskId : undefined,
+          sessionId: buildChatOpsSessionId(
+            provider.providerId,
+            message.channelId,
+            message.threadId,
+          ),
+          source: CHATOPS_PROVIDER_SOURCES[provider.providerId],
+          routeCategory: RouteCategory.CHATOPS,
+          completionTarget: {
+            type: "chatops",
+            bindingId: binding.id,
+            threadId,
+          },
+          ephemeralExecutionPrefix,
+        },
+      });
+      void watchChatOpsTask({
+        taskId: task.id,
+        bindingId: binding.id,
+        threadId,
+        agentName: agent.name,
+      }).catch((error) => {
+        logger.warn(
+          { error: errorMessage(error), taskId: task.id },
+          "[ChatOps] Failed to watch Agent Runtime run for thread completion",
+        );
+      });
+      logger.info(
+        { agentId: agent.id, taskId: task.id, messageId: message.messageId },
+        "[ChatOps] Started Agent Runtime run",
+      );
+      return await acknowledge(
+        `Started a run for this. I will post the result in this thread when it finishes: ${agentRunUrl(task.id)}`,
+      );
+    } catch (error) {
+      logger.error(
+        { messageId: message.messageId, error: errorMessage(error) },
+        "[ChatOps] Failed to start Agent Runtime run",
+      );
+      if (sendReply) {
+        await this.sendExecutionErrorReply({
+          provider,
+          message,
+          error,
+          agentName: agent.name,
+        });
+      }
+      return { success: false, error: errorMessage(error) };
+    }
+  }
+
+  /**
    * Whether the thread was muted after this run started, by comparing the mute
    * marker captured at the start against the current one. A non-null current
    * marker that differs from the captured value means a mute landed mid-run; a
@@ -2028,6 +2173,21 @@ export class ChatOpsManager {
       await provider.sendReply({
         originalMessage: message,
         text: `This agent uses ${error.providerLabel}, which is per-user. Connect your own ${error.providerLabel} account, then try again: ${config.frontendBaseUrl}/settings`,
+        footer: footer(),
+        conversationReference: message.metadata?.conversationReference,
+      });
+      return;
+    }
+
+    // The Agent's runtime needs per-user credentials the sender has not set
+    // up — link straight to the form instead of a generic apology.
+    if (error instanceof AgentRuntimeCredentialsRequiredError) {
+      await provider.sendReply({
+        originalMessage: message,
+        text: `This agent runs in its own runtime, which needs credentials you have not set up yet: ${error.missing.map((entry) => entry.label).join(", ")}. Add them, then send your message again: ${agentCredentialSetupUrl(
+          error.agentId,
+          error.missing.map((entry) => entry.key),
+        )}`,
         footer: footer(),
         conversationReference: message.metadata?.conversationReference,
       });
@@ -2722,6 +2882,11 @@ function isTransientProviderError(error: unknown): error is ProviderError {
     error.chatErrorResponse.isRetryable &&
     CHATOPS_AUTO_RETRYABLE_CODES.has(error.chatErrorResponse.code)
   );
+}
+
+/** The web page that follows an Agent Runtime run started from a thread. */
+function agentRunUrl(taskId: string): string {
+  return `${config.frontendBaseUrl}/chat/runs/${taskId}`;
 }
 
 /**

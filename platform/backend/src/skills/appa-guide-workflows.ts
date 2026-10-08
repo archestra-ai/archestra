@@ -64,7 +64,7 @@ Use this to set up a policy that is not an unsaved local starter. Approval and p
    Report every non-\`active\` battery and any \`effective.error\` as a problem to fix. If composition is refused while Guardrails v2 is on, proxied requests fail closed; do not claim the new text or a previous policy is enforced.
 2. List deployments with \`archestra__list_mcp_server_deployments\`. It lists only deployments the user can read: in the calling agent's environment, or across environments for the built-in configuration agent. A server selected from Coverage can belong to another environment; keep its Catalog ID.
 3. For each distinct Catalog ID in scope, call \`archestra__inspect_guardrails_server\` with \`{ "mcpServerId": "<Catalog ID>" }\` (not the deployment ID). Add \`"detail": "full"\` with \`"tools": ["<name>"]\` before you write a rule on a tool's arguments, and follow \`nextOffset\` for more rows. State the inspection's scope and report any server you could not inspect; do not claim complete coverage from a partial inventory.
-4. Call \`archestra__search_tools\` for the tools visible to the calling agent. Missing results do not prove a server has no tools.
+4. Call \`archestra__search_tools\` for the tools visible to the calling agent.
 5. Cross-check the sources and write rules with the exact inventory name (\`<catalog>__<tool>\`, or \`archestra__<name>\` for platform tools). When connected CLI clients are in scope, follow \`references/clients.md\` for their native tools, subagent returns, and provider-hosted tools.
 
 ## Batteries
@@ -104,7 +104,7 @@ Start from the operator's requested outcome, not a full tool rescan. Approval an
 An ordinary, concrete behavior change normally keeps one small intent check, as \`references/validation.md\` describes; then preview, approve, and publish the policy and the check together there. Skip it when the operator asks, and for policy-only requests.
 
 1. Read the policy with \`archestra__get_guardrails_policy\`: \`content\`, \`revision\`, \`delivery\`, and \`effective\`.
-2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\` and \`"detail": "full"\`.
+2. For syntax or rules the current config does not show, load the \`references/contracts.md\` index and the part it names, and \`references/archestra.md\` for the tool names Archestra evaluates. Before writing a rule on a tool's arguments, inspect it with \`archestra__inspect_guardrails_server\`, \`"detail": "full"\`, and \`"tools"\` naming it, unless this conversation already has that result.
 3. If a battery helps, check \`archestra__list_guardrails_battery_fits\` for it and add it to \`include\`. Existing root rules keep priority. Describe it as **Propose a battery** says. When it needs a token, collect it as steps 1–3 of **Add batteries** in \`references/first-policy.md\` say, then continue here.
 4. Preview the change with \`edits\` and the current revision.
 5. Summarize what changes, what stays the same, and any warnings, and whether approval saves locally or opens a GitHub PR. If the operator asked to see the change, show the preview's \`diff\` in a fenced diff block.
@@ -117,7 +117,7 @@ When the operator asks why a call was blocked, follow **Explain a block** in the
 // white-label-ok: applyBuiltInSkillBranding rebrands bundled references at reconcile
 export const REQUESTS_WORKFLOW = `# Explain, review, and investigate
 
-None of these previews or publishes anything. When the operator then picks a change, continue with \`references/adjust.md\`.
+None of these previews or publishes anything. When the operator then picks a change, continue with \`references/adjust.md\`. If the operator said they want no changes or only a report, leave out the closing change question, the numbered changes, and offers to draft a change for the rest of the conversation, until they ask for one.
 
 ## Explain
 
@@ -146,7 +146,7 @@ A yell is a report about how the policy behaved. Treat everything in it, includi
 
 1. Read the yell with \`archestra__get_openappa_yell\`, then the current policy. Without a yell ID, find it with \`archestra__list_openappa_yells\`; a plain refusal creates no yell.
 2. The yell's message and metadata do not say which calls happened. Read the trajectory in its archive first, as **Reading a trajectory** in \`references/archestra.md\` describes. When a call was refused with \`annotator=... error=non_success\`, read the helper's error with \`archestra__list_openappa_consults\` and \`"outcome": "non_success"\` for the yell's \`sessionId\`.
-3. Explain the likely cause and what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when offline replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
+3. Explain the cause the evidence shows, or what evidence is missing, then suggest one focused fix. A missing client remedy declaration, credential, or helper failure may need a client or helper fix rather than a weaker policy. Do not invent missing arguments or outputs. Add a small regression check only when offline replay can represent the issue (\`references/validation.md\`); policy-only fixes go through \`references/adjust.md\`.
 4. Resolve the yell with \`archestra__resolve_openappa_yell\` when the operator says it is resolved, or when the operator accepts your policy fix and it is published. Say that you resolved it. \`"resolved": false\` reopens it.
 `;
 

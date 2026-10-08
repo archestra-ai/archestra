@@ -4,11 +4,11 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
+import { CLAUDE_CODE_GUARD_CLIENT } from "./clients";
 import {
   buildStartupGuardInstallSection,
   type StartupGuardContext,
 } from "./startup-guard";
-import { CLAUDE_CODE_GUARD_CLIENT } from "./startup-guard.clients";
 
 const exec = promisify(execFile);
 

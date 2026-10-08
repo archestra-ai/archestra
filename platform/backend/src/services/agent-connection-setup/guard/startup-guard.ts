@@ -11,14 +11,11 @@ import {
   ARCHESTRA_MARK_NAME_ROW,
   ARCHESTRA_MARK_TAGLINE,
   ARCHESTRA_MARK_TAGLINE_ROW,
-} from "./archestra-mark";
-import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
-import type {
-  SetupScriptContext,
-  SetupScriptProxySection,
-} from "./connection-setup-script";
-import { describeMarketplaceContents } from "./marketplace-copy";
-import { OPENCODE_HANDOFF_PLUGIN } from "./opencode-handoff";
+} from "@/services/archestra-mark";
+import type { SetupScriptContext, SetupScriptProxySection } from "../index";
+import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
+import { describeMarketplaceContents } from "../steps/marketplace-copy";
 
 /**
  * Client-agnostic renderer for the CLI startup guard ("pre-loader"): a

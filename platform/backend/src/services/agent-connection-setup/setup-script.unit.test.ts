@@ -33,7 +33,7 @@ import {
   proxyBaseUrlToOrigin,
   renderSetupScript,
   type SetupScriptContext,
-} from "@/services/connection-setup-script";
+} from "./index";
 
 const execFileAsync = promisify(execFile);
 

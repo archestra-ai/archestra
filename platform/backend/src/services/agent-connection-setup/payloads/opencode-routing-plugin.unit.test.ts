@@ -4,7 +4,7 @@ import path from "node:path";
 import { pathToFileURL } from "node:url";
 import { OPENCODE_AGENT_HEADER } from "@archestra/shared/consts";
 import { describe, expect, test, vi } from "vitest";
-import { renderOpenCodeRoutingPlugin } from "@/services/opencode-routing-plugin";
+import { renderOpenCodeRoutingPlugin } from "./opencode-routing-plugin";
 
 describe("OpenCode routing plugin", () => {
   test("reapplies managed routes and fails closed for unsupported or overridden providers", async () => {

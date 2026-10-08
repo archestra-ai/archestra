@@ -4,8 +4,8 @@ import type { FastifyPluginAsyncZod } from "fastify-type-provider-zod";
 import { z } from "zod";
 import { isRateLimited } from "@/agents/utils";
 import { CacheKey } from "@/cache-manager";
+import { CLIENT_CONNECTION_INSTALLER } from "@/services/agent-connection-setup/bootstrap/client-connection-installer";
 import { clientConnectionService } from "@/services/client-connection";
-import { CLIENT_CONNECTION_INSTALLER } from "@/services/client-connection-installer";
 import { ApiError, constructResponseSchema } from "@/types";
 import {
   ConnectionSetupClientIdSchema,

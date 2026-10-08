@@ -21,21 +21,21 @@ import {
   openCodePassthroughBaseUrl,
 } from "@archestra/shared/opencode-provider-routes";
 import { describe, expect, test } from "vitest";
+import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import {
+  CLAUDE_CODE_GUARD_CLIENT,
+  CODEX_GUARD_CLIENT,
+  COPILOT_GUARD_CLIENT,
+  OPENCODE_GUARD_CLIENT,
+} from "./clients";
 import {
   buildStartupGuardInstallSection,
   buildStartupGuardUnshadowSection,
   renderStartupGuardScript,
   type StartupGuardClient,
   type StartupGuardContext,
-} from "@/services/startup-guard";
-import {
-  CLAUDE_CODE_GUARD_CLIENT,
-  CODEX_GUARD_CLIENT,
-  COPILOT_GUARD_CLIENT,
-  OPENCODE_GUARD_CLIENT,
-} from "@/services/startup-guard.clients";
-import { renderStartupGuardPowerShell } from "@/services/startup-guard.windows";
-import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
+} from "./startup-guard";
+import { renderStartupGuardPowerShell } from "./startup-guard.windows";
 
 const execFileAsync = promisify(execFile);
 

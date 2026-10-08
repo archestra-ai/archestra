@@ -21,28 +21,28 @@ import {
   REQUIRED_OPENAPPA_TOOL_SHORT_NAMES,
   TOOL_ASK_USER_SHORT_NAME,
 } from "@archestra/shared/archestra-mcp-server";
+import { archestraMarkWithText } from "@/services/archestra-mark";
 import type {
   ConnectionSetupClientId,
   ConnectionSetupPlatform,
   ConnectionSetupProxyAuth,
 } from "@/types";
-import { archestraMarkWithText } from "./archestra-mark";
-import { renderClaudeDesktopSetupScript } from "./connection-setup-script.claude-desktop";
-import { renderWindowsSetupScript } from "./connection-setup-script.windows";
-import { describeMarketplaceContents } from "./marketplace-copy";
-import { renderOpenCodeRoutingPlugin } from "./opencode-routing-plugin";
-import {
-  buildStartupGuardContext,
-  buildStartupGuardInstallSection,
-  buildStartupGuardUnshadowSection,
-  type StartupGuardClient,
-} from "./startup-guard";
+import { renderClaudeDesktopSetupScript } from "./agents/claude-desktop";
 import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
-} from "./startup-guard.clients";
+} from "./guard/clients";
+import {
+  buildStartupGuardContext,
+  buildStartupGuardInstallSection,
+  buildStartupGuardUnshadowSection,
+  type StartupGuardClient,
+} from "./guard/startup-guard";
+import { renderOpenCodeRoutingPlugin } from "./payloads/opencode-routing-plugin";
+import { renderWindowsSetupScript } from "./render-powershell";
+import { describeMarketplaceContents } from "./steps/marketplace-copy";
 
 /**
  * Pure renderers for the /connection one-command setup scripts. Everything in

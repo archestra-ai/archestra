@@ -19,18 +19,15 @@ import {
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared/consts";
 import { describe, expect, test } from "vitest";
-import type { SetupScriptContext } from "@/services/connection-setup-script";
+import type { SetupScriptContext } from "../index";
+import { CLAUDE_CODE_GUARD_CLIENT, CODEX_GUARD_CLIENT } from "./clients";
 import {
   buildStartupGuardContext,
   buildStartupGuardInstallSection,
   renderStartupGuardScript,
   type StartupGuardClient,
   type StartupGuardContext,
-} from "@/services/startup-guard";
-import {
-  CLAUDE_CODE_GUARD_CLIENT,
-  CODEX_GUARD_CLIENT,
-} from "@/services/startup-guard.clients";
+} from "./startup-guard";
 
 const execFileAsync = promisify(execFile);
 

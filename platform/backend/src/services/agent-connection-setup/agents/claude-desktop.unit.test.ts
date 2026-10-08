@@ -4,10 +4,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
-import {
-  renderSetupScript,
-  type SetupScriptContext,
-} from "./connection-setup-script";
+import { renderSetupScript, type SetupScriptContext } from "../index";
 
 const exec = promisify(execFile);
 

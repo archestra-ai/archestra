@@ -12,10 +12,10 @@ import {
   isCodexOriginator,
 } from "@archestra/shared/interactions/client";
 import { expect, test } from "vitest";
+import { CODEX_GUARD_CLIENT } from "../guard/clients";
+import { renderSetupScript } from "../index";
 import { CODEX_CONNECTION_VERIFICATION_WINDOWS } from "./codex-connection-verification.windows";
 import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
-import { renderSetupScript } from "./connection-setup-script";
-import { CODEX_GUARD_CLIENT } from "./startup-guard.clients";
 
 const exec = promisify(execFile);
 

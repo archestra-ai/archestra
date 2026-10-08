@@ -13,7 +13,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import logger from "@/logging";
-import { renderPowerShellJsonWriter } from "./powershell-json";
+import { renderPowerShellJsonWriter } from "../steps/powershell-json";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
 /**

@@ -17,12 +17,9 @@ import {
 } from "@archestra/shared/consts";
 import { parse as parseToml } from "smol-toml";
 import { describe, expect, test } from "vitest";
-import {
-  renderSetupScript,
-  type SetupScriptProxySection,
-} from "@/services/connection-setup-script";
-import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
-import { CODEX_GUARD_CLIENT } from "./startup-guard.clients";
+import { CODEX_GUARD_CLIENT } from "./guard/clients";
+import { renderSetupScript, type SetupScriptProxySection } from "./index";
+import { CODEX_HANDOFF_HELPER } from "./payloads/codex-handoff";
 
 const execFileAsync = promisify(execFile);
 const powershellAvailable =

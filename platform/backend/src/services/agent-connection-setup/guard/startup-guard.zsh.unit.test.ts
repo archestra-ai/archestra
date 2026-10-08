@@ -4,8 +4,8 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 import { expect, test } from "vitest";
+import { CLAUDE_CODE_GUARD_CLIENT } from "./clients";
 import { buildStartupGuardInstallSection } from "./startup-guard";
-import { CLAUDE_CODE_GUARD_CLIENT } from "./startup-guard.clients";
 
 const execFileAsync = promisify(execFile);
 

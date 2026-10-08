@@ -37,6 +37,13 @@ import {
   CONNECTION_SETUP_TOKEN_TTL_MS,
 } from "@/models/connection-setup";
 import { pluginDeliveryBudgetError } from "@/plugins/delivery-budget";
+import {
+  buildSetupCommand,
+  proxyBaseUrlToOrigin,
+  renderSetupScript,
+  type SetupScriptContext,
+} from "@/services/agent-connection-setup";
+import { buildDesktopInstallerBundle } from "@/services/agent-connection-setup/desktop/connection-setup-desktop-bundle";
 import { clientConnectionService } from "@/services/client-connection";
 import { issueConnectionProxySetupContext } from "@/services/connection-proxy-setup-context";
 import {
@@ -49,13 +56,6 @@ import {
   CONNECTION_SETUP_CONTEXT_PARAM,
   issueConnectionSetupContext,
 } from "@/services/connection-setup-context";
-import { buildDesktopInstallerBundle } from "@/services/connection-setup-desktop-bundle";
-import {
-  buildSetupCommand,
-  proxyBaseUrlToOrigin,
-  renderSetupScript,
-  type SetupScriptContext,
-} from "@/services/connection-setup-script";
 import { isGuardrailsV2Active } from "@/services/guardrails-deployment";
 import { ResourcePermissions } from "@/services/resource-permissions";
 import {

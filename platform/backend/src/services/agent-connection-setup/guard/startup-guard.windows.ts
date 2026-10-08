@@ -9,11 +9,11 @@ import {
   ARCHESTRA_MARK_TAGLINE,
   ARCHESTRA_MARK_TAGLINE_ROW,
   archestraMarkWithText,
-} from "./archestra-mark";
-import { CODEX_CONNECTION_VERIFICATION_WINDOWS } from "./codex-connection-verification.windows";
-import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
-import { describeMarketplaceContents } from "./marketplace-copy";
-import { OPENCODE_HANDOFF_PLUGIN } from "./opencode-handoff";
+} from "@/services/archestra-mark";
+import { CODEX_CONNECTION_VERIFICATION_WINDOWS } from "../payloads/codex-connection-verification.windows";
+import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import { OPENCODE_HANDOFF_PLUGIN } from "../payloads/opencode-handoff";
+import { describeMarketplaceContents } from "../steps/marketplace-copy";
 import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 
 /**

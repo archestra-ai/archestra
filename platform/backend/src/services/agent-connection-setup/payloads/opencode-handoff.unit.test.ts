@@ -6,13 +6,13 @@ import { pathToFileURL } from "node:url";
 import { promisify } from "node:util";
 import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared/consts";
 import { expect, test, vi } from "vitest";
-import { OPENCODE_HANDOFF_PLUGIN } from "./opencode-handoff";
+import { OPENCODE_GUARD_CLIENT } from "../guard/clients";
 import {
   buildStartupGuardInstallSection,
   type StartupGuardContext,
-} from "./startup-guard";
-import { OPENCODE_GUARD_CLIENT } from "./startup-guard.clients";
-import { buildWindowsStartupGuardInstallSection } from "./startup-guard.windows";
+} from "../guard/startup-guard";
+import { buildWindowsStartupGuardInstallSection } from "../guard/startup-guard.windows";
+import { OPENCODE_HANDOFF_PLUGIN } from "./opencode-handoff";
 
 const exec = promisify(execFile);
 const client = OPENCODE_GUARD_CLIENT;

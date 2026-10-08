@@ -4,21 +4,18 @@ import {
   STARTUP_GUARD_INSTALL,
 } from "@archestra/shared/consts";
 import { describe, expect, test } from "vitest";
-import type {
-  StartupGuardClient,
-  StartupGuardContext,
-} from "@/services/startup-guard";
 import {
   CLAUDE_CODE_GUARD_CLIENT,
   CODEX_GUARD_CLIENT,
   COPILOT_GUARD_CLIENT,
   OPENCODE_GUARD_CLIENT,
-} from "@/services/startup-guard.clients";
+} from "./clients";
+import type { StartupGuardClient, StartupGuardContext } from "./startup-guard";
 import {
   buildWindowsStartupGuardInstallSection,
   buildWindowsStartupGuardUnshadowSection,
   renderStartupGuardPowerShell,
-} from "@/services/startup-guard.windows";
+} from "./startup-guard.windows";
 
 const {
   psScriptRelpath: CLAUDE_CODE_GUARD_PS_SCRIPT_RELPATH,

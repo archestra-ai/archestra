@@ -16,16 +16,13 @@ import { promisify } from "node:util";
 import { DEFAULT_RUNTIME_HANDOFF_INSTRUCTIONS } from "@archestra/shared/consts";
 import { parse as parseToml } from "smol-toml";
 import { expect, test } from "vitest";
-import { CODEX_HANDOFF_HELPER } from "./codex-handoff";
-import { renderSetupScript } from "./connection-setup-script";
+import { renderSetupScript } from "../index";
+import { CODEX_HANDOFF_HELPER } from "../payloads/codex-handoff";
+import { CODEX_GUARD_CLIENT, COPILOT_GUARD_CLIENT } from "./clients";
 import {
   buildStartupGuardInstallSection,
   type StartupGuardContext,
 } from "./startup-guard";
-import {
-  CODEX_GUARD_CLIENT,
-  COPILOT_GUARD_CLIENT,
-} from "./startup-guard.clients";
 
 const exec = promisify(execFile);
 

@@ -10,7 +10,7 @@ import {
   claudeCodeAppaPermissionsAreLiteral,
   renderSetupScript,
   type SetupScriptMcpSection,
-} from "@/services/connection-setup-script";
+} from "./index";
 
 const execFileAsync = promisify(execFile);
 const powershellBin = [

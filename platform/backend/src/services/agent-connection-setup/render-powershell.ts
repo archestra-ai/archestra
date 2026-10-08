@@ -11,8 +11,22 @@ import {
   openCodePassthroughBaseUrl,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
+import { archestraMarkWithText } from "@/services/archestra-mark";
 import type { ConnectionSetupClientId } from "@/types";
-import { archestraMarkWithText } from "./archestra-mark";
+import {
+  CLAUDE_CODE_GUARD_CLIENT,
+  CODEX_GUARD_CLIENT,
+  COPILOT_GUARD_CLIENT,
+  OPENCODE_GUARD_CLIENT,
+} from "./guard/clients";
+import {
+  buildStartupGuardContext,
+  type StartupGuardClient,
+} from "./guard/startup-guard";
+import {
+  buildWindowsStartupGuardInstallSection,
+  buildWindowsStartupGuardUnshadowSection,
+} from "./guard/startup-guard.windows";
 import {
   CLAUDE_APPA_PERMISSIONS_SKIPPED_WARNING,
   claudeCodeAppaPermissionRules,
@@ -29,24 +43,10 @@ import {
   type SetupScriptContext,
   type SetupScriptMcpSection,
   type SetupScriptProxySection,
-} from "./connection-setup-script";
-import { describeMarketplaceContents } from "./marketplace-copy";
-import { renderOpenCodeRoutingPlugin } from "./opencode-routing-plugin";
-import { renderPowerShellJsonWriter } from "./powershell-json";
-import {
-  buildStartupGuardContext,
-  type StartupGuardClient,
-} from "./startup-guard";
-import {
-  CLAUDE_CODE_GUARD_CLIENT,
-  CODEX_GUARD_CLIENT,
-  COPILOT_GUARD_CLIENT,
-  OPENCODE_GUARD_CLIENT,
-} from "./startup-guard.clients";
-import {
-  buildWindowsStartupGuardInstallSection,
-  buildWindowsStartupGuardUnshadowSection,
-} from "./startup-guard.windows";
+} from "./index";
+import { renderOpenCodeRoutingPlugin } from "./payloads/opencode-routing-plugin";
+import { describeMarketplaceContents } from "./steps/marketplace-copy";
+import { renderPowerShellJsonWriter } from "./steps/powershell-json";
 
 /**
  * PowerShell renderer for the Windows variant of the /connection one-command

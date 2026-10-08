@@ -292,6 +292,42 @@ class OpenAppaBatteriesService {
     return (await this.recompose(organizationId)).policy;
   }
 
+  /**
+   * Compose `content` as a recompose would were it the root now, writing
+   * nothing: the batteries this deployment holds back compose as the empty
+   * battery. A refusal names each held-back battery and what brings it back.
+   */
+  async composeInDeployment(params: {
+    organizationId: string;
+    content: string;
+  }): Promise<{ errors: string[] }> {
+    const { organizationId, content } = params;
+    const [root, installs] = await Promise.all([
+      guardrailsPolicyService.get(organizationId),
+      OpenAppaBatteryInstallModel.list(organizationId),
+    ]);
+    const planned = await this.plan({
+      organizationId,
+      root: { ...root, content },
+      governed: installs.flatMap((install) => install.catalogId ?? []),
+    });
+    const composed = await openappaDeclarations.composeForCheck({
+      root: planned.root.content,
+      resolution: planned.resolution,
+      held: new Set(
+        planned.batteries
+          .filter((battery) => !battery.composed)
+          .map((battery) => battery.name),
+      ),
+    });
+    return {
+      errors:
+        (composed.content ?? null) === null
+          ? withHeldBack(composed.errors, planned.batteries)
+          : [],
+    };
+  }
+
   async recompileAll(): Promise<void> {
     await this.recompileOrganizations(await OrganizationModel.findAllIds());
   }
@@ -919,6 +955,7 @@ class OpenAppaBatteriesService {
       }
       const values = await this.compose({
         root: planned.root,
+        held: planned.batteries,
         composed,
         installFingerprint,
         previousContent: expected?.content ?? null,
@@ -1001,11 +1038,13 @@ class OpenAppaBatteriesService {
 
   private async compose(params: {
     root: GuardrailsPolicy;
+    held: readonly PlannedBattery[];
     composed: ComposeBatteryInput[];
     installFingerprint: string;
     previousContent: string | null;
   }): Promise<EffectivePolicyValues> {
-    const { root, composed, installFingerprint, previousContent } = params;
+    const { root, held, composed, installFingerprint, previousContent } =
+      params;
     const native = await loadNative();
     const result = await native.composeOpenappaPolicy({
       root: root.content,
@@ -1024,7 +1063,8 @@ class OpenAppaBatteriesService {
       contentHash: hash(content),
       rootRevision: root.revision,
       installFingerprint,
-      error: accepted === null ? result.errors.join("\n") : null,
+      error:
+        accepted === null ? withHeldBack(result.errors, held).join("\n") : null,
     };
   }
 
@@ -1754,6 +1794,50 @@ function composes(battery: {
     case "server_missing":
     case "refused":
       return false;
+  }
+}
+
+/**
+ * A refusal followed by every battery the deployment held back from it. What a
+ * held-back battery declares is absent from the composition, so a refusal naming
+ * one of its declarations is fixed where the status says, not in the root, which
+ * may not redeclare what an included battery declares.
+ */
+function withHeldBack(
+  errors: readonly string[],
+  batteries: readonly PlannedBattery[],
+): string[] {
+  return [
+    ...errors,
+    ...batteries
+      .filter((battery) => !battery.composed)
+      .map(
+        (battery) =>
+          `battery ${JSON.stringify(battery.name)} is held back (${battery.status}), so nothing it declares is composed; bring it back rather than redeclaring what it declares in the root: ${heldBackRemedy(battery)}`,
+      ),
+  ];
+}
+
+function heldBackRemedy(battery: PlannedBattery): string {
+  switch (battery.status) {
+    case "unavailable":
+      return "no battery package answers its include entry, or another entry answers the same battery";
+    case "missing_credentials":
+      return "bind each credential it reads to a runtime credential key with an organization value";
+    case "naming_conflict":
+      return "point its [server_aliases] targets at tool prefixes exactly one MCP server carries";
+    case "server_missing": {
+      const unserved = battery.servers
+        .filter((server) => server.catalogId === null)
+        .map((server) => JSON.stringify(server.target));
+      return unserved.length === 0
+        ? "point a [server_aliases] target at its namespaces"
+        : `no MCP server in this deployment carries the tool prefix ${unserved.join(", ")}; install or restore that server, or point the alias at one that exists`;
+    }
+    case "refused":
+    case "unrouted":
+    case "active":
+      return "it composes once its status is active";
   }
 }
 

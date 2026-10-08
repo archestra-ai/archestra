@@ -11,6 +11,7 @@ import GuardrailsPolicyModel from "@/models/guardrails-policy";
 import OpenAppaGithubSyncModel from "@/models/openappa-github-sync";
 import OpenAppaPolicyTestsModel from "@/models/openappa-policy-tests";
 import { ARCHESTRA_BATTERY } from "@/openappa/archestra-audience";
+import { openappaBatteriesService } from "@/openappa/batteries";
 import {
   addedGrants,
   bundledEntry,
@@ -64,6 +65,46 @@ function duplicateEntryErrors(resolution: PolicyResolution): string[] {
           .map((entry) => `${JSON.stringify(entry.entry)} (line ${entry.line})`)
           .join(", ")}`,
     );
+}
+
+/**
+ * What this deployment's recompose would refuse in a document that composes on
+ * its own: a battery the deployment holds back composes as empty, and the root
+ * may name what it declares. A refusal the revision being replaced already
+ * meets is a warning, so a write that leaves it as it was is never blocked by
+ * it; one the document introduces is an error.
+ */
+async function deploymentRefusal(params: {
+  organizationId: string;
+  content: string;
+  previous: string;
+}): Promise<{ errors: string[]; warnings: string[] }> {
+  const { organizationId, content, previous } = params;
+  const submitted = await openappaBatteriesService.composeInDeployment({
+    organizationId,
+    content,
+  });
+  if (submitted.errors.length === 0) return { errors: [], warnings: [] };
+  const kept = new Set(
+    previous === content
+      ? submitted.errors
+      : (
+          await openappaBatteriesService.composeInDeployment({
+            organizationId,
+            content: previous,
+          })
+        ).errors,
+  );
+  const refusal = (error: string) => `in this deployment: ${error}`;
+  return {
+    errors: submitted.errors.filter((error) => !kept.has(error)).map(refusal),
+    warnings: submitted.errors
+      .filter((error) => kept.has(error))
+      .map(
+        (error) =>
+          `${refusal(error)} (the current revision is refused the same way; the runtime keeps enforcing the last composition that opened)`,
+      ),
+  };
 }
 
 /** The 409 a lost revision race answers with; a retrying writer waits for this one. */
@@ -125,13 +166,11 @@ export const guardrailsPolicyService = {
   ): Promise<{ valid: boolean; errors: string[]; warnings: string[] }> {
     requireEnabled();
     const { organizationId } = params;
+    const previous =
+      params.previous ?? (await this.get(organizationId)).content;
     const resolved =
       params.resolved ??
-      (await resolveBoth({
-        organizationId,
-        content,
-        previous: params.previous ?? (await this.get(organizationId)).content,
-      }));
+      (await resolveBoth({ organizationId, content, previous }));
     const resolution = resolved.submitted;
     const errors = [...resolution.errors];
     const kept = new Set(resolved.previous.entries.map((entry) => entry.entry));
@@ -150,6 +189,15 @@ export const guardrailsPolicyService = {
         resolution,
       });
       if ((composed.content ?? null) === null) errors.push(...composed.errors);
+      else {
+        const deployed = await deploymentRefusal({
+          organizationId,
+          content,
+          previous,
+        });
+        errors.push(...deployed.errors);
+        warnings.push(...deployed.warnings);
+      }
     }
     return { valid: errors.length === 0, errors, warnings };
   },

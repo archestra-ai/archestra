@@ -1,6 +1,6 @@
 /**
  * Persisted cross-turn compaction for stateful A2A contexts, mirroring web
- * chat's `conversation_compactions` flow (routes/chat/context-compaction.ts).
+ * chat's `conversation_compactions` flow (routes/chat/compaction/).
  *
  * Stateful A2A callers (chatops server-side sessions, the A2A v2 route) load
  * a context's full message history on every turn. Without a persisted
@@ -13,23 +13,25 @@
  *   shared compaction primitives, persists it, and reports the event so the
  *   caller can tell the user (e.g. a Telegram notice).
  *
- * Failures are non-fatal: the uncompacted view is returned and the per-step
- * guard (agents/step-context-guard.ts) remains the in-run safety net.
+ * Failures are non-fatal: the view with the stored summary applied is
+ * returned and the per-step guard (agents/step-context-guard.ts) remains the
+ * in-run safety net.
  */
-import {
-  BUILT_IN_AGENT_IDS,
-  CONTEXT_COMPACTION_AUTO_THRESHOLD,
-} from "@archestra/shared";
+import { CONTEXT_COMPACTION_AUTO_THRESHOLD } from "@archestra/shared";
 import type { UIMessage } from "ai";
-import { createLLMModel, isApiKeyRequired } from "@/clients/llm-client";
 import logger from "@/logging";
-import { A2AContextCompactionModel, AgentModel, ModelModel } from "@/models";
+import { A2AContextCompactionModel, ModelModel } from "@/models";
 import { TOKEN_ESTIMATE } from "@/routes/chat/normalization/estimate-message-tokens";
+import { resolveCompactionLlm } from "@/services/compaction-llm";
 import {
-  CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
+  CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
+  type CompactionSummarizer,
+  chooseRecentSuffixStart,
   compactionSummaryText,
-  composeCompactionPrompt,
-  summarizeCompactionTranscript,
+  createCompactionSummarizer,
+  renderCompactionTranscript,
+  type TranscriptEntry,
+  uiMessageTranscriptEntries,
 } from "@/services/context-compaction";
 import type { A2AMessage } from "@/types";
 import { resolveAgentLlmOrDefault } from "@/utils/llm-resolution";
@@ -38,11 +40,6 @@ export interface A2AContextCompactionEvent {
   compactionId: string;
   originalTokenEstimate: number;
   compactedTokenEstimate: number;
-}
-
-interface SummarizeParams {
-  transcript: string;
-  previousSummary: string | null;
 }
 
 /**
@@ -68,17 +65,24 @@ export async function applyA2AContextCompaction(params: {
   userId: string | null;
   sessionId?: string;
   abortSignal?: AbortSignal;
-  summarizeTranscript?: (params: SummarizeParams) => Promise<string | null>;
+  summarizeTranscript?: CompactionSummarizer;
 }): Promise<{
   messages: A2AMessage[];
   created: A2AContextCompactionEvent | null;
 }> {
   const { contextId, messages, agent, userId, sessionId, abortSignal } = params;
+  // A failure past this point keeps whatever stored summary was applied:
+  // dropping it would resend the overflow it already solved.
+  let applied: AppliedCompaction = {
+    view: messages,
+    realMessages: messages,
+    summary: null,
+  };
 
   try {
     const latest =
       await A2AContextCompactionModel.findLatestByContext(contextId);
-    const applied = applyLatestCompaction(messages, latest);
+    applied = applyLatestCompaction(messages, latest);
 
     // The agent's own model defines the budget; without a known context
     // window there is no threshold to compact against (same policy as chat).
@@ -131,8 +135,10 @@ export async function applyA2AContextCompaction(params: {
     }
 
     const summary = await summarize({
-      transcript: serializeForTranscript(split.compactable),
-      previousSummary: latest?.summary ?? null,
+      transcript: renderCompactionTranscript(
+        split.compactable.flatMap(transcriptEntries),
+      ),
+      previousSummary: applied.summary,
     });
     if (!summary) {
       logger.warn(
@@ -182,20 +188,26 @@ export async function applyA2AContextCompaction(params: {
       },
     };
   } catch (error) {
-    if (abortSignal?.aborted) {
-      return { messages, created: null };
+    if (!abortSignal?.aborted) {
+      logger.warn(
+        { error, contextId },
+        "[A2AContextCompaction] failed to compact context history",
+      );
     }
-    logger.warn(
-      { error, contextId },
-      "[A2AContextCompaction] failed to compact context history",
-    );
-    return { messages, created: null };
+    return { messages: applied.view, created: null };
   }
 }
 
 // =============================================================================
 // Internal Helpers
 // =============================================================================
+
+type AppliedCompaction = {
+  view: A2AMessage[];
+  realMessages: A2AMessage[];
+  /** Summary covering the messages before `realMessages`, if one applied. */
+  summary: string | null;
+};
 
 /**
  * Replace the prefix covered by the latest compaction with its summary
@@ -204,17 +216,13 @@ export async function applyA2AContextCompaction(params: {
  */
 function applyLatestCompaction(
   messages: A2AMessage[],
-  latest: { id: string; summary: string; boundaryMessageId: string } | null,
-): { view: A2AMessage[]; realMessages: A2AMessage[] } {
-  if (!latest) {
-    return { view: messages, realMessages: messages };
-  }
-
-  const boundaryIndex = messages.findIndex(
-    (message) => message.id === latest.boundaryMessageId,
-  );
-  if (boundaryIndex < 0) {
-    return { view: messages, realMessages: messages };
+  latest: { summary: string; boundaryMessageId: string } | null,
+): AppliedCompaction {
+  const boundaryIndex = latest
+    ? messages.findIndex((message) => message.id === latest.boundaryMessageId)
+    : -1;
+  if (!latest || boundaryIndex < 0) {
+    return { view: messages, realMessages: messages, summary: null };
   }
 
   const realMessages = messages.slice(boundaryIndex + 1);
@@ -222,7 +230,11 @@ function applyLatestCompaction(
     contextId: messages[boundaryIndex].contextId,
     summary: latest.summary,
   });
-  return { view: [summaryMessage, ...realMessages], realMessages };
+  return {
+    view: [summaryMessage, ...realMessages],
+    realMessages,
+    summary: latest.summary,
+  };
 }
 
 /**
@@ -253,7 +265,7 @@ function buildSummaryMessage(params: {
 }
 
 /**
- * Keep a recent suffix of roughly RECENT_KEEP_RATIO of the budget verbatim
+ * Keep a recent suffix of roughly the keep ratio of the budget verbatim
  * (always at least the most recent message); everything before it becomes
  * the compactable prefix.
  */
@@ -261,20 +273,10 @@ function splitForCompaction(
   messages: A2AMessage[],
   budgetTokens: number,
 ): { compactable: A2AMessage[]; recent: A2AMessage[] } {
-  if (messages.length <= 1) {
-    return { compactable: [], recent: messages };
-  }
-
-  const keepTokens = budgetTokens * RECENT_KEEP_RATIO;
-  let boundary = messages.length - 1;
-  let kept = estimateMessagesTokens([messages[boundary]]);
-  while (boundary > 0) {
-    const next = estimateMessagesTokens([messages[boundary - 1]]);
-    if (kept + next > keepTokens) break;
-    kept += next;
-    boundary--;
-  }
-
+  const boundary = chooseRecentSuffixStart({
+    sizes: messages.map((message) => estimateMessagesTokens([message])),
+    keepBudget: budgetTokens * CONTEXT_COMPACTION_RECENT_KEEP_RATIO,
+  });
   return {
     compactable: messages.slice(0, boundary),
     recent: messages.slice(boundary),
@@ -290,56 +292,17 @@ function estimateMessagesTokens(messages: A2AMessage[]): number {
   return Math.ceil(chars / TOKEN_ESTIMATE.charsPerToken);
 }
 
-/**
- * Render persisted UIMessages as a plain-text transcript for the summarizer,
- * covering text, tool, and file parts (same shapes the step guard serializes).
- */
-function serializeForTranscript(messages: A2AMessage[]): string {
-  const lines: string[] = [];
-  for (const message of messages) {
-    const ui = message.content as UIMessage | undefined;
-    const role = ui?.role ?? message.role;
-    for (const part of ui?.parts ?? []) {
-      const record = part as unknown as Record<string, unknown>;
-      const type = String(record.type ?? "");
-      if (type === "text") {
-        lines.push(`[${role}]: ${String(record.text ?? "")}`);
-      } else if (type === "file") {
-        lines.push(`[${role} attached a file]`);
-      } else if (type.startsWith("tool-") || type === "dynamic-tool") {
-        const toolName =
-          type === "dynamic-tool"
-            ? String(record.toolName ?? "tool")
-            : type.slice("tool-".length);
-        lines.push(
-          `[assistant → tool ${toolName}]: ${truncate(
-            safeJson(record.input),
-            TRANSCRIPT_TOOL_INPUT_MAX_CHARS,
-          )}`,
-        );
-        if (record.output !== undefined) {
-          lines.push(
-            `[tool ${toolName} result]: ${truncate(
-              safeJson(record.output),
-              TRANSCRIPT_TOOL_RESULT_MAX_CHARS,
-            )}`,
-          );
-        }
-      }
-    }
-  }
-  const transcript = lines.join("\n");
-  // keep the tail — recent context matters most for continuing the thread
-  return transcript.length <= CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS
-    ? transcript
-    : transcript.slice(
-        transcript.length - CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS,
-      );
+function transcriptEntries(message: A2AMessage): TranscriptEntry[] {
+  const ui = message.content as UIMessage | undefined;
+  return uiMessageTranscriptEntries({
+    role: ui?.role ?? message.role,
+    parts: ui?.parts ?? [],
+  });
 }
 
 /**
- * Resolve the built-in compaction agent's model into a summarize function,
- * or null when no usable LLM is configured (compaction is then skipped).
+ * Resolve the built-in compaction agent's model into a summarizer, or null
+ * when no usable LLM is configured (compaction is then skipped).
  */
 async function buildSummarizer(params: {
   agent: {
@@ -351,25 +314,21 @@ async function buildSummarizer(params: {
   userId: string | null;
   sessionId?: string;
   abortSignal?: AbortSignal;
-}): Promise<((params: SummarizeParams) => Promise<string | null>) | null> {
-  const compactionAgent = await AgentModel.getBuiltInAgent(
-    BUILT_IN_AGENT_IDS.CONTEXT_COMPACTION,
-    params.agent.organizationId,
-  );
-  const compactionLlm = await resolveAgentLlmOrDefault({
-    agent: compactionAgent,
-    // Summarize on the calling agent's own model unless an admin pinned one on
-    // the compaction subagent. The threshold above is already computed from
-    // this agent's context window, so summarizing on a different model sized
-    // the compaction against a window it never ran in.
+}): Promise<CompactionSummarizer | null> {
+  const compactionLlm = await resolveCompactionLlm({
+    organizationId: params.agent.organizationId,
+    userId: params.userId ?? undefined,
+    // The threshold above is computed from the calling agent's context
+    // window, so the summary is written by that same model unless pinned.
     inheritFrom: {
       modelId: params.agent.modelId,
       agentLlmApiKeyId: params.agent.llmApiKeyId,
     },
-    organizationId: params.agent.organizationId,
-    userId: params.userId ?? undefined,
+    fallbackAgentId: params.agent.id,
+    sessionId: params.sessionId,
+    source: "a2a:compaction",
   });
-  if (isApiKeyRequired(compactionLlm.provider, compactionLlm.apiKey)) {
+  if (!compactionLlm) {
     logger.warn(
       { organizationId: params.agent.organizationId },
       "[A2AContextCompaction] no API key for compaction model; skipping",
@@ -377,48 +336,12 @@ async function buildSummarizer(params: {
     return null;
   }
 
-  const model = createLLMModel({
-    provider: compactionLlm.provider,
-    apiKey: compactionLlm.apiKey,
-    agentId: compactionAgent?.id ?? params.agent.id,
-    modelName: compactionLlm.modelName,
-    baseUrl: compactionLlm.baseUrl,
-    userId: params.userId ?? undefined,
-    sessionId: params.sessionId,
-    source: "a2a:compaction",
-    chatApiKeyId: compactionLlm.chatApiKeyId,
-  });
-
   // Last-resort flow (no interactive retry affordance): salvage untagged
   // output rather than fail the compaction, like chat's fallback path.
-  return (summarizeParams: SummarizeParams) =>
-    summarizeCompactionTranscript({
-      model,
-      prompt: composeCompactionPrompt({
-        previousSummary: summarizeParams.previousSummary,
-        transcript: summarizeParams.transcript,
-      }),
-      abortSignal: params.abortSignal,
-      salvageUntagged: true,
-    });
+  return createCompactionSummarizer({
+    model: compactionLlm.model,
+    systemPrompt: compactionLlm.systemPrompt,
+    abortSignal: params.abortSignal,
+    salvageUntagged: true,
+  });
 }
-
-function truncate(text: string, maxChars: number): string {
-  return text.length <= maxChars ? text : `${text.slice(0, maxChars)}…`;
-}
-
-function safeJson(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return String(value);
-  }
-}
-
-/** Share of the token budget preserved verbatim as the recent suffix. */
-const RECENT_KEEP_RATIO = 0.3;
-
-// Per-entry caps for the transcript serializer (the whole-transcript ceiling
-// is the shared CONTEXT_COMPACTION_TRANSCRIPT_MAX_CHARS).
-const TRANSCRIPT_TOOL_INPUT_MAX_CHARS = 2_000;
-const TRANSCRIPT_TOOL_RESULT_MAX_CHARS = 8_000;

@@ -263,4 +263,97 @@ describe("applyA2AContextCompaction", () => {
       await A2AContextCompactionModel.findLatestByContext(contextId),
     ).toBeNull();
   });
+
+  test("keeps the stored summary applied when a new compaction attempt fails", async ({
+    makeUser,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeInternalAgent,
+  }) => {
+    const { userId, agent } = await setUpAgentWithModel({
+      makeUser,
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeInternalAgent,
+    });
+    const { contextId, messages } = await seedContextMessages({
+      actorId: userId,
+      organizationId: agent.organizationId,
+      count: 10,
+    });
+    await A2AContextCompactionModel.create({
+      contextId,
+      summary: "STORED-SUMMARY",
+      boundaryMessageId: messages[1].id,
+      provider: "anthropic",
+      model: "claude-compaction-test",
+      originalTokenEstimate: 1000,
+      compactedTokenEstimate: 100,
+    });
+
+    const result = await applyA2AContextCompaction({
+      contextId,
+      messages,
+      agent,
+      userId,
+      summarizeTranscript: async () => {
+        throw new Error("provider down");
+      },
+    });
+
+    expect(result.created).toBeNull();
+    expect(result.messages).toHaveLength(messages.length - 1);
+    expect(result.messages.slice(1)).toEqual(messages.slice(2));
+    const summaryContent = result.messages[0].content as {
+      parts: Array<{ text: string }>;
+    };
+    expect(summaryContent.parts[0].text).toContain("STORED-SUMMARY");
+  });
+
+  test("does not update a stored summary whose boundary is missing from the loaded history", async ({
+    makeUser,
+    makeOrganization,
+    makeSecret,
+    makeLlmProviderApiKey,
+    makeInternalAgent,
+  }) => {
+    const { userId, agent } = await setUpAgentWithModel({
+      makeUser,
+      makeOrganization,
+      makeSecret,
+      makeLlmProviderApiKey,
+      makeInternalAgent,
+    });
+    const { contextId, messages } = await seedContextMessages({
+      actorId: userId,
+      organizationId: agent.organizationId,
+      count: 10,
+    });
+    await A2AContextCompactionModel.create({
+      contextId,
+      summary: "STALE-SUMMARY",
+      boundaryMessageId: messages[0].id,
+      provider: "anthropic",
+      model: "claude-compaction-test",
+      originalTokenEstimate: 1000,
+      compactedTokenEstimate: 100,
+    });
+
+    const previousSummaries: Array<string | null> = [];
+    const result = await applyA2AContextCompaction({
+      contextId,
+      messages: messages.slice(1),
+      agent,
+      userId,
+      summarizeTranscript: async ({ previousSummary }) => {
+        previousSummaries.push(previousSummary);
+        return "FRESH-SUMMARY";
+      },
+    });
+
+    expect(result.created).not.toBeNull();
+    expect(previousSummaries).toEqual([null]);
+  });
 });

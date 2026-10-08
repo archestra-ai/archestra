@@ -262,7 +262,8 @@ export declare function readPeerMessage(input: string, policy: DispatchPolicy): 
 
 /**
  * Evaluate bounded `.appa` scenarios against the supplied effective policy. The
- * replay core refuses live consults and keeps every trajectory in memory.
+ * replay core answers consults through an in-process stand-in, never a live party,
+ * and keeps every trajectory in memory.
  */
 export declare function replayOpenappaPolicy(input: string): Promise<string>
 

@@ -333,7 +333,8 @@ pub async fn inspect_openappa_policy_tests(input: String) -> napi::Result<String
 }
 
 /// Evaluate bounded `.appa` scenarios against the supplied effective policy. The
-/// replay core refuses live consults and keeps every trajectory in memory.
+/// replay core answers consults through an in-process stand-in, never a live party,
+/// and keeps every trajectory in memory.
 #[napi(js_name = "replayOpenappaPolicy")]
 pub async fn replay_openappa_policy(input: String) -> napi::Result<String> {
     static REPLAY_SLOT: Semaphore = Semaphore::const_new(1);

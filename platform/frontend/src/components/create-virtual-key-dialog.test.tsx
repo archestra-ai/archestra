@@ -2,11 +2,19 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
+import { useHasPermissions, useSession } from "@/lib/auth/auth.query";
 import { useAppName } from "@/lib/hooks/use-app-name";
 import { useLlmModels, useModelsWithApiKeys } from "@/lib/llm-models.query";
 import { useOrganization } from "@/lib/organization.query";
+import { useMyTeams, useTeams } from "@/lib/teams/team.query";
 import { useCreateVirtualApiKey } from "@/lib/virtual-api-keys.query";
 import { CreateVirtualKeyDialog } from "./create-virtual-key-dialog";
+
+// Radix Select uses scrollIntoView and pointer capture
+Element.prototype.scrollIntoView = vi.fn();
+Element.prototype.hasPointerCapture = vi.fn().mockReturnValue(false);
+Element.prototype.setPointerCapture = vi.fn();
+Element.prototype.releasePointerCapture = vi.fn();
 
 vi.mock("@/lib/virtual-api-keys.query", () => ({
   useCreateVirtualApiKey: vi.fn(),
@@ -16,6 +24,11 @@ vi.mock("@/lib/llm-models.query", () => ({
   useModelsWithApiKeys: vi.fn(),
 }));
 vi.mock("@/lib/organization.query");
+vi.mock("@/lib/auth/auth.query");
+vi.mock("@/lib/teams/team.query", () => ({
+  useTeams: vi.fn(),
+  useMyTeams: vi.fn(),
+}));
 vi.mock("@/lib/hooks/use-app-name");
 vi.mock("@/components/owner-select-field", async () => {
   const actual = await vi.importActual<
@@ -47,6 +60,24 @@ const mutateAsync = vi.fn();
 beforeEach(() => {
   vi.clearAllMocks();
   vi.mocked(useAppName).mockReturnValue("Archestra");
+  vi.mocked(useSession).mockReturnValue({
+    data: { user: { id: "u-self" } },
+  } as unknown as ReturnType<typeof useSession>);
+  // A plain member: may bill only teams they administer, cannot read limits.
+  vi.mocked(useHasPermissions).mockReturnValue({
+    data: false,
+  } as unknown as ReturnType<typeof useHasPermissions>);
+  const platformTeam = {
+    id: "team-platform",
+    name: "Platform",
+    members: [{ userId: "u-self", role: "admin" }],
+  };
+  vi.mocked(useMyTeams).mockReturnValue({
+    data: [platformTeam],
+  } as unknown as ReturnType<typeof useMyTeams>);
+  vi.mocked(useTeams).mockReturnValue({
+    data: [platformTeam],
+  } as unknown as ReturnType<typeof useTeams>);
   vi.mocked(useOrganization).mockReturnValue({
     data: undefined,
   } as unknown as ReturnType<typeof useOrganization>);
@@ -111,7 +142,7 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.queryByText("Passthrough")).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Name"), "My passthrough key");
-    await user.click(screen.getByRole("button", { name: "Create key" }));
+    await createFromAnyStep(user);
 
     expect(mutateAsync).toHaveBeenCalledWith({
       data: {
@@ -120,6 +151,8 @@ describe("CreateVirtualKeyDialog", () => {
         expiresAt: undefined,
         ownerId: undefined,
         labels: [],
+        billingTeamId: undefined,
+        spendCap: undefined,
       },
     });
   });
@@ -131,16 +164,22 @@ describe("CreateVirtualKeyDialog", () => {
     expect(
       screen.getByRole("heading", { name: "New virtual key" }),
     ).toBeInTheDocument();
-    // A review, not a form: every value is shown, and nothing needs typing.
-    expect(screen.getByText("Self Admin's virtual key (2)")).toBeVisible();
-    expect(screen.getByText("OpenAI · Main OpenAI")).toBeVisible();
-    expect(screen.getByText("Never")).toBeVisible();
-    expect(screen.queryByLabelText("Name")).not.toBeInTheDocument();
+    // Every value starts at a sensible default, so Continue is enough.
+    expect(screen.getByLabelText("Name")).toHaveValue(
+      "Self Admin's virtual key (2)",
+    );
+    expect(
+      screen.getByLabelText("Selected provider keys"),
+    ).toHaveTextContent("OpenAI · Main OpenAI");
     // Sharing is set from the saved key's Permissions tab, not on create.
     expect(
       screen.queryByRole("button", { name: "Permissions" }),
     ).not.toBeInTheDocument();
     expect(screen.queryByText("Key type")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    expect(screen.getByText("Never")).toBeVisible();
+    expect(screen.getByText("No team")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "Create key" }));
 
     expect(mutateAsync).toHaveBeenCalledWith({
@@ -153,7 +192,34 @@ describe("CreateVirtualKeyDialog", () => {
         ],
         ownerId: undefined,
         labels: [],
+        billingTeamId: undefined,
+        spendCap: undefined,
       },
+    });
+  });
+
+  it("bills a team the caller administers and caps the key", async () => {
+    const user = userEvent.setup();
+    renderDialog("standard");
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByLabelText("Who pays for this key?"));
+    await user.click(await screen.findByRole("option", { name: "Platform" }));
+    expect(
+      screen.getByText(/The owner's personal limit does not apply/),
+    ).toBeVisible();
+    await user.type(screen.getByLabelText("Spend cap in dollars"), "500");
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+
+    expect(screen.getByText("Platform")).toBeVisible();
+    expect(screen.getByText("$500 this month")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "Create key" }));
+
+    expect(mutateAsync).toHaveBeenCalledWith({
+      data: expect.objectContaining({
+        billingTeamId: "team-platform",
+        spendCap: { limitValue: 500, cleanupInterval: "calendar_month" },
+      }),
     });
   });
 
@@ -164,7 +230,8 @@ describe("CreateVirtualKeyDialog", () => {
     expect(screen.queryByLabelText("Label key")).not.toBeInTheDocument();
 
     await user.type(screen.getByLabelText("Name"), "Regional key");
-    await user.click(screen.getByRole("button", { name: "Add Labels" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
     await user.type(screen.getByLabelText("Label key"), "region");
     await user.type(screen.getByLabelText("Label value"), "eu");
     await user.click(screen.getByRole("button", { name: "Create key" }));
@@ -176,6 +243,8 @@ describe("CreateVirtualKeyDialog", () => {
         expiresAt: undefined,
         ownerId: undefined,
         labels: [{ key: "region", value: "eu" }],
+        billingTeamId: undefined,
+        spendCap: undefined,
       },
     });
   });
@@ -189,7 +258,7 @@ describe("CreateVirtualKeyDialog", () => {
       ]),
     );
     renderDialog("standard");
-    await user.click(screen.getByRole("button", { name: "Create key" }));
+    await createFromAnyStep(user);
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     expect(within(dialog).getByText("Copy your key")).toBeVisible();
@@ -241,7 +310,7 @@ describe("CreateVirtualKeyDialog", () => {
       ]),
     );
     renderDialog("standard");
-    await user.click(screen.getByRole("button", { name: "Create key" }));
+    await createFromAnyStep(user);
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     await user.click(within(dialog).getByText("Native provider API"));
@@ -256,7 +325,7 @@ describe("CreateVirtualKeyDialog", () => {
     mutateAsync.mockResolvedValue(createdKey("passthrough", []));
     renderDialog("passthrough");
     await user.type(screen.getByLabelText("Name"), "Laptop");
-    await user.click(screen.getByRole("button", { name: "Create key" }));
+    await createFromAnyStep(user);
 
     const dialog = await screen.findByTestId("virtual-key-create-dialog");
     expect(
@@ -276,18 +345,30 @@ describe("CreateVirtualKeyDialog", () => {
       ],
     });
 
-    expect(screen.getByText("Self Admin's virtual key (2)")).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: "Change Owner" }));
-    await user.click(screen.getByRole("button", { name: "Choose Bob" }));
-    await user.click(
-      screen.getByRole("button", { name: "Done editing Owner" }),
+    expect(screen.getByLabelText("Name")).toHaveValue(
+      "Self Admin's virtual key (2)",
     );
+
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+    await user.click(screen.getByRole("button", { name: "Choose Bob" }));
+    await user.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(screen.getByText("Bob Brown's virtual key (2)")).toBeVisible();
     expect(screen.getByText("Bob Brown")).toBeVisible();
   });
 });
+
+/** Walk the remaining wizard steps with their defaults and create. */
+async function createFromAnyStep(user: ReturnType<typeof userEvent.setup>) {
+  for (;;) {
+    const create = screen.queryByRole("button", { name: "Create key" });
+    if (create) {
+      await user.click(create);
+      return;
+    }
+    await user.click(screen.getByRole("button", { name: "Continue" }));
+  }
+}
 
 function createdKey(
   keyType: "standard" | "passthrough",

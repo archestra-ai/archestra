@@ -19,7 +19,7 @@ export function ProviderKeyAccessFields({
 }) {
   const docsUrl = getDocsUrl(
     DocsPage.PlatformLlmProxyAuthentication,
-    "virtual-api-keys",
+    "standard-virtual-keys",
   );
 
   return (

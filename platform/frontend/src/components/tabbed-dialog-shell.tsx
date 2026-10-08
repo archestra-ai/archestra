@@ -113,6 +113,8 @@ export function TabbedDialogShell<TSection extends string>({
                 type="button"
                 variant="ghost"
                 data-testid={getNavItemTestId?.(navItem.id)}
+                aria-label={navItem.status ? navItem.label : undefined}
+                aria-description={navItem.status}
                 className={cn(
                   "justify-start font-normal w-full",
                   navItem.status && "h-auto flex-col items-start gap-0 py-1.5",
@@ -123,7 +125,10 @@ export function TabbedDialogShell<TSection extends string>({
               >
                 <span>{navItem.label}</span>
                 {navItem.status && (
-                  <span className="max-w-full truncate text-xs font-normal text-muted-foreground">
+                  <span
+                    aria-hidden
+                    className="max-w-full truncate text-xs font-normal text-muted-foreground"
+                  >
                     {navItem.status}
                   </span>
                 )}

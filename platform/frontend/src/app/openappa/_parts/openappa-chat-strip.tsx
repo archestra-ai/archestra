@@ -1,47 +1,47 @@
 "use client";
 
 import { MessageCircle } from "lucide-react";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import type { OpenAppaLaunchPromptKey } from "@/lib/openappa-chat-prompts";
+import { Card, CardDescription, CardTitle } from "@/components/ui/card";
+import { OPENAPPA_SUGGESTED_LAUNCH_PROMPTS } from "@/lib/openappa-chat-prompts";
 import { OpenAppaChatButton } from "./openappa-chat-button";
 
-const QUESTIONS: { promptKey: OpenAppaLaunchPromptKey; label: string }[] = [
-  { promptKey: "currentPolicy", label: "Ask about current policy" },
-  { promptKey: "explainGuardrails", label: "Explain OpenAPPA guardrails" },
-  { promptKey: "changePolicy", label: "Help me change a policy" },
-];
+/** The agent's suggested prompts, as the chat shows them: title as the label. */
+const QUESTIONS = Object.entries(OPENAPPA_SUGGESTED_LAUNCH_PROMPTS).map(
+  ([promptKey, suggested]) => ({
+    promptKey: promptKey as keyof typeof OPENAPPA_SUGGESTED_LAUNCH_PROMPTS,
+    label: suggested.summaryTitle,
+  }),
+);
 
 /**
- * The ways into the configuration agent: what it is for, a plain chat that
- * opens on the agent's suggested prompts, and three questions that send
- * themselves.
+ * The ways into the configuration agent: on the left what it is for and a
+ * plain chat that opens on the agent's suggested prompts, on the right those
+ * same prompts, each sending itself.
  */
 export function OpenAppaChatStrip() {
   return (
-    <Card className="gap-3 py-4">
-      <CardHeader className="flex items-center gap-3 px-4">
+    <Card className="flex-row flex-wrap items-start gap-x-8 gap-y-3 px-4 py-4">
+      <div className="flex min-w-64 flex-1 items-start gap-3">
         <span className="bg-primary/10 text-primary flex size-7 shrink-0 items-center justify-center rounded-md [&>svg]:size-4">
           <MessageCircle aria-hidden />
         </span>
-        <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <CardTitle className="text-sm">Configuration agent</CardTitle>
+        <div className="flex min-w-0 flex-col gap-0.5">
+          <CardTitle className="text-sm">
+            Chat with the configuration agent
+          </CardTitle>
           <CardDescription className="text-xs leading-relaxed">
             Ask what your policy allows, why a call was blocked, or have the
             policy changed for you.
           </CardDescription>
+          <div className="pt-2">
+            <OpenAppaChatButton size="sm">
+              <MessageCircle />
+              <span>Open chat</span>
+            </OpenAppaChatButton>
+          </div>
         </div>
-        <OpenAppaChatButton size="sm" className="shrink-0">
-          <MessageCircle />
-          <span>Open chat</span>
-        </OpenAppaChatButton>
-      </CardHeader>
-      <CardContent className="flex flex-wrap gap-2 px-4">
+      </div>
+      <div className="flex flex-wrap justify-end gap-2">
         {QUESTIONS.map((question) => (
           <OpenAppaChatButton
             key={question.promptKey}
@@ -54,7 +54,7 @@ export function OpenAppaChatStrip() {
             <span>{question.label}</span>
           </OpenAppaChatButton>
         ))}
-      </CardContent>
+      </div>
     </Card>
   );
 }

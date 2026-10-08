@@ -1,7 +1,19 @@
 import {
   describeOpenAppaPolicyTarget,
+  OPENAPPA_CONFIG_SUGGESTED_PROMPTS,
   type OpenAppaPolicyTargetKind,
 } from "@archestra/shared";
+
+/**
+ * The configuration agent's own suggested prompts, keyed for launch links,
+ * so the overview chat strip offers the same ones the chat shows.
+ */
+export const OPENAPPA_SUGGESTED_LAUNCH_PROMPTS = {
+  explainPolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[0],
+  reviewRisks: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[1],
+  changePolicy: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[2],
+  validateAssumptions: OPENAPPA_CONFIG_SUGGESTED_PROMPTS[3],
+} as const;
 
 const POLICY_LAUNCH_PROMPTS = {
   writeValidations:
@@ -15,12 +27,12 @@ const POLICY_LAUNCH_PROMPTS = {
   /** Batteries card: included batteries not enforced, or ones that fit. */
   configureBatteries:
     "Review my OpenAPPA batteries: what is not enforced, and which ones fit my MCP servers.",
-  /** Overview chat strip: what the policy does today. */
-  currentPolicy: "Tell me about my current OpenAPPA policy.",
-  /** Overview chat strip: the concepts, for someone new to guardrails. */
-  explainGuardrails: "Explain OpenAPPA guardrails to me.",
-  /** Overview chat strip: a guided change. */
-  changePolicy: "Help me change my OpenAPPA policy.",
+  // Overview chat strip: the agent's suggested prompts.
+  explainPolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.explainPolicy.prompt,
+  reviewRisks: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.reviewRisks.prompt,
+  changePolicy: OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.changePolicy.prompt,
+  validateAssumptions:
+    OPENAPPA_SUGGESTED_LAUNCH_PROMPTS.validateAssumptions.prompt,
 } as const;
 
 const TARGET_LAUNCH_PROMPTS = {

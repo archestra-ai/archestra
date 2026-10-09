@@ -768,7 +768,9 @@ function ExpandedToolCard({
             isCancelling={isCancellingTask}
           />
         ) : null}
-        {hasInput ? <ToolInput input={input} defaultOpen /> : null}
+        {hasInput && !policyChange ? (
+          <ToolInput input={input} defaultOpen />
+        ) : null}
         {nestedToolCalls}
         {isApprovalRequested &&
           onToolApprovalResponse &&

@@ -50,13 +50,7 @@ import {
 } from "react";
 import { McpCatalogIcon } from "@/components/mcp-catalog-icon";
 import { Button } from "@/components/ui/button";
-import {
-  Popover,
-  PopoverContent,
-  PopoverTrigger,
-} from "@/components/ui/popover";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Switch } from "@/components/ui/switch";
 import {
   Tooltip,
   TooltipContent,
@@ -77,7 +71,10 @@ import type { ConnectClient } from "./clients";
 import {
   ALL_INCLUDED,
   type ConnectChoices,
+  type ConnectPicks,
+  DEFAULT_PICKS,
   readConnectChoices,
+  readConnectPicks,
   saveConnectChoices,
 } from "./connect-choices";
 import {
@@ -107,6 +104,7 @@ import {
   LastConnectedMark,
   useConnectedAgents,
 } from "./connected-agents";
+import { type IncludeChange, IncludeDialog } from "./include-dialog";
 import {
   readsPrompts,
   type SetupMode,
@@ -123,7 +121,7 @@ const ConnectCommandPanel = dynamic(
   { ssr: false },
 );
 
-type DialogKind = "servers" | "skills" | "plugins" | "cursor";
+type DialogKind = "servers" | "skills" | "plugins" | "cursor" | "include";
 
 const MOTION_CSS = `
 @keyframes connect-icon {
@@ -139,6 +137,9 @@ const MOTION_CSS = `
 
 export function ConnectPage() {
   usePageTitle("Connect");
+  // A gateway and plugins picked over the defaults, per agent, kept next to
+  // the switches below.
+  const [picks, setPicks] = useState<ConnectPicks>(DEFAULT_PICKS);
   const connected = useConnectedAgents();
   // Same access as the Agent connections log it links to.
   const { data: canSeeStatistics } = useHasPermissions(
@@ -149,7 +150,7 @@ export function ConnectPage() {
   const searchParams = useSearchParams();
   const updateUrlParams = useUpdateUrlParams();
   const [pickedId, setPickedId] = useState(() => searchParams.get("clientId"));
-  const data = useConnectPageData(pickedId);
+  const data = useConnectPageData(pickedId, picks.gatewayId);
   const [dialog, setDialog] = useState<DialogKind | null>(null);
   const [focus, setFocus] = useState<string | null>(null);
   // What the user leaves out, per agent. The copied command (or prompt, for
@@ -173,6 +174,7 @@ export function ConnectPage() {
     // left out (Choose what to include).
     if (!clientId) return;
     setChoices({ ...readConnectChoices(clientId), tools: true });
+    setPicks(readConnectPicks(clientId));
   }, [clientId]);
 
   if (data.loading || !client) return <LoadingState />;
@@ -182,12 +184,16 @@ export function ConnectPage() {
   const servers = choices.tools ? data.servers : [];
   const tools = choices.tools ? data.totalTools : 0;
   const skills = data.skillsEnabled ? skillsSorted : [];
-  const plugins = parts.plugins ? data.pluginsFor(client) : [];
+  const plugins = parts.plugins
+    ? data.keptPlugins(client, picks.pluginIds)
+    : [];
   const prompt = data.connectPrompt(client, choices);
-  const setChoice = (part: keyof ConnectChoices, value: boolean) => {
-    const next = { ...choices, [part]: value };
-    setChoices(next);
-    saveConnectChoices(client.id, next);
+  const update = (change: IncludeChange) => {
+    const nextChoices = { ...choices, ...change.choices };
+    const nextPicks = { ...picks, ...change.picks };
+    setChoices(nextChoices);
+    setPicks(nextPicks);
+    saveConnectChoices(client.id, nextChoices, nextPicks);
   };
 
   const setup = setupModeFor(client);
@@ -276,10 +282,11 @@ export function ConnectPage() {
             skills={skills}
             skillsOff={parts.skills && !choices.skills}
             plugins={plugins}
-            pluginsOff={parts.plugins && !choices.plugins}
+            pluginsOff={
+              parts.plugins && (!choices.plugins || plugins.length === 0)
+            }
             routed={routed}
             choices={choices}
-            onChoice={setChoice}
             onOpen={(d, item) => {
               setFocus(item ?? null);
               setDialog(d);
@@ -293,6 +300,7 @@ export function ConnectPage() {
             setup={setup}
             step={step}
             choices={choices}
+            picks={picks}
             prompt={prompt}
             onCursorNote={() => setDialog("cursor")}
           />
@@ -311,6 +319,15 @@ export function ConnectPage() {
         client={client}
         skills={skillsSorted}
         choices={choices}
+      />
+      <IncludeDialog
+        open={dialog === "include"}
+        onOpenChange={(v) => !v && setDialog(null)}
+        data={data}
+        client={client}
+        choices={choices}
+        picks={picks}
+        onChange={update}
       />
       <InfoDialog
         open={dialog === "cursor"}
@@ -595,6 +612,7 @@ function ConnectArea({
   setup,
   step,
   choices,
+  picks,
   prompt,
   onCursorNote,
 }: {
@@ -603,6 +621,7 @@ function ConnectArea({
   setup: SetupMode;
   step: string;
   choices: ConnectChoices;
+  picks: ConnectPicks;
   /** The generic prompt; null when every part is left out. */
   prompt: string | null;
   onCursorNote: () => void;
@@ -616,13 +635,21 @@ function ConnectArea({
   const script = setup === "script";
   const download = setup === "download";
   const command = script
-    ? data.installerCommand(client, choices, windows)
+    ? data.installerCommand(client, choices, windows, picks)
     : null;
   // What the box shows and the button copies.
   const text = script ? command : prompt;
+  const keptPlugins = data.keptPlugins(client, picks.pluginIds);
+  // Keeping none of the plugins is leaving plugins out.
   const leftOutParts = (
     Object.keys(choices) as (keyof ConnectChoices)[]
-  ).filter((part) => !choices[part]);
+  ).filter(
+    (part) =>
+      !choices[part] ||
+      (part === "plugins" &&
+        data.partsFor(client).plugins &&
+        keptPlugins.length === 0),
+  );
 
   // After copying: the status card under the band. A changed pick or choice
   // sends it back to idle, except once connected.
@@ -632,6 +659,8 @@ function ConnectArea({
     manual,
     download,
     ...leftOutParts,
+    data.gateway?.id,
+    ...keptPlugins.map((p) => p.id),
   ].join();
   const [run, setRun] = useState<AfterConnectRun>({
     phase: "idle",
@@ -661,25 +690,28 @@ function ConnectArea({
       </div>
 
       {download ? (
-        <>
-          <ConnectCommandPanel
-            // Remount on a changed selection; the panel reads it once.
-            key={leftOutParts.join(",")}
-            variant="download"
-            client={client}
-            exclude={leftOutParts}
-            mcpGateways={data.gateway ? [data.gateway] : null}
-            mcpGatewayId={data.gateway?.id ?? null}
-            onMcpGatewaySelect={() => {}}
-            llmProxyId={data.llmProxyId}
-            shownProviders={data.shownProviders}
-            urlProvider={null}
-            onProviderSelect={() => {}}
-            baseUrl={data.baseUrl}
-            skillsEnabled={data.skillsEnabled}
-            pluginsEnabled={data.pluginsEnabled}
-          />
-        </>
+        <ConnectCommandPanel
+          // Remount on a changed selection; the panel reads it once.
+          key={setupKey}
+          variant="download"
+          client={client}
+          exclude={leftOutParts}
+          pluginSlugs={
+            picks.pluginIds === null
+              ? undefined
+              : keptPlugins.map((p) => p.slug)
+          }
+          mcpGateways={data.gateway ? [data.gateway] : null}
+          mcpGatewayId={data.gateway?.id ?? null}
+          onMcpGatewaySelect={() => {}}
+          llmProxyId={data.llmProxyId}
+          shownProviders={data.shownProviders}
+          urlProvider={null}
+          onProviderSelect={() => {}}
+          baseUrl={data.baseUrl}
+          skillsEnabled={data.skillsEnabled}
+          pluginsEnabled={data.pluginsEnabled}
+        />
       ) : manual ? (
         // The steps start right here, in the band.
         <div
@@ -742,8 +774,24 @@ function ConnectArea({
           )}
 
           {script && (
-            <div className="mt-3 flex justify-end px-1 text-xs text-muted-foreground">
-              <TextButton onClick={() => setWindows(!windows)}>
+            <div className="mt-3 grid gap-x-8 gap-y-2 px-1 text-xs text-muted-foreground md:grid-cols-[minmax(0,1fr)_auto]">
+              <div>
+                <p className="font-semibold text-foreground">
+                  When it finishes
+                </p>
+                <ol className="mt-1 list-decimal space-y-0.5 pl-4">
+                  {scriptNextSteps(client).map((line) => (
+                    <li key={line}>{line}</li>
+                  ))}
+                  <li>
+                    The full next steps are printed at the end of the output.
+                  </li>
+                </ol>
+              </div>
+              <TextButton
+                onClick={() => setWindows(!windows)}
+                className="self-start"
+              >
                 {windows
                   ? "Use the macOS / Linux command"
                   : "Use the Windows command"}
@@ -813,6 +861,46 @@ function ScriptBlock({
       </pre>
     </div>
   );
+}
+
+/**
+ * The Script option's "When it finishes" list. It follows the installer's own
+ * ending (each agent's ending in
+ * backend/src/services/agent-connection-setup/agents/), which prints in full at
+ * the end of the output.
+ */
+function scriptNextSteps(client: ConnectClient): string[] {
+  switch (client.id) {
+    case "claude-code":
+      return [
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Open a new terminal and run the claude command it prints. Skills load on their own.",
+      ];
+    case "cursor":
+      return [
+        "Reload Cursor.",
+        "Open Customize > MCPs and sign in to the gateway.",
+        'If the output shows "Cursor model settings", enter them under Settings > Models > API Keys.',
+      ];
+    case "codex":
+      return [
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Open a new terminal and run the codex command it prints.",
+        "For skills, run /plugins in Codex and install the plugin.",
+      ];
+    case "copilot-cli":
+      return [
+        "If the output prints COPILOT_* lines, add them to your shell profile.",
+        "Open a new terminal and run the copilot command it prints. It opens the browser to sign in to the gateway.",
+      ];
+    case "opencode":
+      return [
+        "Say yes when the terminal offers to sign you in to the gateway.",
+        "Close OpenCode if it's open, then run the opencode command it prints in a new terminal.",
+      ];
+    default:
+      return [`Restart ${nameOf(client)}.`];
+  }
 }
 
 // === Connect band heading: the one instruction ===
@@ -980,98 +1068,6 @@ function guardrailsStatus(
 
 // === Profile card ===
 
-/** The card's one place to leave parts out; the command carries the result. */
-function IncludeMenu({
-  skills,
-  plugins,
-  routing,
-  choices,
-  onChoice,
-}: {
-  skills: boolean;
-  plugins: boolean;
-  routing: boolean;
-  choices: ConnectChoices;
-  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
-}) {
-  const rows: {
-    id: string;
-    title: string;
-    sub: string;
-    part?: keyof ConnectChoices;
-  }[] = [
-    { id: "tools", title: "Tools", sub: "Always included" },
-    ...(skills
-      ? [
-          {
-            id: "skills",
-            title: "Skills",
-            sub: "Loaded when a task needs one",
-            part: "skills" as const,
-          },
-        ]
-      : []),
-    ...(plugins
-      ? [
-          {
-            id: "plugins",
-            title: "Plugins",
-            sub: "The plugins your org approved for this agent",
-            part: "plugins" as const,
-          },
-        ]
-      : []),
-    ...(routing
-      ? [
-          {
-            id: "proxy",
-            title: "LLM proxy",
-            sub: "Model requests go through the LLM proxy",
-            part: "proxy" as const,
-          },
-        ]
-      : []),
-  ];
-  return (
-    <Popover>
-      <PopoverTrigger asChild>
-        <Button
-          variant="ghost"
-          size="xs"
-          className="-mr-1.5 shrink-0 text-muted-foreground"
-        >
-          <SlidersHorizontal />
-          Choose what to include
-        </Button>
-      </PopoverTrigger>
-      <PopoverContent align="end" className="w-80 p-1.5">
-        {rows.map((r) => (
-          <div
-            key={r.id}
-            className="flex items-center gap-3 rounded-md px-2.5 py-2"
-          >
-            <label
-              htmlFor={`include-${r.id}`}
-              className={cn("min-w-0 flex-1", r.part && "cursor-pointer")}
-            >
-              <span className="block text-sm font-semibold">{r.title}</span>
-              <span className="block text-xs text-muted-foreground">
-                {r.sub}
-              </span>
-            </label>
-            <Switch
-              id={`include-${r.id}`}
-              checked={r.part ? choices[r.part] : true}
-              disabled={!r.part}
-              onCheckedChange={(v) => r.part && onChoice(r.part, v)}
-            />
-          </div>
-        ))}
-      </PopoverContent>
-    </Popover>
-  );
-}
-
 /** "See all 5 skills", or "See the skill" when there's one. */
 function seeAllLabel(count: number, noun: string) {
   return count === 1
@@ -1117,7 +1113,6 @@ function ProfileCard({
   pluginsOff,
   routed,
   choices,
-  onChoice,
   onOpen,
 }: {
   data: ConnectPageData;
@@ -1133,7 +1128,6 @@ function ProfileCard({
   servers: ConnectServer[];
   tools: number | null;
   choices: ConnectChoices;
-  onChoice: (part: keyof ConnectChoices, value: boolean) => void;
   /** Opens a dialog; for servers and skills, on one row's item. */
   onOpen: (d: DialogKind, item?: string) => void;
 }) {
@@ -1222,14 +1216,19 @@ function ProfileCard({
           <p className="text-sm leading-snug text-pretty text-foreground">
             {cardIntro(data, servers, included)}
           </p>
-          {(skillsOn || pluginsOn || proxyOn) && (
-            <IncludeMenu
-              skills={skillsOn && skills.length > 0}
-              plugins={pluginsOn}
-              routing={proxyOn}
-              choices={choices}
-              onChoice={onChoice}
-            />
+          {(data.gateways.length > 1 ||
+            data.partsFor(client).skills ||
+            pluginsOn ||
+            proxyOn) && (
+            <Button
+              variant="ghost"
+              size="xs"
+              className="-mr-1.5 shrink-0 text-muted-foreground"
+              onClick={() => onOpen("include")}
+            >
+              <SlidersHorizontal />
+              Choose what to include
+            </Button>
           )}
         </div>
 

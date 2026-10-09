@@ -1,0 +1,4 @@
+`import $_ from $source` where {
+  $source <: r".*__arena__.*",
+  register_diagnostic(span=$source, message="design-arena: do not commit")
+}

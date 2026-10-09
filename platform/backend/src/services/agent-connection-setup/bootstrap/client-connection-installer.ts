@@ -16,7 +16,7 @@ async function main() {
   const args = process.argv.slice(2);
   const value = (flag) => { const i = args.indexOf(flag); return i < 0 ? undefined : args[i + 1]; };
   if (args.includes('--help')) {
-    console.log('Usage: node connect.cjs --url https://deployment.example --client ${INSTALLER_CLIENT_IDS.join("|")} [--exclude ${CONNECT_SETUP_PARTS.join(",")}] [--no-open]');
+    console.log('Usage: node connect.cjs --url https://deployment.example --client ${INSTALLER_CLIENT_IDS.join("|")} [--exclude ${CONNECT_SETUP_PARTS.join(",")}] [--gateway <slug>] [--plugins <slug,...>] [--no-open]');
     return;
   }
   const origin = new URL(value('--url'));
@@ -30,6 +30,11 @@ async function main() {
   if (!${JSON.stringify(INSTALLER_CLIENT_IDS)}.includes(clientId)) throw new Error('Choose --client ${INSTALLER_CLIENT_IDS.slice(0, -1).join(", ")}, or ${INSTALLER_CLIENT_IDS.at(-1)}.');
   const exclude = (value('--exclude') ?? '').split(',').filter(Boolean);
   if (exclude.some(part => !${JSON.stringify(CONNECT_SETUP_PARTS)}.includes(part))) throw new Error('--exclude takes a comma-separated list of ${CONNECT_SETUP_PARTS.join(", ")}.');
+  // Picks from the Connect page; the browser approval starts from them.
+  const gateway = value('--gateway');
+  if (gateway !== undefined && !/^[A-Za-z0-9_-]{1,128}$/.test(gateway)) throw new Error('--gateway takes a gateway slug.');
+  const plugins = value('--plugins')?.split(',').filter(Boolean);
+  if (plugins?.some(slug => !/^[A-Za-z0-9._-]{1,128}$/.test(slug))) throw new Error('--plugins takes a comma-separated list of plugin slugs.');
   const platform = { darwin: 'macos', linux: 'linux', win32: 'windows' }[process.platform];
   if (!platform) throw new Error('Supported operating systems: macOS, Linux, Windows.');
   if (typeof fetch !== 'function') throw new Error('Node.js 18 or newer is required.');
@@ -47,21 +52,21 @@ async function main() {
   const releaseLock = await acquireConnectionLock({ origin: origin.origin, clientId, platform });
   let ending;
   try {
-    ending = await runConnection({ args, clientId, exclude, networkOrigin, origin, platform });
+    ending = await runConnection({ args, clientId, exclude, gateway, plugins, networkOrigin, origin, platform });
   } finally {
     await releaseLock();
   }
   // After the lock: the sign-in and the agent it starts can run for a long time.
   finishSetup(ending, platform);
 }
-async function runConnection({ args, clientId, exclude, networkOrigin, origin, platform }) {
+async function runConnection({ args, clientId, exclude, gateway, plugins, networkOrigin, origin, platform }) {
   const request = async (path, body) => {
     const response = await fetch(new URL(path, networkOrigin), { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), redirect: 'error', signal: AbortSignal.timeout(15000) });
     if (!response.ok) { const error = new Error('Connection request failed (HTTP ' + response.status + '). Restart the installer or check the deployment URL.'); error.retryable = response.status === 429 || response.status >= 500; throw error; }
     return response.json();
   };
   const deviceName = hostname().trim().slice(0, 64);
-  const started = await request('/api/client-connections', { clientId, platform, ...(exclude.length ? { exclude } : {}), ...(deviceName ? { deviceName } : {}) });
+  const started = await request('/api/client-connections', { clientId, platform, ...(exclude.length ? { exclude } : {}), ...(gateway ? { gateway } : {}), ...(plugins ? { plugins } : {}), ...(deviceName ? { deviceName } : {}) });
   if (exclude.length) console.log('Leaving out: ' + exclude.join(', ') + '.');
   if (!Number.isSafeInteger(started.interval) || started.interval < 1 || started.interval > 600) throw new Error('Invalid polling interval.');
   const pollIntervalMs = started.interval * 1000;
@@ -253,7 +258,14 @@ function finishSetup(ending, platform) {
 // stdin is the download pipe, so questions go to the terminal itself.
 function openTerminal() {
   if (!process.stdout.isTTY) return null;
-  try { return openSync(process.platform === 'win32' ? '\\\\.\\CONIN$' : '/dev/tty', 'r+'); } catch { return null; }
+  try { return openSync(process.platform === 'win32' ? '\\\\.\\CONIN$' : terminalDevice(), 'r+'); } catch { return null; }
+}
+// macOS kqueue rejects /dev/tty (EINVAL), which crashes Bun-built sign-in
+// commands such as claude mcp login, so hand them the real device instead.
+function terminalDevice() {
+  if (process.platform !== 'darwin') return '/dev/tty';
+  const name = spawnSync('ps', ['-o', 'tty=', '-p', String(process.pid)], { encoding: 'utf8' }).stdout?.trim();
+  return name && name !== '??' ? '/dev/' + name : '/dev/tty';
 }
 // Enter or anything but "n" means yes.
 function ask(terminal, question) {

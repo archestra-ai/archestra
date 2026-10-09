@@ -213,7 +213,7 @@ function RemedyRow({ remedy }: { remedy: Remedy }) {
       </TableCell>
       <TableCell className="text-xs whitespace-nowrap">
         {runner ? (
-          <span className="text-muted-foreground">{runner.phrase}</span>
+          <span className="text-muted-foreground">{runner}</span>
         ) : (
           <span className="flex items-center gap-1.5 text-amber-600 dark:text-amber-400">
             <TriangleAlert aria-hidden className="size-3.5" />

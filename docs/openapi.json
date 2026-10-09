@@ -146855,6 +146855,18 @@
                       ]
                     }
                   },
+                  "gateway": {
+                    "type": "string",
+                    "pattern": "^[A-Za-z0-9_-]{1,128}$"
+                  },
+                  "plugins": {
+                    "maxItems": 50,
+                    "type": "array",
+                    "items": {
+                      "type": "string",
+                      "pattern": "^[A-Za-z0-9._-]{1,128}$"
+                    }
+                  },
                   "deviceName": {
                     "type": "string",
                     "minLength": 1,
@@ -147490,6 +147502,17 @@
                         ]
                       }
                     },
+                    "gateway": {
+                      "nullable": true,
+                      "type": "string"
+                    },
+                    "plugins": {
+                      "nullable": true,
+                      "type": "array",
+                      "items": {
+                        "type": "string"
+                      }
+                    },
                     "deviceName": {
                       "nullable": true,
                       "type": "string"
@@ -147505,6 +147528,8 @@
                     "clientId",
                     "platform",
                     "exclude",
+                    "gateway",
+                    "plugins",
                     "deviceName",
                     "userCode",
                     "expiresAt"

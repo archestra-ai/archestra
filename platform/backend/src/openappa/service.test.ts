@@ -3124,6 +3124,7 @@ describe("remedy by offer", () => {
     expect(native.loadChildReturns).toHaveBeenCalledWith(
       organizationId,
       "user:alice|conversation",
+      undefined,
     );
     expect(records).toEqual([
       {
@@ -3161,6 +3162,25 @@ describe("remedy by offer", () => {
         value: "SUMMARY(24 characters): safe",
       },
     ]);
+  });
+
+  test("narrows retained child returns to one child", async () => {
+    native.loadChildReturns.mockResolvedValueOnce([]);
+
+    await loadChildReturns({
+      organizationId,
+      parentSessionId: "user:alice|conversation",
+      childSessionId: "user:alice|conversation:a1",
+    });
+
+    expect(native.loadChildReturns).toHaveBeenCalledWith(
+      organizationId,
+      "user:alice|conversation",
+      {
+        childSessionId: "user:alice|conversation:a1",
+        operationPrefix: undefined,
+      },
+    );
   });
 
   test("fails closed with 503 when the child returns cannot be loaded", async () => {

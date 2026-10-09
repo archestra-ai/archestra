@@ -253,7 +253,14 @@ function finishSetup(ending, platform) {
 // stdin is the download pipe, so questions go to the terminal itself.
 function openTerminal() {
   if (!process.stdout.isTTY) return null;
-  try { return openSync(process.platform === 'win32' ? '\\\\.\\CONIN$' : '/dev/tty', 'r+'); } catch { return null; }
+  try { return openSync(process.platform === 'win32' ? '\\\\.\\CONIN$' : terminalDevice(), 'r+'); } catch { return null; }
+}
+// macOS kqueue rejects /dev/tty (EINVAL), which crashes Bun-built sign-in
+// commands such as claude mcp login, so hand them the real device instead.
+function terminalDevice() {
+  if (process.platform !== 'darwin') return '/dev/tty';
+  const name = spawnSync('ps', ['-o', 'tty=', '-p', String(process.pid)], { encoding: 'utf8' }).stdout?.trim();
+  return name && name !== '??' ? '/dev/' + name : '/dev/tty';
 }
 // Enter or anything but "n" means yes.
 function ask(terminal, question) {

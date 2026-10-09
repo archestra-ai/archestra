@@ -1,4 +1,8 @@
-import { archestraApiSdk, type ErrorExtended } from "@archestra/shared";
+import {
+  archestraApiSdk,
+  type archestraApiTypes,
+  type ErrorExtended,
+} from "@archestra/shared";
 import { notFound } from "next/navigation";
 import { ServerErrorFallback } from "@/components/error-fallback";
 import { getServerApiHeaders } from "@/lib/utils/server";
@@ -10,19 +14,20 @@ export default async function OpenAppaLayout({
 }: {
   children: React.ReactNode;
 }) {
-  let features: { openappaEnabled: boolean; betaEnabled: boolean } | undefined;
+  let config: archestraApiTypes.GetConfigResponses["200"] | undefined;
   try {
     const headers = await getServerApiHeaders();
-    const config = await archestraApiSdk.getConfig({ headers });
-    if (config.error) throw config.error;
-    features = config.data?.features;
+    const response = await archestraApiSdk.getConfig({ headers });
+    if (response.error) throw response.error;
+    config = response.data;
   } catch (error) {
     return <ServerErrorFallback error={error as ErrorExtended} />;
   }
   // `notFound` throws, so it stays outside the catch above.
-  if (features?.openappaEnabled !== true) {
+  if (config?.features.openappaEnabled !== true) {
     // Beta on with OpenAPPA off means the licence is what holds it back.
-    if (features?.betaEnabled === true) return <OpenAppaLicenceRequired />;
+    if (config?.features.betaEnabled === true)
+      return <OpenAppaLicenceRequired tier={config.smallTeamTier} />;
     notFound();
   }
 

@@ -14,12 +14,16 @@ import {
   EmptyMedia,
   EmptyTitle,
 } from "@/components/ui/empty";
-import { useSmallTeamTier } from "@/lib/config/config.query";
 
 const SALES_EMAIL = "sales@archestra.ai";
 
-export function OpenAppaLicenceRequired() {
-  const tier = useSmallTeamTier();
+// The tier comes from the same server fetch that chose this page: the
+// client's config cache can lag behind and contradict that choice.
+export function OpenAppaLicenceRequired({
+  tier,
+}: {
+  tier: { threshold: number; userCount: number };
+}) {
   return (
     <PageLayout title="Guardrails">
       <Empty className="py-16">
@@ -35,12 +39,10 @@ export function OpenAppaLicenceRequired() {
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>
-          {tier && (
-            <p className="text-sm text-muted-foreground">
-              It is free for teams under {tier.threshold} users. This instance
-              has {tier.userCount}, so it needs an enterprise license.
-            </p>
-          )}
+          <p className="text-sm text-muted-foreground">
+            It is free for teams under {tier.threshold} users. This instance has{" "}
+            {tier.userCount}, so it needs an enterprise license.
+          </p>
           <Button asChild>
             <a href={`mailto:${SALES_EMAIL}`}>
               <Mail aria-hidden="true" />

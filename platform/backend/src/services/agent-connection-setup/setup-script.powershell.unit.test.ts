@@ -393,7 +393,7 @@ exit 0
               HOME: home,
               USERPROFILE: home,
               CLAUDE_CONFIG_DIR: "",
-              CODEX_HOME: path.join(home, "custom codex"),
+              CODEX_HOME: path.join(root, "custom codex"),
               PATH: `${bin}:${process.env.PATH}`,
               NO_COLOR: "1",
               ARCHESTRA_TEST_COMMAND_LOG: callsPath,

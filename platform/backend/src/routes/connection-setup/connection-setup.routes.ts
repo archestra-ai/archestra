@@ -106,19 +106,10 @@ const CLIENT_SUPPORTED_PROVIDERS: Record<
     "cerebras",
     "github-copilot",
   ],
-  opencode: [
-    "anthropic",
-    "openai",
-    "azure",
-    "openrouter",
-    "vllm",
-    "ollama",
-    "groq",
-    "mistral",
-    "deepseek",
-    "xai",
-    "cerebras",
-  ],
+  // OpenCode can only route the providers its plugin redirects natively.
+  opencode: OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map(
+    ({ provider }) => provider,
+  ),
 };
 
 const CreateConnectionSetupBodySchema = z.object({
@@ -377,18 +368,6 @@ const connectionSetupRoutes: FastifyPluginAsyncZod = async (fastify) => {
         throw new ApiError(
           400,
           "model is only supported for copilot-cli and claude-desktop setups",
-        );
-      }
-      if (
-        clientId === "opencode" &&
-        provider &&
-        !OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.some(
-          (route) => route.provider === provider,
-        )
-      ) {
-        throw new ApiError(
-          400,
-          `${provider} is not supported by OpenCode local-credential passthrough`,
         );
       }
 

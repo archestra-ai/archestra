@@ -16,6 +16,7 @@ import {
 } from "@/components/ui/empty";
 
 const SALES_EMAIL = "sales@archestra.ai";
+const OPENAPPA_URL = "https://www.openappa.com/";
 
 export function OpenAppaLicenceRequired() {
   return (
@@ -25,11 +26,16 @@ export function OpenAppaLicenceRequired() {
           <EmptyMedia variant="icon">
             <OpenAppaIcon aria-hidden="true" />
           </EmptyMedia>
-          <EmptyTitle>OpenAPPA is an enterprise feature</EmptyTitle>
+          <EmptyTitle>
+            The OpenAPPA integration is an enterprise feature
+          </EmptyTitle>
           <EmptyDescription>
-            OpenAPPA checks every tool call against your policy before it runs,
-            so an agent that read an untrusted page cannot leak your data. A
-            prompt injection cannot change its decisions.
+            <a href={OPENAPPA_URL} target="_blank" rel="noreferrer">
+              OpenAPPA
+            </a>{" "}
+            is an open-source policy engine that checks every tool call before
+            it runs, so an agent that read an untrusted page cannot leak your
+            data. Running it on your agents here takes an enterprise license.
           </EmptyDescription>
         </EmptyHeader>
         <EmptyContent>

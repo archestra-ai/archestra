@@ -30,6 +30,6 @@ The following components are licensed under the Enterprise License and are not p
 - Content encryption at rest (LLM logs and chat messages under a separate, operator-held key)
 - Two-factor authentication (TOTP enrollment, organization-wide enforcement, and session lifetime caps)
 - Idle hibernation for self-hosted MCP servers, in beta (scale-to-zero of unused servers with wake on demand)
-- Guardrails with OpenAPPA, in alpha (policy enforcement on every tool call)
+- Guardrails: the [OpenAPPA](https://www.openappa.com/) integration, in alpha (policy enforcement on every tool call; OpenAPPA itself is MIT-licensed)
 
 If you'd like to pilot the Enterprise feature set, reach out to sales@archestra.ai for a PoC license.

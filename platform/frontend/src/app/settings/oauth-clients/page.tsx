@@ -41,7 +41,12 @@ import {
   OAuthClientCreatedDialog,
 } from "@/components/oauth-client-created-dialog";
 import { QueryLoadError } from "@/components/query-load-error";
+import {
+  RESOURCE_ACCESS_FILTER_PARAMS,
+  ResourceAccessFilter,
+} from "@/components/resource-access-filter";
 import { ResourceListActions } from "@/components/resource-list-actions";
+import { useScopeFilterParams } from "@/components/resource-scope-filter";
 import { SearchInput } from "@/components/search-input";
 import { TableRowActions } from "@/components/table-row-actions";
 import { Button } from "@/components/ui/button";
@@ -133,11 +138,18 @@ function OauthClientsTable() {
   });
   const resourceNameById = new Map(resources.map((r) => [r.id, r.name]));
 
+  // One set of access filters for both halves: who a client is shared with
+  // and who created it read the same way for an LLM and an MCP client.
+  const { hasActiveScopeFilters, access, sharedWith, owner } =
+    useScopeFilterParams();
   const llmQuery = useLlmOauthClients({
     limit: ALL_CLIENTS_LIMIT,
     search: search || undefined,
     providerApiKeyId,
     labels: labelsFilter,
+    access,
+    sharedWith,
+    owner,
     toastOnError: false,
   });
   // Read permission for the two halves is separate, and only the LLM one
@@ -147,6 +159,9 @@ function OauthClientsTable() {
   const mcpQuery = useMcpOauthClients({
     search: search || undefined,
     labels: labelsFilter,
+    access,
+    sharedWith,
+    owner,
     enabled: canReadMcp === true,
   });
 
@@ -185,7 +200,12 @@ function OauthClientsTable() {
     .sort((a, b) => a.client.name.localeCompare(b.client.name));
 
   const hasActiveFilters = Boolean(
-    search || typeFilter || grantTypeFilter || providerApiKeyId || labelsFilter,
+    search ||
+      typeFilter ||
+      grantTypeFilter ||
+      providerApiKeyId ||
+      labelsFilter ||
+      hasActiveScopeFilters,
   );
   const clearFilters = useCallback(
     () =>
@@ -195,6 +215,9 @@ function OauthClientsTable() {
         grantType: null,
         providerApiKeyId: null,
         labels: null,
+        ...Object.fromEntries(
+          RESOURCE_ACCESS_FILTER_PARAMS.map((param) => [param, null]),
+        ),
         page: "1",
       }),
     [updateQueryParams],
@@ -428,6 +451,10 @@ function OauthClientsTable() {
             />
           }
         >
+          <ResourceAccessFilter
+            resource="llmOauthClient"
+            noun="OAuth clients"
+          />
           <FilterSelect
             value={typeFilter ?? "all"}
             onValueChange={(value) =>

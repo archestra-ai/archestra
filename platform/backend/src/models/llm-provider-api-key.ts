@@ -46,7 +46,9 @@ import ConversationModel from "./conversation";
 import CreatedByModel from "./created-by";
 import { LlmProviderApiKeyLabelModel } from "./entity-labels";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
-import ResourcePermissionSubjectModel from "./resource-permission-subject";
+import ResourcePermissionSubjectModel, {
+  type ResourceAccessFilter,
+} from "./resource-permission-subject";
 
 class LlmProviderApiKeyModel {
   // SPDX-SnippetBegin
@@ -253,6 +255,8 @@ class LlmProviderApiKeyModel {
       provider?: SupportedProvider;
       ids?: string[];
       labels?: Record<string, string[]>;
+      /** The list's `access`, `sharedWith`, and `owner` filters. */
+      access?: ResourceAccessFilter;
     },
     options?: { includeSubscriptionInfo?: boolean },
   ): Promise<LlmProviderApiKeyWithScopeInfo[]> {
@@ -297,6 +301,22 @@ class LlmProviderApiKeyModel {
         inArray(schema.llmProviderApiKeysTable.id, labelFilteredIds),
       );
     }
+
+    // SPDX-SnippetBegin
+    // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+    // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+    const accessCondition =
+      filters?.access &&
+      ResourcePermissionPolicyModel.accessRelationCondition({
+        ...filters.access,
+        organizationId,
+        resource: "llmProviderApiKey",
+        scopeColumn: schema.llmProviderApiKeysTable.id,
+        // An own key belongs to its user; a shared one to whoever added it.
+        ownerColumn: sql`coalesce(${schema.llmProviderApiKeysTable.userId}, ${schema.llmProviderApiKeysTable.createdBy})`,
+      });
+    if (accessCondition) conditions.push(accessCondition);
+    // SPDX-SnippetEnd
 
     // Query with team, user, and secrets table joins.
     // NOTE: secretsTable.secret is encrypted at rest — decrypt via

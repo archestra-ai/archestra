@@ -27,6 +27,7 @@ import type {
 } from "@/types";
 import ModelTeamModel from "./model-team";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
+import type { ResourceAccessFilter } from "./resource-permission-subject";
 
 /**
  * Effective pricing result with source tracking. All prices are per-million
@@ -175,6 +176,35 @@ function readOllamaDefaultNumCtx(
 }
 
 class ModelModel {
+  // SPDX-SnippetBegin
+  // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+  // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+  /**
+   * The ids among `ids` that pass a list's `access` and `sharedWith`
+   * filters. Models are synced, not authored, so none is "mine" and an
+   * owner filter matches nothing.
+   */
+  static async idsMatchingAccess(params: {
+    organizationId: string;
+    ids: string[];
+    access: ResourceAccessFilter;
+  }): Promise<Set<string>> {
+    if (params.ids.length === 0) return new Set();
+    const condition = ResourcePermissionPolicyModel.accessRelationCondition({
+      ...params.access,
+      organizationId: params.organizationId,
+      resource: "llmModel",
+      scopeColumn: schema.modelsTable.id,
+      ownerColumn: sql`NULL`,
+    });
+    const rows = await db
+      .select({ id: schema.modelsTable.id })
+      .from(schema.modelsTable)
+      .where(and(inArray(schema.modelsTable.id, params.ids), condition));
+    return new Set(rows.map((row) => row.id));
+  }
+  // SPDX-SnippetEnd
+
   /**
    * Find all models discovered via LLM Proxy requests.
    */

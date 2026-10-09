@@ -5,7 +5,10 @@ import {
   PaginationQuerySchema,
   parseLabelsParam,
   perUserCredentialLabel,
+  ResourceAccessQuerySchema,
+  ResourceOwnerQuerySchema,
   ResourcePermissionGrantSchema,
+  ResourceSharedWithQuerySchema,
   RouteId,
   type SupportedProvider,
   SupportedProvidersSchema,
@@ -20,6 +23,7 @@ import {
   VirtualApiKeyLabelModel,
   VirtualApiKeyModel,
 } from "@/models";
+import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
 import { getSecretValueForLlmProviderApiKey } from "@/secrets-manager";
 import { readVirtualKeyValue } from "@/services/connection-setup";
 import { credentialBilling } from "@/services/credential-billing";
@@ -149,6 +153,9 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
             .describe(
               "Filter by labels. Format: key1:val1|val2;key2:val3. AND across keys, OR within values.",
             ),
+          access: ResourceAccessQuerySchema,
+          sharedWith: ResourceSharedWithQuerySchema,
+          owner: ResourceOwnerQuerySchema,
         }),
         response: constructResponseSchema(
           createPaginatedResponseSchema(VirtualApiKeyWithParentInfoSchema),
@@ -165,13 +172,16 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           keyType,
           scope,
           labels,
+          access: relations,
+          sharedWith,
+          owner,
         },
         organizationId,
         user,
       },
       reply,
     ) => {
-      const [userTeamIds, isVirtualKeyAdmin] = await Promise.all([
+      const [userTeamIds, isVirtualKeyAdmin, access] = await Promise.all([
         TeamModel.getUserTeamIds(user.id),
         ResourcePermissions.allows({
           userId: user.id,
@@ -179,6 +189,13 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
           resource: "llmVirtualKey",
           scope: "*",
           action: "update",
+        }),
+        ResourcePermissionSubjectModel.resolveAccessFilter({
+          userId: user.id,
+          organizationId,
+          relations,
+          sharedWith,
+          ownerIds: owner,
         }),
       ]);
 
@@ -193,6 +210,7 @@ const virtualApiKeysRoutes: FastifyPluginAsyncZod = async (fastify) => {
         keyType,
         scope,
         labels: parseLabelsParam(labels),
+        access,
       });
       return reply.send(result);
     },

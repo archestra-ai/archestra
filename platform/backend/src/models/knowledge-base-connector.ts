@@ -29,6 +29,7 @@ import CreatedByModel from "./created-by";
 import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel, {
   type GrantPrincipal,
+  type ResourceAccessFilter,
 } from "./resource-permission-subject";
 
 class KnowledgeBaseConnectorModel {
@@ -121,6 +122,8 @@ class KnowledgeBaseConnectorModel {
     viewerPrincipal?: GrantPrincipal;
     visibilityScope?: ConnectorVisibilityScope;
     status?: "active" | "deleted";
+    /** The list's `access`, `sharedWith`, and `owner` filters. */
+    access?: ResourceAccessFilter;
   }): Promise<{ data: KnowledgeBaseConnector[]; total: number }> {
     const {
       organizationId,
@@ -133,6 +136,7 @@ class KnowledgeBaseConnectorModel {
       viewerTeamIds,
       visibilityScope,
       status,
+      access,
     } = params;
     const searchPattern = search ? `%${escapeLikePattern(search)}%` : null;
 
@@ -175,6 +179,19 @@ class KnowledgeBaseConnectorModel {
             ),
           ]
         : []),
+      // SPDX-SnippetBegin
+      // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
+      // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise
+      access
+        ? ResourcePermissionPolicyModel.accessRelationCondition({
+            ...access,
+            organizationId,
+            resource: "knowledgeConnector",
+            scopeColumn: schema.knowledgeBaseConnectorsTable.id,
+            ownerColumn: schema.knowledgeBaseConnectorsTable.createdBy,
+          })
+        : undefined,
+      // SPDX-SnippetEnd
     ];
 
     const [data, totalResult] = await Promise.all([

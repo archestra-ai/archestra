@@ -31,7 +31,7 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
-  TeamTokenModel,
+  ServiceAccountModel,
   ToolModel,
   UserModel,
   UserTokenModel,
@@ -329,9 +329,9 @@ export async function validateAppGatewayToken(
       tokenId: userToken.id,
     };
   }
-  // A valid organization/team token authenticates, but carries no viewer — apps
-  // need one. Surface that distinctly so the route can explain it.
-  if (await TeamTokenModel.validateToken(token)) {
+  // A valid service account token authenticates, but carries no viewer —
+  // apps need one. Surface that distinctly so the route can explain it.
+  if (await ServiceAccountModel.verifyToken(token)) {
     return { ok: false, reason: "no_viewer" };
   }
   return { ok: false, reason: "invalid" };

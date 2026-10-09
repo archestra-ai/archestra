@@ -22,7 +22,10 @@ import {
   getSkillDelegationTools,
 } from "@/archestra-mcp-server";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
-import { isServiceAccountUserId } from "@/auth/service-account-user-id";
+import {
+  isServiceAccountUserId,
+  serviceAccountIdFromUserId,
+} from "@/auth/service-account-user-id";
 import { CacheKey, LRUCacheManager } from "@/cache-manager";
 import type { ChatMcpElicitationBridge } from "@/clients/chat-mcp-elicitation";
 import type { ChatTaskBridge } from "@/clients/chat-task-bridge";
@@ -42,8 +45,8 @@ import logger from "@/logging";
 import {
   AgentModel,
   AgentTeamModel,
+  ServiceAccountModel,
   TeamModel,
-  TeamTokenModel,
   ToolModel,
   UserTokenModel,
 } from "@/models";
@@ -51,6 +54,7 @@ import { isAppaDelegatedRun } from "@/openappa/service";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import { agentToolExclusionsService } from "@/services/agent-tool-exclusions";
 import { resolveSessionExternalIdpToken } from "@/services/identity-providers/session-token";
+import type { SelectServiceAccount } from "@/types";
 import type { ClientCapabilitiesWithExtensions } from "@/types/mcp-capabilities";
 import { buildMcpClientInfo } from "@/utils/mcp-client-info";
 
@@ -285,148 +289,77 @@ export const __test = {
 };
 
 /**
- * Select the appropriate token for a user based on team overlap
- * Priority:
- * 1. Personal user token (always preferred - ensures userId is available for global catalog tools)
- * 2. Organization token (fallback for admins)
- * 3. Team token where user is a member AND team is assigned to profile
+ * Select the token the chat MCP client presents to the gateway for a caller:
+ * - a person uses their personal token, created on first use;
+ * - a service account (`service-account:<id>`) uses its platform-held token;
+ * - the headless "system" sentinel uses the organization's built-in system
+ *   service account.
  *
  * @param agentId - The profile (agent) ID
- * @param userId - The user requesting access
- * @param actorTeamId - Set when a team token made the call; uses that team's token
+ * @param userId - The caller: a user id, a service-account principal, or "system"
  * @returns Token value and metadata, or null if no token available
  */
 export async function selectMCPGatewayToken(
   agentId: string,
   userId: string,
   organizationId: string,
-  actorTeamId?: string,
 ): Promise<McpGatewayToken | null> {
-  if (actorTeamId) {
-    const teamToken = await TeamTokenModel.findTeamToken(actorTeamId);
-    if (teamToken) {
-      const tokenValue = await TeamTokenModel.getTokenValue(teamToken.id);
-      if (tokenValue) {
-        logger.info(
-          { agentId, actorTeamId, tokenId: teamToken.id },
-          "Using the requesting team's own token for chat MCP client",
-        );
-        return {
-          tokenValue,
-          tokenId: teamToken.id,
-          teamId: actorTeamId,
-          isOrganizationToken: false,
-        };
-      }
-    }
-  }
-
-  // Get user's team IDs and profile's team IDs (needed for fallback token selection)
-  const userTeamIds = await TeamModel.getUserTeamIds(userId);
-  const profileTeamIds = await AgentTeamModel.getTeamsForAgent(agentId);
-  const commonTeamIds = userTeamIds.filter((id) => profileTeamIds.includes(id));
-
-  // Synthetic principals ("system" for internal/public email security modes,
-  // "service-account:<id>" for service-account callers) have no users row, so
-  // they can never own a personal user token — attempting to create one fails
-  // on the user_id foreign key. They fall back to org/team tokens below.
-  const isSyntheticUser = userId === "system" || isServiceAccountUserId(userId);
-
-  // 1. Always try to get/create a personal user token first
-  // This ensures userId is available in the token for global catalog tools
-  if (!isSyntheticUser) {
-    // Ensure user has a token (creates one if missing)
-    const userToken = await UserTokenModel.ensureUserToken(
-      userId,
-      organizationId,
-    );
-    const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
-    if (tokenValue) {
-      logger.info(
-        {
-          agentId,
-          userId,
-          tokenId: userToken.id,
-        },
-        "Using personal user token for chat MCP client",
+  // Synthetic principals have no users row, so they can never own a personal
+  // user token. They act through a service account instead.
+  const serviceAccount =
+    userId === "system"
+      ? await ServiceAccountModel.ensureSystemServiceAccount(organizationId)
+      : await findCallerServiceAccount(userId, organizationId);
+  if (serviceAccount) {
+    if (serviceAccount.disabled) {
+      logger.warn(
+        { agentId, serviceAccountId: serviceAccount.id },
+        "Service account is disabled - no gateway token for chat MCP client",
       );
-      return {
-        tokenValue,
-        tokenId: userToken.id,
-        teamId: null,
-        isOrganizationToken: false,
-        isUserToken: true,
-      };
+      return null;
     }
+    const { tokenId, value } =
+      await ServiceAccountModel.ensurePlatformTokenValue(serviceAccount.id);
+    logger.info(
+      { agentId, serviceAccountId: serviceAccount.id, tokenId },
+      "Using service account platform token for chat MCP client",
+    );
+    return {
+      tokenValue: value,
+      tokenId,
+      teamId: serviceAccount.teamId,
+      isOrganizationToken: false,
+      serviceAccountId: serviceAccount.id,
+    };
+  }
+  if (isServiceAccountUserId(userId)) {
+    logger.warn(
+      { agentId, userId },
+      "Service account not found - no gateway token for chat MCP client",
+    );
+    return null;
   }
 
-  // Get all team tokens for this organization
-  const tokens = await TeamTokenModel.findAll(organizationId);
-
-  // 2. Synthetic principals have no team memberships so they can never match a
-  //    team token. Fall back to the organization token to preserve tool access.
-  if (isSyntheticUser) {
-    const orgToken = tokens.find((t) => t.isOrganizationToken);
-    if (orgToken) {
-      const tokenValue = await TeamTokenModel.getTokenValue(orgToken.id);
-      if (tokenValue) {
-        logger.info(
-          {
-            agentId,
-            userId,
-            tokenId: orgToken.id,
-          },
-          "Using organization token for chat MCP client (fallback)",
-        );
-        return {
-          tokenValue,
-          tokenId: orgToken.id,
-          teamId: null,
-          isOrganizationToken: true,
-        };
-      }
-    }
-  }
-
-  // 3. Try to find a team token where user is in that team and profile is assigned to it
-  if (commonTeamIds.length > 0) {
-    for (const token of tokens) {
-      if (token.teamId && commonTeamIds.includes(token.teamId)) {
-        const tokenValue = await TeamTokenModel.getTokenValue(token.id);
-        if (tokenValue) {
-          logger.info(
-            {
-              agentId,
-              userId,
-              tokenId: token.id,
-              teamId: token.teamId,
-            },
-            "Selected team-scoped token for chat MCP client (fallback)",
-          );
-          return {
-            tokenValue,
-            tokenId: token.id,
-            teamId: token.teamId,
-            isOrganizationToken: false,
-          };
-        }
-      }
-    }
-  }
-
-  logger.warn(
-    {
-      agentId,
-      userId,
-      userTeamCount: userTeamIds.length,
-      profileTeamCount: profileTeamIds.length,
-      commonTeamCount: commonTeamIds.length,
-      tokenCount: tokens.length,
-    },
-    "No valid token found for user",
+  const userToken = await UserTokenModel.ensureUserToken(
+    userId,
+    organizationId,
   );
-
-  return null;
+  const tokenValue = await UserTokenModel.getTokenValue(userToken.id);
+  if (!tokenValue) {
+    logger.warn({ agentId, userId }, "No valid token found for user");
+    return null;
+  }
+  logger.info(
+    { agentId, userId, tokenId: userToken.id },
+    "Using personal user token for chat MCP client",
+  );
+  return {
+    tokenValue,
+    tokenId: userToken.id,
+    teamId: null,
+    isOrganizationToken: false,
+    isUserToken: true,
+  };
 }
 
 /**
@@ -834,7 +767,6 @@ export async function getChatMcpTools({
   agentId,
   userId,
   organizationId,
-  actorTeamId,
   chatOpsBindingId,
   chatOpsThreadId,
   enabledToolIds,
@@ -862,8 +794,6 @@ export async function getChatMcpTools({
   agentId: string;
   userId: string;
   organizationId: string;
-  /** Set when a team token made the call (userId is then "system") */
-  actorTeamId?: string;
   /** ChatOps channel binding ID for Slack/MS Teams-triggered executions */
   chatOpsBindingId?: string;
   /** ChatOps thread identifier for thread-scoped agent overrides */
@@ -1001,12 +931,11 @@ export async function getChatMcpTools({
     agentId,
     userId,
     organizationId,
-    actorTeamId,
   );
   if (!mcpGwToken) {
     logger.warn(
       { agentId, userId },
-      "No valid team token available for user - cannot fetch tools",
+      "No valid gateway token available for caller - cannot fetch tools",
     );
     throw new McpToolsUnavailableError("no gateway token for user");
   }
@@ -1404,4 +1333,14 @@ function deleteToolCacheScope(toolCacheKey: string): void {
   // The separator keeps the match on a key boundary: isolation key `exec-1`
   // must not reclaim `exec-10`'s entries.
   toolCache.deleteByPrefix(`${toolCacheKey}:`);
+}
+
+async function findCallerServiceAccount(
+  userId: string,
+  organizationId: string,
+): Promise<SelectServiceAccount | null> {
+  const serviceAccountId = serviceAccountIdFromUserId(userId);
+  return serviceAccountId
+    ? ServiceAccountModel.findAccount(serviceAccountId, organizationId)
+    : null;
 }

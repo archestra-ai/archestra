@@ -41,6 +41,7 @@ import type {
 import QuickLRU from "quick-lru";
 import { unavailableThirdPartyToolMessage } from "@/archestra-mcp-server/tool-recovery-messages";
 import { getMcpCatalogPermissionChecker } from "@/auth/mcp-catalog-permissions";
+import { isServiceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import config from "@/config";
 import type { EncryptedChatAuditContext } from "@/content-encryption/encrypted-chat";
@@ -297,6 +298,8 @@ export type TokenAuthContext = {
   isUserToken?: boolean;
   /** Optional user ID for user-owned server priority (set when called from chat or from user token) */
   userId?: string;
+  /** Service account the caller authenticated as; its team (teamId) scopes install resolution */
+  serviceAccountId?: string;
   /** True if authenticated via external IdP JWKS */
   isExternalIdp?: boolean;
   /** Raw JWT token for propagation to underlying MCP servers (set when isExternalIdp is true) */
@@ -323,7 +326,7 @@ type ResolvedInstallIdentity = Pick<
 >;
 
 type InstallCallerContext = Pick<TokenAuthContext, "userId"> &
-  Partial<Pick<TokenAuthContext, "teamId">>;
+  Partial<Pick<TokenAuthContext, "teamId" | "serviceAccountId">>;
 
 /**
  * Identity fields attached to every persisted tool call and returned result:
@@ -2243,6 +2246,7 @@ class McpClient {
           tokenId: tokenAuth.tokenId,
           teamId: tokenAuth.teamId,
           userId: tokenAuth.userId,
+          serviceAccountId: tokenAuth.serviceAccountId,
           isOrganizationToken: tokenAuth.isOrganizationToken,
           isUserToken: tokenAuth.isUserToken,
           isExternalIdp: tokenAuth.isExternalIdp,
@@ -2551,27 +2555,32 @@ class McpClient {
     allServers: McpServer[],
     tokenAuth: InstallCallerContext | undefined,
   ): Promise<McpServer | undefined> {
-    if (tokenAuth?.userId) {
+    // A service account acts under a synthetic user id that owns no installs
+    // and belongs to no teams; the team it acts for arrives as teamId.
+    const personUserId =
+      tokenAuth?.userId && !isServiceAccountUserId(tokenAuth.userId)
+        ? tokenAuth.userId
+        : undefined;
+    if (personUserId) {
       const userServer = allServers.find(
-        (s) => s.ownerId === tokenAuth.userId && !s.teamId && s.scope !== "org",
+        (s) => s.ownerId === personUserId && !s.teamId && s.scope !== "org",
       );
       if (userServer) return userServer;
 
-      const userTeams = await TeamModel.getUserTeams(tokenAuth.userId);
+      const userTeams = await TeamModel.getUserTeams(personUserId);
       const userTeamIds = new Set(userTeams.map((t) => t.id));
       const teamServer = allServers.find(
         (s) => s.teamId && userTeamIds.has(s.teamId),
       );
       if (teamServer) return teamServer;
-
-      const orgServer = allServers.find((s) => s.scope === "org");
-      if (orgServer) return orgServer;
     }
 
     if (tokenAuth?.teamId) {
       const teamServer = allServers.find((s) => s.teamId === tokenAuth.teamId);
       if (teamServer) return teamServer;
+    }
 
+    if (tokenAuth?.userId || tokenAuth?.teamId || tokenAuth?.serviceAccountId) {
       const orgServer = allServers.find((s) => s.scope === "org");
       if (orgServer) return orgServer;
     }

@@ -16,6 +16,7 @@ import {
   sessionFromHeaders,
 } from "@/openappa/service";
 import {
+  actorRunsAsSystemAccount,
   RUNTIME_BINDING_HEADER,
   resolveGatewayRuntimeSession,
   resolveRuntimeSessionForWorkspace,
@@ -898,7 +899,7 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
       if (
         !run ||
         run.agentId !== profileId ||
-        !runtimeTokenMatchesRun({ run, tokenAuth })
+        !(await runtimeTokenMatchesRun({ run, tokenAuth }))
       ) {
         // Do not disclose another actor's task to a token that merely reaches
         // the same Agent.
@@ -1206,6 +1207,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
               isOrganizationToken: tokenAuth.isOrganizationToken,
               organizationId: tokenAuth.organizationId,
               ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+              ...(tokenAuth.serviceAccountId && {
+                serviceAccountId: tokenAuth.serviceAccountId,
+              }),
               ...(tokenAuth.oauthClientId && {
                 oauthClientId: tokenAuth.oauthClientId,
               }),
@@ -1233,6 +1237,9 @@ const mcpGatewayRoutes: FastifyPluginAsyncZod = async (fastify) => {
         organizationId: tokenAuth.organizationId,
         ...(tokenAuth.isUserToken && { isUserToken: true }),
         ...(tokenAuth.userId && { userId: tokenAuth.userId }),
+        ...(tokenAuth.serviceAccountId && {
+          serviceAccountId: tokenAuth.serviceAccountId,
+        }),
         ...(tokenAuth.isExternalIdp && { isExternalIdp: true }),
         ...(tokenAuth.rawToken && { rawToken: tokenAuth.rawToken }),
         ...(tokenAuth.oauthClientId && {
@@ -1323,21 +1330,35 @@ function cancelledRequestId(
     : undefined;
 }
 
-function runtimeTokenMatchesRun(params: {
+async function runtimeTokenMatchesRun(params: {
   run: Pick<AgentRunRecord, "actorId" | "actorKind" | "organizationId">;
-  tokenAuth: TokenAuthContext;
-}): boolean {
-  if (params.tokenAuth.organizationId !== params.run.organizationId) {
+  tokenAuth: Pick<
+    TokenAuthContext,
+    "organizationId" | "userId" | "serviceAccountId"
+  >;
+}): Promise<boolean> {
+  const { run, tokenAuth } = params;
+  if (tokenAuth.organizationId !== run.organizationId) {
     return false;
   }
-  switch (params.run.actorKind) {
+  switch (run.actorKind) {
     case "user":
-      return params.tokenAuth.userId === params.run.actorId;
-    case "team":
-      return params.tokenAuth.teamId === params.run.actorId;
+      return tokenAuth.userId === run.actorId;
+    case "serviceAccount":
+      return tokenAuth.serviceAccountId === run.actorId;
     case "organization":
     case "system":
-      return params.tokenAuth.isOrganizationToken;
+      return tokenAuth.serviceAccountId
+        ? actorRunsAsSystemAccount({
+            actorKind: run.actorKind,
+            actorId: run.actorId,
+            serviceAccountId: tokenAuth.serviceAccountId,
+            organizationId: run.organizationId,
+          })
+        : false;
+    case "team":
+      // Team tokens are retired; no token can act for a team run anymore.
+      return false;
   }
 }
 

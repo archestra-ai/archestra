@@ -152,6 +152,7 @@ export class BrowserStreamService {
           tokenId: mcpGwToken.tokenId,
           teamId: mcpGwToken.teamId,
           isOrganizationToken: mcpGwToken.isOrganizationToken,
+          serviceAccountId: mcpGwToken.serviceAccountId,
           organizationId: userContext.organizationId,
           userId: userContext.userId,
         }

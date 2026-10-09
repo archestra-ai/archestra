@@ -22,6 +22,7 @@ import {
   UserModel,
 } from "@/models";
 import { RouteCategory, startActiveChatSpan } from "@/observability/tracing";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { validateMCPGatewayToken } from "@/routes/mcp-gateway/utils";
 import {
   resolveAgentRuntime,
@@ -675,8 +676,7 @@ export class A2AManager {
                   : undefined,
               messages: requestMessages,
               organizationId: actor.organizationId,
-              userId: actor.kind === "user" ? actor.id : "system",
-              actorTeamId: actor.kind === "team" ? actor.id : undefined,
+              userId: a2aActorUserId(actor),
               sessionId,
               source: systemParams?.source,
               parentDelegationChain: undefined, // This is the root call, chain starts with agentId
@@ -1742,6 +1742,14 @@ export class A2AManager {
 
     const organizationId = tokenAuth.organizationId;
 
+    if (tokenAuth.serviceAccountId) {
+      return {
+        id: tokenAuth.serviceAccountId,
+        kind: "serviceAccount",
+        organizationId,
+      };
+    }
+
     if (tokenAuth.userId) {
       const user = await UserModel.getById(tokenAuth.userId);
       if (!user) {
@@ -1776,6 +1784,22 @@ export class A2AManager {
       kind: "system",
       organizationId,
     };
+  }
+}
+
+/**
+ * The principal a turn runs as. A service account acts under its synthetic
+ * user id so the run is authorized against the account's own grants; every
+ * other non-user actor runs as the headless "system" sentinel.
+ */
+function a2aActorUserId(actor: A2AActor): string {
+  switch (actor.kind) {
+    case "user":
+      return actor.id;
+    case "serviceAccount":
+      return serviceAccountUserId(actor.id);
+    default:
+      return "system";
   }
 }
 

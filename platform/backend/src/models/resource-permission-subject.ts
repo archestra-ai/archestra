@@ -343,6 +343,7 @@ export default class ResourcePermissionSubjectModel {
         .select({
           role: schema.serviceAccountsTable.role,
           disabled: schema.serviceAccountsTable.disabled,
+          teamId: schema.serviceAccountsTable.teamId,
         })
         .from(schema.serviceAccountsTable)
         .where(
@@ -357,6 +358,16 @@ export default class ResourcePermissionSubjectModel {
         .limit(1);
       if (!account || account.disabled) return [];
       subjects.push({ type: "serviceAccount", id });
+      // An account acting for a team is reached by that team's grants, and
+      // its ancestors', the same way a member is. The team's roles are not
+      // inherited: the account's own role says what its keys may do.
+      if (account.teamId) {
+        const teams = await RoleCompositionModel.getTeamSources({
+          organizationId: params.organizationId,
+          teamId: account.teamId,
+        });
+        subjects.push(...teams.map(({ id }) => ({ type: "team" as const, id })));
+      }
       identifiers = account.role.split(",");
     } else {
       const member = await MemberModel.getByUserId(

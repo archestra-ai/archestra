@@ -13,6 +13,7 @@ import {
 } from "@archestra/shared";
 import type { A2AActor } from "@/agents/a2a/a2a-base";
 import { archestraMcpBranding } from "@/archestra-mcp-server/branding";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { getBedrockRegion } from "@/clients/bedrock-credentials";
 import { selectMCPGatewayToken } from "@/clients/chat-mcp-client";
 import config from "@/config";
@@ -23,7 +24,6 @@ import {
   LlmProviderApiKeyModel,
   LlmProviderApiKeyModelLinkModel,
   ModelModel,
-  TeamTokenModel,
   VirtualApiKeyModel,
 } from "@/models";
 import type { OpenAppaSession } from "@/openappa/service";
@@ -596,14 +596,12 @@ async function resolveGatewayToken(params: {
   agentId: string;
   organizationId: string;
 }): Promise<string> {
-  if (params.actor.kind === "team") {
-    const token = await TeamTokenModel.findTeamToken(params.actor.id);
-    const value = token ? await TeamTokenModel.getTokenValue(token.id) : null;
-    if (value) return value;
-  } else {
+  // Team tokens are retired, so a team actor (only left on runs started
+  // before then) has no token to act with.
+  if (params.actor.kind !== "team") {
     const selected = await selectMCPGatewayToken(
       params.agentId,
-      params.actor.kind === "user" ? params.actor.id : "system",
+      runActorUserId(params.actor),
       params.organizationId,
     );
     if (selected?.tokenValue) return selected.tokenValue;
@@ -612,6 +610,18 @@ async function resolveGatewayToken(params: {
     500,
     "Could not resolve an MCP gateway token for this run actor",
   );
+}
+
+/** The principal the run's gateway token is selected for. */
+function runActorUserId(actor: A2AActor): string {
+  switch (actor.kind) {
+    case "user":
+      return actor.id;
+    case "serviceAccount":
+      return serviceAccountUserId(actor.id);
+    default:
+      return "system";
+  }
 }
 
 /**
@@ -637,6 +647,18 @@ function virtualKeyVisibility(actor: A2AActor): {
       authorId: null,
       initialPermissionGrants: [
         { subject: { type: "team", id: actor.id }, actions: ["read", "use"] },
+      ],
+    };
+  }
+  if (actor.kind === "serviceAccount") {
+    return {
+      scope: "org",
+      authorId: null,
+      initialPermissionGrants: [
+        {
+          subject: { type: "serviceAccount", id: actor.id },
+          actions: ["read", "use"],
+        },
       ],
     };
   }

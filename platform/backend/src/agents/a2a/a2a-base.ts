@@ -1,6 +1,6 @@
 export interface A2AActor {
   id: string;
-  kind: "user" | "team" | "organization" | "system";
+  kind: "user" | "team" | "organization" | "serviceAccount" | "system";
   organizationId: string;
 }
 

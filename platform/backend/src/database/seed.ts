@@ -50,7 +50,6 @@ import {
   SkillFileModel,
   SkillModel,
   TeamModel,
-  TeamTokenModel,
   ToolModel,
   UserModel,
 } from "@/models";
@@ -61,6 +60,7 @@ import { verifySecretsEncryptionKey } from "@/secrets-manager/encryption-key-gua
 import { createAppBacking } from "@/services/apps/app-mcp-backing";
 import { DEFAULT_APPS, loadDefaultAppHtml } from "@/services/apps/default-apps";
 import { modelSyncService } from "@/services/model-sync";
+import { migrateTeamTokensToServiceAccounts } from "@/services/team-token-migration";
 import {
   builtInSkillShippedWrite,
   builtInSkillSourceRef,
@@ -758,33 +758,6 @@ async function seedTestMcpServer(): Promise<void> {
 }
 
 /**
- * Creates team tokens for existing teams and organization
- * - Creates "Organization Token" if missing
- * - Creates team tokens for each team if missing
- */
-async function seedTeamTokens(): Promise<void> {
-  // Get the default organization
-  const org = await OrganizationModel.getOrCreateDefaultOrganization();
-
-  // Ensure organization token exists
-  const orgToken = await TeamTokenModel.ensureOrganizationToken();
-  logger.debug(
-    { organizationId: org.id, tokenId: orgToken.id },
-    "Ensured organization token exists",
-  );
-
-  // Get all teams for this organization and ensure they have tokens
-  const teams = await TeamModel.findByOrganization(org.id);
-  for (const team of teams) {
-    const teamToken = await TeamTokenModel.ensureTeamToken(team.id, team.name);
-    logger.info(
-      { teamId: team.id, teamName: team.name, tokenId: teamToken.id },
-      "Ensured team token exists",
-    );
-  }
-}
-
-/**
  * Seeds chat API keys from environment variables.
  * For each provider with ARCHESTRA_CHAT_<PROVIDER>_API_KEY set, creates an org-wide API key
  * and syncs models from the provider.
@@ -1259,7 +1232,7 @@ export async function seedRequiredStartingData(): Promise<void> {
   await migratePlaywrightToolsToDynamicCredential();
   await PlaywrightRuntimeModel.reconcileAll();
   await seedTestMcpServer();
-  await seedTeamTokens();
+  await migrateTeamTokensToServiceAccounts();
   await seedChatApiKeysFromEnv();
   // Ensure all existing members have a personal default chat agent
   await ensureExistingUsersHavePersonalChatAgents();

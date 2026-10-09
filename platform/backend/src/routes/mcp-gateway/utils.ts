@@ -64,6 +64,7 @@ import { structuredToolErrorResult } from "@/archestra-mcp-server/helpers";
 import { isOpenappaTool } from "@/archestra-mcp-server/openappa";
 import { attestToolDescription } from "@/archestra-mcp-server/tool-attestation";
 import type { RequestLookups } from "@/auth/request-lookups";
+import { serviceAccountUserId } from "@/auth/service-account-user-id";
 import { LRUCacheManager } from "@/cache-manager";
 import {
   type ArchestraElicitationOutcome,
@@ -83,8 +84,8 @@ import {
   McpToolCallModel,
   MemberModel,
   OAuthAccessTokenModel,
+  ServiceAccountModel,
   TeamModel,
-  TeamTokenModel,
   ToolModel,
   UserModel,
   UserTokenModel,
@@ -128,7 +129,8 @@ import {
   agentOwner,
   type CommonToolCall,
   type GatewayAgent,
-  type SelectTeamToken,
+  type SelectServiceAccount,
+  type SelectServiceAccountToken,
   type SelectUserToken,
   type ToolExposureMode,
 } from "@/types";
@@ -177,6 +179,8 @@ export interface TokenAuthResult {
   isUserToken?: boolean;
   /** User ID for user tokens */
   userId?: string;
+  /** Service account the token belongs to, for service account tokens */
+  serviceAccountId?: string;
   /** True if authenticated via external IdP JWKS */
   isExternalIdp?: boolean;
   /** Raw JWT token for propagation to underlying MCP servers */
@@ -256,12 +260,13 @@ type TokenHashes = {
 
 type ResolvedArchestraToken =
   | {
-      type: "team";
-      token: SelectTeamToken;
-    }
-  | {
       type: "user";
       token: SelectUserToken;
+    }
+  | {
+      type: "serviceAccount";
+      token: SelectServiceAccountToken;
+      serviceAccount: SelectServiceAccount;
     };
 
 /**
@@ -1564,55 +1569,6 @@ export function extractPassthroughHeaders(
 }
 
 /**
- * Validate a platform-managed token for a specific profile
- * Returns token auth info if valid, null otherwise
- *
- * Validates that:
- * 1. The token is valid (exists and matches)
- * 2. The profile is accessible via this token:
- *    - Org token: profile must belong to the same organization
- *    - Team token: profile must be assigned to that team
- */
-export async function validateTeamToken(
-  profileId: string,
-  tokenValue: string,
-  agentAccessContext?: AgentAccessContext | null,
-): Promise<TokenAuthResult | null> {
-  // Validate the token itself
-  const token = await TeamTokenModel.validateToken(tokenValue);
-  if (!token) {
-    return null;
-  }
-
-  return validateResolvedTeamToken({
-    profileId,
-    token,
-    agentAccessContext,
-  });
-}
-
-async function validateResolvedTeamToken(params: {
-  profileId: string;
-  token: SelectTeamToken;
-  agentAccessContext?: AgentAccessContext | null;
-}): Promise<TokenAuthResult | null> {
-  const { profileId, token } = params;
-  const hasAccess = await AgentTeamModel.credentialHasAgentAccess({
-    organizationId: token.organizationId,
-    agentId: profileId,
-    teamId: token.isOrganizationToken ? null : token.teamId,
-  });
-  if (!hasAccess) return null;
-
-  return {
-    tokenId: token.id,
-    teamId: token.teamId,
-    isOrganizationToken: token.isOrganizationToken,
-    organizationId: token.organizationId,
-  };
-}
-
-/**
  * Validate a user token for a specific profile
  * Returns token auth info if valid, null otherwise
  *
@@ -1687,6 +1643,62 @@ async function validateResolvedUserToken(params: {
     organizationId: token.organizationId,
     isUserToken: true,
     userId: token.userId,
+  };
+}
+
+/**
+ * A service account reaches a gateway the way a member does: through grants
+ * made to the account, to the team it acts for, to its role, or to the
+ * organization at large. The account is carried as its own principal, never
+ * as a user, so nothing downstream mistakes it for one.
+ */
+async function validateResolvedServiceAccountToken(params: {
+  profileId: string;
+  token: SelectServiceAccountToken;
+  serviceAccount: SelectServiceAccount;
+  agentAccessContext?: AgentAccessContext | null;
+  lookups?: RequestLookups;
+}): Promise<TokenAuthResult | null> {
+  const { profileId, token, serviceAccount, agentAccessContext, lookups } =
+    params;
+  if (
+    agentAccessContext &&
+    agentAccessContext.organizationId !== serviceAccount.organizationId
+  ) {
+    return null;
+  }
+  const principalId = serviceAccountUserId(serviceAccount.id);
+  const isGatewayAdmin = await ResourcePermissions.allows({
+    userId: principalId,
+    organizationId: serviceAccount.organizationId,
+    resource: "mcpGateway",
+    scope: "*",
+    action: "update",
+    lookups,
+  });
+  if (
+    !(await AgentTeamModel.userHasAgentAccess({
+      userId: principalId,
+      agentId: profileId,
+      isAgentAdmin: isGatewayAdmin,
+      agentAccessContext,
+      action: "use",
+      lookups,
+    }))
+  ) {
+    logger.warn(
+      { profileId, serviceAccountId: serviceAccount.id },
+      "Profile not accessible via service account token (missing use permission)",
+    );
+    return null;
+  }
+
+  return {
+    tokenId: token.id,
+    teamId: serviceAccount.teamId,
+    isOrganizationToken: false,
+    organizationId: serviceAccount.organizationId,
+    serviceAccountId: serviceAccount.id,
   };
 }
 
@@ -1978,7 +1990,7 @@ async function mcpOauthClientGrantsGatewayAccess(params: {
 
 /**
  * Validate any token for a specific profile.
- * Tries external IdP JWKS first (if configured), then team/org tokens, user tokens, and OAuth tokens.
+ * Tries external IdP JWKS first (if configured), then user and service account tokens, and OAuth tokens.
  * Returns token auth info if valid, null otherwise.
  */
 export async function validateMCPGatewayToken(
@@ -2011,7 +2023,10 @@ export async function resolveTokenOrganizationId(
 
   const rawTokenHash = createHash("sha256").update(tokenValue).digest("hex");
   const resolved = await resolveArchestraToken(tokenValue, rawTokenHash);
-  return resolved?.token.organizationId ?? null;
+  if (!resolved) return null;
+  return resolved.type === "serviceAccount"
+    ? resolved.serviceAccount.organizationId
+    : resolved.token.organizationId;
 }
 
 /**
@@ -2059,17 +2074,17 @@ export async function authenticateMCPGatewayRequest(
       tokenValue,
       tokenHashes.rawTokenHash,
     );
-    if (resolvedToken?.type === "team") {
-      const teamTokenResult = await validateResolvedTeamToken({
+    if (resolvedToken?.type === "serviceAccount") {
+      const serviceAccountResult = await validateResolvedServiceAccountToken({
         profileId,
         token: resolvedToken.token,
-        agentAccessContext: resolvedToken.token.isOrganizationToken
-          ? null
-          : await getAgentAccessContext(),
+        serviceAccount: resolvedToken.serviceAccount,
+        agentAccessContext: await getAgentAccessContext(),
+        lookups,
       });
-      if (teamTokenResult) {
-        cacheTokenAuthResult(tokenHashes.cacheKey, teamTokenResult);
-        return { result: teamTokenResult, reason: null };
+      if (serviceAccountResult) {
+        cacheTokenAuthResult(tokenHashes.cacheKey, serviceAccountResult);
+        return { result: serviceAccountResult, reason: null };
       }
     }
 
@@ -2424,21 +2439,22 @@ async function resolveArchestraToken(
     return cached;
   }
 
-  const teamToken = await TeamTokenModel.validateToken(tokenValue);
-  if (teamToken) {
-    const result: ResolvedArchestraToken = {
-      type: "team",
-      token: teamToken,
-    };
-    cacheRawArchestraToken(rawTokenHash, result);
-    return result;
-  }
-
   const userToken = await UserTokenModel.validateToken(tokenValue);
   if (userToken) {
     const result: ResolvedArchestraToken = {
       type: "user",
       token: userToken,
+    };
+    cacheRawArchestraToken(rawTokenHash, result);
+    return result;
+  }
+
+  const serviceAccountToken = await ServiceAccountModel.verifyToken(tokenValue);
+  if (serviceAccountToken) {
+    const result: ResolvedArchestraToken = {
+      type: "serviceAccount",
+      token: serviceAccountToken.token,
+      serviceAccount: serviceAccountToken.serviceAccount,
     };
     cacheRawArchestraToken(rawTokenHash, result);
     return result;

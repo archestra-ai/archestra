@@ -474,6 +474,9 @@ describe("ConnectPage (no connect request)", () => {
       );
       await userEvent.click(screen.getByRole("switch", { name: /LLM proxy/ }));
       expect(screen.getByText("Off")).toBeVisible();
+      expect(
+        screen.getByText(/^Off\. .+ calls its model provider directly\.$/),
+      ).toBeVisible();
       // Other agents' prompt is covered by the generic prompt tests.
       if (id === "claude-code")
         expect(
@@ -763,6 +766,54 @@ describe("ConnectPage guardrails for members", () => {
   });
 });
 
+describe("ConnectPage gateway pick", () => {
+  it("connects through the gateway picked over the default", async () => {
+    window.localStorage.clear();
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams() as ReturnType<typeof useSearchParams>,
+    );
+    vi.mocked(useHasPermissions).mockReturnValue({
+      data: true,
+    } as ReturnType<typeof useHasPermissions>);
+    const gateway = (id: string, name: string) => ({
+      id,
+      name,
+      slug: id,
+      agentType: "mcp_gateway",
+      tools: [],
+      accessAllTools: false,
+    });
+    const gateways = [
+      gateway("default-gateway", "Default gateway"),
+      gateway("coding-gateway", "Coding gateway"),
+    ];
+    vi.mocked(useDefaultMcpGateway).mockReturnValue({
+      data: gateways[0],
+    } as unknown as ReturnType<typeof useDefaultMcpGateway>);
+    vi.mocked(useProfiles).mockReturnValue({
+      data: gateways,
+      isPending: false,
+    } as unknown as ReturnType<typeof useProfiles>);
+    vi.mocked(useProfile).mockImplementation(
+      (id) =>
+        ({
+          data: gateways.find((g) => g.id === id),
+          isPending: false,
+        }) as unknown as ReturnType<typeof useProfile>,
+    );
+    mockOrganization({ data: { connectionShownClientIds: ["claude-code"] } });
+    saveConnectChoices(
+      "claude-code",
+      { tools: true, skills: true, proxy: true, plugins: true },
+      { gatewayId: "coding-gateway", pluginIds: null },
+    );
+    render(<ConnectionPage />);
+    expect(
+      await screen.findByText(/--client claude-code --gateway coding-gateway$/),
+    ).toBeVisible();
+  });
+});
+
 describe("ConnectPage plugins", () => {
   const plugin = (
     id: string,
@@ -770,6 +821,7 @@ describe("ConnectPage plugins", () => {
     supportedPlatforms: string[],
   ) => ({
     id,
+    pluginSlug: `plugin-${id}`,
     displayName: `Plugin ${id}`,
     description: null,
     clientType,
@@ -779,7 +831,7 @@ describe("ConnectPage plugins", () => {
     approvedContentHash: "h",
   });
 
-  function setup(clientId: string) {
+  function setup(clientId: string, extra: ReturnType<typeof plugin>[] = []) {
     window.localStorage.clear();
     vi.mocked(useSearchParams).mockReturnValue(
       new URLSearchParams() as ReturnType<typeof useSearchParams>,
@@ -795,6 +847,7 @@ describe("ConnectPage plugins", () => {
         plugin("a", "claude-code", ["posix", "windows"]),
         plugin("b", "claude-code", ["windows"]),
         plugin("c", "codex", ["posix"]),
+        ...extra,
       ],
     } as unknown as ReturnType<typeof usePlugins>);
     mockOrganization({
@@ -820,6 +873,41 @@ describe("ConnectPage plugins", () => {
     );
     await userEvent.click(screen.getByRole("switch", { name: /Plugins/ }));
     expect(screen.getByText("Plugins off")).toBeVisible();
+    expect(
+      screen.getByText(/--client claude-code --exclude plugins$/),
+    ).toBeVisible();
+  });
+
+  it("keeps only the plugins picked in the dialog", async () => {
+    setup("claude-code", [plugin("d", "claude-code", ["posix", "windows"])]);
+    await userEvent.click(
+      screen.getByRole("button", { name: "Choose what to include" }),
+    );
+    const dialog = screen.getByRole("dialog");
+    expect(
+      within(dialog).getByText(/All 2 plugins your org approved/),
+    ).toBeVisible();
+    // Only these starts from nothing picked, in the pane over the dialog.
+    await userEvent.click(
+      within(dialog).getByRole("radio", { name: /Only these/ }),
+    );
+    const pane = screen.getByRole("region", { name: "Pick plugins" });
+    await userEvent.click(
+      within(pane).getByRole("checkbox", { name: /Plugin a/ }),
+    );
+    await userEvent.click(within(pane).getByRole("button", { name: "Done" }));
+    expect(within(dialog).getByText(/1 of 2 plugins/)).toBeVisible();
+    expect(
+      screen.getByText(/--client claude-code --plugins plugin-a$/),
+    ).toBeVisible();
+    // Removing the last pick is leaving plugins out.
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "Remove Plugin a" }),
+    );
+    expect(within(dialog).getByText("No plugins picked")).toBeVisible();
+    expect(
+      within(dialog).getByText(/^Off\. Claude Code gets none of the 2 plugins/),
+    ).toBeVisible();
     expect(
       screen.getByText(/--client claude-code --exclude plugins$/),
     ).toBeVisible();

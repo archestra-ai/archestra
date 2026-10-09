@@ -10,6 +10,13 @@ describe("supportsThinkingEffort", () => {
     ["gemini", "gemini-2.5-flash", false],
     ["openai", "gpt-5.2", true],
     ["openai", "gpt-4o", false],
+    ["zhipuai", "glm-5.3", true],
+    ["zhipuai", "glm-5.3-flash", true],
+    ["zhipuai", "glm-5.3-flashx", true],
+    ["zhipuai", "glm-4.7", false],
+    ["zhipuai", "glm-5.2", false],
+    ["zhipuai", "glm-5.3-unknown", false],
+    ["openai", "glm-5.3-flash", false],
     ["anthropic", "claude-opus-5", true],
     ["anthropic", "claude-haiku-4-5", false],
   ])("%s/%s -> %s", (provider, modelId, expected) => {

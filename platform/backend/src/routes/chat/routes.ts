@@ -231,6 +231,7 @@ import { withStreamIdleTimeout } from "./stream-idle-timeout";
 import { createToolCallRepair } from "./tool-call-repair";
 import { createToolUiStartTransform } from "./tool-ui-stream";
 import { sendGatedUiMessageStreamResponse } from "./ui-stream-response";
+import { buildZhipuAiProviderOptions } from "./zhipuai-provider-options";
 
 // The chat route always builds a `messages` (not `prompt`) config, so the
 // `runAgentStream` config is narrowed to require it.
@@ -1571,6 +1572,21 @@ const chatRoutes: FastifyPluginAsyncZod = async (fastify) => {
                   streamTextConfig.providerOptions = {
                     ...streamTextConfig.providerOptions,
                     openrouter: openRouterProviderOptions,
+                  };
+                }
+
+                const zhipuAiProviderOptions = buildZhipuAiProviderOptions({
+                  provider,
+                  selectedModel,
+                  thinkingEffort,
+                });
+                if (zhipuAiProviderOptions) {
+                  streamTextConfig.providerOptions = {
+                    ...streamTextConfig.providerOptions,
+                    openaiCompatible: {
+                      ...streamTextConfig.providerOptions?.openaiCompatible,
+                      ...zhipuAiProviderOptions,
+                    },
                   };
                 }
 

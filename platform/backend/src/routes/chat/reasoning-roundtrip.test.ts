@@ -182,6 +182,12 @@ function everyToolCallTurnHasReasoning(messages: unknown[]): boolean {
 
 const PROVIDER_CASES = [
   {
+    caseName: "Zhipu GLM-5.3 Flash",
+    provider: "zhipuai" as const,
+    externalId: "zhipuai/glm-5.3-flash",
+    modelId: "glm-5.3-flash",
+  },
+  {
     caseName: "DeepSeek",
     provider: "deepseek" as const,
     externalId: "deepseek/deepseek-v4-flash",
@@ -209,6 +215,7 @@ describe.each(
   let organizationId: string;
   let conversationId: string;
   let upstreamRequests: Array<{
+    reasoning_effort?: string;
     messages: Array<{ role: string; reasoning_content?: string }>;
   }>;
 
@@ -340,6 +347,31 @@ describe.each(
       payload: { id: conversationId, trigger: "submit-message", messages },
     });
   }
+
+  test.each([
+    [null, undefined],
+    ["low", "low"],
+    ["medium", "high"],
+    ["high", "max"],
+  ] as const)("sends chosen depth %s only in the provider's dialect", async (thinkingEffort, expected) => {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/chat",
+      payload: {
+        id: conversationId,
+        messages: [userMessage("Read /tmp/a.txt")],
+        thinkingEffort,
+      },
+    });
+    expect(response.statusCode).toBe(200);
+    expect(response.body).toContain(FINAL_TEXT);
+    expect(upstreamRequests.length).toBeGreaterThanOrEqual(2);
+    for (const request of upstreamRequests) {
+      expect(request.reasoning_effort).toBe(
+        provider === "zhipuai" ? expected : undefined,
+      );
+    }
+  });
 
   test("passes reasoning_content back on the tool-call follow-up turn", async () => {
     const response = await sendMessages([userMessage("Read /tmp/a.txt")]);

@@ -2186,6 +2186,40 @@ describe("LLM proxy provider matrix", () => {
         },
       );
 
+      if (config.provider === "zhipuai") {
+        for (const reasoningEffort of [
+          "low",
+          "high",
+          "max",
+          undefined,
+        ] as const) {
+          test(`preserves GLM reasoning effort ${reasoningEffort} through request validation`, async ({
+            makeAgent,
+          }) => {
+            const agent = await makeAgent({ agentType: "llm_proxy" });
+            const harness = await setupRoute(agent);
+            for (const stream of [false, true]) {
+              const response = await app.inject({
+                method: "POST",
+                url: config.endpoint(agent.id),
+                headers: config.headers(),
+                payload: {
+                  model: "glm-5.3-flash",
+                  messages: [{ role: "user", content: "Hello" }],
+                  reasoning_effort: reasoningEffort,
+                  stream,
+                },
+              });
+              expect(response.statusCode).toBe(200);
+              expect(
+                (harness.requests.at(-1) as { reasoning_effort?: string })
+                  .reasoning_effort,
+              ).toBe(reasoningEffort);
+            }
+          });
+        }
+      }
+
       // DeepSeek-style thinking mode rejects tool-call turns with a 400 unless
       // the assistant's `reasoning_content` is passed back verbatim, so the
       // proxy must round-trip the field in both directions: request body

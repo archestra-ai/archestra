@@ -3,7 +3,7 @@ title: Guardrail Clients
 sidebarTitle: Clients
 description: Make Guardrails check your client, with built-in support or session headers
 order: 3
-alpha: "Available on every deployment."
+alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
 lastUpdated: 2026-10-09
 ---
 

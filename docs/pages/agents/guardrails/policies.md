@@ -3,7 +3,7 @@ title: Guardrail Policies
 sidebarTitle: Policies
 description: Cover your tools with rules, change the policy, and sync it with GitHub
 order: 1
-alpha: "Available on every deployment."
+alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
 lastUpdated: 2026-10-09
 ---
 

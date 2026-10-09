@@ -3,7 +3,7 @@ title: Guardrail Batteries
 sidebarTitle: Batteries
 description: Cover an MCP server's tools with a ready-made policy package
 order: 2
-alpha: "Available on every deployment."
+alpha: "Policy syntax and behavior may change as OpenAPPA evolves."
 lastUpdated: 2026-10-09
 ---
 

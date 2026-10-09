@@ -877,7 +877,22 @@ const registry = defineArchestraTools([
         context,
         AUTHENTICATED_CONTEXT_REQUIRED,
       );
-      return result(await getOpenAppaPolicyTests(organizationId, userId));
+      return result({
+        ...(await getOpenAppaPolicyTests(organizationId, userId)),
+        offlineReplay: {
+          scope:
+            "Ordered tool-call policy decisions in a fresh session per file",
+          inputSchemas:
+            "Effective policy contracts; no installed MCP schema lookup",
+          toolExecution: false,
+          toolResults: "Empty results only",
+          modelExecution: false,
+          remoteHelpers: false,
+          hostNoopAnnotator: true,
+          subagentLifecycleEvents: false,
+          missingDependency: "cannot_run, not an allow or deny decision",
+        },
+      });
     },
   }),
   defineArchestraTool({
@@ -885,7 +900,7 @@ const registry = defineArchestraTools([
     title: "Preview OpenAPPA validations",
     annotations: { readOnlyHint: true },
     description:
-      "Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Show the draft validation files and explain their assertions, warnings, failed or cannot-run scenarios and offline limits before publishing. A failed check does not authorize a policy fix or changing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
+      "Preview a patch of .appa validation files against the current policy, then replay the full resulting suite offline. Replay evaluates the effective policy contracts, including their parameter schemas and selectors; it does not fetch installed MCP input schemas or require tools to be installed. Draft from those contracts and use replay to check decisions. Read the policy revision and specification version first. Upserts replace only named files; deletions must be explicit; unrelated files are preserved. Omit policyContent or pass null for validation-only work; never send the current policy or blank text as a placeholder. Include a complete proposed policy only when the user explicitly requested a policy change. Correct scenario syntax errors in the .appa files without changing the policy. This saves nothing and does not affect global run history, execute business tools, or contact model/helper providers. Show the draft validation files and explain their assertions, warnings, failed or cannot-run scenarios and offline limits before publishing. A failed check does not authorize a policy fix or changing expectations merely to force green. Keep specifications small and focused on the user's intended behavior.",
     schema: PreviewOpenAppaValidationChangeSchema,
     async handler({ args, context }) {
       const { organizationId, userId } = organizationUser(

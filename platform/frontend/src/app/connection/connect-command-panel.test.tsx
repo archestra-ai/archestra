@@ -338,7 +338,7 @@ describe("ConnectCommandPanel", () => {
     expect(createKeyMock).not.toHaveBeenCalled();
   });
 
-  it("gives the Connect page one Desktop installer download that keeps left-out parts out", async () => {
+  it("keeps the gateway in Desktop downloads while honoring optional exclusions", async () => {
     availableKeysMock.mockReturnValue({ data: [] });
     createSetupMock.mockResolvedValue({
       id: "desktop-setup",
@@ -351,7 +351,7 @@ describe("ConnectCommandPanel", () => {
     renderPanel({
       client: findClient("claude-desktop"),
       variant: "download",
-      exclude: ["tools"],
+      exclude: ["tools", "skills", "proxy", "plugins"],
     });
     const link = await screen.findByRole("link", {
       name: "Download installer",
@@ -364,11 +364,52 @@ describe("ConnectCommandPanel", () => {
       expect.objectContaining({ clientId: "claude-desktop" }),
     );
     expect(createSetupMock).toHaveBeenLastCalledWith(
-      expect.not.objectContaining({ mcpGatewayId: "g1" }),
+      expect.objectContaining({
+        mcpGatewayId: "g1",
+        llmProxyId: undefined,
+        skills: undefined,
+        pluginIds: [],
+      }),
     );
     expect(
       screen.queryByRole("button", { name: "Customize setup" }),
     ).toBeNull();
+  });
+
+  it("can re-enable an omitted proxy and skills from Desktop customization", async () => {
+    const user = userEvent.setup();
+    renderPanel({
+      client: findClient("claude-desktop"),
+      exclude: ["proxy", "skills"],
+    });
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          mcpGatewayId: "g1",
+          llmProxyId: undefined,
+          skills: undefined,
+        }),
+      ),
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Route model requests through the LLM Proxy",
+      }),
+    );
+    await user.click(
+      screen.getByRole("checkbox", {
+        name: "Install shared skills",
+      }),
+    );
+    await waitFor(() =>
+      expect(createSetupMock).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          mcpGatewayId: "g1",
+          llmProxyId: "p1",
+          skills: { skillIds: ["s1", "s2"], ttlDays: null },
+        }),
+      ),
+    );
   });
 
   it("regenerates Desktop setup when the platform or API-key authentication changes", async () => {
@@ -548,6 +589,11 @@ describe("ConnectCommandPanel", () => {
         screen.queryByRole("heading", { name: "Finish the OAuth flow" }),
       ).toBeNull();
       await user.click(screen.getByRole("button", { name: "Customize setup" }));
+      const gateway = screen.getByRole("checkbox", {
+        name: "Connect the MCP gateway (required)",
+      });
+      expect(gateway).toBeChecked();
+      expect(gateway).toBeDisabled();
       await user.click(
         screen.getByRole("checkbox", { name: "Install shared skills" }),
       );
@@ -574,6 +620,98 @@ describe("ConnectCommandPanel", () => {
         "Connection approved. Return to your terminal to finish setup.",
       );
       expect(decisions).toEqual([{ decision: "approve", setupId: "setup-1" }]);
+    } finally {
+      view.unmount();
+      queryClient.clear();
+      server.close();
+      archestraApiClient.setConfig({ baseUrl: "" });
+    }
+  });
+
+  it("lets approval re-enable omitted optional parts while keeping the gateway required", async () => {
+    const server = setupServer(
+      http.get("http://localhost:9000/api/client-connections/demo", () =>
+        HttpResponse.json({
+          clientId: "claude-code",
+          platform: "macos",
+          exclude: ["tools", "proxy", "skills", "plugins"],
+          userCode: "ABCD-1234",
+          expiresAt: "2099-01-01T00:00:00Z",
+        }),
+      ),
+    );
+    server.listen({ onUnhandledRequest: "error" });
+    archestraApiClient.setConfig({ baseUrl: "http://localhost:9000" });
+    vi.mocked(useSearchParams).mockReturnValue(
+      new URLSearchParams("connectRequest=demo&platform=macos") as ReturnType<
+        typeof useSearchParams
+      >,
+    );
+    const queryClient = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    const user = userEvent.setup();
+    const view = render(
+      <QueryClientProvider client={queryClient}>
+        <ConnectCommandPanel {...renderPanelProps()} />
+      </QueryClientProvider>,
+    );
+    try {
+      const gateway = await screen.findByRole("checkbox", {
+        name: "Connect the MCP gateway (required)",
+      });
+      expect(gateway).toBeChecked();
+      expect(gateway).toBeDisabled();
+      await user.click(gateway);
+      const optionalLabels = [
+        "Route model requests through the LLM Proxy",
+        "Install shared skills",
+        "Install compatible plugins",
+      ];
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            mcpGatewayId: "g1",
+            llmProxyId: undefined,
+            skills: undefined,
+            pluginIds: [],
+          }),
+        ),
+      );
+      for (const name of optionalLabels) {
+        const checkbox = screen.getByRole("checkbox", { name });
+        expect(checkbox).not.toBeChecked();
+        expect(checkbox).toBeEnabled();
+        await user.click(checkbox);
+      }
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            mcpGatewayId: "g1",
+            llmProxyId: "p1",
+            skills: { skillIds: ["s1", "s2"], ttlDays: null },
+            pluginIds: ["b1"],
+          }),
+        ),
+      );
+      // A refetch must not reapply the initial opt-outs over the user's edits.
+      await queryClient.invalidateQueries();
+      for (const name of optionalLabels) {
+        expect(screen.getByRole("checkbox", { name })).toBeChecked();
+      }
+      for (const name of optionalLabels) {
+        await user.click(screen.getByRole("checkbox", { name }));
+      }
+      await waitFor(() =>
+        expect(createSetupMock).toHaveBeenLastCalledWith(
+          expect.objectContaining({
+            mcpGatewayId: "g1",
+            llmProxyId: undefined,
+            skills: undefined,
+            pluginIds: [],
+          }),
+        ),
+      );
     } finally {
       view.unmount();
       queryClient.clear();

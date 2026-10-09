@@ -10,6 +10,7 @@ import {
 } from "@/fastify-instance";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import ConnectionSetupModel from "@/models/connection-setup";
+import PluginModel from "@/models/plugin";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
 import routes from "./client-connection.routes";
@@ -196,23 +197,57 @@ describe("browser-approved client connection", () => {
     });
   });
 
-  test("a setup with a part the prompt left out cannot be approved", async () => {
-    const refused = await start(["skills"]);
-    const details = await app.inject({
-      url: `/api/client-connections/${refused.id}`,
-    });
-    expect(details.json()).toMatchObject({ exclude: ["skills"] });
-    const withSkills = await setup({ includeSkills: true });
-    expect((await decide(refused.id, withSkills.setup.id)).statusCode).toBe(
-      400,
-    );
-
+  test("approval can include parts omitted from the initial request", async ({
+    makeAgent,
+  }) => {
     const pending = await start(["tools", "skills", "proxy", "plugins"]);
-    const withoutSkills = await setup();
-    expect((await decide(pending.id, withoutSkills.setup.id)).statusCode).toBe(
-      200,
-    );
+    const gateway = await makeAgent({
+      organizationId,
+      agentType: "mcp_gateway",
+    });
+    const proxy = await makeAgent({ organizationId, agentType: "llm_proxy" });
+    const plugin = await PluginModel.create({
+      organizationId,
+      userId: user.id,
+      input: {
+        displayName: "Setup plugin",
+        description: "Connection setup test",
+        clientType: "claude-code",
+        supportedPlatforms: ["posix"],
+        files: [
+          {
+            path: "hooks/hooks.json",
+            content: "{}",
+            encoding: "utf8",
+            mode: "100644",
+          },
+        ],
+      },
+    });
+    if (!plugin) throw new Error("Failed to create test plugin");
+    const ticket = await ConnectionSetupModel.create({
+      organizationId,
+      userId: user.id,
+      clientId: "claude-code",
+      platform: "linux",
+      baseUrl: "http://localhost:3000/v1",
+      expiresAt: new Date(Date.now() + 900_000),
+      mcpGatewayId: gateway.id,
+      llmProxyId: proxy.id,
+      includeSkills: true,
+      pluginIds: [plugin.id],
+    });
+    expect((await decide(pending.id, ticket.setup.id)).statusCode).toBe(200);
     expect(await poll(pending.deviceCode)).toBe("approved");
+    expect(
+      await ConnectionSetupModel.findByToken(
+        `archestra_con_${pending.deviceCode}`,
+      ),
+    ).toMatchObject({
+      mcpGatewayId: gateway.id,
+      llmProxyId: proxy.id,
+      includeSkills: true,
+    });
   });
 
   test("denial prevents binding and subsequent approval", async () => {

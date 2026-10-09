@@ -166,6 +166,36 @@ describe("browser-approved client connection", () => {
     expect(legacyDetails.json()).toMatchObject({ deviceName: null });
   });
 
+  test("carries the gateway and plugins picked on the Connect page to the approval", async () => {
+    const started = await app.inject({
+      method: "POST",
+      url: "/api/client-connections",
+      payload: {
+        clientId: "claude-code",
+        platform: "linux",
+        gateway: "coding-gateway",
+        plugins: ["openappa-1a2b3c4d"],
+      },
+    });
+    expect(started.statusCode).toBe(200);
+    const details = await app.inject({
+      url: `/api/client-connections/${started.json<{ id: string }>().id}`,
+    });
+    expect(details.json()).toMatchObject({
+      gateway: "coding-gateway",
+      plugins: ["openappa-1a2b3c4d"],
+    });
+
+    const legacy = await start();
+    const legacyDetails = await app.inject({
+      url: `/api/client-connections/${legacy.id}`,
+    });
+    expect(legacyDetails.json()).toMatchObject({
+      gateway: null,
+      plugins: null,
+    });
+  });
+
   test("a setup with a part the prompt left out cannot be approved", async () => {
     const refused = await start(["skills"]);
     const details = await app.inject({

@@ -40270,6 +40270,8 @@ export type StartClientConnectionData = {
         clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
         exclude?: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
+        gateway?: string;
+        plugins?: Array<string>;
         deviceName?: string;
     };
     path?: never;
@@ -40525,6 +40527,8 @@ export type GetClientConnectionResponses = {
         clientId: 'claude-code' | 'cursor' | 'codex' | 'claude-desktop' | 'copilot-cli' | 'opencode';
         platform: 'macos' | 'linux' | 'windows';
         exclude: Array<'tools' | 'skills' | 'proxy' | 'plugins'>;
+        gateway: string | null;
+        plugins: Array<string> | null;
         deviceName: string | null;
         userCode: string;
         expiresAt: string;

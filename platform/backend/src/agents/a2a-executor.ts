@@ -46,7 +46,7 @@ import {
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, ModelModel } from "@/models";
+import { AgentModel, LlmProviderApiKeyModel, ModelModel } from "@/models";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
   formatUnavailableToolErrorDetails,
@@ -1228,13 +1228,20 @@ async function resolveRunLlmSelection(params: {
   tier?: SubagentModelTier;
 }) {
   const { llmApiKeyId, modelId } = params.agent;
+  const parentLlm =
+    params.parentLlm &&
+    (await usableParentLlm({
+      parentLlm: params.parentLlm,
+      agentLlmApiKeyId: llmApiKeyId,
+      userId: params.userId,
+    }));
   const base = await resolveConversationLlmSelectionForAgent({
     agent: { llmApiKeyId, modelId },
     organizationId: params.organizationId,
     userId: params.userId,
-    ...(params.parentLlm && {
-      explicitModelId: params.parentLlm.modelId,
-      explicitApiKeyId: params.parentLlm.apiKeyId,
+    ...(parentLlm && {
+      explicitModelId: parentLlm.modelId,
+      explicitApiKeyId: parentLlm.apiKeyId,
     }),
   });
   return params.tier
@@ -1245,6 +1252,26 @@ async function resolveRunLlmSelection(params: {
         organizationId: params.organizationId,
       })
     : base;
+}
+
+/**
+ * The fork runs on the resolved key as its agent key, which skips the per-user
+ * access check, so a parent key the user can no longer use is dropped and the
+ * fork falls back to the agent's own configuration.
+ */
+async function usableParentLlm(params: {
+  parentLlm: ModelSelection;
+  agentLlmApiKeyId: string | null;
+  userId: string;
+}): Promise<ModelSelection | undefined> {
+  const { parentLlm, agentLlmApiKeyId, userId } = params;
+  if (!parentLlm.apiKeyId || parentLlm.apiKeyId === agentLlmApiKeyId) {
+    return parentLlm;
+  }
+  const key = await LlmProviderApiKeyModel.findById(parentLlm.apiKeyId);
+  return key && (await LlmProviderApiKeyModel.canUseKey(key, userId, []))
+    ? parentLlm
+    : undefined;
 }
 
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */

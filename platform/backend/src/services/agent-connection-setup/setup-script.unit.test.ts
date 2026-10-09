@@ -1912,7 +1912,8 @@ ${script.slice(start, end)}
         stat(path.join(home, ".archestra", "opencode-connection-state.json")),
       ).rejects.toMatchObject({ code: "ENOENT" });
 
-      restored.model = `openai/${PROVIDER_MODEL_TIERS.openai.normal}`;
+      // What a pre-runtime-routing connection pinned as the default.
+      restored.model = "openai/gpt-5.5";
       await writeFile(configPath, JSON.stringify(restored));
       await execFileAsync("bash", [block], {
         env: { ...process.env, HOME: home, PATH: `${bin}:${process.env.PATH}` },

@@ -29,18 +29,22 @@ const UNSET = "all";
 /**
  * Fast and Smart model pickers for one provider key: the models a forked
  * subagent runs on when its parent asks for a faster or smarter tier.
+ * `inherited` is the organization trio an unset tier falls back to when the
+ * key serves it, ahead of the provider default.
  */
 export function ModelTierPickers({
   apiKeyId,
   provider,
   value,
   onChange,
+  inherited = EMPTY_MODEL_TIERS,
   disabled = false,
 }: {
   apiKeyId: string;
   provider: SupportedProvider;
   value: ModelTierSelection;
   onChange: (value: ModelTierSelection) => void;
+  inherited?: ModelTierSelection;
   disabled?: boolean;
 }) {
   const { data, isPending, isPlaceholderData } = useLlmModels({ apiKeyId });
@@ -69,7 +73,12 @@ export function ModelTierPickers({
               selected: value[tier],
             })}
             includeAllOption
-            allLabel={defaultLabel(candidates, provider, tier)}
+            allLabel={unsetLabel({
+              candidates,
+              provider,
+              tier,
+              inherited: inherited[tier],
+            })}
             placeholder="Loading models..."
             className="w-full"
             disabled={disabled || loading}
@@ -83,7 +92,7 @@ export function ModelTierPickers({
 function toOption(model: LlmModel): LlmModelSelectOption {
   return {
     value: model.dbId,
-    model: model.displayName ?? model.id,
+    model: modelName(model),
     modelId: model.id,
     provider: model.provider,
     isBest: model.isBest,
@@ -117,17 +126,29 @@ function tierOptions(params: {
   ];
 }
 
-function defaultLabel(
-  candidates: LlmModel[],
-  provider: SupportedProvider,
-  tier: ModelTier,
-): string {
+// Mirrors the backend's fork tier resolution: inherited org tier when the key
+// serves it, else the provider default, else the parent's own model.
+function unsetLabel(params: {
+  candidates: LlmModel[];
+  provider: SupportedProvider;
+  tier: ModelTier;
+  inherited: string | null;
+}): string {
+  const { candidates, provider, tier, inherited } = params;
+  const organizationModel = candidates.find(
+    (model) => model.dbId === inherited,
+  );
+  if (organizationModel) {
+    return `Organization default (${modelName(organizationModel)})`;
+  }
   const model = findTierDefault(
     candidates.map((candidate) => ({ ...candidate, modelId: candidate.id })),
     provider,
     tier,
   );
-  return model
-    ? `Default (${model.displayName ?? model.id})`
-    : "Same as normal";
+  return model ? `Default (${modelName(model)})` : "Same as normal";
+}
+
+function modelName(model: LlmModel): string {
+  return model.displayName ?? model.id;
 }

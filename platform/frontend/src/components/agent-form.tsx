@@ -203,6 +203,7 @@ import {
 import { isPersonalSubscription } from "@/lib/llm-key-subscription";
 import { type LlmModel, useLlmModelsByProvider } from "@/lib/llm-models.query";
 import { useAvailableLlmProviderApiKeys } from "@/lib/llm-provider-api-keys.query";
+import { useOrganization } from "@/lib/organization.query";
 import { useSkillsPaginated } from "@/lib/skills/skill.query";
 import { isReportedApiError } from "@/lib/utils/api";
 import { cn } from "@/lib/utils/tailwind";
@@ -1242,6 +1243,11 @@ export function AgentForm({
     keyedModelTiers.keyId === llmApiKeyId
       ? keyedModelTiers.tiers
       : EMPTY_MODEL_TIERS;
+  const { data: organization } = useOrganization();
+  const organizationModelTiers: ModelTierSelection = {
+    fast: organization?.defaultFastModelId ?? null,
+    smart: organization?.defaultSmartModelId ?? null,
+  };
   const [apiKeySelectorOpen, setApiKeySelectorOpen] = useState(false);
   const [selectedToolsCount, setSelectedToolsCount] = useState(0);
   // The tools editor's live selection (pending edits included), so the
@@ -3010,6 +3016,7 @@ export function AgentForm({
                     onChange={(tiers) =>
                       setKeyedModelTiers({ keyId: selectedApiKey.id, tiers })
                     }
+                    inherited={organizationModelTiers}
                     disabled={readOnly}
                   />
                 </div>

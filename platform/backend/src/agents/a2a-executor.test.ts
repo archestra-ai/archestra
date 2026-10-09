@@ -969,6 +969,64 @@ describe("executeA2AMessage model selection", () => {
       }),
     );
   });
+
+  test("a fork keeps its parent's key only while the user can still use it", async ({
+    makeUser,
+    makeOrganization,
+    makeMember,
+    makeAgent,
+    makeLlmProviderApiKey,
+  }) => {
+    const org = await makeOrganization();
+    const [user, other] = await Promise.all([makeUser(), makeUser()]);
+    await makeMember(user.id, org.id);
+    const agent = await makeAgent({
+      organizationId: org.id,
+      agentType: "agent",
+    });
+    const [orgKey, othersKey] = await Promise.all([
+      makeLlmProviderApiKey(org.id, null),
+      makeLlmProviderApiKey(org.id, null, { userId: other.id }),
+    ]);
+
+    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+      chatApiKeyId: "resolved-key",
+      selectedModel: "claude-sonnet-5-5",
+      selectedProvider: "anthropic",
+    });
+    mockGetChatMcpTools.mockResolvedValue({});
+    mockCreateLLMModelForAgent.mockRejectedValue(
+      new Error("stop after resolve"),
+    );
+
+    for (const { keyId, inherited } of [
+      { keyId: orgKey.id, inherited: true },
+      { keyId: othersKey.id, inherited: false },
+    ]) {
+      mockResolveConversationLlmSelectionForAgent.mockClear();
+      await executeA2AMessage({
+        agentId: agent.id,
+        message: "Handle this",
+        organizationId: org.id,
+        userId: user.id,
+        conversationId: "conv-1",
+        parentDelegationChain: "agent-parent",
+        parentLlm: { modelId: "parent-model", apiKeyId: keyId },
+      }).catch(() => undefined);
+
+      expect(
+        mockResolveConversationLlmSelectionForAgent.mock.calls[0]?.[0],
+      ).toEqual({
+        agent: { llmApiKeyId: null, modelId: null },
+        organizationId: org.id,
+        userId: user.id,
+        ...(inherited && {
+          explicitModelId: "parent-model",
+          explicitApiKeyId: keyId,
+        }),
+      });
+    }
+  });
 });
 
 describe("executeA2AMessage isolation scope", () => {

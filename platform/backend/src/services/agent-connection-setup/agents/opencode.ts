@@ -4,6 +4,7 @@ import {
   OPENCODE_PASSTHROUGH_PROVIDER_ROUTES,
   openCodePassthroughBaseUrl,
   PROVIDER_MODEL_TIERS,
+  type SupportedProvider,
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import { OPENCODE_GUARD_CLIENT } from "../guard/clients";
@@ -56,6 +57,27 @@ function opencodeProviderTarget(
     model: proxy.model ?? PROVIDER_MODEL_TIERS[proxy.provider].normal,
   };
 }
+
+/**
+ * The global model an older connection pinned before provider-key connections
+ * moved to runtime routing, so reconnecting can clear it. It must match what
+ * those connections wrote, so it keeps the default models of that time.
+ */
+function opencodeLegacyModelRef(ctx: SetupScriptContext): string {
+  const target = opencodeProviderTarget(ctx);
+  const provider = (ctx.proxy as SetupScriptProxySection).provider;
+  const model =
+    ctx.proxy?.model ?? LEGACY_PINNED_DEFAULT_MODELS[provider] ?? target.model;
+  return `${target.id}/${model}`;
+}
+
+const LEGACY_PINNED_DEFAULT_MODELS: Partial<Record<SupportedProvider, string>> =
+  {
+    anthropic: "claude-opus-4-8",
+    openai: "gpt-5.5",
+    gemini: "gemini-3.6-flash",
+    openrouter: "openrouter/auto",
+  };
 
 /** Headers OpenCode sends on every proxied request (attribution). */
 function opencodeProxyHeaders(
@@ -343,7 +365,7 @@ ${opencodeRoutingPluginBash({ routes, headers: opencodeProxyHeaders(ctx.proxy) }
         ]),
       );
       const headers = opencodeProxyHeaders(ctx.proxy);
-      const legacyTarget = opencodeProviderTarget(ctx);
+      const legacyModel = opencodeLegacyModelRef(ctx);
       const manual =
         "The routing plugin is installed. Node.js or Python is required to remove provider settings left by an older connection.";
       sections.push(`say "Routing supported OpenCode providers through the LLM proxy"
@@ -353,7 +375,7 @@ ${opencodeOwnedMergeBash(
     ARCHESTRA_OC_MCP_NAME: "",
     ARCHESTRA_OC_PROVIDER_ROUTES: JSON.stringify(routes),
     ARCHESTRA_OC_RUNTIME_ROUTING: "1",
-    ARCHESTRA_OC_LEGACY_MODEL: `${legacyTarget.id}/${legacyTarget.model}`,
+    ARCHESTRA_OC_LEGACY_MODEL: legacyModel,
     ARCHESTRA_OC_HEADERS: JSON.stringify(headers),
   },
   manual,
@@ -456,7 +478,7 @@ finally { Remove-Item Env:ARCHESTRA_OC_KEY, Env:ARCHESTRA_OC_PRIMARY, Env:ARCHES
 ${opencodeRoutingPluginPowerShell({ routes, headers: opencodeProxyHeaders(ctx.proxy) })}`);
     } else if (ctx.proxy.authMode === "provider-key") {
       const headers = opencodeProxyHeaders(ctx.proxy);
-      const legacyTarget = opencodeProviderTarget(ctx);
+      const legacyModel = opencodeLegacyModelRef(ctx);
       const routes = Object.fromEntries(
         OPENCODE_PASSTHROUGH_PROVIDER_ROUTES.map((route) => [
           route.openCodeProviderId,
@@ -492,7 +514,7 @@ ${managedHeaders}
 ${opencodeRoutingPluginPowerShell({ routes, headers })}
 $archCfg = Read-ArchOcOwned
 if (-not $archCfg.PSObject.Properties['provider']) { Set-ArchProp $archCfg 'provider' ([pscustomobject]@{}) }
-if ($archCfg.PSObject.Properties['model'] -and $archCfg.model -eq ${psq(`${legacyTarget.id}/${legacyTarget.model}`)}) { $archCfg.PSObject.Properties.Remove('model') }
+if ($archCfg.PSObject.Properties['model'] -and $archCfg.model -eq ${psq(legacyModel)}) { $archCfg.PSObject.Properties.Remove('model') }
 $archStateFile = Join-Path $env:USERPROFILE '.archestra/opencode-connection-state.json'
 if (Test-Path $archStateFile) {
   $archState = Get-Content -Raw -Path $archStateFile | ConvertFrom-Json

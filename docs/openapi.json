@@ -146014,7 +146014,8 @@
                     "type": "string",
                     "enum": [
                       "provider-key",
-                      "virtual-key"
+                      "virtual-key",
+                      "primary-providers"
                     ]
                   },
                   "attributePassthrough": {

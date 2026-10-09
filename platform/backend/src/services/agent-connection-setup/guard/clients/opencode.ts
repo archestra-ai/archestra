@@ -9,6 +9,7 @@ import {
   VIRTUAL_KEY_HEADER,
 } from "@archestra/shared";
 import logger from "@/logging";
+import { OPENCODE_PRIMARY_CONFIG_SCRIPT } from "../../payloads/opencode-primary-config";
 import { psq, sh } from "../../steps/quoting";
 import type { StartupGuardClient, StartupGuardContext } from "../startup-guard";
 
@@ -253,6 +254,19 @@ function opencodeRestoreRoutingPluginSh(): string {
 }
 
 function opencodeProxyDisconnect(ctx: StartupGuardContext): string {
+  if (
+    ctx.proxy?.usesModelCatalog ||
+    ctx.proxy?.authMode === "primary-providers"
+  ) {
+    return `disconnect_proxy() {
+  ARCHESTRA_OC_PRIMARY=null node -e ${sh(OPENCODE_PRIMARY_CONFIG_SCRIPT)} || return 1
+  ${opencodeRestoreRoutingPluginSh()}
+}
+proxy_disconnect_notes() {
+  printf '%s\\n' 'Restored the provider configuration from before model-provider setup.'
+}`;
+  }
+
   if (ctx.proxy?.authMode === "provider-key") {
     const routes = opencodePassthroughRoutes(ctx);
     const headers = opencodeManagedHeaders(ctx);
@@ -382,6 +396,21 @@ function opencodeWindowsRemoveConfigBackup(): string {
 }
 
 function opencodeWindowsProxyDisconnect(ctx: StartupGuardContext): string {
+  if (
+    ctx.proxy?.usesModelCatalog ||
+    ctx.proxy?.authMode === "primary-providers"
+  ) {
+    return `function Disconnect-ArchProxy {
+$archPrimaryRestore = @'
+${OPENCODE_PRIMARY_CONFIG_SCRIPT}
+'@
+$env:ARCHESTRA_OC_PRIMARY = 'null'
+try { $archPrimaryRestore | & node -; if ($LASTEXITCODE -ne 0) { throw 'Could not restore provider configuration' } }
+finally { Remove-Item Env:ARCHESTRA_OC_PRIMARY -ErrorAction SilentlyContinue }
+${opencodeWindowsRestoreRoutingPlugin()}
+}`;
+  }
+
   if (ctx.proxy?.authMode === "provider-key") {
     const routes = opencodePassthroughRoutes(ctx);
     const headers = opencodeManagedHeaders(ctx);

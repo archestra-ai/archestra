@@ -169,12 +169,15 @@ const GUARD_CLIENTS: Partial<Record<InstallerClientId, GuardClient>> = {
     binary: "opencode",
     inventory: `- Config: \${XDG_CONFIG_HOME:-~/.config}/opencode/opencode.json. The gateway is the mcp
   entry whose URL starts with {{BASE}}/mcp/. The proxy is a provider entry whose
-  options.baseURL points at {{HOST}}, or x-archestra-* headers added to a provider.
+  options.baseURL (V1) or settings.baseURL (V2 providers) points at {{HOST}}, or x-archestra-* headers added to a provider.
 - Skills: the folder \${XDG_CONFIG_HOME:-~/.config}/opencode/skills/MARKETPLACE cloned from {{HOST}}/skills/.
 - Routing plugin: \${XDG_CONFIG_HOME:-~/.config}/opencode/plugins/archestra-llm-proxy.js.`,
     manual: `- opencode mcp logout SERVER_NAME, then remove mcp.SERVER_NAME from opencode.json.
 - Delete the skills folder named above.
-- Remove the provider entry that points at {{HOST}}, or only the baseURL and
+- If ~/.archestra/opencode-primary-state.json exists, restore its sections and fields
+  into opencode.json: null means delete the field or provider entry. Then delete
+  that state file and ~/.archestra/opencode-primary.key.
+- Otherwise, remove the provider entry that points at {{HOST}}, or only the baseURL and
   x-archestra-* headers that were added to the user's own provider.
 - Routing plugin: if ~/.archestra/opencode-routing-plugin-state.json says the plugin
   file existed before, restore its saved content; otherwise delete archestra-llm-proxy.js.

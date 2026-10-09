@@ -3,7 +3,9 @@ import {
   getProvidersWithOptionalApiKey,
   isCredentialLevelSubscriptionProvider,
   isVaultReference,
+  PROVIDERS_REQUIRING_BASE_URL,
   parseVaultReference,
+  providerHasEndpointLocalModels,
   providerRequiresPerUserCredential,
   type ResourcePermissionGrant,
   SUBSCRIPTION_CREDENTIALS,
@@ -49,6 +51,46 @@ import ResourcePermissionPolicyModel from "./resource-permission-policy";
 import ResourcePermissionSubjectModel from "./resource-permission-subject";
 
 class LlmProviderApiKeyModel {
+  /** Usable primaries, preserving endpoint-local catalogs and ownership precedence. */
+  static async getUsablePrimaryKeys(params: {
+    organizationId: string;
+    userId: string;
+    userTeamIds: string[];
+  }): Promise<LlmProviderApiKeyWithScopeInfo[]> {
+    const available = await LlmProviderApiKeyModel.withoutOrphans({
+      organizationId: params.organizationId,
+      keys: (
+        await LlmProviderApiKeyModel.getAvailableKeysForUser(
+          params.organizationId,
+          params.userId,
+          params.userTeamIds,
+        )
+      ).filter(
+        (key) =>
+          key.isPrimary &&
+          !key.requiresReauthentication &&
+          (!PROVIDERS_REQUIRING_BASE_URL.has(key.provider) ||
+            Boolean(key.baseUrl)),
+      ),
+    });
+    const ranks = await LlmProviderApiKeyModel.ownershipRanks({
+      ...params,
+      keys: available,
+    });
+    available.sort(
+      (a, b) =>
+        (ranks.get(a.id) ?? 2) - (ranks.get(b.id) ?? 2) ||
+        a.createdAt.getTime() - b.createdAt.getTime(),
+    );
+    const seen = new Set<SupportedProvider>();
+    return available.filter((key) => {
+      if (providerHasEndpointLocalModels(key.provider)) return true;
+      if (seen.has(key.provider)) return false;
+      seen.add(key.provider);
+      return true;
+    });
+  }
+
   // SPDX-SnippetBegin
   // SPDX-SnippetCopyrightText: 2026 Archestra Inc.
   // SPDX-License-Identifier: LicenseRef-Archestra-Enterprise

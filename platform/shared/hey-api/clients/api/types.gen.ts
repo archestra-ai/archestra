@@ -40279,7 +40279,7 @@ export type CreateConnectionSetupData = {
         mcpGatewayId?: string;
         llmProxyId?: string;
         provider?: 'openai' | 'gemini' | 'anthropic' | 'bedrock' | 'cohere' | 'cerebras' | 'mistral' | 'perplexity' | 'groq' | 'xai' | 'openrouter' | 'vllm' | 'ollama' | 'ollama-native' | 'zhipuai' | 'deepseek' | 'minimax' | 'kimi' | 'azure' | 'github-copilot' | 'microsoft-365-copilot' | 'archestra' | 'voyage' | 'jev';
-        proxyAuth?: 'provider-key' | 'virtual-key';
+        proxyAuth?: 'provider-key' | 'virtual-key' | 'primary-providers';
         attributePassthrough?: boolean;
         model?: string;
         skills?: {

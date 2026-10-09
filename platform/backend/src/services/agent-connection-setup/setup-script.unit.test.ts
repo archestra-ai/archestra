@@ -141,7 +141,29 @@ function fullContext(
     proxy:
       clientId === "claude-code"
         ? PROXY
-        : { ...PROXY, provider: "openai", providerLabel: "OpenAI" },
+        : {
+            ...PROXY,
+            provider: "openai",
+            providerLabel: "OpenAI",
+            ...(clientId === "opencode"
+              ? {
+                  primaryProviders: [
+                    {
+                      provider: "openai" as const,
+                      name: "OpenAI",
+                      models: [
+                        {
+                          id: "gpt-test",
+                          name: "GPT test",
+                          context: null,
+                          output: null,
+                        },
+                      ],
+                    },
+                  ],
+                }
+              : {}),
+          },
     skills: SKILLS,
   };
 }
@@ -1608,6 +1630,122 @@ ${script.slice(pluginStart, pluginEnd)}
       expect(plugin).toContain(expected);
     } finally {
       await rm(root, { recursive: true, force: true });
+    }
+  });
+
+  test.each([
+    {
+      major: 1,
+      authMode: "primary-providers" as const,
+      provider: "vllm" as const,
+    },
+    {
+      major: 2,
+      authMode: "primary-providers" as const,
+      provider: "vllm" as const,
+    },
+    {
+      major: 1,
+      authMode: "virtual-key" as const,
+      provider: "bedrock" as const,
+    },
+    {
+      major: 2,
+      authMode: "virtual-key" as const,
+      provider: "bedrock" as const,
+    },
+  ])("OpenCode $major $authMode setup installs a large catalog and every plugin route", async ({
+    major,
+    authMode,
+    provider,
+  }) => {
+    const models = Array.from({ length: 1500 }, (_, i) => ({
+      id: `accounts/example/models/coder-${i}`,
+      name: `Coding model ${i}`,
+      context: 200000,
+      output: 8192,
+    }));
+    const script = renderSetupScript({
+      ...fullContext("opencode", "linux"),
+      proxy: {
+        ...PROXY,
+        authMode,
+        provider,
+        primaryProviders: [
+          { provider, name: "Selected inference", models },
+          ...(authMode === "primary-providers"
+            ? [
+                {
+                  provider: "openai" as const,
+                  name: "My subscription",
+                  models: [models[0]],
+                },
+              ]
+            : []),
+        ],
+      },
+    });
+    const start = script.indexOf('say "Configuring model providers');
+    const end = script.indexOf("\nsay ", start + 5);
+    expect(start).toBeGreaterThan(-1);
+    expect(end).toBeGreaterThan(start);
+    const home = await mkdtemp(path.join(tmpdir(), "opencode-primary-script-"));
+    try {
+      const block = path.join(home, "install.sh");
+      await writeFile(
+        block,
+        `set -euo pipefail
+say() { :; }
+ok() { :; }
+err() { echo "$*" >&2; }
+ARCHESTRA_OPENCODE_MAJOR=${major}
+ARCHESTRA_OPENCODE_CONFIG="$HOME/.config/opencode/opencode.json"
+${script.slice(start, end)}
+`,
+      );
+      await execFileAsync("bash", [block], {
+        env: {
+          ...process.env,
+          HOME: home,
+          XDG_CONFIG_HOME: path.join(home, ".config"),
+        },
+      });
+      const config = JSON.parse(
+        await readFile(
+          path.join(home, ".config/opencode/opencode.json"),
+          "utf8",
+        ),
+      );
+      const providers = config[major === 2 ? "providers" : "provider"];
+      expect(
+        Object.keys(providers[`archestra-${provider}`].models),
+      ).toHaveLength(1500);
+      expect(Object.keys(providers)).toHaveLength(
+        authMode === "primary-providers" ? 2 : 1,
+      );
+      const plugin = await readFile(
+        path.join(home, ".config/opencode/plugins/archestra-llm-proxy.js"),
+        "utf8",
+      );
+      expect(plugin).toContain(
+        `"archestra-${provider}":"https://archestra.example.com/v1/model-router"`,
+      );
+      if (authMode === "primary-providers") {
+        expect(plugin).toContain(
+          '"archestra-openai":"https://archestra.example.com/v1/model-router"',
+        );
+      } else {
+        expect(plugin).not.toContain('"archestra-openai"');
+        expect(
+          providers[`archestra-${provider}`].models[models[0].id],
+        ).toMatchObject(
+          major === 2
+            ? { modelID: `${provider}:${models[0].id}` }
+            : { id: `${provider}:${models[0].id}` },
+        );
+      }
+    } finally {
+      await rm(home, { recursive: true, force: true });
     }
   });
 

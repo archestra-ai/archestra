@@ -6,65 +6,22 @@ import type {
   Sanitizer,
 } from "@/lib/openappa-remedies.query";
 
-/** Who answers a consult, grouped for the panel's bar and the table's column. */
-export type RunsAs = {
-  key: "people" | "services" | "models" | "programs" | "builtIn";
-  /** The bar legend, plural. */
-  label: string;
-  /** The table cell. */
-  phrase: string;
-  color: string;
-};
-
-const RUNS_AS: Record<RunsAs["key"], RunsAs> = {
-  people: {
-    key: "people",
-    label: "people",
-    phrase: "a person reviews",
-    color: "var(--color-blue-400)",
-  },
-  services: {
-    key: "services",
-    label: "services",
-    phrase: "an HTTP service",
-    color: "var(--color-violet-400)",
-  },
-  models: {
-    key: "models",
-    label: "models",
-    phrase: "a model decides",
-    color: "var(--color-pink-400)",
-  },
-  programs: {
-    key: "programs",
-    label: "programs",
-    phrase: "a local program",
-    color: "var(--color-amber-400)",
-  },
-  builtIn: {
-    key: "builtIn",
-    label: "built in",
-    phrase: "built in",
-    color: "var(--color-teal-400)",
-  },
-};
-
-/** Null when the declaration has no `[externals.*]` entry wiring it. */
-export function runsAs(remedy: Remedy): RunsAs | null {
+/** Who answers a consult, as the table phrases it; null when no `[externals.*]` entry wires it. */
+export function runsAs(remedy: Remedy): string | null {
   switch (remedy.implementation?.kind) {
     case "hitl":
-      return RUNS_AS.people;
+      return "a person reviews";
     case "url":
-      return RUNS_AS.services;
+      return "an HTTP service";
     case "llm":
     case "claude_code":
-      return RUNS_AS.models;
+      return "a model decides";
     case "command":
     case "module":
-      return RUNS_AS.programs;
+      return "a local program";
     case "approve":
     case "builtin":
-      return RUNS_AS.builtIn;
+      return "built in";
     default:
       return null;
   }

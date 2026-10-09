@@ -71,20 +71,17 @@ function view(overrides: Partial<RemediesView> = {}): RemediesView {
 
 describe("runsAs", () => {
   test("groups implementations by who answers, and null when not wired", () => {
-    expect(runsAs(authority())?.phrase).toBe("a person reviews");
+    expect(runsAs(authority())).toBe("a person reviews");
     expect(
-      runsAs(authority({ implementation: { kind: "url", detail: "a.b" } }))
-        ?.phrase,
+      runsAs(authority({ implementation: { kind: "url", detail: "a.b" } })),
     ).toBe("an HTTP service");
     expect(
-      runsAs(sanitizer({ implementation: { kind: "llm", detail: "llm" } }))
-        ?.phrase,
+      runsAs(sanitizer({ implementation: { kind: "llm", detail: "llm" } })),
     ).toBe("a model decides");
     expect(
-      runsAs(sanitizer({ implementation: { kind: "command", detail: "py" } }))
-        ?.phrase,
+      runsAs(sanitizer({ implementation: { kind: "command", detail: "py" } })),
     ).toBe("a local program");
-    expect(runsAs(sanitizer())?.phrase).toBe("built in");
+    expect(runsAs(sanitizer())).toBe("built in");
     expect(runsAs(authority({ implementation: null }))).toBeNull();
   });
 });

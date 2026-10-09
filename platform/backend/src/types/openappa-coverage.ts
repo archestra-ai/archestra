@@ -195,7 +195,6 @@ export type CoverageEntitiesPage = z.infer<typeof CoverageEntitiesPageSchema>;
 export const DetectedCoverageEntitySchema = DetectedMcpServerSchema.pick({
   id: true,
   label: true,
-  clientFamilies: true,
   firstObservedAt: true,
 }).extend({
   type: z.literal("detected_mcp_server"),

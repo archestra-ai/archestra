@@ -68,28 +68,21 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
 
     expect(response.statusCode).toBe(200);
     const body = response.json();
-    // Claude Code and Codex both declared slack: one server, both clients.
+    // Claude Code and Codex both declared slack: one server.
     expect(body.pagination.total).toBe(3);
     expect(
       body.data.map(
-        (s: {
-          id: string;
-          type: string;
-          name: string;
-          clientFamilies: string[];
-          toolCount: number;
-        }) => [s.type, s.id, s.name, s.clientFamilies, s.toolCount],
+        (s: { id: string; type: string; name: string; toolCount: number }) => [
+          s.type,
+          s.id,
+          s.name,
+          s.toolCount,
+        ],
       ),
     ).toEqual([
-      ["detected_mcp_server", "detected.github", "github", ["opencode"], 1],
-      ["detected_mcp_server", "detected.linear", "linear", ["codex"], 1],
-      [
-        "detected_mcp_server",
-        "detected.slack",
-        "slack",
-        ["claude-code", "codex"],
-        2,
-      ],
+      ["detected_mcp_server", "detected.github", "github", 1],
+      ["detected_mcp_server", "detected.linear", "linear", 1],
+      ["detected_mcp_server", "detected.slack", "slack", 2],
     ]);
   });
 
@@ -199,7 +192,7 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
     });
   });
 
-  test("leaves out other organizations, catalog tools, unreadable names and unknown clients", async ({
+  test("leaves out other organizations, catalog tools and unreadable names", async ({
     makeUser,
     makeMember,
     makeOrganization,
@@ -234,7 +227,6 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
       CLAUDE_CODE_CLIENT_ID,
     );
     await observe(["slack_send"], ctx.user.id, OPENCODE_CLIENT_ID);
-    await observe(["mcp__slack__send"], ctx.user.id, CURSOR_CLIENT_ID);
 
     const response = await ctx.app.inject({
       method: "GET",
@@ -243,6 +235,24 @@ describe("GET /api/openappa/coverage/entities with detected servers", () => {
 
     expect(response.statusCode).toBe(200);
     expect(response.json().data).toEqual([]);
+  });
+
+  test("lists a server whichever client sent it, an unknown one included", async () => {
+    await ToolModel.bulkCreateProxyToolsIfNotExists(
+      [proxyTool("mcp__slack__send")],
+      "",
+    );
+    await observe(["mcp__slack__send"], ctx.user.id, CURSOR_CLIENT_ID);
+    await observe(["mcp__slack__send"], ctx.user.id, "");
+
+    const response = await ctx.app.inject({
+      method: "GET",
+      url: "/api/openappa/coverage/entities?type=detected_mcp_server",
+    });
+
+    expect(response.json().data).toMatchObject([
+      { id: "detected.slack", toolCount: 1 },
+    ]);
   });
 });
 

@@ -6,40 +6,33 @@ import {
 
 describe("parseDetectedToolName", () => {
   test.each([
-    [
-      "claude-code",
-      "mcp__slack__slack_send_message",
-      "slack",
-      "slack_send_message",
-    ],
-    ["codex", "mcp__linear__create_issue", "linear", "create_issue"],
-    ["claude-code", "mcp__my.server-1__tool", "my.server-1", "tool"],
-    ["opencode", "mcp:slack:send_message", "slack", "send_message"],
-  ] as const)("%s reads %s as label %s and tool %s", (family, name, label, toolName) => {
-    expect(parseDetectedToolName(family, name)).toEqual({ label, toolName });
+    ["mcp__slack__slack_send_message", "slack", "slack_send_message"],
+    ["mcp__linear__create_issue", "linear", "create_issue"],
+    ["mcp__my.server-1__tool", "my.server-1", "tool"],
+    ["mcp:slack:send_message", "slack", "send_message"],
+  ] as const)("reads %s as label %s and tool %s, whichever client sent it", (name, label, toolName) => {
+    expect(parseDetectedToolName(name)).toEqual({ label, toolName });
   });
 
   test.each([
-    ["claude-code", "Bash"],
-    ["claude-code", "mcp__slack"],
-    ["claude-code", "mcp__slack__"],
-    ["claude-code", "mcp____send"],
-    ["claude-code", "mcp__sl ack__send"],
-    ["claude-code", "mcp__sl/ack__send"],
-    ["codex", "exec_command"],
-    ["opencode", "slack_send_message"],
-    ["opencode", "mcp:slack"],
-    ["opencode", "mcp::send"],
-  ] as const)("%s does not read %s as a detected tool", (family, name) => {
-    expect(parseDetectedToolName(family, name)).toBeUndefined();
+    "Bash",
+    "exec_command",
+    "mcp__slack",
+    "mcp__slack__",
+    "mcp____send",
+    "mcp__sl ack__send",
+    "mcp__sl/ack__send",
+    "slack_send_message",
+    "mcp:slack",
+    "mcp::send",
+  ])("does not read %s as a detected tool", (name) => {
+    expect(parseDetectedToolName(name)).toBeUndefined();
   });
 
   // A second `__` makes the split ambiguous, and the runtime reads a
   // canonical name at its last `__`; the name is skipped rather than rewritten.
   test("rejects a name with more than one separator without normalising it", () => {
-    expect(
-      parseDetectedToolName("claude-code", "mcp__a__b__send"),
-    ).toBeUndefined();
+    expect(parseDetectedToolName("mcp__a__b__send")).toBeUndefined();
   });
 });
 

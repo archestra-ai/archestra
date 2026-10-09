@@ -4,41 +4,25 @@ import {
   OPENCODE_MCP_TOOL_NAME_PREFIX,
 } from "@archestra/shared/interactions/client";
 
-/**
- * The client families whose own MCP server spellings the proxy can read.
- * The value is the family's filter id.
- */
-export const DETECTED_CLIENT_FAMILIES = [
-  "claude-code",
-  "codex",
-  "opencode",
-] as const;
-
-export type DetectedClientFamily = (typeof DETECTED_CLIENT_FAMILIES)[number];
-
-/** A tool name read as `<label>` + `<tool>` on one client's wire. */
+/** A tool name read as `<label>` + `<tool>`. */
 type DetectedToolName = { label: string; toolName: string };
 
 /**
- * Reads a client's own MCP tool spelling, or returns undefined for a native
- * client tool, a delegation tool, or a label that cannot be an alias target.
+ * Reads a client's own MCP tool spelling, whichever client sent it, or
+ * returns undefined for a native client tool, a delegation tool, or a label
+ * that cannot be an alias target.
  *
- * - Claude Code and Codex: `mcp__<label>__<tool>` (a Codex namespace member
+ * - `mcp__<label>__<tool>`: Claude Code and Codex (a Codex namespace member
  *   is persisted in this spelling).
- * - OpenCode: `mcp:<label>:<tool>`. Its other spelling, `<label>_<tool>`,
+ * - `mcp:<label>:<tool>`: OpenCode. Its other spelling, `<label>_<tool>`,
  *   cannot be split without knowing the label, so it is not read here.
  */
 export function parseDetectedToolName(
-  family: DetectedClientFamily,
   name: string,
 ): DetectedToolName | undefined {
-  switch (family) {
-    case "claude-code":
-    case "codex":
-      return parseDoubleUnderscoreSpelling(name);
-    case "opencode":
-      return parseOpenCodeColonSpelling(name);
-  }
+  return (
+    parseDoubleUnderscoreSpelling(name) ?? parseOpenCodeColonSpelling(name)
+  );
 }
 
 /** The prefix of every detected server's id. */
@@ -50,12 +34,6 @@ const DETECTED_SERVER_ID_PREFIX = "detected.";
  */
 export function detectedServerId(label: string): string {
   return `${DETECTED_SERVER_ID_PREFIX}${label}`;
-}
-
-export function isDetectedClientFamily(
-  value: string,
-): value is DetectedClientFamily {
-  return (DETECTED_CLIENT_FAMILIES as readonly string[]).includes(value);
 }
 
 /**

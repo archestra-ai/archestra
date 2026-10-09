@@ -336647,17 +336647,6 @@
                               "label": {
                                 "type": "string"
                               },
-                              "clientFamilies": {
-                                "type": "array",
-                                "items": {
-                                  "type": "string",
-                                  "enum": [
-                                    "claude-code",
-                                    "codex",
-                                    "opencode"
-                                  ]
-                                }
-                              },
                               "firstObservedAt": {
                                 "type": "string",
                                 "format": "date-time"
@@ -336680,7 +336669,6 @@
                             "required": [
                               "id",
                               "label",
-                              "clientFamilies",
                               "firstObservedAt",
                               "type",
                               "name",

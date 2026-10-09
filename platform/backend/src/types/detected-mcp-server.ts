@@ -1,5 +1,4 @@
 import { z } from "zod";
-import { DETECTED_CLIENT_FAMILIES } from "@/utils/detected-mcp-server-names";
 
 /**
  * An MCP server a client connected on its own, seen through the tools the LLM
@@ -10,8 +9,6 @@ import { DETECTED_CLIENT_FAMILIES } from "@/utils/detected-mcp-server-names";
 export const DetectedMcpServerSchema = z.object({
   id: z.string(),
   label: z.string(),
-  /** The clients it was seen in, in a fixed order. */
-  clientFamilies: z.array(z.enum(DETECTED_CLIENT_FAMILIES)),
   tools: z.array(
     z.object({
       id: z.string().uuid(),

@@ -1,6 +1,5 @@
 "use client";
 
-import { CLIENT_FILTER_OPTIONS } from "@archestra/shared";
 import type { Column, ColumnDef, SortingState } from "@tanstack/react-table";
 import {
   Bot,
@@ -11,7 +10,6 @@ import {
 } from "lucide-react";
 import { useCallback, useMemo, useState } from "react";
 import { AgentIcon } from "@/components/agent-icon";
-import { ClientSourceBadge } from "@/components/client-source-badge";
 import {
   CollectionFilters,
   FilterBar,
@@ -154,10 +152,7 @@ export function EntitiesTable() {
         size: 210,
         cell: ({ row }) =>
           isDetected(row.original) ? (
-            <span className="flex items-center gap-2">
-              <DetectedClientBadge entity={row.original} />
-              <span>Detected</span>
-            </span>
+            <span>Detected</span>
           ) : (
             <span className="flex items-center gap-2">
               <span>{entityTypeLabel(row.original.type)}</span>
@@ -386,20 +381,6 @@ function isTypeFilter(value: string | null): value is TypeFilter {
 
 function isDetected(entity: CoverageEntity): entity is DetectedCoverageEntity {
   return entity.type === "detected_mcp_server";
-}
-
-/** One badge per client the server was seen in. */
-function DetectedClientBadge({ entity }: { entity: DetectedCoverageEntity }) {
-  const clients = entity.clientFamilies.flatMap((family) =>
-    CLIENT_FILTER_OPTIONS.filter((option) => option.value === family),
-  );
-  return (
-    <span className="flex flex-wrap items-center gap-1">
-      {clients.map((client) => (
-        <ClientSourceBadge key={client.value} client={client} />
-      ))}
-    </span>
-  );
 }
 
 function entityTypeLabel(type: RegistryCoverageEntity["type"]): string {

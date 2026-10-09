@@ -131,6 +131,8 @@ export interface AgentEnding {
   launch?: string[] | null;
   /** Anything else the person still has to do or should know. */
   notes?: string[];
+  /** Read-only Node script that prints local optional settings before next steps. */
+  optionalInstructions?: string;
 }
 
 export interface SetupEndingPart {
@@ -155,6 +157,8 @@ export interface SetupEnding {
   /** `text` is `command` quoted for the person's shell. */
   launch: { command: string[]; text: string } | null;
   notes: string[];
+  /** Read-only Node script; credentials are read locally, never embedded here. */
+  optionalInstructions?: string;
 }
 
 /**

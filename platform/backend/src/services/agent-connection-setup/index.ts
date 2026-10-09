@@ -29,7 +29,7 @@ export type { SetupScriptContext } from "./types";
  * - secrets are passed via shell variables / env / stdin, never as argv of
  *   external commands;
  * - `curl | bash` cannot export env into the parent shell, so env-based
- *   config (Copilot, Codex login) is either performed inside the script or
+ *   config (Codex login) is either performed inside the script or
  *   emitted as ready-to-paste export lines;
  * - every script ends with next steps + revocation guidance.
  *

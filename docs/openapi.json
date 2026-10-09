@@ -148475,7 +148475,6 @@
                           }
                         },
                         "agentRuntimeBackend": {
-                          "nullable": true,
                           "type": "object",
                           "properties": {
                             "name": {
@@ -258804,10 +258803,34 @@
                         "probedAt"
                       ],
                       "additionalProperties": false
+                    },
+                    "agentSandbox": {
+                      "type": "object",
+                      "properties": {
+                        "installed": {
+                          "type": "boolean"
+                        },
+                        "missingResources": {
+                          "type": "array",
+                          "items": {
+                            "type": "string"
+                          }
+                        },
+                        "message": {
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "installed",
+                        "missingResources",
+                        "message"
+                      ],
+                      "additionalProperties": false
                     }
                   },
                   "required": [
-                    "networkPolicy"
+                    "networkPolicy",
+                    "agentSandbox"
                   ],
                   "additionalProperties": false
                 }

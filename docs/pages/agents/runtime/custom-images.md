@@ -2,8 +2,8 @@
 title: Custom Images
 description: Run your own coding agent image in Agent Runtime
 order: 3
-lastUpdated: 2026-10-05
-beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). Then set [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED). See [Setup](/docs/agents/runtime/setup)."
+lastUpdated: 2026-10-08
+beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). See [Setup](/docs/agents/runtime/setup)."
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

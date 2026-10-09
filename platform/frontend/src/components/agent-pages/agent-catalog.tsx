@@ -10,6 +10,7 @@ import {
 import { Bot, Network } from "lucide-react";
 import Image from "next/image";
 import type { AgentFormInitialValues } from "@/components/agent-form";
+import { AgentRuntimeUnavailableNotice } from "@/components/agent-runtime-unavailable-notice";
 import { CatalogSourceCard } from "@/components/catalog-source-card";
 import { ProviderIcon } from "@/components/provider-icon";
 import { QueryLoadError } from "@/components/query-load-error";
@@ -117,14 +118,15 @@ export function AgentCatalog({
   onStartFromScratch,
   onAddExternalAgent,
   onSelect,
-  showPopularAgents,
+  runtimeAvailable,
 }: {
   canAddExternalAgent: boolean;
   canCreateAgent: boolean;
   onStartFromScratch: () => void;
   onAddExternalAgent: () => void;
   onSelect: (template: AgentCatalogTemplate) => void;
-  showPopularAgents: boolean;
+  /** Popular agents run in a dedicated runtime; undefined while loading. */
+  runtimeAvailable: boolean | undefined;
 }) {
   const { templates, isError, isFetching, refetch } =
     useAvailableAgentCatalogTemplates();
@@ -144,9 +146,12 @@ export function AgentCatalog({
         </div>
       </div>
 
-      {showPopularAgents && !isFetching && (isError || templates.length > 0) ? (
+      {runtimeAvailable !== undefined &&
+      !isFetching &&
+      (isError || templates.length > 0) ? (
         <div className="space-y-3">
           <h2 className="text-base font-semibold">Popular agents</h2>
+          {runtimeAvailable ? null : <AgentRuntimeUnavailableNotice />}
           {isError ? (
             <QueryLoadError
               title="Could not load popular agents"
@@ -161,8 +166,12 @@ export function AgentCatalog({
                   title={item.name}
                   description={item.description}
                   onClick={() => onSelect(item)}
-                  disabled={!canCreateAgent}
-                  disabledReason="Requires permission to create agents."
+                  disabled={!canCreateAgent || !runtimeAvailable}
+                  disabledReason={
+                    canCreateAgent
+                      ? "Requires the Agent Sandbox controller."
+                      : "Requires permission to create agents."
+                  }
                 />
               ))}
             </div>

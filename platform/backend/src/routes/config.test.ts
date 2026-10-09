@@ -3,6 +3,7 @@ import {
   createFastifyInstance,
   type FastifyInstanceWithZod,
 } from "@/fastify-instance";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { OrganizationModel } from "@/models";
 import { afterEach, beforeEach, describe, expect, test, vi } from "@/test";
 import type { User } from "@/types";
@@ -180,6 +181,37 @@ describe("config routes", () => {
       "xai",
       "zhipuai",
     ]);
+  });
+
+  test("reports Agent Runtime availability from the Agent Sandbox controller", async () => {
+    const sandboxInstalled = vi
+      .spyOn(agentSandboxApi, "isInstalled", "get")
+      .mockReturnValue(false);
+    try {
+      const missing = (
+        await app.inject({ method: "GET", url: "/api/config" })
+      ).json();
+      // The backend settings stay visible so the UI can explain what is
+      // missing instead of hiding Agent Runtime entirely.
+      expect(missing.features.agentRuntime).toBe(false);
+      expect(missing.features.agentRuntimeBackend).toMatchObject({
+        name: "kubernetes",
+        available: false,
+        defaultTtlHours: config.agentRuntime.defaultTtlHours,
+      });
+
+      sandboxInstalled.mockReturnValue(true);
+      const installed = (
+        await app.inject({ method: "GET", url: "/api/config" })
+      ).json();
+      expect(installed.features.agentRuntime).toBe(true);
+      expect(installed.features.agentRuntimeBackend).toMatchObject({
+        name: "kubernetes",
+        available: true,
+      });
+    } finally {
+      sandboxInstalled.mockRestore();
+    }
   });
 
   test("returns configured provider base URLs exactly", async () => {

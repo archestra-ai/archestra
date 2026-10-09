@@ -1,7 +1,6 @@
 import type { AddressInfo } from "node:net";
 import { vi } from "vitest";
 import type { A2AExecuteParams } from "@/agents/a2a-executor";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
 import {
@@ -179,7 +178,6 @@ describe("a2a v2 task methods", () => {
   let agentId: string;
   let organizationId: string;
   let userId: string;
-  const previousAgentRuntimeEnabled = config.agentRuntime.enabled;
 
   beforeEach(async ({ makeInternalAgent, makeUser, makeMember }) => {
     const agent = await makeInternalAgent();
@@ -204,7 +202,6 @@ describe("a2a v2 task methods", () => {
     mockExecuteA2AMessage.mockReset();
     mockRunTaskInAgentRuntime.mockReset();
     mockValidateMCPGatewayToken.mockReset();
-    config.agentRuntime.enabled = previousAgentRuntimeEnabled;
     await app.close();
   });
 
@@ -264,7 +261,6 @@ describe("a2a v2 task methods", () => {
     makeLlmProviderApiKey,
     makeSecret,
   }) => {
-    config.agentRuntime.enabled = true;
     const secret = await makeSecret({ secret: { apiKey: "gemini-test-key" } });
     const providerKey = await makeLlmProviderApiKey(organizationId, secret.id, {
       provider: "gemini",
@@ -320,7 +316,6 @@ describe("a2a v2 task methods", () => {
   test("SendMessage returns a durable Task when the Agent uses Agent Runtime", async ({
     makeInternalAgent,
   }) => {
-    config.agentRuntime.enabled = true;
     const runtimeAgent = await makeInternalAgent({
       organizationId,
       runtime: {

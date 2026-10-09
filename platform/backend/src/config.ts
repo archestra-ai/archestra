@@ -2414,19 +2414,12 @@ const config = {
       process.env.ARCHESTRA_SKILL_MARKETPLACE_CACHE_DIR?.trim() ||
       path.join(homedir(), ".archestra", "skill-marketplace-cache"),
   },
+  /**
+   * Agent Runtime: delegated Agent tasks run in one Kubernetes pod each and
+   * remain attachable and steerable while they run. Available whenever the
+   * cluster serves the Agent Sandbox API (see `k8s/agent-runtime/sandbox-api`).
+   */
   agentRuntime: {
-    /**
-     * Agent Runtime: delegated Agent tasks run in one Kubernetes pod
-     * each and remain attachable and steerable while they run.
-     *
-     * Deliberately an independent switch rather than `betaFeatureEnabled`:
-     * the feature spawns compute holding a user's personal credentials, so
-     * flipping the ARCHESTRA_BETA master switch must never turn it on by
-     * implication. It also needs the Kubernetes runtime configured — without
-     * that, `orchestratorK8sRuntime` is false and dedicated runtimes stay unavailable
-     * regardless of this value.
-     */
-    enabled: process.env.ARCHESTRA_AGENT_RUNTIME_ENABLED === "true",
     /** Ready spare workspaces per compatible runtime configuration. */
     warmPoolSize: parseNonNegativeInt(
       process.env.ARCHESTRA_AGENT_RUNTIME_WARM_POOL_SIZE,

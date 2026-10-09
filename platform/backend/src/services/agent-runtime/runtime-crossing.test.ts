@@ -55,12 +55,10 @@ const OTHER = "user:parent|other-session";
 
 describe("runtime crossing", () => {
   const originalBaseUrl = config.agentRuntime.platformBaseUrl;
-  const originalRuntime = config.agentRuntime.enabled;
   const originalOpenappa = config.openappa.enabled;
 
   beforeEach(async () => {
     config.agentRuntime.platformBaseUrl = "http://platform.test";
-    config.agentRuntime.enabled = true;
     config.openappa.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
     vi.spyOn(backend, "isEnabled", "get").mockReturnValue(true);
@@ -253,7 +251,6 @@ describe("runtime crossing", () => {
   afterEach(async () => {
     await drainBackgroundWork();
     config.agentRuntime.platformBaseUrl = originalBaseUrl;
-    config.agentRuntime.enabled = originalRuntime;
     config.openappa.enabled = originalOpenappa;
   });
 });
@@ -261,7 +258,6 @@ describe("runtime crossing", () => {
 describe("model-facing runtime tools", () => {
   beforeEach(async () => {
     config.openappa.enabled = true;
-    config.agentRuntime.enabled = true;
     await GuardrailsDeploymentModel.setEnabled(true);
   });
 
@@ -760,7 +756,6 @@ test("a signed released get_run proof executes once and replay cannot read the r
 }) => {
   await GuardrailsDeploymentModel.setEnabled(true);
   config.openappa.enabled = true;
-  config.agentRuntime.enabled = true;
   const seeded = await seededRun({
     makeAgent,
     makeMember,

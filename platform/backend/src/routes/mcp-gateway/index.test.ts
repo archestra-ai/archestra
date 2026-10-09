@@ -31,7 +31,9 @@ import {
   validatorCompiler,
   type ZodTypeProvider,
 } from "fastify-type-provider-zod";
+import { vi } from "vitest";
 import config from "@/config";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import {
   AgentExcludedSubagentModel,
   AgentModel,
@@ -900,6 +902,8 @@ describe("MCP Gateway (stateless mode)", () => {
     makeOrganization,
     makeUser,
   }) => {
+    // Without the Agent Sandbox controller no run-control tools are implied.
+    vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
     const org = await makeOrganization();
     const author = await makeUser();
     await makeMember(author.id, org.id, { role: "admin" });

@@ -590,8 +590,7 @@ COPY docker/scripts/docker-entrypoint.sh /docker-entrypoint.sh
 # the entrypoint falls back to a registry pull when the tar is absent.
 COPY docker/dagger-engine.quickstart.yaml /app/dagger-engine.quickstart.yaml
 # Upstream Agent Sandbox controller, applied into the embedded KinD cluster in
-# quickstart mode when ARCHESTRA_AGENT_RUNTIME_ENABLED=true: every Agent Runtime
-# run is one of its Sandbox resources. Real deployments install it themselves;
+# quickstart mode: every Agent Runtime run is one of its Sandbox resources. Real deployments install it themselves;
 # keep this version in step with the Agent Runtime prerequisites in
 # docs/pages/platform-deployment.md.
 ARG AGENT_SANDBOX_VERSION=v1.0.1

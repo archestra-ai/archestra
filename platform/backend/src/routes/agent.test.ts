@@ -10,6 +10,7 @@ import config from "@/config";
 import db, { schema } from "@/database";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import { registerAuditLogHook } from "@/middleware/audit-log-hook";
 import {
   AgentModel,
@@ -246,8 +247,9 @@ describe("agent routes", () => {
     });
 
     test("persists Agent Runtime on an Agent", async () => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       const runtime = {
         image: "example.com/coding-agent:latest",
         command: null,
@@ -277,7 +279,7 @@ describe("agent routes", () => {
         expect(response.statusCode).toBe(200);
         expect(response.json().runtime).toEqual(runtime);
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
@@ -286,8 +288,9 @@ describe("agent routes", () => {
       makeLlmProviderApiKey,
       makeSecret,
     }) => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       try {
         const secret = await makeSecret({ secret: { apiKey: "test-key" } });
         const providerKey = await makeLlmProviderApiKey(
@@ -344,7 +347,7 @@ describe("agent routes", () => {
         );
         expect((await AgentModel.findById(agent.id))?.runtime).toBeNull();
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
@@ -352,8 +355,9 @@ describe("agent routes", () => {
       makeLlmProviderApiKey,
       makeSecret,
     }) => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       try {
         const secret = await makeSecret({ secret: { apiKey: "test-key" } });
         const providerKey = await makeLlmProviderApiKey(
@@ -405,7 +409,7 @@ describe("agent routes", () => {
           "Codex runtime requires an OpenAI",
         );
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
@@ -414,8 +418,9 @@ describe("agent routes", () => {
       makeLlmProviderApiKey,
       makeSecret,
     }) => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       try {
         const secret = await makeSecret({ secret: { apiKey: "test-key" } });
         const providerKey = await makeLlmProviderApiKey(
@@ -465,13 +470,14 @@ describe("agent routes", () => {
         expect(response.statusCode).toBe(400);
         expect(response.json().error.message).toContain("linked and available");
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
-    test("rejects Agent Runtime configuration while the feature flag is disabled", async () => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = false;
+    test("rejects Agent Runtime configuration when the Agent Sandbox controller is not installed", async () => {
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(false);
       try {
         const response = await app.inject({
           method: "POST",
@@ -497,16 +503,17 @@ describe("agent routes", () => {
 
         expect(response.statusCode).toBe(400);
         expect(response.json().error.message).toBe(
-          "Agent Runtime is not enabled",
+          "Agent Runtime is unavailable: this cluster does not have the Agent Sandbox controller installed",
         );
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
     test("rejects Agent Runtime on an MCP Gateway", async () => {
-      const previous = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       try {
         const response = await app.inject({
           method: "POST",
@@ -535,14 +542,15 @@ describe("agent routes", () => {
           "can only be configured for Agents",
         );
       } finally {
-        config.agentRuntime.enabled = previous;
+        sandboxInstalled.mockRestore();
       }
     });
 
     test("requires deployment-operator approval for privileged Agent Runtime", async () => {
-      const previousEnabled = config.agentRuntime.enabled;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
       const previousAllowPrivileged = config.agentRuntime.allowPrivileged;
-      config.agentRuntime.enabled = true;
       config.agentRuntime.allowPrivileged = false;
       try {
         const response = await app.inject({
@@ -572,7 +580,7 @@ describe("agent routes", () => {
           "disabled by the deployment operator",
         );
       } finally {
-        config.agentRuntime.enabled = previousEnabled;
+        sandboxInstalled.mockRestore();
         config.agentRuntime.allowPrivileged = previousAllowPrivileged;
       }
     });

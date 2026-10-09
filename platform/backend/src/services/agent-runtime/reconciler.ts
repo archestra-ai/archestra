@@ -29,7 +29,7 @@ class AgentRunReconciler {
   private isReconciling = false;
 
   start(): void {
-    if (this.timer || !isAnyAgentRuntimeBackendDriverEnabled()) return;
+    if (this.timer) return;
     this.runReconcile();
     this.timer = setInterval(
       () => this.runReconcile(),
@@ -54,7 +54,8 @@ class AgentRunReconciler {
   }
 
   async reconcile(): Promise<void> {
-    if (this.isReconciling) return;
+    // Started with the server; idles until the Agent Sandbox API appears.
+    if (this.isReconciling || !isAnyAgentRuntimeBackendDriverEnabled()) return;
     this.isReconciling = true;
     try {
       const workspaces = await AgentWorkspaceModel.listForReaping(

@@ -40890,7 +40890,7 @@ export type GetConfigResponses = {
                     memoryRequest: string;
                     memoryLimit: string;
                 };
-            } | null;
+            };
             plugins: boolean;
             sandboxArtifactBytesLimit: number;
             chatAttachmentStorageBytesLimit: number;
@@ -66091,6 +66091,11 @@ export type GetK8sCapabilitiesResponses = {
             enforcementStatus: 'verified-enforced' | 'verified-not-enforced' | 'unknown';
             probe: 'enforced' | 'not-enforced' | 'inconclusive' | 'absent';
             probedAt: string | null;
+        };
+        agentSandbox: {
+            installed: boolean;
+            missingResources: Array<string>;
+            message: string;
         };
     };
 };

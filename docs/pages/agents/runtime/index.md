@@ -1,9 +1,9 @@
 ---
 title: Agent Runtime
-beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). Then set [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED). See [Setup](/docs/agents/runtime/setup)."
+beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). See [Setup](/docs/agents/runtime/setup)."
 description: Run coding agents and long tasks in their own Kubernetes containers
 order: 2
-lastUpdated: 2026-10-05
+lastUpdated: 2026-10-08
 ---
 
 <!-- Renaming/deleting this file? Add a redirect in docs/redirects.json. -->

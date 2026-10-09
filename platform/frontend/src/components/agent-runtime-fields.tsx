@@ -116,7 +116,7 @@ export function AgentRuntimeFields({
               </Label>
               <FieldDescription>
                 {runtimeEnabled === false && value === null
-                  ? "Your deployment administrator must enable Agent Runtime before you can configure a dedicated runtime."
+                  ? "Unavailable: this cluster does not have the Agent Sandbox controller installed."
                   : "Selecting this agent in Chat starts a run in the container instead of a foreground conversation."}
               </FieldDescription>
             </div>

@@ -17,11 +17,14 @@ import {
   type KubernetesAgentRunLaunchSpec,
 } from "./manifests";
 import { AGENT_RUNTIME_WORKSPACE_LABEL, agentRuntimeLabels } from "./naming";
+import {
+  AGENT_SANDBOX_EXTENSIONS_API,
+  agentSandboxApi,
+} from "./sandbox-api";
 import { warmPoolTemplate } from "./warm-pool-template";
 
 export const SANDBOX_CLAIM_API = {
-  group: "extensions.agents.x-k8s.io",
-  version: "v1beta1",
+  ...AGENT_SANDBOX_EXTENSIONS_API,
   plural: "sandboxclaims",
 } as const;
 
@@ -78,7 +81,7 @@ class AgentWarmPoolManager {
   private inFlight = false;
 
   start() {
-    if (this.timer || !config.agentRuntime.enabled) return;
+    if (this.timer) return;
     void this.reconcileSafely();
     this.timer = setInterval(() => void this.reconcileSafely(), 30_000);
     this.timer.unref();
@@ -90,7 +93,7 @@ class AgentWarmPoolManager {
   }
 
   async reconcile() {
-    if (this.inFlight || !config.agentRuntime.enabled) return;
+    if (this.inFlight || !agentSandboxApi.isInstalled) return;
     this.inFlight = true;
     try {
       if (!this.clients) {

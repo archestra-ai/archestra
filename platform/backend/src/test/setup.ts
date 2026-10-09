@@ -211,6 +211,17 @@ beforeEach(async ({ task }) => {
     enterpriseTier.setUserCountForTesting(0);
   }
 
+  // Agent Runtime availability is detected from whatever cluster the default
+  // kubeconfig points at, so a developer machine with the Agent Sandbox
+  // controller would answer differently from CI. Default to "not installed";
+  // a test that needs it either overrides this spy or restores it to exercise
+  // real detection. Imported here, after the test file's mocks are applied.
+  const { agentSandboxApi } = await import(
+    "../k8s/agent-runtime/sandbox-api.js"
+  );
+  agentSandboxApi.reset();
+  vi.spyOn(agentSandboxApi, "isInstalled", "get").mockReturnValue(false);
+
   if (
     pgliteClient &&
     databaseTouched &&

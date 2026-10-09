@@ -932,12 +932,7 @@ Archestra creates one Dagger engine per organization and per environment. Each e
 
 ## Agent Runtime
 
-Agent Runtime needs the orchestrator configured. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
-
-- **`ARCHESTRA_AGENT_RUNTIME_ENABLED`** - Enables Agent Runtime.
-  - Default: `false`
-  - Values: `true`, `false`
-  - Does not follow [`ARCHESTRA_BETA`](/docs/reference/configuration#ARCHESTRA_BETA).
+Agent Runtime turns on when the orchestrator's cluster has the Agent Sandbox controller installed. Agents can override the settings described as defaults. See [Agent Runtime](/docs/agents/runtime) for cluster setup.
 
 - **`ARCHESTRA_AGENT_RUNTIME_IMAGE_REGISTRY`** - Registry the maintained Claude Code, Codex, OpenCode, Hermes, and OpenClaw images are pulled from.
   - Default: `europe-west1-docker.pkg.dev/friendly-path-465518-r6/archestra-public`

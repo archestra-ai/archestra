@@ -13,7 +13,6 @@ import {
   getAgentTypePermissionChecker,
   isAgentTypeAdmin,
 } from "@/auth/agent-type-permissions";
-import config from "@/config";
 import { knowledgeSourceAccessControlService } from "@/knowledge-base/source-access-control";
 import logger from "@/logging";
 import {
@@ -448,10 +447,7 @@ const registry = defineArchestraTools([
             id: agent.id,
             name: agent.name,
             scope: agent.scope,
-            executionMode:
-              config.agentRuntime.enabled && agent.runtime
-                ? "runtime"
-                : "foreground",
+            executionMode: agent.runtime ? "runtime" : "foreground",
             description: agent.description,
             resolvedLlmProviderKeyName:
               agent.resolvedLlmProviderKeyName ?? null,

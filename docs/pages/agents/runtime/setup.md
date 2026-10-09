@@ -3,8 +3,8 @@ title: Agent Runtime Setup
 sidebarTitle: Setup
 description: Prepare Kubernetes nodes, storage, and the Agent Sandbox controller for Agent Runtime
 order: 1
-lastUpdated: 2026-10-05
-beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/). Then set [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED)."
+lastUpdated: 2026-10-08
+beta: "Needs Kubernetes, persistent storage, and the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/)."
 ---
 
 Prepare your cluster once, and every agent can get a dedicated runtime. Each run becomes a pod with its own persistent volume, created by the [Agent Sandbox controller](https://agent-sandbox.sigs.k8s.io/docs/).
@@ -13,13 +13,13 @@ You install three things:
 
 - **The controller** and its custom resources.
 - **A storage class** with dynamic volume provisioning.
-- **Archestra's access** to the cluster, then the Agent Runtime switch.
+- **Archestra's access** to the cluster.
 
 ## Cluster Prerequisites
 
 Your cluster needs Linux nodes compatible with the runtime images, a storage class with dynamic volume provisioning, and the Helm chart's runtime permissions in every execution namespace. Allow outbound access to the image registry, DNS, and Archestra's API, proxy, and gateway.
 
-The quickstart Docker image installs the controller in its KinD cluster when [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED). On other clusters, install the tested version of the controller and its extensions:
+The quickstart Docker image installs the controller in its KinD cluster. On other clusters, install the tested version of the controller and its extensions:
 
 ```bash
 kubectl apply --server-side -f https://github.com/kubernetes-sigs/agent-sandbox/releases/download/v1.0.1/sandbox-with-extensions.yaml
@@ -35,7 +35,7 @@ kubectl rollout restart deployment/agent-sandbox-controller -n agent-sandbox-sys
 kubectl rollout status deployment/agent-sandbox-controller -n agent-sandbox-system --timeout=120s
 ```
 
-Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Then set [`ARCHESTRA_AGENT_RUNTIME_ENABLED=true`](/docs/reference/configuration#ARCHESTRA_AGENT_RUNTIME_ENABLED). Restart Archestra, then check **Settings → Agents → Runtime Backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
+Give Archestra access to the cluster. When Archestra runs in that cluster, set [`ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER=true`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_LOAD_KUBECONFIG_FROM_CURRENT_CLUSTER). Otherwise, set [`ARCHESTRA_ORCHESTRATOR_KUBECONFIG`](/docs/reference/configuration#ARCHESTRA_ORCHESTRATOR_KUBECONFIG). Agent Runtime turns on when Archestra finds the controller in the cluster. You do not need to restart Archestra after you install the controller. Check **Settings → Agents → Runtime Backend**. Create an agent with a dedicated runtime and start a run to check image access and storage provisioning.
 
 The controller does not install a container isolation runtime. Check image architecture and admission policies before starting workloads.
 

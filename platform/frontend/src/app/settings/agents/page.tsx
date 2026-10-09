@@ -523,7 +523,7 @@ function RuntimeBackendSection({
       }
       notice={
         !runtimeBackend.available
-          ? "The feature is enabled, but the Kubernetes backend is unreachable. Check the orchestrator configuration."
+          ? "Unavailable: the cluster does not serve the Agent Sandbox API. Install the Agent Sandbox controller to run agents in dedicated runtimes."
           : undefined
       }
     >

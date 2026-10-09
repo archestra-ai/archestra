@@ -10,6 +10,62 @@ describe("Kubernetes capability inspection", () => {
     clearK8sCapabilitiesCache();
   });
 
+  test("reports the Agent Sandbox controller installed when every resource is served", async () => {
+    const customObjectsApi = {
+      getAPIResources: vi.fn(async ({ group }: { group: string }) => {
+        if (group === "agents.x-k8s.io") {
+          return { resources: [{ name: "sandboxes" }] };
+        }
+        if (group === "extensions.agents.x-k8s.io") {
+          return {
+            resources: [
+              { name: "sandboxclaims" },
+              { name: "sandboxtemplates" },
+              { name: "sandboxwarmpools" },
+            ],
+          };
+        }
+        throw { statusCode: 404 };
+      }),
+    };
+
+    const { agentSandbox } = await getK8sCapabilitiesFromApi(
+      customObjectsApi as never,
+    );
+
+    expect(agentSandbox).toEqual({
+      installed: true,
+      missingResources: [],
+      message: expect.stringContaining("is installed"),
+    });
+  });
+
+  test("names the missing Agent Sandbox resources when the extensions group is absent", async () => {
+    const customObjectsApi = {
+      getAPIResources: vi.fn(async ({ group }: { group: string }) => {
+        if (group === "agents.x-k8s.io") {
+          return { resources: [{ name: "sandboxes" }] };
+        }
+        // A cluster without the CRD answers discovery with a 404.
+        throw { statusCode: 404 };
+      }),
+    };
+
+    const { agentSandbox } = await getK8sCapabilitiesFromApi(
+      customObjectsApi as never,
+    );
+
+    expect(agentSandbox).toEqual({
+      installed: false,
+      missingResources: [
+        "sandboxclaims.extensions.agents.x-k8s.io",
+        "sandboxtemplates.extensions.agents.x-k8s.io",
+        "sandboxwarmpools.extensions.agents.x-k8s.io",
+      ],
+      message: expect.stringContaining("not installed"),
+    });
+  });
+
   test("reports Cilium FQDN support when the CiliumNetworkPolicy CRD exists", async () => {
     const customObjectsApi = {
       getAPIResources: vi.fn(async ({ group }: { group: string }) => ({
@@ -182,7 +238,8 @@ describe("Kubernetes capability inspection", () => {
     await getK8sCapabilitiesFromApi(customObjectsApi as never);
     await getK8sCapabilitiesFromApi(customObjectsApi as never);
 
-    expect(customObjectsApi.getAPIResources).toHaveBeenCalledTimes(4);
+    // Four network policy groups plus the two Agent Sandbox groups, once.
+    expect(customObjectsApi.getAPIResources).toHaveBeenCalledTimes(6);
   });
 
   test("reprobes after the capability cache TTL expires", async () => {
@@ -196,7 +253,7 @@ describe("Kubernetes capability inspection", () => {
     vi.advanceTimersByTime(5 * 60 * 1000 + 1);
     await getK8sCapabilitiesFromApi(customObjectsApi as never);
 
-    expect(customObjectsApi.getAPIResources).toHaveBeenCalledTimes(8);
+    expect(customObjectsApi.getAPIResources).toHaveBeenCalledTimes(12);
   });
 
   describe("with a behavioural enforcement probe", () => {

@@ -1,8 +1,8 @@
 import { ADMIN_ROLE_NAME, BUILT_IN_AGENT_IDS } from "@archestra/shared";
 import { vi } from "vitest";
-import config from "@/config";
 import type { FastifyInstanceWithZod } from "@/fastify-instance";
 import { createFastifyInstance } from "@/fastify-instance";
+import { agentSandboxApi } from "@/k8s/agent-runtime/sandbox-api";
 import ResourcePermissionPolicyModel from "@/models/resource-permission-policy";
 import { afterEach, beforeEach, describe, expect, test } from "@/test";
 import type { User } from "@/types";
@@ -209,8 +209,9 @@ describe("agent type permission isolation (routes)", () => {
       });
       await makeMember(memberUser.id, organizationId, { role: "agent_only" });
       const memberApp = await createAppForUser(memberUser);
-      const previousEnabled = config.agentRuntime.enabled;
-      config.agentRuntime.enabled = true;
+      const sandboxInstalled = vi
+        .spyOn(agentSandboxApi, "isInstalled", "get")
+        .mockReturnValue(true);
 
       try {
         const agentRes = await memberApp.inject({
@@ -278,7 +279,7 @@ describe("agent type permission isolation (routes)", () => {
         });
         expect(privilegedAgent.statusCode).toBe(403);
       } finally {
-        config.agentRuntime.enabled = previousEnabled;
+        sandboxInstalled.mockRestore();
         await memberApp.close();
       }
     });

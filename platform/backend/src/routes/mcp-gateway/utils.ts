@@ -102,6 +102,7 @@ import {
   agentToolExclusionsService,
   isToolIdentityExcluded,
 } from "@/services/agent-tool-exclusions";
+import { isAnyAgentRuntimeBackendDriverEnabled } from "@/services/agent-runtime/backends";
 import { isAppConnectorAudienceRef } from "@/services/apps/app-connector-resource";
 import {
   appLaunchToolDescription,
@@ -494,7 +495,7 @@ export async function createAgentServer(params: {
     // start work. Advertise lifecycle controls for runtime handoffs and dynamic
     // delegation; handlers still enforce actor ownership and RBAC.
     const implicitTaskControlTools =
-      config.agentRuntime.enabled || hasTaskStarter
+      isAnyAgentRuntimeBackendDriverEnabled() || hasTaskStarter
         ? getImplicitTaskControlTools()
         : [];
     // A thrown switch read must fail the list, not look like the switch is off.

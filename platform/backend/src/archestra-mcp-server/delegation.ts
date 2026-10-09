@@ -19,7 +19,6 @@ import {
   AgentExcludedSubagentModel,
   AgentModel,
   AgentTeamModel,
-  ModelModel,
   ToolModel,
 } from "@/models";
 import ResourcePermissionSubjectModel from "@/models/resource-permission-subject";
@@ -45,9 +44,8 @@ import { ResourcePermissions } from "@/services/resource-permissions";
 import { type Agent, ApiError } from "@/types";
 import {
   availableSubagentTiers,
-  type ConversationLlmSelection,
   type ModelTrioTiers,
-  resolveConversationLlmSelectionForAgent,
+  resolveForkParentSelection,
 } from "@/utils/llm-resolution";
 import { errorResult, isAbortLikeError, successResult } from "./helpers";
 import type { ArchestraContext } from "./types";
@@ -400,8 +398,9 @@ export async function handleDelegation(
 
     const run = {
       agentId: target.id,
-      selfFork,
-      ...(selfFork ? { parentLlm: context.parentLlm, tier } : {}),
+      ...(selfFork
+        ? { selfFork: true as const, parentLlm: context.parentLlm, tier }
+        : {}),
       ...(spawn.binding ? { appaSubagent: spawn.binding.child } : {}),
       organizationId,
       userId: userId || "system",
@@ -883,34 +882,14 @@ async function forkTiers(params: {
   parentLlm?: ModelSelection;
 }): Promise<Exclude<SubagentModelTier, "normal">[]> {
   const { caller, organizationId, userId, parentLlm } = params;
-  const parent = parentLlm
-    ? await parentSelection(parentLlm)
-    : userId
-      ? await resolveConversationLlmSelectionForAgent({
-          agent: { llmApiKeyId: caller.llmApiKeyId, modelId: caller.modelId },
-          organizationId,
-          userId,
-        })
-      : null;
-  return parent
-    ? availableSubagentTiers({ parent, agentTrio: caller, organizationId })
-    : [];
-}
-
-async function parentSelection(
-  parentLlm: ModelSelection,
-): Promise<ConversationLlmSelection | null> {
-  const model = parentLlm.modelId
-    ? await ModelModel.findById(parentLlm.modelId)
-    : null;
-  return model
-    ? {
-        modelId: model.id,
-        chatApiKeyId: parentLlm.apiKeyId ?? null,
-        selectedModel: model.modelId,
-        selectedProvider: model.provider,
-      }
-    : null;
+  if (!userId) return [];
+  const parent = await resolveForkParentSelection({
+    agent: caller,
+    organizationId,
+    userId,
+    parentLlm,
+  });
+  return availableSubagentTiers({ parent, agentTrio: caller, organizationId });
 }
 
 const SELF_FORK_DESCRIPTION =

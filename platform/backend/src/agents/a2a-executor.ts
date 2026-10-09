@@ -46,7 +46,7 @@ import {
 } from "@/clients/tool-call-repeat-tracker";
 import config from "@/config";
 import logger from "@/logging";
-import { AgentModel, LlmProviderApiKeyModel, ModelModel } from "@/models";
+import { AgentModel, ModelModel } from "@/models";
 import type { SubagentBinding } from "@/openappa/subagent-binding";
 import {
   formatUnavailableToolErrorDetails,
@@ -66,7 +66,7 @@ import { executionSandboxRegistry } from "@/skills-sandbox/execution-sandbox-reg
 import type { ChatMessage } from "@/types";
 import {
   type ModelTrioTiers,
-  resolveConversationLlmSelectionForAgent,
+  resolveForkParentSelection,
   resolveSubagentTierSelection,
 } from "@/utils/llm-resolution";
 import {
@@ -101,7 +101,25 @@ export interface A2AAttachment {
 export const MAX_DELEGATION_DEPTH = 5;
 
 /** @public — exported for testability */
-export interface A2AExecuteParams {
+/**
+ * The caller forks itself: a fresh-context copy of the calling agent. It may
+ * repeat its direct parent in the chain once, and never forks again. Only a
+ * fork starts from its parent's model, optionally moved to a tier.
+ */
+type ForkOptions =
+  | { selfFork?: false }
+  | {
+      selfFork: true;
+      /** The model and key the forking parent runs on. */
+      parentLlm?: ModelSelection;
+      /** The model tier the fork runs on, relative to `parentLlm`. */
+      tier?: SubagentModelTier;
+    };
+
+/** @public — exercised by the a2a route tests (knip --production ignores tests) */
+export type A2AExecuteParams = A2AExecuteParamsBase & ForkOptions;
+
+interface A2AExecuteParamsBase {
   /**
    * Agent ID to execute. Must be an internal agent (agentType='agent').
    */
@@ -133,15 +151,6 @@ export interface A2AExecuteParams {
    * The current agentId will be appended to form the new chain.
    */
   parentDelegationChain?: string;
-  /**
-   * The caller forks itself: a fresh-context copy of the calling agent. It may
-   * repeat its direct parent in the chain once, and never forks again.
-   */
-  selfFork?: boolean;
-  /** The model and key the forking parent runs on; a fork starts from it. */
-  parentLlm?: ModelSelection;
-  /** The model tier a fork runs on, relative to `parentLlm`. */
-  tier?: SubagentModelTier;
   /** The child trajectory an OpenAPPA-governed spawn bound this run to. */
   appaSubagent?: SubagentBinding;
   /**
@@ -325,8 +334,7 @@ export async function executeA2AMessage(
     agent,
     organizationId,
     userId,
-    parentLlm: params.parentLlm,
-    tier: params.tier,
+    ...(params.selfFork && { parentLlm: params.parentLlm, tier: params.tier }),
   });
   // Run on the key that was selected with the model (the agent's own, or the
   // organization default's). Without it, key lookup prefers the caller's
@@ -367,7 +375,7 @@ export async function executeA2AMessage(
       repeatTracker,
       appaSubagent: params.appaSubagent,
       parentLlm: resolvedModelId
-        ? { modelId: resolvedModelId, apiKeyId: llmApiKeyId }
+        ? { modelId: resolvedModelId, apiKeyId: resolvedApiKeyId }
         : undefined,
     });
 
@@ -1228,21 +1236,11 @@ async function resolveRunLlmSelection(params: {
   tier?: SubagentModelTier;
 }) {
   const { llmApiKeyId, modelId } = params.agent;
-  const parentLlm =
-    params.parentLlm &&
-    (await usableParentLlm({
-      parentLlm: params.parentLlm,
-      agentLlmApiKeyId: llmApiKeyId,
-      userId: params.userId,
-    }));
-  const base = await resolveConversationLlmSelectionForAgent({
+  const base = await resolveForkParentSelection({
     agent: { llmApiKeyId, modelId },
     organizationId: params.organizationId,
     userId: params.userId,
-    ...(parentLlm && {
-      explicitModelId: parentLlm.modelId,
-      explicitApiKeyId: parentLlm.apiKeyId,
-    }),
+    parentLlm: params.parentLlm,
   });
   return params.tier
     ? resolveSubagentTierSelection({
@@ -1252,26 +1250,6 @@ async function resolveRunLlmSelection(params: {
         organizationId: params.organizationId,
       })
     : base;
-}
-
-/**
- * The fork runs on the resolved key as its agent key, which skips the per-user
- * access check, so a parent key the user can no longer use is dropped and the
- * fork falls back to the agent's own configuration.
- */
-async function usableParentLlm(params: {
-  parentLlm: ModelSelection;
-  agentLlmApiKeyId: string | null;
-  userId: string;
-}): Promise<ModelSelection | undefined> {
-  const { parentLlm, agentLlmApiKeyId, userId } = params;
-  if (!parentLlm.apiKeyId || parentLlm.apiKeyId === agentLlmApiKeyId) {
-    return parentLlm;
-  }
-  const key = await LlmProviderApiKeyModel.findById(parentLlm.apiKeyId);
-  return key && (await LlmProviderApiKeyModel.canUseKey(key, userId, []))
-    ? parentLlm
-    : undefined;
 }
 
 /** Estimate decoded byte size from base64 length: every 4 chars = 3 bytes. */

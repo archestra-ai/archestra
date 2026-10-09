@@ -19,14 +19,14 @@ const {
   mockStreamText,
   mockGetChatMcpTools,
   mockCreateLLMModelForAgent,
-  mockResolveConversationLlmSelectionForAgent,
+  mockResolveForkParentSelection,
   mockBuildSkillCatalogPrompt,
   mockListAccessibleCatalogSkills,
 } = vi.hoisted(() => ({
   mockStreamText: vi.fn(),
   mockGetChatMcpTools: vi.fn(),
   mockCreateLLMModelForAgent: vi.fn(),
-  mockResolveConversationLlmSelectionForAgent: vi.fn(),
+  mockResolveForkParentSelection: vi.fn(),
   mockBuildSkillCatalogPrompt: vi.fn(),
   mockListAccessibleCatalogSkills: vi.fn(),
 }));
@@ -56,8 +56,8 @@ vi.mock("@/utils/llm-resolution", async () => {
   );
   return {
     ...actual,
-    resolveConversationLlmSelectionForAgent: (...args: unknown[]) =>
-      mockResolveConversationLlmSelectionForAgent(...args),
+    resolveForkParentSelection: (...args: unknown[]) =>
+      mockResolveForkParentSelection(...args),
   };
 });
 
@@ -642,7 +642,7 @@ describe("buildUserContent", () => {
 describe("executeA2AMessage current turn assembly", () => {
   function primeStreamMocks() {
     mockGetChatMcpTools.mockResolvedValue({});
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "claude-sonnet-4-6",
       selectedProvider: "anthropic",
@@ -898,7 +898,7 @@ describe("executeA2AMessage model selection", () => {
       systemPrompt: "Handle the task.",
     });
 
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
       selectedProvider: "gemini",
@@ -946,14 +946,13 @@ describe("executeA2AMessage model selection", () => {
       parentDelegationChain: "agent-parent",
     });
 
-    expect(mockResolveConversationLlmSelectionForAgent).toHaveBeenCalledWith({
+    expect(mockResolveForkParentSelection).toHaveBeenCalledWith({
       agent: {
         llmApiKeyId: null,
         modelId: null,
       },
       organizationId: org.id,
       userId: user.id,
-      // A2A runs never adopt the acting member's /chat default.
     });
     expect(mockCreateLLMModelForAgent).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -969,70 +968,12 @@ describe("executeA2AMessage model selection", () => {
       }),
     );
   });
-
-  test("a fork keeps its parent's key only while the user can still use it", async ({
-    makeUser,
-    makeOrganization,
-    makeMember,
-    makeAgent,
-    makeLlmProviderApiKey,
-  }) => {
-    const org = await makeOrganization();
-    const [user, other] = await Promise.all([makeUser(), makeUser()]);
-    await makeMember(user.id, org.id);
-    const agent = await makeAgent({
-      organizationId: org.id,
-      agentType: "agent",
-    });
-    const [orgKey, othersKey] = await Promise.all([
-      makeLlmProviderApiKey(org.id, null),
-      makeLlmProviderApiKey(org.id, null, { userId: other.id }),
-    ]);
-
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
-      chatApiKeyId: "resolved-key",
-      selectedModel: "claude-sonnet-5-5",
-      selectedProvider: "anthropic",
-    });
-    mockGetChatMcpTools.mockResolvedValue({});
-    mockCreateLLMModelForAgent.mockRejectedValue(
-      new Error("stop after resolve"),
-    );
-
-    for (const { keyId, inherited } of [
-      { keyId: orgKey.id, inherited: true },
-      { keyId: othersKey.id, inherited: false },
-    ]) {
-      mockResolveConversationLlmSelectionForAgent.mockClear();
-      await executeA2AMessage({
-        agentId: agent.id,
-        message: "Handle this",
-        organizationId: org.id,
-        userId: user.id,
-        conversationId: "conv-1",
-        parentDelegationChain: "agent-parent",
-        parentLlm: { modelId: "parent-model", apiKeyId: keyId },
-      }).catch(() => undefined);
-
-      expect(
-        mockResolveConversationLlmSelectionForAgent.mock.calls[0]?.[0],
-      ).toEqual({
-        agent: { llmApiKeyId: null, modelId: null },
-        organizationId: org.id,
-        userId: user.id,
-        ...(inherited && {
-          explicitModelId: "parent-model",
-          explicitApiKeyId: keyId,
-        }),
-      });
-    }
-  });
 });
 
 describe("executeA2AMessage isolation scope", () => {
   function primeExecutionMocks() {
     mockGetChatMcpTools.mockClear();
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
       selectedProvider: "gemini",
@@ -1179,7 +1120,7 @@ describe("executeA2AMessage unavailable tool errors", () => {
       systemPrompt: "Handle the task.",
     });
 
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "claude-sonnet-4-6",
       selectedProvider: "anthropic",
@@ -1260,7 +1201,7 @@ describe("executeA2AMessage skill catalog", () => {
     mockBuildSkillCatalogPrompt.mockClear();
     mockListAccessibleCatalogSkills.mockReset();
     mockListAccessibleCatalogSkills.mockResolvedValue([]);
-    mockResolveConversationLlmSelectionForAgent.mockResolvedValue({
+    mockResolveForkParentSelection.mockResolvedValue({
       chatApiKeyId: "org-key",
       selectedModel: "gemini-2.5-pro",
       selectedProvider: "gemini",

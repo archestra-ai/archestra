@@ -153,6 +153,52 @@ export async function resolveConversationLlmSelectionForAgent(params: {
   };
 }
 
+/**
+ * The selection a fork starts from: its parent's model and key, else the
+ * agent's own configuration. The fork runs on the resolved key as its agent
+ * key, which skips the per-user access check, so a parent key the user can no
+ * longer use is dropped.
+ */
+export async function resolveForkParentSelection(params: {
+  agent: { llmApiKeyId: string | null; modelId: string | null };
+  organizationId: string;
+  userId: string;
+  parentLlm?: ModelSelection;
+}): Promise<ConversationLlmSelection> {
+  const { agent, organizationId, userId } = params;
+  const parentLlm =
+    params.parentLlm &&
+    (await isParentKeyUsable({
+      apiKeyId: params.parentLlm.apiKeyId,
+      agentLlmApiKeyId: agent.llmApiKeyId,
+      userId,
+    }))
+      ? params.parentLlm
+      : undefined;
+  return resolveConversationLlmSelectionForAgent({
+    agent: { llmApiKeyId: agent.llmApiKeyId, modelId: agent.modelId },
+    organizationId,
+    userId,
+    ...(parentLlm && {
+      explicitModelId: parentLlm.modelId,
+      explicitApiKeyId: parentLlm.apiKeyId,
+    }),
+  });
+}
+
+async function isParentKeyUsable(params: {
+  apiKeyId: string | null | undefined;
+  agentLlmApiKeyId: string | null;
+  userId: string;
+}): Promise<boolean> {
+  const { apiKeyId, agentLlmApiKeyId, userId } = params;
+  if (!apiKeyId || apiKeyId === agentLlmApiKeyId) return true;
+  const key = await LlmProviderApiKeyModel.findById(apiKeyId);
+  return (
+    key !== null && (await LlmProviderApiKeyModel.canUseKey(key, userId, []))
+  );
+}
+
 /** The optional `fast` / `smart` halves of a trio (agent or organization). */
 export interface ModelTrioTiers {
   fastModelId: string | null;
